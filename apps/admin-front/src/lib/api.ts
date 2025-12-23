@@ -293,8 +293,8 @@ export interface UpdateStrategyTemplatePayload {
   status?: 'draft' | 'testing' | 'live' | 'disabled'
 }
 
-// 策略模板 API 方法
-export async function fetchStrategyTemplates(params?: {
+// 策略模板 API 方法（后端相关接口已移除，这里保留占位并在运行时报错）
+export async function fetchStrategyTemplates(_params?: {
   page?: number
   limit?: number
   status?: 'draft' | 'testing' | 'live' | 'disabled'
@@ -302,41 +302,28 @@ export async function fetchStrategyTemplates(params?: {
   orderBy?: string
   onlyDraft?: boolean
 }): Promise<StrategyTemplatesListResponse> {
-  const response = await client.AdminStrategyTemplatesController_list({
-    headers: requireAuthHeaders(),
-    queries: params,
-  })
-  return unwrapResponse(response) as StrategyTemplatesListResponse
+  throw new Error('Strategy template APIs are not available in this build')
 }
 
-export async function fetchStrategyTemplateDetail(id: string): Promise<StrategyTemplate> {
-  const response = await client.AdminStrategyTemplatesController_detail({
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-  return unwrapResponse(response) as StrategyTemplate
+export async function fetchStrategyTemplateDetail(_id: string): Promise<StrategyTemplate> {
+  throw new Error('Strategy template APIs are not available in this build')
 }
 
-export async function createStrategyTemplate(payload: CreateStrategyTemplatePayload): Promise<StrategyTemplate> {
-  const response = await client.AdminStrategyTemplatesController_create(payload as any, {
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as StrategyTemplate
+export async function createStrategyTemplate(
+  _payload: CreateStrategyTemplatePayload,
+): Promise<StrategyTemplate> {
+  throw new Error('Strategy template APIs are not available in this build')
 }
 
-export async function updateStrategyTemplate(id: string, payload: UpdateStrategyTemplatePayload): Promise<StrategyTemplate> {
-  const response = await client.AdminStrategyTemplatesController_update(payload as any, {
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-  return unwrapResponse(response) as StrategyTemplate
+export async function updateStrategyTemplate(
+  _id: string,
+  _payload: UpdateStrategyTemplatePayload,
+): Promise<StrategyTemplate> {
+  throw new Error('Strategy template APIs are not available in this build')
 }
 
-export async function deleteStrategyTemplate(id: string): Promise<void> {
-  await client.AdminStrategyTemplatesController_delete(undefined as any, {
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
+export async function deleteStrategyTemplate(_id: string): Promise<void> {
+  throw new Error('Strategy template APIs are not available in this build')
 }
 
 export async function generateStrategyScript(id: string): Promise<string> {
@@ -380,10 +367,10 @@ export async function validateStrategyScript(script: string): Promise<{
   return unwrapResponse(data) || data
 }
 
-// 策略实例相关类型定义 (使用生成的类型)
-export type StrategyInstance = z.infer<typeof schemas.StrategyInstanceResponseDto>
-export type CreateStrategyInstancePayload = z.infer<typeof schemas.CreateStrategyInstanceDto>
-export type UpdateStrategyInstancePayload = z.infer<typeof schemas.UpdateStrategyInstanceDto>
+// 策略实例相关类型定义（后端相关 DTO / 接口已移除，使用宽松占位类型）
+export type StrategyInstance = any
+export type CreateStrategyInstancePayload = any
+export type UpdateStrategyInstancePayload = any
 export type StrategyInstanceStatus = 'draft' | 'running' | 'paused' | 'stopped'
 export type StrategyInstanceMode = 'BACKTEST' | 'PAPER' | 'TESTNET' | 'LIVE'
 
@@ -395,89 +382,50 @@ export interface StrategyInstancesListResponse {
 }
 
 // 策略实例 API 方法 (使用生成的 client)
-export async function fetchStrategyInstances(params?: {
+export async function fetchStrategyInstances(_params?: {
   page?: number
   limit?: number
   strategyTemplateId?: string
   status?: StrategyInstanceStatus
   llmModel?: string
 }): Promise<StrategyInstancesListResponse> {
-  const response = await client.AdminStrategyInstancesController_list({
-    headers: requireAuthHeaders(),
-    queries: {
-      page: params?.page || 1,
-      limit: params?.limit || 20,
-      strategyTemplateId: params?.strategyTemplateId,
-      status: params?.status,
-      llmModel: params?.llmModel,
-    },
-  })
-  
-  const data = unwrapResponse(response)
-  return {
-    items: Array.isArray(data) ? data : ((data as any)?.items || []),
-    total: (data as any)?.total || 0,
-    page: params?.page || 1,
-    limit: params?.limit || 20,
-  }
+  throw new Error('Strategy instance APIs are not available in this build')
 }
 
-export async function fetchStrategyInstanceDetail(id: string): Promise<StrategyInstance> {
-  const response = await client.AdminStrategyInstancesController_detail({
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-  
-  return unwrapResponse(response)
+export async function fetchStrategyInstanceDetail(_id: string): Promise<StrategyInstance> {
+  throw new Error('Strategy instance APIs are not available in this build')
 }
 
-export async function createStrategyInstance(payload: CreateStrategyInstancePayload): Promise<StrategyInstance> {
-  const response = await client.AdminStrategyInstancesController_create(payload, {
-    headers: requireAuthHeaders(),
-  })
-  
-  return unwrapResponse(response)
+export async function createStrategyInstance(
+  _payload: CreateStrategyInstancePayload,
+): Promise<StrategyInstance> {
+  throw new Error('Strategy instance APIs are not available in this build')
 }
 
 export async function updateStrategyInstance(
-  id: string,
-  payload: UpdateStrategyInstancePayload
+  _id: string,
+  _payload: UpdateStrategyInstancePayload,
 ): Promise<StrategyInstance> {
-  const response = await client.AdminStrategyInstancesController_update(payload, {
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-  
-  return unwrapResponse(response)
+  throw new Error('Strategy instance APIs are not available in this build')
 }
 
-export async function deleteStrategyInstance(id: string): Promise<void> {
-  await client.AdminStrategyInstancesController_delete(undefined, {
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
+export async function deleteStrategyInstance(_id: string): Promise<void> {
+  throw new Error('Strategy instance APIs are not available in this build')
 }
 
-// 主动实例检查（调试）相关类型（使用生成的类型）
-export type TestStrategyInstancePayload = z.infer<typeof schemas.TestStrategyInstanceDto>
-export type TestStrategyInstanceResult = z.infer<typeof schemas.TestStrategyInstanceResultDto>
+// 主动实例检查（调试）相关类型（占位）
+export type TestStrategyInstancePayload = any
+export type TestStrategyInstanceResult = any
 
 /**
  * 主动触发策略实例检查（调试用，不会生成真实信号）
  * 使用生成的 SDK client 方法
  */
 export async function testStrategyInstance(
-  id: string,
-  payload: TestStrategyInstancePayload,
+  _id: string,
+  _payload: TestStrategyInstancePayload,
 ): Promise<TestStrategyInstanceResult> {
-  // 按照 Zodios 约定：第一个参数为 body，第二个参数传 headers / params 等配置
-  const response = await client.AdminStrategyInstancesController_testRun(payload, {
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-
-  const data = unwrapResponse(response)
-  return data || (response as TestStrategyInstanceResult)
+  throw new Error('Strategy instance test APIs are not available in this build')
 }
 
 /**
@@ -485,34 +433,21 @@ export async function testStrategyInstance(
  * 使用生成的 SDK client 方法
  */
 export async function prefillStrategyInstanceTestPayload(
-  id: string,
+  _id: string,
 ): Promise<TestStrategyInstancePayload> {
-  const response = await client.AdminStrategyInstancesController_buildTestPayload({
-    headers: requireAuthHeaders(),
-    params: { id },
-  })
-
-  const data = unwrapResponse(response)
-  return data || (response as TestStrategyInstancePayload)
+  throw new Error('Strategy instance test APIs are not available in this build')
 }
 
-// 导出 SDK 生成的类型
-export type SubscriberInfo = z.infer<typeof schemas.SubscriberInfoDto>
-export type StrategyInstanceSubscriptionDetails = z.infer<typeof schemas.StrategyInstanceSubscriptionDetailsDto>
+// 订阅相关类型（后端 DTO 已移除，占位）
+export type SubscriberInfo = any
+export type StrategyInstanceSubscriptionDetails = any
 
 export async function fetchStrategyInstanceSubscriptionDetails(
-  id: string,
-  page: number = 1,
-  limit: number = 50
+  _id: string,
+  _page: number = 1,
+  _limit: number = 50,
 ): Promise<StrategyInstanceSubscriptionDetails> {
-  const response = await client.AdminStrategyInstancesController_getSubscriptionDetails({
-    headers: requireAuthHeaders(),
-    params: { id },
-    queries: { page, limit },
-  })
-  
-  const data = unwrapResponse(response)
-  return data || response as StrategyInstanceSubscriptionDetails
+  throw new Error('Strategy subscription APIs are not available in this build')
 }
 
 export interface TriggerSignalGenerationResponse {
@@ -520,18 +455,17 @@ export interface TriggerSignalGenerationResponse {
   instanceId?: string
 }
 
-export async function triggerSignalGeneration(instanceId: string): Promise<TriggerSignalGenerationResponse> {
-  const result = await client.AdminStrategyInstancesController_generateSignal(undefined, {
-    params: { id: instanceId },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(result)
+export async function triggerSignalGeneration(
+  _instanceId: string,
+): Promise<TriggerSignalGenerationResponse> {
+  // 后端主动触发信号相关接口已移除，这里直接报错
+  throw new Error('Trigger signal generation API is not available in this build')
 }
 
-// 信号记录相关类型定义（使用生成的类型）
-export type TradingSignal = z.infer<typeof schemas.TradingSignalResponseDto>
-export type SignalStatus = TradingSignal['status']
-export type SignalDirection = TradingSignal['direction']
+// 信号记录相关类型定义（后端 DTO / 接口已移除，占位）
+export type TradingSignal = any
+export type SignalStatus = string
+export type SignalDirection = string
 
 export interface TradingSignalsListResponse {
   items: TradingSignal[]
@@ -540,8 +474,8 @@ export interface TradingSignalsListResponse {
   limit: number
 }
 
-// 信号记录 API 方法（使用生成的 client）
-export async function fetchTradingSignals(params?: {
+// 信号记录 API 方法（后端相关接口已移除，占位）
+export async function fetchTradingSignals(_params?: {
   page?: number
   limit?: number
   strategyInstanceId?: string
@@ -549,43 +483,24 @@ export async function fetchTradingSignals(params?: {
   symbolId?: string
   status?: SignalStatus
 }): Promise<TradingSignalsListResponse> {
-  const response = await client.AdminTradingSignalsController_list({
-    headers: requireAuthHeaders(),
-    queries: {
-      page: params?.page || 1,
-      limit: params?.limit || 20,
-      strategyInstanceId: params?.strategyInstanceId,
-      strategyId: params?.strategyId,
-      symbolId: params?.symbolId,
-      status: params?.status,
-    },
-  })
-  
-  const data = unwrapResponse(response)
-  return {
-    items: Array.isArray(data) ? data : ((data as any)?.items || []),
-    total: (data as any)?.total || 0,
-    page: params?.page || 1,
-    limit: params?.limit || 20,
-  }
+  throw new Error('Trading signal APIs are not available in this build')
 }
 
 // ===== LLM Strategy 相关类型定义和 API 方法 =====
 
-// LLM策略相关类型（从生成的 schemas 推导）
-export type LlmStrategy = z.infer<typeof schemas.LlmStrategyResponseDto>
-export type LlmStrategyInstance = z.infer<typeof schemas.LlmStrategyInstanceResponseDto>
-export type LlmStrategyRun = z.infer<typeof schemas.LlmStrategyRunResponseDto>
-export type CreateLlmStrategyPayload = z.infer<typeof schemas.CreateLlmStrategyDto>
-export type UpdateLlmStrategyPayload = z.infer<typeof schemas.UpdateLlmStrategyDto>
-export type CreateLlmStrategyInstancePayload = z.infer<typeof schemas.CreateLlmStrategyInstanceDto>
-export type UpdateLlmStrategyInstancePayload = z.infer<typeof schemas.UpdateLlmStrategyInstanceDto>
+// LLM 策略相关类型（后端 DTO / 接口已移除，占位）
+export type LlmStrategy = any
+export type LlmStrategyInstance = any
+export type LlmStrategyRun = any
+export type CreateLlmStrategyPayload = any
+export type UpdateLlmStrategyPayload = any
+export type CreateLlmStrategyInstancePayload = any
+export type UpdateLlmStrategyInstancePayload = any
 
-// 从响应 DTO 推导枚举类型
-export type LlmStrategyStatus = LlmStrategy['status']
-export type LlmStrategyInstanceStatus = LlmStrategyInstance['status']
-export type LlmStrategyInstanceMode = LlmStrategyInstance['mode']
-export type LlmStrategyRunStatus = LlmStrategyRun['status']
+export type LlmStrategyStatus = string
+export type LlmStrategyInstanceStatus = string
+export type LlmStrategyInstanceMode = string
+export type LlmStrategyRunStatus = string
 
 // 列表响应类型（使用 BasePaginationResponseDto）
 export interface LlmStrategiesListResponse {
@@ -602,115 +517,82 @@ export interface LlmStrategyInstancesListResponse {
   limit: number
 }
 
-// LLM Strategy API 方法
-export async function fetchLlmStrategies(params?: {
+// LLM Strategy API 方法（后端相关接口已移除，占位）
+export async function fetchLlmStrategies(_params?: {
   page?: number
   limit?: number
   status?: LlmStrategyStatus
   keyword?: string
   orderBy?: string
 }): Promise<LlmStrategiesListResponse> {
-  const response = await client.AdminLlmStrategiesController_list({
-    queries: params,
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategiesListResponse
+  throw new Error('LLM strategy APIs are not available in this build')
 }
 
-export async function fetchLlmStrategyDetail(id: string): Promise<LlmStrategy> {
-  const response = await client.AdminLlmStrategiesController_detail({
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategy
+export async function fetchLlmStrategyDetail(_id: string): Promise<LlmStrategy> {
+  throw new Error('LLM strategy APIs are not available in this build')
 }
 
-export async function createLlmStrategy(payload: CreateLlmStrategyPayload): Promise<LlmStrategy> {
-  const response = await client.AdminLlmStrategiesController_create(payload, {
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategy
+export async function createLlmStrategy(_payload: CreateLlmStrategyPayload): Promise<LlmStrategy> {
+  throw new Error('LLM strategy APIs are not available in this build')
 }
 
-export async function updateLlmStrategy(id: string, payload: UpdateLlmStrategyPayload): Promise<LlmStrategy> {
-  const response = await client.AdminLlmStrategiesController_update(payload, {
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategy
+export async function updateLlmStrategy(
+  _id: string,
+  _payload: UpdateLlmStrategyPayload,
+): Promise<LlmStrategy> {
+  throw new Error('LLM strategy APIs are not available in this build')
 }
 
-export async function deleteLlmStrategy(id: string): Promise<void> {
-  await client.AdminLlmStrategiesController_delete(undefined as any, {
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
+export async function deleteLlmStrategy(_id: string): Promise<void> {
+  throw new Error('LLM strategy APIs are not available in this build')
 }
 
-// LLM Strategy Instance API 方法
-export async function fetchLlmStrategyInstances(params?: {
+// LLM Strategy Instance API 方法（后端相关接口已移除，占位）
+export async function fetchLlmStrategyInstances(_params?: {
   page?: number
   limit?: number
   status?: LlmStrategyInstanceStatus
   strategyId?: string
   orderBy?: string
 }): Promise<LlmStrategyInstancesListResponse> {
-  const response = await client.AdminLlmStrategyInstancesController_list({
-    queries: params,
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyInstancesListResponse
+  throw new Error('LLM strategy instance APIs are not available in this build')
 }
 
-export async function fetchLlmStrategyInstanceDetail(id: string): Promise<LlmStrategyInstance> {
-  const response = await client.AdminLlmStrategyInstancesController_detail({
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyInstance
+export async function fetchLlmStrategyInstanceDetail(_id: string): Promise<LlmStrategyInstance> {
+  throw new Error('LLM strategy instance APIs are not available in this build')
 }
 
-export async function createLlmStrategyInstance(payload: CreateLlmStrategyInstancePayload): Promise<LlmStrategyInstance> {
-  const response = await client.AdminLlmStrategyInstancesController_create(payload, {
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyInstance
+export async function createLlmStrategyInstance(
+  _payload: CreateLlmStrategyInstancePayload,
+): Promise<LlmStrategyInstance> {
+  throw new Error('LLM strategy instance APIs are not available in this build')
 }
 
-export async function updateLlmStrategyInstance(id: string, payload: UpdateLlmStrategyInstancePayload): Promise<LlmStrategyInstance> {
-  const response = await client.AdminLlmStrategyInstancesController_update(payload, {
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyInstance
+export async function updateLlmStrategyInstance(
+  _id: string,
+  _payload: UpdateLlmStrategyInstancePayload,
+): Promise<LlmStrategyInstance> {
+  throw new Error('LLM strategy instance APIs are not available in this build')
 }
 
-export async function deleteLlmStrategyInstance(id: string): Promise<void> {
-  await client.AdminLlmStrategyInstancesController_delete(undefined as any, {
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
+export async function deleteLlmStrategyInstance(_id: string): Promise<void> {
+  throw new Error('LLM strategy instance APIs are not available in this build')
 }
 
-export async function fetchLlmStrategyRuns(instanceId: string, limit: number = 20): Promise<LlmStrategyRun[]> {
-  const response = await client.AdminLlmStrategyInstancesController_listRuns({
-    params: { id: instanceId },
-    queries: { limit },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapListResponse<LlmStrategyRun>(response)
+export async function fetchLlmStrategyRuns(
+  _instanceId: string,
+  _limit: number = 20,
+): Promise<LlmStrategyRun[]> {
+  throw new Error('LLM strategy run APIs are not available in this build')
 }
 
-export async function testLlmStrategyInstance(id: string): Promise<LlmStrategyRun> {
-  const response = await client.AdminLlmStrategyInstancesController_testRun(undefined as any, {
-    params: { id },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyRun
+export async function testLlmStrategyInstance(_id: string): Promise<LlmStrategyRun> {
+  throw new Error('LLM strategy run APIs are not available in this build')
 }
 
 // 市场交易对列表（用于下拉选择，自动与后台配置对齐）
-export type MarketSymbol = z.infer<typeof schemas.MarketSymbolDto>
+// 后端部分 Admin 管理接口已移除，这里仅保留查询列表功能。
+export type MarketSymbol = any
 
 export interface MarketSymbolsListResponse {
   items: MarketSymbol[]
@@ -731,48 +613,34 @@ export async function fetchMarketSymbols(params?: {
   const page = params?.page ?? 1
   const limit = params?.limit ?? 50
 
-  // 使用 SDK client 调用后端接口，统一鉴权与数据结构
-  const response = await client.MarketDataController_listSymbols({
-    headers: requireAuthHeaders(),
-    queries: {
-      page,
-      limit,
-      exchange: params?.exchange,
-      type: params?.type,
-      status: params?.status,
-      instrumentType: params?.instrumentType,
-      keyword: params?.keyword,
-    },
-  })
-
-  return unwrapResponse(response) as MarketSymbolsListResponse
+  // 后端通用市场交易对查询接口已裁剪，当前构建暂不支持从服务端动态获取列表。
+  // 这里保留占位实现，返回空列表。
+  return {
+    items: [],
+    total: 0,
+    page,
+    limit,
+  }
 }
 
-// 管理员交易对管理（创建/更新）
-// 使用 SDK 生成的类型
-export type CreateMarketSymbolPayload = z.infer<typeof schemas.AdminCreateMarketSymbolDto>
-export type UpdateMarketSymbolPayload = z.infer<typeof schemas.AdminUpdateMarketSymbolDto>
+// 管理员交易对管理（创建/更新）相关接口已从后端移除，这里保留占位类型与方法。
+export type CreateMarketSymbolPayload = any
+export type UpdateMarketSymbolPayload = any
 
-export async function createMarketSymbol(payload: CreateMarketSymbolPayload): Promise<MarketSymbol> {
-  const response = await client.AdminMarketSymbolsController_create(payload as any, {
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as MarketSymbol
+export async function createMarketSymbol(
+  _payload: CreateMarketSymbolPayload,
+): Promise<MarketSymbol> {
+  throw new Error('Admin market symbol management APIs are not available in this build')
 }
 
-export async function updateMarketSymbol(code: string, payload: UpdateMarketSymbolPayload): Promise<MarketSymbol> {
-  const response = await client.AdminMarketSymbolsController_update(payload as any, {
-    params: { code },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as MarketSymbol
+export async function updateMarketSymbol(
+  _code: string,
+  _payload: UpdateMarketSymbolPayload,
+): Promise<MarketSymbol> {
+  throw new Error('Admin market symbol management APIs are not available in this build')
 }
 
-export async function fetchLlmStrategyRunDetail(runId: string): Promise<LlmStrategyRun> {
-  const response = await client.AdminLlmStrategyInstancesController_getRunDetail({
-    params: { runId },
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse(response) as LlmStrategyRun
+export async function fetchLlmStrategyRunDetail(_runId: string): Promise<LlmStrategyRun> {
+  throw new Error('LLM strategy run detail API is not available in this build')
 }
 

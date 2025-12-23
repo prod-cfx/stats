@@ -3,7 +3,11 @@
  */
 
 import type { schemas } from '@ai/api-contracts'
-import type { LlmSubscriptionResponse, UserLlmStrategyInstanceResponse, TradingSignalResponse } from '@/lib/api'
+import type {
+  LlmSubscriptionResponse,
+  TradingSignalResponse,
+  UserLlmStrategyInstanceResponse,
+} from '@/lib/api'
 import type { StrategyItem } from '@/types/my-strategies'
 import type { ActionItem, Strategy, StrategyDetail } from '@/types/strategies'
 
