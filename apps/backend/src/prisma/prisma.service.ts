@@ -8,6 +8,7 @@ import { generateShortId } from '@ai/shared'
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient as PrismaClientBase } from '@prisma/client'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
 import { Pool } from 'pg'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
@@ -20,13 +21,7 @@ const TRANSACTION_KEY = 'PRISMA_TRANSACTION'
 type ExtendedPrismaClient = any
 type TransactionClient = any
 
-// 通过 require 获取运行时 PrismaClient 构造函数，避免对类型定义的依赖
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { PrismaClient: PrismaClientBase } = require('@prisma/client') as {
-  PrismaClient: new (options: any) => any
-}
-
-type PrismaLogDefinition = {
+interface PrismaLogDefinition {
   emit: 'event' | 'stdout'
   level: 'query' | 'info' | 'warn' | 'error'
 }

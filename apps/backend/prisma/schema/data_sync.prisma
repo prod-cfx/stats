@@ -1,0 +1,41 @@
+/// 数据拉取任务与执行历史相关模型
+
+model DataPullTask {
+  id            Int      @id @default(autoincrement())
+  key           String   @unique
+  name          String
+  source        String?
+  type          String?
+  /// Cron 表达式（可选），当前服务端逻辑主要使用 intervalSeconds 进行调度
+  cron          String?
+  /// 最小执行间隔（秒），用于防止任务被过于频繁地调度
+  intervalSeconds Int?   @map("interval_seconds")
+  enabled       Boolean  @default(true)
+  cursor        String?
+  lastStatus    String?  @map("last_status")
+  lastRunAt     DateTime? @map("last_run_at")
+  lastSuccessAt DateTime? @map("last_success_at")
+  lastError     String?  @map("last_error")
+  meta          Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  executions    DataPullExecution[]
+
+  @@map("data_pull_tasks")
+}
+
+model DataPullExecution {
+  id           Int      @id @default(autoincrement())
+  taskId       Int      @map("task_id")
+  task         DataPullTask @relation(fields: [taskId], references: [id])
+  startedAt    DateTime @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  status       String
+  fetchedCount Int      @default(0) @map("fetched_count")
+  errorMessage String?  @map("error_message")
+  meta         Json?
+
+  @@map("data_pull_executions")
+}
+

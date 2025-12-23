@@ -6,12 +6,16 @@
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
-import { $Enums } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
-export type PrismaMarketTimeframe = $Enums.MarketTimeframe
-export type PrismaIndicatorType = $Enums.IndicatorType
-export type PrismaSymbolStatus = $Enums.SymbolStatus
+/**
+ * 为了兼容当前裁剪后的 Prisma schema（不再包含部分交易相关枚举），
+ * 这里不直接依赖 @prisma/client 导出的枚举类型，而是使用字符串类型别名。
+ * 如后续重新引入相关 Prisma 枚举，可将这些类型别名替换为 Prisma 枚举类型。
+ */
+export type PrismaMarketTimeframe = string
+export type PrismaIndicatorType = string
+export type PrismaSymbolStatus = string
 
 /**
  * 时间周期枚举键名常量
@@ -87,10 +91,10 @@ export function reverseMapTimeframe(timeframe: PrismaMarketTimeframe): MarketTim
  */
 export function mapIndicatorType(type: IndicatorType): PrismaIndicatorType {
   const mapping: Record<string, PrismaIndicatorType> = {
-    'RET': $Enums.IndicatorType.RET,
-    'MOVING_AVG': $Enums.IndicatorType.MOVING_AVG,
-    'VOLATILITY': $Enums.IndicatorType.VOLATILITY,
-    'VOLUME_RATIO': $Enums.IndicatorType.VOLUME_RATIO,
+    RET: 'RET',
+    MOVING_AVG: 'MOVING_AVG',
+    VOLATILITY: 'VOLATILITY',
+    VOLUME_RATIO: 'VOLUME_RATIO',
   }
   
   const mapped = mapping[type]
@@ -112,10 +116,10 @@ export function mapIndicatorType(type: IndicatorType): PrismaIndicatorType {
 export function mapSymbolStatus(status: string): PrismaSymbolStatus {
   const upperStatus = status.toUpperCase()
   const statusMap: Record<string, PrismaSymbolStatus> = {
-    'ACTIVE': $Enums.SymbolStatus.ACTIVE,
-    'TRADING': $Enums.SymbolStatus.ACTIVE,
-    'DISABLED': $Enums.SymbolStatus.DISABLED,
-    'DELISTED': $Enums.SymbolStatus.DISABLED,
+    ACTIVE: 'ACTIVE',
+    TRADING: 'ACTIVE',
+    DISABLED: 'DISABLED',
+    DELISTED: 'DISABLED',
   }
   
   const mapped = statusMap[upperStatus]

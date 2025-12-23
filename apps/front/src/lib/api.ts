@@ -428,7 +428,17 @@ export interface LlmStrategyInstanceSignalsQuery {
 }
 
 // 使用 SDK 生成的类型，避免手写接口与后端 DTO 发生漂移
-export type UserLlmStrategyInstanceResponse = Infer<typeof schemas.UserLlmStrategyInstanceResponseDto>
+export interface UserLlmStrategyInstanceResponse {
+  id: string
+  name: string
+  description?: string | null
+  strategyId: string
+  strategyName?: string | null
+  strategyDescription?: string | null
+  llmModel: string
+  createdAt?: string | null
+  isSubscribed?: boolean
+}
 
 export async function fetchLlmStrategyInstances(query?: {
   page?: number
@@ -702,7 +712,12 @@ export async function cancelSubscription(subscriptionId: string) {
 // 与后端 DTO / OpenAPI 完全对齐，避免手写类型漂移
 export type CreateLlmSubscriptionPayload = Infer<typeof schemas.CreateLlmSubscriptionDto>
 
-export type LlmSubscriptionResponse = Infer<typeof schemas.LlmSubscriptionResponseDto>
+export interface LlmSubscriptionResponse {
+  id: string
+  llmStrategyInstanceId: string
+  status: 'active' | 'paused' | 'cancelled'
+  createdAt: string
+}
 
 export async function createLlmSubscription(payload: CreateLlmSubscriptionPayload) {
   const result = await apiCall(async () => {
