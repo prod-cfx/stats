@@ -76,396 +76,20 @@
   "fileMap": {
     "nonProjectFiles": [
       {
-        "file": ".claude/agents/code.md",
-        "hash": "11358928721724836357"
-      },
-      {
-        "file": ".claude/agents/requirements-generate.md",
-        "hash": "5690953357564628255"
-      },
-      {
-        "file": "pnpm-workspace.yaml",
-        "hash": "838092932252925324"
-      },
-      {
-        "file": ".claude/agents/bugfix.md",
-        "hash": "13929893115000358006"
-      },
-      {
-        "file": ".claude/commands/bmad-pilot.md",
-        "hash": "14895804457144577271"
-      },
-      {
-        "file": "scripts/lib/worktree.js",
-        "hash": "9039334953614231643"
-      },
-      {
-        "file": "ruler/git-workflow.md",
-        "hash": "5448388821843703845"
-      },
-      {
         "file": ".claude/commands/issue-solve.md",
         "hash": "5989916148811058898"
-      },
-      {
-        "file": "postcss.config.js",
-        "hash": "5572050370254320041"
-      },
-      {
-        "file": ".claude/skills/gh-interactions/references/commands.md",
-        "hash": "3340619179493649119"
-      },
-      {
-        "file": "scripts/lib/env.js",
-        "hash": "4864446789502165601"
-      },
-      {
-        "file": ".claude/skills/gh-interactions/references/api_operations.md",
-        "hash": "7873994948552217686"
-      },
-      {
-        "file": ".github/codex_prompt.txt",
-        "hash": "7914578761239561424"
-      },
-      {
-        "file": ".claude/agents/issue-creator.md",
-        "hash": "11556225394634784190"
-      },
-      {
-        "file": ".claude/skills/db-access/references/query_patterns.md",
-        "hash": "8526592135478031290"
-      },
-      {
-        "file": "ruler/linus-thinking.md",
-        "hash": "8408276790573138548"
-      },
-      {
-        "file": ".claude/commands/code-entropy-scan.md",
-        "hash": "648339885932186422"
-      },
-      {
-        "file": "tailwind.config.js",
-        "hash": "8252444562256198450"
-      },
-      {
-        "file": ".claude/commands/git-commit-and-pr.md",
-        "hash": "1470420643193061613"
-      },
-      {
-        "file": "scripts/lib/exec.js",
-        "hash": "14869623248173576835"
-      },
-      {
-        "file": ".claude/skills/gh-interactions/SKILL.md",
-        "hash": "12025850251677515110"
-      },
-      {
-        "file": "infra/backend/README.md",
-        "hash": "6196363907124186326"
-      },
-      {
-        "file": ".claude/agents/bmad-review.md",
-        "hash": "9114452473272308151"
-      },
-      {
-        "file": "ecosystem.config.cjs",
-        "hash": "17473754951697821535"
-      },
-      {
-        "file": "package.json",
-        "hash": "8532418209762480736"
-      },
-      {
-        "file": "infra/gateway/README.md",
-        "hash": "8830119825908230136"
-      },
-      {
-        "file": ".claude/commands/optimize.md",
-        "hash": "11672663170140396780"
-      },
-      {
-        "file": ".claude/commands/review.md",
-        "hash": "3824864388037889729"
-      },
-      {
-        "file": "scripts/lib/run-with-version-env.js",
-        "hash": "8603872294007857861"
-      },
-      {
-        "file": ".claude/agents/debug.md",
-        "hash": "7563829295009074708"
       },
       {
         "file": "scripts/lib/start-dev.js",
         "hash": "17639987226028876584"
       },
       {
-        "file": "README.md",
-        "hash": "15655459474393280124"
-      },
-      {
-        "file": ".claude/agents/optimize.md",
-        "hash": "13647879725688672765"
-      },
-      {
-        "file": ".claude/agents/bmad-dev.md",
-        "hash": "2658393825584927484"
-      },
-      {
-        "file": ".claude/skills/gh-interactions/references/troubleshooting.md",
-        "hash": "9467051692618770095"
-      },
-      {
-        "file": ".claude/agents/requirements-code.md",
-        "hash": "14578223810437210380"
-      },
-      {
-        "file": ".claude/commands/pr-fix-pilot.md",
-        "hash": "11475139394335225696"
-      },
-      {
-        "file": ".claude/commands/git-release.md",
-        "hash": "6982145959485561083"
-      },
-      {
-        "file": "nx.json",
-        "hash": "6027324938367077762"
-      },
-      {
-        "file": ".claude/agents/requirements-review.md",
-        "hash": "1653107570989098903"
-      },
-      {
-        "file": ".env.example",
-        "hash": "17009649705528837158"
-      },
-      {
-        "file": ".github/workflows/TestLoginEC2.yml",
-        "hash": "14578919189377528449"
-      },
-      {
-        "file": ".claude/commands/refactor.md",
-        "hash": "16063568569393408807"
-      },
-      {
-        "file": "scripts/README-CLI.md",
-        "hash": "14711735767978345613"
-      },
-      {
-        "file": "scripts/config/env-layers.json",
-        "hash": "4107869140658479498"
-      },
-      {
-        "file": "prettier.config.js",
-        "hash": "12465545607414448257"
-      },
-      {
-        "file": ".github/README_GH_ACCOUNT.md",
-        "hash": "7779542929692174447"
-      },
-      {
-        "file": ".claude/commands/ask.md",
-        "hash": "122314428429837607"
-      },
-      {
-        "file": ".claude/agents/bmad-orchestrator.md",
-        "hash": "10702573719356407624"
-      },
-      {
-        "file": ".env.staging",
-        "hash": "16996845334092104936"
-      },
-      {
-        "file": ".cursor/environment.json",
-        "hash": "3383574136795051413"
-      },
-      {
-        "file": "CLAUDE.md",
-        "hash": "15748743206706086969"
-      },
-      {
-        "file": ".env.production",
-        "hash": "10549586479050477578"
-      },
-      {
-        "file": "scripts/dx",
-        "hash": "884647411942473738"
-      },
-      {
-        "file": ".claude/agents/bmad-po.md",
-        "hash": "552682809052190253"
-      },
-      {
-        "file": "pnpm-lock.yaml",
-        "hash": "2990414321934697863"
-      },
-      {
-        "file": ".claude/settings.json",
-        "hash": "8615213053198849182"
-      },
-      {
-        "file": ".claude/agents/bugfix-verify.md",
-        "hash": "13376370762864866724"
-      },
-      {
-        "file": ".claude/commands/debug.md",
-        "hash": "13611456528039977658"
-      },
-      {
-        "file": ".claude/commands/code.md",
-        "hash": "6051814708320966779"
-      },
-      {
-        "file": "scripts/remote-manager.sh",
-        "hash": "17531668742084149218"
-      },
-      {
-        "file": ".codex/prompts/pr-fix-pilot.md",
-        "hash": "7793712798209267364"
-      },
-      {
-        "file": ".cursor/mcp.json",
-        "hash": "14506070605284171377"
-      },
-      {
-        "file": "scripts/lib/confirm.js",
-        "hash": "10531039854247065299"
-      },
-      {
-        "file": ".claude/commands/think.md",
-        "hash": "13857837972819187232"
-      },
-      {
-        "file": ".claude/skills/db-access/references/psql_commands.md",
-        "hash": "14812169439668874329"
-      },
-      {
-        "file": ".claude/commands/bugfix.md",
-        "hash": "10743355592703349256"
-      },
-      {
-        "file": "docker/docker-compose.yml",
-        "hash": "10714669808739184741"
-      },
-      {
-        "file": "ruler/conventions.md",
-        "hash": "15084405473868584152"
-      },
-      {
-        "file": "scripts/config/exempted-keys.jsonc",
-        "hash": "17509891290099781012"
-      },
-      {
-        "file": ".env.development",
-        "hash": "5226394694615027775"
-      },
-      {
-        "file": "scripts/check-env.mjs",
-        "hash": "4330727842630430532"
-      },
-      {
-        "file": "scripts/lib/logger.js",
-        "hash": "9943792367079319669"
-      },
-      {
-        "file": ".claude/agents/bmad-architect.md",
-        "hash": "14080449051229713428"
-      },
-      {
-        "file": "jest.config.js",
-        "hash": "3828087894081639100"
-      },
-      {
-        "file": "ruler/development.md",
-        "hash": "17251590881625451847"
-      },
-      {
-        "file": "tsconfig.base.json",
-        "hash": "4426578697970927539"
-      },
-      {
-        "file": "eslint.config.js",
-        "hash": "17713178401546230393"
-      },
-      {
-        "file": ".github/workflows/Codex_Review.yml",
-        "hash": "14113002910276173809"
-      },
-      {
-        "file": ".claude/skills/db-access/references/troubleshooting.md",
-        "hash": "6803586520848016653"
-      },
-      {
-        "file": ".claude/agents/requirements-testing.md",
-        "hash": "793863868608692718"
-      },
-      {
-        "file": ".claude/agents/bmad-qa.md",
-        "hash": "9692479697550005832"
-      },
-      {
-        "file": ".gitignore",
-        "hash": "6167167818966738763"
-      },
-      {
-        "file": ".claude/skills/db-access/SKILL.md",
-        "hash": "5996019057437606391"
-      },
-      {
-        "file": ".env.e2e.example",
-        "hash": "4607736314077461020"
-      },
-      {
-        "file": "scripts/config/commands.json",
-        "hash": "6301537959017663249"
-      },
-      {
-        "file": ".claude/commands/requirements-pilot.md",
-        "hash": "11241998295150765489"
-      },
-      {
         "file": ".claude/agents/bmad-sm.md",
         "hash": "11683432987533965117"
       },
       {
-        "file": "AGENTS.md",
-        "hash": "11720792311988730486"
-      },
-      {
-        "file": "scripts/lib/backend-package.js",
-        "hash": "11098598489969456423"
-      },
-      {
-        "file": "docker/.env.example",
-        "hash": "5115176829489686184"
-      },
-      {
-        "file": "scripts/lib/validate-env.js",
-        "hash": "11710188773440612219"
-      },
-      {
-        "file": "scripts/dev/pm2-stack.js",
-        "hash": "977778937469079953"
-      },
-      {
-        "file": "scripts/config/required-env.jsonc",
-        "hash": "4535365952123155432"
-      },
-      {
-        "file": ".claude/agents/gpt5.md",
-        "hash": "17993624502185037121"
-      },
-      {
-        "file": "scripts/config/local-env-allowlist.jsonc",
-        "hash": "17140609341782463069"
-      },
-      {
-        "file": "ruler/architecture.md",
-        "hash": "6278702928390954749"
-      },
-      {
-        "file": "docker/start.sh",
-        "hash": "4697468932926872649"
+        "file": "scripts/remote-manager.sh",
+        "hash": "17531668742084149218"
       },
       {
         "file": "docs/architecture.md",
@@ -476,16 +100,392 @@
         "hash": "7685613816394470497"
       },
       {
-        "file": "scripts/ensure-gh-account.sh",
-        "hash": "5959720751612259587"
+        "file": ".claude/commands/code.md",
+        "hash": "6051814708320966779"
+      },
+      {
+        "file": "scripts/lib/backend-package.js",
+        "hash": "11098598489969456423"
+      },
+      {
+        "file": "ruler/conventions.md",
+        "hash": "15084405473868584152"
+      },
+      {
+        "file": ".claude/agents/requirements-review.md",
+        "hash": "1653107570989098903"
+      },
+      {
+        "file": "ruler/development.md",
+        "hash": "17251590881625451847"
+      },
+      {
+        "file": ".claude/agents/bmad-review.md",
+        "hash": "9114452473272308151"
+      },
+      {
+        "file": "scripts/config/exempted-keys.jsonc",
+        "hash": "17509891290099781012"
+      },
+      {
+        "file": ".env.production",
+        "hash": "10549586479050477578"
+      },
+      {
+        "file": ".claude/agents/code.md",
+        "hash": "11358928721724836357"
+      },
+      {
+        "file": ".claude/skills/gh-interactions/references/commands.md",
+        "hash": "3340619179493649119"
+      },
+      {
+        "file": ".claude/commands/pr-fix-pilot.md",
+        "hash": "11475139394335225696"
+      },
+      {
+        "file": ".claude/agents/debug.md",
+        "hash": "7563829295009074708"
+      },
+      {
+        "file": "scripts/config/commands.json",
+        "hash": "6301537959017663249"
+      },
+      {
+        "file": ".claude/agents/requirements-code.md",
+        "hash": "14578223810437210380"
       },
       {
         "file": "docker/README.md",
         "hash": "3776023052298623291"
       },
       {
+        "file": "scripts/lib/run-with-version-env.js",
+        "hash": "8603872294007857861"
+      },
+      {
+        "file": ".claude/agents/gpt5.md",
+        "hash": "17993624502185037121"
+      },
+      {
+        "file": ".github/README_GH_ACCOUNT.md",
+        "hash": "7779542929692174447"
+      },
+      {
+        "file": ".claude/skills/gh-interactions/references/troubleshooting.md",
+        "hash": "9467051692618770095"
+      },
+      {
+        "file": ".claude/commands/git-commit-and-pr.md",
+        "hash": "1470420643193061613"
+      },
+      {
+        "file": ".claude/commands/bugfix.md",
+        "hash": "10743355592703349256"
+      },
+      {
+        "file": ".claude/commands/bmad-pilot.md",
+        "hash": "14895804457144577271"
+      },
+      {
+        "file": ".claude/skills/db-access/references/troubleshooting.md",
+        "hash": "6803586520848016653"
+      },
+      {
+        "file": "ruler/architecture.md",
+        "hash": "6278702928390954749"
+      },
+      {
+        "file": "eslint.config.js",
+        "hash": "17713178401546230393"
+      },
+      {
+        "file": "ruler/git-workflow.md",
+        "hash": "5448388821843703845"
+      },
+      {
+        "file": "docker/docker-compose.yml",
+        "hash": "10714669808739184741"
+      },
+      {
+        "file": ".claude/agents/optimize.md",
+        "hash": "13647879725688672765"
+      },
+      {
+        "file": ".claude/commands/review.md",
+        "hash": "3824864388037889729"
+      },
+      {
+        "file": ".claude/commands/code-entropy-scan.md",
+        "hash": "648339885932186422"
+      },
+      {
+        "file": ".claude/skills/db-access/SKILL.md",
+        "hash": "5996019057437606391"
+      },
+      {
+        "file": ".claude/skills/gh-interactions/references/api_operations.md",
+        "hash": "7873994948552217686"
+      },
+      {
+        "file": ".claude/agents/requirements-testing.md",
+        "hash": "793863868608692718"
+      },
+      {
+        "file": ".gitignore",
+        "hash": "6167167818966738763"
+      },
+      {
+        "file": ".claude/agents/bmad-orchestrator.md",
+        "hash": "10702573719356407624"
+      },
+      {
+        "file": ".claude/commands/ask.md",
+        "hash": "122314428429837607"
+      },
+      {
+        "file": "scripts/lib/confirm.js",
+        "hash": "10531039854247065299"
+      },
+      {
+        "file": "docker/start.sh",
+        "hash": "4697468932926872649"
+      },
+      {
+        "file": ".claude/commands/git-release.md",
+        "hash": "6982145959485561083"
+      },
+      {
+        "file": ".claude/commands/refactor.md",
+        "hash": "16063568569393408807"
+      },
+      {
+        "file": "AGENTS.md",
+        "hash": "11720792311988730486"
+      },
+      {
+        "file": "pnpm-lock.yaml",
+        "hash": "2990414321934697863"
+      },
+      {
+        "file": ".env.staging",
+        "hash": "16996845334092104936"
+      },
+      {
+        "file": "scripts/lib/validate-env.js",
+        "hash": "11710188773440612219"
+      },
+      {
+        "file": ".github/workflows/TestLoginEC2.yml",
+        "hash": "14578919189377528449"
+      },
+      {
+        "file": "README.md",
+        "hash": "15655459474393280124"
+      },
+      {
+        "file": "scripts/dx",
+        "hash": "884647411942473738"
+      },
+      {
+        "file": ".github/workflows/Codex_Review.yml",
+        "hash": "14113002910276173809"
+      },
+      {
+        "file": "scripts/check-env.mjs",
+        "hash": "4330727842630430532"
+      },
+      {
+        "file": "scripts/README-CLI.md",
+        "hash": "14711735767978345613"
+      },
+      {
+        "file": ".claude/agents/bmad-qa.md",
+        "hash": "9692479697550005832"
+      },
+      {
+        "file": "docker/.env.example",
+        "hash": "5115176829489686184"
+      },
+      {
         "file": ".env.e2e",
         "hash": "3950013056986600625"
+      },
+      {
+        "file": "jest.config.js",
+        "hash": "3828087894081639100"
+      },
+      {
+        "file": ".claude/agents/bugfix-verify.md",
+        "hash": "13376370762864866724"
+      },
+      {
+        "file": "scripts/lib/logger.js",
+        "hash": "9943792367079319669"
+      },
+      {
+        "file": ".env.example",
+        "hash": "17009649705528837158"
+      },
+      {
+        "file": ".claude/commands/optimize.md",
+        "hash": "11672663170140396780"
+      },
+      {
+        "file": ".claude/agents/bmad-architect.md",
+        "hash": "14080449051229713428"
+      },
+      {
+        "file": ".claude/agents/issue-creator.md",
+        "hash": "11556225394634784190"
+      },
+      {
+        "file": "nx.json",
+        "hash": "6027324938367077762"
+      },
+      {
+        "file": ".claude/agents/bmad-dev.md",
+        "hash": "2658393825584927484"
+      },
+      {
+        "file": "tsconfig.base.json",
+        "hash": "4426578697970927539"
+      },
+      {
+        "file": "scripts/lib/exec.js",
+        "hash": "14869623248173576835"
+      },
+      {
+        "file": "prettier.config.js",
+        "hash": "12465545607414448257"
+      },
+      {
+        "file": "scripts/lib/env.js",
+        "hash": "4864446789502165601"
+      },
+      {
+        "file": "ecosystem.config.cjs",
+        "hash": "17473754951697821535"
+      },
+      {
+        "file": ".claude/commands/debug.md",
+        "hash": "13611456528039977658"
+      },
+      {
+        "file": "tailwind.config.js",
+        "hash": "8252444562256198450"
+      },
+      {
+        "file": "postcss.config.js",
+        "hash": "5572050370254320041"
+      },
+      {
+        "file": ".claude/commands/think.md",
+        "hash": "13857837972819187232"
+      },
+      {
+        "file": "pnpm-workspace.yaml",
+        "hash": "838092932252925324"
+      },
+      {
+        "file": "scripts/config/env-layers.json",
+        "hash": "4107869140658479498"
+      },
+      {
+        "file": "scripts/ensure-gh-account.sh",
+        "hash": "5959720751612259587"
+      },
+      {
+        "file": ".claude/settings.json",
+        "hash": "8615213053198849182"
+      },
+      {
+        "file": ".claude/commands/requirements-pilot.md",
+        "hash": "11241998295150765489"
+      },
+      {
+        "file": "scripts/dev/pm2-stack.js",
+        "hash": "977778937469079953"
+      },
+      {
+        "file": ".env.e2e.example",
+        "hash": "4607736314077461020"
+      },
+      {
+        "file": "scripts/config/required-env.jsonc",
+        "hash": "4535365952123155432"
+      },
+      {
+        "file": ".cursor/environment.json",
+        "hash": "3383574136795051413"
+      },
+      {
+        "file": ".cursor/mcp.json",
+        "hash": "14506070605284171377"
+      },
+      {
+        "file": "infra/gateway/README.md",
+        "hash": "8830119825908230136"
+      },
+      {
+        "file": "scripts/config/local-env-allowlist.jsonc",
+        "hash": "17140609341782463069"
+      },
+      {
+        "file": "infra/backend/README.md",
+        "hash": "6196363907124186326"
+      },
+      {
+        "file": "ruler/linus-thinking.md",
+        "hash": "8408276790573138548"
+      },
+      {
+        "file": "CLAUDE.md",
+        "hash": "15748743206706086969"
+      },
+      {
+        "file": ".claude/agents/requirements-generate.md",
+        "hash": "5690953357564628255"
+      },
+      {
+        "file": ".env.development",
+        "hash": "5226394694615027775"
+      },
+      {
+        "file": ".claude/agents/bugfix.md",
+        "hash": "13929893115000358006"
+      },
+      {
+        "file": ".claude/skills/gh-interactions/SKILL.md",
+        "hash": "12025850251677515110"
+      },
+      {
+        "file": "package.json",
+        "hash": "8532418209762480736"
+      },
+      {
+        "file": ".codex/prompts/pr-fix-pilot.md",
+        "hash": "7793712798209267364"
+      },
+      {
+        "file": ".claude/skills/db-access/references/query_patterns.md",
+        "hash": "8526592135478031290"
+      },
+      {
+        "file": "scripts/lib/worktree.js",
+        "hash": "9039334953614231643"
+      },
+      {
+        "file": ".github/codex_prompt.txt",
+        "hash": "7914578761239561424"
+      },
+      {
+        "file": ".claude/skills/db-access/references/psql_commands.md",
+        "hash": "14812169439668874329"
+      },
+      {
+        "file": ".claude/agents/bmad-po.md",
+        "hash": "552682809052190253"
       },
       {
         "file": "scripts/oauth-debug.sh",
