@@ -29,7 +29,7 @@ export class DataSyncOrchestrator {
    */
   async runDueTasks(): Promise<void> {
     const now = new Date()
-    const tasks = await this.taskRepo.findDueTasks(now)
+    const tasks = await this.taskRepo.claimDueTasks(now, 10)
 
     if (!tasks.length) {
       this.logger.debug('No due data-pull tasks')
@@ -58,8 +58,6 @@ export class DataSyncOrchestrator {
     const exec = await this.execRepo.createStart(taskId, start)
 
     try {
-      await this.taskRepo.markRunning(taskId, start)
-
       this.logger.log(`Running data-pull task key=${job.key}, cursor=${cursor ?? 'null'}`)
 
       const result = await job.run(cursor)

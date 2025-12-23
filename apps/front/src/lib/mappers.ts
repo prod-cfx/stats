@@ -2,7 +2,6 @@
  * 数据映射函数 - 将后端 DTO 转换为前端展示类型
  */
 
-import type { schemas } from '@ai/api-contracts'
 import type {
   LlmSubscriptionResponse,
   TradingSignalResponse,
@@ -11,11 +10,22 @@ import type {
 import type { StrategyItem } from '@/types/my-strategies'
 import type { ActionItem, Strategy, StrategyDetail } from '@/types/strategies'
 
-// 使用 API contracts 的类型，避免手动定义导致类型漂移
-type Infer<T> = T extends { _output: infer O } ? O : never
+export interface UserStrategyInstanceDto {
+  id: string
+  name: string
+  description?: string | null
+  strategyTemplateName?: string | null
+  strategyTemplateDescription?: string | null
+  llmModel?: string | null
+  startedAt?: string | null
+  isSubscribed?: boolean
+}
 
-export type UserStrategyInstanceDto = Infer<typeof schemas.UserStrategyInstanceResponseDto>
-export type SubscriptionDto = Infer<typeof schemas.SubscriptionResponseDto>
+export interface SubscriptionDto {
+  id: string
+  status: string
+  createdAt: string
+}
 
 // 常量配置
 export const STRATEGY_DEFAULTS = {

@@ -62,6 +62,48 @@ export class DataPullTaskRepository {
     })
   }
 
+  /**
+   * 原子性地“抢占”一批 due 任务，避免多实例重复执行同一任务。
+   *
+   * 实现思路（乐观并发控制）：
+   * - 先用 findDueTasks 计算候选任务列表
+   * - 针对每个候选任务，使用 updateMany(where: { id, lastStatus != RUNNING }) 进行抢占
+   * - 只有 count === 1 的更新才视为当前实例成功 claim
+   */
+  async claimDueTasks(now: Date, maxTasks = 10): Promise<DataPullTask[]> {
+    const client = this.getClient()
+    const candidates = await this.findDueTasks(now)
+
+    const claimed: DataPullTask[] = []
+
+    for (const task of candidates) {
+      if (claimed.length >= maxTasks) break
+
+      const result = await client.dataPullTask.updateMany({
+        where: {
+          id: task.id,
+          lastStatus: { not: 'RUNNING' },
+        },
+        data: {
+          lastStatus: 'RUNNING',
+          lastRunAt: now,
+          lastError: null,
+        },
+      })
+
+      if (result.count === 1) {
+        claimed.push({
+          ...task,
+          lastStatus: 'RUNNING',
+          lastRunAt: now,
+          lastError: null,
+        })
+      }
+    }
+
+    return claimed
+  }
+
   async markRunning(taskId: number, startedAt: Date): Promise<void> {
     const client = this.getClient()
     await client.dataPullTask.update({

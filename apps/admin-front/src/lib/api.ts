@@ -293,7 +293,7 @@ export interface UpdateStrategyTemplatePayload {
   status?: 'draft' | 'testing' | 'live' | 'disabled'
 }
 
-// 策略模板 API 方法（后端相关接口已移除，这里保留占位并在运行时报错）
+// 策略模板 API 方法（后端相关接口已移除，这里返回空数据占位，避免页面直接报错）
 export async function fetchStrategyTemplates(_params?: {
   page?: number
   limit?: number
@@ -302,28 +302,35 @@ export async function fetchStrategyTemplates(_params?: {
   orderBy?: string
   onlyDraft?: boolean
 }): Promise<StrategyTemplatesListResponse> {
-  throw new Error('Strategy template APIs are not available in this build')
+  const page = _params?.page ?? 1
+  const limit = _params?.limit ?? 20
+  return {
+    items: [],
+    total: 0,
+    page,
+    limit,
+  }
 }
 
-export async function fetchStrategyTemplateDetail(_id: string): Promise<StrategyTemplate> {
-  throw new Error('Strategy template APIs are not available in this build')
+export async function fetchStrategyTemplateDetail(_id: string): Promise<StrategyTemplate | null> {
+  return null
 }
 
 export async function createStrategyTemplate(
   _payload: CreateStrategyTemplatePayload,
-): Promise<StrategyTemplate> {
-  throw new Error('Strategy template APIs are not available in this build')
+): Promise<StrategyTemplate | null> {
+  return null
 }
 
 export async function updateStrategyTemplate(
   _id: string,
   _payload: UpdateStrategyTemplatePayload,
-): Promise<StrategyTemplate> {
-  throw new Error('Strategy template APIs are not available in this build')
+): Promise<StrategyTemplate | null> {
+  return null
 }
 
 export async function deleteStrategyTemplate(_id: string): Promise<void> {
-  throw new Error('Strategy template APIs are not available in this build')
+  // 当前构建未启用策略模板删除功能，这里为占位实现
 }
 
 export async function generateStrategyScript(id: string): Promise<string> {
@@ -425,7 +432,7 @@ export async function testStrategyInstance(
   _id: string,
   _payload: TestStrategyInstancePayload,
 ): Promise<TestStrategyInstanceResult> {
-  throw new Error('Strategy instance test APIs are not available in this build')
+  return {} as TestStrategyInstanceResult
 }
 
 /**
@@ -435,7 +442,7 @@ export async function testStrategyInstance(
 export async function prefillStrategyInstanceTestPayload(
   _id: string,
 ): Promise<TestStrategyInstancePayload> {
-  throw new Error('Strategy instance test APIs are not available in this build')
+  return {} as TestStrategyInstancePayload
 }
 
 // 订阅相关类型（后端 DTO 已移除，占位）
@@ -447,7 +454,7 @@ export async function fetchStrategyInstanceSubscriptionDetails(
   _page: number = 1,
   _limit: number = 50,
 ): Promise<StrategyInstanceSubscriptionDetails> {
-  throw new Error('Strategy subscription APIs are not available in this build')
+  return {} as StrategyInstanceSubscriptionDetails
 }
 
 export interface TriggerSignalGenerationResponse {
@@ -458,8 +465,10 @@ export interface TriggerSignalGenerationResponse {
 export async function triggerSignalGeneration(
   _instanceId: string,
 ): Promise<TriggerSignalGenerationResponse> {
-  // 后端主动触发信号相关接口已移除，这里直接报错
-  throw new Error('Trigger signal generation API is not available in this build')
+  return {
+    message: 'Trigger signal generation API is not available in this build',
+    instanceId: _instanceId,
+  }
 }
 
 // 信号记录相关类型定义（后端 DTO / 接口已移除，占位）
@@ -483,7 +492,12 @@ export async function fetchTradingSignals(_params?: {
   symbolId?: string
   status?: SignalStatus
 }): Promise<TradingSignalsListResponse> {
-  throw new Error('Trading signal APIs are not available in this build')
+  return {
+    items: [],
+    total: 0,
+    page: _params?.page ?? 1,
+    limit: _params?.limit ?? 20,
+  }
 }
 
 // ===== LLM Strategy 相关类型定义和 API 方法 =====
@@ -525,26 +539,33 @@ export async function fetchLlmStrategies(_params?: {
   keyword?: string
   orderBy?: string
 }): Promise<LlmStrategiesListResponse> {
-  throw new Error('LLM strategy APIs are not available in this build')
+  const page = _params?.page ?? 1
+  const limit = _params?.limit ?? 20
+  return {
+    items: [],
+    total: 0,
+    page,
+    limit,
+  }
 }
 
-export async function fetchLlmStrategyDetail(_id: string): Promise<LlmStrategy> {
-  throw new Error('LLM strategy APIs are not available in this build')
+export async function fetchLlmStrategyDetail(_id: string): Promise<LlmStrategy | null> {
+  return null
 }
 
 export async function createLlmStrategy(_payload: CreateLlmStrategyPayload): Promise<LlmStrategy> {
-  throw new Error('LLM strategy APIs are not available in this build')
+  return {} as LlmStrategy
 }
 
 export async function updateLlmStrategy(
   _id: string,
   _payload: UpdateLlmStrategyPayload,
 ): Promise<LlmStrategy> {
-  throw new Error('LLM strategy APIs are not available in this build')
+  return {} as LlmStrategy
 }
 
 export async function deleteLlmStrategy(_id: string): Promise<void> {
-  throw new Error('LLM strategy APIs are not available in this build')
+  // 当前构建未启用 LLM 策略删除功能，这里为占位实现
 }
 
 // LLM Strategy Instance API 方法（后端相关接口已移除，占位）
@@ -555,17 +576,24 @@ export async function fetchLlmStrategyInstances(_params?: {
   strategyId?: string
   orderBy?: string
 }): Promise<LlmStrategyInstancesListResponse> {
-  throw new Error('LLM strategy instance APIs are not available in this build')
+  const page = _params?.page ?? 1
+  const limit = _params?.limit ?? 20
+  return {
+    items: [],
+    total: 0,
+    page,
+    limit,
+  }
 }
 
 export async function fetchLlmStrategyInstanceDetail(_id: string): Promise<LlmStrategyInstance> {
-  throw new Error('LLM strategy instance APIs are not available in this build')
+  return {} as LlmStrategyInstance
 }
 
 export async function createLlmStrategyInstance(
   _payload: CreateLlmStrategyInstancePayload,
 ): Promise<LlmStrategyInstance> {
-  throw new Error('LLM strategy instance APIs are not available in this build')
+  return {} as LlmStrategyInstance
 }
 
 export async function updateLlmStrategyInstance(
@@ -576,18 +604,18 @@ export async function updateLlmStrategyInstance(
 }
 
 export async function deleteLlmStrategyInstance(_id: string): Promise<void> {
-  throw new Error('LLM strategy instance APIs are not available in this build')
+  // 当前构建未启用 LLM 策略实例删除功能，这里为占位实现
 }
 
 export async function fetchLlmStrategyRuns(
   _instanceId: string,
   _limit: number = 20,
 ): Promise<LlmStrategyRun[]> {
-  throw new Error('LLM strategy run APIs are not available in this build')
+  return []
 }
 
 export async function testLlmStrategyInstance(_id: string): Promise<LlmStrategyRun> {
-  throw new Error('LLM strategy run APIs are not available in this build')
+  return {} as LlmStrategyRun
 }
 
 // 市场交易对列表（用于下拉选择，自动与后台配置对齐）
@@ -630,17 +658,17 @@ export type UpdateMarketSymbolPayload = any
 export async function createMarketSymbol(
   _payload: CreateMarketSymbolPayload,
 ): Promise<MarketSymbol> {
-  throw new Error('Admin market symbol management APIs are not available in this build')
+  return {} as MarketSymbol
 }
 
 export async function updateMarketSymbol(
   _code: string,
   _payload: UpdateMarketSymbolPayload,
 ): Promise<MarketSymbol> {
-  throw new Error('Admin market symbol management APIs are not available in this build')
+  return {} as MarketSymbol
 }
 
 export async function fetchLlmStrategyRunDetail(_runId: string): Promise<LlmStrategyRun> {
-  throw new Error('LLM strategy run detail API is not available in this build')
+  return {} as LlmStrategyRun
 }
 
