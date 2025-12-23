@@ -1,0 +1,95 @@
+{
+  "name": "front",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/front/src",
+  "projectType": "application",
+  "tags": ["scope:frontend", "type:app", "framework:nextjs"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/front"],
+      "defaultConfiguration": "production",
+      "options": {
+        "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+        "cwd": "apps/front"
+      },
+      "configurations": {
+        "development": {
+          "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+          "cwd": "apps/front"
+        },
+        "production": {
+          "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+          "cwd": "apps/front"
+        }
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "defaultConfiguration": "development",
+      "options": {
+        "command": "next dev -H 0.0.0.0 -p 3001",
+        "cwd": "apps/front"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "next dev -H 0.0.0.0 -p 3001",
+        "cwd": "apps/front"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "next start -p 3001",
+        "cwd": "apps/front"
+      },
+      "dependsOn": ["build"]
+    },
+    "exportDist": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/front"],
+      "options": {
+        "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+        "cwd": "apps/front"
+      }
+    },
+    "preview:export": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx --yes serve -s ../../dist/front -l 3001",
+        "cwd": "apps/front"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest || exit 0",
+        "cwd": "apps/front"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/front/**/*.{ts,tsx,js,jsx}"],
+        "eslintConfig": "eslint.config.js"
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --skipLibCheck --incremental false",
+        "cwd": "apps/front"
+      }
+    },
+    "type-check-strict": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit --project .",
+        "cwd": "apps/front"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+name: Test Login EC2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  login-and-create-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 登录服务器并创建 jerry.txt
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+          DEST_PATH: ${{ secrets.AWS_SERVER_UAT_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p $PORT -H $HOST >> ~/.ssh/known_hosts
+          ssh -p $PORT $USER@$HOST '
+            set -e
+            cd /opt/
+            touch TestLogin.txt
+            echo "已创建TestLogin.txt文件"
+          '

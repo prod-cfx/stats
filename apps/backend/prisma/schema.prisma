@@ -1,0 +1,2 @@
+// Prisma 7: datasource 与 generator 配置统一放在 prisma.config.ts
+// 所有模型 / 枚举已拆分到 ./schema/*.prisma 文件中，仅保留此占位文件方便编辑器引用。

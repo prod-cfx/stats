@@ -1,0 +1,30 @@
+{
+  "name": "config",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/config/src",
+  "projectType": "library",
+  "tags": ["scope:config", "type:lib"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/packages/config/dist"],
+      "options": {
+        "command": "pnpm --filter @net/config run build"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "lintFilePatterns": ["packages/config/src/**/*.ts"],
+        "eslintConfig": "eslint.config.js"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo \"config tests 尚未配置\""
+      }
+    }
+  }
+}
+

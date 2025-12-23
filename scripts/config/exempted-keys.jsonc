@@ -1,0 +1,29 @@
+{
+  // 豁免键：这些键在非 *.local 文件中可以使用非占位符值
+  "exempted": [
+    // Seed 配置（布尔值，非敏感）
+    "SEED_INIT_WALLET_BALANCE",
+
+    // 支付回调 URL（公开的回调地址，非敏感）
+    "WGQPAY_NOTIFY_URL",
+    "WGQPAY_RETURN_URL",
+
+    // 日志配置（非敏感，允许在 .env.* 设置默认值并可在 .local 覆盖）
+    "LOG_CONTEXT_FILTER",
+    "LOG_LEVEL",
+
+    // 数据库/Redis 端口与本地联调地址（非敏感）
+    "POSTGRES_PORT",
+    "REDIS_PORT",
+    "POSTGRES_HOST",
+    "REDIS_HOST",
+
+    // 前端公开的 API 服务器地址（浏览器可见，非敏感）
+    "NEXT_PUBLIC_API_SERVER_URL",
+    "NEXT_PUBLIC_API_BASE_URL",
+
+    // 应用环境标识（每个环境文件都需要设置对应的真实值）
+    "APP_ENV"
+  ]
+}
+

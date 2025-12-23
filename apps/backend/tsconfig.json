@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "module": "commonjs",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    // 业务裁剪：将以下模块目录完全排除出编译，保留为历史参考
+    "src/modules/accounts/**/*",
+    "src/modules/ai/**/*",
+    "src/modules/indicators/**/*",
+    "src/modules/llm-strategies/**/*",
+    "src/modules/market-data/**/*",
+    "src/modules/positions/**/*",
+    "src/modules/strategy-instances/**/*",
+    "src/modules/strategy-signals/**/*",
+    "src/modules/strategy-templates/**/*",
+    "src/modules/trading/**/*",
+    "src/modules/user-exchange-accounts/**/*",
+    "src/modules/user-llm-strategy-subscriptions/**/*",
+    "src/modules/user-strategy-subscriptions/**/*"
+  ]
+}
+

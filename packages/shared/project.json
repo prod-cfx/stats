@@ -1,0 +1,31 @@
+{
+  "name": "shared",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shared/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:lib"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/packages/shared/dist"],
+      "options": {
+        "command": "pnpm --filter @ai/shared run build"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "lintFilePatterns": ["packages/shared/src/**/*.ts"],
+        "eslintConfig": "eslint.config.js"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/packages/shared"],
+      "options": {
+        "jestConfig": "packages/shared/jest.config.ts",
+        "passWithNoTests": false
+      }
+    }
+  }
+}

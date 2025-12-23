@@ -1,0 +1,88 @@
+/// RBAC 相关枚举与模型
+enum PrincipalType {
+  USER
+  ADMIN
+}
+
+enum AdminMenuType {
+  DIRECTORY
+  MENU
+  FEATURE
+}
+
+model Role {
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  name               String
+  description        String?
+  /// 管理后台：菜单权限（通常存储菜单 code 或 ID）
+  menuPermissions    String[]         @default([]) @map("menu_permissions")
+  /// 管理后台：功能权限（按钮级、功能点标识）
+  featurePermissions String[]         @default([]) @map("feature_permissions")
+  /// 管理后台：API 权限（资源+动作等组合标识）
+  apiPermissions     String[]         @default([]) @map("api_permissions")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at")
+  assignments        RoleAssignment[]
+
+  @@map("roles")
+}
+
+model RoleAssignment {
+  id            String        @id @default(cuid())
+  principalId   String        @map("principal_id")
+  principalType PrincipalType @default(USER) @map("principal_type")
+  roleId        String        @map("role_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([principalId, principalType, roleId], map: "uniq_role_assignment")
+  @@index([principalId, principalType], map: "idx_role_assignment_principal")
+  @@map("role_assignments")
+}
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  /// 登录用户名（唯一）
+  username  String   @unique
+  /// 登录密码（哈希）
+  password  String
+  /// 昵称
+  nickName  String?  @map("nick_name")
+  email     String?
+  /// 头像 URL
+  avatarUrl String?  @map("avatar_url")
+  phone     String?  @db.VarChar(20)
+  /// 是否冻结
+  isFrozen  Boolean  @default(false) @map("is_frozen")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([username])
+  @@map("admin_users")
+}
+
+model AdminMenu {
+  id          String        @id @default(cuid())
+  parentId    String?       @map("parent_id")
+  type        AdminMenuType
+  title       String
+  icon        String?
+  /// 唯一的菜单/功能 code，用于权限绑定
+  code        String?       @unique
+  path        String?
+  description String?
+  i18nKey     String?       @map("i18n_key")
+  sort        Int           @default(0)
+  isShow      Boolean       @default(true) @map("is_show")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  parent   AdminMenu?  @relation("AdminMenuHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children AdminMenu[] @relation("AdminMenuHierarchy")
+
+  @@unique([parentId, title])
+  @@index([parentId])
+  @@map("admin_menus")
+}

@@ -1,0 +1,2103 @@
+#!/usr/bin/env node
+
+/**
+ * DX CLI 主入口脚本（本地开发专用）
+ * 提供统一的命令行接口来管理开发环境。
+ * 说明：CI/CD 与本地统一使用 `./scripts/dx` 命令系统（见 docs/CI_SCRIPTS_MIGRATION.md）。
+ *
+ * 用法:
+ *   dx start [service] [环境标志]  - 启动/桥接服务（环境标志需带 -- 前缀）
+ *   dx build [target] [环境标志]   - 构建应用（环境标志需使用 --dev/--staging/--prod/--test/--e2e）
+ *   dx db [action] [环境标志]      - 数据库操作（默认 --dev，亦可传入其他环境标志）
+ *   dx deploy [环境标志]          - 应用数据库迁移（prisma migrate deploy）
+ *   dx test [type]                - 运行测试
+ *   dx release version <ver>  - 同步前后端版本号
+ *   dx lint [--fix]           - 代码检查（--fix 自动修复）
+ *   dx clean [target]         - 清理操作
+ *
+ * 全局选项:
+ *   --dev, --development      - 强制使用开发环境
+ *   --prod, --production      - 强制使用生产环境
+ *   --staging, --stage        - 强制使用预发环境
+ *   --test                    - 强制使用测试环境
+ *   --e2e                     - 强制使用E2E测试环境
+ *   -Y, --yes                 - 跳过所有确认提示
+ *   -v, --verbose             - 详细输出
+ *   -h, --help                - 显示帮助信息
+ */
+
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs'
+import { join } from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
+import { logger } from './lib/logger.js'
+import { envManager } from './lib/env.js'
+import { execManager } from './lib/exec.js'
+import { confirmManager } from './lib/confirm.js'
+import worktreeManager from './lib/worktree.js'
+import * as child_process from 'node:child_process'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+class DxCli {
+  constructor() {
+    this.commands = this.loadCommands()
+    this.args = process.argv.slice(2)
+    this.flags = this.parseFlags()
+    this.command = this.args[0]
+    this.subcommand = this.args[1]
+    this.environment = this.args[2]
+
+    this.flagDefinitions = {
+      _global: [
+        { flag: '--dev' },
+        { flag: '--development' },
+        { flag: '--prod' },
+        { flag: '--production' },
+        { flag: '--staging' },
+        { flag: '--stage' },
+        { flag: '--test' },
+        { flag: '--e2e' },
+        { flag: '--no-env-check' },
+        { flag: '-Y' },
+        { flag: '--yes' },
+        { flag: '-v' },
+        { flag: '--verbose' },
+        { flag: '-h' },
+        { flag: '--help' },
+        { flag: '--parallel' },
+        { flag: '-P' },
+      ],
+      build: [{ flag: '--offline' }, { flag: '--online' }],
+      db: [
+        { flag: '--name', expectsValue: true },
+        { flag: '-n', expectsValue: true },
+      ],
+      test: [{ flag: '-t', expectsValue: true }],
+      lint: [{ flag: '--fix' }],
+      package: [
+        { flag: '--skip-build' },
+        { flag: '--keep-workdir' },
+      ],
+      worktree: [
+        { flag: '--base', expectsValue: true },
+        { flag: '-b', expectsValue: true },
+        { flag: '--all' },
+      ],
+    }
+  }
+
+  // 加载命令配置
+  loadCommands() {
+    try {
+      const configPath = join(__dirname, 'config/commands.json')
+      return JSON.parse(readFileSync(configPath, 'utf8'))
+    } catch (error) {
+      logger.error('无法加载命令配置文件')
+      logger.error(error.message)
+      process.exit(1)
+    }
+  }
+
+  // 解析命令行标志
+  parseFlags() {
+    const flags = {}
+
+    for (const flag of this.args) {
+      if (flag === '--') break
+      if (!flag.startsWith('-')) continue
+      switch (flag) {
+        case '--dev':
+        case '--development':
+          flags.dev = true
+          break
+        case '--prod':
+        case '--production':
+          flags.prod = true
+          break
+        case '--staging':
+        case '--stage':
+          flags.staging = true
+          break
+        case '--test':
+          flags.test = true
+          break
+        case '--e2e':
+          flags.e2e = true
+          break
+        case '-Y':
+        case '--yes':
+          flags.Y = true
+          break
+        case '-v':
+        case '--verbose':
+          flags.verbose = true
+          break
+        case '-h':
+      case '--help':
+        flags.help = true
+        break
+      case '--no-env-check':
+        flags.noEnvCheck = true
+        break
+        case '--parallel':
+        case '-P':
+          flags.parallel = true
+          break
+        case '--offline':
+          flags.offline = true
+          break
+        case '--online':
+          flags.online = true
+          break
+        case '--all':
+          flags.all = true
+          break
+        case '--fix':
+          flags.fix = true
+          break
+      }
+    }
+
+    return flags
+  }
+
+  // 获取非标志参数
+  getCleanArgs() {
+    const result = []
+    let afterDoubleDash = false
+    for (const arg of this.args) {
+      if (arg === '--') {
+        afterDoubleDash = true
+        break
+      }
+      if (arg.startsWith('-')) continue
+      result.push(arg)
+    }
+    return result
+  }
+
+  // 主执行方法
+  async run() {
+    try {
+      // 显示帮助
+      if (this.flags.help || !this.command) {
+        if (this.flags.help && this.command && this.command !== 'help') {
+          this.showCommandHelp(this.command)
+        } else {
+          this.showHelp()
+        }
+        return
+      }
+
+      // 在执行命令前先校验参数与选项
+      this.validateInputs()
+
+      // 设置详细模式
+      if (this.flags.verbose) {
+        logger.debug('启用详细输出模式')
+      }
+
+      // 路由到对应的命令处理器
+      await this.routeCommand()
+
+    } catch (error) {
+      logger.error('命令执行失败')
+      logger.error(error.message)
+
+      if (this.flags.verbose) {
+        console.error(error.stack)
+      }
+
+      process.exit(1)
+    }
+  }
+
+  // 命令路由
+  async routeCommand() {
+    const cleanArgs = this.getCleanArgs()
+    const [command, ...subArgs] = cleanArgs
+
+    switch (command) {
+      case 'help':
+        // 支持 `dx help` 与 `dx help <command>`
+        if (subArgs[0]) this.showCommandHelp(subArgs[0])
+        else this.showHelp()
+        return
+      case 'dev':
+        this.reportDevCommandRemoved(subArgs)
+        break
+      case 'build':
+        await this.handleBuild(subArgs)
+        break
+      case 'db':
+        await this.handleDatabase(subArgs)
+        break
+      case 'deploy':
+        await this.handleDeploy(subArgs)
+        break
+      case 'contracts':
+        await this.handleContracts(subArgs)
+        break
+      case 'test':
+        await this.handleTest(subArgs)
+        break
+      case 'release':
+        await this.handleRelease(subArgs)
+        break
+      case 'worktree':
+        await this.handleWorktree(subArgs)
+        break
+      case 'start':
+        await this.handleStart(subArgs)
+        break
+      case 'package':
+        await this.handlePackage(subArgs)
+        break
+      case 'lint':
+        await this.handleLint()
+        break
+      case 'prcheck':
+        await this.handlePrcheck(subArgs)
+        break
+      case 'clean':
+        await this.handleClean(subArgs)
+        break
+      case 'cache':
+        await this.handleCache(subArgs)
+        break
+      case 'status':
+        await this.handleStatus()
+        break
+      case 'demo':
+        await this.handleDemo(subArgs)
+        break
+      default:
+        logger.error(`未知命令: ${command}`)
+        this.showHelp()
+        process.exit(1)
+    }
+  }
+
+  // 校验原始输入，禁止未识别的选项或多余参数
+  validateInputs() {
+    const cleanArgs = this.getCleanArgs()
+    const command = cleanArgs[0]
+    const allowedFlags = this.getAllowedFlags(command)
+    const consumedFlagValueIndexes = this.validateFlags(command, allowedFlags)
+
+    // 收集所有位置参数（不含命令本身、选项及其值）
+    const positionalArgs = []
+    let commandConsumed = false
+    let afterDoubleDash = false
+    for (let i = 0; i < this.args.length; i++) {
+      const token = this.args[i]
+      if (token === '--') {
+        afterDoubleDash = true
+        continue
+      }
+      if (afterDoubleDash) continue
+      if (token.startsWith('-')) continue
+      if (consumedFlagValueIndexes.has(i)) continue
+
+      if (!commandConsumed && command) {
+        // 跳过命令本身
+        commandConsumed = true
+        continue
+      }
+
+      positionalArgs.push(token)
+    }
+
+    if (!command) {
+      if (positionalArgs.length > 0) {
+        this.reportExtraPositionals('全局', positionalArgs)
+      }
+      return
+    }
+
+    this.validatePositionalArgs(command, positionalArgs)
+  }
+
+  // 获取命令允许的选项
+  getAllowedFlags(command) {
+    const allowed = new Map()
+    const applyDefs = defs => {
+      defs?.forEach(({ flag, expectsValue }) => {
+        if (!flag) return
+        allowed.set(flag, { expectsValue: Boolean(expectsValue) })
+      })
+    }
+
+    applyDefs(this.flagDefinitions._global)
+    if (command && this.flagDefinitions[command]) {
+      applyDefs(this.flagDefinitions[command])
+    }
+
+    return allowed
+  }
+
+  // 校验选项合法性并返回被选项消耗的参数下标集合
+  validateFlags(command, allowedFlags) {
+    const consumedIndexes = new Set()
+    const doubleDashIndex = this.args.indexOf('--')
+
+    for (let i = 0; i < this.args.length; i++) {
+      if (doubleDashIndex !== -1 && i >= doubleDashIndex) break
+      const token = this.args[i]
+      if (!token.startsWith('-')) continue
+
+      const spec = allowedFlags.get(token)
+      if (!spec) {
+        this.reportUnknownFlag(command, token, allowedFlags)
+        process.exit(1)
+      }
+
+      if (spec.expectsValue) {
+        const next = this.args[i + 1]
+        if (next === undefined || next.startsWith('-')) {
+          logger.error(`选项 ${token} 需要提供参数值`)
+          process.exit(1)
+        }
+        consumedIndexes.add(i + 1)
+      }
+    }
+
+    return consumedIndexes
+  }
+
+  // 根据命令定义校验位置参数
+  validatePositionalArgs(command, positionalArgs) {
+    const ensureMax = (max) => {
+      if (positionalArgs.length > max) {
+        this.reportExtraPositionals(command, positionalArgs.slice(max))
+      }
+    }
+
+    switch (command) {
+      case 'help':
+        ensureMax(1)
+        break
+      case 'build': {
+        if (positionalArgs.length >= 2 && this.isEnvironmentToken(positionalArgs[1])) {
+          this.reportEnvironmentFlagRequired(command, positionalArgs[1], positionalArgs)
+        }
+        ensureMax(1)
+        break
+      }
+      case 'package': {
+        if (positionalArgs.length >= 2 && this.isEnvironmentToken(positionalArgs[1])) {
+          this.reportEnvironmentFlagRequired(command, positionalArgs[1], positionalArgs)
+        }
+        ensureMax(1)
+        break
+      }
+      case 'db': {
+        if (positionalArgs.length === 0) return
+        const action = positionalArgs[0]
+        const extras = positionalArgs.slice(1)
+        const envToken = extras.find(token => this.isEnvironmentToken(token))
+        if (envToken) {
+          this.reportEnvironmentFlagRequired(command, envToken, positionalArgs)
+        }
+
+        if (action === 'migrate') {
+          if (extras.length > 1) {
+            this.reportExtraPositionals(command, extras.slice(1))
+          }
+        } else if (action === 'script') {
+          // script 子命令需要一个脚本名称参数
+          if (extras.length > 1) {
+            this.reportExtraPositionals(command, extras.slice(1))
+          }
+        } else if (extras.length > 0) {
+          this.reportExtraPositionals(command, extras)
+        }
+        break
+      }
+      case 'test':
+        ensureMax(3)
+        break
+      case 'release':
+        ensureMax(2)
+        break
+      case 'worktree': {
+        if (positionalArgs.length === 0) return
+        const action = positionalArgs[0]
+        if (['del', 'delete', 'rm'].includes(action)) {
+          return
+        }
+        if (['make'].includes(action)) {
+          ensureMax(3)
+          break
+        }
+        if (['list', 'ls', 'clean', 'prune'].includes(action)) {
+          ensureMax(1)
+          break
+        }
+        break
+      }
+      case 'start': {
+        const extras = positionalArgs.slice(1)
+        const envToken = extras.find(token => this.isEnvironmentToken(token))
+        if (envToken) {
+          this.reportEnvironmentFlagRequired(command, envToken, positionalArgs)
+        }
+        ensureMax(1)
+        break
+      }
+      case 'lint':
+        ensureMax(0)
+        break
+      case 'prcheck':
+        ensureMax(0)
+        break
+      case 'clean':
+        ensureMax(1)
+        break
+      case 'cache':
+        ensureMax(1)
+        break
+      case 'demo':
+        ensureMax(1)
+        break
+      case 'deploy':
+        ensureMax(0)
+        break
+      case 'status':
+        ensureMax(0)
+        break
+      default:
+        // 默认放行，具体命令内部再校验
+        break
+    }
+  }
+
+  isEnvironmentToken(token) {
+    if (!token) return false
+    const value = String(token).toLowerCase()
+    return (
+      value === 'dev' ||
+      value === 'development' ||
+      value === 'prod' ||
+      value === 'production' ||
+      value === 'staging' ||
+      value === 'stage' ||
+      value === 'test' ||
+      value === 'e2e'
+    )
+  }
+
+  reportEnvironmentFlagRequired(command, token, positionalArgs = []) {
+    const normalizedFlag = this.getEnvironmentFlagExample(token)
+    logger.error(`命令 ${command} 不再支持通过位置参数指定环境: ${token}`)
+    logger.info('请使用带前缀的环境标志，例如 --dev、--staging、--prod、--test 或 --e2e。')
+    const suggestion = normalizedFlag
+      ? this.buildEnvironmentSuggestion(command, normalizedFlag, positionalArgs, token)
+      : null
+    if (suggestion) {
+      logger.info(`建议命令: ${suggestion}`)
+    } else if (normalizedFlag) {
+      logger.info(`示例: ./scripts/dx ${command} ... ${normalizedFlag}`)
+    }
+    logger.info('未显式指定环境时将默认使用 --dev。')
+    process.exit(1)
+  }
+
+  getEnvironmentFlagExample(token) {
+    const key = this.normalizeEnvKey(token)
+    switch (key) {
+      case 'dev':
+        return '--dev'
+      case 'prod':
+        return '--prod'
+      case 'staging':
+        return '--staging'
+      case 'test':
+        return '--test'
+      case 'e2e':
+        return '--e2e'
+      default:
+        return null
+    }
+  }
+
+  buildEnvironmentSuggestion(command, normalizedFlag, positionalArgs, token) {
+    const parts = ['./scripts/dx', command]
+    const rest = Array.isArray(positionalArgs) ? [...positionalArgs] : []
+    if (rest.length > 0) {
+      const matchIndex = rest.findIndex(arg => String(arg).toLowerCase() === String(token).toLowerCase())
+      if (matchIndex !== -1) rest.splice(matchIndex, 1)
+    }
+    if (!rest.includes(normalizedFlag)) {
+      rest.push(normalizedFlag)
+    }
+    return parts.concat(rest).join(' ')
+  }
+
+  reportDevCommandRemoved(args) {
+    const target = args?.[0]
+    logger.error('`dx dev` 命令已移除，统一使用 `dx start`。')
+    if (target) {
+      logger.info(`请执行: ./scripts/dx start ${target} --dev`)
+    } else {
+      logger.info('示例: ./scripts/dx start backend --dev')
+      logger.info('      ./scripts/dx start front --dev')
+      logger.info('      ./scripts/dx start admin --dev')
+    }
+    process.exit(1)
+  }
+
+  reportExtraPositionals(command, extras) {
+    const list = extras.join(', ')
+    if (command === '全局') {
+      logger.error(`检测到未识别的参数: ${list}`)
+    } else {
+      logger.error(`命令 ${command} 存在未识别的额外参数: ${list}`)
+    }
+    const hint = command && command !== '全局' ? `./scripts/dx help ${command}` : './scripts/dx --help'
+    logger.info(`提示: 执行 ${hint} 或 ./scripts/dx --help 查看命令用法`)
+    if (command && command !== '全局') {
+      logger.info(`示例: ./scripts/dx ${command} --help`)
+    }
+    process.exit(1)
+  }
+
+  reportUnknownFlag(command, flag, allowedFlags) {
+    logger.error(`检测到未识别的选项: ${flag}`)
+    const supported = Array.from(allowedFlags.keys())
+    if (supported.length > 0) {
+      logger.info(`支持的选项: ${supported.join(', ')}`)
+    } else if (command) {
+      logger.info(`命令 ${command} 不接受额外选项`)
+    }
+    const hint = command ? `./scripts/dx help ${command}` : './scripts/dx --help'
+    logger.info(`提示: 执行 ${hint} 或 ./scripts/dx --help 查看命令用法`)
+    if (command) {
+      logger.info(`示例: ./scripts/dx ${command} --help`)
+    }
+  }
+
+  // 处理构建命令
+  async handleBuild(args) {
+    const target = args[0] || 'all'
+
+    // 特殊目标：contracts 直接走合约生成流程
+    if (target === 'contracts') {
+      await this.handleContracts(['generate'])
+      return
+    }
+
+    const environment = this.determineEnvironment()
+    const envKey = this.normalizeEnvKey(environment)
+
+    const buildConfig = this.commands.build[target]
+    if (!buildConfig) {
+      // 兼容用户误输入或快捷命令，把 "all./scripts/dx" 这类粘连错误拆分
+      const fixed = String(target).split(/\s|\t|\r|\n|\u00A0|\.|\//)[0]
+      if (fixed && this.commands.build[fixed]) {
+        logger.warn(`自动修正构建目标: ${target} -> ${fixed}`)
+        return await this.handleBuild([fixed])
+      }
+      logger.error(`未找到构建目标: ${target}`)
+      process.exitCode = 1
+      return
+    }
+
+    logger.step(`构建 ${target} (${environment})`)
+
+    // 处理嵌套配置
+    let config = buildConfig
+    if (typeof config === 'object' && !config.command) {
+      // 如果是嵌套配置，尝试获取环境特定的配置（兼容 dev/prod 与 development/production 命名）
+      if (config[envKey]) config = config[envKey]
+      else if (envKey === 'staging' && config.prod) config = config.prod
+      else config = config.dev || config
+    }
+
+    if (config.concurrent) {
+      await this.handleConcurrentCommands(config.commands, 'build', envKey)
+    } else if (config.sequential) {
+      await this.handleSequentialCommands(config.commands, envKey)
+    } else {
+      await this.executeCommand(config)
+    }
+  }
+
+  async handlePackage(args) {
+    const target = args[0] || 'backend'
+    if (target !== 'backend') {
+      logger.error(`暂不支持打包目标: ${target}`)
+      logger.info('当前仅支持 ./scripts/dx package backend')
+      process.exitCode = 1
+      return
+    }
+
+    this.ensureRepoRoot()
+
+    const environment = this.determineEnvironment()
+    const passthroughFlags = this.args.filter(token =>
+      ['--skip-build', '--keep-workdir'].includes(token),
+    )
+    const extraArgs = passthroughFlags.length > 0 ? ` ${passthroughFlags.join(' ')}` : ''
+    const command = `node scripts/lib/backend-package.js --env=${environment}${extraArgs}`
+
+    logger.step(`打包 ${target} (${environment})`)
+
+    await execManager.executeCommand(command, {
+      app: 'backend',
+      flags: this.flags,
+    })
+  }
+
+  // 处理数据库命令
+  async handleDatabase(args) {
+    const action = args[0]
+    if (!action) {
+      logger.error('请指定数据库操作: generate, migrate, reset, seed, format, script')
+      process.exitCode = 1
+      return
+    }
+
+    const dbConfig = this.commands.db[action]
+    if (!dbConfig) {
+      logger.error(`未找到数据库操作: ${action}`)
+      process.exitCode = 1
+      return
+    }
+
+    const environment = this.determineEnvironment()
+    const envKey = this.normalizeEnvKey(environment)
+
+    // 处理 script 子命令
+    if (action === 'script') {
+      const scriptName = args[1]
+      if (!scriptName) {
+        logger.error('请指定要运行的脚本名称')
+        logger.info('用法: dx db script <script-name> [环境标志]')
+        logger.info('示例: dx db script fix-email-verified-status --dev')
+        process.exitCode = 1
+        return
+      }
+      return await this.handleDatabaseScript(scriptName, envKey, dbConfig)
+    }
+
+    logger.step(`执行数据库操作: ${action} (${environment})`)
+
+    const migrationNameArg = action === 'migrate' ? args[1] : null
+
+    // 处理嵌套配置
+    let config = dbConfig
+    let resolvedDbVariant = null
+    if (typeof config === 'object' && !config.command) {
+      const nestedConfig = config
+      const variantCandidates = this.buildDbVariantCandidates(envKey, environment)
+      const matchedVariant = variantCandidates.find(key => nestedConfig[key])
+
+      if (matchedVariant) {
+        config = nestedConfig[matchedVariant]
+        resolvedDbVariant = matchedVariant
+      } else {
+        const available = Object.keys(nestedConfig)
+          .filter(key => nestedConfig[key]?.command)
+          .join(', ')
+
+        logger.error(
+          `数据库操作 ${action} 未提供 ${environment} 环境配置（也未找到兼容别名），命令已中止。`,
+        )
+        if (available) {
+          logger.info(`可用环境变体: ${available}`)
+        }
+        logger.info('请使用受支持的环境标志，例如 --dev / --staging / --prod / --test / --e2e。')
+        process.exit(1)
+      }
+    }
+
+    // 危险操作确认
+    if (config.dangerous) {
+      const confirmed = await confirmManager.confirmDatabaseOperation(
+        action,
+        envManager.getEnvironmentDescription(environment),
+        this.flags.Y
+      )
+
+      if (!confirmed) {
+        logger.info('操作已取消')
+        return
+      }
+    }
+
+    const shouldHandleLocks =
+      (action === 'migrate' || action === 'reset') && envKey !== 'prod'
+    if (shouldHandleLocks) {
+      await this.releasePrismaLocksIfNeeded(action, environment, envKey)
+    }
+
+    // 支持为 migrate 传入迁移名：--name/-n 或额外位置参数
+    const normalizedVariant =
+      resolvedDbVariant !== null ? this.normalizeEnvKey(resolvedDbVariant) : null
+    let command = config?.command
+    const runsDevMigrateFlow =
+      action === 'migrate' &&
+      (normalizedVariant === 'dev' ||
+        (typeof command === 'string' && command.includes('prisma:migrate:dev')))
+
+    if (runsDevMigrateFlow) {
+      const allArgs = this.args
+      let migrationName = null
+      // 优先解析显式标志 --name/-n
+      const nameIdx = allArgs.indexOf('--name')
+      const shortIdx = allArgs.indexOf('-n')
+      if (nameIdx !== -1 && nameIdx + 1 < allArgs.length) {
+        migrationName = allArgs[nameIdx + 1]
+      } else if (shortIdx !== -1 && shortIdx + 1 < allArgs.length) {
+        migrationName = allArgs[shortIdx + 1]
+      } else if (
+        typeof migrationNameArg === 'string' &&
+        migrationNameArg &&
+        !migrationNameArg.startsWith('-')
+      ) {
+        // 位置参数：dx db migrate [--dev] <name>
+        migrationName = migrationNameArg
+      }
+
+      if (!migrationName) {
+        logger.error('使用 Prisma migrate dev 时必须通过 --name/-n 指定迁移名称，禁止使用交互输入。')
+        logger.info('用法: ./scripts/dx db migrate --dev --name <migration-name>')
+        logger.info('示例: ./scripts/dx db migrate --dev --name add_users_table')
+        logger.info('也支持位置参数: ./scripts/dx db migrate add_users_table --dev')
+        logger.info('提示: 即使通过其它环境标志触发了开发迁移流程，也必须显式提供迁移名。')
+        process.exitCode = 1
+        return
+      }
+
+      const escaped = String(migrationName).replace(/(["`\\$])/g, '\\$1')
+      // 通过 `-- --name` 将参数传递给 Prisma CLI，避免被 pnpm 自身消费
+      command = `${command} -- --name \"${escaped}\"`
+      logger.info(`使用迁移名: ${migrationName}`)
+    }
+
+    // 对以下数据库操作固定禁用 Nx 缓存，避免命中缓存导致未实际执行：generate/migrate/reset/seed
+    const disableCacheActions = new Set(['generate', 'migrate', 'reset', 'seed'])
+    const extraEnv = disableCacheActions.has(action) ? { NX_CACHE: 'false' } : {}
+    if (disableCacheActions.has(action)) {
+      logger.info('为数据库操作禁用 Nx 缓存: NX_CACHE=false')
+    }
+
+    if (action === 'reset' && envKey !== 'prod') {
+      extraEnv.PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION = 'yes'
+      logger.info('非生产环境重置数据库，已自动确认危险操作: PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=yes')
+    }
+
+    const execFlags = { ...this.flags }
+    ;['dev', 'development', 'prod', 'production', 'test', 'e2e', 'staging', 'stage'].forEach(
+      key => delete execFlags[key]
+    )
+    if (envKey === 'prod') execFlags.prod = true
+    else if (envKey === 'dev') execFlags.dev = true
+    else if (envKey === 'test') execFlags.test = true
+    else if (envKey === 'e2e') execFlags.e2e = true
+    else if (envKey === 'staging') execFlags.staging = true
+
+    await this.executeCommand(
+      { ...config, command, env: { ...(config.env || {}), ...extraEnv } },
+      execFlags
+    )
+  }
+
+  async handleDeploy(args = []) {
+    if (args.length > 0) {
+      this.reportExtraPositionals('deploy', args)
+      return
+    }
+
+    const deployRoot = this.commands.deploy
+    if (!deployRoot) {
+      logger.error('未配置 deploy 命令，无法执行数据库部署。')
+      process.exit(1)
+    }
+
+    const environment = this.determineEnvironment()
+    const envKey = this.normalizeEnvKey(environment)
+    let config = deployRoot
+
+    if (typeof config === 'object' && !config.command) {
+      const variantCandidates = this.buildDbVariantCandidates(envKey, environment)
+      const matchedVariant = variantCandidates.find(key => config[key])
+      if (matchedVariant) {
+        config = config[matchedVariant]
+      } else {
+        const available = Object.keys(config)
+          .filter(key => config[key]?.command)
+          .join(', ')
+        logger.error(
+          `deploy 命令未提供 ${environment} 环境配置（也未找到兼容别名），命令已中止。`
+        )
+        if (available) {
+          logger.info(`可用环境变体: ${available}`)
+        }
+        logger.info('请使用受支持的环境标志，例如 --dev / --staging / --prod / --test / --e2e。')
+        process.exit(1)
+      }
+    }
+
+    if (!config?.command) {
+      logger.error('deploy 命令配置无效：缺少可执行的 command。')
+      process.exit(1)
+    }
+
+    logger.step(`部署数据库迁移 (${environment})`)
+
+    if (config.dangerous) {
+      const confirmed = await confirmManager.confirmDatabaseOperation(
+        'deploy',
+        envManager.getEnvironmentDescription(environment),
+        this.flags.Y
+      )
+      if (!confirmed) {
+        logger.info('操作已取消')
+        return
+      }
+    }
+
+    if (envKey !== 'prod') {
+      await this.releasePrismaLocksIfNeeded('migrate', environment, envKey)
+    }
+
+    const extraEnv = { NX_CACHE: 'false' }
+    logger.info('为数据库部署禁用 Nx 缓存: NX_CACHE=false')
+
+    const execFlags = { ...this.flags }
+    ;['dev', 'development', 'prod', 'production', 'test', 'e2e', 'staging', 'stage'].forEach(
+      key => delete execFlags[key]
+    )
+    if (envKey === 'prod') execFlags.prod = true
+    else if (envKey === 'dev') execFlags.dev = true
+    else if (envKey === 'test') execFlags.test = true
+    else if (envKey === 'e2e') execFlags.e2e = true
+    else if (envKey === 'staging') execFlags.staging = true
+
+    await this.executeCommand(
+      { ...config, env: { ...(config.env || {}), ...extraEnv } },
+      execFlags
+    )
+  }
+
+  // 处理数据库脚本执行
+  async handleDatabaseScript(scriptName, envKey, dbConfig) {
+    // 自动去除 .ts 扩展名（如果用户提供了）
+    const cleanScriptName = scriptName.endsWith('.ts') ? scriptName.slice(0, -3) : scriptName
+
+    // 基础路径校验，避免路径遍历
+    if (
+      cleanScriptName.includes('/') ||
+      cleanScriptName.includes('\\') ||
+      cleanScriptName.includes('..')
+    ) {
+      logger.error(`脚本名称不能包含路径分隔符或父目录引用: ${cleanScriptName}`)
+      process.exitCode = 1
+      return
+    }
+
+    const { existsSync } = await import('fs')
+    const { join, resolve, relative } = await import('path')
+    const scriptsRoot = join(process.cwd(), 'apps/backend/prisma/scripts')
+    const scriptPath = resolve(scriptsRoot, `${cleanScriptName}.ts`)
+
+    if (relative(scriptsRoot, scriptPath).startsWith('..')) {
+      logger.error(`脚本路径解析结果已超出允许目录: ${scriptPath}`)
+      process.exitCode = 1
+      return
+    }
+
+    if (!existsSync(scriptPath)) {
+      logger.error(`脚本文件不存在: ${scriptPath}`)
+      logger.info('可用的脚本文件位于: apps/backend/prisma/scripts/')
+      process.exitCode = 1
+      return
+    }
+
+    const environment = envKey === 'dev' ? 'development' : envKey === 'prod' ? 'production' : envKey
+    logger.step(`执行数据库脚本: ${cleanScriptName} (${environment})`)
+    logger.info(`脚本路径: ${scriptPath}`)
+
+    // 处理嵌套配置
+    let config = dbConfig
+    if (typeof config === 'object' && !config.command) {
+      if (config[envKey]) config = config[envKey]
+      else if (envKey === 'staging' && config.prod) config = config.prod
+      else config = config.dev || config
+    }
+
+    // 危险操作确认
+    if (config.dangerous && envKey === 'prod') {
+      const confirmed = await confirmManager.confirmDatabaseOperation(
+        `script: ${cleanScriptName}`,
+        envManager.getEnvironmentDescription(environment),
+        this.flags.Y
+      )
+
+      if (!confirmed) {
+        logger.info('操作已取消')
+        return
+      }
+    }
+
+    // 替换命令中的脚本名称占位符
+    const command = config.command.replace('{SCRIPT_NAME}', cleanScriptName)
+
+    // 为脚本执行禁用 Nx 缓存
+    const extraEnv = { NX_CACHE: 'false' }
+    logger.info('为数据库脚本禁用 Nx 缓存: NX_CACHE=false')
+
+    const execFlags = { ...this.flags }
+    ;['dev', 'development', 'prod', 'production', 'test', 'e2e', 'staging', 'stage'].forEach(
+      key => delete execFlags[key]
+    )
+    if (envKey === 'prod') execFlags.prod = true
+    else if (envKey === 'dev') execFlags.dev = true
+    else if (envKey === 'test') execFlags.test = true
+    else if (envKey === 'e2e') execFlags.e2e = true
+    else if (envKey === 'staging') execFlags.staging = true
+
+    await this.executeCommand(
+      { ...config, command, env: { ...(config.env || {}), ...extraEnv } },
+      execFlags
+    )
+  }
+
+  buildDbVariantCandidates(envKey, environment) {
+    const normalized = this.normalizeEnvKey(envKey)
+    const aliasMap = {
+      dev: ['dev', 'development'],
+      prod: ['prod', 'production'],
+      staging: ['staging', 'stage', 'prod', 'production'],
+      test: ['test', 'e2e', 'dev'],
+      e2e: ['e2e', 'test', 'dev'],
+    }
+
+    const fallback = aliasMap[normalized] ? [...aliasMap[normalized]] : []
+    if (normalized && !fallback.includes(normalized)) fallback.unshift(normalized)
+
+    const rawEnv = String(environment || '').toLowerCase()
+    if (rawEnv && !fallback.includes(rawEnv)) fallback.push(rawEnv)
+
+    return Array.from(new Set(fallback.filter(Boolean)))
+  }
+
+  resolveDatabaseConnection(environment) {
+    try {
+      const layeredEnv = envManager.collectEnvFromLayers('backend', environment)
+      const envSource = { ...layeredEnv, ...process.env }
+
+      const parseUrl = (value) => {
+        try {
+          const url = new URL(value)
+          return {
+            host: url.hostname || 'localhost',
+            port: url.port ? Number(url.port) : 5432,
+            user: decodeURIComponent(url.username || 'postgres'),
+            password: decodeURIComponent(url.password || ''),
+            database: decodeURIComponent(url.pathname.replace(/^\//, '') || 'postgres'),
+          }
+        } catch (error) {
+          logger.warn(`解析 DATABASE_URL 失败: ${error.message}`)
+          return null
+        }
+      }
+
+      if (envSource.DATABASE_URL) {
+        const parsed = parseUrl(envSource.DATABASE_URL)
+        if (parsed) return parsed
+      }
+
+      const host = envSource.POSTGRES_HOST || envSource.DB_HOST || 'localhost'
+      const port = Number(envSource.POSTGRES_PORT || envSource.DB_PORT || 5432)
+      const user = envSource.POSTGRES_USER || envSource.DB_USER
+      const password = envSource.POSTGRES_PASSWORD || envSource.DB_PASSWORD || ''
+      const database =
+        envSource.POSTGRES_DB ||
+        envSource.POSTGRES_DATABASE ||
+        envSource.DB_NAME ||
+        envSource.DATABASE_NAME ||
+        envSource.PGDATABASE ||
+        'postgres'
+
+      if (!user) {
+        logger.warn('未能解析数据库连接信息（缺少 POSTGRES_USER 或 DATABASE_URL）')
+        return null
+      }
+
+      return { host, port, user, password, database }
+    } catch (error) {
+      logger.warn(`解析数据库连接配置失败: ${error.message}`)
+      return null
+    }
+  }
+
+  runPsqlQuery(connection, query, options = {}) {
+    const { captureOutput = true } = options
+    const args = [
+      '-h',
+      connection.host,
+      '-p',
+      String(connection.port ?? 5432),
+      '-U',
+      connection.user,
+      '-d',
+      connection.database,
+      '-At',
+      '-F',
+      ',',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      query,
+    ]
+
+    const env = { ...process.env }
+    if (connection.password) env.PGPASSWORD = connection.password
+
+    const stdio = captureOutput ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe']
+    const result = child_process.execFileSync('psql', args, {
+      env,
+      stdio,
+    })
+
+    return captureOutput ? result.toString('utf8').trim() : ''
+  }
+
+  async releasePrismaLocksIfNeeded(action, environment, envKey) {
+    const actionsNeedHandling = new Set(['migrate', 'reset'])
+    if (!actionsNeedHandling.has(action)) return
+    if (envKey === 'prod') return
+
+    const connection = this.resolveDatabaseConnection(environment)
+    if (!connection) {
+      logger.debug('跳过 Prisma 锁检查：无法解析数据库连接。')
+      return
+    }
+
+    // Prisma 使用 advisory lock ID 72707369 协调迁移，需要限定在当前数据库范围内以避免误杀其他库会话
+    const lockQuery =
+      "SELECT DISTINCT l.pid FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype='advisory' AND l.objid=72707369 AND a.datname = current_database()"
+
+    let pidOutput = ''
+    try {
+      pidOutput = this.runPsqlQuery(connection, lockQuery)
+    } catch (error) {
+      logger.warn(`检查 Prisma advisory lock 失败: ${error.message}`)
+      return
+    }
+
+    const pids = pidOutput
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+
+    if (pids.length === 0) {
+      logger.debug('未检测到当前数据库上的 Prisma advisory lock。')
+      return
+    }
+
+    logger.warn(
+      `检测到 Prisma advisory lock，自动释放相关会话: ${pids.join(
+        ', ',
+      )} (db=${connection.database}, host=${connection.host}, user=${connection.user})`,
+    )
+
+    const terminateQuery = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid = ANY(ARRAY[${pids.join(
+      ',',
+    )}])`
+
+    try {
+      this.runPsqlQuery(connection, terminateQuery, { captureOutput: false })
+      logger.success('已自动释放 Prisma advisory lock')
+    } catch (error) {
+      logger.warn(`释放 Prisma advisory lock 失败: ${error.message}`)
+    }
+  }
+
+  // 处理测试命令
+  async handleTest(args) {
+    const type = args[0] || 'e2e'
+    const target = args[1] || 'all'
+    const testPath = args[2] // 可选的测试文件路径
+
+    // 解析 -t 参数用于指定特定测试用例（使用原始参数列表）
+    const allArgs = this.args  // 使用原始参数列表包含所有标志
+    const testNamePatternIndex = allArgs.indexOf('-t')
+    let testNamePattern = null
+    if (testNamePatternIndex !== -1 && testNamePatternIndex + 1 < allArgs.length) {
+      testNamePattern = allArgs[testNamePatternIndex + 1]
+    }
+
+    // 根据测试类型自动设置环境标志
+    if (type === 'e2e' && !this.flags.e2e) {
+      this.flags.e2e = true
+    } else if (type === 'unit' && !this.flags.test) {
+      this.flags.test = true
+    }
+
+    let testConfig = this.commands.test[type]?.[target] || this.commands.test[type]
+
+    if (!testConfig) {
+      logger.error(`未找到测试配置: ${type}.${target}`)
+      process.exitCode = 1
+      return
+    }
+
+    // 如果提供了测试文件路径，使用专门的单文件测试配置
+    if (testPath && type === 'e2e' && target === 'backend') {
+      let command = `pnpm --filter ./apps/backend run test:e2e:file ${testPath}`
+
+      // 如果指定了测试用例名称，添加 -t 参数
+      if (testNamePattern) {
+        const escapedPattern = String(testNamePattern).replace(/(["`\\$])/g, '\\$1')
+        command += ` -t "${escapedPattern}"`
+      }
+
+      testConfig = {
+        ...testConfig,
+        command: command,
+        description: testNamePattern
+          ? `运行单个E2E测试文件的特定用例: ${testPath} -> ${testNamePattern}`
+          : `运行单个E2E测试文件: ${testPath}`
+      }
+
+      if (testNamePattern) {
+        logger.step(`运行 ${type} 测试用例: ${testNamePattern} (文件: ${testPath})`)
+      } else {
+        logger.step(`运行单个 ${type} 测试: ${testPath}`)
+      }
+    } else {
+      logger.step(`运行 ${type} 测试`)
+    }
+
+    await this.executeCommand(testConfig)
+  }
+
+  async handleRelease(args) {
+    const action = args[0]
+    const version = args[1]
+
+    if (action !== 'version') {
+      logger.error('用法: dx release version <版本号>')
+      process.exitCode = 1
+      return
+    }
+
+    if (!version) {
+      logger.error('请提供要发布的版本号，例如: dx release version 1.2.3')
+      process.exitCode = 1
+      return
+    }
+
+    const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/
+    if (!semverPattern.test(version)) {
+      logger.warn(`版本号 ${version} 不符合常见语义化版本格式，仍将继续更新`)
+    }
+
+    const packageFiles = [
+      'apps/backend/package.json',
+      'apps/front/package.json',
+      'apps/admin-front/package.json',
+    ]
+
+    logger.step(`统一更新版本号 -> ${version}`)
+
+    packageFiles.forEach(relativePath => {
+      const fullPath = join(process.cwd(), relativePath)
+      if (!existsSync(fullPath)) {
+        logger.warn(`跳过，未找到文件: ${relativePath}`)
+        return
+      }
+
+      try {
+        const raw = readFileSync(fullPath, 'utf8')
+        const pkg = JSON.parse(raw)
+        const previous = pkg.version || '0.0.0'
+        pkg.version = version
+        writeFileSync(fullPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8')
+        logger.info(`更新 ${relativePath}: ${previous} -> ${version}`)
+      } catch (error) {
+        logger.error(`更新 ${relativePath} 失败: ${error.message}`)
+      }
+    })
+
+    logger.success(`版本号已同步为 ${version}`)
+  }
+
+  // 校验是否在仓库根目录执行
+  ensureRepoRoot() {
+    const cwd = process.cwd()
+    const markers = [
+      'pnpm-workspace.yaml',
+      'package.json',
+      'apps',
+      'scripts/dx',
+    ]
+    const missing = markers.filter(p => !existsSync(join(cwd, p)))
+    if (missing.length) {
+      logger.error(`请从仓库根目录运行此命令。缺少标识文件/目录: ${missing.join(', ')}`)
+      process.exit(1)
+    }
+  }
+
+  // 处理启动命令
+  async handleStart(args) {
+    const service = args[0] || 'dev'
+
+    // 处理 stack 子命令 - PM2 交互式管理
+    if (service === 'stack') {
+      const { default: runPM2Stack } = await import('./dev/pm2-stack.js')
+      return  // pm2-stack.js 会接管执行流程
+    }
+
+    const environment = this.determineEnvironment()
+    const envKey = this.normalizeEnvKey(environment)
+
+    let rawConfig = this.commands.start[service]
+    let configNamespace = 'start'
+
+    if (!rawConfig && this.commands.dev?.[service]) {
+      if (envKey !== 'dev') {
+        logger.error(`目标 ${service} 仅支持开发环境启动，请使用 --dev 或省略环境标志。`)
+        process.exitCode = 1
+        return
+      }
+      rawConfig = this.commands.dev[service]
+      configNamespace = 'dev'
+      logger.info(`检测到 legacy "dev" 配置，已自动回退至 ${service} 开发脚本。`)
+    }
+
+    if (!rawConfig) {
+      logger.error(`未找到启动配置: ${service}`)
+      process.exitCode = 1
+      return
+    }
+
+    let startConfig = rawConfig
+    if (configNamespace === 'start' && rawConfig && typeof rawConfig === 'object') {
+      if (rawConfig[envKey]) startConfig = rawConfig[envKey]
+      else if (envKey === 'staging' && rawConfig?.prod) startConfig = rawConfig.prod
+    }
+
+    if (!startConfig) {
+      logger.error(`启动目标 ${service} 未提供 ${environment} 环境配置。`)
+      process.exitCode = 1
+      return
+    }
+
+    logger.step(`启动 ${service} 服务 (${environment})`)
+
+    if (startConfig.concurrent && Array.isArray(startConfig.commands)) {
+      await this.handleConcurrentCommands(startConfig.commands, configNamespace, envKey)
+      return
+    }
+
+    if (startConfig.sequential && Array.isArray(startConfig.commands)) {
+      await this.handleSequentialCommands(startConfig.commands, envKey)
+      return
+    }
+
+    const ports = this.collectStartPorts(service, startConfig, envKey)
+
+    if (envKey === 'dev' && ports.length > 0) {
+      logger.info(`开发环境自动清理端口: ${ports.join(', ')}`)
+    }
+
+    const configToExecute = {
+      ...startConfig,
+      ...(ports.length > 0 ? { ports } : {}),
+      ...(envKey === 'dev' ? { forcePortCleanup: true } : {}),
+    }
+
+    // 为执行阶段构造环境标志，确保 dotenv 选择正确层
+    const execFlags = { ...this.flags }
+    ;['dev', 'development', 'prod', 'production', 'test', 'e2e', 'staging', 'stage'].forEach(
+      key => delete execFlags[key]
+    )
+    if (envKey === 'prod') execFlags.prod = true
+    else if (envKey === 'dev') execFlags.dev = true
+    else if (envKey === 'test') execFlags.test = true
+    else if (envKey === 'e2e') execFlags.e2e = true
+    else if (envKey === 'staging') execFlags.staging = true
+
+    await this.executeCommand(configToExecute, execFlags)
+  }
+
+  // PR 预检查命令：Lint + 分应用构建（遵循禁止 build all 的规范）
+  async handlePrcheck(args) {
+    const environment = this.determineEnvironment()
+    const envKey = this.normalizeEnvKey(environment)
+
+    this.ensureRepoRoot()
+
+    // 版本与环境信息
+    let nxVersion = 'unknown'
+    try {
+      const pkgRaw = readFileSync(join(process.cwd(), 'package.json'), 'utf8')
+      const pkg = JSON.parse(pkgRaw)
+      nxVersion = (pkg.devDependencies && pkg.devDependencies.nx) || 'unknown'
+    } catch {}
+
+    logger.step(`PR 预检开始 (${environment})`)
+    logger.info(`Node: ${process.version} | Nx: ${nxVersion} | APP_ENV: ${process.env.APP_ENV || '-'} | NODE_ENV: ${process.env.NODE_ENV || '-'}`)
+
+    // 1) Lint
+    logger.info('步骤 1/4: 运行 Lint')
+    await this.handleLint()
+
+    // 2) Backend 构建 + 合约生成
+    logger.info('步骤 2/4: 构建 backend')
+    await this.handleBuild(['backend'])
+    logger.info('步骤 2b: 生成 API 合约（packages/api-contracts）')
+    await this.handleContracts(['generate'])
+
+    if (this.flags.parallel) {
+      // 并行构建 front 与 admin（可选加速）
+      logger.info('步骤 3/4: 并行构建 front 与 admin（实验特性）')
+      await this.handleConcurrentCommands([`build.front.${envKey}`, `build.admin.${envKey}`], 'build', envKey)
+    } else {
+      // 4) Front 构建
+      logger.info('步骤 3/4: 构建 front')
+      await this.handleBuild(['front'])
+
+      // 5) Admin 构建
+      logger.info('步骤 4/4: 构建 admin')
+      await this.handleBuild(['admin'])
+    }
+
+    logger.success('PR 预检通过：Lint 与分应用构建均成功')
+  }
+
+  // 生成 API 合约（OpenAPI -> Zod 客户端）
+  async handleContracts(args) {
+    const action = args[0] || 'generate'
+    if (action !== 'generate') {
+      logger.error(`不支持的 contracts 子命令: ${action}`)
+      logger.info('用法: ./scripts/dx contracts [generate]')
+      process.exitCode = 1
+      return
+    }
+
+    this.ensureRepoRoot()
+
+    logger.step('导出 OpenAPI 并生成 Zod 合约 (packages/api-contracts)')
+
+    // 若未配置 backend:swagger，则跳过生成并提示
+    let swaggerTargetExists = false
+    try {
+      const backendProject = JSON.parse(readFileSync(join(process.cwd(), 'apps/backend/project.json'), 'utf8'))
+      swaggerTargetExists = Boolean(backendProject?.targets?.swagger)
+    } catch {}
+
+    if (!swaggerTargetExists) {
+      logger.warn('未检测到 Nx 目标 backend:swagger，跳过 OpenAPI 导出。请在 apps/backend/project.json 中配置 swagger 目标后再运行。')
+      return
+    }
+
+    await execManager.executeCommand('npx nx run backend:swagger', {
+      app: 'backend',
+      flags: this.flags,
+      env: { NX_CACHE: 'false', SKIP_PRISMA_CONNECT: 'true' },
+    })
+
+    const swaggerPath = join(process.cwd(), 'apps/backend/dist/openapi/backend.json')
+    this.patchRecursiveOpenApiSchemas(swaggerPath)
+
+    const outputDir = join(process.cwd(), 'packages/api-contracts/src/generated')
+    mkdirSync(outputDir, { recursive: true })
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api/v1'
+    logger.info(`使用 API 基地址: ${baseUrl}`)
+
+    const generatorCommand = [
+      'pnpm exec openapi-zod-client',
+      'apps/backend/dist/openapi/backend.json',
+      '--output packages/api-contracts/src/generated/backend.ts',
+      '--api-client-name aiBackendClient',
+      `--base-url "${baseUrl}"`,
+      '--with-alias',
+      '--with-docs',
+      '--with-deprecated',
+      '--export-schemas',
+      '--prettier prettier.config.js',
+    ].join(' ')
+
+    try {
+      await execManager.executeCommand(generatorCommand, {
+        flags: this.flags,
+      })
+      logger.success('API 合约已更新（packages/api-contracts/src/generated/backend.ts）')
+    } catch (error) {
+      logger.warn('openapi-zod-client 生成失败，保留现有合约文件，错误信息如下：')
+      logger.warn(error?.message || String(error))
+      // 兜底：至少将最新的 OpenAPI JSON 备份到 packages/api-contracts/openapi/backend.json，便于手工生成
+      const backupDir = join(process.cwd(), 'packages/api-contracts/openapi')
+      mkdirSync(backupDir, { recursive: true })
+      const src = join(process.cwd(), 'apps/backend/dist/openapi/backend.json')
+      const dest = join(backupDir, 'backend.json')
+      try {
+        const json = readFileSync(src, 'utf8')
+        writeFileSync(dest, json, 'utf8')
+        logger.info(`已备份最新 OpenAPI 到 ${dest}，可使用手工工具生成合约。`)
+      } catch {}
+      logger.info('请检查 OpenAPI 是否包含异常 schema，或稍后手动重试。命令本身已退出 0。')
+    }
+  }
+
+  patchRecursiveOpenApiSchemas(swaggerPath) {
+    try {
+      if (!existsSync(swaggerPath)) return
+      const raw = readFileSync(swaggerPath, 'utf8')
+      const json = JSON.parse(raw)
+      const schema = json?.components?.schemas?.AdminMenuPermissionDto
+      const children = schema?.properties?.children
+      const childRef = children?.items?.['$ref']
+      if (schema && children && childRef === '#/components/schemas/AdminMenuPermissionDto') {
+        children.description =
+          'Patched via scripts/dx to avoid recursive schema preventing openapi-zod-client generation. See scripts/lib for context.'
+        children.items = {
+          type: 'object',
+          additionalProperties: true,
+          description:
+            'Original schema是递归结构，openapi-zod-client 暂不支持。这里改为宽松 object，客户端可在运行时递归自身类型。',
+        }
+        writeFileSync(swaggerPath, JSON.stringify(json, null, 2))
+        logger.info('已自动修补 AdminMenuPermissionDto 递归 schema，避免 openapi-zod-client 生成失败。')
+      }
+    } catch (error) {
+      logger.warn('修补递归 OpenAPI schema 失败，可手动检查 apps/backend/dist/openapi/backend.json')
+      logger.warn(error.message)
+    }
+  }
+
+  // 检测是否存在影响 OpenAPI 的后端改动
+  // 处理 worktree 命令
+  async handleWorktree(args) {
+    logger.warn('注意：该封装与原生 git worktree 行为不同，勿混用')
+    const action = args[0]
+    const issueNumber = args[1]
+    // 解析可选的基础分支（位置参数或 --base/-b 标志）
+    let baseBranch = null
+    // 位置参数作为第3个无标志参数传入
+    if (args[2] && !String(args[2]).startsWith('-')) {
+      baseBranch = args[2]
+    }
+    // 支持 --base/-b 标志（从原始参数中解析，包含所有标志）
+    const allArgs = this.args
+    const baseIdx = allArgs.indexOf('--base')
+    const shortBaseIdx = allArgs.indexOf('-b')
+    if (!baseBranch) {
+      if (baseIdx !== -1 && baseIdx + 1 < allArgs.length) baseBranch = allArgs[baseIdx + 1]
+      else if (shortBaseIdx !== -1 && shortBaseIdx + 1 < allArgs.length) baseBranch = allArgs[shortBaseIdx + 1]
+    }
+
+    if (!action) {
+      logger.error('请指定 worktree 操作: make, del, list, clean')
+      logger.info('用法:')
+      logger.info('  dx worktree make <issue_number> [base]  - 创建新的 worktree（可选基础分支）')
+      logger.info('  dx worktree del <issue_number> [issue_number2] ...  - 删除指定 worktree（支持批量）')
+      logger.info('  dx worktree del --all            - 删除所有 issue 相关 worktree')
+      logger.info('  dx worktree list                 - 列出所有 worktree')
+      logger.info('  dx worktree clean                - 清理无效的 worktree')
+      logger.info('')
+      logger.info('选项:')
+      logger.info('  --base <branch>, -b <branch>     - 指定基础分支（make 命令专用）')
+      logger.info('  --all                            - 删除所有 worktree（del 命令专用）')
+      logger.info('  -Y, --yes                        - 跳过所有确认提示（非交互式）')
+      logger.info('')
+      logger.info('示例:')
+      logger.info('  dx worktree make 88              - 从 main 分支创建 worktree')
+      logger.info('  dx worktree make 88 dev          - 从 dev 分支创建 worktree')
+      logger.info('  dx worktree make 88 --base dev   - 使用标志指定基础分支')
+      logger.info('  dx worktree del 88               - 删除单个 worktree')
+      logger.info('  dx worktree del 88 89 90         - 批量删除多个 worktree')
+      logger.info('  dx worktree del --all            - 删除所有 worktree（需确认）')
+      logger.info('  dx worktree del --all -Y         - 删除所有 worktree（跳过确认）')
+      logger.info('')
+      logger.info('提示: 新建的 worktree 不再自动软链接 node_modules 或复制构建产物，需进入目录后自行运行 pnpm install / ./scripts/dx build ...')
+      logger.warn('注意：该封装与原生 git worktree 行为不同，勿混用')
+      process.exitCode = 1
+      return
+    }
+
+    switch (action) {
+      case 'make':
+        if (!issueNumber) {
+          logger.error('请指定 issue 编号')
+          logger.info('用法: dx worktree make <issue_number> [base]  或  dx worktree make <issue_number> --base <branch>')
+          logger.info('示例: dx worktree make 88 dev  或  dx worktree make 88 --base dev')
+          process.exitCode = 1
+          return
+        }
+        await worktreeManager.make(issueNumber, {
+          force: Boolean(this.flags.Y),
+          baseBranch,
+        })
+        break
+
+      case 'del':
+      case 'delete':
+      case 'rm':
+        // 互斥校验：--all 不能与 issue 编号同时使用
+        // args[0] 是 action，args[1] 开始才是 issue 编号
+        if (this.flags.all && args.length > 1) {
+          logger.error('--all 标志不能与 issue 编号同时使用')
+          logger.info('用法: dx worktree del --all  或  dx worktree del <issue_number> ...')
+          process.exitCode = 1
+          return
+        }
+
+        // 批量删除所有 worktree
+        if (this.flags.all) {
+          const allIssues = await worktreeManager.getAllIssueWorktrees()
+
+          if (allIssues.length === 0) {
+            logger.info('没有找到 issue 相关的 worktree')
+            return
+          }
+
+          logger.info(`\n找到 ${allIssues.length} 个 issue worktree:`)
+          allIssues.forEach(issue => {
+            logger.info(`  - issue-${issue}`)
+          })
+
+          // 安全确认（除非 -Y）
+          if (!this.flags.Y) {
+            const confirmed = await confirmManager.confirm(
+              `\n确定要删除所有 ${allIssues.length} 个 worktree 吗？(这将永久删除工作目录)`,
+              false,
+              false
+            )
+            if (!confirmed) {
+              logger.info('操作已取消')
+              return
+            }
+          }
+
+          await worktreeManager.del(allIssues, { force: Boolean(this.flags.Y) })
+          return
+        }
+
+        // 删除指定 issue 编号（原逻辑保持不变）
+        if (!issueNumber) {
+          logger.error('请指定一个或多个 issue 编号，或使用 --all 删除所有')
+          logger.info('用法: dx worktree del <issue_number> [issue_number2] ...')
+          logger.info('      dx worktree del --all  # 删除所有 issue 相关 worktree')
+          logger.info('示例: dx worktree del 123 456 789  # 批量删除指定 worktree')
+          logger.info('      dx worktree del --all -Y      # 删除所有（跳过确认）')
+          logger.info('选项: -Y, --yes  # 跳过所有确认提示')
+          process.exitCode = 1
+          return
+        }
+
+        // 收集所有 issue 编号（从第二个参数开始的所有非标志参数）
+        const issueNumbers = [issueNumber]
+        for (let i = 2; i < args.length; i++) {
+          const arg = args[i]
+          if (arg && !arg.startsWith('-')) {
+            issueNumbers.push(arg)
+          }
+        }
+
+        await worktreeManager.del(issueNumbers, { force: Boolean(this.flags.Y) })
+        break
+
+      case 'list':
+      case 'ls':
+        await worktreeManager.list()
+        break
+
+      case 'clean':
+      case 'prune':
+        await worktreeManager.clean()
+        break
+
+      default:
+        logger.error(`未知的 worktree 操作: ${action}`)
+        logger.info('可用操作: make, del, list, clean')
+        logger.info('使用 dx worktree --help 查看详细用法')
+        logger.warn('注意：该封装与原生 git worktree 行为不同，勿混用')
+    }
+  }
+
+  // 处理代码检查
+  async handleLint() {
+    const lintConfig = { ...this.commands.lint }
+    
+    // 如果指定了 --fix 标志，则在命令中添加 --fix 参数
+    if (this.flags.fix) {
+      logger.step('运行代码检查并自动修复')
+      // ESLint 的 --fix 需要通过 Nx 传递给每个项目
+      // 使用 -- 分隔符将参数传递给底层的 ESLint
+      lintConfig.command = `${lintConfig.command} -- --fix`
+    } else {
+      logger.step('运行代码检查')
+    }
+    
+    await this.executeCommand(lintConfig)
+  }
+
+  // 处理清理命令
+  async handleClean(args) {
+    const target = args[0] || 'all'
+    const cleanConfig = this.commands.clean[target]
+
+    if (!cleanConfig) {
+      logger.error(`未找到清理目标: ${target}`)
+      process.exitCode = 1
+      return
+    }
+
+    // 危险操作确认
+    if (cleanConfig.dangerous) {
+      const confirmed = await confirmManager.confirmDangerous(
+        `清理操作: ${target}`,
+        '当前环境',
+        this.flags.Y
+      )
+
+      if (!confirmed) {
+        logger.info('操作已取消')
+        return
+      }
+    }
+
+    logger.step(`清理 ${target}`)
+    await this.executeCommand(cleanConfig)
+  }
+
+  // 处理缓存命令
+  async handleCache(args) {
+    const action = args[0] || 'clear'
+    const cacheConfig = this.commands.cache?.[action]
+
+    if (!cacheConfig) {
+      logger.error(`未找到缓存操作: ${action}`)
+      logger.info('用法: dx cache clear')
+      process.exitCode = 1
+      return
+    }
+
+    // 危险操作确认
+    if (cacheConfig.dangerous) {
+      const confirmed = await confirmManager.confirmDangerous(
+        `缓存清理: ${action}`,
+        '当前环境',
+        this.flags.Y
+      )
+
+      if (!confirmed) {
+        logger.info('操作已取消')
+        return
+      }
+
+      // 二次确认（更醒目）：强调将清理全局 pnpm store 与 ~/.pnpm-store
+      if (!this.flags.Y && action === 'clear') {
+        const second = await confirmManager.confirm(
+          '二次确认：将清理全局 pnpm store 与 ~/.pnpm-store，可能影响其他项目，是否继续？',
+          false,
+          false
+        )
+        if (!second) {
+          logger.info('操作已取消')
+          return
+        }
+      }
+    }
+
+    logger.step(`执行缓存操作: ${action}`)
+    await this.executeCommand(cacheConfig)
+  }
+
+  // 处理状态查看
+  async handleStatus() {
+    logger.step('系统状态')
+
+    const status = execManager.getStatus()
+    console.log(`运行中的进程: ${status.runningProcesses}`)
+
+    if (status.processes.length > 0) {
+      logger.table(
+        status.processes.map(p => [p.id, p.command, `${Math.round(p.duration/1000)}s`]),
+        ['进程ID', '命令', '运行时长']
+      )
+    }
+  }
+
+  async handleDemo(args) {
+    const target = args[0]
+    const demoConfig = this.commands.demo?.[target]
+
+    if (!demoConfig) {
+      logger.error(`未找到 Demo 配置: ${target || '-未指定-'}`)
+      process.exitCode = 1
+      return
+    }
+
+    logger.step(`运行 Demo: ${target}`)
+    await this.executeCommand(demoConfig)
+  }
+
+  // 并发命令处理
+  async handleConcurrentCommands(commandPaths, baseCommand, environment) {
+    const commands = []
+
+    for (const path of commandPaths) {
+      const config = this.resolveCommandPath(
+        path,
+        baseCommand,
+        this.normalizeEnvKey(environment)
+      )
+      if (!config) {
+        logger.warn(`未解析到命令配置: ${path} (${environment || '-'})`)
+        continue
+      }
+      commands.push({
+        command: config.command,
+        options: {
+          app: config.app,
+          ports: config.ports,
+          flags: this.flags,
+        },
+      })
+    }
+
+    if (commands.length > 0) {
+      await execManager.executeConcurrent(commands)
+    }
+  }
+
+  // 顺序命令处理
+  async handleSequentialCommands(commandPaths, environment) {
+    for (const path of commandPaths) {
+      const config = this.resolveCommandPath(path, null, this.normalizeEnvKey(environment))
+      if (!config) {
+        logger.warn(`未解析到命令配置: ${path} (${environment || '-'})`)
+        continue
+      }
+
+      // 支持在顺序执行中嵌套并发/顺序配置
+      if (config.concurrent && Array.isArray(config.commands)) {
+        await this.handleConcurrentCommands(config.commands, null, environment)
+      } else if (config.sequential && Array.isArray(config.commands)) {
+        await this.handleSequentialCommands(config.commands, environment)
+      } else {
+        await this.executeCommand(config)
+      }
+    }
+  }
+
+  // 解析命令路径
+  resolveCommandPath(path, baseCommand, environment) {
+    const parts = path.split('.')
+    let config = this.commands
+
+    for (const part of parts) {
+      config = config[part]
+      if (!config) break
+    }
+
+    // 如果有环境参数，尝试获取对应环境的配置
+    if (environment && config) {
+      const envKey = this.normalizeEnvKey(environment)
+      if (config[envKey]) config = config[envKey]
+      else if (envKey === 'staging' && config.prod) config = config.prod
+    }
+
+    return config
+  }
+
+  collectStartPorts(service, startConfig, envKey) {
+    const portSet = new Set()
+
+    if (startConfig && Array.isArray(startConfig.ports)) {
+      startConfig.ports.forEach(port => this.addPortToSet(portSet, port))
+    }
+
+    if (envKey === 'dev') {
+      const legacyConfig = this.commands.dev?.[service]
+      if (legacyConfig && Array.isArray(legacyConfig.ports)) {
+        legacyConfig.ports.forEach(port => this.addPortToSet(portSet, port))
+      }
+    }
+
+    return Array.from(portSet)
+  }
+
+  addPortToSet(target, port) {
+    const numeric = Number(port)
+    if (Number.isFinite(numeric) && numeric > 0) {
+      target.add(numeric)
+    }
+  }
+
+  // 执行单个命令
+  async executeCommand(config, overrideFlags) {
+    if (!config || !config.command) {
+      logger.error('无效的命令配置')
+      return
+    }
+
+    const command = config.command
+
+    const options = {
+      app: config.app,
+      flags: overrideFlags || this.flags,
+      ports: config.ports || [],
+      // 允许上游在 config.env 中注入环境变量（例如 NX_CACHE=false）
+      env: config.env || {},
+      skipEnvValidation: Boolean(config.skipEnvValidation),
+      forcePortCleanup: Boolean(config.forcePortCleanup),
+    }
+
+    await execManager.executeCommand(command, options)
+  }
+
+  // 确定环境
+  determineEnvironment() {
+    return envManager.detectEnvironment(this.flags)
+  }
+
+  // 规范化环境键到命令配置使用的命名（dev/prod/test/e2e）
+  normalizeEnvKey(env) {
+    switch (String(env || '').toLowerCase()) {
+      case 'development':
+      case 'dev':
+        return 'dev'
+      case 'production':
+      case 'prod':
+        return 'prod'
+      case 'staging':
+      case 'stage':
+        return 'staging'
+      case 'test':
+        return 'test'
+      case 'e2e':
+        return 'e2e'
+      default:
+        return env
+    }
+  }
+
+  // 显示帮助信息
+  showHelp() {
+    console.log(`
+DX CLI - 统一开发环境管理工具
+
+用法:
+  dx <命令> [选项] [参数...]
+
+命令:
+  start [service] [环境标志]  启动/桥接服务
+    service: backend, front, admin, all, dev, stack, stagewise-front, stagewise-admin (默认: dev)
+    stack: PM2 交互式服务栈管理（推荐）- 同时启动三个服务并提供交互式命令
+    环境标志: --dev, --staging, --prod, --test, --e2e（支持别名 --development、--production 等）
+    说明: 传入 --staging 时会加载 '.env.staging(.local)' 层，同时复用生产构建/启动流程
+
+  build [target] [环境标志]   构建应用
+    target: backend, shared, front, admin, contracts, all, affected (默认: all)
+    环境标志: --dev, --staging, --prod, --test, --e2e（未指定时默认 --dev）
+
+  package backend [环境标志]  构建后端部署包（生成 backend-<version>-<sha>.tar.gz）
+    环境标志: --dev, --staging, --prod, --test, --e2e（默认 --dev）
+    产物位置: dist/backend/backend-*.tar.gz
+    内含: dist/、node_modules(生产依赖)、prisma/、config/.env.runtime、bin/start.sh
+
+  db [action] [环境标志]      数据库操作（开发环境 migrate 必须指定迁移名）
+    action: generate, migrate, reset, seed, format, script
+    用法示例:
+      dx db migrate --dev --name add_user_table   # 开发环境必须指定迁移名
+      dx db migrate --dev add_user_table          # 位置参数指定迁移名（建议仍显式传 --name）
+      dx db script fix-email-verified-status --dev  # 运行数据库脚本（开发环境）
+      dx db script fix-pending-transfer-status --prod  # 运行数据库脚本（生产环境，需确认）
+
+  deploy [环境标志]         应用数据库迁移（prisma migrate deploy）
+    说明: 面向 CI/预发/生产/测试环境，统一执行已生成迁移；无需提供 --name
+    示例:
+      dx deploy --dev
+      dx deploy --staging
+      dx deploy --prod -Y
+
+  test [type] [target] [path] [-t pattern]  运行测试
+    type: e2e, unit (默认: e2e)
+    target: backend, all (默认: all)
+    path: 测试文件路径 (可选，仅支持e2e backend)
+    -t pattern: 指定测试用例名称模式 (可选，需要和path一起使用)
+
+  release version <semver>  统一同步 backend/front/admin-front 的版本号
+    示例: dx release version 1.2.3
+
+  worktree [action] [num...] Git Worktree管理
+    action: make, del, list, clean
+    num: issue编号 (make时需要1个，del时支持多个)
+    支持批量删除: dx worktree del 123 456 789
+    支持非交互式: dx worktree del 123 -Y
+  注意：该封装与原生 git worktree 行为不同，勿混用
+
+  lint [--fix]           运行代码检查
+    --fix: 自动修复可修复的问题
+  prcheck               PR 预检：lint + backend + contracts + front/admin 构建
+  demo [target]         运行示例程序（需提供 target）
+  contracts [generate]  导出 OpenAPI 并生成 Zod 客户端（packages/api-contracts）
+
+  clean [target]         清理操作
+    target: all, deps (默认: all)
+
+  cache [action]         缓存清理
+    action: clear (默认: clear)
+
+  status                 查看系统状态
+
+选项:
+ --dev, --development   使用开发环境
+ --prod, --production   使用生产环境
+  --staging, --stage    使用预发环境（加载 .env.staging*.，复用生产流程）
+  --test                 使用测试环境
+  --e2e                  使用E2E测试环境
+  -Y, --yes              跳过所有确认提示
+  -v, --verbose          详细输出
+  -h, --help             显示此帮助信息
+
+示例:
+  dx start stack            # PM2 交互式服务栈（推荐）- 同时管理三个服务
+  dx start backend --dev    # 启动后端开发服务
+  dx start front --dev      # 启动用户前端开发服务
+  dx start admin --dev      # 启动管理后台开发服务
+  dx start all              # 同时启动所有开发服务（默认 --dev）
+  dx build all --prod       # 构建所有应用(生产环境，含 contracts)
+  dx prcheck --dev          # 运行 Lint 并分别构建 backend/front/admin（默认根据环境标志）
+  dx prcheck -P             # 并行构建 front 与 admin（可选）
+  dx db migrate --dev --name add_user_table  # 执行开发环境数据库迁移（必须指定迁移名）
+  dx deploy --prod -Y       # 以生产环境应用迁移（跳过确认）
+  dx db reset --prod -Y     # 重置生产数据库(跳过确认)
+  dx test e2e backend                           # 运行后端E2E测试
+  dx test e2e backend e2e/activity/activity.admin.e2e-spec.ts  # 运行单个E2E测试文件
+  dx test e2e backend e2e/activity/activity.admin.e2e-spec.ts -t "should list all activity definitions"  # 运行特定测试用例
+  dx release version 1.2.3  # 同步 backend/front/admin-front 版本号
+  dx worktree make 88       # 为issue #88创建worktree
+  dx worktree del 88        # 删除issue #88的worktree
+  dx worktree del 88 89 90 -Y  # 批量删除多个worktree（非交互式）
+  dx worktree list          # 列出所有worktree
+  dx clean deps             # 清理并重新安装依赖
+  dx cache clear            # 清除 Nx 与依赖缓存
+
+  # Stagewise 桥接（固定端口，自动清理占用）
+  dx start stagewise-front      # 桥接 front: 3001 -> 3002（工作目录 apps/front）
+  dx start stagewise-admin      # 桥接 admin-front: 3500 -> 3501（工作目录 apps/admin-front）
+
+  # Start 用法示例
+  dx start backend --prod       # 以生产环境变量启动后端
+  dx start backend --dev        # 以开发环境变量启动后端
+  dx start backend --e2e        # 以 E2E 环境变量启动后端
+
+
+`)
+  }
+
+  // 子命令帮助
+  showCommandHelp(command) {
+    const name = String(command || '').toLowerCase()
+
+    switch (name) {
+      case 'build':
+        console.log(`
+build 命令用法:
+  dx build <target> [环境标志]
+
+参数说明:
+  target: backend, front, admin, shared, all, affected
+  环境标志: --dev、--staging、--prod、--test、--e2e（默认 --dev）
+
+常见示例:
+  dx build backend --staging    # 使用 staging 环境变量构建后端 (prod 流程)
+  dx build front --prod         # 强制以生产配置构建前端
+  dx build affected --dev       # 针对受影响项目执行开发态构建
+
+提示: 也可通过 ./scripts/dx prcheck 触发分应用构建流程。
+`)
+        return
+
+      case 'db':
+        console.log(`
+db 命令用法:
+  dx db <action> [options]
+
+可选 action:
+  generate | migrate | reset | seed | format | script
+
+环境说明:
+  通过 --dev、--staging、--prod、--test、--e2e 指定 APP_ENV（默认 --dev）
+  --staging 会加载 .env.staging*. 文件，并复用 prod 的 Prisma / Nx 流程
+
+⚠️ 部署/CI 环境请使用 \`dx deploy\` 应用迁移，避免触发 migrate dev 的交互式流程。
+
+附加参数:
+  --name/-n <migration-name>    # migrate --dev 时指定迁移名称（必填）
+  dx db migrate --dev add_user  # 位置参数方式指定迁移名（同样必须提供）
+  ⚠️ 未提供迁移名时命令会失败，避免 prisma 进入交互
+
+script 子命令:
+  dx db script <script-name> [环境标志]
+  运行位于 apps/backend/prisma/scripts/ 目录下的数据库脚本
+
+示例:
+  dx deploy --staging                        # 复用生产命令，加载 staging 环境变量
+  dx db reset --prod -Y                          # 生产环境重置 (需确认)
+  dx db script fix-email-verified-status --dev  # 运行数据库脚本（开发环境）
+  dx db script fix-pending-transfer-status --prod -Y  # 运行数据库脚本（生产环境，跳过确认）
+`)
+        return
+      case 'deploy':
+        console.log(`
+deploy 命令用法:
+  dx deploy [环境标志]
+
+说明:
+  - 统一执行 prisma migrate deploy，用于应用已生成的迁移
+  - 适用于 CI、预发、生产、E2E、测试环境；不需要 --name
+  - 支持 --dev（本地验证）、--staging、--prod、--test、--e2e，与 dx db 一致
+
+示例:
+  dx deploy --dev
+  dx deploy --staging
+  dx deploy --prod -Y
+`)
+        return
+
+      case 'start':
+        console.log(`
+start 命令用法:
+  dx start <service> [环境标志]
+
+服务说明:
+  service: backend, dev, stagewise-front, stagewise-admin
+
+环境说明:
+  支持 --dev、--staging、--prod、--test、--e2e。--staging 会注入 .env.staging*. 层并复用 prod 启动流程
+
+常见示例:
+  dx start backend --staging    # 使用 staging 配置启动后端 (生产模式流程)
+  dx start stagewise-front      # Stagewise 桥接用户前端，端口 3001 -> 3002
+
+提示: service 省略时默认启动 dev 套件，可结合 --dev/--staging/--prod 标志使用。
+`)
+        return
+
+      default:
+        this.showHelp()
+    }
+  }
+}
+
+// 创建并运行CLI
+const cli = new DxCli()
+cli.run().catch(error => {
+  logger.error('CLI启动失败')
+  logger.error(error.message)
+  process.exit(1)
+})

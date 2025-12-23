@@ -1,0 +1,52 @@
+{
+  "allowed": [
+    // database
+    "POSTGRES_HOST",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_PORT",
+    "DATABASE_URL",
+
+    //Redis
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_PASSWORD",
+    "REDIS_URL",
+    "REDIS_DB",
+
+
+    "JWT_SECRET",
+    "APP_SECRET",
+    "EXCHANGE_ACCOUNT_CRYPTO_KEY",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "EMAIL_FROM_NAME",
+
+    // GitHub 账号配置（可选）
+    "GH_ACCOUNT",
+
+    // Seed 数据配置
+    "SEED_INIT_WALLET_BALANCE",
+    "OPENAI_COMPATIBLE_API_KEY",
+    "OPENAI_COMPATIBLE_BASE_URL",
+    "UNIAPI_API_KEY",
+    "UNIAPI_BASE_URL",
+
+    // 应用环境标识
+    "APP_ENV",
+
+    // 日志配置
+    "LOG_CONTEXT_FILTER",
+    "LOG_LEVEL",
+
+    // 支付配置
+    "WGQPAY_MERCHANT_NO",
+    "WGQPAY_SECRET",
+    "WGQPAY_NOTIFY_URL",
+    "WGQPAY_RETURN_URL",
+
+    // 前端公开的后端地址（本地可放在 *.local）
+    "NEXT_PUBLIC_API_SERVER_URL",
+    "NEXT_PUBLIC_API_BASE_URL"
+  ]
+}

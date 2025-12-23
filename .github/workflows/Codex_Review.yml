@@ -1,0 +1,198 @@
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '需要评审的 PR 编号（手动触发时必填）'
+        required: true
+        type: string
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # 需要写 PR 评论
+      issues: write          # 额外权限，确保评论功能
+    env:
+      NX_DAEMON: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
+
+      - name: Configure npm global dir
+        run: |
+          npm config set prefix ~/.npm-global
+          echo "$HOME/.npm-global/bin" >> $GITHUB_PATH
+
+      - name: Cache npm global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.npm-global
+          # 缓存 key 中标记当前 Codex CLI 版本（0.58.0）
+          # key: ${{ runner.os }}-npm-global-codex-0.58.0            
+          # 缓存 key 中标记 latest，每次运行都会尝试安装最新版
+          key: ${{ runner.os }}-npm-global-codex-latest
+          restore-keys: |
+            ${{ runner.os }}-npm-global-
+
+      - name: Install dependencies
+        run: |
+          echo "安装项目依赖..."
+          # 此处仅同步依赖版本，避免触发编译
+          pnpm install --no-frozen-lockfile --ignore-scripts
+          echo "依赖安装完成"
+
+      - name: Install Codex CLI
+        run: |
+          if command -v codex >/dev/null 2>&1; then
+            echo "✅ Codex CLI 已在缓存中可用"
+            codex --version || true
+          else
+            echo "安装 Codex CLI..."
+            # 使用 npm 查询到的最新稳定版本：0.58.0
+            # npm install -g @openai/codex@0.58.0
+            # 每次运行都会尝试安装最新版          
+            npm install -g @openai/codex@latest
+            codex --version || true
+          fi
+
+      - name: Verify GitHub CLI Authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh --version
+          # 检查认证状态（GH_TOKEN 环境变量会自动被使用）
+          gh auth status || echo "GitHub CLI 将使用 GH_TOKEN 环境变量进行认证"
+          # 测试基本的 gh 命令
+          gh repo view ${{ github.repository }} --json name
+
+      - name: Run Codex autonomously (Codex evaluates & posts PR comment itself)
+        env:
+          GH_TOKEN: ${{ github.token }}                           # gh CLI 使用（必须）
+          CODEX_AUTH_JSON_B64: ${{ secrets.CODEX_AUTH_JSON_B64 }} # Codex 登录凭证（Base64 的 ~/.codex/auth.json）
+        run: |
+          set -eo pipefail
+
+          OWNER_REPO="${{ github.repository }}"                   # 例如 shitgood-bradford54/aifront
+          # 支持两种触发方式：PR 事件 或 手动输入
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::未能确定 PR 编号。请在手动触发时提供 pr_number 输入。"
+            exit 1
+          fi
+          WORKDIR="${GITHUB_WORKSPACE:-/github/workspace}"
+
+          # 检查必需的环境变量
+          if [ -z "$CODEX_AUTH_JSON_B64" ]; then
+            echo "::error::缺少 CODEX_AUTH_JSON_B64 secret，请在仓库设置中添加"
+            exit 1
+          fi
+
+          # 还原 Codex 凭证
+          mkdir -p ~/.codex
+          echo "$CODEX_AUTH_JSON_B64" | base64 -d > ~/.codex/auth.json
+          chmod 600 ~/.codex/auth.json
+
+          # 验证认证文件
+          if [ ! -s ~/.codex/auth.json ]; then
+            echo "::error::Codex 认证文件为空或无效"
+            exit 1
+          fi
+
+          # 读取评审规范（仓库文件）
+          PROMPT_FILE=".github/codex_prompt.txt"
+          if [ ! -s "$PROMPT_FILE" ]; then
+            echo "::error::未找到 $PROMPT_FILE 或文件为空（请在仓库中创建 .github/codex_prompt.txt）"
+            exit 1
+          fi
+
+          # 创建简洁的提示词：直接让 Codex 审查并发布评论
+          {
+            echo "你是代码审查专家。请为 PR #${PR_NUMBER} 进行代码审查并直接发布评论。"
+            echo
+            echo "## 环境设置（必须先执行）"
+            echo "export GH_TOKEN='${GH_TOKEN}'"
+            echo "gh auth status"
+            echo
+            echo "## 任务"
+            echo "1. 使用 \`gh pr diff ${PR_NUMBER} --repo ${OWNER_REPO}\` 查看代码变更"
+            echo "2. 阅读历史评论（如有）：\`gh pr view ${PR_NUMBER} --repo ${OWNER_REPO} --comments\`"
+            echo "3. 基于以下评审标准进行分析"
+            echo "4. 使用 \`gh pr comment ${PR_NUMBER} --repo ${OWNER_REPO} --body-file -\` 配合 heredoc 发布评论"
+            echo
+            echo "## 环境信息"
+            echo "- 仓库: ${OWNER_REPO}"
+            echo "- PR 编号: ${PR_NUMBER}"
+            echo
+            echo "## 评审标准"
+            cat "$PROMPT_FILE"
+            echo
+            echo "## 重要提醒"
+            echo "- 评论内容必须使用 heredoc 格式（\`gh pr comment --body-file - <<'EOF' ... EOF\`）"
+            echo "- 评论内容仅包含代码分析，不要复制构建日志或验证记录"
+            echo "- 如果是增量评审，先查看历史评论避免重复"
+          } > prompt.autonomous.txt
+
+          # 验证 Codex 安装
+          echo "检查 Codex 安装状态..."
+          if ! command -v codex >/dev/null 2>&1; then
+            echo "::error::Codex CLI 未正确安装"
+            exit 1
+          fi
+
+          echo "开始执行 Codex 自动评审..."
+          echo "PR: ${OWNER_REPO}#${PR_NUMBER}"
+          echo "工作目录: ${WORKDIR}"
+          echo "GH_TOKEN 已设置: $([ -n "$GH_TOKEN" ] && echo "是" || echo "否")"
+
+          # 确保环境变量传递给 Codex
+          echo "传递给 Codex 的 GH_TOKEN: ${GH_TOKEN:0:10}..."
+
+          # 让 Codex 自主评审并直接发评论，显式传递环境变量
+          # 显式使用 GPT-5.1 系列中的代码模型：gpt-5.1-codex
+          GH_TOKEN="${GH_TOKEN}" node "$(which codex)" exec \
+            --skip-git-repo-check \
+            --dangerously-bypass-approvals-and-sandbox \
+            --model gpt-5.1-codex \
+            -C "${WORKDIR}" \
+            "$(cat prompt.autonomous.txt)" > codex.run.log 2>&1
+
+          CODEX_EXIT_CODE=$?
+
+          # 显示执行日志
+          echo "=== Codex 执行日志 ==="
+          cat codex.run.log || true
+          echo "=== 日志结束 ==="
+
+          if [ $CODEX_EXIT_CODE -ne 0 ]; then
+            echo "::warning::Codex 执行返回非零退出码: $CODEX_EXIT_CODE"
+          else
+            echo "✅ Codex 执行完成"
+          fi

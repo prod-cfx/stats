@@ -1,0 +1,60 @@
+/// 用户与认证相关模型
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  nickname        String?
+  avatarUrl       String?   @map("avatar_url")
+  bio             String?   @db.Text
+  invitationCode  String?   @map("invitation_code")
+  inviterId       String?   @map("inviter_id")
+  isGuest         Boolean   @default(false) @map("is_guest")
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  tokenVersion    Int       @default(0) @map("token_version")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  inviter               User?                      @relation("UserInviter", fields: [inviterId], references: [id])
+  invitedUsers          User[]                     @relation("UserInviter")
+  credentials           UserCredential[]
+
+  @@map("users")
+}
+
+model UserCredential {
+  id        String             @id @default(cuid())
+  userId    String             @map("user_id")
+  type      UserCredentialType
+  value     String
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([type, value], map: "uniq_user_credentials_type_value")
+  @@index([userId], map: "idx_user_credentials_user")
+  @@map("user_credentials")
+}
+
+enum UserCredentialType {
+  email
+}
+
+model VerificationCode {
+  id         String                  @id @default(cuid())
+  email      String
+  code       String
+  purpose    VerificationCodePurpose
+  expiresAt  DateTime                @map("expires_at")
+  consumedAt DateTime?               @map("consumed_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+
+  @@index([email, purpose], map: "idx_verification_code_email_purpose")
+  @@index([code, purpose], map: "idx_verification_code_code_purpose")
+  @@map("verification_codes")
+}
+
+enum VerificationCodePurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}

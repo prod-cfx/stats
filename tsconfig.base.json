@@ -1,0 +1,30 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2018",
+    "module": "esnext",
+    "lib": ["es2021", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@ai/shared": ["packages/shared/src/index.ts"],
+      "@ai/shared/*": ["packages/shared/src/*"],
+      "@ai/api-contracts": ["packages/api-contracts/src/index.ts"],
+      "@ai/api-contracts/*": ["packages/api-contracts/src/*"],
+      "@net/config": ["packages/config/src/index.ts"],
+      "@net/config/*": ["packages/config/src/*"],
+      "@/*": ["apps/backend/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

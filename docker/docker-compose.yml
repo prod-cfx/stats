@@ -1,0 +1,50 @@
+version: '3.8'
+
+# 项目名称，确保与其他 Docker 服务隔离
+name: ai-monorepo-dev
+
+services:
+  # PostgreSQL 数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-monorepo-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_dev}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ${DOCKER_DATA_DIR:-${HOME}/docker_data/ai-monorepo-dev}/postgres:/var/lib/postgresql/data
+    networks:
+      - ai-monorepo-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis 服务
+  redis:
+    image: redis:7-alpine
+    container_name: ai-monorepo-dev-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis} --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ${DOCKER_DATA_DIR:-${HOME}/docker_data/ai-monorepo-dev}/redis:/data
+    networks:
+      - ai-monorepo-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  ai-monorepo-dev-network:
+    driver: bridge
+    name: ai-monorepo-dev-network
