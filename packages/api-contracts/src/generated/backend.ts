@@ -1271,7 +1271,7 @@ const endpoints = makeApi([
       {
         name: "limit",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.number().gte(1).lte(2000).optional(),
       },
     ],
     response: z.array(LongShortRatioPointResponseDto),

@@ -1,3 +1,13 @@
+/// 市场数据时间粒度枚举
+enum MarketTimeframe {
+  ONE_MINUTE      @map("1m")
+  FIVE_MINUTES    @map("5m")
+  FIFTEEN_MINUTES @map("15m")
+  ONE_HOUR        @map("1h")
+  FOUR_HOURS      @map("4h")
+  ONE_DAY         @map("1d")
+}
+
 /// 市场数据相关模型：多空比（long/short ratio）
 ///
 /// 说明：
@@ -5,19 +15,19 @@
 /// - 不直接建外键，保持与业务配置表解耦
 
 model LongShortRatio {
-  id        Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   /// 交易对配置 ID（来自 @ai/shared 中的 TradingPairConfig.id）
-  tradingPairId String   @map("trading_pair_id")
+  tradingPairId String @map("trading_pair_id")
 
-  /// 时间粒度，例如：'5m' / '15m' / '1h' / '4h' / '1d'
-  interval      String
+  /// 时间粒度，使用枚举类型确保数据一致性
+  interval MarketTimeframe
 
   /// 该时间粒度对应的时间点（通常为区间起始时间）
-  timestamp     DateTime
+  timestamp DateTime
 
   /// 多空比（多/空）
-  longShortRatio Decimal  @map("long_short_ratio") @db.Decimal(18, 8)
+  longShortRatio Decimal @map("long_short_ratio") @db.Decimal(18, 8)
 
   /// 多头账户占比
   longAccountRatio Decimal? @map("long_account_ratio") @db.Decimal(18, 8)
@@ -44,5 +54,3 @@ model LongShortRatio {
   @@index([tradingPairId, timestamp], map: "idx_long_short_ratio_pair_time")
   @@map("long_short_ratios")
 }
-
-

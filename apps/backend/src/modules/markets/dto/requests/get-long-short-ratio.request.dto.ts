@@ -40,6 +40,8 @@ export class GetLongShortRatioRequestDto {
   @ApiPropertyOptional({
     description: '最多返回的数据点数量，默认 500，最大 2000',
     example: 500,
+    minimum: 1,
+    maximum: 2000,
   })
   @IsOptional()
   @Type(() => Number)
