@@ -19,7 +19,8 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
  */
 
 @Module({
-  imports: [PrismaModule, OrderbookConfigModule],
+  imports: [PrismaModule, OrderbookConfigModule, AuthModule],
+  controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
     DataPullTaskRepository,

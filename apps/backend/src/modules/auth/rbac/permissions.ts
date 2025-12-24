@@ -19,6 +19,7 @@ export enum AppResource {
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
   ORDERBOOK_CONFIG = 'orderbook_config',
+  DATA_PULL_TASK = 'data_pull_task',
 }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()

@@ -250,53 +250,46 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
-const OrderbookPairConfigResponseDto = z
+const AdminDataPullTaskResponseDto = z
   .object({
-    id: z.string(),
-    pairId: z.string(),
-    venue: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    venueType: z.enum(["CEX", "DEX"]),
-    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
     enabled: z.boolean(),
-    pullIntervalSeconds: z.number().nullish(),
-    depthLevels: z.number().nullish(),
-    priority: z.number(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    description: z.string().nullish(),
+    cursor: z.string().nullish(),
+    lastStatus: z.string().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
+    lastError: z.string().nullish(),
     createdAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough();
-const CreateOrderbookPairConfigDto = z
+const CreateAdminDataPullTaskDto = z
   .object({
-    pairId: z
-      .string()
-      .regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
-    venue: z.string(),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    venueType: z.enum(["CEX", "DEX"]),
-    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
     enabled: z.boolean().optional().default(true),
-    pullIntervalSeconds: z.number().gte(1).nullish(),
-    depthLevels: z.number().gte(5).lte(500).nullish(),
-    priority: z.number().gte(1).lte(1000).optional().default(100),
-    metadata: z.object({}).partial().passthrough().optional(),
-    description: z.string().optional(),
+    cursor: z.string().nullish(),
   })
   .passthrough();
-const UpdateOrderbookPairConfigDto = z
+const UpdateAdminDataPullTaskDto = z
   .object({
+    name: z.string(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
     enabled: z.boolean(),
-    pullIntervalSeconds: z.number().gte(1).nullable(),
-    depthLevels: z.number().gte(5).lte(500).nullable(),
-    priority: z.number().gte(1).lte(1000),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    description: z.string().nullable(),
+    cursor: z.string().nullable(),
   })
   .partial()
   .passthrough();
@@ -362,9 +355,9 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
-  OrderbookPairConfigResponseDto,
-  CreateOrderbookPairConfigDto,
-  UpdateOrderbookPairConfigDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  UpdateAdminDataPullTaskDto,
   TradingPairConfigResponseDto,
   BaseResponseDto,
 };
@@ -418,6 +411,106 @@ const endpoints = makeApi([
       },
     ],
     response: AdminAuthResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_list",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "key",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AdminDataPullTaskResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_create",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateAdminDataPullTaskDto,
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_findOne",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "put",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_update",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateAdminDataPullTaskDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "delete",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_delete",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: "get",
@@ -582,117 +675,6 @@ const endpoints = makeApi([
     alias: "AdminMenuController_findPermissionMenus[1]",
     requestFormat: "json",
     response: z.void(),
-  },
-  {
-    method: "get",
-    path: "/admin/orderbook-configs",
-    alias: "AdminOrderbookPairConfigController_getAllConfigs",
-    requestFormat: "json",
-    parameters: [
-      {
-        name: "venue",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "venueType",
-        type: "Query",
-        schema: z.enum(["CEX", "DEX"]).optional(),
-      },
-      {
-        name: "instrumentType",
-        type: "Query",
-        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
-      },
-      {
-        name: "enabledOnly",
-        type: "Query",
-        schema: z.boolean().optional(),
-      },
-    ],
-    response: z
-      .object({
-        data: z.array(OrderbookPairConfigResponseDto),
-        message: z.string(),
-      })
-      .partial()
-      .passthrough(),
-  },
-  {
-    method: "post",
-    path: "/admin/orderbook-configs",
-    alias: "AdminOrderbookPairConfigController_createConfig",
-    requestFormat: "json",
-    parameters: [
-      {
-        name: "body",
-        type: "Body",
-        schema: CreateOrderbookPairConfigDto,
-      },
-    ],
-    response: z
-      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
-      .partial()
-      .passthrough(),
-  },
-  {
-    method: "get",
-    path: "/admin/orderbook-configs/:id",
-    alias: "AdminOrderbookPairConfigController_getConfig",
-    requestFormat: "json",
-    parameters: [
-      {
-        name: "id",
-        type: "Path",
-        schema: z.string(),
-      },
-    ],
-    response: z
-      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
-      .partial()
-      .passthrough(),
-  },
-  {
-    method: "put",
-    path: "/admin/orderbook-configs/:id",
-    alias: "AdminOrderbookPairConfigController_updateConfig",
-    requestFormat: "json",
-    parameters: [
-      {
-        name: "body",
-        type: "Body",
-        schema: UpdateOrderbookPairConfigDto,
-      },
-      {
-        name: "id",
-        type: "Path",
-        schema: z.string(),
-      },
-    ],
-    response: z
-      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
-      .partial()
-      .passthrough(),
-  },
-  {
-    method: "delete",
-    path: "/admin/orderbook-configs/:id",
-    alias: "AdminOrderbookPairConfigController_deleteConfig",
-    requestFormat: "json",
-    parameters: [
-      {
-        name: "id",
-        type: "Path",
-        schema: z.string(),
-      },
-    ],
-    response: z
-      .object({
-        data: z.object({ success: z.boolean() }).partial().passthrough(),
-        message: z.string(),
-      })
-      .partial()
-      .passthrough(),
   },
   {
     method: "get",
