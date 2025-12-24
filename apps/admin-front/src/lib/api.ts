@@ -46,6 +46,11 @@ type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
 
+// 订单薄配置相关类型
+export type OrderbookPairConfigResponse = z.infer<typeof schemas.OrderbookPairConfigResponseDto>
+export type CreateOrderbookPairConfigPayload = z.infer<typeof schemas.CreateOrderbookPairConfigDto>
+export type UpdateOrderbookPairConfigPayload = z.infer<typeof schemas.UpdateOrderbookPairConfigDto>
+
 const SYSTEM_PROMPT_CATEGORY = 'system_prompt'
 
 function requireAuthHeaders() {
@@ -204,6 +209,41 @@ export async function updateSystemPromptSetting(
     },
   )
   return ((response as any)?.data ?? response) as SettingResponse
+}
+
+// 订单薄交易对配置相关 API
+export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
+  const response = await client.AdminOrderbookPairConfigController_getAllConfigs({
+    headers: requireAuthHeaders(),
+  })
+  return unwrapListResponse<OrderbookPairConfigResponse>(response)
+}
+
+export async function createOrderbookConfig(
+  payload: CreateOrderbookPairConfigPayload,
+): Promise<OrderbookPairConfigResponse> {
+  const response = await client.AdminOrderbookPairConfigController_createConfig(payload, {
+    headers: requireAuthHeaders(),
+  })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+}
+
+export async function updateOrderbookConfig(
+  id: string,
+  payload: UpdateOrderbookPairConfigPayload,
+): Promise<OrderbookPairConfigResponse> {
+  const response = await client.AdminOrderbookPairConfigController_updateConfig(payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+}
+
+export async function deleteOrderbookConfig(id: string): Promise<void> {
+  await client.AdminOrderbookPairConfigController_deleteConfig(undefined, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
 }
 
 // ===== 旧业务逻辑已移除 =====

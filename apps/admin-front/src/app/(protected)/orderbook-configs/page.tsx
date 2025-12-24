@@ -1,0 +1,403 @@
+'use client'
+
+import type {
+  CreateOrderbookPairConfigPayload,
+  OrderbookPairConfigResponse,
+  UpdateOrderbookPairConfigPayload,
+} from '@/lib/api'
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tag,
+} from 'antd'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  createOrderbookConfig,
+  deleteOrderbookConfig,
+  fetchOrderbookConfigs,
+  updateOrderbookConfig,
+} from '@/lib/api'
+
+const venueTypeOptions = [
+  { label: 'CEX（中心化交易所）', value: 'CEX' },
+  { label: 'DEX（去中心化交易所）', value: 'DEX' },
+]
+
+const instrumentTypeOptions = [
+  { label: '现货 (SPOT)', value: 'SPOT' },
+  { label: '永续合约 (PERPETUAL)', value: 'PERPETUAL' },
+  { label: '期货 (FUTURE)', value: 'FUTURE' },
+]
+
+export default function OrderbookConfigsPage() {
+  const { message, modal } = App.useApp()
+  const [configs, setConfigs] = useState<OrderbookPairConfigResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingConfig, setEditingConfig] = useState<OrderbookPairConfigResponse | null>(null)
+  const [createForm] = Form.useForm<CreateOrderbookPairConfigPayload>()
+  const [editForm] = Form.useForm<UpdateOrderbookPairConfigPayload>()
+
+  const loadConfigs = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchOrderbookConfigs()
+      setConfigs(data)
+    }
+    catch (error: any) {
+      message.error(error?.message ?? '获取配置失败')
+    }
+    finally {
+      setLoading(false)
+    }
+  }, [message])
+
+  useEffect(() => {
+    void loadConfigs()
+  }, [loadConfigs])
+
+  const handleCreateConfig = async (values: CreateOrderbookPairConfigPayload) => {
+    try {
+      await createOrderbookConfig(values)
+      message.success('配置创建成功')
+      setCreateModalOpen(false)
+      createForm.resetFields()
+      await loadConfigs()
+    }
+    catch (error: any) {
+      const status = error?.response?.status
+      if (status === 409) {
+        message.error('该交易对ID已存在，请使用其他ID')
+      }
+      else if (status === 400) {
+        message.error('输入数据格式错误，请检查后重试')
+      }
+      else if (status === 403) {
+        message.error('没有权限执行此操作')
+      }
+      else {
+        message.error(error?.message ?? '创建失败，请稍后重试')
+      }
+    }
+  }
+
+  const openEditModal = (config: OrderbookPairConfigResponse) => {
+    setEditingConfig(config)
+    editForm.setFieldsValue({
+      enabled: config.enabled,
+      pullIntervalSeconds: config.pullIntervalSeconds ?? undefined,
+      depthLevels: config.depthLevels ?? undefined,
+      priority: config.priority,
+      description: config.description ?? undefined,
+      metadata: config.metadata ?? undefined,
+    })
+    setEditModalOpen(true)
+  }
+
+  const handleEditSubmit = async () => {
+    try {
+      const values = await editForm.validateFields()
+      if (!editingConfig)
+        return
+      await updateOrderbookConfig(editingConfig.id, values)
+      message.success('配置已更新')
+      setEditModalOpen(false)
+      setEditingConfig(null)
+      await loadConfigs()
+    }
+    catch (error: any) {
+      const status = error?.response?.status
+      if (status === 404) {
+        message.error('配置不存在，可能已被删除')
+      }
+      else if (status === 400) {
+        message.error('输入数据格式错误，请检查后重试')
+      }
+      else if (status === 403) {
+        message.error('没有权限执行此操作')
+      }
+      else {
+        message.error(error?.message ?? '更新失败，请稍后重试')
+      }
+    }
+  }
+
+  const handleDelete = (config: OrderbookPairConfigResponse) => {
+    modal.confirm({
+      title: '确认删除',
+      content: `确定要删除配置「${config.pairId}」吗？此操作不可恢复。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await deleteOrderbookConfig(config.id)
+          message.success('删除成功')
+          await loadConfigs()
+        }
+        catch (error: any) {
+          const status = error?.response?.status
+          if (status === 404) {
+            message.error('配置不存在，可能已被删除')
+            await loadConfigs() // Refresh list
+          }
+          else if (status === 409) {
+            message.error('无法删除：该配置正在被活跃任务使用')
+          }
+          else if (status === 403) {
+            message.error('没有权限执行此操作')
+          }
+          else {
+            message.error(error?.message ?? '删除失败，请稍后重试')
+          }
+        }
+      },
+    })
+  }
+
+  return (
+    <div className="page-container">
+      <Space direction="vertical" size={24} style={{ width: '100%' }}>
+        <Card
+          title="订单薄数据拉取配置"
+          extra={(
+            <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+              新建配置
+            </Button>
+          )}
+        >
+          <Table<OrderbookPairConfigResponse>
+            loading={loading}
+            dataSource={configs}
+            rowKey="id"
+            pagination={{ pageSize: 20 }}
+            scroll={{ x: 1400 }}
+            columns={[
+              {
+                title: '交易对ID',
+                dataIndex: 'pairId',
+                fixed: 'left',
+                width: 220,
+              },
+              {
+                title: '交易所',
+                dataIndex: 'venue',
+                width: 120,
+              },
+              {
+                title: '符号',
+                dataIndex: 'symbol',
+                width: 120,
+              },
+              {
+                title: '类型',
+                dataIndex: 'venueType',
+                width: 80,
+                render: value => (
+                  <Tag color={value === 'CEX' ? 'blue' : 'green'}>{value}</Tag>
+                ),
+              },
+              {
+                title: '品种',
+                dataIndex: 'instrumentType',
+                width: 100,
+                render: value => <Tag>{value}</Tag>,
+              },
+              {
+                title: '状态',
+                dataIndex: 'enabled',
+                width: 80,
+                render: value => (
+                  <Tag color={value ? 'success' : 'default'}>
+                    {value ? '启用' : '禁用'}
+                  </Tag>
+                ),
+              },
+              {
+                title: '拉取频率(秒)',
+                dataIndex: 'pullIntervalSeconds',
+                width: 120,
+                render: value => value ?? '默认',
+              },
+              {
+                title: '深度档位',
+                dataIndex: 'depthLevels',
+                width: 100,
+                render: value => value ?? '默认',
+              },
+              {
+                title: '优先级',
+                dataIndex: 'priority',
+                width: 80,
+              },
+              {
+                title: '备注',
+                dataIndex: 'description',
+                width: 150,
+                ellipsis: true,
+                render: value => value || '-',
+              },
+              {
+                title: '操作',
+                fixed: 'right',
+                width: 150,
+                render: (_, record) => (
+                  <Space>
+                    <Button type="link" size="small" onClick={() => openEditModal(record)}>
+                      编辑
+                    </Button>
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      onClick={() => handleDelete(record)}
+                    >
+                      删除
+                    </Button>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      </Space>
+
+      {/* 创建配置 Modal */}
+      <Modal
+        title="新建订单薄配置"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        onOk={() => createForm.submit()}
+        okText="创建"
+        width={700}
+      >
+        <Form
+          layout="vertical"
+          form={createForm}
+          onFinish={handleCreateConfig}
+        >
+          <Form.Item
+            label="交易对ID"
+            name="pairId"
+            rules={[
+              { required: true, message: '请输入交易对ID' },
+              {
+                pattern: /^[A-Z0-9]+\.[A-Z_]+\.(SPOT|PERPETUAL|FUTURE)$/,
+                message: '格式应为: SYMBOL.VENUE.TYPE (如: BTCUSDT.BINANCE.SPOT)',
+              },
+            ]}
+            tooltip="例如：BTCUSDT.BINANCE.SPOT"
+          >
+            <Input placeholder="BTCUSDT.BINANCE.SPOT" />
+          </Form.Item>
+          <Form.Item
+            label="交易所/DEX"
+            name="venue"
+            rules={[{ required: true, message: '请输入交易所标识' }]}
+            tooltip="例如：BINANCE, OKX, UNISWAP_V3"
+          >
+            <Input placeholder="BINANCE" />
+          </Form.Item>
+          <Form.Item
+            label="交易对符号"
+            name="symbol"
+            rules={[{ required: true, message: '请输入交易对符号' }]}
+          >
+            <Input placeholder="BTCUSDT" />
+          </Form.Item>
+          <Space style={{ width: '100%' }} size="large">
+            <Form.Item
+              label="基础资产"
+              name="baseAsset"
+              rules={[{ required: true, message: '请输入基础资产' }]}
+              style={{ width: 150 }}
+            >
+              <Input placeholder="BTC" />
+            </Form.Item>
+            <Form.Item
+              label="计价资产"
+              name="quoteAsset"
+              rules={[{ required: true, message: '请输入计价资产' }]}
+              style={{ width: 150 }}
+            >
+              <Input placeholder="USDT" />
+            </Form.Item>
+          </Space>
+          <Space style={{ width: '100%' }} size="large">
+            <Form.Item
+              label="场所类型"
+              name="venueType"
+              rules={[{ required: true, message: '请选择场所类型' }]}
+              style={{ width: 200 }}
+            >
+              <Select options={venueTypeOptions} placeholder="选择类型" />
+            </Form.Item>
+            <Form.Item
+              label="品种类型"
+              name="instrumentType"
+              rules={[{ required: true, message: '请选择品种类型' }]}
+              style={{ width: 200 }}
+            >
+              <Select options={instrumentTypeOptions} placeholder="选择品种" />
+            </Form.Item>
+          </Space>
+          <Space style={{ width: '100%' }} size="large">
+            <Form.Item label="拉取频率（秒）" name="pullIntervalSeconds" style={{ width: 150 }}>
+              <InputNumber placeholder="留空使用默认" min={1} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="深度档位" name="depthLevels" style={{ width: 150 }}>
+              <InputNumber placeholder="留空使用默认" min={5} max={500} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="优先级" name="priority" initialValue={100} style={{ width: 120 }}>
+              <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+            </Form.Item>
+          </Space>
+          <Form.Item label="是否启用" name="enabled" valuePropName="checked" initialValue>
+            <Switch />
+          </Form.Item>
+          <Form.Item label="备注说明" name="description">
+            <Input.TextArea rows={2} placeholder="可选" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 编辑配置 Modal */}
+      <Modal
+        title={editingConfig ? `编辑：${editingConfig.pairId}` : '编辑配置'}
+        open={editModalOpen}
+        onCancel={() => setEditModalOpen(false)}
+        onOk={handleEditSubmit}
+        okText="保存"
+        width={600}
+      >
+        <Form layout="vertical" form={editForm}>
+          <Form.Item label="拉取频率（秒）" name="pullIntervalSeconds">
+            <InputNumber placeholder="留空使用默认" min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="深度档位" name="depthLevels">
+            <InputNumber placeholder="留空使用默认" min={5} max={500} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="优先级" name="priority">
+            <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="是否启用" name="enabled" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item label="备注说明" name="description">
+            <Input.TextArea rows={2} placeholder="可选" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}

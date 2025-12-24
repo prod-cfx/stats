@@ -276,6 +276,54 @@ const TradingPairConfigResponseDto = z
     dexName: z.string().optional(),
   })
   .passthrough();
+const OrderbookPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().optional(),
+    depthLevels: z.number().optional(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateOrderbookPairConfigDto = z
+  .object({
+    pairId: z.string(),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean().optional().default(true),
+    pullIntervalSeconds: z.number().optional(),
+    depthLevels: z.number().optional(),
+    priority: z.number().optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+const UpdateOrderbookPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number(),
+    depthLevels: z.number(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough(),
+    description: z.string(),
+  })
+  .partial()
+  .passthrough();
 const BaseResponseDto = z
   .object({
     data: z.object({}).partial().passthrough(),
@@ -313,6 +361,9 @@ export const schemas = {
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
   TradingPairConfigResponseDto,
+  OrderbookPairConfigResponseDto,
+  CreateOrderbookPairConfigDto,
+  UpdateOrderbookPairConfigDto,
   BaseResponseDto,
 };
 
@@ -529,6 +580,95 @@ const endpoints = makeApi([
     alias: "AdminMenuController_findPermissionMenus[1]",
     requestFormat: "json",
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_getAllConfigs",
+    requestFormat: "json",
+    response: z
+      .object({
+        data: z.array(OrderbookPairConfigResponseDto),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "post",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_createConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateOrderbookPairConfigDto,
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_getConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "put",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_updateConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateOrderbookPairConfigDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "delete",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_deleteConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.object({ success: z.boolean() }).partial().passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",
@@ -1232,23 +1372,6 @@ const endpoints = makeApi([
     path: "/markets/pairs",
     alias: "MarketsController_getTradingPairs",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "venueType",
-        type: "Query",
-        schema: z.enum(["DEX", "CEX"]).optional(),
-      },
-      {
-        name: "instrumentType",
-        type: "Query",
-        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
-      },
-      {
-        name: "exchange",
-        type: "Query",
-        schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
-      },
-    ],
     response: z.array(TradingPairConfigResponseDto),
   },
   {

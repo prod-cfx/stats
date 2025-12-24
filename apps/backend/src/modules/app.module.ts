@@ -22,6 +22,7 @@ import { AuthModule } from './auth/auth.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
 import { HealthModule } from './health/health.module'
 import { MarketsModule } from './markets/markets.module'
+import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
 import { SettingsModule } from './settings/settings.module'
 import { UserModule } from './user/user.module'
 
@@ -81,6 +82,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     // 统一数据拉取 & 调度模块（K 线、新闻等）
     DataSyncModule,
     MarketsModule,
+    OrderbookConfigModule,
   ],
   providers: [
     {

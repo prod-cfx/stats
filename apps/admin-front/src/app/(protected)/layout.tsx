@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { key: '/roles', label: '角色管理', path: '/roles', permission: 'system.roles' },
   { key: '/menus', label: '菜单管理', path: '/menus', permission: 'system.menus' },
   { key: '/users', label: '管理员', path: '/users', permission: 'system.admins' },
+  { key: '/orderbook-configs', label: '订单薄配置', path: '/orderbook-configs', permission: 'data.orderbook' },
 ]
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {

@@ -13,6 +13,7 @@ import { hashSync } from 'bcrypt'
 import { Pool } from 'pg'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { AppRole } from '../src/modules/auth/rbac/permissions'
+import { seedOrderbookConfigs } from './seeds/orderbook-configs.seed'
 
 // 使用统一的环境变量访问器
 const env = createEnvAccessor()
@@ -82,6 +83,22 @@ const ADMIN_MENU_DEFINITIONS: Array<{
     parentCode: 'system',
     icon: 'lucide:users',
     sort: 13,
+  },
+  {
+    code: 'data',
+    title: '数据管理',
+    type: AdminMenuType.DIRECTORY,
+    icon: 'lucide:database',
+    sort: 20,
+  },
+  {
+    code: 'data.orderbook',
+    title: '订单薄配置',
+    type: AdminMenuType.MENU,
+    path: '/orderbook-configs',
+    parentCode: 'data',
+    icon: 'lucide:book-open',
+    sort: 21,
   },
 ]
 
@@ -248,6 +265,7 @@ async function main() {
   await seedBaseRoles()
   await seedAdminMenus()
   await seedAdminUser()
+  await seedOrderbookConfigs(prisma)
 
   console.log('种子数据填充完成')
 }
