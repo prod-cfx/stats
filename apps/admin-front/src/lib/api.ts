@@ -42,6 +42,8 @@ type CreateRolePayload = z.infer<typeof schemas.CreateAdminRoleDto>
 type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
+type DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
+type UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -87,6 +89,15 @@ export interface AdminUser {
     name: string
     description?: string | null
   }[]
+}
+
+export type DataPullTask = DataPullTaskDto
+
+interface PaginationResult<T> {
+  total: number
+  page: number
+  limit: number
+  items: T[]
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
@@ -204,6 +215,99 @@ export async function updateSystemPromptSetting(
     },
   )
   return ((response as any)?.data ?? response) as SettingResponse
+}
+
+// ===== 数据拉取任务管理（Admin） =====
+
+export interface DataPullTaskListQuery {
+  page?: number
+  limit?: number
+  key?: string
+  name?: string
+  enabled?: boolean
+}
+
+export async function fetchDataPullTasks(
+  query: DataPullTaskListQuery = {},
+): Promise<PaginationResult<DataPullTask>> {
+  const response = await client.AdminDataPullTaskController_list({
+    headers: requireAuthHeaders(),
+    queries: {
+      page: query.page,
+      limit: query.limit,
+      key: query.key,
+      name: query.name,
+      enabled: query.enabled,
+    },
+  })
+  const data = unwrapResponse<any>(response)
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? (query.page ?? 1),
+    limit: data.limit ?? (query.limit ?? 20),
+    items: Array.isArray(data.items) ? (data.items as DataPullTask[]) : [],
+  }
+}
+
+export interface CreateDataPullTaskPayload {
+  key: string
+  name: string
+  source?: string | null
+  type?: string | null
+  cron?: string | null
+  intervalSeconds?: number | null
+  enabled?: boolean
+  cursor?: string | null
+}
+
+export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
+  const dto = {
+    key: payload.key,
+    name: payload.name,
+    source: payload.source,
+    type: payload.type,
+    cron: payload.cron,
+    intervalSeconds: payload.intervalSeconds,
+    enabled: payload.enabled,
+    cursor: payload.cursor,
+  }
+  const response = await client.AdminDataPullTaskController_create(dto, {
+    headers: requireAuthHeaders(),
+  })
+  return unwrapResponse<DataPullTask>(response as any)
+}
+
+export interface UpdateDataPullTaskPayload {
+  name?: string
+  source?: string | null
+  type?: string | null
+  cron?: string | null
+  intervalSeconds?: number | null
+  enabled?: boolean
+  cursor?: string | null
+}
+
+export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
+  const dto: UpdateDataPullTaskDto = {}
+  if (payload.name !== undefined) dto.name = payload.name
+  if (payload.source !== undefined) dto.source = payload.source
+  if (payload.type !== undefined) dto.type = payload.type
+  if (payload.cron !== undefined) dto.cron = payload.cron
+  if (payload.intervalSeconds !== undefined) dto.intervalSeconds = payload.intervalSeconds
+  if (payload.enabled !== undefined) dto.enabled = payload.enabled
+  if (payload.cursor !== undefined) dto.cursor = payload.cursor
+  const response = await client.AdminDataPullTaskController_update(dto, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+  return unwrapResponse<DataPullTask>(response as any)
+}
+
+export async function deleteDataPullTask(id: number): Promise<void> {
+  await (client as any).AdminDataPullTaskController_delete({
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
 }
 
 // ===== 旧业务逻辑已移除 =====

@@ -181,5 +181,117 @@ export class DataPullTaskRepository {
 
     return result
   }
+
+  // ===== 管理后台使用的通用 CRUD 能力 =====
+
+  async findById(id: number): Promise<DataPullTask | null> {
+    const client = this.getClient()
+    return client.dataPullTask.findUnique({
+      where: { id },
+    })
+  }
+
+  async listTasks(params: {
+    page: number
+    limit: number
+    key?: string
+    name?: string
+    enabled?: boolean
+  }): Promise<{ total: number; items: DataPullTask[] }> {
+    const client = this.getClient()
+    const { page, limit, key, name, enabled } = params
+    const where: Record<string, any> = {}
+
+    if (key) {
+      where.key = {
+        contains: key,
+        mode: 'insensitive',
+      }
+    }
+
+    if (name) {
+      where.name = {
+        contains: name,
+        mode: 'insensitive',
+      }
+    }
+
+    if (typeof enabled === 'boolean') {
+      where.enabled = enabled
+    }
+
+    const [total, items] = await client.$transaction([
+      client.dataPullTask.count({ where }),
+      client.dataPullTask.findMany({
+        where,
+        orderBy: {
+          id: 'asc',
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ])
+
+    return { total, items }
+  }
+
+  async createTask(payload: {
+    key: string
+    name: string
+    source?: string
+    type?: string
+    cron?: string
+    intervalSeconds?: number | null
+    enabled?: boolean
+    cursor?: string | null
+  }): Promise<DataPullTask> {
+    const client = this.getClient()
+    return client.dataPullTask.create({
+      data: {
+        key: payload.key,
+        name: payload.name,
+        source: payload.source,
+        type: payload.type,
+        cron: payload.cron,
+        intervalSeconds: payload.intervalSeconds ?? null,
+        enabled: payload.enabled ?? true,
+        cursor: payload.cursor ?? null,
+      },
+    })
+  }
+
+  async updateTask(
+    id: number,
+    payload: {
+      name?: string
+      source?: string | null
+      type?: string | null
+      cron?: string | null
+      intervalSeconds?: number | null
+      enabled?: boolean
+      cursor?: string | null
+    },
+  ): Promise<DataPullTask> {
+    const client = this.getClient()
+    return client.dataPullTask.update({
+      where: { id },
+      data: {
+        ...payload,
+      },
+    })
+  }
+
+  async deleteTask(id: number): Promise<void> {
+    const client = this.getClient()
+    // 使用事务级联删除，先删除执行记录再删除任务
+    await client.$transaction([
+      client.dataPullExecution.deleteMany({
+        where: { taskId: id },
+      }),
+      client.dataPullTask.delete({
+        where: { id },
+      }),
+    ])
+  }
 }
 

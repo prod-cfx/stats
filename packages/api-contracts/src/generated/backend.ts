@@ -250,6 +250,49 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
+const AdminDataPullTaskResponseDto = z
+  .object({
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean(),
+    cursor: z.string().nullish(),
+    lastStatus: z.string().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
+    lastError: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateAdminDataPullTaskDto = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean().optional().default(true),
+    cursor: z.string().nullish(),
+  })
+  .passthrough();
+const UpdateAdminDataPullTaskDto = z
+  .object({
+    name: z.string(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
+    enabled: z.boolean(),
+    cursor: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -326,6 +369,9 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  UpdateAdminDataPullTaskDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   BaseResponseDto,
@@ -380,6 +426,106 @@ const endpoints = makeApi([
       },
     ],
     response: AdminAuthResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_list",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "key",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AdminDataPullTaskResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_create",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateAdminDataPullTaskDto,
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_findOne",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "put",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_update",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateAdminDataPullTaskDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "delete",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_delete",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: "get",

@@ -29,8 +29,8 @@ description: '统一 Git 工作流：自动化创建 Issue、提交与 PR'
 
 ## 背景与约束
 
-- 增量预检必须在提交前完成：`./scripts/dx lint`；如改动涉及后端需先跑 `./scripts/dx build backend`，再按需执行 `./scripts/dx build sdk --online`、`./scripts/dx build front`、`./scripts/dx build admin`
-- 若执行了 `./scripts/dx build sdk --online`，需检查 `apps/sdk/openapi/openapi.json` 是否应当提交，若无 DTO/API 变更应恢复原状
+- 增量预检必须在提交前完成：`./scripts/dx lint`；如改动涉及后端需先跑 `./scripts/dx build backend`，再按需执行 `./scripts/dx build contracts`、`./scripts/dx build front`、`./scripts/dx build admin`
+- 若执行了 `./scripts/dx build contracts`，会自动生成 `packages/api-contracts/src/generated/backend.ts`，该文件为构建产物无需手动提交
 - 所有提交与 PR 必须关联 Issue（`Refs: #<id>` / `Closes: #<id>`）
 - Main 分支禁止直接提交与开 PR，只有增量预检、E2E 全通过且获得明确确认时才可例外
 - 提交与 PR 文本必须使用 heredoc（Git/GH CLI），且全程使用中文
@@ -105,7 +105,7 @@ Use Task tool with issue-creator agent:
 3. 执行增量预检：
    - `./scripts/dx lint`（必跑）
    - 如涉及后端或共享逻辑：`./scripts/dx build backend`
-   - 若 DTO/API 有改动：紧接运行 `./scripts/dx build sdk --online`，随后检查 `openapi.json`
+   - 若 DTO/API 有改动：紧接运行 `./scripts/dx build contracts`，随后检查 `openapi.json`
    - 根据改动选择性执行 `./scripts/dx build front` / `./scripts/dx build admin`
 4. 若预检失败必须停止并提示修复；必要时记录假设（assumption）
 5. 生成提交信息草案：
@@ -191,7 +191,7 @@ PR: !<编号> <标题>
 ### 质量门禁
 
 - 增量预检通过是提交前置条件
-- 执行过 `./scripts/dx build sdk --online` 后必须审查 `openapi.json`
+- 执行过 `./scripts/dx build contracts` 后必须审查 `openapi.json`
 - 高风险改动需列出回滚方案和潜在影响，必要时再次确认假设（assumption）
 
 ### 提交通知

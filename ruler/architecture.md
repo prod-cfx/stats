@@ -4,7 +4,7 @@
 
 ```
 apps/
-├── backend/      # NestJS 11.1.5 + Prisma 6.19.0，REST API，监听 3000
+├── backend/      # NestJS 11.1.5 + Prisma 7.0.1，REST API，监听 3000
 ├── front/        # Next.js 15.4.7 App Router，面向终端用户，监听 3001
 └── admin-front/  # Next.js 15.4.6 + React 19 管理后台，监听 3500
 
@@ -28,7 +28,7 @@ docs/、docker/     # 流程/部署参考
 
 | 层/模块 | 技术 | 说明 |
 | --- | --- | --- |
-| 后端 | NestJS 11.1.5、Prisma 6.19.0、PostgreSQL、ioredis、nestjs-cls、winston | REST + Swagger，CLS 事务封装，winston 控制 `LOG_LEVEL/LOG_CONTEXT_FILTER` |
+| 后端 | NestJS 11.1.5、Prisma 7.0.1、PostgreSQL、ioredis、nestjs-cls、winston | REST + Swagger，CLS 事务封装，winston 控制 `LOG_LEVEL/LOG_CONTEXT_FILTER` |
 | 前端（front） | Next.js 15.4.7、React 18.2.0、Redux Toolkit 2.6.1、shadcn/ui、Radix、TailwindCSS 4.0.6 | App Router + server actions，所有 API 走 `@ai/api-contracts` 封装的 `lib/api.ts` |
 | 管理端（admin-front） | Next.js 15.4.6、React 19.0.0、Ant Design 5.26.7、Zustand 5.0.7 | 采用最新 React 19 流水线，API 入口同样集中在 `src/lib/api.ts` |
 | AI/集成 | OpenAI-compatible 适配器（UniAPI）、Resend、ws | `apps/backend/src/modules/ai` 通过 `UNIAPI_API_KEY` 调用大模型 |
