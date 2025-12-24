@@ -1,49 +1,62 @@
 /// 订单薄数据拉取配置模型
 
+/// 交易场所类型枚举
+enum VenueType {
+  CEX /// 中心化交易所
+  DEX /// 去中心化交易所
+}
+
+/// 交易品种类型枚举
+enum InstrumentType {
+  SPOT /// 现货
+  PERPETUAL /// 永续合约
+  FUTURE /// 期货
+}
+
 model OrderbookPairConfig {
-  id            String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   /// 交易对唯一标识（例如：BTCUSDT.BINANCE.SPOT）
-  pairId        String   @unique @map("pair_id")
-  
+  pairId String @unique @map("pair_id")
+
   /// 交易所/DEX 标识（例如：BINANCE, OKX, UNISWAP_V3）
-  venue         String
-  
+  venue String
+
   /// 交易对符号（例如：BTCUSDT）
-  symbol        String
-  
+  symbol String
+
   /// 基础资产（例如：BTC）
-  baseAsset     String   @map("base_asset")
-  
+  baseAsset String @map("base_asset")
+
   /// 计价资产（例如：USDT）
-  quoteAsset    String   @map("quote_asset")
-  
+  quoteAsset String @map("quote_asset")
+
   /// 交易场所类型（CEX/DEX）
-  venueType     String   @map("venue_type")
-  
+  venueType VenueType @map("venue_type")
+
   /// 交易品种类型（SPOT/PERPETUAL/FUTURE）
-  instrumentType String  @map("instrument_type")
-  
+  instrumentType InstrumentType @map("instrument_type")
+
   /// 是否启用拉取
-  enabled       Boolean  @default(true)
-  
+  enabled Boolean @default(true)
+
   /// 拉取频率（秒），null 表示使用全局默认值
   pullIntervalSeconds Int? @map("pull_interval_seconds")
-  
+
   /// 深度层级（买卖各多少档），null 表示使用全局默认
-  depthLevels   Int?     @map("depth_levels")
-  
+  depthLevels Int? @map("depth_levels")
+
   /// 优先级（数字越小优先级越高）
-  priority      Int      @default(100)
-  
+  priority Int @default(100)
+
   /// 扩展配置（JSON格式，用于存储交易所特定参数等）
-  metadata      Json?
-  
+  metadata Json?
+
   /// 备注说明
-  description   String?
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([venue])
   @@index([venueType])
@@ -51,4 +64,3 @@ model OrderbookPairConfig {
   @@index([priority])
   @@map("orderbook_pair_configs")
 }
-
