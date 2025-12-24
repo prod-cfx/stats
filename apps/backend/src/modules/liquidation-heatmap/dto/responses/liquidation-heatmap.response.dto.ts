@@ -57,3 +57,4 @@ export class LiquidationHeatmapResponseDto {
   price_candlesticks!: [number, string, string, string, string, string][]
 }
 
+

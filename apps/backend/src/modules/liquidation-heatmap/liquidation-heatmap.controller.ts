@@ -1,4 +1,9 @@
-import type { GetLiquidationHeatmapRequestDto } from './dto/requests/get-liquidation-heatmap.request.dto'
+// DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
+/* eslint-disable perfectionist/sort-imports -- NestJS 控制器按语义分组导入 DTO 与 Service，避免自动排序影响可读性与元数据推断 */
+
+// DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetLiquidationHeatmapRequestDto } from './dto/requests/get-liquidation-heatmap.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
