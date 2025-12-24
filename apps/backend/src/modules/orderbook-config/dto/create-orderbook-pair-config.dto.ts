@@ -53,18 +53,18 @@ export class CreateOrderbookPairConfigDto {
   @IsOptional()
   enabled?: boolean
 
-  @ApiPropertyOptional({ description: '拉取频率（秒），null 表示使用全局默认值' })
+  @ApiPropertyOptional({ description: '拉取频率（秒），null 表示使用全局默认值', nullable: true })
   @IsInt()
   @IsPositive()
   @IsOptional()
-  pullIntervalSeconds?: number
+  pullIntervalSeconds?: number | null
 
-  @ApiPropertyOptional({ description: '深度层级（买卖各多少档）' })
+  @ApiPropertyOptional({ description: '深度层级（买卖各多少档）', nullable: true })
   @IsInt()
   @Min(5)
   @Max(500)
   @IsOptional()
-  depthLevels?: number
+  depthLevels?: number | null
 
   @ApiPropertyOptional({ description: '优先级（数字越小优先级越高）', default: 100 })
   @IsInt()

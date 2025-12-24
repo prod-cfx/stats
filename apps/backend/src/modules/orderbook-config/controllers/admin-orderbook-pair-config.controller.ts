@@ -1,4 +1,3 @@
-import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -20,6 +19,8 @@ import {
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import { OrderbookPairConfigResponseDto } from '../dto/orderbook-pair-config.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { OrderbookPairConfigService } from '../services/orderbook-pair-config.service'

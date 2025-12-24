@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
+import { Transform } from 'class-transformer'
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
 
 export class QueryOrderbookPairConfigDto {
@@ -20,7 +20,7 @@ export class QueryOrderbookPairConfigDto {
 
   @ApiPropertyOptional({ description: '是否仅返回已启用的配置' })
   @IsBoolean()
-  @Type(() => Boolean)
+  @Transform(({ value }) => value === true || value === 'true')
   @IsOptional()
   enabledOnly?: boolean
 }

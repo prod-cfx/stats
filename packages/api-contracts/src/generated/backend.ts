@@ -306,8 +306,8 @@ const CreateOrderbookPairConfigDto = z
     venueType: z.enum(["CEX", "DEX"]),
     instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
     enabled: z.boolean().optional().default(true),
-    pullIntervalSeconds: z.number().optional(),
-    depthLevels: z.number().optional(),
+    pullIntervalSeconds: z.number().nullish(),
+    depthLevels: z.number().nullish(),
     priority: z.number().optional().default(100),
     metadata: z.object({}).partial().passthrough().optional(),
     description: z.string().optional(),
@@ -586,6 +586,28 @@ const endpoints = makeApi([
     path: "/admin/orderbook-configs",
     alias: "AdminOrderbookPairConfigController_getAllConfigs",
     requestFormat: "json",
+    parameters: [
+      {
+        name: "venue",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["CEX", "DEX"]).optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "enabledOnly",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
     response: z
       .object({
         data: z.array(OrderbookPairConfigResponseDto),
