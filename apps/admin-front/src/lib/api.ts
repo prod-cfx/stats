@@ -304,7 +304,7 @@ export async function updateDataPullTask(id: number, payload: UpdateDataPullTask
 }
 
 export async function deleteDataPullTask(id: number): Promise<void> {
-  await (client as any).AdminDataPullTaskController_delete(undefined, {
+  await (client as any).AdminDataPullTaskController_delete({
     headers: requireAuthHeaders(),
     params: { id },
   })
