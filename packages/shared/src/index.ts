@@ -19,6 +19,7 @@ export * from './constants/error-codes'
 export * from './signal-output'
 export * from './types/indicator'
 export * from './types/market-data'
+export * from './types/orderbook'
 export * from './types/setting-value'
 
 export interface Pagination {
