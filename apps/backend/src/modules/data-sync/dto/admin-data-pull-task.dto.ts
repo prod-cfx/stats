@@ -45,6 +45,7 @@ export class CreateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '数据来源标识（例如 binance、newsapi 等）',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -53,6 +54,7 @@ export class CreateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '任务类型标识（例如 kline_1m、news_latest 等）',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -61,6 +63,7 @@ export class CreateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: 'Cron 表达式（可选），当前主要使用 intervalSeconds 调度',
+    nullable: true,
     example: '*/5 * * * *',
   })
   @IsOptional()
@@ -70,6 +73,7 @@ export class CreateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '最小执行间隔（秒），用于防止任务过于频繁执行',
+    nullable: true,
     example: 60,
   })
   @IsOptional()
@@ -87,6 +91,7 @@ export class CreateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '初始游标（例如起始时间戳、自增 ID 等）',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -105,6 +110,7 @@ export class UpdateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '数据来源标识',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -113,6 +119,7 @@ export class UpdateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '任务类型标识',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -121,6 +128,7 @@ export class UpdateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: 'Cron 表达式',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -129,6 +137,7 @@ export class UpdateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '最小执行间隔（秒）',
+    nullable: true,
   })
   @IsOptional()
   @IsInt()
@@ -144,6 +153,7 @@ export class UpdateAdminDataPullTaskDto {
 
   @ApiPropertyOptional({
     description: '当前游标（强制重置时使用）',
+    nullable: true,
   })
   @IsOptional()
   @IsString()

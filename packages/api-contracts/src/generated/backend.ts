@@ -273,23 +273,23 @@ const CreateAdminDataPullTaskDto = z
   .object({
     key: z.string(),
     name: z.string(),
-    source: z.string().optional(),
-    type: z.string().optional(),
-    cron: z.string().optional(),
-    intervalSeconds: z.number().optional(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
     enabled: z.boolean().optional().default(true),
-    cursor: z.string().optional(),
+    cursor: z.string().nullish(),
   })
   .passthrough();
 const UpdateAdminDataPullTaskDto = z
   .object({
     name: z.string(),
-    source: z.string(),
-    type: z.string(),
-    cron: z.string(),
-    intervalSeconds: z.number(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
     enabled: z.boolean(),
-    cursor: z.string(),
+    cursor: z.string().nullable(),
   })
   .partial()
   .passthrough();

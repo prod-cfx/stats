@@ -252,12 +252,12 @@ export async function fetchDataPullTasks(
 export interface CreateDataPullTaskPayload {
   key: string
   name: string
-  source?: string
-  type?: string
-  cron?: string
-  intervalSeconds?: number
+  source?: string | null
+  type?: string | null
+  cron?: string | null
+  intervalSeconds?: number | null
   enabled?: boolean
-  cursor?: string
+  cursor?: string | null
 }
 
 export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
@@ -268,13 +268,10 @@ export async function createDataPullTask(payload: CreateDataPullTaskPayload): Pr
     type: payload.type,
     cron: payload.cron,
     intervalSeconds: payload.intervalSeconds,
+    enabled: payload.enabled,
     cursor: payload.cursor,
   }
-  if (typeof payload.enabled === 'boolean') {
-    // 仅在用户显式传入时覆盖默认值
-    ;(dto as any).enabled = payload.enabled
-  }
-  const response = await client.AdminDataPullTaskController_create(dto as any, {
+  const response = await client.AdminDataPullTaskController_create(dto, {
     headers: requireAuthHeaders(),
   })
   return unwrapResponse<DataPullTask>(response as any)
@@ -291,15 +288,14 @@ export interface UpdateDataPullTaskPayload {
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto: UpdateDataPullTaskDto = {
-    name: payload.name,
-    source: payload.source ?? undefined,
-    type: payload.type ?? undefined,
-    cron: payload.cron ?? undefined,
-    intervalSeconds: payload.intervalSeconds ?? undefined,
-    enabled: payload.enabled,
-    cursor: payload.cursor ?? undefined,
-  }
+  const dto: UpdateDataPullTaskDto = {}
+  if (payload.name !== undefined) dto.name = payload.name
+  if (payload.source !== undefined) dto.source = payload.source
+  if (payload.type !== undefined) dto.type = payload.type
+  if (payload.cron !== undefined) dto.cron = payload.cron
+  if (payload.intervalSeconds !== undefined) dto.intervalSeconds = payload.intervalSeconds
+  if (payload.enabled !== undefined) dto.enabled = payload.enabled
+  if (payload.cursor !== undefined) dto.cursor = payload.cursor
   const response = await client.AdminDataPullTaskController_update(dto, {
     headers: requireAuthHeaders(),
     params: { id },
@@ -308,8 +304,9 @@ export async function updateDataPullTask(id: number, payload: UpdateDataPullTask
 }
 
 export async function deleteDataPullTask(id: number): Promise<void> {
-  await (client as any).AdminDataPullTaskController_delete(id, {
+  await client.AdminDataPullTaskController_delete(undefined, {
     headers: requireAuthHeaders(),
+    params: { id },
   })
 }
 
