@@ -1,10 +1,13 @@
-import type { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
-import type { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+// Nest 运行时需要反射 DTO 构造函数以生成 OpenAPI query 参数，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
