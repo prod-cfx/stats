@@ -32,15 +32,23 @@ export function toMarketKey(market: MarketId): MarketKey {
 // 从字符串 key 解析回结构化 MarketId
 // 非法输入会抛出 Error，调用方可按需捕获
 export function parseMarketKey(key: MarketKey): MarketId {
-  const [symbolPart, venueType] = key.split(':')
+  const parts = key.split(':')
+  if (parts.length !== 2) {
+    throw new Error(`Invalid MarketKey format (expected "<BASE-QUOTE>:<TYPE>"): "${key}"`)
+  }
+
+  const [symbolPart, venueType] = parts
   if (!symbolPart || !venueType) {
     throw new Error(`Invalid MarketKey: "${key}"`)
   }
 
-  const [base, quote] = symbolPart.split('-')
-  if (!base || !quote) {
+  const lastDash = symbolPart.lastIndexOf('-')
+  if (lastDash <= 0 || lastDash === symbolPart.length - 1) {
     throw new Error(`Invalid MarketKey symbol part: "${symbolPart}"`)
   }
+
+  const base = symbolPart.slice(0, lastDash)
+  const quote = symbolPart.slice(lastDash + 1)
 
   const normalizedVenueType = venueType as VenueType
   const allowedVenueTypes: readonly VenueType[] = ['spot', 'perp', 'future', 'margin', 'amm']
@@ -120,7 +128,8 @@ export interface VenueConnector {
   /**
    * 注册订单簿更新回调。
    * 实现需要在本地订单簿发生变化时调用 handler。
+   * 返回一个用于取消订阅的 disposer 函数。
    */
-  onOrderBookUpdate: (handler: (book: VenueOrderBook) => void) => void
+  onOrderBookUpdate: (handler: (book: VenueOrderBook) => void) => () => void
 }
 
