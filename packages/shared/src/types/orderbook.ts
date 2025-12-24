@@ -42,10 +42,16 @@ export function parseMarketKey(key: MarketKey): MarketId {
     throw new Error(`Invalid MarketKey symbol part: "${symbolPart}"`)
   }
 
+  const normalizedVenueType = venueType as VenueType
+  const allowedVenueTypes: readonly VenueType[] = ['spot', 'perp', 'future', 'margin', 'amm']
+  if (!allowedVenueTypes.includes(normalizedVenueType)) {
+    throw new Error(`Invalid MarketKey venue type: "${venueType}"`)
+  }
+
   return {
     base: base.toUpperCase(),
     quote: quote.toUpperCase(),
-    venueType: venueType as VenueType,
+    venueType: normalizedVenueType,
   }
 }
 
