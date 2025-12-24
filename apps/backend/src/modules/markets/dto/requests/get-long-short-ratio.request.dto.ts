@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator'
+import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 
 export class GetLongShortRatioRequestDto {
   @ApiProperty({
@@ -42,6 +42,7 @@ export class GetLongShortRatioRequestDto {
   @Type(() => Number)
   @IsInt({ message: 'limit 必须是整数' })
   @Min(1, { message: 'limit 必须大于 0' })
+  @Max(2000, { message: 'limit 不能超过 2000' })
   limit?: number
 }
 
