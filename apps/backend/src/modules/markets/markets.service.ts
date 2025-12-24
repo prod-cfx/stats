@@ -4,7 +4,7 @@ import type { LongShortRatio } from './repositories/long-short-ratio.repository'
 // Nest 注入需要运行时引用 LongShortRatioRepository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { LongShortRatioRepository } from './repositories/long-short-ratio.repository'
-import type { ExchangeId, MarketInstrumentType, TradingPairConfig, TradingVenueType } from '@ai/shared'
+import type { ExchangeId, MarketInstrumentType, MarketTimeframe, TradingPairConfig, TradingVenueType } from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
 
 export interface MarketsFilter {
@@ -45,7 +45,7 @@ export class MarketsService {
    */
   async getLongShortRatios(params: {
     tradingPairId: string
-    interval?: string
+    interval: MarketTimeframe
     from?: Date
     to?: Date
     limit?: number

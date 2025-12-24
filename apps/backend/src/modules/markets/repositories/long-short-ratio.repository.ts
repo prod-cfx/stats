@@ -8,7 +8,7 @@ export type LongShortRatio = LongShortRatioModel
 
 export interface LongShortRatioQuery {
   tradingPairId: string
-  interval?: string
+  interval: string
   from?: Date
   to?: Date
   limit?: number
@@ -46,10 +46,9 @@ export class LongShortRatioRepository {
     const where: Prisma.LongShortRatioWhereInput = {
       tradingPairId,
     }
-
-    if (interval) {
-      where.interval = interval
-    }
+    // interval 在 DB 侧已由 ENUM 约束，且请求 DTO 也限制了取值范围
+    // 这里使用 any 以兼容 Prisma Client 未导出 enum 类型的场景
+    where.interval = interval as any
 
     if (from || to) {
       where.timestamp = {

@@ -12,14 +12,13 @@ export class GetLongShortRatioRequestDto {
   @IsString({ message: 'tradingPairId 必须是字符串' })
   tradingPairId!: string
 
-  @ApiPropertyOptional({
-    description: '时间粒度，可选值：1m / 5m / 15m / 1h / 4h / 1d',
+  @ApiProperty({
+    description: '时间粒度，可选值：1m / 5m / 15m / 1h / 4h / 1d（必填）',
     example: '4h',
     enum: MARKET_TIMEFRAMES,
   })
-  @IsOptional()
   @IsIn(MARKET_TIMEFRAMES, { message: `interval 必须是以下值之一：${MARKET_TIMEFRAMES.join(', ')}` })
-  interval?: MarketTimeframe
+  interval!: MarketTimeframe
 
   @ApiPropertyOptional({
     description: '开始时间（ISO 时间字符串，例如 2025-01-01T00:00:00Z）',

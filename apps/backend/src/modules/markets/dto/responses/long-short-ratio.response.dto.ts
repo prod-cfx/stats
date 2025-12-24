@@ -1,3 +1,4 @@
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LongShortRatioPointResponseDto {
@@ -8,8 +9,9 @@ export class LongShortRatioPointResponseDto {
   tradingPairId!: string
 
   @ApiProperty({
-    description: '时间粒度，例如 5m / 15m / 1h / 4h / 1d',
+    description: '时间粒度，可选值：1m / 5m / 15m / 1h / 4h / 1d',
     example: '4h',
+    enum: MARKET_TIMEFRAMES,
   })
   interval!: string
 

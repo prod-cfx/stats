@@ -322,7 +322,7 @@ const TradingPairConfigResponseDto = z
 const LongShortRatioPointResponseDto = z
   .object({
     tradingPairId: z.string(),
-    interval: z.string(),
+    interval: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
     timestamp: z.string(),
     longShortRatio: z.string(),
     longAccountRatio: z.string().nullish(),
@@ -1402,7 +1402,7 @@ const endpoints = makeApi([
       {
         name: "interval",
         type: "Query",
-        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).optional(),
+        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
       },
       {
         name: "from",
