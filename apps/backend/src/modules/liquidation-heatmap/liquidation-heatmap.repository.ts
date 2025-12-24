@@ -59,9 +59,7 @@ export class LiquidationHeatmapRepository {
    * 创建一条新的 Heatmap 快照及其所有明细数据。
    */
   async createSnapshotWithData(input: CreateHeatmapSnapshotInput): Promise<HeatmapSnapshotWithData> {
-    const client = this.getClient()
-
-    return client.$transaction(async tx => {
+    return this.prisma.runInTransaction(async tx => {
       const snapshot = await tx.liquidationHeatmapSnapshot.create({
         data: {
           source: 'COINGLASS',

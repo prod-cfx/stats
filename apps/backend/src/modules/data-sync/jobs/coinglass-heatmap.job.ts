@@ -46,8 +46,8 @@ export class CoinglassHeatmapJob implements DataPullJob {
       'https://open-api.coinglass.com/api/pro/v4/futures/liquidation-heatmap'
 
     if (!apiKey) {
-      this.logger.error('COINGLASS_API_KEY is not configured, skip job')
-      return { fetchedCount: 0, newCursor: currentCursor }
+      // 不应“默默成功”，否则后台无法感知配置缺失
+      throw new Error('COINGLASS_API_KEY is not configured')
     }
 
     const url = new URL(endpoint)
