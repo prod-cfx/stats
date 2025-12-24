@@ -1,6 +1,8 @@
 import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
-import type { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 import { Injectable, Logger } from '@nestjs/common'
+// Nest 注入需要运行时引用 Service，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 
 /**
  * 示例：订单薄数据拉取 Job

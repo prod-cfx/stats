@@ -28,19 +28,19 @@ export class OrderbookPairConfigResponseDto {
   @ApiProperty({ description: '是否启用' })
   enabled!: boolean
 
-  @ApiPropertyOptional({ description: '拉取频率（秒）' })
+  @ApiPropertyOptional({ description: '拉取频率（秒）', nullable: true })
   pullIntervalSeconds?: number | null
 
-  @ApiPropertyOptional({ description: '深度层级' })
+  @ApiPropertyOptional({ description: '深度层级', nullable: true })
   depthLevels?: number | null
 
   @ApiProperty({ description: '优先级' })
   priority!: number
 
-  @ApiPropertyOptional({ description: '扩展配置' })
+  @ApiPropertyOptional({ description: '扩展配置', nullable: true })
   metadata?: Record<string, any> | null
 
-  @ApiPropertyOptional({ description: '备注说明' })
+  @ApiPropertyOptional({ description: '备注说明', nullable: true })
   description?: string | null
 
   @ApiProperty({ description: '创建时间' })
