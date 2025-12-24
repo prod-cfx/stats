@@ -283,9 +283,15 @@ export class DataPullTaskRepository {
 
   async deleteTask(id: number): Promise<void> {
     const client = this.getClient()
-    await client.dataPullTask.delete({
-      where: { id },
-    })
+    // 使用事务级联删除，先删除执行记录再删除任务
+    await client.$transaction([
+      client.dataPullExecution.deleteMany({
+        where: { taskId: id },
+      }),
+      client.dataPullTask.delete({
+        where: { id },
+      }),
+    ])
   }
 }
 

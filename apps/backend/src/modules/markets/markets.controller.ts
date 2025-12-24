@@ -1,7 +1,7 @@
 import type { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
-import type { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports
