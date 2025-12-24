@@ -124,9 +124,7 @@ For comprehensive command references, security guidelines, and usage examples, r
 
 - No `DROP TABLE` or `TRUNCATE`
 - No bulk deletes without WHERE clause
-- Schema changes must use Prisma migrations:
-  - Development: use `./scripts/dx db migrate --dev --name <migration_name>` to generate/apply dev migrations with explicit names (no interactive prompts).
-  - Deploy / CI / staging / production: use `./scripts/dx deploy --<env>` (e.g. `--staging`, `--prod`, `--test`, `--e2e`) to apply already generated migrations via `prisma migrate deploy`, without `--name`.
+- Schema changes must use Prisma migrations (`./scripts/dx db migrate`)
 
 ## Quick Reference
 
