@@ -1,11 +1,11 @@
-import type {
-  ExchangeId,
-  MarketInstrumentType,
-  TradingPairConfig,
-  TradingVenueType,
-} from '@ai/shared'
-import { TRADING_PAIRS } from '@ai/shared'
+/* eslint-disable perfectionist/sort-imports */
 import { Injectable } from '@nestjs/common'
+import type { LongShortRatio } from './repositories/long-short-ratio.repository'
+// Nest 注入需要运行时引用 LongShortRatioRepository，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { LongShortRatioRepository } from './repositories/long-short-ratio.repository'
+import type { ExchangeId, MarketInstrumentType, TradingPairConfig, TradingVenueType } from '@ai/shared'
+import { TRADING_PAIRS } from '@ai/shared'
 
 export interface MarketsFilter {
   venueType?: TradingVenueType
@@ -15,7 +15,11 @@ export interface MarketsFilter {
 
 @Injectable()
 export class MarketsService {
-  private readonly pairs: TradingPairConfig[] = TRADING_PAIRS
+  private readonly pairs: TradingPairConfig[]
+
+  constructor(private readonly longShortRatioRepository: LongShortRatioRepository) {
+    this.pairs = TRADING_PAIRS
+  }
 
   findAll(filter?: MarketsFilter): TradingPairConfig[] {
     if (!filter) return this.pairs
@@ -33,6 +37,27 @@ export class MarketsService {
       }
 
       return true
+    })
+  }
+
+  /**
+   * 查询指定交易对的多空比时间序列
+   */
+  async getLongShortRatios(params: {
+    tradingPairId: string
+    interval?: string
+    from?: Date
+    to?: Date
+    limit?: number
+  }): Promise<LongShortRatio[]> {
+    const { tradingPairId, interval, from, to, limit } = params
+
+    return this.longShortRatioRepository.findByPairAndTime({
+      tradingPairId,
+      interval,
+      from,
+      to,
+      limit,
     })
   }
 }

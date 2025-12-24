@@ -1,0 +1,120 @@
+import type { LongShortRatio as LongShortRatioModel, Prisma } from '@prisma/client'
+import { Injectable } from '@nestjs/common'
+// Nest 注入需要运行时引用 PrismaService，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { PrismaService } from '@/prisma/prisma.service'
+
+export type LongShortRatio = LongShortRatioModel
+
+export interface LongShortRatioQuery {
+  tradingPairId: string
+  interval?: string
+  from?: Date
+  to?: Date
+  limit?: number
+}
+
+export interface LongShortRatioUpsertInput {
+  tradingPairId: string
+  interval: string
+  timestamp: Date
+  longShortRatio: string
+  longAccountRatio?: string | null
+  shortAccountRatio?: string | null
+  longVolume?: string | null
+  shortVolume?: string | null
+  longShortAccountRatio?: string | null
+  source?: string
+}
+
+@Injectable()
+export class LongShortRatioRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  private getClient() {
+    return this.prisma.getClient()
+  }
+
+  /**
+   * 按交易对 + 时间范围查询多空比时间序列
+   */
+  async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
+    const client = this.getClient()
+    const { tradingPairId, interval, from, to, limit = 500 } = query
+
+    const where: Prisma.LongShortRatioWhereInput = {
+      tradingPairId,
+    }
+
+    if (interval) {
+      where.interval = interval
+    }
+
+    if (from || to) {
+      where.timestamp = {
+        ...(from ? { gte: from } : {}),
+        ...(to ? { lte: to } : {}),
+      }
+    }
+
+    return client.longShortRatio.findMany({
+      where,
+      orderBy: {
+        timestamp: 'asc',
+      },
+      take: limit,
+    })
+  }
+
+  /**
+   * 单条 upsert，用于数据拉取任务写入
+   */
+  async upsertOne(input: LongShortRatioUpsertInput): Promise<LongShortRatio> {
+    const client = this.getClient()
+
+    const {
+      tradingPairId,
+      interval,
+      timestamp,
+      longShortRatio,
+      longAccountRatio,
+      shortAccountRatio,
+      longVolume,
+      shortVolume,
+      longShortAccountRatio,
+      source = 'COINGLASS',
+    } = input
+
+    return client.longShortRatio.upsert({
+      where: {
+        tradingPairId_interval_timestamp: {
+          tradingPairId,
+          interval,
+          timestamp,
+        },
+      },
+      create: {
+        tradingPairId,
+        interval,
+        timestamp,
+        longShortRatio,
+        longAccountRatio,
+        shortAccountRatio,
+        longVolume,
+        shortVolume,
+        longShortAccountRatio,
+        source,
+      },
+      update: {
+        longShortRatio,
+        longAccountRatio,
+        shortAccountRatio,
+        longVolume,
+        shortVolume,
+        longShortAccountRatio,
+        source,
+      },
+    })
+  }
+}
+
