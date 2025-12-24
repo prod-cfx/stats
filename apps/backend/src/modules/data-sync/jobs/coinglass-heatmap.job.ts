@@ -29,6 +29,8 @@ interface CoinglassHeatmapApiResponse {
 export class CoinglassHeatmapJob implements DataPullJob {
   readonly key = 'coinglass-liquidation-heatmap'
   private readonly logger = new Logger(CoinglassHeatmapJob.name)
+  private readonly requestTimeoutMs = 10_000
+  private readonly maxAttempts = 2
 
   constructor(
     private readonly configService: ConfigService,
@@ -66,21 +68,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
 
     this.logger.log(`Requesting Coinglass heatmap: ${url.toString()}`)
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        // 具体 header 名称以 Coinglass 文档为准
-        'CG-API-KEY': apiKey,
-      },
-    })
-
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(`Coinglass API request failed: ${response.status} ${response.statusText} - ${text}`)
-    }
-
-    const json = (await response.json()) as CoinglassHeatmapApiResponse
+    const json = await this.fetchHeatmapJson(url, apiKey)
 
     if (json.code !== '0' || !json.data) {
       throw new Error(`Coinglass API returned error: code=${json.code}, msg=${json.msg}`)
@@ -121,6 +109,95 @@ export class CoinglassHeatmapJob implements DataPullJob {
         contractType: snapshot.snapshot.contractType,
         modelType: snapshot.snapshot.modelType,
       },
+    }
+  }
+
+  private async fetchHeatmapJson(url: URL, apiKey: string): Promise<CoinglassHeatmapApiResponse> {
+    const requestInit: RequestInit = {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        // 具体 header 名称以 Coinglass 文档为准
+        'CG-API-KEY': apiKey,
+      },
+    }
+
+    let lastFailure: string | null = null
+
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs)
+
+      try {
+        const response = await fetch(url.toString(), {
+          ...requestInit,
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          const body = await this.safeReadText(response)
+          const snippet = body ? body.slice(0, 500) : ''
+
+          const failure = `status=${response.status} ${response.statusText}${snippet ? ` body=${JSON.stringify(snippet)}` : ''}`
+          lastFailure = failure
+
+          const retryable = response.status >= 500 || response.status === 429
+          if (retryable && attempt < this.maxAttempts) {
+            this.logger.warn(
+              `Coinglass heatmap request failed (attempt ${attempt}/${this.maxAttempts}), retrying: ${failure}`,
+            )
+            continue
+          }
+
+          throw new Error(
+            `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
+          )
+        }
+
+        return (await response.json()) as CoinglassHeatmapApiResponse
+      } catch (error) {
+        const isAbort = this.isAbortError(error)
+
+        const failure = isAbort
+          ? `timeout after ${this.requestTimeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error)
+
+        lastFailure = failure
+
+        if (attempt < this.maxAttempts) {
+          this.logger.warn(
+            `Coinglass heatmap request error (attempt ${attempt}/${this.maxAttempts}), retrying: ${failure}`,
+          )
+          continue
+        }
+
+        throw new Error(
+          `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
+        )
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+
+    // 理论不可达，兜底
+    throw new Error(
+      `Coinglass heatmap request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
+    )
+  }
+
+  private isAbortError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false
+    if (!('name' in error)) return false
+    return (error as { name?: unknown }).name === 'AbortError'
+  }
+
+  private async safeReadText(response: Response): Promise<string> {
+    try {
+      return await response.text()
+    } catch {
+      return ''
     }
   }
 
