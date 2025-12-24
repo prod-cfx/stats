@@ -10,26 +10,23 @@
 
 ## Context
 
-- 该 Pilot 面向"已有 PR 的修复与收敛"，遵循循环修复流程。
+- 该 Pilot 面向"已有 PR 的修复与收敛"，一次性完成修复流程。
 - 使用 GH CLI 拉取 PR 检查状态、Review、评论与讨论线程，分类评估后决定修复范围；若有纳入项，则进行代码修复；
-  完成后自动提交并在 PR 与关联 Issue 进行同步说明；等待服务器侧自动 Review，再次循环最多 3 次。
+  完成后自动提交并在 PR 与关联 Issue 进行同步说明。
 
 ---
 
-## Phase A: 获取数据（GH CLI 轮询 + 拉取上下文）
+## Phase A: 获取数据（GH CLI 拉取上下文）
 
 1. 解析输入
 
 - 接受 `<PR_NUMBER>` 或 `<PR_URL>`；解析出 `owner/repo`、`pr_number`。
 - 从 PR URL 或当前仓库 `git remote get-url origin` 推断。
 
-2. 轮询检查状态
+2. 获取 PR 状态
 
 - 使用 `gh pr view <pr> --json statusCheckRollup,commits,headRefName,baseRefName,mergeable,reviewDecision,url,author,title,number` 查询检查概况与分支信息。
-- 若 `statusCheckRollup` 中存在 `IN_PROGRESS`/`PENDING` 等正在运行项：
-  - 若累计等待时间未超过 30 分钟：sleep 180 秒，然后再次查询。
-  - 若超过 30 分钟最长等待时长：进入后续步骤，但在 B 阶段计入风险与范围决策（例如“CI 长时间未通过”）。
-- 若全部完成（成功或失败），继续。
+- 记录当前检查状态（无论成功、失败或进行中），继续后续步骤。
 
 3. 拉取评审与讨论数据
 
@@ -139,7 +136,6 @@ Instructions:
 
 - ✅ **Checklist（逐条勾对）**：
   - 遍历 Phase A 中记录的全部 `discussion_rXXXXXXX` thread ID；确保每个 thread 都在本阶段被回复或标记已处理，禁止遗漏。
-  - 若 GitHub UI 新增 thread，需重新回到 Phase A 更新列表后再进入本阶段。
 
 - 对于 GitHub Review Threads（讨论贴）：在线程内逐条单独回复，引用关键上下文，附上 commit 链接和文件行。
 - 对于非线程的 Review 总结类评论（一次列出多个问题）：允许集中一条回复，按小节分点回应并引用相关上下文。
@@ -152,45 +148,24 @@ Instructions:
 
 ---
 
-## Phase F: 等待服务器自动 Review 并回到 A（至多 3 次）
-
-1. 等待 CI 完成
-
-- 完成 D/E 后，先 sleep 180 秒让服务器启动自动 Review。
-- 使用 `gh pr view <pr> --json statusCheckRollup` 轮询检查状态：
-  - 若存在 `IN_PROGRESS`/`PENDING` 等正在运行项：sleep 180 秒后继续轮询。
-  - 若累计等待时间超过 30 分钟：记录超时但继续后续流程。
-  - 若所有检查完成（成功或失败）：继续下一步。
-
-2. 循环判断
-
-- 重新执行 Phase A（拉取最新检查状态与讨论）；
-- 再次确认新的 `discussion_rXXXXXXX` thread 是否出现；若有新增，返回 Phase B→E 按上述 checklist 处理。
-- 若检查失败或出现新的阻断/高优先项，则重复 B→E；
-- 循环次数达到 3 次后退出。
-
----
-
 ## Execution Flow Summary
 
 ```mermaid
 flowchart TD
-  A[Phase A 获取数据\n轮询检查 + 拉取 Review/讨论] --> B[Phase B 评估归类\n范围与优先级清单]
+  A[Phase A 获取数据\n拉取 Review/讨论] --> B[Phase B 评估归类\n范围与优先级清单]
   B --> C[Phase C 修复\n代码修复实施]
   C --> D[Phase D 提交与同步\nPR 与 Issue 评论]
   D --> E[Phase E 逐条回复讨论]
-  E --> F[Phase F 等待3分钟\n再回到 A，最多 3 次]
-  F --> A
-  F -->|达到上限| End[退出]
+  E --> End[完成]
 ```
 
 ---
 
 ## Success Criteria
 
-- 阻断问题均已修复或获得明确、充分的拒绝理由并经沟通达成一致；
+- 阻断问题均已修复或获得明确、充分的拒绝理由；
 - 高收益非阻断项在可控成本内纳入；
-- CI/自动检查通过或已按流程豁免；
+- 代码已提交并推送；
 - PR 与关联 Issue 均获得清晰、可追溯的记录与链接。
 
 ---

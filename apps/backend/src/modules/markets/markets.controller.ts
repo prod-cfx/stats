@@ -11,6 +11,8 @@ import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.respo
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 
+/* eslint-enable perfectionist/sort-imports */
+
 @ApiTags('markets')
 @ApiBearerAuth('bearer')
 @Controller('markets')

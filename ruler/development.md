@@ -4,168 +4,351 @@
 
 ### 1.1 构建策略
 
-- 🔨 **分项目构建**：本地优先执行 `./scripts/dx build backend|front|admin --dev`；CI 通过 `./scripts/dx build all --prod`（禁止本地运行）。
-- 🔍 **增量预检**：提交前至少执行一次 `./scripts/dx lint`。若改动后端，再跑 `./scripts/dx build backend`；若改动任一 Next 应用，再跑对应构建。CI 由 `./scripts/dx prcheck --prod` 全量兜底。
-- ⛔ **禁用包管理器**：**绝对禁止**使用 `pnpm`、`npm`、`yarn`、`npx` 命令，所有操作必须通过 `./scripts/dx` 执行。
-- 🚫 **失败即止**：任一构建或 lint 失败必须先修复并重跑；禁止忽略错误继续提交。
+- 🔨 **构建策略**：按应用分别构建（backend/front/admin），本地禁止 `./scripts/dx build all`；CI 使用 `./scripts/dx build all --prod`
+- 🔍 **增量预检**：提交前必须执行 `./scripts/dx lint`；若后端代码有改动需先运行 `./scripts/dx build backend`，随后仅在后端 DTO 或 API 变更时执行 `./scripts/dx build contracts`，最后再按需运行 `./scripts/dx build front` 与 `./scripts/dx build admin`；CI 仍由 `./scripts/dx prcheck --prod` 负责全量校验
+- 🚫 **提交前构建**：提交前必须对受影响应用执行构建并通过；构建失败禁止提交
 
 ### 1.2 测试与提交流程
 
-- 🧪 **E2E 规则**：当前仅维护 `apps/backend/e2e`（Jest）；`./scripts/dx test e2e backend [spec] [-t "case"]` 支持逐文件/逐用例执行。无单元测试。
-- 📋 **提交前清单**：
-  1. 根据改动范围跑 E2E（至少覆盖受影响 spec）；main 分支与 PR 创建强制全部通过。
-  2. 按顺序执行 `./scripts/dx lint` → `./scripts/dx build backend`（若涉及）→ `./scripts/dx build front` / `admin`（若涉及）。
-  3. 若修改 DTO/API，务必运行 `./scripts/dx contracts` 并提交 `packages/api-contracts`。
-  4. 确认 `.env*` 没有新敏感文件被提交。
-  5. 检查 commit message 带 Issue ID（详见 `git-workflow.md`）。
+- 🧪 **E2E 测试规则**：详见 conventions.md「测试约定」
+- 📋 **提交前检查清单**（四步走）：
+  1. 识别受影响 E2E 用例并逐个运行通过（后端改动时）
+  2. 分别构建受影响应用（backend/front/admin）
+  3. 执行增量预检（`./scripts/dx lint` 必跑；若后端代码改动先跑 `./scripts/dx build backend`，再视 DTO/API 变更决定是否执行 `./scripts/dx build contracts`，最后按需运行前端与管理后台构建）
+  4. 若增量预检包含 `./scripts/dx build contracts`，仅需确认 SDK 构建成功；`packages/api-contracts/openapi/backend.json` 视为本地构建产物，**不再纳入 Git 管理，也无需手动检查/提交**
 
-### 1.3 Lint 自动修复
+### 1.3 Lint 自动修复策略
 
-1. 运行 `./scripts/dx lint`。
-2. 若有报错，执行 `./scripts/dx lint --fix`，然后再次运行 `./scripts/dx lint`。
-3. 只有在自动修复后仍存在问题时，才允许手动修改并重复上述流程。
+- **入口命令**：统一使用 `./scripts/dx lint` 进行检查；如需自动修复，使用 `./scripts/dx lint --fix`
+- **强制流程**（请严格遵守顺序）：
+  - 第一步：运行 `./scripts/dx lint`
+  - 如果 lint **没有报错**，可以继续后续流程
+  - 如果 lint **有报错**，第二步必须执行：
+
+```bash
+./scripts/dx lint --fix
+```
+
+  - 第三步：再次运行 `./scripts/dx lint`，若此时仍有错误，才允许在代码中进行手动修改并重复上述流程，直到 `./scripts/dx lint` 通过
 
 ---
 
 ## 二、命令系统
 
-| 类别 | 命令 | 说明 |
-| --- | --- | --- |
-| **启动服务** | `./scripts/dx start backend --dev` | 启动 Nest 开发服务（3000） |
-|  | `./scripts/dx start front --dev` | 启动用户端 Next（3001） |
-|  | `./scripts/dx start admin --dev` | 启动管理端 Next（3500） |
-|  | `./scripts/dx start all` | 并行启动 backend/front/admin（dev 环境） |
-| **数据库** | `./scripts/dx db generate` | 运行 Prisma `generate` |
-|  | `./scripts/dx db format` | `schema.prisma` 格式化 |
-|  | `./scripts/dx db migrate --dev --name <name>` | 开发迁移（必须提供 `--name` 或位置参数） |
-|  | `./scripts/dx deploy --prod`（或 `--staging` / `--test`） | 应用迁移（prisma migrate deploy，无需 `--name`） |
-|  | `./scripts/dx db seed --dev` | 执行 `apps/backend/prisma/seed.ts` |
-| **构建** | `./scripts/dx build backend --dev|--prod` | Nest 构建（`dist/backend`） |
-|  | `./scripts/dx build front --dev|--prod` | Next 构建；生产模式使用 `front:exportDist` |
-|  | `./scripts/dx build admin --dev|--prod` | 管理端构建 |
-|  | ⚠️ `./scripts/dx build all --prod` | 仅 CI/发布使用，禁止本地运行 |
-| **PR 预检** | `./scripts/dx prcheck --prod` | Lint → backend build → contracts → front/admin build |
-| **测试** | `./scripts/dx test e2e backend <file> [-t case]` | 指定文件/用例运行 E2E |
-|  | `./scripts/dx test e2e backend` | 全量 E2E（耗时，谨慎使用） |
-| **合约** | `./scripts/dx contracts` | 导出 Swagger + 生成 `@ai/api-contracts` |
-| **缓存/清理** | `./scripts/dx cache clear` | 清理 Nx/PNPM 缓存（危险命令需确认） |
+### 2.1 核心规则
 
-所有命令默认加载 `.env.development(.local)`；传入 `--prod / --staging / --e2e` 时会切换到对应层。
+> 详细约束见 conventions.md「输出与命令约束」
+
+- **环境标志**：`--dev/--staging/--prod/--test/--e2e`（禁止位置参数）
+
+### 2.2 常用命令速查
+
+| 类别         | 命令                                          | 说明                                             |
+| ------------ | --------------------------------------------- | ------------------------------------------------ |
+| **启动服务** | `./scripts/dx start backend --dev`            | 启动后端（端口 3000）                            |
+|              | `./scripts/dx start front --dev`              | 启动前端（端口 3001）                            |
+|              | `./scripts/dx start admin --dev`              | 启动管理后台（端口 3500）                        |
+|              | `./scripts/dx start all`                      | 同时启动所有服务（默认 dev）                     |
+| **数据库**   | `./scripts/dx db generate`                    | 生成 Prisma Client                               |
+|              | `./scripts/dx db format`                      | 格式化 schema                                    |
+|              | `./scripts/dx db migrate --dev --name <名称>` | 创建开发迁移（开发环境必须指定 --name）          |
+|              | `./scripts/dx db deploy --dev\|--prod`        | 应用迁移（本地/预发/生产；生产需确认）           |
+|              | `./scripts/dx db reset --dev`                 | 重置数据库（危险）                               |
+|              | `./scripts/dx db seed --dev`                  | 填充种子数据                                     |
+| **构建**     | `./scripts/dx build backend --dev\|--prod`    | 构建后端                                         |
+|              | `./scripts/dx build front --dev\|--prod`      | 构建前端                                         |
+|              | `./scripts/dx build admin --dev\|--prod`      | 构建管理后台                                     |
+|              | ⚠️ 本地禁止：`./scripts/dx build all`         | 仅 CI 用 `--prod`                                |
+| **PR 预检**  | `./scripts/dx lint`                           | 所有代码改动必跑                                 |
+|              | `./scripts/dx build backend`                  | 修改后端相关代码时执行                           |
+|              | `./scripts/dx build contracts`                      | 仅后端 DTO/API 变更时执行（输出到 `packages/api-contracts`，应紧随 backend 之后） |
+|              | `./scripts/dx build front`                    | 修改用户端前端代码时执行                         |
+|              | `./scripts/dx build admin`                    | 修改管理后台代码时执行                           |
+| **CI**       | `./scripts/dx prcheck --prod`                 | CI 专用全量校验                                  |
+| **测试**     | `./scripts/dx test e2e backend <file>`        | 运行 E2E（逐个运行）                             |
+|              | `./scripts/dx lint`                           | 代码检查和格式化                                 |
+| **SDK**      | `./scripts/dx build contracts`                      | 生成并构建 SDK                                   |
+| **生产**     | `./scripts/dx build backend --prod`           | 生产构建                                         |
+|              | `./scripts/dx db deploy --prod`               | 生产迁移                                         |
+|              | `./scripts/dx start backend --prod`           | 生产启动                                         |
 
 ---
 
-## 三、日志与环境开关
+## 三、前端日志配置
 
-### 3.1 后端日志
+### 3.1 日志级别说明
 
-- `apps/backend/src/config/logger.config.ts` 使用 winston；`LOG_LEVEL` 控制输出（默认 dev=debug、prod=warn），`LOG_CONTEXT_FILTER` 允许逗号分隔的 `Logger` 名称白名单。
-- `APP_ENV=e2e/test` 时日志强制静默，仅输出错误，避免污染测试快照。
-- `./scripts/dx` 会根据 `scripts/config/required-env.jsonc` 校验 `LOG_LEVEL` 是否存在，推荐值：error、warn、info、debug。
+前端日志系统支持以下级别（按严重程度从低到高）：
 
-### 3.2 前端环境检查
+- **SILLY** → 最详细的调试信息
+- **TRACE** → 跟踪信息
+- **DEBUG** → 调试信息（开发环境默认）
+- **INFO** → 一般信息
+- **WARN** → 警告信息（生产环境默认）
+- **ERROR** → 错误信息
+- **FATAL** → 致命错误
 
-- `apps/front/scripts/check-env.js` 要求配置 `NEXT_PUBLIC_API_BASE_URL`、`APP_ENV`，并在设置 `NEXT_PUBLIC_LOG_LEVEL` 时校验可选值（SILLY/TRACE/DEBUG/INFO/WARN/ERROR/FATAL）。前端目前仍使用 `console` 级别日志，该变量只是为了未来引入 `tslog` 做预留；建议 dev=DEBUG、prod=WARN。
-- `apps/admin-front/scripts/check-env.js` 只校验 `NEXT_PUBLIC_API_BASE_URL` 与 `APP_ENV`。Admin 暂未接入日志级别，可按需在 `.env.*.local` 中手动控制。
+### 3.2 环境变量配置
 
-### 3.3 配置加载顺序
+#### 方式 1：构建时环境变量（推荐）
 
-- `packages/config` 已在 Nest `main.ts` 调用 `loadEnvironment()`；若新建 CLI/Next 服务器入口，必须在做其他操作前调用同函数以保证 zod 校验和 `.env` 层级一致。
-- `.env.<env>.local` 冲突时优先生效；`./scripts/dx` 会在命令执行前打印加载顺序，便于排查。
+**文件**：`.env.[environment].local`
+
+```bash
+# 前端日志级别
+NEXT_PUBLIC_LOG_LEVEL=WARN  # 可选: SILLY | TRACE | DEBUG | INFO | WARN | ERROR | FATAL
+```
+
+**特点**：
+- ✅ 在构建时生效，影响 SSR 和客户端初始日志级别
+- ✅ 适用于持久配置
+- ✅ 构建脚本会自动验证配置合法性
+
+**示例**：
+
+```bash
+# 开发环境（默认 DEBUG，通常无需设置）
+NEXT_PUBLIC_LOG_LEVEL=DEBUG
+
+# 生产环境（默认 WARN）
+NEXT_PUBLIC_LOG_LEVEL=WARN
+
+# 预发布环境（建议 INFO）
+NEXT_PUBLIC_LOG_LEVEL=INFO
+
+# 生产环境临时调试（谨慎使用）
+NEXT_PUBLIC_LOG_LEVEL=DEBUG
+```
+
+#### 方式 2：运行时 localStorage（临时调试）
+
+**浏览器控制台**：
+
+```javascript
+// 临时开启 DEBUG 日志
+localStorage.setItem('logLevel', 'DEBUG')
+location.reload()
+
+// 恢复默认级别
+localStorage.removeItem('logLevel')
+location.reload()
+```
+
+**特点**：
+- ✅ 无需重新构建，立即生效
+- ✅ 适用于用户端临时排查问题
+- ⚠️ 仅影响当前浏览器
+
+### 3.3 优先级规则
+
+日志级别的优先级（从高到低）：
+
+1. **运行时 localStorage** → `localStorage.logLevel`
+2. **构建期环境变量** → `NEXT_PUBLIC_LOG_LEVEL` / `VITE_LOG_LEVEL`
+3. **环境默认值** → 开发 `DEBUG` / 生产 `WARN`
+
+### 3.4 实际应用场景
+
+#### 场景 1：生产环境排查问题
+
+用户报错时，可以指导用户：
+
+```javascript
+// 在浏览器控制台执行
+localStorage.setItem('logLevel', 'DEBUG')
+location.reload()
+
+// 复现问题后，右键 "Save as..." 保存完整控制台日志
+```
+
+#### 场景 2：预发布环境监控
+
+```bash
+# .env.staging.local
+NEXT_PUBLIC_LOG_LEVEL=INFO  # 比生产多输出 INFO，但不包含 DEBUG 噪音
+```
+
+#### 场景 3：CI/CD 构建验证
+
+```bash
+# 错误的配置会导致构建失败
+NEXT_PUBLIC_LOG_LEVEL=INVALID ./scripts/dx build front
+# 输出: 错误: NEXT_PUBLIC_LOG_LEVEL 必须是以下之一: SILLY | TRACE | DEBUG | INFO | WARN | ERROR | FATAL
+```
+
+### 3.5 最佳实践
+
+**生产环境**：
+- ✅ 使用默认 `WARN` 级别
+- ✅ 保留 error/warn 日志，方便用户反馈时提供截图
+- ❌ 避免长期开启 `DEBUG`（会产生大量日志）
+
+**开发环境**：
+- ✅ 使用默认 `DEBUG` 级别
+- ✅ 充分利用日志排查问题
+
+**用户端调试**：
+- ✅ 通过 localStorage 临时开启 DEBUG
+- ✅ 截图后及时关闭，避免影响性能
+
+### 3.6 注意事项
+
+1. **环境变量命名**：
+   - Next.js 项目使用 `NEXT_PUBLIC_LOG_LEVEL`
+   - Vite 项目使用 `VITE_LOG_LEVEL`
+
+2. **SSR 与客户端一致性**：
+   - 环境变量在 SSR 阶段和客户端初始化时生效
+   - localStorage 仅在客户端运行时生效（避免 SSR 不一致）
+
+3. **性能影响**：
+   - `WARN` 及以上级别性能影响极小
+   - `DEBUG` 级别在高频调用场景可能产生一定开销
 
 ---
 
 ## 四、工作流程
 
-### 4.1 新功能开发
+### 4.1 新功能开发流程
 
-1. 检查当前分支（`git branch --show-current`）；禁止在 `main` 直接开发。
-2. 绑定 Issue ID（`feat/123-...`），无 Issue 先通过 `git-workflow.md` 中流程创建。
-3. 对照现有模块（例如 `apps/backend/src/modules/accounts`）确认目录结构，再按 controller/service/dto/exception 划分。
-4. 开发过程中保持 Swagger 注解完整，结束后运行 `./scripts/dx contracts` 确保前端消费的 schema 更新。
-5. 更新/新增必要的 E2E（位于同名目录下，例：`apps/backend/e2e/indicators/...`）。
+**前置检查（强制）**：
 
-### 4.2 数据库变更
+1. **检查当前分支**：执行 `git branch --show-current`
+   - 如果在 `main`/`master` 分支，**禁止开始开发**
+   - 必须先获取或创建 Issue ID
+   - 创建对应的 issue 分支（如 `feat/123-add-feature`）
+2. **确认 Issue 存在**：
+   - 如果没有 Issue ID，询问用户提供或使用 `/git-create-issue` 创建
+   - 记录 Issue ID 供后续提交使用
+
+**开发流程**：
+
+1. 检查 `apps/backend/src/modules/` 现有模块模式
+2. 可使用模块生成器辅助搭建
+3. 遵循标准文件结构：controller、service、dto、entities
+4. 添加 OpenAPI 装饰器以自动生成 SDK
+5. 更新/新增 E2E 测试（`apps/backend/e2e/`）
+6. 更新相关文档
+
+### 4.2 数据库变更流程
 
 ```bash
-vi apps/backend/prisma/schema.prisma
+# 1. 修改 schema
+vi apps/backend/prisma/schema/*.prisma
+
+# 2. 格式化
 ./scripts/dx db format
+
+# 3. 生成客户端
 ./scripts/dx db generate
-./scripts/dx db migrate --dev --name add_strategy_table
+
+# 4. 创建迁移（非交互）
+./scripts/dx db migrate --dev --name <migration-name>
 ```
 
-迁移生成后提交 `apps/backend/prisma/migrations`。CI/预发/生产部署前通过 `./scripts/dx deploy --prod`（或 `--staging`）应用。
-
-### 4.3 API 变更链路
+### 4.3 API 变更 → 前端更新链路
 
 ```
-后端更新 DTO/Controller
+后端更新 DTO/Service
   ↓
-./scripts/dx db migrate --dev --name ...（如涉及 schema）
+./scripts/dx db migrate --dev --name <migration-name>
   ↓
-./scripts/dx contracts  # 导出 Swagger + 生成 Zod 客户端
+Swagger/OpenAPI 自动更新接口描述
   ↓
-前端更新 `@ai/api-contracts`（集中在 front/admin 的 `src/lib/api.ts`）
+./scripts/dx build contracts
+  ↓
+前端更新类型与调用
 ```
 
-> 部署到预发/生产前，务必执行 `./scripts/dx deploy --<env>`（如 `--staging`、`--prod`）来应用最新迁移。
+### 4.4 提交前检查清单（强制）
 
-必做事项：提交 `packages/api-contracts/src/generated/backend.ts`、更新调用封装、重新运行 `./scripts/dx lint` + 受影响应用的构建。
+- [ ] 识别受影响的 E2E 用例并逐个运行通过（后端改动时）
+- [ ] 按改动执行增量预检（`./scripts/dx lint` 必跑；若需构建，遵循 backend → sdk → front → admin 的顺序，并仅在 DTO/API 变更时运行 `./scripts/dx build contracts`）
+- [ ] 若增量预检包含 `./scripts/dx build contracts`，确认 SDK 构建成功；`packages/api-contracts/openapi/backend.json` 为本地生成的 OpenAPI 规范文件，**已从 Git 中移除，无需提交**
+- [ ] 确认无 `.env` 违规文件
+- [ ] 确认 Issue ID 存在并已关联
 
-### 4.4 调试顺序（推荐）
+**注意**：main 分支提交和 PR 创建时，E2E 测试为强制门禁，必须全部通过
+
+### 4.5 调试工作流
+
+**增量预检建议顺序**
+
+本地自检建议按以下顺序执行命令，只有在对应模块确有改动时才继续后续构建；任一步失败需先修复再重试：
 
 1. `./scripts/dx lint`
-2. `./scripts/dx build backend`
-3. `./scripts/dx start backend --dev`（如需验证 API，注意命令不会退出）
-4. `./scripts/dx build front`
-5. `./scripts/dx build admin`
-
-任一步失败即停止，修复后从失败步骤重新执行。
+2. `./scripts/dx build backend`（仅当修改后端代码或共享逻辑被后端使用）
+3. `./scripts/dx start backend`（仅当需要验证后端改动；正常情况下不会返回，最多等待 50 秒）
+4. `./scripts/dx build contracts`（仅当后端 DTO/API 有变更）
+5. `./scripts/dx build front`（仅当修改用户端前端代码）
+6. `./scripts/dx build admin`（仅当修改管理后台代码）
 
 ---
 
-## 五、种子数据与默认账号
+## 五、Seed 数据架构 (Issue #1343 架构重构)
 
-### 5.1 入口
+### 5.1 架构概览
 
-- 位置：`apps/backend/prisma/seed.ts`。
-- 命令：`./scripts/dx db seed --dev`（同理可传 `--e2e` / `--prod`，生产环境有危险确认）。
+**设计理念**: 单文件入口 + 显式环境加载 + 幂等 upsert
 
-### 5.2 功能概览
+```text
+apps/backend/prisma/
+└── seed.ts  # 加载环境变量 → 初始化 Prisma(Driver Adapter) → 执行 seedBaseRoles/seedAdminMenus/seedAdminUser
+```
 
-- `seedBaseRoles()`：向 `roles` 表 upsert `USER/MODERATOR/ADMIN/SUPER_ADMIN`，并为超级管理员授予 `*` 权限。
-- `seedAdminMenus()`：若 `admin_menus` 为空则创建“系统设置”目录及 3 个子菜单。
-- `seedAdminUser()`：创建默认管理员（用户名/密码在文件顶部常量中配置）并绑定 `SUPER_ADMIN` 角色。
-- `seedAiProviderKeys()`：读取 `UNIAPI_API_KEY`，为 `aiProviderKey` upsert `uniapi/default`。
+### 5.2 种子内容与幂等策略
 
-### 5.3 环境依赖
+| 种子内容 | 说明 | 幂等策略 | 备注 |
+|---------|------|---------|------|
+| **基础角色** | AppRole 默认角色 | `role.upsert({ where: { code } })` | SUPER_ADMIN 授权全部权限 |
+| **后台菜单** | AdminMenu 菜单树 | `adminMenu.upsert({ where: { code } })` | 内存 Map 解析父子关系 |
+| **管理员账号** | 超级管理员账户 | 先 `findUnique`，缺失才 `create` | `SEED_ADMIN_*` 可覆盖默认值 |
 
-- `UNIAPI_API_KEY`：若为空或仍为 `__SET_IN_env.local__`，AI Provider 将跳过初始化；请在 `.env.<env>.local` 配置真实值。
-- `BCRYPT_SALT_ROUNDS`：可覆盖种子用户的密码哈希成本，默认 12。
+### 5.3 环境策略
 
-### 5.4 定制策略
+| 环境 | 是否执行 | 说明 |
+|------|----------|------|
+| **Development** | ✅ 运行 | 与其他环境一致 |
+| **Staging** | ✅ 运行 | 与其他环境一致 |
+| **Production** | ✅ 运行 | 建议通过 `SEED_ADMIN_*` 覆盖默认账号 |
+| **E2E** | ✅ 运行 | 与其他环境一致 |
 
-- 需要额外的菜单/角色，可直接扩展 `seedAdminMenus` / `seedBaseRoles` 并保持 `upsert` 幂等。
-- 若要创建演示账号或策略模板，请在 `seed.ts` 中新增函数并在 `main()` 序列化调用，确保复跑不会覆盖已编辑的数据（尽量使用 `find` + `create`）。
+### 5.3.1 账号参数规范
 
-### 5.5 故障排查
+🔒 **管理员种子参数**：
 
-| 现象 | 可能原因 | 处理方式 |
-| --- | --- | --- |
-| `seed` 停在 `aiProviderKey` | 缺少 `UNIAPI_API_KEY` | 设置变量后重跑 |
-| 管理员未生成 | 角色 upsert 失败或数据库已有旧账号 | 删除冲突数据或更新用户名常量后重跑 |
-| 菜单重复 | 手动插入/迁移导致 `admin_menus` 非空 | 删除菜单后再执行 seed |
+1. `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_EMAIL` 可覆盖默认值（默认 `admin` / `admin123` / `admin@example.com`）
+2. 生产环境必须通过环境变量注入强密码
+3. 禁止在代码中硬编码生产账号信息
+
+### 5.4 幂等性说明
+
+- 角色与菜单使用 upsert，重复运行不会产生重复记录，会同步到代码定义
+- 管理员账号仅在不存在时创建，不会覆盖已存在的密码与邮箱
+- SUPER_ADMIN 角色绑定缺失时会补齐
+
+### 5.5 使用指南
+
+#### 添加新的种子步骤
+
+1. 在 `apps/backend/prisma/seed.ts` 新增 seed 函数，保持幂等（优先 `upsert` 或 `findUnique` + `create`）
+2. 在 `main()` 中按顺序调用新的 seed 函数
+3. 需要环境变量时使用 `createEnvAccessor()` 读取并在 `.env.*.local` 配置
+
+### 5.6 故障排查
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| `DATABASE_URL` 未配置或仍为占位符 | `.env.*.local` 未设置或值无效 | 设置正确的 `DATABASE_URL` 后重试 |
+| 连接失败/超时 | 数据库不可用或连接串错误 | 检查数据库服务与连接字符串 |
+| 管理员账号未更新 | 已存在账号不会被覆盖 | 手动更新/删除账号，或调整 seed 逻辑 |
 
 ---
 
 ## 六、故障排除
 
-| 问题 | 解决方案 |
-| --- | --- |
-| `./scripts/dx contracts` 失败 | 先运行 `./scripts/dx build backend`，确保 `nx run backend:swagger` 能产出 JSON；确认所有 DTO 都挂载了 Swagger 装饰器。 |
-| `nx` 缓存脏数据 | 执行 `./scripts/dx cache clear`（会清空 `.nx/cache` 与依赖缓存，慎用）。 |
-| 端口占用 | `./scripts/dx start ...` 会自动尝试释放占用端口；必要时手动结束冲突进程。 |
-| Prisma 锁未释放 | `./scripts/dx db migrate` / `./scripts/dx deploy` 若异常终止，可运行 `./scripts/dx db reset --dev` 或手动删除 `prisma_migrations_lock`。 |
-
----
-
-保持以上流程，可确保 Nx 与 DX CLI 一致工作，避免环境漂移与类型/合约不一致。
+| 问题         | 解决方案                        |
+| ------------ | ------------------------------- |
+| SDK 生成失败 | 确认后端正在运行                |
+| 类型错误     | 运行 `./scripts/dx db generate` |
+| 端口占用     | 启动脚本自动清理                |

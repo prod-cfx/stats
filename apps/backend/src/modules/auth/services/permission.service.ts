@@ -264,6 +264,13 @@ export class PermissionService {
       case 'setting':
       case 'settings':
         return AppResource.SETTINGS
+      case 'data_pull_task':
+      case 'data_pull_tasks':
+      case 'datapulltask':
+      case 'datapulltasks':
+      case 'data_sync_task':
+      case 'datasynctask':
+        return AppResource.DATA_PULL_TASK
       case 'strategy_template':
       case 'strategytemplate':
       case 'strategy_templates':

@@ -270,6 +270,53 @@ const LiquidationHeatmapResponseDto = z
     ),
   })
   .passthrough();
+
+const AdminDataPullTaskResponseDto = z
+  .object({
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean(),
+    cursor: z.string().nullish(),
+    lastStatus: z.string().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
+    lastError: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+
+const CreateAdminDataPullTaskDto = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean().optional().default(true),
+    cursor: z.string().nullish(),
+  })
+  .passthrough();
+
+const UpdateAdminDataPullTaskDto = z
+  .object({
+    name: z.string(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
+    enabled: z.boolean(),
+    cursor: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
+
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -333,6 +380,9 @@ export const schemas = {
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
   LiquidationHeatmapResponseDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  UpdateAdminDataPullTaskDto,
   TradingPairConfigResponseDto,
   BaseResponseDto,
 };

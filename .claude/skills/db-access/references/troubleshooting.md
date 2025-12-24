@@ -93,11 +93,11 @@ PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c "\l"
 PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE ai_dev;"
 ```
 
-3. 运行 Prisma 迁移初始化数据库(开发环境生成迁移并推进到最新，必须提供迁移名):
+3. 运行 Prisma 迁移初始化数据库:
 
 ```bash
 cd /Users/a1/work/ai_monorepo_main
-./scripts/dx db migrate --dev --name init_schema
+./scripts/dx db migrate --dev
 ```
 
 ## 查询问题
@@ -344,11 +344,7 @@ cd /Users/a1/work/ai_monorepo_main
 2. 应用所有迁移:
 
 ```bash
-# 开发环境：生成并应用迁移（必须提供迁移名）
-./scripts/dx db migrate --dev --name <migration_name>
-
-# 部署 / CI / 预发 / 生产：应用已有迁移动作（prisma migrate deploy）
-./scripts/dx deploy --<env>  # 如 --staging / --prod / --test / --e2e
+./scripts/dx db migrate --dev
 ```
 
 3. 如果迁移失败,检查数据库状态:
