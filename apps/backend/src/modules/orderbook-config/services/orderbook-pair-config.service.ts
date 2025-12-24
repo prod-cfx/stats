@@ -40,7 +40,19 @@ export class OrderbookPairConfigService {
       })
     }
 
-    return this.repository.create(dto)
+    try {
+      return await this.repository.create(dto)
+    }
+    catch (error: any) {
+      // 捕获 Prisma 唯一约束冲突（并发情况下可能通过前置检查）
+      if (error?.code === 'P2002') {
+        throw new DomainException('Pair ID already exists', {
+          code: ErrorCode.CONFLICT,
+          status: HttpStatus.CONFLICT,
+        })
+      }
+      throw error
+    }
   }
 
   async update(id: string, dto: UpdateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
@@ -91,3 +103,4 @@ export class OrderbookPairConfigService {
   //   return []
   // }
 }
+

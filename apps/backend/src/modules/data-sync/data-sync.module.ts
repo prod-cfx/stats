@@ -1,11 +1,13 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
+import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
+import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 
@@ -17,7 +19,7 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
  */
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, OrderbookConfigModule],
   providers: [
     // 仓储
     DataPullTaskRepository,
@@ -25,14 +27,16 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
     // Job 实现（示例）
     ExampleKlineJob,
     ExampleNewsJob,
+    ExampleOrderbookJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
       useFactory: (
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
-      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob],
-      inject: [ExampleKlineJob, ExampleNewsJob],
+        exampleOrderbookJob: ExampleOrderbookJob,
+      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, exampleOrderbookJob],
+      inject: [ExampleKlineJob, ExampleNewsJob, ExampleOrderbookJob],
     },
     // 统一编排 & Cron
     DataSyncOrchestrator,

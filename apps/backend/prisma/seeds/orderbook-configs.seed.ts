@@ -105,3 +105,4 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
 
   console.log(`✅ Orderbook configs seeded: ${createdCount} created, ${skippedCount} skipped`)
 }
+

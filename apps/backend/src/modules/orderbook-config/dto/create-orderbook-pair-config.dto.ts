@@ -89,3 +89,4 @@ export class CreateOrderbookPairConfigDto {
   @IsOptional()
   description?: string
 }
+

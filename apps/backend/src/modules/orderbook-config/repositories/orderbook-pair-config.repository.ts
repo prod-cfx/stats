@@ -59,14 +59,6 @@ export class OrderbookPairConfigRepository {
   async create(dto: CreateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
     const client = this.getClient()
     
-    // Check for uniqueness before insert
-    const existing = await client.orderbookPairConfig.findUnique({
-      where: { pairId: dto.pairId },
-    })
-    if (existing) {
-      throw new Error(`Config with pairId ${dto.pairId} already exists`)
-    }
-    
     return client.orderbookPairConfig.create({
       data: {
         pairId: dto.pairId,
@@ -118,3 +110,4 @@ export class OrderbookPairConfigRepository {
     })
   }
 }
+

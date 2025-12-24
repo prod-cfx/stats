@@ -55,3 +55,4 @@ export class UpdateOrderbookPairConfigDto {
   @IsOptional()
   description?: string | null
 }
+

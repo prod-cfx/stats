@@ -24,3 +24,4 @@ export class QueryOrderbookPairConfigDto {
   @IsOptional()
   enabledOnly?: boolean
 }
+

@@ -51,3 +51,4 @@ model OrderbookPairConfig {
   @@index([priority])
   @@map("orderbook_pair_configs")
 }
+

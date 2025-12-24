@@ -49,3 +49,4 @@ export class OrderbookPairConfigResponseDto {
   @ApiProperty({ description: '更新时间' })
   updatedAt!: Date
 }
+

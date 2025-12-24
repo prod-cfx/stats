@@ -12,3 +12,4 @@ import { OrderbookPairConfigService } from './services/orderbook-pair-config.ser
   exports: [OrderbookPairConfigService],
 })
 export class OrderbookConfigModule {}
+
