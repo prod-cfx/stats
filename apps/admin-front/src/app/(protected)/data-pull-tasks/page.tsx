@@ -51,15 +51,15 @@ export default function DataPullTasksPage() {
   const [form] = Form.useForm<TaskFormValues>()
 
   const loadTasks = useCallback(
-    async (pageParam = page, limitParam = limit) => {
+    async (pageParam: number, limitParam: number, filters?: { key?: string; name?: string; enabled?: boolean }) => {
       setLoading(true)
       try {
         const result = await fetchDataPullTasks({
           page: pageParam,
           limit: limitParam,
-          key: queryKey,
-          name: queryName,
-          enabled: queryEnabled,
+          key: filters?.key,
+          name: filters?.name,
+          enabled: filters?.enabled,
         })
         setTasks(result.items)
         setTotal(result.total)
@@ -71,12 +71,13 @@ export default function DataPullTasksPage() {
         setLoading(false)
       }
     },
-    [limit, message, page, queryEnabled, queryKey, queryName],
+    [message],
   )
 
   useEffect(() => {
-    void loadTasks()
-  }, [loadTasks])
+    void loadTasks(1, 20)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const openCreateModal = useCallback(() => {
     setCurrentTask(null)
@@ -131,7 +132,7 @@ export default function DataPullTasksPage() {
         message.success('任务已创建')
       }
       setModalVisible(false)
-      void loadTasks()
+      void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
     } catch (error: any) {
       if (error?.message) {
         message.error(error.message)
@@ -150,13 +151,13 @@ export default function DataPullTasksPage() {
         try {
           await deleteDataPullTask(task.id)
           message.success('任务已删除')
-          void loadTasks()
+          void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
         } catch (error: any) {
           message.error(error?.message ?? '删除失败')
         }
       },
     })
-  }, [loadTasks, message])
+  }, [loadTasks, message, page, limit, queryKey, queryName, queryEnabled])
 
   const statusBadge = useCallback((task: DataPullTask) => {
     if (!task.lastStatus) {
@@ -269,7 +270,7 @@ export default function DataPullTasksPage() {
               { value: 'false', label: '仅停用' },
             ]}
           />
-          <Button type="primary" onClick={() => loadTasks(1, limit)}>
+          <Button type="primary" onClick={() => loadTasks(1, limit, { key: queryKey, name: queryName, enabled: queryEnabled })}>
             查询
           </Button>
         </div>
@@ -288,7 +289,7 @@ export default function DataPullTasksPage() {
             onChange: (p, ps) => {
               setPage(p)
               setLimit(ps)
-              void loadTasks(p, ps)
+              void loadTasks(p, ps, { key: queryKey, name: queryName, enabled: queryEnabled })
             },
           }}
         />
