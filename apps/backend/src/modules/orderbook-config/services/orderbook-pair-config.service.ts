@@ -2,10 +2,12 @@ import type { OrderbookPairConfig } from '@prisma/client'
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
-import type { OrderbookPairConfigRepository } from '../repositories/orderbook-pair-config.repository'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// Nest 注入需要运行时引用 Repository，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { OrderbookPairConfigRepository } from '../repositories/orderbook-pair-config.repository'
 
 @Injectable()
 export class OrderbookPairConfigService {

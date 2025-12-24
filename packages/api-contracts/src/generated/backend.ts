@@ -316,11 +316,11 @@ const CreateOrderbookPairConfigDto = z
 const UpdateOrderbookPairConfigDto = z
   .object({
     enabled: z.boolean(),
-    pullIntervalSeconds: z.number(),
-    depthLevels: z.number(),
+    pullIntervalSeconds: z.number().nullable(),
+    depthLevels: z.number().nullable(),
     priority: z.number(),
-    metadata: z.object({}).partial().passthrough(),
-    description: z.string(),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
   })
   .partial()
   .passthrough();
@@ -1372,6 +1372,23 @@ const endpoints = makeApi([
     path: "/markets/pairs",
     alias: "MarketsController_getTradingPairs",
     requestFormat: "json",
+    parameters: [
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["DEX", "CEX"]).optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
+      },
+    ],
     response: z.array(TradingPairConfigResponseDto),
   },
   {
