@@ -2,39 +2,35 @@
 
 ## 一、输出与命令约束
 
-- ✅ **输出语言**：所有对外/对用户回复统一使用中文。
-- ⛔ **禁用包管理器命令**：**绝对禁止**使用 `pnpm`、`npm`、`yarn`、`npx` 等包管理器命令。所有操作必须通过 `./scripts/dx` 执行。
-- ✅ **命令入口**：默认使用 `./scripts/dx <command>`，该 CLI 会注入 `.env.<env>(.local)`、执行端口清理与危险操作确认；只有在 `dx` 明确不支持且用户明确要求时，才可调用 `pnpm nx ...`。
-- ✅ **工作目录**：所有命令从仓库根目录执行，依赖 Nx `project.json` 相对路径。
-- ✅ **环境校验**：`./scripts/dx` 自带 env 校验，无需手动运行 check-env。
-- ⛔ **环境变量**：禁止提交 `.env*.local`，敏感值放本地；`.env` 根文件如果存在将被 CLI 判为错误。
-- ⛔ **文件存储**：遵循 `apps/backend/src/config/s3.config.ts`，所有文件需走 S3/R2；禁止写入宿主磁盘。
-- ⛔ **控制器职责**：Controller 做请求解析、鉴权、DTO 校验；业务逻辑放 Service 层。
+- ✅ **输出语言**：所有输出必须使用中文
+- ✅ **命令入口**：统一使用 `./scripts/dx`（本地与 CI/CD 保持一致）
+- ⛔ **禁止 pnpm**：编译/构建/运行/启动服务/数据库相关操作**严禁直接使用 `pnpm` 命令**（如 `pnpm dev`、`pnpm build`、`pnpm start`、`pnpm prisma migrate` 等），必须通过 `./scripts/dx` 入口执行
+- ✅ **工作目录**：所有命令必须从项目根目录运行
+- ⛔ **环境变量**：禁止提交 `.env*` 文件（`.env.development.local` 等本地私有）
+- ⛔ **文件存储**：禁止本地持久化（统一 S3/R2）
+- ⛔ **类型约束**：禁止使用 `any`（优先 `unknown`/泛型/类型守卫）
 
 ---
 
 ## 二、代码风格
 
-- Prettier（`prettier.config.js`）：2 空格、100 列、单引号、无分号、Tailwind 排序。
-- ESLint：`@antfu/eslint-config` + React + TypeScript，CI 必须 `./scripts/dx lint` 通过；`lint-staged` 会自动跑 `prettier` + `eslint --fix`。
-- TypeScript：`tsconfig.base.json` 开启装饰器、严格模块解析；`skipLibCheck` 仅限外部依赖。
+- 缩进 2 空格 | 行尾 LF | ESLint @antfu 4.10.1 | Prettier 3.6.2 | TypeScript 5.9.2 严格模式
 
 ---
 
 ## 三、路径映射
 
-- `@ai/shared` / `@ai/shared/*`：跨端常量、ErrorCode、DTO、纯函数；禁止依赖 Nest/React/Node-only 包。
-- `@ai/api-contracts`：Zod schema + HTTP 客户端；前后端通过它共享 API 类型。
-- `@net/config`：统一加载 `.env`，`apps/backend/src/main.ts` 已接入；新增入口（Next `next.config.js`、脚本等）必须在创建应用前调用 `loadEnvironment()`。
-- `@/*`：仅后端使用，指向 `apps/backend/src`。
+- 使用 TypeScript 路径别名（`@ai/shared`、`@/*` 等）
+- `@ai/shared` 仅承载纯函数/常量/类型的同构实现，禁止引入框架或 Node 专属依赖
+- 避免相对路径导入，特别是跨模块导入
 
 ---
 
 ## 四、类型约束
 
-- `@typescript-eslint/no-explicit-any` 在全局关闭，但领域代码仍需避免裸 `any`；只能在桥接第三方 SDK、测试桩或 `openapi-zod-client` 生成代码附近使用，并附带最小范围包裹。
-- 公共 API、DTO、Service 返回值必须提供精确类型；如需部分字段可选，优先写 DTO + Zod schema。
-- 类型断言需限制作用域，避免传播到调用层；使用 type guard/泛型/`unknown` 替代。
+- 禁止裸 `any`；为公共 API、DTO、服务返回值提供精确类型
+- 必要时优先使用 `unknown`、泛型或类型守卫
+- 类型断言需谨慎，作用域限制到最小
 
 ---
 
@@ -42,79 +38,228 @@
 
 ### 5.1 NestJS 后端
 
-- 模块结构：`controller` + `service` + `dto` + `exceptions` + `repositories`；所有模块经 `AppModule` 注册。
-- 控制器处理请求、鉴权、参数校验，繁重逻辑移入 service/repository。
-- Swagger 必须覆盖新的 DTO（`@ApiOkResponse` / `@ApiCreatedResponse`）；`nx run backend:swagger` 输出结果是 `./scripts/dx contracts` 的输入。
-- 统一用户上下文：`@CurrentUser('id')` 获取 `userId`；仅在必须访问 `req/res` 时使用 `@Req()`。
+- 遵循模块化架构：controller、service、dto、entities
+- 控制器精简（请求处理 + 权限验证），业务逻辑放 service
+- 使用装饰器进行验证/授权/事务管理
+- 统一获取用户：`@CurrentUser('id')` 获取 `userId`；多字段时用 `@CurrentUser() user: AuthenticatedUser`；仅在必须访问原生 `req/res` 时保留 `@Req()`
+- 使用 OpenAPI 装饰器自动生成 SDK
 
 ### 5.2 Prisma 使用
 
-- Schema 文件：`apps/backend/prisma/schema.prisma`；迁移生成在 `apps/backend/prisma/migrations/`。
-- 工作流：修改 schema → `./scripts/dx db format` → `./scripts/dx db generate` → `./scripts/dx db migrate --dev --name <migration>`。
-- 种子脚本：`apps/backend/prisma/seed.ts`（初始化角色、管理员、菜单、AI Provider Key）；运行 `./scripts/dx db seed --dev` 需要预先配置 `UNIAPI_API_KEY` 等变量。
-- Schema 引导：使用枚举（如 `ExchangeId`、`AdminMenuType`）替代硬编码字符串；`@map` 统一数据库列命名。
+- Schema 文件：`apps/backend/prisma/schema/*.prisma`
+- 工作流：修改 Schema → `format` → `generate` → `migrate`
+- 支持模块化 Schema 文件组织
+- 枚举优先：使用枚举作为 case 值，而非硬编码小写/大写
 
 ### 5.3 前端约定
 
-- `apps/front`：Next.js 15.4.7 App Router + React 18.2，Redux Toolkit 状态管理；全局 API 封装在 `src/lib/api.ts`，只引用 `@ai/api-contracts` 导出的 `aiBackendClient`。
-- `apps/admin-front`：Next.js 15.4.6 + React 19，Ant Design 5 + Zustand；同样通过 `src/lib/api.ts` 统一请求，严禁在页面中手写 `fetch`。
-- UI 组件：用户端使用 shadcn/ui + Radix + Tailwind；管理端使用 AntD 主题；全局样式分别位于 `apps/front/src/app/globals.css` 与 `apps/admin-front/src/app/globals.css`。
-- 环境变量：Next 需要 `NEXT_PUBLIC_API_BASE_URL`、`APP_ENV`，可选 `NEXT_PUBLIC_LOG_LEVEL`（仅在 `apps/front/scripts/check-env.js` 做合法性提示）。
-
-### 5.4 事务管理（CLS + Prisma）
-
-- 事务入口：只允许在 HTTP 控制器上使用 `@Transaction()`；装饰器注入 `TransactionInterceptor`，自动将 `PrismaService.runInTransaction` 与 `nestjs-cls` 结合。
-- Service/Repository 通过 `this.prisma.runInTransaction` 获取当前事务客户端；禁止在这些层面显式开启/提交事务。
-- 非 HTTP 场景（消息、定时任务）使用 `ClsService.run(() => prisma.runInTransaction(...))`。
-- 流式接口/SSE 不包事务；外部副作用在事务结束后由 `TransactionEventsService.afterCommit()` 触发。
-
-### 5.5 模块依赖与关键模式
-
-- 核心依赖：`PrismaModule`、`ConfigModule`、`CacheModule`（Redis）必须在使用方模块的 `imports` 中声明。
-- 认证集成：模块通过依赖 `AuthModule` 并使用 `@RequireAuth()` + RBAC 装饰器（`ReadAny(AppResource.X)`）限制访问。
-- 跨模块通信：通过 Nest DI 注入导出的 service，禁止直接实例化或者跨目录引用内部实现。
-- API 合约：任何调整 DTO/Controller 必须运行 `./scripts/dx contracts` 并提交 `packages/api-contracts` 改动。
-
-### 5.6 快速参考
-
-- **分页 DTO**：继承 `apps/backend/src/common/dto/base.pagination.request.dto.ts` 中的 `BasePaginationRequestDto`。
-- **固定端口**：backend=3000、front=3001、admin-front=3500（`scripts/config/commands.json` 亦会自动清理端口）。
-- **ENV 优先级**：`.env.<env>.local` > `.env.<env>`；`packages/config` 已内置校验。
+- 用户端：Redux Toolkit + shadcn/Radix（版本见 architecture.md）
+- 管理端：Ant Design + Zustand + TanStack Query（版本见 architecture.md）
+- SDK 类型更新优先，避免手写请求层
 
 ---
 
 ## 六、环境管理
 
-- `.env.example` 仅存放占位符（统一 `__SET_IN_env.local__`）。
-- `.env.<env>` 可提交的非敏感配置；`.env.<env>.local` 存放个人密钥（gitignored）。
-- `packages/config/loadEnvironment()` 已在 Nest `bootstrap` 中调用；Next.js 配置（`apps/front/next.config.js`、`apps/admin-front/next.config.js`）也会在导出前执行同一 helper。新增入口务必复用该模式，禁止绕过直接访问 `process.env`。
+- 环境配置分层与优先级：`.env.[environment].local` > `.env.[environment]`（`.env` 不使用，存在会报错）
+- 复制 `.env.example` 到 `.env.[environment].local` 进行本地配置
+- 开发环境数据库连接使用本地 psql 客户端
 
 ---
 
-## 七、测试约定
+## 七、事务管理规范（Issue #465）
 
-- 重点维护 `apps/backend/e2e/`；单位测试目标仍在 scaffold 状态。
-- 运行方式：`./scripts/dx test e2e backend [file] [-t "case"]`；命令支持按文件+`-t` 精准筛选。
-- main 分支提交、PR 创建必须完成受影响用例回归；CI via `./scripts/dx prcheck --prod` 会复跑。
-
----
-
-## 八、安全规范
-
-- API 默认开启 JWT + RBAC（`nest-access-control`），公开接口需显式标注匿名访问。
-- 限流使用 `@nestjs/throttler`，输入校验使用 `class-validator` / `class-transformer`。
-- 文件/对象存储必须走 S3/R2（参考 `apps/backend/src/config/s3.config.ts`），禁止写入本地磁盘。
-- 环境变量通过 `packages/config` 强校验；缺失变量在 `./scripts/dx` 阶段即失败。
+- 🔒 **事务边界**：仅在控制器/Resolver 使用 `@Transaction()`；`service/repository/subscriber` 层禁用
+- 🔗 **事务参与**：服务/仓储通过 `prisma.getClient()` 获取当前 CLS 上下文客户端自动加入事务
+- ⚙️ **非 HTTP 入口**：消息订阅、Bull 处理器、定时任务使用 `ClsService.run(() => prisma.runInTransaction(async (tx) => { ... }))`
+- 📤 **外部副作用**：事务中禁止直接执行外部 I/O（事件/HTTP/消息确认）；统一用 `TransactionEventsService.afterCommit(() => ...)`
+- 🚫 **流式接口**：SSE/流式响应不加 `@Transaction()`，流式过程禁止开启事务
+- ⚠️ **ESLint 守护**：根 ESLint 已禁止在 `service/repository/subscriber` 使用 `@Transaction()`
 
 ---
 
-## 九、错误处理规范
+## 八、测试约定
 
-- ErrorCode 枚举位于 `@ai/shared/constants/error-codes.ts`；前后端共享。
-- 自定义业务异常继承 `DomainException`，禁止直接抛出 `BadRequestException('字符串')`。
-- 创建新异常：新增 ErrorCode → 在模块 `exceptions/` 目录创建异常类 → 添加最少的单元测试（可在同目录 `.spec.ts`）→ 前端增加本地化消息。
-- 响应结构：`{ status, error: { code, args, requestId }, timestamp, path }`，不要返回未结构化字符串。
+- 仅后端 E2E 测试（`apps/backend/e2e/`），项目不做单元测试
+- 运行规则：按文件或目录逐个运行，禁止无参全量执行
+- 执行时机：
+  - **后端改动**：识别受影响用例并逐个运行（所有分支）
+  - **强制门禁**：main 分支提交和 PR 创建时必须全部通过
+- 命令：`./scripts/dx test e2e backend <file-or-dir> [-t "test case name"]`
+- 支持测试环境隔离和数据库重置
 
 ---
 
-> 以上规则若与运行代码冲突，以当前仓库实现为准，若需例外必须在 PR 描述中说明理由。
+## 九、安全规范
+
+- 所有接口默认需身份验证（RBAC 使用 nest-access-control）
+- API 限流：throttler；输入校验：class-validator
+
+---
+
+## 十、错误处理规范
+
+### 10.1 统一错误码体系
+
+项目采用统一的错误码枚举 `ErrorCode`（位于 `@ai/shared`），前后端共用。
+
+**核心原则**:
+
+- ✅ 所有业务异常必须继承 `DomainException`
+- ✅ 所有异常必须提供 `ErrorCode`
+- ⛔ 禁止直接使用 `BadRequestException('字符串')` 等标准异常
+
+### 10.2 异常抛出规范
+
+**正确示例**:
+
+```typescript
+import { DomainException } from '@/common/exceptions/domain.exception'
+import { ErrorCode } from '@ai/shared'
+
+// 方式 1: 使用预定义异常类（推荐）
+throw new InsufficientBalanceException({
+  currentBalance: '5.00',
+  requestedAmount: '10.00',
+  isFromFreeze: false,
+})
+
+// 方式 2: 直接使用 DomainException
+throw new DomainException('余额不足', {
+  code: ErrorCode.WALLET_INSUFFICIENT_BALANCE,
+  args: { current: '5.00', required: '10.00' },
+})
+```
+
+**错误示例**:
+
+```typescript
+// ❌ 禁止：直接使用标准异常
+throw new BadRequestException('余额不足,请充值')
+
+// ❌ 禁止：使用 HttpException 但不提供 code
+throw new HttpException('余额不足', 400)
+```
+
+### 10.3 创建新异常类规范
+
+当需要创建新的业务异常时：
+
+1. 在 `@ai/shared/constants/error-codes.ts` 添加错误码
+2. 在对应模块 `exceptions/` 目录创建异常类（继承 `DomainException`）
+3. 编写单元测试验证 code/args/status 正确性
+4. 前端根据 `ErrorCode` 添加对应的本地化翻译（前端职责，后端无需处理）
+
+**文件组织**:
+
+```
+apps/backend/src/modules/wallet/
+├── exceptions/
+│   ├── insufficient-balance.exception.ts
+│   ├── insufficient-balance.exception.spec.ts  # 单元测试
+│   ├── guest-trial-ended.exception.ts
+│   ├── guest-trial-ended.exception.spec.ts
+│   └── index.ts  # 统一导出
+```
+
+### 10.4 错误响应结构
+
+前端接收到的错误响应格式：
+
+```typescript
+{
+  status: 400,
+  error: {
+    code: 'WALLET_INSUFFICIENT_BALANCE',  // 业务错误码（前端基于此映射本地化消息）
+    args: { current: '5.00', required: '10.00' },  // 动态参数（用于消息插值）
+    requestId: 'uuid-xxx'  // 请求追踪ID
+  },
+  timestamp: '2025-10-12T...',
+  path: '/api/chat/send'
+}
+```
+
+**架构说明**：
+
+- 后端仅返回 `code` 和 `args`，不处理多语言文案
+- 前端基于 `code` 映射本地化消息，完全掌控 i18n
+- 这种职责分离使后端更简洁，前端更灵活
+
+### 10.5 单元测试规范
+
+每个异常类必须包含单元测试，验证 `code`、`args`、`status` 正确性：
+
+```typescript
+// insufficient-balance.exception.spec.ts
+import { InsufficientBalanceException } from './insufficient-balance.exception'
+import { ErrorCode } from '@ai/shared'
+
+describe('InsufficientBalanceException', () => {
+  it('should create exception with correct error code (available balance)', () => {
+    const exception = new InsufficientBalanceException({
+      currentBalance: '5.00',
+      requestedAmount: '10.00',
+      isFromFreeze: false,
+    })
+
+    expect(exception.code).toBe(ErrorCode.WALLET_INSUFFICIENT_BALANCE)
+    expect(exception.args).toEqual({
+      balanceType: '可用余额',
+      current: '5.00',
+      required: '10.00',
+    })
+    expect(exception.getStatus()).toBe(400)
+  })
+
+  it('should create exception with correct error code (frozen balance)', () => {
+    const exception = new InsufficientBalanceException({
+      currentBalance: '3.00',
+      requestedAmount: '8.00',
+      isFromFreeze: true,
+    })
+
+    expect(exception.code).toBe(ErrorCode.WALLET_INSUFFICIENT_FROZEN_BALANCE)
+    expect(exception.getStatus()).toBe(400)
+  })
+})
+```
+
+### 10.6 ESLint 强制规则
+
+项目已配置 ESLint 规则禁止直接使用标准异常：
+
+```javascript
+// eslint.config.js
+{
+  files: ['apps/backend/src/modules/**/*.ts'],
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "NewExpression[callee.name='BadRequestException'][arguments.0.type='Literal']",
+        message: '禁止直接使用字符串字面量创建 BadRequestException。请使用 DomainException 或其子类，并提供 ErrorCode。'
+      },
+      // ... 其他标准异常规则
+    ]
+  }
+}
+```
+
+违反规则将导致 ESLint 错误，无法通过 `./scripts/dx lint` 检查。
+
+---
+
+## 十一、变更风险评估要求
+
+**所有代码变更必须进行风险评估：**
+
+- **API/数据破坏性检查**：确认是否影响现有接口和数据结构
+- **兼容性说明**：新流程如何与现有系统兼容
+- **高风险变更需证据**：提供测试结果和回滚方案
+- **明确标注假设**：将推测性内容标记为 "assumption"
+
+**以下变更需走单独评审流程：**
+
+- 数据库 Schema 变更（提供迁移策略，评估数据迁移风险）
+
+---
