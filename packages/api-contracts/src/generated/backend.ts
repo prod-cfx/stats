@@ -264,8 +264,10 @@ const LiquidationHeatmapResponseDto = z
     effectiveFrom: z.string().datetime({ offset: true }).nullable(),
     effectiveTo: z.string().datetime({ offset: true }).nullable(),
     y_axis: z.array(z.number()),
-    liquidation_leverage_data: z.array(z.array(z.any())),
-    price_candlesticks: z.array(z.array(z.any())),
+    liquidation_leverage_data: z.array(z.tuple([z.number(), z.number(), z.number()])),
+    price_candlesticks: z.array(
+      z.tuple([z.number(), z.string(), z.string(), z.string(), z.string(), z.string()]),
+    ),
   })
   .passthrough();
 const TradingPairConfigResponseDto = z
@@ -1251,31 +1253,6 @@ const endpoints = makeApi([
     path: "/liquidation-heatmap/latest",
     alias: "LiquidationHeatmapController_getLatest",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "symbol",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "exchangeCode",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "contractType",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "modelType",
-        type: "Query",
-        schema: z
-          .enum(["MODEL1", "MODEL2", "MODEL3"])
-          .optional()
-          .default("MODEL3"),
-      },
-    ],
     response: LiquidationHeatmapResponseDto,
   },
   {
@@ -1283,23 +1260,6 @@ const endpoints = makeApi([
     path: "/markets/pairs",
     alias: "MarketsController_getTradingPairs",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "venueType",
-        type: "Query",
-        schema: z.enum(["DEX", "CEX"]).optional(),
-      },
-      {
-        name: "instrumentType",
-        type: "Query",
-        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
-      },
-      {
-        name: "exchange",
-        type: "Query",
-        schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
-      },
-    ],
     response: z.array(TradingPairConfigResponseDto),
   },
   {

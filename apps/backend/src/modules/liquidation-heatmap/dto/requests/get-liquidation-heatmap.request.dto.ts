@@ -1,13 +1,14 @@
 import type { LiquidationHeatmapModelType } from '@prisma/client'
-import { ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEnum, IsOptional, IsString } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class GetLiquidationHeatmapRequestDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: '基础交易标的，例如 BTC',
     example: 'BTC',
   })
   @IsString()
+  @IsNotEmpty()
   symbol!: string
 
   @ApiPropertyOptional({
