@@ -1,9 +1,9 @@
-import type { ExchangeId, MarketInstrumentType, TradingVenueType } from '@ai/shared'
-import { EXCHANGES, MARKET_INSTRUMENT_TYPES, TRADING_VENUE_TYPES } from '@ai/shared'
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
+import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 
@@ -17,19 +17,38 @@ export class MarketsController {
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取交易对配置列表' })
-  @ApiQuery({ name: 'venueType', required: false, enum: TRADING_VENUE_TYPES })
-  @ApiQuery({ name: 'instrumentType', required: false, enum: MARKET_INSTRUMENT_TYPES })
-  @ApiQuery({ name: 'exchange', required: false, enum: EXCHANGES })
-  getTradingPairs(
-    @Query('venueType') venueType?: TradingVenueType,
-    @Query('instrumentType') instrumentType?: MarketInstrumentType,
-    @Query('exchange') exchange?: ExchangeId,
-  ) {
-    return this.marketsService.findAll({
-      venueType,
-      instrumentType,
-      exchange,
+  @ApiOkResponse({ type: TradingPairConfigResponseDto, isArray: true })
+  getTradingPairs(@Query() query: GetTradingPairsRequestDto): TradingPairConfigResponseDto[] {
+    const pairs = this.marketsService.findAll({
+      venueType: query.venueType,
+      instrumentType: query.instrumentType,
+      exchange: query.exchange,
     })
+
+    return pairs.map(pair => ({
+      id: pair.id,
+      displaySymbol: pair.displaySymbol,
+      symbol: pair.symbol,
+      baseAsset: pair.baseAsset,
+      quoteAsset: pair.quoteAsset,
+      venueType: pair.venueType,
+      instrumentType: pair.instrumentType,
+      pricePrecision: pair.pricePrecision,
+      quantityPrecision: pair.quantityPrecision,
+      minNotional: pair.minNotional,
+      minQuantity: pair.minQuantity,
+      enabled: pair.enabled,
+      exchange: pair.venueType === 'CEX' ? pair.exchange : undefined,
+      exchangeSymbol: pair.venueType === 'CEX' ? pair.exchangeSymbol : undefined,
+      maxLeverage: pair.venueType === 'CEX' ? pair.maxLeverage : undefined,
+      contractSize: pair.venueType === 'CEX' ? pair.contractSize : undefined,
+      chainId: pair.venueType === 'DEX' ? pair.chainId : undefined,
+      baseTokenAddress: pair.venueType === 'DEX' ? pair.baseTokenAddress : undefined,
+      quoteTokenAddress: pair.venueType === 'DEX' ? pair.quoteTokenAddress : undefined,
+      routerAddress: pair.venueType === 'DEX' ? pair.routerAddress : undefined,
+      poolAddress: pair.venueType === 'DEX' ? pair.poolAddress : undefined,
+      dexName: pair.venueType === 'DEX' ? pair.dexName : undefined,
+    }))
   }
 }
 

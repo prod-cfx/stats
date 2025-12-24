@@ -250,6 +250,32 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
+const TradingPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    displaySymbol: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["DEX", "CEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    pricePrecision: z.number(),
+    quantityPrecision: z.number(),
+    minNotional: z.number().optional(),
+    minQuantity: z.number().optional(),
+    enabled: z.boolean(),
+    exchange: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
+    exchangeSymbol: z.string().optional(),
+    maxLeverage: z.number().optional(),
+    contractSize: z.number().optional(),
+    chainId: z.number().optional(),
+    baseTokenAddress: z.string().optional(),
+    quoteTokenAddress: z.string().optional(),
+    routerAddress: z.string().optional(),
+    poolAddress: z.string().optional(),
+    dexName: z.string().optional(),
+  })
+  .passthrough();
 const BaseResponseDto = z
   .object({
     data: z.object({}).partial().passthrough(),
@@ -286,6 +312,7 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
+  TradingPairConfigResponseDto,
   BaseResponseDto,
 };
 
@@ -1222,7 +1249,7 @@ const endpoints = makeApi([
         schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
       },
     ],
-    response: z.void(),
+    response: z.array(TradingPairConfigResponseDto),
   },
   {
     method: "get",
