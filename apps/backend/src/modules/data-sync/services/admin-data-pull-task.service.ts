@@ -1,14 +1,14 @@
+import type { DataPullJob } from '../contracts/data-pull-job'
 import type {
   AdminDataPullTaskListQueryDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
 } from '../dto/admin-data-pull-task.dto'
-import type { DataPullJob } from '../contracts/data-pull-job'
 import type { DataPullTask } from '../repositories/data-pull-task.repository'
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { AdminDataPullTaskResponseDto } from '../dto/admin-data-pull-task.dto'
 import { DATA_PULL_JOB_REGISTRY } from '../data-sync.tokens'
+import { AdminDataPullTaskResponseDto } from '../dto/admin-data-pull-task.dto'
 import { DataPullTaskRepository } from '../repositories/data-pull-task.repository'
 
 @Injectable()

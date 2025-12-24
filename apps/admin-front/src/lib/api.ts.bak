@@ -42,9 +42,21 @@ type CreateRolePayload = z.infer<typeof schemas.CreateAdminRoleDto>
 type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
+type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
+type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
+
+// 数据拉取任务相关类型
+export type DataPullTask = _DataPullTaskDto
+
+interface _PaginationResult<T> {
+  total: number
+  page: number
+  limit: number
+  items: T[]
+}
 
 // 订单薄配置相关类型
 export type OrderbookPairConfigResponse = z.infer<typeof schemas.OrderbookPairConfigResponseDto>
