@@ -1,12 +1,12 @@
 import type { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
 import type { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
-import type { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
-import type { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
+import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 

@@ -28,30 +28,35 @@ export class LongShortRatioPointResponseDto {
   @ApiPropertyOptional({
     description: '多头账户占比，字符串形式返回',
     example: '0.56',
+    nullable: true,
   })
   longAccountRatio?: string | null
 
   @ApiPropertyOptional({
     description: '空头账户占比，字符串形式返回',
     example: '0.44',
+    nullable: true,
   })
   shortAccountRatio?: string | null
 
   @ApiPropertyOptional({
     description: '多头仓位名义价值 / 数量，字符串形式返回',
     example: '12345.6789',
+    nullable: true,
   })
   longVolume?: string | null
 
   @ApiPropertyOptional({
     description: '空头仓位名义价值 / 数量，字符串形式返回',
     example: '9876.5432',
+    nullable: true,
   })
   shortVolume?: string | null
 
   @ApiPropertyOptional({
     description: '账户多空比，字符串形式返回',
     example: '1.10',
+    nullable: true,
   })
   longShortAccountRatio?: string | null
 
@@ -61,4 +66,5 @@ export class LongShortRatioPointResponseDto {
   })
   source!: string
 }
+
 

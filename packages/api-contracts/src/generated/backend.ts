@@ -282,11 +282,11 @@ const LongShortRatioPointResponseDto = z
     interval: z.string(),
     timestamp: z.string(),
     longShortRatio: z.string(),
-    longAccountRatio: z.string().optional(),
-    shortAccountRatio: z.string().optional(),
-    longVolume: z.string().optional(),
-    shortVolume: z.string().optional(),
-    longShortAccountRatio: z.string().optional(),
+    longAccountRatio: z.string().nullish(),
+    shortAccountRatio: z.string().nullish(),
+    longVolume: z.string().nullish(),
+    shortVolume: z.string().nullish(),
+    longShortAccountRatio: z.string().nullish(),
     source: z.string(),
   })
   .passthrough();
@@ -1247,33 +1247,6 @@ const endpoints = makeApi([
     path: "/markets/long-short-ratio",
     alias: "MarketsController_getLongShortRatio",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "tradingPairId",
-        type: "Query",
-        schema: z.string(),
-      },
-      {
-        name: "interval",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "from",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "to",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "limit",
-        type: "Query",
-        schema: z.number().optional(),
-      },
-    ],
     response: z.array(LongShortRatioPointResponseDto),
   },
   {
@@ -1281,23 +1254,6 @@ const endpoints = makeApi([
     path: "/markets/pairs",
     alias: "MarketsController_getTradingPairs",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "venueType",
-        type: "Query",
-        schema: z.enum(["DEX", "CEX"]).optional(),
-      },
-      {
-        name: "instrumentType",
-        type: "Query",
-        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
-      },
-      {
-        name: "exchange",
-        type: "Query",
-        schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
-      },
-    ],
     response: z.array(TradingPairConfigResponseDto),
   },
   {

@@ -45,3 +45,4 @@ model LongShortRatio {
   @@map("long_short_ratios")
 }
 
+
