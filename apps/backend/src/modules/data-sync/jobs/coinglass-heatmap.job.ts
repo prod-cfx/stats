@@ -59,6 +59,10 @@ export class CoinglassHeatmapJob implements DataPullJob {
     if (cursor.contractType) {
       url.searchParams.set('contractType', cursor.contractType)
     }
+    if (cursor.modelType) {
+      // Coinglass API 通常用 model 或 modelType 参数区分 MODEL1/MODEL2/MODEL3
+      url.searchParams.set('model', cursor.modelType)
+    }
 
     this.logger.log(`Requesting Coinglass heatmap: ${url.toString()}`)
 
