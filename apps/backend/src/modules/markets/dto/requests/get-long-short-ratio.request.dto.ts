@@ -1,6 +1,8 @@
+import type { MarketTimeframe } from '@ai/shared'
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 
 export class GetLongShortRatioRequestDto {
   @ApiProperty({
@@ -11,12 +13,13 @@ export class GetLongShortRatioRequestDto {
   tradingPairId!: string
 
   @ApiPropertyOptional({
-    description: '时间粒度，例如 5m / 15m / 1h / 4h / 1d',
+    description: '时间粒度，可选值：1m / 5m / 15m / 1h / 4h / 1d',
     example: '4h',
+    enum: MARKET_TIMEFRAMES,
   })
   @IsOptional()
-  @IsString({ message: 'interval 必须是字符串' })
-  interval?: string
+  @IsIn(MARKET_TIMEFRAMES, { message: `interval 必须是以下值之一：${MARKET_TIMEFRAMES.join(', ')}` })
+  interval?: MarketTimeframe
 
   @ApiPropertyOptional({
     description: '开始时间（ISO 时间字符串，例如 2025-01-01T00:00:00Z）',

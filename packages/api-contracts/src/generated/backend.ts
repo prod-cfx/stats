@@ -1256,7 +1256,7 @@ const endpoints = makeApi([
       {
         name: "interval",
         type: "Query",
-        schema: z.string().optional(),
+        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).optional(),
       },
       {
         name: "from",
