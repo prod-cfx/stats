@@ -37,6 +37,7 @@ export class LongShortRatioRepository {
 
   /**
    * 按交易对 + 时间范围查询多空比时间序列
+   * 默认按时间倒序返回最新的 limit 条数据
    */
   async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
     const client = this.getClient()
@@ -57,13 +58,17 @@ export class LongShortRatioRepository {
       }
     }
 
-    return client.longShortRatio.findMany({
+    // 默认按时间倒序查询，返回最新数据
+    const items = await client.longShortRatio.findMany({
       where,
       orderBy: {
-        timestamp: 'asc',
+        timestamp: 'desc',
       },
       take: limit,
     })
+
+    // 反转数组使时间从旧到新排列，便于前端绘制曲线
+    return items.reverse()
   }
 
   /**
