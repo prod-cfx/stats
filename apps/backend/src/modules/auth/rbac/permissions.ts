@@ -18,8 +18,8 @@ export enum AppResource {
   LLM_STRATEGY = 'llm_strategy',
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
-  ORDERBOOK_CONFIG = 'orderbook_config',
   DATA_PULL_TASK = 'data_pull_task',
+  ORDERBOOK_CONFIG = 'orderbook_config',
 }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
@@ -56,6 +56,10 @@ RBAC_PERMISSIONS.grant(AppRole.ADMIN)
   .createAny(AppResource.MARKET_SYMBOL)
   .updateAny(AppResource.MARKET_SYMBOL)
   .deleteAny(AppResource.MARKET_SYMBOL)
+  .readAny(AppResource.DATA_PULL_TASK)
+  .createAny(AppResource.DATA_PULL_TASK)
+  .updateAny(AppResource.DATA_PULL_TASK)
+  .deleteAny(AppResource.DATA_PULL_TASK)
   .readAny(AppResource.ORDERBOOK_CONFIG)
   .createAny(AppResource.ORDERBOOK_CONFIG)
   .updateAny(AppResource.ORDERBOOK_CONFIG)

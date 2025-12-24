@@ -276,6 +276,13 @@ export class PermissionService {
       case 'strategy_templates':
       case 'strategytemplates':
         return AppResource.STRATEGY_TEMPLATE
+      case 'orderbook_config':
+      case 'orderbookconfig':
+      case 'orderbook_configs':
+      case 'orderbookconfigs':
+      case 'orderbook':
+      case 'orderbooks':
+        return AppResource.ORDERBOOK_CONFIG
       default:
         return null
     }
