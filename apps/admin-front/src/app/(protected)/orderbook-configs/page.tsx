@@ -292,11 +292,11 @@ export default function OrderbookConfigsPage() {
             rules={[
               { required: true, message: '请输入交易对ID' },
               {
-                pattern: /^[A-Z0-9]+\.[A-Z_]+\.(SPOT|PERPETUAL|FUTURE)$/,
-                message: '格式应为: SYMBOL.VENUE.TYPE (如: BTCUSDT.BINANCE.SPOT)',
+                pattern: /^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/,
+                message: '格式应为: SYMBOL.VENUE.TYPE (如: BTCUSDT.BINANCE.SPOT, ETHUSDT.UNISWAP_V3.SPOT)',
               },
             ]}
-            tooltip="例如：BTCUSDT.BINANCE.SPOT"
+            tooltip="例如：BTCUSDT.BINANCE.SPOT 或 ETHUSDT.UNISWAP_V3.SPOT"
           >
             <Input placeholder="BTCUSDT.BINANCE.SPOT" />
           </Form.Item>
