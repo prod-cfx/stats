@@ -439,6 +439,113 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_list",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "key",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({
+          items: z.array(AdminDataPullTaskResponseDto),
+        })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_create",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateAdminDataPullTaskDto,
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_findOne",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "put",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_update",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateAdminDataPullTaskDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "delete",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_delete",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z
+      .object({
+        success: z.boolean(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
     path: "/admin/menu",
     alias: "AdminMenuController_findMenuTree[0]",
     requestFormat: "json",
