@@ -1,19 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, Matches, MaxLength, Min } from 'class-validator'
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
-export class AdminDataPullTaskListQueryDto {
-  @ApiPropertyOptional({ description: '页码，从 1 开始', example: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  page?: number
-
-  @ApiPropertyOptional({ description: '每页数量', example: 20 })
-  @IsOptional()
-  @IsInt()
-  @IsPositive()
-  limit?: number
-
+export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '按任务 key 模糊搜索' })
   @IsOptional()
   @IsString()
@@ -60,7 +49,7 @@ export class CreateAdminDataPullTaskDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  source?: string
+  source?: string | null
 
   @ApiPropertyOptional({
     description: '任务类型标识（例如 kline_1m、news_latest 等）',
@@ -68,7 +57,7 @@ export class CreateAdminDataPullTaskDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  type?: string
+  type?: string | null
 
   @ApiPropertyOptional({
     description: 'Cron 表达式（可选），当前主要使用 intervalSeconds 调度',
@@ -77,7 +66,7 @@ export class CreateAdminDataPullTaskDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  cron?: string
+  cron?: string | null
 
   @ApiPropertyOptional({
     description: '最小执行间隔（秒），用于防止任务过于频繁执行',
@@ -86,7 +75,7 @@ export class CreateAdminDataPullTaskDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  intervalSeconds?: number
+  intervalSeconds?: number | null
 
   @ApiPropertyOptional({
     description: '是否启用任务',
@@ -102,7 +91,7 @@ export class CreateAdminDataPullTaskDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  cursor?: string
+  cursor?: string | null
 }
 
 export class UpdateAdminDataPullTaskDto {
@@ -172,34 +161,34 @@ export class AdminDataPullTaskResponseDto {
   @ApiProperty()
   name!: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   source?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   type?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   cron?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   intervalSeconds?: number | null
 
   @ApiProperty()
   enabled!: boolean
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   cursor?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastStatus?: string | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastRunAt?: Date | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastSuccessAt?: Date | null
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   lastError?: string | null
 
   @ApiProperty()

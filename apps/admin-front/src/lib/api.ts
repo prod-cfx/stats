@@ -42,6 +42,8 @@ type CreateRolePayload = z.infer<typeof schemas.CreateAdminRoleDto>
 type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
+type DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
+type UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -89,23 +91,7 @@ export interface AdminUser {
   }[]
 }
 
-export interface DataPullTask {
-  id: number
-  key: string
-  name: string
-  source?: string | null
-  type?: string | null
-  cron?: string | null
-  intervalSeconds?: number | null
-  enabled: boolean
-  cursor?: string | null
-  lastStatus?: string | null
-  lastRunAt?: string | null
-  lastSuccessAt?: string | null
-  lastError?: string | null
-  createdAt: string
-  updatedAt: string
-}
+export type DataPullTask = DataPullTaskDto
 
 interface PaginationResult<T> {
   total: number
@@ -244,28 +230,23 @@ export interface DataPullTaskListQuery {
 export async function fetchDataPullTasks(
   query: DataPullTaskListQuery = {},
 ): Promise<PaginationResult<DataPullTask>> {
-  const headers = requireAuthHeaders()
-  const url = new URL(`${API_BASE_URL}/admin/data-pull-tasks`)
-  if (query.page != null)
-    url.searchParams.set('page', String(query.page))
-  if (query.limit != null)
-    url.searchParams.set('limit', String(query.limit))
-  if (query.key)
-    url.searchParams.set('key', query.key)
-  if (query.name)
-    url.searchParams.set('name', query.name)
-  if (typeof query.enabled === 'boolean')
-    url.searchParams.set('enabled', String(query.enabled))
-
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers,
+  const response = await client.AdminDataPullTaskController_list({
+    headers: requireAuthHeaders(),
+    queries: {
+      page: query.page,
+      limit: query.limit,
+      key: query.key,
+      name: query.name,
+      enabled: query.enabled,
+    },
   })
-  if (!res.ok) {
-    throw new Error(`获取数据拉取任务失败：${res.statusText}`)
+  const data = unwrapResponse<any>(response)
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? (query.page ?? 1),
+    limit: data.limit ?? (query.limit ?? 20),
+    items: Array.isArray(data.items) ? (data.items as DataPullTask[]) : [],
   }
-  const data = (await res.json()) as PaginationResult<DataPullTask> | { data: PaginationResult<DataPullTask> }
-  return (data as any).data ?? (data as any)
 }
 
 export interface CreateDataPullTaskPayload {
@@ -280,21 +261,23 @@ export interface CreateDataPullTaskPayload {
 }
 
 export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
-  const headers = {
-    ...requireAuthHeaders(),
-    'Content-Type': 'application/json',
+  const dto = {
+    key: payload.key,
+    name: payload.name,
+    source: payload.source,
+    type: payload.type,
+    cron: payload.cron,
+    intervalSeconds: payload.intervalSeconds,
+    cursor: payload.cursor,
   }
-  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
+  if (typeof payload.enabled === 'boolean') {
+    // 仅在用户显式传入时覆盖默认值
+    ;(dto as any).enabled = payload.enabled
+  }
+  const response = await client.AdminDataPullTaskController_create(dto as any, {
+    headers: requireAuthHeaders(),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || '创建数据拉取任务失败')
-  }
-  const data = (await res.json()) as DataPullTask | { data: DataPullTask }
-  return (data as any).data ?? (data as any)
+  return unwrapResponse<DataPullTask>(response as any)
 }
 
 export interface UpdateDataPullTaskPayload {
@@ -308,33 +291,26 @@ export interface UpdateDataPullTaskPayload {
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  const headers = {
-    ...requireAuthHeaders(),
-    'Content-Type': 'application/json',
+  const dto: UpdateDataPullTaskDto = {
+    name: payload.name,
+    source: payload.source ?? undefined,
+    type: payload.type ?? undefined,
+    cron: payload.cron ?? undefined,
+    intervalSeconds: payload.intervalSeconds ?? undefined,
+    enabled: payload.enabled,
+    cursor: payload.cursor ?? undefined,
   }
-  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(payload),
+  const response = await client.AdminDataPullTaskController_update(dto, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || '更新数据拉取任务失败')
-  }
-  const data = (await res.json()) as DataPullTask | { data: DataPullTask }
-  return (data as any).data ?? (data as any)
+  return unwrapResponse<DataPullTask>(response as any)
 }
 
 export async function deleteDataPullTask(id: number): Promise<void> {
-  const headers = requireAuthHeaders()
-  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}`, {
-    method: 'DELETE',
-    headers,
+  await (client as any).AdminDataPullTaskController_delete(id, {
+    headers: requireAuthHeaders(),
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || '删除数据拉取任务失败')
-  }
 }
 
 // ===== 旧业务逻辑已移除 =====
