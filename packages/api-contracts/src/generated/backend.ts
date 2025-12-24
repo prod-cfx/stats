@@ -272,7 +272,9 @@ const OrderbookPairConfigResponseDto = z
   .passthrough();
 const CreateOrderbookPairConfigDto = z
   .object({
-    pairId: z.string(),
+    pairId: z
+      .string()
+      .regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
     venue: z.string(),
     symbol: z.string(),
     baseAsset: z.string(),

@@ -43,10 +43,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   }, [accessibleNavItems, pathname])
 
   useEffect(() => {
-    // 方便验证当前浏览器拿到的 session 结构
-    console.log('[ProtectedLayout] session snapshot', session)
-    console.log('[ProtectedLayout] username', session?.admin?.username)
-    console.log('[ProtectedLayout] menu permissions', session?.admin?.menuPermissions)
+    // Session 验证已移至 AuthProvider，避免在客户端日志中泄露令牌
 
     if (!initializing && !session) {
       router.replace('/login')

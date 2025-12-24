@@ -31,6 +31,18 @@ export class OrderbookPairConfigService {
   }
 
   async create(dto: CreateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
+    // 验证 pairId 与其他字段的一致性
+    const expectedPairId = `${dto.symbol.toUpperCase()}.${dto.venue.toUpperCase()}.${dto.instrumentType}`
+    if (dto.pairId !== expectedPairId) {
+      throw new DomainException(
+        `pairId 必须与 symbol/venue/instrumentType 一致。期望: ${expectedPairId}，实际: ${dto.pairId}`,
+        {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+        },
+      )
+    }
+
     // 检查 pairId 是否已存在
     const existing = await this.repository.findByPairId(dto.pairId)
     if (existing) {
@@ -46,6 +58,16 @@ export class OrderbookPairConfigService {
     catch (error: any) {
       // 捕获 Prisma 唯一约束冲突（并发情况下可能通过前置检查）
       if (error?.code === 'P2002') {
+        const target = error?.meta?.target
+        if (Array.isArray(target) && target.includes('symbol')) {
+          throw new DomainException(
+            `该市场配置已存在：${dto.symbol} @ ${dto.venue} (${dto.instrumentType})`,
+            {
+              code: ErrorCode.CONFLICT,
+              status: HttpStatus.CONFLICT,
+            },
+          )
+        }
         throw new DomainException('Pair ID already exists', {
           code: ErrorCode.CONFLICT,
           status: HttpStatus.CONFLICT,

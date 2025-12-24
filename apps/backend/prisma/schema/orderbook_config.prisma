@@ -58,8 +58,10 @@ model OrderbookPairConfig {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@unique([symbol, venue, instrumentType], name: "unique_market_config")
   @@index([venue])
   @@index([venueType])
+  @@index([instrumentType])
   @@index([enabled])
   @@index([priority])
   @@map("orderbook_pair_configs")

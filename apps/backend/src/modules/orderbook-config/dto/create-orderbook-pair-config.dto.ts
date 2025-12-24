@@ -9,15 +9,23 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Matches,
   Max,
   Min,
   ValidateNested,
 } from 'class-validator'
 
 export class CreateOrderbookPairConfigDto {
-  @ApiProperty({ description: '交易对唯一标识，例如 BTCUSDT.BINANCE.SPOT' })
+  @ApiProperty({ 
+    description: '交易对唯一标识，格式: SYMBOL.VENUE.INSTRUMENT_TYPE（全大写），例如 BTCUSDT.BINANCE.SPOT',
+    pattern: '^[A-Z0-9]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$',
+    example: 'BTCUSDT.BINANCE.SPOT'
+  })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/, {
+    message: 'pairId 必须符合格式: SYMBOL.VENUE.INSTRUMENT_TYPE（全大写），例如 BTCUSDT.BINANCE.SPOT'
+  })
   pairId!: string
 
   @ApiProperty({ description: '交易所/DEX 标识，例如 BINANCE, OKX, UNISWAP_V3' })
