@@ -89,6 +89,31 @@ export interface AdminUser {
   }[]
 }
 
+export interface DataPullTask {
+  id: number
+  key: string
+  name: string
+  source?: string | null
+  type?: string | null
+  cron?: string | null
+  intervalSeconds?: number | null
+  enabled: boolean
+  cursor?: string | null
+  lastStatus?: string | null
+  lastRunAt?: string | null
+  lastSuccessAt?: string | null
+  lastError?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface PaginationResult<T> {
+  total: number
+  page: number
+  limit: number
+  items: T[]
+}
+
 export async function loginAdmin(payload: AdminLoginPayload) {
   const response = await client.AdminAuthController_login(payload)
   return unwrapResponse(response)
@@ -204,6 +229,112 @@ export async function updateSystemPromptSetting(
     },
   )
   return ((response as any)?.data ?? response) as SettingResponse
+}
+
+// ===== 数据拉取任务管理（Admin） =====
+
+export interface DataPullTaskListQuery {
+  page?: number
+  limit?: number
+  key?: string
+  name?: string
+  enabled?: boolean
+}
+
+export async function fetchDataPullTasks(
+  query: DataPullTaskListQuery = {},
+): Promise<PaginationResult<DataPullTask>> {
+  const headers = requireAuthHeaders()
+  const url = new URL(`${API_BASE_URL}/admin/data-pull-tasks`)
+  if (query.page != null)
+    url.searchParams.set('page', String(query.page))
+  if (query.limit != null)
+    url.searchParams.set('limit', String(query.limit))
+  if (query.key)
+    url.searchParams.set('key', query.key)
+  if (query.name)
+    url.searchParams.set('name', query.name)
+  if (typeof query.enabled === 'boolean')
+    url.searchParams.set('enabled', String(query.enabled))
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers,
+  })
+  if (!res.ok) {
+    throw new Error(`获取数据拉取任务失败：${res.statusText}`)
+  }
+  const data = (await res.json()) as PaginationResult<DataPullTask> | { data: PaginationResult<DataPullTask> }
+  return (data as any).data ?? (data as any)
+}
+
+export interface CreateDataPullTaskPayload {
+  key: string
+  name: string
+  source?: string
+  type?: string
+  cron?: string
+  intervalSeconds?: number
+  enabled?: boolean
+  cursor?: string
+}
+
+export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
+  const headers = {
+    ...requireAuthHeaders(),
+    'Content-Type': 'application/json',
+  }
+  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || '创建数据拉取任务失败')
+  }
+  const data = (await res.json()) as DataPullTask | { data: DataPullTask }
+  return (data as any).data ?? (data as any)
+}
+
+export interface UpdateDataPullTaskPayload {
+  name?: string
+  source?: string | null
+  type?: string | null
+  cron?: string | null
+  intervalSeconds?: number | null
+  enabled?: boolean
+  cursor?: string | null
+}
+
+export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
+  const headers = {
+    ...requireAuthHeaders(),
+    'Content-Type': 'application/json',
+  }
+  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || '更新数据拉取任务失败')
+  }
+  const data = (await res.json()) as DataPullTask | { data: DataPullTask }
+  return (data as any).data ?? (data as any)
+}
+
+export async function deleteDataPullTask(id: number): Promise<void> {
+  const headers = requireAuthHeaders()
+  const res = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}`, {
+    method: 'DELETE',
+    headers,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || '删除数据拉取任务失败')
+  }
 }
 
 // ===== 旧业务逻辑已移除 =====

@@ -250,6 +250,49 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
+const AdminDataPullTaskResponseDto = z
+  .object({
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().optional(),
+    type: z.string().optional(),
+    cron: z.string().optional(),
+    intervalSeconds: z.number().optional(),
+    enabled: z.boolean(),
+    cursor: z.string().optional(),
+    lastStatus: z.string().optional(),
+    lastRunAt: z.string().datetime({ offset: true }).optional(),
+    lastSuccessAt: z.string().datetime({ offset: true }).optional(),
+    lastError: z.string().optional(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateAdminDataPullTaskDto = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    source: z.string().optional(),
+    type: z.string().optional(),
+    cron: z.string().optional(),
+    intervalSeconds: z.number().optional(),
+    enabled: z.boolean().optional().default(true),
+    cursor: z.string().optional(),
+  })
+  .passthrough();
+const UpdateAdminDataPullTaskDto = z
+  .object({
+    name: z.string(),
+    source: z.string(),
+    type: z.string(),
+    cron: z.string(),
+    intervalSeconds: z.number(),
+    enabled: z.boolean(),
+    cursor: z.string(),
+  })
+  .partial()
+  .passthrough();
 const BaseResponseDto = z
   .object({
     data: z.object({}).partial().passthrough(),
@@ -286,6 +329,9 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  UpdateAdminDataPullTaskDto,
   BaseResponseDto,
 };
 
@@ -338,6 +384,106 @@ const endpoints = makeApi([
       },
     ],
     response: AdminAuthResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_list",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "key",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AdminDataPullTaskResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_create",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateAdminDataPullTaskDto,
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_findOne",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "put",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_update",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateAdminDataPullTaskDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "delete",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_delete",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: "get",

@@ -25,6 +25,7 @@ export default function DashboardPage() {
           <Link href="/roles">前往角色管理 →</Link>
           <Link href="/menus">前往菜单管理 →</Link>
           <Link href="/users">前往管理员管理 →</Link>
+          <Link href="/data-pull-tasks">前往数据拉取任务 →</Link>
           <Link href="/strategy-templates">前往策略模板管理 →</Link>
         </Space>
       </Space>

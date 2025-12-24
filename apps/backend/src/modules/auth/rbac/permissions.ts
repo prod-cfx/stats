@@ -18,6 +18,7 @@ export enum AppResource {
   LLM_STRATEGY = 'llm_strategy',
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
+  DATA_PULL_TASK = 'data_pull_task',
 }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
@@ -67,6 +68,11 @@ RBAC_PERMISSIONS.grant(AppRole.SUPER_ADMIN)
   .createAny(AppResource.ROLE)
   .updateAny(AppResource.ROLE)
   .deleteAny(AppResource.ROLE)
+  // 管理后台高危操作：数据拉取任务配置
+  .readAny(AppResource.DATA_PULL_TASK)
+  .createAny(AppResource.DATA_PULL_TASK)
+  .updateAny(AppResource.DATA_PULL_TASK)
+  .deleteAny(AppResource.DATA_PULL_TASK)
   .readAny(AppResource.ADMIN_USER)
   .createAny(AppResource.ADMIN_USER)
   .updateAny(AppResource.ADMIN_USER)
