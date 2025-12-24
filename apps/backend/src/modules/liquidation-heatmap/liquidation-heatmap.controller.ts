@@ -37,6 +37,11 @@ export class LiquidationHeatmapController {
     description: '合约类型，例如 PERPETUAL',
   })
   @ApiQuery({
+    name: 'timeInterval',
+    required: false,
+    description: '时间区间/粒度，例如 15m、1h（默认 15m）',
+  })
+  @ApiQuery({
     name: 'modelType',
     required: false,
     enum: ['MODEL1', 'MODEL2', 'MODEL3'],
@@ -47,8 +52,9 @@ export class LiquidationHeatmapController {
   async getLatest(@Query() query: GetLiquidationHeatmapRequestDto): Promise<LiquidationHeatmapResponseDto> {
     const result = await this.service.getLatestHeatmap({
       symbol: query.symbol,
-      exchangeCode: query.exchangeCode,
-      contractType: query.contractType,
+      exchangeCode: query.exchangeCode === '' ? null : query.exchangeCode,
+      contractType: query.contractType === '' ? null : query.contractType,
+      timeInterval: query.timeInterval,
       modelType: query.modelType ?? 'MODEL3',
     })
 

@@ -33,6 +33,7 @@ export interface HeatmapQueryCriteria {
   symbol: string
   exchangeCode?: string | null
   contractType?: string | null
+  timeInterval?: string | null
   modelType?: LiquidationHeatmapModelType
 }
 
@@ -154,9 +155,11 @@ export class LiquidationHeatmapRepository {
     return client.liquidationHeatmapSnapshot.findFirst({
       where: {
         symbol: criteria.symbol,
-        exchangeCode: criteria.exchangeCode ?? undefined,
-        contractType: criteria.contractType ?? undefined,
-        modelType: criteria.modelType ?? undefined,
+        // 保留三态语义：undefined=不筛选；null=只匹配 NULL；string=精确匹配
+        exchangeCode: criteria.exchangeCode === undefined ? undefined : criteria.exchangeCode,
+        contractType: criteria.contractType === undefined ? undefined : criteria.contractType,
+        timeInterval: criteria.timeInterval === undefined ? undefined : criteria.timeInterval,
+        modelType: criteria.modelType === undefined ? undefined : criteria.modelType,
       },
       orderBy: {
         fetchedAt: 'desc',

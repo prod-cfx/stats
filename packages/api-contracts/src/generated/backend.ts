@@ -1270,6 +1270,11 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
+        name: "timeInterval",
+        type: "Query",
+        schema: z.string().optional().default("15m"),
+      },
+      {
         name: "modelType",
         type: "Query",
         schema: z

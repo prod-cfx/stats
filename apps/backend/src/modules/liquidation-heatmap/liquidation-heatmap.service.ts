@@ -9,6 +9,7 @@ export interface GetLatestHeatmapParams {
   symbol: string
   exchangeCode?: string | null
   contractType?: string | null
+  timeInterval?: string
   modelType?: LiquidationHeatmapModelType
 }
 
@@ -34,10 +35,14 @@ export class LiquidationHeatmapService {
   constructor(private readonly repo: LiquidationHeatmapRepository) {}
 
   async getLatestHeatmap(params: GetLatestHeatmapParams): Promise<LiquidationHeatmapApiShape> {
+    // interval 维度必须显式化，否则同一 symbol 不同 interval 会互相覆盖“latest”的含义
+    const timeInterval = params.timeInterval ?? '15m'
+
     const criteria: HeatmapQueryCriteria = {
       symbol: params.symbol,
-      exchangeCode: params.exchangeCode ?? null,
-      contractType: params.contractType ?? null,
+      exchangeCode: params.exchangeCode,
+      contractType: params.contractType,
+      timeInterval,
       modelType: params.modelType,
     }
 

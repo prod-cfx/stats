@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 // Nest 校验需要运行时枚举值，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
 import { LiquidationHeatmapModelType } from '@prisma/client'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
@@ -28,6 +27,16 @@ export class GetLiquidationHeatmapRequestDto {
   @IsOptional()
   @IsString()
   contractType?: string
+
+  @ApiPropertyOptional({
+    description: '时间区间/粒度，例如 15m、1h（用于区分不同 interval 的快照）',
+    example: '15m',
+    default: '15m',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  timeInterval?: string
 
   @ApiPropertyOptional({
     description: 'Coinglass 热力图模型类型',
