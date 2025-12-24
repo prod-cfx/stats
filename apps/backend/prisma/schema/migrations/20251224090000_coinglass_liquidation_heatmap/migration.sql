@@ -65,6 +65,18 @@ CREATE INDEX "liquidation_heatmap_snapshots_symbol_exchange_code_contract_type_i
   ON "liquidation_heatmap_snapshots"("symbol", "exchange_code", "contract_type");
 
 -- CreateIndex
+-- /liquidation-heatmap/latest 热路径复合索引：按维度过滤并按 fetched_at 排序
+CREATE INDEX "liquidation_heatmap_snapshots_query_idx"
+  ON "liquidation_heatmap_snapshots"(
+    "symbol",
+    "exchange_code",
+    "contract_type",
+    "time_interval",
+    "model_type",
+    "fetched_at"
+  );
+
+-- CreateIndex
 CREATE INDEX "liquidation_heatmap_snapshots_fetched_at_idx"
   ON "liquidation_heatmap_snapshots"("fetched_at");
 

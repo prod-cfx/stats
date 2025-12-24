@@ -30,6 +30,8 @@ model LiquidationHeatmapSnapshot {
   cells       LiquidationHeatmapCell[]
 
   @@index([symbol, exchangeCode, contractType])
+  // /liquidation-heatmap/latest 热路径：按维度过滤 + fetchedAt 排序
+  @@index([symbol, exchangeCode, contractType, timeInterval, modelType, fetchedAt])
   @@index([fetchedAt])
   @@map("liquidation_heatmap_snapshots")
 }
