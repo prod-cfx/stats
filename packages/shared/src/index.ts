@@ -13,6 +13,7 @@ export const buildHealthPayload = (service: string, status: HealthStatus = 'ok')
 })
 
 export * from './constants/error-codes'
+export * from './constants/trading-pairs'
 // NOTE: script-engine is Node-only and should not be imported in browser environments
 // Use direct import: import { createScriptEngine } from '@ai/shared/script-engine'
 // export * from './script-engine'
@@ -21,6 +22,7 @@ export * from './types/indicator'
 export * from './types/market-data'
 export * from './types/orderbook'
 export * from './types/setting-value'
+export * from './types/trading-pair'
 
 export interface Pagination {
     page: number

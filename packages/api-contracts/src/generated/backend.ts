@@ -1202,6 +1202,30 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/markets/pairs",
+    alias: "MarketsController_getTradingPairs",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["DEX", "CEX"]).optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.enum(["BINANCE", "OKX", "BYBIT"]).optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: "get",
     path: "/users/me",
     alias: "UserController_me",
     requestFormat: "json",
