@@ -1,9 +1,9 @@
+import type { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
-import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
-import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 

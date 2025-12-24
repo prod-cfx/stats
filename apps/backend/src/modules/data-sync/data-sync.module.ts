@@ -1,6 +1,8 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { AuthModule } from '../auth/auth.module'
+import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
@@ -8,6 +10,7 @@ import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
+import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 
 /**
  * 统一的数据拉取调度模块：
@@ -17,7 +20,8 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
  */
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, AuthModule],
+  controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
     DataPullTaskRepository,
@@ -28,6 +32,7 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
@@ -37,6 +42,8 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
     // 统一编排 & Cron
     DataSyncOrchestrator,
     DataSyncCronService,
+    // 管理后台：数据拉取任务 CRUD
+    AdminDataPullTaskService,
   ],
 })
 export class DataSyncModule {}
