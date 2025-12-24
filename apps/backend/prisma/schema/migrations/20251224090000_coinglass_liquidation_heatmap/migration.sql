@@ -118,3 +118,4 @@ ALTER TABLE "liquidation_heatmap_cells"
   FOREIGN KEY ("snapshot_id") REFERENCES "liquidation_heatmap_snapshots"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
+

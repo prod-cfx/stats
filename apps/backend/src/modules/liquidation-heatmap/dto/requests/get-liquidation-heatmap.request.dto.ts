@@ -1,5 +1,7 @@
-import type { LiquidationHeatmapModelType } from '@prisma/client'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+// Nest 校验需要运行时枚举值，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { LiquidationHeatmapModelType } from '@prisma/client'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class GetLiquidationHeatmapRequestDto {
@@ -28,12 +30,13 @@ export class GetLiquidationHeatmapRequestDto {
   contractType?: string
 
   @ApiPropertyOptional({
-    description: 'Coinglass Heatmap 模型类型（MODEL1 / MODEL2 / MODEL3）',
-    enum: ['MODEL1', 'MODEL2', 'MODEL3'],
-    default: 'MODEL3',
+    description: 'Coinglass 热力图模型类型',
+    enum: Object.values(LiquidationHeatmapModelType),
+    default: LiquidationHeatmapModelType.MODEL3,
   })
   @IsOptional()
-  @IsEnum(['MODEL1', 'MODEL2', 'MODEL3'])
+  @IsEnum(LiquidationHeatmapModelType)
   modelType?: LiquidationHeatmapModelType
 }
+
 

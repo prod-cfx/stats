@@ -1,6 +1,6 @@
 import type { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
@@ -16,6 +16,21 @@ export class MarketsController {
   @Get('pairs')
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiQuery({
+    name: 'venueType',
+    required: false,
+    description: '交易 venue 类型',
+  })
+  @ApiQuery({
+    name: 'instrumentType',
+    required: false,
+    description: '交易品种类型',
+  })
+  @ApiQuery({
+    name: 'exchange',
+    required: false,
+    description: '交易所标识，仅对 CEX 生效',
+  })
   @ApiOperation({ summary: '获取交易对配置列表' })
   @ApiOkResponse({ type: TradingPairConfigResponseDto, isArray: true })
   getTradingPairs(@Query() query: GetTradingPairsRequestDto): TradingPairConfigResponseDto[] {
