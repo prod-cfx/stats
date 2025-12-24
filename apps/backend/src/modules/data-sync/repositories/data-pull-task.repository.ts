@@ -1,6 +1,7 @@
 import type { DataPullTask as DataPullTaskModel } from '@prisma/client'
-import { Inject, Injectable } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 
 export type DataPullTaskStatus = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
@@ -9,10 +10,7 @@ export type DataPullTask = DataPullTaskModel
 
 @Injectable()
 export class DataPullTaskRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   private getClient() {
     return this.prisma.getClient()

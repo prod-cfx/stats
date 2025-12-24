@@ -1,5 +1,6 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
+import { PrismaModule } from '@/prisma/prisma.module'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
@@ -16,6 +17,7 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
  */
 
 @Module({
+  imports: [PrismaModule],
   providers: [
     // 仓储
     DataPullTaskRepository,

@@ -1,10 +1,9 @@
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
 
-import { cachedRequest, CacheKeys, CacheTTL, clearCache, invalidateCache } from './api-cache'
+import { CacheKeys, clearCache, invalidateCache } from './api-cache'
 import {
   API_BASE_URL,
-  buildCachedFetchOptions,
   client,
   safeApiCall,
   unwrapApiResponse,
@@ -329,96 +328,10 @@ export async function fetchHistoricalPositions(
   }, 'FETCH_HISTORICAL_POSITIONS')
 }
 
-// ===== 策略实例相关 API（已被 LLM 实例接口替代）=====
-/**
- * @deprecated 前端已统一使用 LLM 实例接口（fetchLlmStrategyInstances），
- *             新功能请勿再使用基于 strategy-instances 的客户端方法。
- */
-export interface StrategyInstanceSignalsQuery {
-  limit?: number
-}
+// ===== 旧策略实例 API 已移除（已被 LLM 实例接口替代）=====
+// 前端现统一使用 fetchLlmStrategyInstances、fetchLlmStrategyInstanceDetail、fetchLlmStrategyInstanceSignals
 
 export type TradingSignalResponse = Infer<typeof schemas.StrategyInstanceSignalPublicResponseDto>
-
-/**
- * @deprecated 请改用 fetchLlmStrategyInstances
- */
-export async function fetchStrategyInstances(query?: {
-  page?: number
-  limit?: number
-  llmModel?: string
-  strategyTemplateId?: string
-}) {
-  return cachedRequest(
-    CacheKeys.strategyList(query),
-    () => apiCall(async () => {
-      const response = await client.UserStrategyInstancesController_list({
-        headers: optionalAuthHeaders(),  // 支持匿名访问
-        queries: {
-          page: query?.page || 1,
-          limit: query?.limit || 20,
-          llmModel: query?.llmModel,
-          strategyTemplateId: query?.strategyTemplateId,
-        },
-      })
-      return unwrapResponse(response)
-    }, 'FETCH_STRATEGY_INSTANCES'),
-    CacheTTL.MEDIUM // 30秒缓存
-  )
-}
-
-/**
- * @deprecated 请改用 fetchLlmStrategyInstanceDetail
- */
-export async function fetchStrategyInstanceDetail(id: string) {
-  // 验证ID格式，防止路径注入
-  validateId(id, 'strategy instance ID')
-  
-  return cachedRequest(
-    CacheKeys.strategyInstance(id),
-    () => apiCall(async () => {
-      // 直接使用 fetch 确保 headers 正确传递
-      const response = await fetch(`${API_BASE_URL}/strategy-instances/${id}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...optionalAuthHeaders(),
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      return unwrapResponse(data)
-    }, `FETCH_STRATEGY_DETAIL:${id}`),
-    CacheTTL.SHORT // 10秒缓存（订阅状态需要较快更新）
-  )
-}
-
-/**
- * @deprecated 请改用 fetchLlmStrategyInstanceSignals（后端 LLM 信号实现稳定后）
- */
-export async function fetchStrategyInstanceSignals(
-  id: string,
-  query: StrategyInstanceSignalsQuery = {},
-): Promise<PaginatedResponse<TradingSignalResponse>> {
-  validateId(id, 'strategy instance ID')
-
-  return apiCall(async () => {
-    const response = await client.UserStrategyInstancesController_listSignals({
-      headers: optionalAuthHeaders(),
-      params: { id },
-      queries: {
-        page: 1,
-        limit: query.limit && query.limit > 0 ? query.limit : 20,
-      },
-    })
-
-    return unwrapResponse(response) as PaginatedResponse<TradingSignalResponse>
-  }, `FETCH_STRATEGY_SIGNALS:${id}`)
-}
 
 // ===== LLM 策略实例（用户侧）相关 API =====
 
@@ -548,165 +461,8 @@ export async function fetchLlmStrategyInstanceSignals(
   }, `FETCH_LLM_STRATEGY_SIGNALS:${id}`)
 }
 
-// ===== 用户订阅相关 API（旧版策略实例订阅，已被 LLM 订阅替代）=====
-type CreateSubscriptionPayload = Infer<typeof schemas.CreateSubscriptionDto>
-
-/**
- * @deprecated 前端已统一使用 createLlmSubscription
- */
-export async function createSubscription(payload: CreateSubscriptionPayload) {
-  const result = await apiCall(async () => {
-    return safeApiCall(
-      () => client.UserStrategySubscriptionsController_subscribe(payload, {
-        headers: requireAuthHeaders(),
-      }),
-      {
-        url: `${API_BASE_URL}/user/strategy-subscriptions`,
-        options: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-          body: JSON.stringify(payload),
-        },
-        validateResponse: (data) => unwrapResponse(data),
-      }
-    )
-  }, 'CREATE_SUBSCRIPTION')
-  
-  // 清除相关缓存
-  clearCache(CacheKeys.strategyInstance(payload.strategyInstanceId))
-  invalidateCache('subscription-list:')
-  
-  return result
-}
-
-/**
- * @deprecated 前端已统一使用 fetchMyLlmSubscriptions
- */
-export async function fetchMySubscriptions(query?: {
-  page?: number
-  limit?: number
-  status?: 'active' | 'paused' | 'cancelled'
-}) {
-  return cachedRequest(
-    CacheKeys.subscriptionList(query),
-    () => apiCall(async () => {
-      const response = await client.UserStrategySubscriptionsController_listMySubscriptions({
-        headers: requireAuthHeaders(),
-        queries: {
-          page: query?.page || 1,
-          limit: query?.limit || 20,
-          status: query?.status,
-        },
-      })
-      return unwrapResponse(response)
-    }, 'FETCH_MY_SUBSCRIPTIONS'),
-    CacheTTL.SHORT // 10秒缓存
-  )
-}
-
-/**
- * @deprecated 前端已统一使用 fetchLlmSubscriptionDetail
- */
-export async function fetchSubscriptionDetail(subscriptionId: string) {
-  return apiCall(async () => {
-    validateId(subscriptionId, 'subscription ID')
-    
-    return safeApiCall(
-      () => client.UserStrategySubscriptionsController_detail({
-        headers: requireAuthHeaders(),
-        params: { subscriptionId },
-      }),
-      {
-        url: `${API_BASE_URL}/user/strategy-subscriptions/${subscriptionId}`,
-        options: {
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-          ...buildCachedFetchOptions(30, [`subscription-${subscriptionId}`]),
-        },
-        validateResponse: (data) => unwrapResponse(data),
-      }
-    )
-  }, `FETCH_SUBSCRIPTION_DETAIL:${subscriptionId}`)
-}
-
-type UpdateSubscriptionPayload = Infer<typeof schemas.UpdateSubscriptionDto>
-
-/**
- * @deprecated 前端已统一使用 updateLlmSubscription
- */
-export async function updateSubscription(
-  subscriptionId: string,
-  payload: UpdateSubscriptionPayload
-) {
-  validateId(subscriptionId, 'subscription ID')
-  
-  const result = await apiCall(async () => {
-    return safeApiCall(
-      () => client.UserStrategySubscriptionsController_update(
-        payload,
-        {
-          headers: requireAuthHeaders(),
-          params: { subscriptionId },
-        }
-      ),
-      {
-        url: `${API_BASE_URL}/user/strategy-subscriptions/${subscriptionId}`,
-        options: {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-          body: JSON.stringify(payload),
-        },
-        validateResponse: (data) => unwrapResponse(data),
-      }
-    )
-  }, `UPDATE_SUBSCRIPTION:${subscriptionId}`)
-  
-  // 清除相关缓存
-  clearCache(CacheKeys.subscription(subscriptionId))
-  invalidateCache('subscription-list:')
-  
-  return result
-}
-
-/**
- * @deprecated 前端已统一使用 cancelLlmSubscription
- */
-export async function cancelSubscription(subscriptionId: string) {
-  validateId(subscriptionId, 'subscription ID')
-  
-  await apiCall(async () => {
-    await safeApiCall(
-      () => client.UserStrategySubscriptionsController_cancel({
-        headers: requireAuthHeaders(),
-        params: { subscriptionId },
-      }),
-      {
-        url: `${API_BASE_URL}/user/strategy-subscriptions/${subscriptionId}`,
-        options: {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: (data) => unwrapResponse(data),
-      }
-    )
-  }, `CANCEL_SUBSCRIPTION:${subscriptionId}`)
-  
-  // 清除相关缓存
-  clearCache(CacheKeys.subscription(subscriptionId))
-  invalidateCache('subscription-list:')
-  invalidateCache('strategy-instance:')
-}
+// ===== 旧版订阅 API 已移除（已被 LLM 订阅接口替代）=====
+// 前端现统一使用 createLlmSubscription、fetchMyLlmSubscriptions、fetchLlmSubscriptionDetail、updateLlmSubscription、cancelLlmSubscription
 
 // ===== 用户订阅（LLM 策略实例）相关 API =====
 // 与后端 DTO / OpenAPI 完全对齐，避免手写类型漂移

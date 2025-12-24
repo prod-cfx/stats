@@ -1,6 +1,8 @@
-import type { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
+// 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
+// eslint-disable-next-line ts/consistent-type-imports
+import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 
 @Injectable()
 export class DataSyncCronService {
