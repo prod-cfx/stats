@@ -54,6 +54,13 @@ function getErrorMessage(error: unknown): string | undefined {
   return (error as HttpErrorLike).message
 }
 
+function normalizeOptionalUrl(value: string | null | undefined): string | null | undefined {
+  if (value == null)
+    return value
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
 function safeStringifyJson(value: unknown) {
   if (value === undefined || value === null)
     return ''
@@ -253,9 +260,9 @@ export default function ExchangeConfigsPage() {
       await createExchangeConfig({
         code: values.code,
         name: values.name,
-        avatarUrl: values.avatarUrl,
+        avatarUrl: normalizeOptionalUrl(values.avatarUrl),
         intro: values.intro,
-        websiteUrl: values.websiteUrl,
+        websiteUrl: normalizeOptionalUrl(values.websiteUrl),
         venueType: values.venueType,
         enabled: values.enabled,
         sort: values.sort,
@@ -298,9 +305,9 @@ export default function ExchangeConfigsPage() {
       await updateExchangeConfig(editing.id, {
         code: values.code,
         name: values.name,
-        avatarUrl: values.avatarUrl,
+        avatarUrl: normalizeOptionalUrl(values.avatarUrl),
         intro: values.intro,
-        websiteUrl: values.websiteUrl,
+        websiteUrl: normalizeOptionalUrl(values.websiteUrl),
         venueType: values.venueType,
         enabled: values.enabled,
         sort: values.sort,
