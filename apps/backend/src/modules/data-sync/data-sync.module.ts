@@ -22,6 +22,9 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
 import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
+import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
+import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
+import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 
@@ -95,21 +98,34 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     BinanceCexSpotOrderbookWsAdapter,
     BinanceCexPerpetualOrderbookWsAdapter,
     BinanceCexFutureOrderbookWsAdapter,
+    BybitCexSpotOrderbookWsAdapter,
+    BybitCexPerpetualOrderbookWsAdapter,
+    BybitCexFutureOrderbookWsAdapter,
     {
       provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter: BinanceCexFutureOrderbookWsAdapter,
+        bybitCexSpotOrderbookWsAdapter: BybitCexSpotOrderbookWsAdapter,
+        bybitCexPerpetualOrderbookWsAdapter: BybitCexPerpetualOrderbookWsAdapter,
+        bybitCexFutureOrderbookWsAdapter: BybitCexFutureOrderbookWsAdapter,
       ) => [
         binanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter,
+        bybitCexSpotOrderbookWsAdapter,
+        bybitCexPerpetualOrderbookWsAdapter,
+        bybitCexFutureOrderbookWsAdapter,
       ],
       inject: [
         BinanceCexSpotOrderbookWsAdapter,
         BinanceCexPerpetualOrderbookWsAdapter,
         BinanceCexFutureOrderbookWsAdapter,
+        BybitCexSpotOrderbookWsAdapter,
+        BybitCexPerpetualOrderbookWsAdapter,
+        BybitCexFutureOrderbookWsAdapter,
       ],
     },
     OrderbookWsSyncManager,
