@@ -53,14 +53,17 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
       restBaseUrl: string
       restTimeoutMs: number
     }>('marketData')
+    const client = this.redisService.getClient()
 
     if (!marketData) {
       this.logger.warn('marketData config not found, skip BinanceOrderBookSnapshotJob')
+      await this.cleanupDisabledSnapshots(client, new Set())
       return { fetchedCount: 0, newCursor: currentCursor, meta: { reason: 'no_marketdata_config' } }
     }
 
     if (marketData.provider !== 'binance') {
       this.logger.debug(`marketData.provider=${marketData.provider}, skip (expect "binance")`)
+      await this.cleanupDisabledSnapshots(client, new Set())
       return {
         fetchedCount: 0,
         newCursor: currentCursor,
@@ -79,6 +82,7 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
 
     if (!configs.length) {
       this.logger.warn('No enabled BINANCE SPOT orderbook configs found, skip BinanceOrderBookSnapshotJob')
+      await this.cleanupDisabledSnapshots(client, new Set())
       return {
         fetchedCount: 0,
         newCursor: currentCursor,
@@ -106,7 +110,6 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
 
     const nextIndex = (startIndex + batch.length) % total
 
-    const client = this.redisService.getClient()
     const fetchedBooks: VenueOrderBook[] = []
     const errors: string[] = []
 
