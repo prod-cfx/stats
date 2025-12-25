@@ -8,6 +8,7 @@ import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
+import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -35,6 +36,7 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
     ExampleNewsJob,
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
+    CoinglassAggregatedLiquidationJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -44,8 +46,21 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
-      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, coinglassHeatmapJob, exampleOrderbookJob],
-      inject: [ExampleKlineJob, ExampleNewsJob, CoinglassHeatmapJob, ExampleOrderbookJob],
+        coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
+      ): DataPullJob[] => [
+        exampleKlineJob,
+        exampleNewsJob,
+        coinglassHeatmapJob,
+        exampleOrderbookJob,
+        coinglassAggregatedLiquidationJob,
+      ],
+      inject: [
+        ExampleKlineJob,
+        ExampleNewsJob,
+        CoinglassHeatmapJob,
+        ExampleOrderbookJob,
+        CoinglassAggregatedLiquidationJob,
+      ],
     },
     // 统一编排 & Cron
     DataSyncOrchestrator,
