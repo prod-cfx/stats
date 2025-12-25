@@ -54,6 +54,8 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
   private readonly defaultSymbol = 'BTC'
   // 不传时按文档默认 Binance
   private readonly defaultExchangeCode: string | null = 'Binance'
+  // 显式聚合（全市场）的 Exchange 代号
+  private readonly aggregatedExchangeCode = 'AGGREGATED' as const
   private readonly defaultInterval: MarketTimeframe = '4h'
   private readonly defaultLimit = 1000
 
