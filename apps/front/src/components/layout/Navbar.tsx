@@ -17,7 +17,7 @@ export const Navbar = () => {
         { name: '数据聚合', href: '#' },
         { name: '清算地图', href: '/liquidation-map' },
         { name: '交易所多空比', href: '/long-short-ratio' },
-        { name: '聚合挂单', href: '#' },
+        { name: '聚合挂单', href: '/aggregated-orderbook' },
         { name: '爆仓数据', href: '#' },
         { name: '预测市场', href: '#' },
         { name: '币股', href: '#' },
