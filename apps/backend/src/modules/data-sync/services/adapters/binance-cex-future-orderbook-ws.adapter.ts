@@ -1,6 +1,6 @@
-import type { ConfigService } from '@nestjs/config'
-import type { RedisService } from '@/common/services/redis.service'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { RedisService } from '@/common/services/redis.service'
 import { BinanceOrderbookWsAdapterBase } from './binance/binance-orderbook-ws.base'
 
 @Injectable()
@@ -31,8 +31,8 @@ export class BinanceCexFutureOrderbookWsAdapter extends BinanceOrderbookWsAdapte
   }
 
   constructor(
-    configService: ConfigService,
-    redisService: RedisService,
+    @Inject(ConfigService) configService: ConfigService,
+    @Inject(RedisService) redisService: RedisService,
   ) {
     super(configService, redisService)
   }

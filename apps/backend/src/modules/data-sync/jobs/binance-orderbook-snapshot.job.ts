@@ -15,6 +15,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
+import type Redis from 'ioredis'
 
 type BinanceDepthLevel = [string, string]
 
@@ -36,6 +37,7 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
   readonly key = 'binance-orderbook-snapshot'
 
   private readonly logger = new Logger(BinanceOrderBookSnapshotJob.name)
+  private readonly venueId = 'binance-spot' as const
 
   constructor(
     private readonly configService: ConfigService,
@@ -92,6 +94,8 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
       this.configService.get<number>('MARKET_DATA_ORDERBOOK_SNAPSHOT_BATCH_SIZE') ?? 10
     const batchSize = Math.max(1, maxPerRun)
 
+    const enabledMarketKeys = new Set(configs.map(cfg => this.buildMarketKeyFromConfig(cfg)))
+
     const batch: typeof configs = []
     for (let i = 0; i < batchSize && i < total; i += 1) {
       const idx = (startIndex + i) % total
@@ -130,6 +134,8 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
         errors,
       })
     }
+
+    await this.cleanupDisabledSnapshots(client, enabledMarketKeys)
 
     return {
       fetchedCount: fetchedBooks.length,
@@ -215,7 +221,7 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
     const exchangeTs = depth.E ?? depth.T
 
     const book: VenueOrderBook = {
-      venueId: 'binance-spot',
+      venueId: this.venueId,
       marketKey,
       bids,
       asks,
@@ -248,6 +254,33 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
           : 'future'
 
     return { base, quote, venueType }
+  }
+
+  private buildMarketKeyFromConfig(cfg: {
+    baseAsset: string
+    quoteAsset: string
+    instrumentType: 'SPOT' | 'PERPETUAL' | 'FUTURE'
+  }): string {
+    return toMarketKey(this.toMarketIdFromConfig(cfg))
+  }
+
+  private async cleanupDisabledSnapshots(
+    client: Redis,
+    enabledMarketKeys: Set<string>,
+  ): Promise<void> {
+    const prefix = `orderbook:${this.venueId}:`
+    let cursor = '0'
+    do {
+      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100)
+      cursor = nextCursor
+      for (const key of keys) {
+        const marketKey = key.slice(prefix.length)
+        if (!enabledMarketKeys.has(marketKey)) {
+          await client.del(key)
+          this.logger.log(`Deleted stale snapshot key=${key}`)
+        }
+      }
+    } while (cursor !== '0')
   }
 
   private parseCursor(currentCursor: string | null): BinanceOrderbookCursor {
