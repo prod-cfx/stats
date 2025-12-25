@@ -97,9 +97,9 @@ export class OpenInterestUsageExample {
       exchange: 'All',
       startTime: oneDayAgo.toISOString(),
       endTime: now.toISOString(),
+      page: 1,
       limit: 100,
-      offset: 0,
-    })
+    } as any)
 
     console.log(`查询到 ${result.data.length} 条记录，总共 ${result.total} 条`)
     return result

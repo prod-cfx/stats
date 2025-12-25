@@ -14,6 +14,7 @@ import { Pool } from 'pg'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { AppRole } from '../src/modules/auth/rbac/permissions'
 import { seedOrderbookConfigs } from './seeds/orderbook-configs.seed'
+import { seedDataPullTasks } from './seeds/data-pull-tasks.seed'
 
 // 使用统一的环境变量访问器
 const env = createEnvAccessor()
@@ -266,6 +267,7 @@ async function main() {
   await seedAdminMenus()
   await seedAdminUser()
   await seedOrderbookConfigs(prisma)
+  await seedDataPullTasks(prisma)
 
   console.log('种子数据填充完成')
 }

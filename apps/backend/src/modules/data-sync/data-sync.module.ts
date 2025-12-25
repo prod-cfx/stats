@@ -2,6 +2,7 @@ import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
+import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
@@ -35,6 +36,7 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
     ExampleNewsJob,
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
+    OpenInterestSyncJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -44,8 +46,21 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
-      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, coinglassHeatmapJob, exampleOrderbookJob],
-      inject: [ExampleKlineJob, ExampleNewsJob, CoinglassHeatmapJob, ExampleOrderbookJob],
+        openInterestSyncJob: OpenInterestSyncJob,
+      ): DataPullJob[] => [
+        exampleKlineJob,
+        exampleNewsJob,
+        coinglassHeatmapJob,
+        exampleOrderbookJob,
+        openInterestSyncJob,
+      ],
+      inject: [
+        ExampleKlineJob,
+        ExampleNewsJob,
+        CoinglassHeatmapJob,
+        ExampleOrderbookJob,
+        OpenInterestSyncJob,
+      ],
     },
     // 统一编排 & Cron
     DataSyncOrchestrator,

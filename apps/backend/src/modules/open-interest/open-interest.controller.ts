@@ -1,6 +1,7 @@
 import type {
   CreateOpenInterestDto,
-  QueryOpenInterestDto} from './dto/open-interest.dto';
+  QueryOpenInterestDto,
+} from './dto/open-interest.dto'
 import type { OpenInterestService } from './open-interest.service'
 import {
   BadRequestException,
@@ -21,6 +22,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger'
+import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import { AppResource } from '@/modules/auth/rbac/permissions'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import {
   OpenInterestDto,
@@ -70,6 +73,10 @@ export class OpenInterestController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '查询持仓量数据' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -85,6 +92,10 @@ export class OpenInterestController {
   }
 
   @Get('latest/:exchange/:symbol')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取最新的持仓量数据' })
   @ApiParam({ name: 'exchange', description: '交易所名称', example: 'All' })
   @ApiParam({ name: 'symbol', description: '币种符号', example: 'BTC' })
@@ -105,6 +116,10 @@ export class OpenInterestController {
   }
 
   @Get('stats/:symbol')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取持仓量统计数据' })
   @ApiParam({ name: 'symbol', description: '币种符号', example: 'BTC' })
   @ApiQuery({

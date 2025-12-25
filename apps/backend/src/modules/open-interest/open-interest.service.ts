@@ -1,7 +1,11 @@
 import type { Prisma } from '@prisma/client'
 import type { PrismaService } from '../../prisma/prisma.service'
-import type { CreateOpenInterestDto, QueryOpenInterestDto } from './dto/open-interest.dto'
+import type {
+  CreateOpenInterestDto,
+  QueryOpenInterestDto,
+} from './dto/open-interest.dto'
 import { Injectable, Logger } from '@nestjs/common'
+import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 
 /**
  * 持仓量数据服务
@@ -126,12 +130,17 @@ export class OpenInterestService {
       }
     }
 
+    // 统一分页逻辑：复用 BasePaginationRequestDto 中的 page/limit
+    const limit = query.limit ?? PAGINATION_CONSTANTS.DEFAULT_PAGE_SIZE
+    const page = query.page ?? 1
+    const offset = (page - 1) * limit
+
     const [data, total] = await Promise.all([
       this.prisma.openInterest.findMany({
         where,
         orderBy: { dataTimestamp: 'desc' },
-        take: query.limit || 100,
-        skip: query.offset || 0,
+        take: limit,
+        skip: offset,
       }),
       this.prisma.openInterest.count({ where }),
     ])
@@ -139,8 +148,8 @@ export class OpenInterestService {
     return {
       data,
       total,
-      limit: query.limit || 100,
-      offset: query.offset || 0,
+      limit,
+      offset,
     }
   }
 

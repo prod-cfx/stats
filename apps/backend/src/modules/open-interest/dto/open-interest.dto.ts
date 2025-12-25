@@ -1,14 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
 import {
   IsDateString,
-  IsInt,
   IsNumber,
   IsOptional,
   IsString,
-  Max,
-  Min,
 } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 /**
  * 持仓量数据 DTO
@@ -133,7 +130,7 @@ export class CreateOpenInterestDto extends OpenInterestDto {
 /**
  * 查询持仓量数据 DTO
  */
-export class QueryOpenInterestDto {
+export class QueryOpenInterestDto extends BasePaginationRequestDto {
   @ApiProperty({ description: '交易所名称', required: false, example: 'All' })
   @IsString()
   @IsOptional()
@@ -153,34 +150,6 @@ export class QueryOpenInterestDto {
   @IsDateString()
   @IsOptional()
   endTime?: string
-
-  @ApiProperty({
-    description: '每页数量',
-    required: false,
-    example: 100,
-    default: 100,
-    minimum: 1,
-    maximum: 1000,
-  })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(1000)
-  @IsOptional()
-  limit?: number
-
-  @ApiProperty({
-    description: '偏移量',
-    required: false,
-    example: 0,
-    default: 0,
-    minimum: 0,
-  })
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  offset?: number
 }
 
 /**
