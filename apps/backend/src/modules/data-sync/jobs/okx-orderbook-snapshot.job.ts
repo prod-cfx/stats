@@ -6,6 +6,8 @@ import { toMarketKey } from '@ai/shared'
 import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
 import type { OrderbookPairConfig } from '@prisma/client'
 import { Inject, Injectable, Logger } from '@nestjs/common'
+// 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
+// eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 // Nest 注入需要运行时引用 Service，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
