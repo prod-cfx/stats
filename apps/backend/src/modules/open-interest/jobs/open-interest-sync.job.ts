@@ -87,9 +87,15 @@ export class OpenInterestSyncJob implements DataPullJob {
     try {
       const json = await this.fetchOiJson(url, apiKey)
 
-      if (json.code !== '0' || !json.data || json.data.length === 0) {
+      if (json.code !== '0') {
+        const errorMsg = `Coinglass OI API returned error: code=${json.code}, msg=${json.msg}`
+        this.logger.error(errorMsg)
+        throw new Error(errorMsg)
+      }
+
+      if (!json.data || json.data.length === 0) {
         this.logger.warn(
-          `Coinglass OI API returned no data: code=${json.code}, msg=${json.msg}`,
+          `Coinglass OI API returned empty data for symbol=${cursor.symbol}, exchange=${cursor.exchange ?? 'All'}`,
         )
         return {
           fetchedCount: 0,
