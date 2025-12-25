@@ -21,7 +21,7 @@ export class QueryExchangeConfigDto extends BasePaginationRequestDto {
 
   @ApiPropertyOptional({ description: '是否启用' })
   @IsBoolean()
-  @Transform(({ value }) => value === true || value === 'true')
+  @Transform(({ value }) => (value == null || value === '' ? undefined : value === true || value === 'true'))
   @IsOptional()
   enabled?: boolean
 }

@@ -280,10 +280,19 @@ export default function ExchangeConfigsPage() {
       const values = await editForm.validateFields()
       if (!editing) return
 
-      const metadata = values.metadataText ? safeParseJson(values.metadataText) : undefined
-      if (metadata === null) {
-        message.error('扩展信息(JSON) 格式不合法：必须是 JSON 对象')
-        return
+      let metadata: Record<string, unknown> | null | undefined
+      const metadataText = (values.metadataText ?? '').trim()
+      if (!metadataText) {
+        // 显式清空：让后端写入 DbNull
+        metadata = null
+      }
+      else {
+        const parsed = safeParseJson(metadataText)
+        if (parsed === null) {
+          message.error('扩展信息(JSON) 格式不合法：必须是 JSON 对象')
+          return
+        }
+        metadata = parsed
       }
 
       await updateExchangeConfig(editing.id, {
