@@ -9,10 +9,10 @@ import {
   Controller,
   Get,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -22,9 +22,12 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import {
+  CreateAny,
+  ReadAny,
+  RequireAuth,
+} from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 import {
   OpenInterestDto,
   OpenInterestStatsDto,
@@ -40,8 +43,9 @@ export class OpenInterestController {
   constructor(private readonly openInterestService: OpenInterestService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @RequireAuth()
+  @CreateAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '创建或更新持仓量数据' })
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -57,8 +61,9 @@ export class OpenInterestController {
   }
 
   @Post('batch')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @RequireAuth()
+  @CreateAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '批量创建或更新持仓量数据' })
   @ApiResponse({ status: HttpStatus.CREATED, description: '批量创建成功' })
   @ApiResponse({
@@ -73,7 +78,6 @@ export class OpenInterestController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
@@ -88,11 +92,14 @@ export class OpenInterestController {
     description: '参数验证失败',
   })
   async query(@Query() query: QueryOpenInterestDto) {
-    return this.openInterestService.query(query)
+    const result = await this.openInterestService.query(query)
+    return {
+      ...result,
+      data: result.data.map(entity => this.toDto(entity)),
+    }
   }
 
   @Get('latest/:exchange/:symbol')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
@@ -112,11 +119,18 @@ export class OpenInterestController {
     if (!exchange || !symbol) {
       throw new BadRequestException('exchange and symbol are required')
     }
-    return this.openInterestService.getLatest(exchange, symbol)
+    const entity = await this.openInterestService.getLatest(exchange, symbol)
+
+    if (!entity) {
+      throw new NotFoundException(
+        `Open interest not found for ${exchange}:${symbol}`,
+      )
+    }
+
+    return this.toDto(entity)
   }
 
   @Get('stats/:symbol')
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
@@ -166,6 +180,63 @@ export class OpenInterestController {
       throw new BadRequestException('startTime must be before endTime')
     }
 
-    return this.openInterestService.getStats(symbol, start, end)
+    const stats = await this.openInterestService.getStats(symbol, start, end)
+
+    if (!stats) {
+      throw new NotFoundException(
+        `Open interest stats not found for ${symbol} in range`,
+      )
+    }
+
+    return stats
+  }
+
+  private toDto(entity: any): OpenInterestDto {
+    return {
+      exchange: entity.exchange,
+      symbol: entity.symbol,
+      open_interest_usd: Number(entity.openInterestUsd),
+      open_interest_quantity: Number(entity.openInterestQuantity),
+      open_interest_by_stable_coin_margin:
+        entity.openInterestByStableCoinMargin != null
+          ? Number(entity.openInterestByStableCoinMargin)
+          : undefined,
+      open_interest_quantity_by_coin_margin:
+        entity.openInterestQuantityByCoinMargin != null
+          ? Number(entity.openInterestQuantityByCoinMargin)
+          : undefined,
+      open_interest_quantity_by_stable_coin_margin:
+        entity.openInterestQuantityByStableCoinMargin != null
+          ? Number(entity.openInterestQuantityByStableCoinMargin)
+          : undefined,
+      open_interest_change_percent_5m:
+        entity.openInterestChangePercent5m != null
+          ? Number(entity.openInterestChangePercent5m)
+          : undefined,
+      open_interest_change_percent_15m:
+        entity.openInterestChangePercent15m != null
+          ? Number(entity.openInterestChangePercent15m)
+          : undefined,
+      open_interest_change_percent_30m:
+        entity.openInterestChangePercent30m != null
+          ? Number(entity.openInterestChangePercent30m)
+          : undefined,
+      open_interest_change_percent_1h:
+        entity.openInterestChangePercent1h != null
+          ? Number(entity.openInterestChangePercent1h)
+          : undefined,
+      open_interest_change_percent_4h:
+        entity.openInterestChangePercent4h != null
+          ? Number(entity.openInterestChangePercent4h)
+          : undefined,
+      open_interest_change_percent_24h:
+        entity.openInterestChangePercent24h != null
+          ? Number(entity.openInterestChangePercent24h)
+          : undefined,
+      data_timestamp:
+        entity.dataTimestamp instanceof Date
+          ? entity.dataTimestamp.toISOString()
+          : entity.dataTimestamp,
+    }
   }
 }

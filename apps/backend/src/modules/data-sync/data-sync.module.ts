@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
+import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
@@ -25,7 +26,13 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
  */
 
 @Module({
-  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    LiquidationHeatmapModule,
+    OpenInterestModule,
+    OrderbookConfigModule,
+  ],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
