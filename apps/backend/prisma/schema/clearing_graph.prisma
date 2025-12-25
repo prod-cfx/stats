@@ -1,0 +1,103 @@
+/// Coinglass Liquidation Heatmap 数据落库模型
+/// 参考文档：https://docs.coinglass.com/v4.0-zh/reference/liquidation-heatmap
+/// 设计目标：保留每次拉取结果的元信息、Y 轴价格、X 轴K线以及热力图栅格值
+
+model LiquidationHeatmapSnapshot {
+  id             Int                         @id @default(autoincrement())
+  source         LiquidationHeatmapSource    @default(COINGLASS)
+  modelType      LiquidationHeatmapModelType @default(MODEL3) @map("model_type")
+  /// 交易所 (如 BINANCE / OKX)
+  exchangeCode   String?                     @map("exchange_code")
+  /// 交易对基础资产，如 BTC
+  symbol         String
+  /// 完整交易对，例如 BTC/USDT
+  tradingPair    String?                     @map("trading_pair")
+  /// 合约类型 (perpetual、delivery 等)
+  contractType   String?                     @map("contract_type")
+  /// API 请求的时间区间/粒度 (如 15m, 1h)
+  timeInterval   String?                     @map("time_interval")
+  /// 数据币种（Coinglass 返回 USD）
+  valueCurrency  String                      @default("USD") @map("value_currency")
+  /// 数据对应的时间范围（API 通常返回最近 N 根 K 线）
+  effectiveFrom  DateTime?                   @map("effective_from")
+  effectiveTo    DateTime?                   @map("effective_to")
+  fetchedAt      DateTime                    @default(now()) @map("fetched_at")
+  /// 原始响应，可用于审计 / 调试
+  rawPayload     Json?                       @map("raw_payload")
+
+  yAxes       LiquidationHeatmapYAxis[]
+  candlesticks LiquidationHeatmapCandle[]
+  cells       LiquidationHeatmapCell[]
+
+  @@index([symbol, exchangeCode, contractType])
+  // /liquidation-heatmap/latest 热路径：按维度过滤 + fetchedAt 排序
+  @@index([symbol, exchangeCode, contractType, timeInterval, modelType, fetchedAt])
+  @@index([fetchedAt])
+  @@map("liquidation_heatmap_snapshots")
+}
+
+enum LiquidationHeatmapSource {
+  COINGLASS
+}
+
+enum LiquidationHeatmapModelType {
+  MODEL1
+  MODEL2
+  MODEL3
+}
+
+/// 对应响应中的 y_axis 数组，记录价格刻度
+model LiquidationHeatmapYAxis {
+  id         Int                       @id @default(autoincrement())
+  snapshotId Int                       @map("snapshot_id")
+  /// Y 轴序号，对应 API 中的索引
+  axisIndex  Int                       @map("axis_index")
+  /// 实际价格
+  price      Decimal                   @map("price")
+
+  snapshot LiquidationHeatmapSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, axisIndex], map: "uniq_heatmap_y_axis")
+  @@index([snapshotId])
+  @@map("liquidation_heatmap_y_axes")
+}
+
+/// 对应响应中的 price_candlesticks
+model LiquidationHeatmapCandle {
+  id         Int                       @id @default(autoincrement())
+  snapshotId Int                       @map("snapshot_id")
+  /// K 线位置索引，与 heatmap cell 的 X 轴索引匹配
+  candleIndex Int                      @map("candle_index")
+  timestamp  DateTime                  @map("timestamp")
+  open       Decimal                   @map("open")
+  high       Decimal                   @map("high")
+  low        Decimal                   @map("low")
+  close      Decimal                   @map("close")
+  volume     Decimal                   @map("volume")
+
+  snapshot LiquidationHeatmapSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, candleIndex], map: "uniq_heatmap_candle_idx")
+  @@index([snapshotId])
+  @@index([timestamp])
+  @@map("liquidation_heatmap_candles")
+}
+
+/// 对应响应中的 liquidation_leverage_data
+/// 每行代表一个栅格（X 轴索引、Y 轴索引、清算金额）
+model LiquidationHeatmapCell {
+  id          Int                       @id @default(autoincrement())
+  snapshotId  Int                       @map("snapshot_id")
+  xIndex      Int                       @map("x_index")
+  yIndex      Int                       @map("y_index")
+  value       Decimal                   @map("value")
+  valueCurrency String                  @default("USD") @map("value_currency")
+
+  snapshot LiquidationHeatmapSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, xIndex, yIndex], map: "uniq_heatmap_cell")
+  @@index([snapshotId, xIndex], map: "idx_heatmap_cell_x")
+  @@index([snapshotId, yIndex], map: "idx_heatmap_cell_y")
+  @@map("liquidation_heatmap_cells")
+}
+

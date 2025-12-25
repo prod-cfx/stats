@@ -250,6 +250,27 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
+const LiquidationHeatmapResponseDto = z
+  .object({
+    snapshotId: z.number(),
+    symbol: z.string(),
+    exchangeCode: z.string().nullable(),
+    tradingPair: z.string().nullable(),
+    contractType: z.string().nullable(),
+    modelType: z.enum(["MODEL1", "MODEL2", "MODEL3"]),
+    timeInterval: z.string().nullable(),
+    valueCurrency: z.string(),
+    fetchedAt: z.string().datetime({ offset: true }),
+    effectiveFrom: z.string().datetime({ offset: true }).nullable(),
+    effectiveTo: z.string().datetime({ offset: true }).nullable(),
+    y_axis: z.array(z.number()),
+    liquidation_leverage_data: z.array(z.tuple([z.number(), z.number(), z.number()])),
+    price_candlesticks: z.array(
+      z.tuple([z.number(), z.string(), z.string(), z.string(), z.string(), z.string()]),
+    ),
+  })
+  .passthrough();
+
 const AdminDataPullTaskResponseDto = z
   .object({
     id: z.number(),
@@ -269,6 +290,7 @@ const AdminDataPullTaskResponseDto = z
     updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough();
+
 const CreateAdminDataPullTaskDto = z
   .object({
     key: z.string(),
@@ -281,6 +303,7 @@ const CreateAdminDataPullTaskDto = z
     cursor: z.string().nullish(),
   })
   .passthrough();
+
 const UpdateAdminDataPullTaskDto = z
   .object({
     name: z.string(),
@@ -293,6 +316,7 @@ const UpdateAdminDataPullTaskDto = z
   })
   .partial()
   .passthrough();
+
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -355,6 +379,7 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
+  LiquidationHeatmapResponseDto,
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
@@ -419,19 +444,9 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "enabled",
+        name: "page",
         type: "Query",
-        schema: z.boolean().optional(),
-      },
-      {
-        name: "name",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "key",
-        type: "Query",
-        schema: z.string().optional(),
+        schema: z.number().optional(),
       },
       {
         name: "limit",
@@ -439,14 +454,26 @@ const endpoints = makeApi([
         schema: z.number().optional(),
       },
       {
-        name: "page",
+        name: "key",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.string().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
       z
-        .object({ items: z.array(AdminDataPullTaskResponseDto) })
+        .object({
+          items: z.array(AdminDataPullTaskResponseDto),
+        })
         .partial()
         .passthrough()
     ),
@@ -510,7 +537,12 @@ const endpoints = makeApi([
         schema: z.number(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({
+        success: z.boolean(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",
@@ -1372,6 +1404,43 @@ const endpoints = makeApi([
       })
       .partial()
       .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/liquidation-heatmap/latest",
+    alias: "LiquidationHeatmapController_getLatest",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "exchangeCode",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "contractType",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "timeInterval",
+        type: "Query",
+        schema: z.string().optional().default("15m"),
+      },
+      {
+        name: "modelType",
+        type: "Query",
+        schema: z
+          .enum(["MODEL1", "MODEL2", "MODEL3"])
+          .optional()
+          .default("MODEL3"),
+      },
+    ],
+    response: LiquidationHeatmapResponseDto,
   },
   {
     method: "get",

@@ -1,11 +1,13 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
+import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AuthModule } from '../auth/auth.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
+import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
@@ -20,15 +22,16 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
  */
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
     DataPullTaskRepository,
     DataPullExecutionRepository,
-    // Job 实现（示例）
+    // Job 实现（示例 + 实际）
     ExampleKlineJob,
     ExampleNewsJob,
+    CoinglassHeatmapJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -36,8 +39,9 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
       useFactory: (
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
-      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob],
-      inject: [ExampleKlineJob, ExampleNewsJob],
+        coinglassHeatmapJob: CoinglassHeatmapJob,
+      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, coinglassHeatmapJob],
+      inject: [ExampleKlineJob, ExampleNewsJob, CoinglassHeatmapJob],
     },
     // 统一编排 & Cron
     DataSyncOrchestrator,
