@@ -1,3 +1,5 @@
+import type {
+  QueryOpenInterestDto} from './dto/open-interest.dto';
 import {
   BadRequestException,
   Body,
@@ -13,12 +15,16 @@ import {
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiExtraModels,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger'
+import { BaseResponseDto } from '@/common/dto/base.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   CreateAny,
   ReadAny,
@@ -28,18 +34,47 @@ import { AppResource } from '@/modules/auth/rbac/permissions'
 import {
   CreateOpenInterestDto,
   OpenInterestDto,
-  OpenInterestStatsDto,
-  QueryOpenInterestDto,
-  QueryOpenInterestResponseDto,
+  OpenInterestStatsDto
 } from './dto/open-interest.dto'
 // Nest 注入需要运行时引用 OpenInterestService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { OpenInterestService } from './open-interest.service'
 
+const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
+  allOf: [
+    { $ref: getSchemaPath(BaseResponseDto) },
+    {
+      properties: {
+        data: dataSchema,
+      },
+    },
+  ],
+})
+
+const basePaginationSchema = (itemSchema: Record<string, unknown>) => ({
+  allOf: [
+    { $ref: getSchemaPath(BasePaginationResponseDto) },
+    {
+      properties: {
+        items: {
+          type: 'array',
+          items: itemSchema,
+        },
+      },
+    },
+  ],
+})
+
 /**
  * 持仓量数据控制器
  */
 @ApiTags('持仓量数据')
+@ApiExtraModels(
+  BaseResponseDto,
+  BasePaginationResponseDto,
+  OpenInterestDto,
+  OpenInterestStatsDto,
+)
 @Controller('open-interest')
 export class OpenInterestController {
   constructor(private readonly openInterestService: OpenInterestService) {}
@@ -52,7 +87,9 @@ export class OpenInterestController {
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: '创建成功',
-    type: OpenInterestDto,
+    schema: baseResponseSchema({
+      $ref: getSchemaPath(OpenInterestDto),
+    }),
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -60,7 +97,7 @@ export class OpenInterestController {
   })
   async upsert(@Body() data: CreateOpenInterestDto) {
     const entity = await this.openInterestService.upsert(data)
-    return this.toDto(entity)
+    return new BaseResponseDto(this.toDto(entity))
   }
 
   @Post('batch')
@@ -69,11 +106,15 @@ export class OpenInterestController {
   @CreateAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '批量创建或更新持仓量数据' })
   @ApiBody({ type: CreateOpenInterestDto, isArray: true })
-  @ApiResponse({ 
-    status: HttpStatus.CREATED, 
+  @ApiResponse({
+    status: HttpStatus.CREATED,
     description: '批量创建成功',
-    type: OpenInterestDto,
-    isArray: true,
+    schema: baseResponseSchema({
+      type: 'array',
+      items: {
+        $ref: getSchemaPath(OpenInterestDto),
+      },
+    }),
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -92,7 +133,7 @@ export class OpenInterestController {
     }
 
     const entities = await this.openInterestService.batchUpsert(dataList)
-    return entities.map(entity => this.toDto(entity))
+    return new BaseResponseDto(entities.map(entity => this.toDto(entity)))
   }
 
   @Get()
@@ -109,7 +150,9 @@ export class OpenInterestController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: '查询成功',
-    type: QueryOpenInterestResponseDto,
+    schema: basePaginationSchema({
+      $ref: getSchemaPath(OpenInterestDto),
+    }),
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -117,12 +160,14 @@ export class OpenInterestController {
   })
   async query(@Query() queryDto: QueryOpenInterestDto) {
     const result = await this.openInterestService.query(queryDto)
-    return {
-      data: result.data.map(entity => this.toDto(entity)),
-      total: result.total,
-      limit: result.limit,
-      offset: result.offset,
-    }
+    const items = result.data.map(entity => this.toDto(entity))
+    const limit = result.limit || 1
+    const computedPage =
+      Number.isFinite(result.offset) && limit > 0
+        ? Math.floor(result.offset / limit) + 1
+        : 1
+    const page = queryDto.page ?? computedPage
+    return new BasePaginationResponseDto(result.total, page, limit, items)
   }
 
   @Get('latest/:exchange/:symbol')
@@ -135,7 +180,9 @@ export class OpenInterestController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: '查询成功',
-    type: OpenInterestDto,
+    schema: baseResponseSchema({
+      $ref: getSchemaPath(OpenInterestDto),
+    }),
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: '未找到数据' })
   async getLatest(
@@ -153,7 +200,7 @@ export class OpenInterestController {
       )
     }
 
-    return this.toDto(entity)
+    return new BaseResponseDto(this.toDto(entity))
   }
 
   @Get('stats/:symbol')
@@ -177,7 +224,9 @@ export class OpenInterestController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: '统计成功',
-    type: OpenInterestStatsDto,
+    schema: baseResponseSchema({
+      $ref: getSchemaPath(OpenInterestStatsDto),
+    }),
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
@@ -218,7 +267,7 @@ export class OpenInterestController {
       )
     }
 
-    return stats
+    return new BaseResponseDto(stats)
   }
 
   private toDto(entity: any): OpenInterestDto {

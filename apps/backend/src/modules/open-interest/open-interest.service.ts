@@ -1,9 +1,9 @@
-import type { Prisma } from '@prisma/client'
 import type {
   CreateOpenInterestDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
-import { Injectable, Logger } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -15,6 +15,7 @@ import { PrismaService } from '@/prisma/prisma.service'
 @Injectable()
 export class OpenInterestService {
   private readonly logger = new Logger(OpenInterestService.name)
+  private static readonly MAX_STATS_RANGE_MS = 31 * 24 * 60 * 60 * 1000
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -176,7 +177,6 @@ export class OpenInterestService {
    * @param endTime 结束时间
    */
   async getStats(symbol: string, startTime: Date, endTime: Date) {
-    // 验证输入
     if (!symbol || !startTime || !endTime) {
       throw new Error('Symbol, startTime, and endTime are required')
     }
@@ -185,56 +185,60 @@ export class OpenInterestService {
       throw new Error('startTime must be before endTime')
     }
 
-    // 查询所有交易所的数据，按时间戳分组聚合
-    const data = await this.prisma.openInterest.findMany({
-      where: {
-        symbol,
-        dataTimestamp: {
-          gte: startTime,
-          lte: endTime,
-        },
-      },
-      orderBy: { dataTimestamp: 'asc' },
-    })
+    const rangeMs = endTime.getTime() - startTime.getTime()
+    if (rangeMs > OpenInterestService.MAX_STATS_RANGE_MS) {
+      throw new BadRequestException('Time range cannot exceed 31 days')
+    }
 
-    if (data.length === 0) {
+    interface StatsRow {
+      min: Prisma.Decimal | null
+      max: Prisma.Decimal | null
+      avg: Prisma.Decimal | null
+      data_points: bigint | null
+      earliest: Prisma.Decimal | null
+      latest: Prisma.Decimal | null
+    }
+
+    const statsRows = (await this.prisma.$queryRaw(
+      Prisma.sql`
+      WITH aggregated AS (
+        SELECT
+          data_timestamp,
+          SUM(open_interest_usd)::numeric AS total_value
+        FROM open_interest
+        WHERE symbol = ${symbol}
+          AND data_timestamp BETWEEN ${startTime} AND ${endTime}
+        GROUP BY data_timestamp
+      )
+      SELECT
+        MIN(total_value) AS min,
+        MAX(total_value) AS max,
+        AVG(total_value) AS avg,
+        COUNT(*) AS data_points,
+        (ARRAY_AGG(total_value ORDER BY data_timestamp ASC))[1] AS earliest,
+        (ARRAY_AGG(total_value ORDER BY data_timestamp DESC))[1] AS latest
+      FROM aggregated;
+    `,
+    )) as StatsRow[]
+
+    const stats = statsRows[0]
+    if (!stats || !stats.data_points || Number(stats.data_points) === 0) {
       return null
     }
 
-    // 按时间戳分组，聚合所有交易所的数据
-    const groupedByTime = new Map<string, number>()
-    for (const item of data) {
-      const timeKey = item.dataTimestamp.toISOString()
-      const currentSum = groupedByTime.get(timeKey) || 0
-      groupedByTime.set(timeKey, currentSum + Number(item.openInterestUsd))
-    }
-
-    // 将聚合数据转换为数组并排序
-    const aggregatedValues = Array.from(groupedByTime.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([_, value]) => value)
-
-    if (aggregatedValues.length === 0) {
-      return null
-    }
-
-    // 计算统计数据
-    const max = Math.max(...aggregatedValues)
-    const min = Math.min(...aggregatedValues)
-    const avg =
-      aggregatedValues.reduce((sum, v) => sum + v, 0) / aggregatedValues.length
-    const latest = aggregatedValues[aggregatedValues.length - 1]
-    const earliest = aggregatedValues[0]
+    const max = Number(stats.max ?? 0)
+    const min = Number(stats.min ?? 0)
+    const avg = Number(stats.avg ?? 0)
+    const earliest = Number(stats.earliest ?? 0)
+    const latest = Number(stats.latest ?? 0)
     const change = latest - earliest
-
-    // 防止除零错误
     const changePercent = earliest !== 0 ? (change / earliest) * 100 : 0
 
     return {
       symbol,
       startTime,
       endTime,
-      dataPoints: aggregatedValues.length,
+      dataPoints: Number(stats.data_points),
       max,
       min,
       avg,

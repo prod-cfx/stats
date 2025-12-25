@@ -2467,7 +2467,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenInterestDto"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OpenInterestDto"
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -2556,7 +2567,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/QueryOpenInterestResponseDto"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/OpenInterestDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -2599,10 +2624,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OpenInterestDto"
-                  }
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/OpenInterestDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -2653,7 +2689,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenInterestDto"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OpenInterestDto"
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -2714,7 +2761,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OpenInterestStatsDto"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OpenInterestStatsDto"
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -4770,93 +4828,6 @@
           "price_candlesticks"
         ]
       },
-      "CreateOpenInterestDto": {
-        "type": "object",
-        "properties": {
-          "exchange": {
-            "type": "string",
-            "description": "交易所名称，\"All\"表示所有交易所汇总",
-            "example": "All"
-          },
-          "symbol": {
-            "type": "string",
-            "description": "币种符号",
-            "example": "BTC"
-          },
-          "open_interest_usd": {
-            "type": "number",
-            "description": "未平仓合约价值(USD)",
-            "example": 57437891724.5572
-          },
-          "open_interest_quantity": {
-            "type": "number",
-            "description": "未平仓合约数量",
-            "example": 659557.3064
-          },
-          "open_interest_by_stable_coin_margin": {
-            "type": "number",
-            "description": "稳定币本位未平仓合约价值(USD)",
-            "example": 48920274435.15
-          },
-          "open_interest_by_coin_margin": {
-            "type": "number",
-            "description": "币本位未平仓合约价值(USD)",
-            "example": 8517617289.12
-          },
-          "open_interest_quantity_by_coin_margin": {
-            "type": "number",
-            "description": "币本位未平仓合约数量",
-            "example": 97551.2547
-          },
-          "open_interest_quantity_by_stable_coin_margin": {
-            "type": "number",
-            "description": "稳定币本位未平仓合约数量",
-            "example": 562006.0517
-          },
-          "open_interest_change_percent_5m": {
-            "type": "number",
-            "description": "5分钟内未平仓合约变化百分比",
-            "example": 0.34
-          },
-          "open_interest_change_percent_15m": {
-            "type": "number",
-            "description": "15分钟内未平仓合约变化百分比",
-            "example": 0.59
-          },
-          "open_interest_change_percent_30m": {
-            "type": "number",
-            "description": "30分钟内未平仓合约变化百分比",
-            "example": 1.42
-          },
-          "open_interest_change_percent_1h": {
-            "type": "number",
-            "description": "1小时内未平仓合约变化百分比",
-            "example": 2.27
-          },
-          "open_interest_change_percent_4h": {
-            "type": "number",
-            "description": "4小时内未平仓合约变化百分比",
-            "example": 2.95
-          },
-          "open_interest_change_percent_24h": {
-            "type": "number",
-            "description": "24小时内未平仓合约变化百分比",
-            "example": 0.9
-          },
-          "data_timestamp": {
-            "type": "string",
-            "description": "数据时间戳（必填）",
-            "example": "2025-12-24T10:00:00Z"
-          }
-        },
-        "required": [
-          "exchange",
-          "symbol",
-          "open_interest_usd",
-          "open_interest_quantity",
-          "data_timestamp"
-        ]
-      },
       "OpenInterestDto": {
         "type": "object",
         "properties": {
@@ -4943,39 +4914,6 @@
           "open_interest_quantity"
         ]
       },
-      "QueryOpenInterestResponseDto": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "description": "数据列表",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OpenInterestDto"
-            }
-          },
-          "total": {
-            "type": "number",
-            "description": "总数",
-            "example": 1000
-          },
-          "limit": {
-            "type": "number",
-            "description": "每页数量",
-            "example": 100
-          },
-          "offset": {
-            "type": "number",
-            "description": "偏移量",
-            "example": 0
-          }
-        },
-        "required": [
-          "data",
-          "total",
-          "limit",
-          "offset"
-        ]
-      },
       "OpenInterestStatsDto": {
         "type": "object",
         "properties": {
@@ -5047,6 +4985,93 @@
           "earliest",
           "change",
           "changePercent"
+        ]
+      },
+      "CreateOpenInterestDto": {
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "交易所名称，\"All\"表示所有交易所汇总",
+            "example": "All"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "币种符号",
+            "example": "BTC"
+          },
+          "open_interest_usd": {
+            "type": "number",
+            "description": "未平仓合约价值(USD)",
+            "example": 57437891724.5572
+          },
+          "open_interest_quantity": {
+            "type": "number",
+            "description": "未平仓合约数量",
+            "example": 659557.3064
+          },
+          "open_interest_by_stable_coin_margin": {
+            "type": "number",
+            "description": "稳定币本位未平仓合约价值(USD)",
+            "example": 48920274435.15
+          },
+          "open_interest_by_coin_margin": {
+            "type": "number",
+            "description": "币本位未平仓合约价值(USD)",
+            "example": 8517617289.12
+          },
+          "open_interest_quantity_by_coin_margin": {
+            "type": "number",
+            "description": "币本位未平仓合约数量",
+            "example": 97551.2547
+          },
+          "open_interest_quantity_by_stable_coin_margin": {
+            "type": "number",
+            "description": "稳定币本位未平仓合约数量",
+            "example": 562006.0517
+          },
+          "open_interest_change_percent_5m": {
+            "type": "number",
+            "description": "5分钟内未平仓合约变化百分比",
+            "example": 0.34
+          },
+          "open_interest_change_percent_15m": {
+            "type": "number",
+            "description": "15分钟内未平仓合约变化百分比",
+            "example": 0.59
+          },
+          "open_interest_change_percent_30m": {
+            "type": "number",
+            "description": "30分钟内未平仓合约变化百分比",
+            "example": 1.42
+          },
+          "open_interest_change_percent_1h": {
+            "type": "number",
+            "description": "1小时内未平仓合约变化百分比",
+            "example": 2.27
+          },
+          "open_interest_change_percent_4h": {
+            "type": "number",
+            "description": "4小时内未平仓合约变化百分比",
+            "example": 2.95
+          },
+          "open_interest_change_percent_24h": {
+            "type": "number",
+            "description": "24小时内未平仓合约变化百分比",
+            "example": 0.9
+          },
+          "data_timestamp": {
+            "type": "string",
+            "description": "数据时间戳（必填）",
+            "example": "2025-12-24T10:00:00Z"
+          }
+        },
+        "required": [
+          "exchange",
+          "symbol",
+          "open_interest_usd",
+          "open_interest_quantity",
+          "data_timestamp"
         ]
       },
       "OrderbookPairConfigResponseDto": {

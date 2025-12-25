@@ -330,6 +330,12 @@ const CreateOpenInterestDto = z
     data_timestamp: z.string(),
   })
   .passthrough();
+const BaseResponseDto = z
+  .object({
+    data: z.object({}).partial().passthrough(),
+    message: z.string().optional(),
+  })
+  .passthrough();
 const OpenInterestDto = z
   .object({
     exchange: z.string(),
@@ -347,14 +353,6 @@ const OpenInterestDto = z
     open_interest_change_percent_4h: z.number().optional(),
     open_interest_change_percent_24h: z.number().optional(),
     data_timestamp: z.string().optional(),
-  })
-  .passthrough();
-const QueryOpenInterestResponseDto = z
-  .object({
-    data: z.array(OpenInterestDto),
-    total: z.number(),
-    limit: z.number(),
-    offset: z.number(),
   })
   .passthrough();
 const OpenInterestStatsDto = z
@@ -505,12 +503,6 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough();
-const BaseResponseDto = z
-  .object({
-    data: z.object({}).partial().passthrough(),
-    message: z.string().optional(),
-  })
-  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -546,8 +538,8 @@ export const schemas = {
   UpdateAdminDataPullTaskDto,
   LiquidationHeatmapResponseDto,
   CreateOpenInterestDto,
+  BaseResponseDto,
   OpenInterestDto,
-  QueryOpenInterestResponseDto,
   OpenInterestStatsDto,
   OrderbookPairConfigResponseDto,
   CreateOrderbookPairConfigDto,
@@ -557,7 +549,6 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
-  BaseResponseDto,
 };
 
 const endpoints = makeApi([
@@ -1906,7 +1897,9 @@ const endpoints = makeApi([
         schema: CreateOpenInterestDto,
       },
     ],
-    response: OpenInterestDto,
+    response: BaseResponseDto.and(
+      z.object({ data: OpenInterestDto }).partial().passthrough()
+    ),
     errors: [
       {
         status: 400,
@@ -1952,7 +1945,12 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: QueryOpenInterestResponseDto,
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(OpenInterestDto) })
+        .partial()
+        .passthrough()
+    ),
     errors: [
       {
         status: 400,
@@ -1973,7 +1971,12 @@ const endpoints = makeApi([
         schema: z.array(CreateOpenInterestDto),
       },
     ],
-    response: z.array(OpenInterestDto),
+    response: BaseResponseDto.and(
+      z
+        .object({ data: z.array(OpenInterestDto) })
+        .partial()
+        .passthrough()
+    ),
     errors: [
       {
         status: 400,
@@ -1999,7 +2002,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: OpenInterestDto,
+    response: BaseResponseDto.and(
+      z.object({ data: OpenInterestDto }).partial().passthrough()
+    ),
     errors: [
       {
         status: 404,
@@ -2030,7 +2035,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: OpenInterestStatsDto,
+    response: BaseResponseDto.and(
+      z.object({ data: OpenInterestStatsDto }).partial().passthrough()
+    ),
     errors: [
       {
         status: 400,
