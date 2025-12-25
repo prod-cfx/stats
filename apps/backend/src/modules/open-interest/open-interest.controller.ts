@@ -180,7 +180,11 @@ export class OpenInterestController {
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description: '参数错误或未找到数据',
+    description: '参数错误',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: '未找到数据',
   })
   async getStats(
     @Param('symbol') symbol: string,

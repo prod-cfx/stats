@@ -2034,7 +2034,12 @@ const endpoints = makeApi([
     errors: [
       {
         status: 400,
-        description: `参数错误或未找到数据`,
+        description: `参数错误`,
+        schema: z.void(),
+      },
+      {
+        status: 404,
+        description: `未找到数据`,
         schema: z.void(),
       },
     ],
