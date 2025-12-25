@@ -1,11 +1,13 @@
 /// 市场数据时间粒度枚举
 enum MarketTimeframe {
-  ONE_MINUTE      @map("1m")
-  FIVE_MINUTES    @map("5m")
-  FIFTEEN_MINUTES @map("15m")
-  ONE_HOUR        @map("1h")
-  FOUR_HOURS      @map("4h")
-  ONE_DAY         @map("1d")
+  /// 说明：Prisma Client 侧使用 m1/m5/... 作为枚举键名，数据库存储 "1m"/"5m"/...
+  /// 这样可以复用后端现有的 mapTimeframe/reverseMapTimeframe 映射工具，确保 API/SDK 看到的始终是 "1m" 等值
+  m1  @map("1m")
+  m5  @map("5m")
+  m15 @map("15m")
+  h1  @map("1h")
+  h4  @map("4h")
+  d1  @map("1d")
 }
 
 /// 市场数据相关模型：多空比（long/short ratio）

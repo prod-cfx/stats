@@ -1,5 +1,7 @@
+import type { MarketTimeframe } from '@ai/shared'
 import type { LongShortRatio as LongShortRatioModel, Prisma } from '@prisma/client'
 import { Injectable } from '@nestjs/common'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -8,7 +10,7 @@ export type LongShortRatio = LongShortRatioModel
 
 export interface LongShortRatioQuery {
   tradingPairId: string
-  interval: string
+  interval: MarketTimeframe
   from?: Date
   to?: Date
   limit?: number
@@ -16,7 +18,7 @@ export interface LongShortRatioQuery {
 
 export interface LongShortRatioUpsertInput {
   tradingPairId: string
-  interval: string
+  interval: MarketTimeframe
   timestamp: Date
   longShortRatio: string
   longAccountRatio?: string | null
@@ -42,13 +44,12 @@ export class LongShortRatioRepository {
   async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
     const client = this.getClient()
     const { tradingPairId, interval, from, to, limit = 500 } = query
+    const prismaInterval = mapTimeframe(interval)
 
     const where: Prisma.LongShortRatioWhereInput = {
       tradingPairId,
+      interval: prismaInterval as any,
     }
-    // interval 在 DB 侧已由 ENUM 约束，且请求 DTO 也限制了取值范围
-    // 这里使用 any 以兼容 Prisma Client 未导出 enum 类型的场景
-    where.interval = interval as any
 
     if (from || to) {
       where.timestamp = {
@@ -88,18 +89,19 @@ export class LongShortRatioRepository {
       longShortAccountRatio,
       source = 'COINGLASS',
     } = input
+    const prismaInterval = mapTimeframe(interval)
 
     return client.longShortRatio.upsert({
       where: {
         tradingPairId_interval_timestamp: {
           tradingPairId,
-          interval,
+          interval: prismaInterval as any,
           timestamp,
         },
       },
       create: {
         tradingPairId,
-        interval,
+        interval: prismaInterval as any,
         timestamp,
         longShortRatio,
         longAccountRatio,

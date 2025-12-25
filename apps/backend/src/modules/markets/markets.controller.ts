@@ -8,6 +8,7 @@ import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.requ
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
+import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
@@ -115,7 +116,7 @@ export class MarketsController {
 
       return {
         tradingPairId: item.tradingPairId,
-        interval: item.interval,
+        interval: reverseMapTimeframe(item.interval as any),
         timestamp: item.timestamp.toISOString(),
         longShortRatio: longShortRatio!,
         longAccountRatio,
