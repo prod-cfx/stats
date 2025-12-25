@@ -15,7 +15,6 @@ enum MarketTimeframe {
 /// 说明：
 /// - tradingPairId 对应业务层的 TradingPairConfig.id（例如 'BTCUSDT.BINANCE.PERP'）
 /// - 不直接建外键，保持与业务配置表解耦
-
 model LongShortRatio {
   id Int @id @default(autoincrement())
 
@@ -56,3 +55,44 @@ model LongShortRatio {
   @@index([tradingPairId, timestamp], map: "idx_long_short_ratio_pair_time")
   @@map("long_short_ratios")
 }
+
+/// 合约币种爆仓历史（Aggregated Liquidation History）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/aggregated-liquidation-history
+///
+/// 设计说明：
+/// - 每条记录表示某个币种在特定时间粒度 & 时间点上的多空爆仓金额（USD）
+/// - interval 复用 MarketTimeframe，方便与其他市场数据对齐
+model AggregatedLiquidationHistory {
+  id Int @id @default(autoincrement())
+
+  /// 币种基础资产，例如 BTC / ETH
+  symbol String
+
+  /// 交易所 (如 BINANCE / OKX)，'AGGREGATED' 表示全市场聚合
+  exchangeCode String @map("exchange_code") @default("AGGREGATED")
+
+  /// 时间粒度（例如 4h / 1h），使用枚举统一管理
+  interval MarketTimeframe
+
+  /// 该时间粒度对应的时间点（通常为区间起始时间），来自响应中的 time 字段
+  timestamp DateTime
+
+  /// 多头爆仓金额（USD）
+  longLiquidationUsd  Decimal @map("aggregated_long_liquidation_usd") @db.Decimal(30, 10)
+
+  /// 空头爆仓金额（USD）
+  shortLiquidationUsd Decimal @map("aggregated_short_liquidation_usd") @db.Decimal(30, 10)
+
+  /// 数据来源，例如：'COINGLASS'
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, exchangeCode, interval, timestamp], map: "uniq_agg_liq_symbol_exchange_interval_time")
+  @@index([symbol, exchangeCode, timestamp], map: "idx_agg_liq_symbol_exchange_time")
+  @@map("aggregated_liquidation_history")
+}
+
