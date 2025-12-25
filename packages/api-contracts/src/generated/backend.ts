@@ -293,6 +293,24 @@ const UpdateAdminDataPullTaskDto = z
   })
   .partial()
   .passthrough();
+const LiquidationHeatmapResponseDto = z
+  .object({
+    snapshotId: z.number(),
+    symbol: z.string(),
+    exchangeCode: z.string().nullable(),
+    tradingPair: z.string().nullable(),
+    contractType: z.string().nullable(),
+    modelType: z.enum(["MODEL1", "MODEL2", "MODEL3"]),
+    timeInterval: z.string().nullable(),
+    valueCurrency: z.string(),
+    fetchedAt: z.string().datetime({ offset: true }),
+    effectiveFrom: z.string().datetime({ offset: true }).nullable(),
+    effectiveTo: z.string().datetime({ offset: true }).nullable(),
+    y_axis: z.array(z.number()),
+    liquidation_leverage_data: z.array(z.array(z.any())),
+    price_candlesticks: z.array(z.array(z.any())),
+  })
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -372,6 +390,7 @@ export const schemas = {
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
+  LiquidationHeatmapResponseDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   BaseResponseDto,
@@ -1387,6 +1406,40 @@ const endpoints = makeApi([
       })
       .partial()
       .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/liquidation-heatmap/latest",
+    alias: "LiquidationHeatmapController_getLatest",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "exchangeCode",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "contractType",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "timeInterval",
+        type: "Query",
+        schema: z.string().optional().default("15m"),
+      },
+      {
+        name: "modelType",
+        type: "Query",
+        schema: z.enum(["MODEL1", "MODEL2", "MODEL3"]).optional(),
+      },
+    ],
+    response: LiquidationHeatmapResponseDto,
   },
   {
     method: "get",

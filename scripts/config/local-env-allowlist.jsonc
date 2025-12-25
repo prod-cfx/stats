@@ -32,6 +32,10 @@
     "UNIAPI_API_KEY",
     "UNIAPI_BASE_URL",
 
+    // Coinglass（DataSync: CoinglassHeatmapJob）
+    "COINGLASS_API_KEY",
+    "COINGLASS_HEATMAP_ENDPOINT",
+
     // 应用环境标识
     "APP_ENV",
 
