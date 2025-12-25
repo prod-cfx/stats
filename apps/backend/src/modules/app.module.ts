@@ -24,6 +24,7 @@ import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
 import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heatmap.module'
 import { MarketsModule } from './markets/markets.module'
+import { OpenInterestModule } from './open-interest/open-interest.module'
 import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
 import { SettingsModule } from './settings/settings.module'
 import { UserModule } from './user/user.module'
@@ -87,6 +88,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     LiquidationHeatmapModule,
     OrderbookConfigModule,
     ExchangeConfigModule,
+    OpenInterestModule,
   ],
   providers: [
     {

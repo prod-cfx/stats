@@ -87,7 +87,6 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
         this.logger.warn(
           `Skip OKX orderbook config due to missing instId mapping: pairId=${cfg.pairId} instrument=${cfg.instrumentType}`,
         )
-        this.markEnabledMarketKey(enabledByVenue, venueId, marketKey)
         continue
       }
 

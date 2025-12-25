@@ -181,7 +181,7 @@ export abstract class OkxOrderbookWsAdapterBase implements OrderbookWsAdapter {
   }
 
   private async reconcileSubscriptions(instIds: string[]): Promise<void> {
-    const perConn = Math.max(20, Math.floor(this.getMaxStreamsPerConnection()))
+    const perConn = Math.max(1, Math.floor(this.getMaxStreamsPerConnection()))
 
     const instSet = new Set(instIds.map(id => id.toUpperCase()))
     const streams = [...instSet].sort((a, b) => a.localeCompare(b))
