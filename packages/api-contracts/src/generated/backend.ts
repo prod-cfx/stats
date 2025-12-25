@@ -652,6 +652,16 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
+        name: "page",
+        type: "Query",
+        schema: z.number().gte(1),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(100),
+      },
+      {
         name: "code",
         type: "Query",
         schema: z.string().optional(),
@@ -667,15 +677,17 @@ const endpoints = makeApi([
         schema: z.enum(["CEX", "DEX"]).optional(),
       },
       {
-        name: "enabledOnly",
+        name: "enabled",
         type: "Query",
         schema: z.boolean().optional(),
       },
     ],
-    response: z
-      .object({ data: z.array(ExchangeConfigResponseDto), message: z.string() })
-      .partial()
-      .passthrough(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(ExchangeConfigResponseDto) })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "post",

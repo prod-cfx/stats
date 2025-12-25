@@ -16,30 +16,40 @@ export class ExchangeConfigRepository {
     return this.prisma.getClient()
   }
 
-  async findAll(filter?: QueryExchangeConfigDto): Promise<ExchangeConfig[]> {
+  async list(params: QueryExchangeConfigDto): Promise<{ total: number; items: ExchangeConfig[] }> {
     const client = this.getClient()
     const where: PrismaTypes.ExchangeConfigWhereInput = {}
 
-    if (filter?.code) {
-      where.code = filter.code
+    if (params.code) {
+      where.code = params.code
     }
 
-    if (filter?.venueType) {
-      where.venueType = filter.venueType
+    if (params.venueType) {
+      where.venueType = params.venueType
     }
 
-    if (filter?.enabledOnly) {
-      where.enabled = true
+    if (typeof params.enabled === 'boolean') {
+      where.enabled = params.enabled
     }
 
-    if (filter?.name) {
-      where.name = { contains: filter.name, mode: 'insensitive' }
+    if (params.name) {
+      where.name = { contains: params.name, mode: 'insensitive' }
     }
 
-    return client.exchangeConfig.findMany({
-      where,
-      orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
-    })
+    const page = params.page ?? 1
+    const limit = params.limit ?? 20
+
+    const [total, items] = await client.$transaction([
+      client.exchangeConfig.count({ where }),
+      client.exchangeConfig.findMany({
+        where,
+        orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ])
+
+    return { total, items }
   }
 
   async findById(id: string): Promise<ExchangeConfig | null> {

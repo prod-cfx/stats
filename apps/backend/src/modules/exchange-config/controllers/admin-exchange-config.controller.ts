@@ -4,12 +4,13 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiExtraModels,
+  ApiOkResponse,
   ApiOperation,
-  ApiResponse,
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   CreateAny,
   DeleteAny,
@@ -34,37 +35,43 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 @Controller('admin/exchange-configs')
 @ApiBearerAuth('bearer')
 @RequireAuth()
-@ApiExtraModels(BaseResponseDto, ExchangeConfigResponseDto)
+@ApiExtraModels(BaseResponseDto, BasePaginationResponseDto, ExchangeConfigResponseDto)
 export class AdminExchangeConfigController {
   constructor(private readonly service: ExchangeConfigService) {}
 
   @Get()
   @ReadAny(AppResource.EXCHANGE_CONFIG)
-  @ApiOperation({ summary: '获取交易所配置列表' })
-  @ApiResponse({
-    status: 200,
-    description: '成功获取配置列表',
+  @ApiOperation({ summary: '分页获取交易所配置列表' })
+  @ApiOkResponse({
+    description: '获取列表成功',
     schema: {
-      type: 'object',
-      properties: {
-        data: {
-          type: 'array',
-          items: { $ref: getSchemaPath(ExchangeConfigResponseDto) },
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(ExchangeConfigResponseDto) },
+            },
+          },
         },
-        message: { type: 'string', example: 'Success' },
-      },
+      ],
     },
   })
-  async getAllConfigs(@Query() query: QueryExchangeConfigDto): Promise<ExchangeConfigResponseDto[]> {
-    const records = await this.service.findAll(query)
-    return records.map(r => this.toResponseDto(r))
+  async getAllConfigs(@Query() query: QueryExchangeConfigDto) {
+    const pageResult = await this.service.list(query)
+    return new BasePaginationResponseDto(
+      pageResult.total,
+      pageResult.page,
+      pageResult.limit,
+      pageResult.items.map(r => this.toResponseDto(r)),
+    )
   }
 
   @Get(':id')
   @ReadAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '获取单个交易所配置' })
-  @ApiResponse({
-    status: 200,
+  @ApiOkResponse({
     description: '成功获取配置',
     schema: {
       type: 'object',
@@ -83,8 +90,7 @@ export class AdminExchangeConfigController {
   @CreateAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '创建交易所配置' })
   @ApiBody({ type: CreateExchangeConfigDto })
-  @ApiResponse({
-    status: 201,
+  @ApiOkResponse({
     description: '成功创建配置',
     schema: {
       type: 'object',
@@ -103,8 +109,7 @@ export class AdminExchangeConfigController {
   @UpdateAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '更新交易所配置' })
   @ApiBody({ type: UpdateExchangeConfigDto })
-  @ApiResponse({
-    status: 200,
+  @ApiOkResponse({
     description: '成功更新配置',
     schema: {
       type: 'object',
@@ -125,8 +130,7 @@ export class AdminExchangeConfigController {
   @Delete(':id')
   @DeleteAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '删除交易所配置' })
-  @ApiResponse({
-    status: 200,
+  @ApiOkResponse({
     description: '成功删除配置',
     schema: {
       type: 'object',

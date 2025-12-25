@@ -83,6 +83,9 @@ function safeParseJson(text: string): Record<string, unknown> | null | undefined
 export default function ExchangeConfigsPage() {
   const { message, modal } = App.useApp()
   const [configs, setConfigs] = useState<ExchangeConfigResponse[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [loading, setLoading] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -93,8 +96,9 @@ export default function ExchangeConfigsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchExchangeConfigs()
-      setConfigs(data)
+      const data = await fetchExchangeConfigs({ page, limit })
+      setConfigs(data.items)
+      setTotal(data.total)
     }
     catch (error: unknown) {
       message.error(getErrorMessage(error) ?? '获取交易所配置失败')
@@ -102,7 +106,7 @@ export default function ExchangeConfigsPage() {
     finally {
       setLoading(false)
     }
-  }, [message])
+  }, [limit, message, page])
 
   useEffect(() => {
     void load()
@@ -323,7 +327,19 @@ export default function ExchangeConfigsPage() {
             loading={loading}
             dataSource={configs}
             rowKey="id"
-            pagination={{ pageSize: 20 }}
+            pagination={{
+              current: page,
+              pageSize: limit,
+              total,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+            }}
+            onChange={(pagination) => {
+              const nextPage = pagination.current ?? 1
+              const nextLimit = pagination.pageSize ?? 20
+              if (nextPage !== page) setPage(nextPage)
+              if (nextLimit !== limit) setLimit(nextLimit)
+            }}
             scroll={{ x: 1400 }}
             columns={columns}
           />

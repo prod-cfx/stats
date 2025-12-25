@@ -1,8 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
-export class QueryExchangeConfigDto {
+export class QueryExchangeConfigDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '按 code 精确筛选（例如 BINANCE）' })
   @IsString()
   @IsOptional()
@@ -18,10 +19,10 @@ export class QueryExchangeConfigDto {
   @IsOptional()
   venueType?: 'CEX' | 'DEX'
 
-  @ApiPropertyOptional({ description: '是否仅返回已启用的配置' })
+  @ApiPropertyOptional({ description: '是否启用' })
   @IsBoolean()
   @Transform(({ value }) => value === true || value === 'true')
   @IsOptional()
-  enabledOnly?: boolean
+  enabled?: boolean
 }
 

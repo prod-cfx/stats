@@ -5,6 +5,7 @@ import type { UpdateExchangeConfigDto } from '../dto/update-exchange-config.dto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 Repository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -16,8 +17,13 @@ export class ExchangeConfigService {
     private readonly repository: ExchangeConfigRepository,
   ) {}
 
-  async findAll(filter?: QueryExchangeConfigDto): Promise<ExchangeConfig[]> {
-    return this.repository.findAll(filter)
+  async list(query: QueryExchangeConfigDto): Promise<BasePaginationResponseDto<ExchangeConfig>> {
+    const page = query.page ?? 1
+    const limit = query.limit ?? 20
+
+    const { total, items } = await this.repository.list(query)
+
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 
   async findById(id: string): Promise<ExchangeConfig> {

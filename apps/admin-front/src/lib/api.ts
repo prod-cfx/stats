@@ -357,11 +357,38 @@ export async function deleteOrderbookConfig(id: string): Promise<void> {
 }
 
 // 交易所配置相关 API
-export async function fetchExchangeConfigs(): Promise<ExchangeConfigResponse[]> {
+export interface ExchangeConfigListQuery {
+  page?: number
+  limit?: number
+  code?: string
+  name?: string
+  venueType?: 'CEX' | 'DEX'
+  enabled?: boolean
+}
+
+export async function fetchExchangeConfigs(
+  query: ExchangeConfigListQuery = {},
+): Promise<_PaginationResult<ExchangeConfigResponse>> {
+  const page = query.page ?? 1
+  const limit = query.limit ?? 20
   const response = await client.AdminExchangeConfigController_getAllConfigs({
     headers: requireAuthHeaders(),
+    queries: {
+      page,
+      limit,
+      code: query.code,
+      name: query.name,
+      venueType: query.venueType,
+      enabled: query.enabled,
+    },
   })
-  return unwrapListResponse<ExchangeConfigResponse>(response)
+  const data = unwrapResponse<any>(response)
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    limit: data.limit ?? limit,
+    items: Array.isArray(data.items) ? (data.items as ExchangeConfigResponse[]) : [],
+  }
 }
 
 export async function createExchangeConfig(payload: CreateExchangeConfigPayload): Promise<ExchangeConfigResponse> {
