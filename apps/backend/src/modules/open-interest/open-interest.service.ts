@@ -204,7 +204,12 @@ export class OpenInterestService {
       WITH aggregated AS (
         SELECT
           data_timestamp,
-          SUM(open_interest_usd)::numeric AS total_value
+          CASE
+            WHEN BOOL_OR(exchange = 'All') THEN
+              SUM(CASE WHEN exchange = 'All' THEN open_interest_usd ELSE 0 END)
+            ELSE
+              SUM(open_interest_usd)
+          END::numeric AS total_value
         FROM open_interest
         WHERE symbol = ${symbol}
           AND data_timestamp BETWEEN ${startTime} AND ${endTime}
