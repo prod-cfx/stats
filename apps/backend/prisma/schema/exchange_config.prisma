@@ -1,0 +1,43 @@
+/// 交易所配置模型
+///
+/// 用于维护交易所/DEX 的展示信息（名称、头像、简介等），
+/// 其 code 建议与其他业务表中的 venue 字段保持一致（例如 BINANCE、OKX、UNISWAP_V3）。
+model ExchangeConfig {
+  id String @id @default(cuid())
+
+  /// 唯一标识（建议与 venue 对齐）
+  code String @unique
+
+  /// 展示名称
+  name String
+
+  /// 头像/Logo URL（统一使用对象存储的 URL，不做本地持久化）
+  avatarUrl String? @map("avatar_url")
+
+  /// 简介（用于展示）
+  intro String? @db.Text
+
+  /// 官网链接
+  websiteUrl String? @map("website_url")
+
+  /// 交易场所类型（CEX/DEX）
+  venueType VenueType? @map("venue_type")
+
+  /// 是否启用展示/使用
+  enabled Boolean @default(true)
+
+  /// 排序（数字越小越靠前）
+  sort Int @default(100)
+
+  /// 扩展信息（JSON）
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([venueType])
+  @@index([enabled])
+  @@index([sort])
+  @@map("exchange_configs")
+}
+

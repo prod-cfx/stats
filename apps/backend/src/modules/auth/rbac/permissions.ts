@@ -20,6 +20,7 @@ export enum AppResource {
   MARKET_SYMBOL = 'market_symbol',
   DATA_PULL_TASK = 'data_pull_task',
   ORDERBOOK_CONFIG = 'orderbook_config',
+  EXCHANGE_CONFIG = 'exchange_config',
 }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
@@ -64,6 +65,10 @@ RBAC_PERMISSIONS.grant(AppRole.ADMIN)
   .createAny(AppResource.ORDERBOOK_CONFIG)
   .updateAny(AppResource.ORDERBOOK_CONFIG)
   .deleteAny(AppResource.ORDERBOOK_CONFIG)
+  .readAny(AppResource.EXCHANGE_CONFIG)
+  .createAny(AppResource.EXCHANGE_CONFIG)
+  .updateAny(AppResource.EXCHANGE_CONFIG)
+  .deleteAny(AppResource.EXCHANGE_CONFIG)
   .readAny(AppResource.ADMIN_MENU)
   .readAny(AppResource.ADMIN_USER)
   .readAny(AppResource.SETTINGS)
