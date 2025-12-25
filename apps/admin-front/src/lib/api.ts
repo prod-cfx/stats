@@ -42,11 +42,26 @@ type CreateRolePayload = z.infer<typeof schemas.CreateAdminRoleDto>
 type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
-type DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
-type UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
+type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
+type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
+
+// 数据拉取任务相关类型
+export type DataPullTask = _DataPullTaskDto
+
+interface _PaginationResult<T> {
+  total: number
+  page: number
+  limit: number
+  items: T[]
+}
+
+// 订单薄配置相关类型
+export type OrderbookPairConfigResponse = z.infer<typeof schemas.OrderbookPairConfigResponseDto>
+export type CreateOrderbookPairConfigPayload = z.infer<typeof schemas.CreateOrderbookPairConfigDto>
+export type UpdateOrderbookPairConfigPayload = z.infer<typeof schemas.UpdateOrderbookPairConfigDto>
 
 const SYSTEM_PROMPT_CATEGORY = 'system_prompt'
 
@@ -89,15 +104,6 @@ export interface AdminUser {
     name: string
     description?: string | null
   }[]
-}
-
-export type DataPullTask = DataPullTaskDto
-
-interface PaginationResult<T> {
-  total: number
-  page: number
-  limit: number
-  items: T[]
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
@@ -229,7 +235,7 @@ export interface DataPullTaskListQuery {
 
 export async function fetchDataPullTasks(
   query: DataPullTaskListQuery = {},
-): Promise<PaginationResult<DataPullTask>> {
+): Promise<_PaginationResult<DataPullTask>> {
   const response = await client.AdminDataPullTaskController_list({
     headers: requireAuthHeaders(),
     queries: {
@@ -288,7 +294,7 @@ export interface UpdateDataPullTaskPayload {
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto: UpdateDataPullTaskDto = {}
+  const dto: _UpdateDataPullTaskDto = {}
   if (payload.name !== undefined) dto.name = payload.name
   if (payload.source !== undefined) dto.source = payload.source
   if (payload.type !== undefined) dto.type = payload.type
@@ -305,6 +311,41 @@ export async function updateDataPullTask(id: number, payload: UpdateDataPullTask
 
 export async function deleteDataPullTask(id: number): Promise<void> {
   await (client as any).AdminDataPullTaskController_delete({
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+}
+
+// 订单薄交易对配置相关 API
+export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
+  const response = await client.AdminOrderbookPairConfigController_getAllConfigs({
+    headers: requireAuthHeaders(),
+  })
+  return unwrapListResponse<OrderbookPairConfigResponse>(response)
+}
+
+export async function createOrderbookConfig(
+  payload: CreateOrderbookPairConfigPayload,
+): Promise<OrderbookPairConfigResponse> {
+  const response = await client.AdminOrderbookPairConfigController_createConfig(payload, {
+    headers: requireAuthHeaders(),
+  })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+}
+
+export async function updateOrderbookConfig(
+  id: string,
+  payload: UpdateOrderbookPairConfigPayload,
+): Promise<OrderbookPairConfigResponse> {
+  const response = await client.AdminOrderbookPairConfigController_updateConfig(payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+}
+
+export async function deleteOrderbookConfig(id: string): Promise<void> {
+  await client.AdminOrderbookPairConfigController_deleteConfig(undefined, {
     headers: requireAuthHeaders(),
     params: { id },
   })

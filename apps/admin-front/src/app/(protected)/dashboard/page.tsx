@@ -27,6 +27,7 @@ export default function DashboardPage() {
           <Link href="/users">前往管理员管理 →</Link>
           <Link href="/data-pull-tasks">前往数据拉取任务 →</Link>
           <Link href="/strategy-templates">前往策略模板管理 →</Link>
+          <Link href="/orderbook-configs">前往订单薄配置管理 →</Link>
         </Space>
       </Space>
     </div>

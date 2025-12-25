@@ -29,10 +29,10 @@ model LiquidationHeatmapSnapshot {
   candlesticks LiquidationHeatmapCandle[]
   cells       LiquidationHeatmapCell[]
 
-  @@index([symbol, exchangeCode, contractType])
+  @@index([symbol, exchangeCode, contractType], map: "liq_heatmap_symbol_exchange_contract_idx")
   // /liquidation-heatmap/latest 热路径：按维度过滤 + fetchedAt 排序
-  @@index([symbol, exchangeCode, contractType, timeInterval, modelType, fetchedAt])
-  @@index([fetchedAt])
+  @@index([symbol, exchangeCode, contractType, timeInterval, modelType, fetchedAt], map: "liq_heatmap_latest_query_idx")
+  @@index([fetchedAt], map: "liq_heatmap_fetched_at_idx")
   @@map("liquidation_heatmap_snapshots")
 }
 
