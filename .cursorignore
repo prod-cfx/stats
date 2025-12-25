@@ -1,0 +1,31 @@
+# Cursor ignore file - prevents indexing of these paths
+# This significantly improves performance
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Logs
+logs/
+*.log
+
+# Cache
+.nx/
+.cache/
+
+# Worktrees (CRITICAL - prevents Cursor from indexing all worktrees)
+../.cursor/worktrees/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
