@@ -101,6 +101,15 @@ const ADMIN_MENU_DEFINITIONS: Array<{
     icon: 'lucide:book-open',
     sort: 21,
   },
+  {
+    code: 'data.exchanges',
+    title: '交易所配置',
+    type: AdminMenuType.MENU,
+    path: '/exchange-configs',
+    parentCode: 'data',
+    icon: 'lucide:building-2',
+    sort: 22,
+  },
 ]
 
 const ADMIN_MENU_PERMISSION_CODES = ADMIN_MENU_DEFINITIONS.filter(def => def.type !== AdminMenuType.DIRECTORY).map(
