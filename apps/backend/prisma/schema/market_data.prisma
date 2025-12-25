@@ -70,8 +70,8 @@ model AggregatedLiquidationHistory {
   /// 币种基础资产，例如 BTC / ETH
   symbol String
 
-  /// 交易所 (如 BINANCE / OKX)，为空表示全市场聚合
-  exchangeCode String? @map("exchange_code")
+  /// 交易所 (如 BINANCE / OKX)，'AGGREGATED' 表示全市场聚合
+  exchangeCode String @map("exchange_code") @default("AGGREGATED")
 
   /// 时间粒度（例如 4h / 1h），使用枚举统一管理
   interval MarketTimeframe

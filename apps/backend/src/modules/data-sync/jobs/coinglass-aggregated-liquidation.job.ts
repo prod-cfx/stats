@@ -83,8 +83,8 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     url.searchParams.set('interval', interval)
     url.searchParams.set('limit', this.defaultLimit.toString())
 
-    const exchange = cursor.exchangeCode ?? this.defaultExchangeCode
-    if (exchange) {
+    const exchange = this.normalizeExchangeCode(cursor.exchangeCode)
+    if (exchange !== this.aggregatedExchangeCode) {
       // v4 文档中的参数名：exchange_list，以逗号分隔多交易所
       url.searchParams.set('exchange_list', exchange)
     }
@@ -117,7 +117,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
 
     const rows = json.data.map(point => ({
       symbol: cursor.symbol,
-      exchangeCode: cursor.exchangeCode ?? null,
+      exchangeCode: exchange,
       interval: prismaInterval,
       timestamp: new Date(point.time),
       longLiquidationUsd: point.aggregated_long_liquidation_usd.toString(),
@@ -133,7 +133,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
 
     const newCursor: AggregatedLiquidationCursor = {
       symbol: cursor.symbol,
-      exchangeCode: cursor.exchangeCode,
+      exchangeCode: exchange,
       interval,
       lastTimestamp: latestPoint.time,
     }
@@ -144,7 +144,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
       meta: {
         symbol: cursor.symbol,
         interval,
-        exchangeCode: cursor.exchangeCode ?? null,
+        exchangeCode: exchange,
         latestTime: new Date(latestPoint.time).toISOString(),
         lastTimestamp: latestPoint.time,
         apiDataCount: json.data.length,
@@ -251,8 +251,9 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     if (!currentCursor) {
       return {
         symbol: this.defaultSymbol,
-        exchangeCode: this.defaultExchangeCode ?? undefined,
+        exchangeCode: this.normalizeExchangeCode(undefined),
         interval: this.defaultInterval,
+        lastTimestamp: undefined,
       }
     }
 
@@ -261,9 +262,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
       if (!parsed.symbol) {
         parsed.symbol = this.defaultSymbol
       }
-      if (!Object.prototype.hasOwnProperty.call(parsed, 'exchangeCode')) {
-        parsed.exchangeCode = this.defaultExchangeCode ?? undefined
-      }
+      parsed.exchangeCode = this.normalizeExchangeCode(parsed.exchangeCode)
       if (!parsed.interval) {
         parsed.interval = this.defaultInterval
       }
@@ -275,11 +274,21 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
       this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
       return {
         symbol: this.defaultSymbol,
-        exchangeCode: this.defaultExchangeCode ?? undefined,
+        exchangeCode: this.normalizeExchangeCode(undefined),
         interval: this.defaultInterval,
         lastTimestamp: undefined,
       }
     }
+  }
+
+  private normalizeExchangeCode(value: string | null | undefined): string {
+    if (value === null || value === '' || value === this.aggregatedExchangeCode) {
+      return this.aggregatedExchangeCode
+    }
+    if (typeof value === 'undefined') {
+      return this.defaultExchangeCode ?? this.aggregatedExchangeCode
+    }
+    return value
   }
 }
 
