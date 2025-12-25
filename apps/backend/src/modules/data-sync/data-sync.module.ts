@@ -15,11 +15,15 @@ import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
+import { OkxOrderBookSnapshotJob } from './jobs/okx-orderbook-snapshot.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
 import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
+import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
+import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-perpetual-orderbook-ws.adapter'
+import { OkxCexSpotOrderbookWsAdapter } from './services/adapters/okx-cex-spot-orderbook-ws.adapter'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 
@@ -43,6 +47,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
     BinanceOrderBookSnapshotJob,
+    OkxOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
     // Job registry，将多个 Job 注入为一个数组
     {
@@ -54,6 +59,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
+        okxOrderBookSnapshotJob: OkxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
       ): DataPullJob[] => [
         exampleKlineJob,
@@ -61,6 +67,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         coinglassHeatmapJob,
         exampleOrderbookJob,
         binanceOrderBookSnapshotJob,
+        okxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
       ],
       inject: [
@@ -69,6 +76,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         CoinglassHeatmapJob,
         ExampleOrderbookJob,
         BinanceOrderBookSnapshotJob,
+        OkxOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
       ],
     },
@@ -82,21 +90,33 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     BinanceCexSpotOrderbookWsAdapter,
     BinanceCexPerpetualOrderbookWsAdapter,
     BinanceCexFutureOrderbookWsAdapter,
+    OkxCexSpotOrderbookWsAdapter,
+    OkxCexPerpetualOrderbookWsAdapter,
+    OkxCexFutureOrderbookWsAdapter,
     {
       provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
       useFactory: (
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter: BinanceCexFutureOrderbookWsAdapter,
+        okxCexSpotOrderbookWsAdapter: OkxCexSpotOrderbookWsAdapter,
+        okxCexPerpetualOrderbookWsAdapter: OkxCexPerpetualOrderbookWsAdapter,
+        okxCexFutureOrderbookWsAdapter: OkxCexFutureOrderbookWsAdapter,
       ) => [
         binanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter,
+        okxCexSpotOrderbookWsAdapter,
+        okxCexPerpetualOrderbookWsAdapter,
+        okxCexFutureOrderbookWsAdapter,
       ],
       inject: [
         BinanceCexSpotOrderbookWsAdapter,
         BinanceCexPerpetualOrderbookWsAdapter,
         BinanceCexFutureOrderbookWsAdapter,
+        OkxCexSpotOrderbookWsAdapter,
+        OkxCexPerpetualOrderbookWsAdapter,
+        OkxCexFutureOrderbookWsAdapter,
       ],
     },
     OrderbookWsSyncManager,
