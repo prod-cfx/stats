@@ -1,4 +1,5 @@
 import type { TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client'
 import type { CreateOpenInterestDto } from './dto/open-interest.dto'
 import { Test } from '@nestjs/testing'
 import { PrismaService } from '../../prisma/prisma.service'
@@ -15,6 +16,7 @@ describe('openInterestService', () => {
       findFirst: jest.fn(),
       count: jest.fn(),
     },
+    $queryRaw: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -205,93 +207,98 @@ describe('openInterestService', () => {
   })
 
   describe('getStats', () => {
+    const startTime = new Date('2025-12-24T00:00:00Z')
+    const endTime = new Date('2025-12-24T23:59:59Z')
+
+    const buildRow = (overrides?: Partial<{
+      min: string
+      max: string
+      avg: string
+      earliest: string
+      latest: string
+      dataPoints: number
+    }>) => {
+      const {
+        min = '57000000000',
+        max = '58000000000',
+        avg = '57500000000',
+        earliest = '57000000000',
+        latest = '58000000000',
+        dataPoints = 3,
+      } = overrides ?? {}
+
+      return {
+        min: new Prisma.Decimal(min),
+        max: new Prisma.Decimal(max),
+        avg: new Prisma.Decimal(avg),
+        data_points: BigInt(dataPoints),
+        earliest: new Prisma.Decimal(earliest),
+        latest: new Prisma.Decimal(latest),
+      }
+    }
+
     it('should calculate statistics for a time range', async () => {
-      const startTime = new Date('2025-12-24T00:00:00Z')
-      const endTime = new Date('2025-12-24T23:59:59Z')
-
-      const mockData = [
-        {
-          openInterestUsd: '57000000000',
-          dataTimestamp: new Date('2025-12-24T00:00:00Z'),
-        },
-        {
-          openInterestUsd: '57500000000',
-          dataTimestamp: new Date('2025-12-24T12:00:00Z'),
-        },
-        {
-          openInterestUsd: '58000000000',
-          dataTimestamp: new Date('2025-12-24T23:59:59Z'),
-        },
-      ]
-
-      mockPrismaService.openInterest.findMany.mockResolvedValue(mockData)
+      mockPrismaService.$queryRaw.mockResolvedValue([buildRow()])
 
       const result = await service.getStats('BTC', startTime, endTime)
 
-      expect(result).toMatchObject({
+      expect(result).toEqual({
         symbol: 'BTC',
         startTime,
         endTime,
         dataPoints: 3,
-        max: 58000000000,
-        min: 57000000000,
-        latest: 58000000000,
-        earliest: 57000000000,
-        change: 1000000000,
+        max: 58_000_000_000,
+        min: 57_000_000_000,
+        avg: 57_500_000_000,
+        latest: 58_000_000_000,
+        earliest: 57_000_000_000,
+        change: 1_000_000_000,
+        changePercent: (1_000_000_000 / 57_000_000_000) * 100,
       })
-      expect(result.changePercent).toBeCloseTo(1.75, 2)
+      expect(mockPrismaService.$queryRaw).toHaveBeenCalledTimes(1)
     })
 
     it('should return null when no data is found', async () => {
-      const startTime = new Date('2025-12-24T00:00:00Z')
-      const endTime = new Date('2025-12-24T23:59:59Z')
-
-      mockPrismaService.openInterest.findMany.mockResolvedValue([])
+      mockPrismaService.$queryRaw.mockResolvedValue([])
 
       const result = await service.getStats('BTC', startTime, endTime)
 
       expect(result).toBeNull()
     })
 
-    it('should handle zero division when earliest value is zero', async () => {
-      const startTime = new Date('2025-12-24T00:00:00Z')
-      const endTime = new Date('2025-12-24T23:59:59Z')
-
-      const mockData = [
-        {
-          openInterestUsd: '0',
-          dataTimestamp: new Date('2025-12-24T00:00:00Z'),
-        },
-        {
-          openInterestUsd: '58000000000',
-          dataTimestamp: new Date('2025-12-24T23:59:59Z'),
-        },
-      ]
-
-      mockPrismaService.openInterest.findMany.mockResolvedValue(mockData)
+    it('should handle zero earliest value', async () => {
+      mockPrismaService.$queryRaw.mockResolvedValue([
+        buildRow({ earliest: '0', latest: '58000000000' }),
+      ])
 
       const result = await service.getStats('BTC', startTime, endTime)
 
-      expect(result.changePercent).toBe(0)
-      expect(result.earliest).toBe(0)
+      expect(result?.earliest).toBe(0)
+      expect(result?.changePercent).toBe(0)
     })
 
     it('should throw error when startTime is after endTime', async () => {
-      const startTime = new Date('2025-12-25T00:00:00Z')
-      const endTime = new Date('2025-12-24T00:00:00Z')
+      const invalidStart = new Date('2025-12-25T00:00:00Z')
+      const invalidEnd = new Date('2025-12-24T00:00:00Z')
 
-      await expect(service.getStats('BTC', startTime, endTime)).rejects.toThrow(
-        'startTime must be before endTime',
-      )
+      await expect(
+        service.getStats('BTC', invalidStart, invalidEnd),
+      ).rejects.toThrow('startTime must be before endTime')
     })
 
     it('should throw error when parameters are missing', async () => {
-      const startTime = new Date('2025-12-24T00:00:00Z')
-      const endTime = new Date('2025-12-24T23:59:59Z')
-
       await expect(
         service.getStats('', startTime, endTime),
       ).rejects.toThrow('Symbol, startTime, and endTime are required')
+    })
+
+    it('should reject when range exceeds 31 days', async () => {
+      const longStart = new Date('2025-01-01T00:00:00Z')
+      const longEnd = new Date('2025-03-15T00:00:00Z')
+
+      await expect(
+        service.getStats('BTC', longStart, longEnd),
+      ).rejects.toThrow('Time range cannot exceed 31 days')
     })
   })
 })
