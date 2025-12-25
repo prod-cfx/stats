@@ -21,7 +21,6 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   CreateAny,
   ReadAny,
@@ -119,14 +118,12 @@ export class OpenInterestController {
   })
   async query(@Query() queryDto: QueryOpenInterestDto) {
     const result = await this.openInterestService.query(queryDto)
-    const items = result.data.map(entity => this.toDto(entity))
-    const page = queryDto.page ?? 1
-    return new BasePaginationResponseDto(
-      result.total,
-      page,
-      result.limit,
-      items,
-    )
+    return {
+      data: result.data.map(entity => this.toDto(entity)),
+      total: result.total,
+      limit: result.limit,
+      offset: result.offset,
+    }
   }
 
   @Get('latest/:exchange/:symbol')
