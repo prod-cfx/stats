@@ -1,5 +1,3 @@
-import type {
-  QueryOpenInterestDto} from './dto/open-interest.dto';
 import {
   BadRequestException,
   Body,
@@ -31,6 +29,7 @@ import {
   CreateOpenInterestDto,
   OpenInterestDto,
   OpenInterestStatsDto,
+  QueryOpenInterestDto,
   QueryOpenInterestResponseDto,
 } from './dto/open-interest.dto'
 // Nest 注入需要运行时引用 OpenInterestService，保留值导入

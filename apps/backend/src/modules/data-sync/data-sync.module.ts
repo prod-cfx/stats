@@ -12,6 +12,7 @@ import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { BinanceOrderBookSnapshotJob } from './jobs/binance-orderbook-snapshot.job'
+import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -52,6 +53,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleOrderbookJob,
     OpenInterestSyncJob,
     BinanceOrderBookSnapshotJob,
+    CoinglassAggregatedLiquidationJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -63,6 +65,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
+        coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
@@ -70,6 +73,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob,
         openInterestSyncJob,
         binanceOrderBookSnapshotJob,
+        coinglassAggregatedLiquidationJob,
       ],
       inject: [
         ExampleKlineJob,
@@ -78,6 +82,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleOrderbookJob,
         OpenInterestSyncJob,
         BinanceOrderBookSnapshotJob,
+        CoinglassAggregatedLiquidationJob,
       ],
     },
     // 统一编排 & Cron
