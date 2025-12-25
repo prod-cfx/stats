@@ -96,7 +96,9 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     // 移除的 symbol：删除 state（订阅层会在 reconcile 时做 UNSUBSCRIBE）
     for (const symbol of [...this.states.keys()]) {
       if (!targetSymbols.has(symbol)) {
+        const state = this.states.get(symbol)
         this.states.delete(symbol)
+        await this.deleteRedisSnapshot(symbol, state)
       }
     }
 
@@ -252,6 +254,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       state.isReady = false
       // 移除该 symbol 的 state，让下次 syncTargetConfigs 重新尝试 snapshot 初始化
       this.states.delete(symbol)
+      await this.deleteRedisSnapshot(symbol, state)
       this.logger.error(
         `Failed to init snapshot for ${symbol}, state removed and will retry on next sync: ${
           error instanceof Error ? error.message : String(error)
@@ -311,6 +314,19 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
 
   private buildRedisKey(venueId: string, marketKey: string): string {
     return `orderbook:${venueId}:${marketKey}`
+  }
+
+  private async deleteRedisSnapshot(symbol: string, state?: BookState): Promise<void> {
+    if (!this.redis || !state) return
+    const redisKey = this.buildRedisKey(this.venueId, state.marketKey)
+    try {
+      await this.redis.del(redisKey)
+      this.logger.log(`Orderbook snapshot deleted due to config removal: symbol=${symbol}, key=${redisKey}`)
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete orderbook snapshot for ${symbol}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
 
   private async fetchSnapshot(
