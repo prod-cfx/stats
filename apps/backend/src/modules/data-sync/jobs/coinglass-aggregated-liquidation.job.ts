@@ -79,6 +79,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     }
 
     const interval = cursor.interval ?? this.defaultInterval
+    const lastTimestampMs = cursor.lastTimestamp ?? null
 
     const url = new URL(endpoint)
     url.searchParams.set('symbol', cursor.symbol)
@@ -89,6 +90,10 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     if (exchange !== this.aggregatedExchangeCode) {
       // v4 文档中的参数名：exchange_list，以逗号分隔多交易所
       url.searchParams.set('exchange_list', exchange)
+    }
+    if (typeof lastTimestampMs === 'number') {
+      // Coinglass 文档示例：start_time 以毫秒为单位
+      url.searchParams.set('start_time', Math.floor(lastTimestampMs).toString())
     }
 
     this.logger.log(`Requesting Coinglass aggregated liquidation history: ${url.toString()}`)
@@ -114,43 +119,69 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
 
     const client = this.prisma.getClient()
 
-    // 将返回的时间戳转换为 Date，并以字符串形式存储 Decimal 字段
+    // 将返回的时间戳转换为毫秒，并以字符串形式存储 Decimal 字段
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
-    const rows = json.data.map(point => ({
-      symbol: cursor.symbol,
-      exchangeCode: exchange,
-      interval: prismaInterval,
-      timestamp: new Date(point.time),
-      longLiquidationUsd: point.aggregated_long_liquidation_usd.toString(),
-      shortLiquidationUsd: point.aggregated_short_liquidation_usd.toString(),
-    }))
-
-    const result = await client.aggregatedLiquidationHistory.createMany({
-      data: rows,
-      skipDuplicates: true,
+    const pointsWithTimestamps = json.data.map(point => {
+      const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
+      return {
+        ...point,
+        timestampMs,
+      }
     })
 
-    const latestPoint = json.data.reduce((max, cur) => (cur.time > max.time ? cur : max), json.data[0])
+    const incrementalPoints = lastTimestampMs
+      ? pointsWithTimestamps.filter(point => point.timestampMs > lastTimestampMs)
+      : pointsWithTimestamps
+
+    let insertedCount = 0
+    if (incrementalPoints.length > 0) {
+      const rows = incrementalPoints.map(point => ({
+        symbol: cursor.symbol,
+        exchangeCode: exchange,
+        interval: prismaInterval,
+        timestamp: new Date(point.timestampMs),
+        longLiquidationUsd: point.aggregated_long_liquidation_usd.toString(),
+        shortLiquidationUsd: point.aggregated_short_liquidation_usd.toString(),
+      }))
+
+      const result = await client.aggregatedLiquidationHistory.createMany({
+        data: rows,
+        skipDuplicates: true,
+      })
+      insertedCount = result.count
+    }
+
+    const latestTimestampCandidates: number[] = []
+    if (pointsWithTimestamps.length > 0) {
+      for (const point of pointsWithTimestamps) {
+        latestTimestampCandidates.push(point.timestampMs)
+      }
+    }
+    if (typeof lastTimestampMs === 'number') {
+      latestTimestampCandidates.push(lastTimestampMs)
+    }
+    const latestTimestampMs =
+      latestTimestampCandidates.length > 0 ? Math.max(...latestTimestampCandidates) : undefined
 
     const newCursor: AggregatedLiquidationCursor = {
       symbol: cursor.symbol,
       exchangeCode: exchange,
       interval,
-      lastTimestamp: latestPoint.time,
+      lastTimestamp: latestTimestampMs,
     }
 
     return {
-      fetchedCount: result.count,
+      fetchedCount: insertedCount,
       newCursor: JSON.stringify(newCursor),
       meta: {
         symbol: cursor.symbol,
         interval,
         exchangeCode: exchange,
-        latestTime: new Date(latestPoint.time).toISOString(),
-        lastTimestamp: latestPoint.time,
+        latestTime: latestTimestampMs ? new Date(latestTimestampMs).toISOString() : null,
+        lastTimestamp: latestTimestampMs ?? null,
         apiDataCount: json.data.length,
-        insertedCount: result.count,
+        insertedCount,
       },
     }
   }
