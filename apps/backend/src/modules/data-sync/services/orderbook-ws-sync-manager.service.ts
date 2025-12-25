@@ -41,7 +41,11 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
     })
 
     this.timer = setInterval(() => {
-      void this.tick()
+      void this.tick().catch(err => {
+        this.logger.error(
+          `Orderbook WS sync tick failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
     }, intervalMs)
   }
 

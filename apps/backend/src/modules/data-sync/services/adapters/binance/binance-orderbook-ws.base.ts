@@ -250,8 +250,12 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       await this.publish(symbol, state, Date.now())
     } catch (error) {
       state.isReady = false
+      // 移除该 symbol 的 state，让下次 syncTargetConfigs 重新尝试 snapshot 初始化
+      this.states.delete(symbol)
       this.logger.error(
-        `Failed to init snapshot for ${symbol}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to init snapshot for ${symbol}, state removed and will retry on next sync: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       )
     }
   }

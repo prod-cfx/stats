@@ -1,3 +1,5 @@
+import type { ConfigService } from '@nestjs/config'
+import type { RedisService } from '@/common/services/redis.service'
 import { Injectable } from '@nestjs/common'
 import { BinanceOrderbookWsAdapterBase } from './binance/binance-orderbook-ws.base'
 
@@ -26,6 +28,13 @@ export class BinanceCexSpotOrderbookWsAdapter extends BinanceOrderbookWsAdapterB
       this.configService.get<number>('ORDERBOOK_WS_MAX_STREAMS_PER_CONNECTION') ??
       200
     )
+  }
+
+  constructor(
+    configService: ConfigService,
+    redisService: RedisService,
+  ) {
+    super(configService, redisService)
   }
 }
 
