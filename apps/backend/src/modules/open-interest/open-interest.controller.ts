@@ -1,3 +1,5 @@
+import type {
+  QueryOpenInterestDto} from './dto/open-interest.dto';
 import {
   BadRequestException,
   Body,
@@ -19,6 +21,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   CreateAny,
   ReadAny,
@@ -29,7 +32,6 @@ import {
   CreateOpenInterestDto,
   OpenInterestDto,
   OpenInterestStatsDto,
-  QueryOpenInterestDto,
   QueryOpenInterestResponseDto,
 } from './dto/open-interest.dto'
 // Nest 注入需要运行时引用 OpenInterestService，保留值导入
@@ -115,12 +117,16 @@ export class OpenInterestController {
     status: HttpStatus.BAD_REQUEST,
     description: '参数验证失败',
   })
-  async query(@Query() query: QueryOpenInterestDto) {
-    const result = await this.openInterestService.query(query)
-    return {
-      ...result,
-      data: result.data.map(entity => this.toDto(entity)),
-    }
+  async query(@Query() queryDto: QueryOpenInterestDto) {
+    const result = await this.openInterestService.query(queryDto)
+    const items = result.data.map(entity => this.toDto(entity))
+    const page = queryDto.page ?? 1
+    return new BasePaginationResponseDto(
+      result.total,
+      page,
+      result.limit,
+      items,
+    )
   }
 
   @Get('latest/:exchange/:symbol')

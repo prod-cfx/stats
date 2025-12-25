@@ -185,10 +185,10 @@ export class OpenInterestService {
       throw new Error('startTime must be before endTime')
     }
 
+    // 查询所有交易所的数据，按时间戳分组聚合
     const data = await this.prisma.openInterest.findMany({
       where: {
         symbol,
-        exchange: 'All', // 只统计汇总数据
         dataTimestamp: {
           gte: startTime,
           lte: endTime,
@@ -201,31 +201,45 @@ export class OpenInterestService {
       return null
     }
 
+    // 按时间戳分组，聚合所有交易所的数据
+    const groupedByTime = new Map<string, number>()
+    for (const item of data) {
+      const timeKey = item.dataTimestamp.toISOString()
+      const currentSum = groupedByTime.get(timeKey) || 0
+      groupedByTime.set(timeKey, currentSum + Number(item.openInterestUsd))
+    }
+
+    // 将聚合数据转换为数组并排序
+    const aggregatedValues = Array.from(groupedByTime.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([_, value]) => value)
+
+    if (aggregatedValues.length === 0) {
+      return null
+    }
+
     // 计算统计数据
-    const values = data.map(d => Number(d.openInterestUsd))
-    const max = Math.max(...values)
-    const min = Math.min(...values)
-    const avg = values.reduce((sum, v) => sum + v, 0) / values.length
-    const latest = data[data.length - 1]
-    const earliest = data[0]
-    const change =
-      Number(latest.openInterestUsd) - Number(earliest.openInterestUsd)
+    const max = Math.max(...aggregatedValues)
+    const min = Math.min(...aggregatedValues)
+    const avg =
+      aggregatedValues.reduce((sum, v) => sum + v, 0) / aggregatedValues.length
+    const latest = aggregatedValues[aggregatedValues.length - 1]
+    const earliest = aggregatedValues[0]
+    const change = latest - earliest
 
     // 防止除零错误
-    const earliestValue = Number(earliest.openInterestUsd)
-    const changePercent =
-      earliestValue !== 0 ? (change / earliestValue) * 100 : 0
+    const changePercent = earliest !== 0 ? (change / earliest) * 100 : 0
 
     return {
       symbol,
       startTime,
       endTime,
-      dataPoints: data.length,
+      dataPoints: aggregatedValues.length,
       max,
       min,
       avg,
-      latest: Number(latest.openInterestUsd),
-      earliest: earliestValue,
+      latest,
+      earliest,
       change,
       changePercent,
     }
