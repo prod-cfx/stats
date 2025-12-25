@@ -311,6 +311,56 @@ const LiquidationHeatmapResponseDto = z
     price_candlesticks: z.array(z.array(z.any())),
   })
   .passthrough();
+const OrderbookPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().nullish(),
+    depthLevels: z.number().nullish(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    description: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateOrderbookPairConfigDto = z
+  .object({
+    pairId: z
+      .string()
+      .regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean().optional().default(true),
+    pullIntervalSeconds: z.number().gte(1).nullish(),
+    depthLevels: z.number().gte(5).lte(500).nullish(),
+    priority: z.number().gte(1).lte(1000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+const UpdateOrderbookPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().gte(1).nullable(),
+    depthLevels: z.number().gte(5).lte(500).nullable(),
+    priority: z.number().gte(1).lte(1000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -391,6 +441,9 @@ export const schemas = {
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
   LiquidationHeatmapResponseDto,
+  OrderbookPairConfigResponseDto,
+  CreateOrderbookPairConfigDto,
+  UpdateOrderbookPairConfigDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   BaseResponseDto,
@@ -709,6 +762,117 @@ const endpoints = makeApi([
     alias: "AdminMenuController_findPermissionMenus[1]",
     requestFormat: "json",
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_getAllConfigs",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "venue",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["CEX", "DEX"]).optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "enabledOnly",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.array(OrderbookPairConfigResponseDto),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "post",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_createConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateOrderbookPairConfigDto,
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_getConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "put",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_updateConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateOrderbookPairConfigDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "delete",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_deleteConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.object({ success: z.boolean() }).partial().passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",
