@@ -56,6 +56,61 @@ model LongShortRatio {
   @@map("long_short_ratios")
 }
 
+/// 持仓量数据模型 - 记录加密货币期货的未平仓合约数据
+model OpenInterest {
+  id          Int      @id @default(autoincrement())
+  
+  // 基础信息
+  exchange    String   /// 交易所名称，"All" 表示所有交易所汇总
+  symbol      String   /// 币种符号，如 "BTC", "ETH"
+  
+  // 未平仓合约数据
+  /// 未平仓合约价值(USD)，表示所有未平仓合约的总价值
+  openInterestUsd      Decimal  @map("open_interest_usd") @db.Decimal(20, 4)
+  /// 未平仓合约数量，表示所有未平仓合约的总数量
+  openInterestQuantity Decimal  @map("open_interest_quantity") @db.Decimal(20, 8)
+  
+  // 按保证金类型分类的未平仓合约数据
+  /// 稳定币本位未平仓合约价值(USD)，合约采用稳定币作为保证金
+  openInterestByStableCoinMargin   Decimal? @map("open_interest_by_stable_coin_margin") @db.Decimal(20, 4)
+  /// 币本位未平仓合约价值(USD)，合约采用币本位作为保证金
+  openInterestByCoinMargin         Decimal? @map("open_interest_by_coin_margin") @db.Decimal(20, 4)
+  /// 币本位未平仓合约数量
+  openInterestQuantityByCoinMargin Decimal? @map("open_interest_quantity_by_coin_margin") @db.Decimal(20, 8)
+  /// 稳定币本位未平仓合约数量
+  openInterestQuantityByStableCoinMargin Decimal? @map("open_interest_quantity_by_stable_coin_margin") @db.Decimal(20, 8)
+  
+  // 变化百分比数据 - 使用 Decimal 存储以保持精度
+  /// 5分钟内未平仓合约变化百分比
+  openInterestChangePercent5m  Decimal? @map("open_interest_change_percent_5m") @db.Decimal(10, 4)
+  /// 15分钟内未平仓合约变化百分比
+  openInterestChangePercent15m Decimal? @map("open_interest_change_percent_15m") @db.Decimal(10, 4)
+  /// 30分钟内未平仓合约变化百分比
+  openInterestChangePercent30m Decimal? @map("open_interest_change_percent_30m") @db.Decimal(10, 4)
+  /// 1小时内未平仓合约变化百分比
+  openInterestChangePercent1h  Decimal? @map("open_interest_change_percent_1h") @db.Decimal(10, 4)
+  /// 4小时内未平仓合约变化百分比
+  openInterestChangePercent4h  Decimal? @map("open_interest_change_percent_4h") @db.Decimal(10, 4)
+  /// 24小时内未平仓合约变化百分比
+  openInterestChangePercent24h Decimal? @map("open_interest_change_percent_24h") @db.Decimal(10, 4)
+  
+  // 元数据
+  /// 数据时间戳，表示该数据采集的时间
+  dataTimestamp DateTime @map("data_timestamp")
+  /// 数据创建时间
+  createdAt     DateTime @default(now()) @map("created_at")
+  /// 数据更新时间
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  
+  // 索引
+  @@unique([exchange, symbol, dataTimestamp], name: "unique_oi_record")
+  @@index([symbol, dataTimestamp], name: "idx_oi_symbol_timestamp")
+  @@index([exchange, dataTimestamp], name: "idx_oi_exchange_timestamp")
+  @@index([dataTimestamp], name: "idx_oi_timestamp")
+  
+  @@map("open_interest")
+}
+
 /// 合约币种爆仓历史（Aggregated Liquidation History）
 ///
 /// 参考文档：
@@ -95,4 +150,3 @@ model AggregatedLiquidationHistory {
   @@index([symbol, exchangeCode, timestamp], map: "idx_agg_liq_symbol_exchange_time")
   @@map("aggregated_liquidation_history")
 }
-

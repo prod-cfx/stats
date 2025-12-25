@@ -2,6 +2,8 @@ import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
+import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
+import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { PrismaModule } from '@/prisma/prisma.module'
@@ -31,7 +33,14 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
  */
 
 @Module({
-  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule, SettingsModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    LiquidationHeatmapModule,
+    OpenInterestModule,
+    OrderbookConfigModule,
+    SettingsModule,
+  ],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
@@ -42,6 +51,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleNewsJob,
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
+    OpenInterestSyncJob,
     BinanceOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
     // Job registry，将多个 Job 注入为一个数组
@@ -53,6 +63,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
+        openInterestSyncJob: OpenInterestSyncJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
       ): DataPullJob[] => [
@@ -60,6 +71,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob,
         coinglassHeatmapJob,
         exampleOrderbookJob,
+        openInterestSyncJob,
         binanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
       ],
@@ -68,6 +80,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleNewsJob,
         CoinglassHeatmapJob,
         ExampleOrderbookJob,
+        OpenInterestSyncJob,
         BinanceOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
       ],
@@ -103,4 +116,3 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
   ],
 })
 export class DataSyncModule {}
-
