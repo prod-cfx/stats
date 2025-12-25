@@ -37,6 +37,7 @@
     "@nx/eslint": "19.8.14",
     "@nx/jest": "19.8.14",
     "@nx/webpack": "19.8.14",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.7.5",
     "@types/react": "^19.0.0",

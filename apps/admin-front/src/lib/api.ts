@@ -63,6 +63,11 @@ export type OrderbookPairConfigResponse = z.infer<typeof schemas.OrderbookPairCo
 export type CreateOrderbookPairConfigPayload = z.infer<typeof schemas.CreateOrderbookPairConfigDto>
 export type UpdateOrderbookPairConfigPayload = z.infer<typeof schemas.UpdateOrderbookPairConfigDto>
 
+// 交易所配置相关类型
+export type ExchangeConfigResponse = z.infer<typeof schemas.ExchangeConfigResponseDto>
+export type CreateExchangeConfigPayload = z.infer<typeof schemas.CreateExchangeConfigDto>
+export type UpdateExchangeConfigPayload = z.infer<typeof schemas.UpdateExchangeConfigDto>
+
 const SYSTEM_PROMPT_CATEGORY = 'system_prompt'
 
 function requireAuthHeaders() {
@@ -346,6 +351,39 @@ export async function updateOrderbookConfig(
 
 export async function deleteOrderbookConfig(id: string): Promise<void> {
   await client.AdminOrderbookPairConfigController_deleteConfig(undefined, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+}
+
+// 交易所配置相关 API
+export async function fetchExchangeConfigs(): Promise<ExchangeConfigResponse[]> {
+  const response = await client.AdminExchangeConfigController_getAllConfigs({
+    headers: requireAuthHeaders(),
+  })
+  return unwrapListResponse<ExchangeConfigResponse>(response)
+}
+
+export async function createExchangeConfig(payload: CreateExchangeConfigPayload): Promise<ExchangeConfigResponse> {
+  const response = await client.AdminExchangeConfigController_createConfig(payload, {
+    headers: requireAuthHeaders(),
+  })
+  return unwrapResponse<ExchangeConfigResponse>(response as any)
+}
+
+export async function updateExchangeConfig(
+  id: string,
+  payload: UpdateExchangeConfigPayload,
+): Promise<ExchangeConfigResponse> {
+  const response = await client.AdminExchangeConfigController_updateConfig(payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+  return unwrapResponse<ExchangeConfigResponse>(response as any)
+}
+
+export async function deleteExchangeConfig(id: string): Promise<void> {
+  await client.AdminExchangeConfigController_deleteConfig(undefined, {
     headers: requireAuthHeaders(),
     params: { id },
   })
