@@ -23,6 +23,12 @@ interface AggregatedLiquidationCursor {
    * 不传时使用默认值
    */
   interval?: string
+
+  /**
+   * 最新一次成功写入的数据点时间戳（毫秒）
+   * 主要用于后续增量抓取
+   */
+  lastTimestamp?: number
 }
 
 interface AggregatedLiquidationPoint {
@@ -128,6 +134,8 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     const newCursor: AggregatedLiquidationCursor = {
       symbol: cursor.symbol,
       exchangeCode: cursor.exchangeCode,
+      interval,
+      lastTimestamp: latestPoint.time,
     }
 
     return {
@@ -138,6 +146,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
         interval,
         exchangeCode: cursor.exchangeCode ?? null,
         latestTime: new Date(latestPoint.time).toISOString(),
+        lastTimestamp: latestPoint.time,
         apiDataCount: json.data.length,
         insertedCount: result.count,
       },
@@ -258,6 +267,9 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
       if (!parsed.interval) {
         parsed.interval = this.defaultInterval
       }
+      if (typeof parsed.lastTimestamp !== 'number') {
+        delete parsed.lastTimestamp
+      }
       return parsed as AggregatedLiquidationCursor
     } catch {
       this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
@@ -265,6 +277,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
         symbol: this.defaultSymbol,
         exchangeCode: this.defaultExchangeCode ?? undefined,
         interval: this.defaultInterval,
+        lastTimestamp: undefined,
       }
     }
   }
