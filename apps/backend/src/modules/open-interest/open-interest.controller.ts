@@ -1,7 +1,4 @@
-import type {
-  CreateOpenInterestDto,
-  QueryOpenInterestDto,
-} from './dto/open-interest.dto'
+import type { QueryOpenInterestDto } from './dto/open-interest.dto'
 import type { OpenInterestService } from './open-interest.service'
 import {
   BadRequestException,
@@ -11,6 +8,7 @@ import {
   HttpStatus,
   NotFoundException,
   Param,
+  ParseArrayPipe,
   Post,
   Query,
 } from '@nestjs/common'
@@ -29,6 +27,7 @@ import {
 } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import {
+  CreateOpenInterestDto,
   OpenInterestDto,
   OpenInterestStatsDto,
   QueryOpenInterestResponseDto,
@@ -57,7 +56,8 @@ export class OpenInterestController {
     description: '参数验证失败',
   })
   async upsert(@Body() data: CreateOpenInterestDto) {
-    return this.openInterestService.upsert(data)
+    const entity = await this.openInterestService.upsert(data)
+    return this.toDto(entity)
   }
 
   @Post('batch')
@@ -70,11 +70,20 @@ export class OpenInterestController {
     status: HttpStatus.BAD_REQUEST,
     description: '参数验证失败',
   })
-  async batchUpsert(@Body() dataList: CreateOpenInterestDto[]) {
+  async batchUpsert(
+    @Body(
+      new ParseArrayPipe({
+        items: CreateOpenInterestDto,
+      }),
+    )
+    dataList: CreateOpenInterestDto[],
+  ) {
     if (!Array.isArray(dataList) || dataList.length === 0) {
       throw new BadRequestException('dataList must be a non-empty array')
     }
-    return this.openInterestService.batchUpsert(dataList)
+
+    const entities = await this.openInterestService.batchUpsert(dataList)
+    return entities.map(entity => this.toDto(entity))
   }
 
   @Get()
