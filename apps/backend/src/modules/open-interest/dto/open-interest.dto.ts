@@ -36,6 +36,15 @@ export class OpenInterestDto {
   @IsOptional()
   open_interest_by_stable_coin_margin?: number
 
+  @ApiProperty({
+    description: '币本位未平仓合约价值(USD)',
+    example: 8517617289.12,
+    required: false,
+  })
+  @IsNumber()
+  @IsOptional()
+  open_interest_by_coin_margin?: number
+
   @ApiProperty({ 
     description: '币本位未平仓合约数量', 
     example: 97551.2547,

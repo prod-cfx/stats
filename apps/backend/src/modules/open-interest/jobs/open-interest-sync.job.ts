@@ -106,6 +106,8 @@ export class OpenInterestSyncJob implements DataPullJob {
         symbol: item.symbol,
         open_interest_usd: item.openInterest,
         open_interest_quantity: item.openInterestAmount,
+        open_interest_by_coin_margin:
+          item.openInterestByCoinMargin ?? undefined,
         open_interest_by_stable_coin_margin:
           item.openInterestByStableCoinMargin ?? undefined,
         open_interest_quantity_by_coin_margin:

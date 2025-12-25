@@ -210,6 +210,10 @@ export class OpenInterestController {
         entity.openInterestByStableCoinMargin != null
           ? Number(entity.openInterestByStableCoinMargin)
           : undefined,
+      open_interest_by_coin_margin:
+        entity.openInterestByCoinMargin != null
+          ? Number(entity.openInterestByCoinMargin)
+          : undefined,
       open_interest_quantity_by_coin_margin:
         entity.openInterestQuantityByCoinMargin != null
           ? Number(entity.openInterestQuantityByCoinMargin)

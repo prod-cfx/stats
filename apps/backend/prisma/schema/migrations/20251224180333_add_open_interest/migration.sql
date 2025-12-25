@@ -6,6 +6,7 @@ CREATE TABLE "open_interest" (
     "open_interest_usd" DECIMAL(20,4) NOT NULL,
     "open_interest_quantity" DECIMAL(20,8) NOT NULL,
     "open_interest_by_stable_coin_margin" DECIMAL(20,4),
+    "open_interest_by_coin_margin" DECIMAL(20,4),
     "open_interest_quantity_by_coin_margin" DECIMAL(20,8),
     "open_interest_quantity_by_stable_coin_margin" DECIMAL(20,8),
     "open_interest_change_percent_5m" DECIMAL(10,4),
@@ -40,6 +41,7 @@ COMMENT ON COLUMN "open_interest"."symbol" IS '币种符号，如 "BTC", "ETH"';
 COMMENT ON COLUMN "open_interest"."open_interest_usd" IS '未平仓合约价值(USD)';
 COMMENT ON COLUMN "open_interest"."open_interest_quantity" IS '未平仓合约数量';
 COMMENT ON COLUMN "open_interest"."open_interest_by_stable_coin_margin" IS '稳定币本位未平仓合约价值(USD)';
+COMMENT ON COLUMN "open_interest"."open_interest_by_coin_margin" IS '币本位未平仓合约价值(USD)';
 COMMENT ON COLUMN "open_interest"."open_interest_quantity_by_coin_margin" IS '币本位未平仓合约数量';
 COMMENT ON COLUMN "open_interest"."open_interest_quantity_by_stable_coin_margin" IS '稳定币本位未平仓合约数量';
 COMMENT ON COLUMN "open_interest"."open_interest_change_percent_5m" IS '5分钟内未平仓合约变化百分比';

@@ -74,6 +74,8 @@ model OpenInterest {
   // 按保证金类型分类的未平仓合约数据
   /// 稳定币本位未平仓合约价值(USD)，合约采用稳定币作为保证金
   openInterestByStableCoinMargin   Decimal? @map("open_interest_by_stable_coin_margin") @db.Decimal(20, 4)
+  /// 币本位未平仓合约价值(USD)，合约采用币本位作为保证金
+  openInterestByCoinMargin         Decimal? @map("open_interest_by_coin_margin") @db.Decimal(20, 4)
   /// 币本位未平仓合约数量
   openInterestQuantityByCoinMargin Decimal? @map("open_interest_quantity_by_coin_margin") @db.Decimal(20, 8)
   /// 稳定币本位未平仓合约数量

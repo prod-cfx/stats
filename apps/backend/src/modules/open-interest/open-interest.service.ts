@@ -1,11 +1,13 @@
 import type { Prisma } from '@prisma/client'
-import type { PrismaService } from '../../prisma/prisma.service'
 import type {
   CreateOpenInterestDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
+// Nest 注入需要运行时引用 PrismaService，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { PrismaService } from '@/prisma/prisma.service'
 
 /**
  * 持仓量数据服务
@@ -34,6 +36,7 @@ export class OpenInterestService {
           openInterestUsd: data.open_interest_usd,
           openInterestQuantity: data.open_interest_quantity,
           openInterestByStableCoinMargin: data.open_interest_by_stable_coin_margin,
+          openInterestByCoinMargin: data.open_interest_by_coin_margin,
           openInterestQuantityByCoinMargin: data.open_interest_quantity_by_coin_margin,
           openInterestQuantityByStableCoinMargin: data.open_interest_quantity_by_stable_coin_margin,
           openInterestChangePercent5m: data.open_interest_change_percent_5m,
@@ -49,6 +52,7 @@ export class OpenInterestService {
           openInterestUsd: data.open_interest_usd,
           openInterestQuantity: data.open_interest_quantity,
           openInterestByStableCoinMargin: data.open_interest_by_stable_coin_margin,
+          openInterestByCoinMargin: data.open_interest_by_coin_margin,
           openInterestQuantityByCoinMargin: data.open_interest_quantity_by_coin_margin,
           openInterestQuantityByStableCoinMargin: data.open_interest_quantity_by_stable_coin_margin,
           openInterestChangePercent5m: data.open_interest_change_percent_5m,
