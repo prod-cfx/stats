@@ -401,6 +401,49 @@ const LongShortRatioPointResponseDto = z
     source: z.string(),
   })
   .passthrough();
+const ExchangeConfigResponseDto = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    name: z.string(),
+    avatarUrl: z.string().nullish(),
+    intro: z.string().nullish(),
+    websiteUrl: z.string().nullish(),
+    venueType: z.enum(["CEX", "DEX"]).nullish(),
+    enabled: z.boolean(),
+    sort: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateExchangeConfigDto = z
+  .object({
+    code: z.string().regex(/^[A-Z0-9_]+$/),
+    name: z.string(),
+    avatarUrl: z.string().nullish(),
+    intro: z.string().nullish(),
+    websiteUrl: z.string().nullish(),
+    venueType: z.enum(["CEX", "DEX"]).nullish(),
+    enabled: z.boolean().optional().default(true),
+    sort: z.number().gte(0).lte(100000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough();
+const UpdateExchangeConfigDto = z
+  .object({
+    code: z.string().regex(/^[A-Z0-9_]+$/),
+    name: z.string(),
+    avatarUrl: z.string().nullable(),
+    intro: z.string().nullable(),
+    websiteUrl: z.string().nullable(),
+    venueType: z.enum(["CEX", "DEX"]).nullable(),
+    enabled: z.boolean(),
+    sort: z.number().gte(0).lte(100000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+  })
+  .partial()
+  .passthrough();
 const BaseResponseDto = z
   .object({
     data: z.object({}).partial().passthrough(),
@@ -446,6 +489,9 @@ export const schemas = {
   UpdateOrderbookPairConfigDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
+  ExchangeConfigResponseDto,
+  CreateExchangeConfigDto,
+  UpdateExchangeConfigDto,
   BaseResponseDto,
 };
 
@@ -598,6 +644,126 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/admin/exchange-configs",
+    alias: "AdminExchangeConfigController_getAllConfigs",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().gte(1),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(100),
+      },
+      {
+        name: "code",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["CEX", "DEX"]).optional(),
+      },
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(ExchangeConfigResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/exchange-configs",
+    alias: "AdminExchangeConfigController_createConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateExchangeConfigDto,
+      },
+    ],
+    response: z
+      .object({ data: ExchangeConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/exchange-configs/:id",
+    alias: "AdminExchangeConfigController_getConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: ExchangeConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "put",
+    path: "/admin/exchange-configs/:id",
+    alias: "AdminExchangeConfigController_updateConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateExchangeConfigDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: ExchangeConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "delete",
+    path: "/admin/exchange-configs/:id",
+    alias: "AdminExchangeConfigController_deleteConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.object({ success: z.boolean() }).partial().passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",

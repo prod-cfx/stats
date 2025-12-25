@@ -20,6 +20,7 @@ import { PrismaModule } from '../prisma/prisma.module'
 import { AdminModule } from './admin/admin.module'
 import { AuthModule } from './auth/auth.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
+import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
 import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heatmap.module'
 import { MarketsModule } from './markets/markets.module'
@@ -85,6 +86,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     MarketsModule,
     LiquidationHeatmapModule,
     OrderbookConfigModule,
+    ExchangeConfigModule,
   ],
   providers: [
     {
