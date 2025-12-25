@@ -1,4 +1,5 @@
-import type { QueryOpenInterestDto } from './dto/open-interest.dto'
+import type {
+  QueryOpenInterestDto} from './dto/open-interest.dto';
 import {
   BadRequestException,
   Body,
