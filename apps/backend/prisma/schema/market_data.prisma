@@ -1,4 +1,61 @@
-/// 市场数据相关模型
+/// 市场数据时间粒度枚举
+enum MarketTimeframe {
+  /// 说明：Prisma Client 侧使用 m1/m5/... 作为枚举键名，数据库存储 "1m"/"5m"/...
+  /// 这样可以复用后端现有的 mapTimeframe/reverseMapTimeframe 映射工具，确保 API/SDK 看到的始终是 "1m" 等值
+  m1  @map("1m")
+  m5  @map("5m")
+  m15 @map("15m")
+  h1  @map("1h")
+  h4  @map("4h")
+  d1  @map("1d")
+}
+
+/// 市场数据相关模型：多空比（long/short ratio）
+///
+/// 说明：
+/// - tradingPairId 对应业务层的 TradingPairConfig.id（例如 'BTCUSDT.BINANCE.PERP'）
+/// - 不直接建外键，保持与业务配置表解耦
+
+model LongShortRatio {
+  id Int @id @default(autoincrement())
+
+  /// 交易对配置 ID（来自 @ai/shared 中的 TradingPairConfig.id）
+  tradingPairId String @map("trading_pair_id")
+
+  /// 时间粒度，使用枚举类型确保数据一致性
+  interval MarketTimeframe
+
+  /// 该时间粒度对应的时间点（通常为区间起始时间）
+  timestamp DateTime
+
+  /// 多空比（多/空）
+  longShortRatio Decimal @map("long_short_ratio") @db.Decimal(18, 8)
+
+  /// 多头账户占比
+  longAccountRatio Decimal? @map("long_account_ratio") @db.Decimal(18, 8)
+
+  /// 空头账户占比
+  shortAccountRatio Decimal? @map("short_account_ratio") @db.Decimal(18, 8)
+
+  /// 多头仓位名义价值 / 数量
+  longVolume Decimal? @map("long_volume") @db.Decimal(30, 10)
+
+  /// 空头仓位名义价值 / 数量
+  shortVolume Decimal? @map("short_volume") @db.Decimal(30, 10)
+
+  /// 账户多空比
+  longShortAccountRatio Decimal? @map("long_short_account_ratio") @db.Decimal(18, 8)
+
+  /// 数据来源，例如：'COINGLASS'
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([tradingPairId, interval, timestamp], map: "uniq_long_short_ratio_pair_interval_time")
+  @@index([tradingPairId, timestamp], map: "idx_long_short_ratio_pair_time")
+  @@map("long_short_ratios")
+}
 
 /// 持仓量数据模型 - 记录加密货币期货的未平仓合约数据
 model OpenInterest {

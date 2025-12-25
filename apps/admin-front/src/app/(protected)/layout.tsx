@@ -13,6 +13,9 @@ const NAV_ITEMS = [
   { key: '/roles', label: '角色管理', path: '/roles', permission: 'system.roles' },
   { key: '/menus', label: '菜单管理', path: '/menus', permission: 'system.menus' },
   { key: '/users', label: '管理员', path: '/users', permission: 'system.admins' },
+  // 入口默认显示；实际数据权限由后端 RBAC 控制（无权限会被接口拦截）
+  { key: '/data-pull-tasks', label: '数据拉取任务', path: '/data-pull-tasks' },
+  { key: '/orderbook-configs', label: '订单薄配置', path: '/orderbook-configs', permission: 'data.orderbook' },
 ]
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -42,10 +45,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   }, [accessibleNavItems, pathname])
 
   useEffect(() => {
-    // 方便验证当前浏览器拿到的 session 结构
-    console.log('[ProtectedLayout] session snapshot', session)
-    console.log('[ProtectedLayout] username', session?.admin?.username)
-    console.log('[ProtectedLayout] menu permissions', session?.admin?.menuPermissions)
+    // Session 验证已移至 AuthProvider，避免在客户端日志中泄露令牌
 
     if (!initializing && !session) {
       router.replace('/login')

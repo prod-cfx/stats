@@ -250,6 +250,117 @@ const UpdateAdminMenuDto = z
   })
   .partial()
   .passthrough();
+const AdminDataPullTaskResponseDto = z
+  .object({
+    id: z.number(),
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean(),
+    cursor: z.string().nullish(),
+    lastStatus: z.string().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
+    lastError: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateAdminDataPullTaskDto = z
+  .object({
+    key: z.string(),
+    name: z.string(),
+    source: z.string().nullish(),
+    type: z.string().nullish(),
+    cron: z.string().nullish(),
+    intervalSeconds: z.number().nullish(),
+    enabled: z.boolean().optional().default(true),
+    cursor: z.string().nullish(),
+  })
+  .passthrough();
+const UpdateAdminDataPullTaskDto = z
+  .object({
+    name: z.string(),
+    source: z.string().nullable(),
+    type: z.string().nullable(),
+    cron: z.string().nullable(),
+    intervalSeconds: z.number().nullable(),
+    enabled: z.boolean(),
+    cursor: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
+const LiquidationHeatmapResponseDto = z
+  .object({
+    snapshotId: z.number(),
+    symbol: z.string(),
+    exchangeCode: z.string().nullable(),
+    tradingPair: z.string().nullable(),
+    contractType: z.string().nullable(),
+    modelType: z.enum(["MODEL1", "MODEL2", "MODEL3"]),
+    timeInterval: z.string().nullable(),
+    valueCurrency: z.string(),
+    fetchedAt: z.string().datetime({ offset: true }),
+    effectiveFrom: z.string().datetime({ offset: true }).nullable(),
+    effectiveTo: z.string().datetime({ offset: true }).nullable(),
+    y_axis: z.array(z.number()),
+    liquidation_leverage_data: z.array(z.array(z.any())),
+    price_candlesticks: z.array(z.array(z.any())),
+  })
+  .passthrough();
+const OrderbookPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().nullish(),
+    depthLevels: z.number().nullish(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    description: z.string().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
+const CreateOrderbookPairConfigDto = z
+  .object({
+    pairId: z
+      .string()
+      .regex(/^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+    venue: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    venueType: z.enum(["CEX", "DEX"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean().optional().default(true),
+    pullIntervalSeconds: z.number().gte(1).nullish(),
+    depthLevels: z.number().gte(5).lte(500).nullish(),
+    priority: z.number().gte(1).lte(1000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+const UpdateOrderbookPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    pullIntervalSeconds: z.number().gte(1).nullable(),
+    depthLevels: z.number().gte(5).lte(500).nullable(),
+    priority: z.number().gte(1).lte(1000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -274,6 +385,20 @@ const TradingPairConfigResponseDto = z
     routerAddress: z.string().optional(),
     poolAddress: z.string().optional(),
     dexName: z.string().optional(),
+  })
+  .passthrough();
+const LongShortRatioPointResponseDto = z
+  .object({
+    tradingPairId: z.string(),
+    interval: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    timestamp: z.string(),
+    longShortRatio: z.string(),
+    longAccountRatio: z.string().nullish(),
+    shortAccountRatio: z.string().nullish(),
+    longVolume: z.string().nullish(),
+    shortVolume: z.string().nullish(),
+    longShortAccountRatio: z.string().nullish(),
+    source: z.string(),
   })
   .passthrough();
 const BaseResponseDto = z
@@ -312,7 +437,15 @@ export const schemas = {
   UpdateAdminRoleDto,
   CreateAdminMenuDto,
   UpdateAdminMenuDto,
+  AdminDataPullTaskResponseDto,
+  CreateAdminDataPullTaskDto,
+  UpdateAdminDataPullTaskDto,
+  LiquidationHeatmapResponseDto,
+  OrderbookPairConfigResponseDto,
+  CreateOrderbookPairConfigDto,
+  UpdateOrderbookPairConfigDto,
   TradingPairConfigResponseDto,
+  LongShortRatioPointResponseDto,
   BaseResponseDto,
 };
 
@@ -365,6 +498,106 @@ const endpoints = makeApi([
       },
     ],
     response: AdminAuthResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_list",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "enabled",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+      {
+        name: "name",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "key",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AdminDataPullTaskResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks",
+    alias: "AdminDataPullTaskController_create",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateAdminDataPullTaskDto,
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_findOne",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "put",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_update",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateAdminDataPullTaskDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullTaskResponseDto,
+  },
+  {
+    method: "delete",
+    path: "/admin/data-pull-tasks/:id",
+    alias: "AdminDataPullTaskController_delete",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: "get",
@@ -529,6 +762,117 @@ const endpoints = makeApi([
     alias: "AdminMenuController_findPermissionMenus[1]",
     requestFormat: "json",
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_getAllConfigs",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "venue",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "venueType",
+        type: "Query",
+        schema: z.enum(["CEX", "DEX"]).optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "enabledOnly",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.array(OrderbookPairConfigResponseDto),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "post",
+    path: "/admin/orderbook-configs",
+    alias: "AdminOrderbookPairConfigController_createConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateOrderbookPairConfigDto,
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_getConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "put",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_updateConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateOrderbookPairConfigDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: OrderbookPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "delete",
+    path: "/admin/orderbook-configs/:id",
+    alias: "AdminOrderbookPairConfigController_deleteConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.object({ success: z.boolean() }).partial().passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",
@@ -1226,6 +1570,74 @@ const endpoints = makeApi([
       })
       .partial()
       .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/liquidation-heatmap/latest",
+    alias: "LiquidationHeatmapController_getLatest",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "exchangeCode",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "contractType",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "timeInterval",
+        type: "Query",
+        schema: z.string().optional().default("15m"),
+      },
+      {
+        name: "modelType",
+        type: "Query",
+        schema: z.enum(["MODEL1", "MODEL2", "MODEL3"]).optional(),
+      },
+    ],
+    response: LiquidationHeatmapResponseDto,
+  },
+  {
+    method: "get",
+    path: "/markets/long-short-ratio",
+    alias: "MarketsController_getLongShortRatio",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "tradingPairId",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "interval",
+        type: "Query",
+        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+      },
+      {
+        name: "from",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "to",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(2000).optional(),
+      },
+    ],
+    response: z.array(LongShortRatioPointResponseDto),
   },
   {
     method: "get",

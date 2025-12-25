@@ -264,11 +264,25 @@ export class PermissionService {
       case 'setting':
       case 'settings':
         return AppResource.SETTINGS
+      case 'data_pull_task':
+      case 'data_pull_tasks':
+      case 'datapulltask':
+      case 'datapulltasks':
+      case 'data_sync_task':
+      case 'datasynctask':
+        return AppResource.DATA_PULL_TASK
       case 'strategy_template':
       case 'strategytemplate':
       case 'strategy_templates':
       case 'strategytemplates':
         return AppResource.STRATEGY_TEMPLATE
+      case 'orderbook_config':
+      case 'orderbookconfig':
+      case 'orderbook_configs':
+      case 'orderbookconfigs':
+      case 'orderbook':
+      case 'orderbooks':
+        return AppResource.ORDERBOOK_CONFIG
       default:
         return null
     }

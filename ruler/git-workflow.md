@@ -6,17 +6,18 @@
 
 - 🔗 **Issue ID 必需**：提交前必须有 Issue ID；若无则询问用户创建或指定
 
-### 1.2 Issue 分支强制
+### 1.2 Issue 分支提交规则
 
-- 🚨 **Issue 分支强制**：修改代码前必须检查当前分支
-  - ✅ 允许：在 `feat/<issue-id>-*`、`fix/<issue-id>-*`、`refactor/<issue-id>-*` 等 issue 分支上修改
-  - ❌ 禁止：在 `main`、`master` 等主分支上修改代码
+- 🚨 **提交必须在 Issue 分支**：可以在任意分支修改代码，但提交时必须在 issue 分支
+  - ✅ 允许提交：`feat/<issue-id>-*`、`fix/<issue-id>-*`、`refactor/<issue-id>-*` 等 issue 分支
+  - ❌ 禁止提交：直接提交到 `main`、`master` 等主分支
   - 📋 处理流程：
-    1. 检测到需要修改代码时，先执行 `git branch --show-current` 检查当前分支
-    2. 如果在主分支，询问用户提供 Issue ID 或使用 `/git-create-issue` 创建
-    3. 获取 Issue ID 后，创建对应分支：`git checkout -b <type>/<issue-id>-<description>`
-    4. 切换到 issue 分支后再执行代码修改
-    5. 如果用户拒绝创建分支，则拒绝修改代码并说明原因
+    1. 可以在任意分支（包括 main）进行代码修改
+    2. 提交前执行 `git branch --show-current` 检查当前分支
+    3. 如果在主分支，询问用户提供 Issue ID 或使用 `/git-create-issue` 创建
+    4. 获取 Issue ID 后，创建对应分支：`git checkout -b <type>/<issue-id>-<description>`
+    5. 切换到 issue 分支后再执行 `git add` 和 `git commit`
+    6. 如果用户拒绝创建分支，则拒绝提交并说明原因
 
 ### 1.3 Git 认证与格式
 
@@ -85,45 +86,7 @@ MSG
 
 ---
 
-## 四、提交前质量检查
-
-### 4.1 增量预检流程
-
-**执行时机**：提交前必须执行（所有分支）
-
-**跳过条件**（同时满足才可跳过）：
-
-- 本次会话已完成一次增量预检
-- 自上次预检后，仅修改了以下类型文件：
-  - 文档文件（`*.md`）
-  - 注释（单纯的注释修改，无代码变更）
-  - `.gitignore`、`LICENSE` 等非代码文件
-
-**必须执行**（任一条件满足）：
-
-- 本次会话未完成增量预检
-- 修改了任何代码文件（`.ts`、`.tsx`、`.js`、`.jsx` 等）
-- 修改了配置文件（`package.json`、`tsconfig.json`、`.env.*` 等）
-- 修改了样式文件（`.css`、`.scss` 等）
-
-**执行内容**：
-
-1. `./scripts/dx lint` —— 所有关联代码改动必跑；**如发现任何 lint 问题，必须先执行一次 `./scripts/dx lint --fix`，再重新运行 `./scripts/dx lint`，只有在自动修复后仍有残留错误时，才允许手动修改代码**
-2. `./scripts/dx build backend` —— 仅在后端代码或共享逻辑被后端使用时执行
-3. `./scripts/dx build front` —— 仅在用户端前端代码有改动时执行
-4. `./scripts/dx build admin` —— 仅在管理后台代码有改动时执行
-
-**失败处理**：
-
-- 任一命令失败则终止，不允许提交
-- 修复问题后需重新执行失败的命令（以及后续受影响的命令）
-
-**CI 提示**：
-
-- CI 环境仍通过 `./scripts/dx prcheck --prod` 执行同一套检查，本地无需额外跑全量命令
-
-
-## 五、推送后流程
+## 四、推送后流程
 
 1. 推送代码到远端
 2. 在对应 Issue 评论报告修改内容
@@ -131,9 +94,9 @@ MSG
 
 ---
 
-## 六、关键约束
+## 五、关键约束
 
 - 提交前必须确认存在 Issue ID（无则询问用户）
 - 统一使用 SSH key 认证（Git 和 gh CLI）
 - 禁止使用 `\n` 字符（只会产生字面量）
-- 增量预检：已执行且仅改文档/注释可跳过，涉及代码改动必须重新执行
+- 增量预检和构建流程见 development.md
