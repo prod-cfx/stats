@@ -1,12 +1,14 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
+import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
+import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
@@ -22,15 +24,16 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
  */
 
 @Module({
-  imports: [PrismaModule, OrderbookConfigModule, AuthModule],
+  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
     DataPullTaskRepository,
     DataPullExecutionRepository,
-    // Job 实现（示例）
+    // Job 实现（示例 + 实际）
     ExampleKlineJob,
     ExampleNewsJob,
+    CoinglassHeatmapJob,
     ExampleOrderbookJob,
     // Job registry，将多个 Job 注入为一个数组
     {
@@ -39,9 +42,10 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
       useFactory: (
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
+        coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
-      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, exampleOrderbookJob],
-      inject: [ExampleKlineJob, ExampleNewsJob, ExampleOrderbookJob],
+      ): DataPullJob[] => [exampleKlineJob, exampleNewsJob, coinglassHeatmapJob, exampleOrderbookJob],
+      inject: [ExampleKlineJob, ExampleNewsJob, CoinglassHeatmapJob, ExampleOrderbookJob],
     },
     // 统一编排 & Cron
     DataSyncOrchestrator,
@@ -51,4 +55,3 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
   ],
 })
 export class DataSyncModule {}
-

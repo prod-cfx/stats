@@ -46,6 +46,13 @@ docker/            # Docker 部署配置
 - `.env.<env>`：非敏感的可提交配置（development/staging/production/e2e）。
 - `.env.<env>.local`：仅供本地敏感值，已加入 `.gitignore`。
 
+### Coinglass 清算热力图（DataSync Job）
+
+`CoinglassHeatmapJob` 依赖以下环境变量，否则任务会打印 “API key 未配置” 并跳过：
+
+- **`COINGLASS_API_KEY`**：必填
+- **`COINGLASS_HEATMAP_ENDPOINT`**：可选（不填则使用默认 `https://open-api.coinglass.com/api/pro/v4/futures/liquidation-heatmap`）
+
 ## 常用命令（DX CLI）
 
 所有命令从仓库根目录执行，统一通过 `./scripts/dx` 调用：
