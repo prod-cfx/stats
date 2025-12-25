@@ -387,6 +387,20 @@ const TradingPairConfigResponseDto = z
     dexName: z.string().optional(),
   })
   .passthrough();
+const LongShortRatioPointResponseDto = z
+  .object({
+    tradingPairId: z.string(),
+    interval: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    timestamp: z.string(),
+    longShortRatio: z.string(),
+    longAccountRatio: z.string().nullish(),
+    shortAccountRatio: z.string().nullish(),
+    longVolume: z.string().nullish(),
+    shortVolume: z.string().nullish(),
+    longShortAccountRatio: z.string().nullish(),
+    source: z.string(),
+  })
+  .passthrough();
 const BaseResponseDto = z
   .object({
     data: z.object({}).partial().passthrough(),
@@ -431,6 +445,7 @@ export const schemas = {
   CreateOrderbookPairConfigDto,
   UpdateOrderbookPairConfigDto,
   TradingPairConfigResponseDto,
+  LongShortRatioPointResponseDto,
   BaseResponseDto,
 };
 
@@ -1589,6 +1604,40 @@ const endpoints = makeApi([
       },
     ],
     response: LiquidationHeatmapResponseDto,
+  },
+  {
+    method: "get",
+    path: "/markets/long-short-ratio",
+    alias: "MarketsController_getLongShortRatio",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "tradingPairId",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "interval",
+        type: "Query",
+        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+      },
+      {
+        name: "from",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "to",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(2000).optional(),
+      },
+    ],
+    response: z.array(LongShortRatioPointResponseDto),
   },
   {
     method: "get",
