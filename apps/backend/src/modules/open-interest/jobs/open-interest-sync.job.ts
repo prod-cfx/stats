@@ -3,11 +3,12 @@ import type {
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
 import type { CreateOpenInterestDto } from '../dto/open-interest.dto'
-import type { OpenInterestService } from '../open-interest.service'
 import { Injectable, Logger } from '@nestjs/common'
-// Nest 注入需要运行时引用 ConfigService，保留值导入
+// Nest 注入需要运行时引用 ConfigService 和 OpenInterestService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+// eslint-disable-next-line ts/consistent-type-imports
+import { OpenInterestService } from '../open-interest.service'
 
 interface CoinglassOiCursor {
   symbol: string

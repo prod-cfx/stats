@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger'
 import {
   IsDateString,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -132,6 +133,7 @@ export class OpenInterestDto {
  */
 export class CreateOpenInterestDto extends OpenInterestDto {
   @ApiProperty({ description: '数据时间戳', example: '2025-12-24T10:00:00Z' })
+  @IsNotEmpty()
   @IsDateString()
   data_timestamp: string
 }

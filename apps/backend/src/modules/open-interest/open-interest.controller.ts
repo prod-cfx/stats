@@ -1,5 +1,4 @@
 import type { QueryOpenInterestDto } from './dto/open-interest.dto'
-import type { OpenInterestService } from './open-interest.service'
 import {
   BadRequestException,
   Body,
@@ -32,6 +31,9 @@ import {
   OpenInterestStatsDto,
   QueryOpenInterestResponseDto,
 } from './dto/open-interest.dto'
+// Nest 注入需要运行时引用 OpenInterestService，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { OpenInterestService } from './open-interest.service'
 
 /**
  * 持仓量数据控制器

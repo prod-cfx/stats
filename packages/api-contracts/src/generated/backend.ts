@@ -311,6 +311,67 @@ const LiquidationHeatmapResponseDto = z
     price_candlesticks: z.array(z.array(z.any())),
   })
   .passthrough();
+const CreateOpenInterestDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    open_interest_usd: z.number(),
+    open_interest_quantity: z.number(),
+    open_interest_by_stable_coin_margin: z.number().optional(),
+    open_interest_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
+    open_interest_change_percent_5m: z.number().optional(),
+    open_interest_change_percent_15m: z.number().optional(),
+    open_interest_change_percent_30m: z.number().optional(),
+    open_interest_change_percent_1h: z.number().optional(),
+    open_interest_change_percent_4h: z.number().optional(),
+    open_interest_change_percent_24h: z.number().optional(),
+    data_timestamp: z.string().optional(),
+  })
+  .passthrough();
+const OpenInterestDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    open_interest_usd: z.number(),
+    open_interest_quantity: z.number(),
+    open_interest_by_stable_coin_margin: z.number().optional(),
+    open_interest_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_coin_margin: z.number().optional(),
+    open_interest_quantity_by_stable_coin_margin: z.number().optional(),
+    open_interest_change_percent_5m: z.number().optional(),
+    open_interest_change_percent_15m: z.number().optional(),
+    open_interest_change_percent_30m: z.number().optional(),
+    open_interest_change_percent_1h: z.number().optional(),
+    open_interest_change_percent_4h: z.number().optional(),
+    open_interest_change_percent_24h: z.number().optional(),
+    data_timestamp: z.string().optional(),
+  })
+  .passthrough();
+const QueryOpenInterestResponseDto = z
+  .object({
+    data: z.array(OpenInterestDto),
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  })
+  .passthrough();
+const OpenInterestStatsDto = z
+  .object({
+    symbol: z.string(),
+    startTime: z.string().datetime({ offset: true }),
+    endTime: z.string().datetime({ offset: true }),
+    dataPoints: z.number(),
+    max: z.number(),
+    min: z.number(),
+    avg: z.number(),
+    latest: z.number(),
+    earliest: z.number(),
+    change: z.number(),
+    changePercent: z.number(),
+  })
+  .passthrough();
 const OrderbookPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -484,6 +545,10 @@ export const schemas = {
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
   LiquidationHeatmapResponseDto,
+  CreateOpenInterestDto,
+  OpenInterestDto,
+  QueryOpenInterestResponseDto,
+  OpenInterestStatsDto,
   OrderbookPairConfigResponseDto,
   CreateOrderbookPairConfigDto,
   UpdateOrderbookPairConfigDto,
@@ -1828,6 +1893,119 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(TradingPairConfigResponseDto),
+  },
+  {
+    method: "post",
+    path: "/open-interest",
+    alias: "OpenInterestController_upsert",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateOpenInterestDto,
+      },
+    ],
+    response: OpenInterestDto,
+    errors: [
+      {
+        status: 400,
+        description: `参数验证失败`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: "get",
+    path: "/open-interest",
+    alias: "OpenInterestController_query",
+    requestFormat: "json",
+    response: QueryOpenInterestResponseDto,
+    errors: [
+      {
+        status: 400,
+        description: `参数验证失败`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: "post",
+    path: "/open-interest/batch",
+    alias: "OpenInterestController_batchUpsert",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: z.array(z.string()),
+      },
+    ],
+    response: z.void(),
+    errors: [
+      {
+        status: 400,
+        description: `参数验证失败`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: "get",
+    path: "/open-interest/latest/:exchange/:symbol",
+    alias: "OpenInterestController_getLatest",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "exchange",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "symbol",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: OpenInterestDto,
+    errors: [
+      {
+        status: 404,
+        description: `未找到数据`,
+        schema: z.void(),
+      },
+    ],
+  },
+  {
+    method: "get",
+    path: "/open-interest/stats/:symbol",
+    alias: "OpenInterestController_getStats",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "startTime",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "endTime",
+        type: "Query",
+        schema: z.string(),
+      },
+    ],
+    response: OpenInterestStatsDto,
+    errors: [
+      {
+        status: 400,
+        description: `参数错误或未找到数据`,
+        schema: z.void(),
+      },
+    ],
   },
   {
     method: "get",
