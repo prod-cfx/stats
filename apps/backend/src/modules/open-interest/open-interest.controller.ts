@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -67,7 +68,13 @@ export class OpenInterestController {
   @RequireAuth()
   @CreateAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '批量创建或更新持仓量数据' })
-  @ApiResponse({ status: HttpStatus.CREATED, description: '批量创建成功' })
+  @ApiBody({ type: CreateOpenInterestDto, isArray: true })
+  @ApiResponse({ 
+    status: HttpStatus.CREATED, 
+    description: '批量创建成功',
+    type: OpenInterestDto,
+    isArray: true,
+  })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
     description: '参数验证失败',
@@ -93,6 +100,12 @@ export class OpenInterestController {
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '查询持仓量数据' })
+  @ApiQuery({ name: 'exchange', required: false, type: String, description: '交易所名称', example: 'All' })
+  @ApiQuery({ name: 'symbol', required: false, type: String, description: '币种符号', example: 'BTC' })
+  @ApiQuery({ name: 'startTime', required: false, type: String, description: '开始时间', example: '2025-12-24T00:00:00Z' })
+  @ApiQuery({ name: 'endTime', required: false, type: String, description: '结束时间', example: '2025-12-24T23:59:59Z' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '页码（从1开始）', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: '每页数量', example: 100 })
   @ApiResponse({
     status: HttpStatus.OK,
     description: '查询成功',

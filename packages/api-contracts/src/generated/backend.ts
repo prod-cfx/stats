@@ -327,7 +327,7 @@ const CreateOpenInterestDto = z
     open_interest_change_percent_1h: z.number().optional(),
     open_interest_change_percent_4h: z.number().optional(),
     open_interest_change_percent_24h: z.number().optional(),
-    data_timestamp: z.string().optional(),
+    data_timestamp: z.string(),
   })
   .passthrough();
 const OpenInterestDto = z
@@ -1920,6 +1920,38 @@ const endpoints = makeApi([
     path: "/open-interest",
     alias: "OpenInterestController_query",
     requestFormat: "json",
+    parameters: [
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "endTime",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "startTime",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
     response: QueryOpenInterestResponseDto,
     errors: [
       {
@@ -1938,10 +1970,10 @@ const endpoints = makeApi([
       {
         name: "body",
         type: "Body",
-        schema: z.array(z.string()),
+        schema: z.array(CreateOpenInterestDto),
       },
     ],
-    response: z.void(),
+    response: z.array(OpenInterestDto),
     errors: [
       {
         status: 400,
