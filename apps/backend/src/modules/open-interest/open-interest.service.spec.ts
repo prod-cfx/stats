@@ -1,7 +1,7 @@
 import type { TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client'
 import type { CreateOpenInterestDto } from './dto/open-interest.dto'
 import { Test } from '@nestjs/testing'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { OpenInterestService } from './open-interest.service'
 

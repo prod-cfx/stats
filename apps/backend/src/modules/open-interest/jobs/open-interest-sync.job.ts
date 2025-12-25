@@ -128,7 +128,11 @@ export class OpenInterestSyncJob implements DataPullJob {
         data_timestamp: nowIso,
       }))
 
-      const results = await this.openInterestService.batchUpsert(items)
+      const aggregatedAllRecords = this.buildAllExchangeRecords(items, nowIso)
+      const payload =
+        aggregatedAllRecords.length > 0 ? [...items, ...aggregatedAllRecords] : items
+
+      const results = await this.openInterestService.batchUpsert(payload)
 
       const newCursor = JSON.stringify(cursor)
 
@@ -152,6 +156,133 @@ export class OpenInterestSyncJob implements DataPullJob {
       )
       throw error
     }
+  }
+
+  private buildAllExchangeRecords(
+    items: CreateOpenInterestDto[],
+    timestamp: string,
+  ): CreateOpenInterestDto[] {
+    interface WeightedAccumulator { sum: number; weight: number }
+    interface AggregateAccumulator {
+      symbol: string
+      openInterestUsd: number
+      openInterestQuantity: number
+      openInterestByCoinMargin: number
+      openInterestByStableCoinMargin: number
+      openInterestQuantityByCoinMargin: number
+      openInterestQuantityByStableCoinMargin: number
+      hasOpenInterestByCoinMargin: boolean
+      hasOpenInterestByStableCoinMargin: boolean
+      hasOpenInterestQuantityByCoinMargin: boolean
+      hasOpenInterestQuantityByStableCoinMargin: boolean
+      changePercent5m: WeightedAccumulator
+      changePercent15m: WeightedAccumulator
+      changePercent30m: WeightedAccumulator
+      changePercent1h: WeightedAccumulator
+      changePercent4h: WeightedAccumulator
+      changePercent24h: WeightedAccumulator
+    }
+
+    const aggregates = new Map<string, AggregateAccumulator>()
+
+    for (const item of items) {
+      const symbol = item.symbol
+      let agg = aggregates.get(symbol)
+      if (!agg) {
+        agg = {
+          symbol,
+          openInterestUsd: 0,
+          openInterestQuantity: 0,
+          openInterestByCoinMargin: 0,
+          openInterestByStableCoinMargin: 0,
+          openInterestQuantityByCoinMargin: 0,
+          openInterestQuantityByStableCoinMargin: 0,
+          hasOpenInterestByCoinMargin: false,
+          hasOpenInterestByStableCoinMargin: false,
+          hasOpenInterestQuantityByCoinMargin: false,
+          hasOpenInterestQuantityByStableCoinMargin: false,
+          changePercent5m: { sum: 0, weight: 0 },
+          changePercent15m: { sum: 0, weight: 0 },
+          changePercent30m: { sum: 0, weight: 0 },
+          changePercent1h: { sum: 0, weight: 0 },
+          changePercent4h: { sum: 0, weight: 0 },
+          changePercent24h: { sum: 0, weight: 0 },
+        }
+        aggregates.set(symbol, agg)
+      }
+
+      agg.openInterestUsd += item.open_interest_usd ?? 0
+      agg.openInterestQuantity += item.open_interest_quantity ?? 0
+      if (item.open_interest_by_coin_margin != null) {
+        agg.openInterestByCoinMargin += item.open_interest_by_coin_margin
+        agg.hasOpenInterestByCoinMargin = true
+      }
+      if (item.open_interest_by_stable_coin_margin != null) {
+        agg.openInterestByStableCoinMargin += item.open_interest_by_stable_coin_margin
+        agg.hasOpenInterestByStableCoinMargin = true
+      }
+      if (item.open_interest_quantity_by_coin_margin != null) {
+        agg.openInterestQuantityByCoinMargin += item.open_interest_quantity_by_coin_margin
+        agg.hasOpenInterestQuantityByCoinMargin = true
+      }
+      if (item.open_interest_quantity_by_stable_coin_margin != null) {
+        agg.openInterestQuantityByStableCoinMargin +=
+          item.open_interest_quantity_by_stable_coin_margin
+        agg.hasOpenInterestQuantityByStableCoinMargin = true
+      }
+
+      const weight = item.open_interest_usd ?? 0
+      this.addWeightedValue(agg.changePercent5m, item.open_interest_change_percent_5m, weight)
+      this.addWeightedValue(agg.changePercent15m, item.open_interest_change_percent_15m, weight)
+      this.addWeightedValue(agg.changePercent30m, item.open_interest_change_percent_30m, weight)
+      this.addWeightedValue(agg.changePercent1h, item.open_interest_change_percent_1h, weight)
+      this.addWeightedValue(agg.changePercent4h, item.open_interest_change_percent_4h, weight)
+      this.addWeightedValue(agg.changePercent24h, item.open_interest_change_percent_24h, weight)
+    }
+
+    return Array.from(aggregates.values()).map(agg => ({
+      exchange: 'All',
+      symbol: agg.symbol,
+      open_interest_usd: agg.openInterestUsd,
+      open_interest_quantity: agg.openInterestQuantity,
+      open_interest_by_coin_margin:
+        agg.hasOpenInterestByCoinMargin ? agg.openInterestByCoinMargin : undefined,
+      open_interest_by_stable_coin_margin:
+        agg.hasOpenInterestByStableCoinMargin
+          ? agg.openInterestByStableCoinMargin
+          : undefined,
+      open_interest_quantity_by_coin_margin:
+        agg.hasOpenInterestQuantityByCoinMargin
+          ? agg.openInterestQuantityByCoinMargin
+          : undefined,
+      open_interest_quantity_by_stable_coin_margin:
+        agg.hasOpenInterestQuantityByStableCoinMargin
+          ? agg.openInterestQuantityByStableCoinMargin
+          : undefined,
+      open_interest_change_percent_5m: this.resolveWeightedValue(agg.changePercent5m),
+      open_interest_change_percent_15m: this.resolveWeightedValue(agg.changePercent15m),
+      open_interest_change_percent_30m: this.resolveWeightedValue(agg.changePercent30m),
+      open_interest_change_percent_1h: this.resolveWeightedValue(agg.changePercent1h),
+      open_interest_change_percent_4h: this.resolveWeightedValue(agg.changePercent4h),
+      open_interest_change_percent_24h: this.resolveWeightedValue(agg.changePercent24h),
+      data_timestamp: timestamp,
+    }))
+  }
+
+  private addWeightedValue(
+    target: { sum: number; weight: number },
+    value: number | undefined,
+    weightSource: number,
+  ) {
+    if (value == null) return
+    const weight = Number.isFinite(weightSource) && weightSource > 0 ? weightSource : 1
+    target.sum += value * weight
+    target.weight += weight
+  }
+
+  private resolveWeightedValue(target: { sum: number; weight: number }): number | undefined {
+    if (!target.weight) return undefined
+    return target.sum / target.weight
   }
 
   /**

@@ -1,3 +1,5 @@
+import type {
+  QueryOpenInterestDto} from './dto/open-interest.dto';
 import {
   BadRequestException,
   Body,
@@ -32,8 +34,7 @@ import { AppResource } from '@/modules/auth/rbac/permissions'
 import {
   CreateOpenInterestDto,
   OpenInterestDto,
-  OpenInterestStatsDto,
-  QueryOpenInterestDto,
+  OpenInterestStatsDto
 } from './dto/open-interest.dto'
 // Nest 注入需要运行时引用 OpenInterestService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
