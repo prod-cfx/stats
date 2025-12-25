@@ -3,11 +3,13 @@ import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
+import { SettingsModule } from '@/modules/settings/settings.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
-import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
+import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
+import { BinanceOrderBookSnapshotJob } from './jobs/binance-orderbook-snapshot.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
@@ -15,7 +17,11 @@ import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
+import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
+import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
+import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
+import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 
 /**
  * 统一的数据拉取调度模块：
@@ -25,7 +31,7 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
  */
 
 @Module({
-  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule],
+  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule, SettingsModule],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
@@ -36,6 +42,7 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
     ExampleNewsJob,
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
+    BinanceOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
     // Job registry，将多个 Job 注入为一个数组
     {
@@ -46,12 +53,14 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
+        binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
         coinglassHeatmapJob,
         exampleOrderbookJob,
+        binanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
       ],
       inject: [
@@ -59,6 +68,7 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
         ExampleNewsJob,
         CoinglassHeatmapJob,
         ExampleOrderbookJob,
+        BinanceOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
       ],
     },
@@ -67,6 +77,30 @@ import { AdminDataPullTaskService } from './services/admin-data-pull-task.servic
     DataSyncCronService,
     // 管理后台：数据拉取任务 CRUD
     AdminDataPullTaskService,
+
+    // ===== Orderbook WS sync（动态订阅/退订；按 orderbook_pair_configs 驱动）=====
+    BinanceCexSpotOrderbookWsAdapter,
+    BinanceCexPerpetualOrderbookWsAdapter,
+    BinanceCexFutureOrderbookWsAdapter,
+    {
+      provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
+      useFactory: (
+        binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
+        binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
+        binanceCexFutureOrderbookWsAdapter: BinanceCexFutureOrderbookWsAdapter,
+      ) => [
+        binanceCexSpotOrderbookWsAdapter,
+        binanceCexPerpetualOrderbookWsAdapter,
+        binanceCexFutureOrderbookWsAdapter,
+      ],
+      inject: [
+        BinanceCexSpotOrderbookWsAdapter,
+        BinanceCexPerpetualOrderbookWsAdapter,
+        BinanceCexFutureOrderbookWsAdapter,
+      ],
+    },
+    OrderbookWsSyncManager,
   ],
 })
 export class DataSyncModule {}
+

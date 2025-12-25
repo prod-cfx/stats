@@ -7,3 +7,10 @@
  */
 export const DATA_PULL_JOB_REGISTRY = 'DATA_PULL_JOB_REGISTRY' as const
 
+/**
+ * 订单薄 WS 适配器 registry：
+ * - 每个交易所/市场类型实现一个 adapter（例如 BINANCE.CEX.SPOT）
+ * - OrderbookWsSyncManager 会按配置分组并调用对应 adapter 动态订阅/退订
+ */
+export const ORDERBOOK_WS_ADAPTER_REGISTRY = 'ORDERBOOK_WS_ADAPTER_REGISTRY' as const
+
