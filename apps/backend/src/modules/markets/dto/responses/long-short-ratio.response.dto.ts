@@ -1,3 +1,4 @@
+import type { MarketTimeframe } from '@ai/shared'
 import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
@@ -13,7 +14,7 @@ export class LongShortRatioPointResponseDto {
     example: '4h',
     enum: MARKET_TIMEFRAMES,
   })
-  interval!: string
+  interval!: MarketTimeframe
 
   @ApiProperty({
     description: '时间戳（ISO 字符串），通常为该时间粒度区间的起始时间',

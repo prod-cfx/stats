@@ -41,6 +41,8 @@ export class GetLongShortRatioRequestDto {
     example: 500,
     minimum: 1,
     maximum: 2000,
+    type: Number,
+    format: 'int32',
   })
   @IsOptional()
   @Type(() => Number)
