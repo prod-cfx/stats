@@ -58,28 +58,28 @@ model LongShortRatio {
 
 /// 持仓量数据模型 - 记录加密货币期货的未平仓合约数据
 model OpenInterest {
-  id          Int      @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // 基础信息
-  exchange    String   /// 交易所名称，"All" 表示所有交易所汇总
-  symbol      String   /// 币种符号，如 "BTC", "ETH"
-  
+  exchange String /// 交易所名称，"All" 表示所有交易所汇总
+  symbol   String /// 币种符号，如 "BTC", "ETH"
+
   // 未平仓合约数据
   /// 未平仓合约价值(USD)，表示所有未平仓合约的总价值
-  openInterestUsd      Decimal  @map("open_interest_usd") @db.Decimal(20, 4)
+  openInterestUsd      Decimal @map("open_interest_usd") @db.Decimal(20, 4)
   /// 未平仓合约数量，表示所有未平仓合约的总数量
-  openInterestQuantity Decimal  @map("open_interest_quantity") @db.Decimal(20, 8)
-  
+  openInterestQuantity Decimal @map("open_interest_quantity") @db.Decimal(20, 8)
+
   // 按保证金类型分类的未平仓合约数据
   /// 稳定币本位未平仓合约价值(USD)，合约采用稳定币作为保证金
-  openInterestByStableCoinMargin   Decimal? @map("open_interest_by_stable_coin_margin") @db.Decimal(20, 4)
+  openInterestByStableCoinMargin         Decimal? @map("open_interest_by_stable_coin_margin") @db.Decimal(20, 4)
   /// 币本位未平仓合约价值(USD)，合约采用币本位作为保证金
-  openInterestByCoinMargin         Decimal? @map("open_interest_by_coin_margin") @db.Decimal(20, 4)
+  openInterestByCoinMargin               Decimal? @map("open_interest_by_coin_margin") @db.Decimal(20, 4)
   /// 币本位未平仓合约数量
-  openInterestQuantityByCoinMargin Decimal? @map("open_interest_quantity_by_coin_margin") @db.Decimal(20, 8)
+  openInterestQuantityByCoinMargin       Decimal? @map("open_interest_quantity_by_coin_margin") @db.Decimal(20, 8)
   /// 稳定币本位未平仓合约数量
   openInterestQuantityByStableCoinMargin Decimal? @map("open_interest_quantity_by_stable_coin_margin") @db.Decimal(20, 8)
-  
+
   // 变化百分比数据 - 使用 Decimal 存储以保持精度
   /// 5分钟内未平仓合约变化百分比
   openInterestChangePercent5m  Decimal? @map("open_interest_change_percent_5m") @db.Decimal(10, 4)
@@ -93,7 +93,7 @@ model OpenInterest {
   openInterestChangePercent4h  Decimal? @map("open_interest_change_percent_4h") @db.Decimal(10, 4)
   /// 24小时内未平仓合约变化百分比
   openInterestChangePercent24h Decimal? @map("open_interest_change_percent_24h") @db.Decimal(10, 4)
-  
+
   // 元数据
   /// 数据时间戳，表示该数据采集的时间
   dataTimestamp DateTime @map("data_timestamp")
@@ -101,13 +101,12 @@ model OpenInterest {
   createdAt     DateTime @default(now()) @map("created_at")
   /// 数据更新时间
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
-  
+
   // 索引
   @@unique([exchange, symbol, dataTimestamp], name: "unique_oi_record")
   @@index([symbol, dataTimestamp], name: "idx_oi_symbol_timestamp")
   @@index([exchange, dataTimestamp], name: "idx_oi_exchange_timestamp")
   @@index([dataTimestamp], name: "idx_oi_timestamp")
-  
   @@map("open_interest")
 }
 
@@ -126,7 +125,7 @@ model AggregatedLiquidationHistory {
   symbol String
 
   /// 交易所 (如 BINANCE / OKX)，'AGGREGATED' 表示全市场聚合
-  exchangeCode String @map("exchange_code") @default("AGGREGATED")
+  exchangeCode String @default("AGGREGATED") @map("exchange_code")
 
   /// 时间粒度（例如 4h / 1h），使用枚举统一管理
   interval MarketTimeframe
@@ -135,7 +134,7 @@ model AggregatedLiquidationHistory {
   timestamp DateTime
 
   /// 多头爆仓金额（USD）
-  longLiquidationUsd  Decimal @map("aggregated_long_liquidation_usd") @db.Decimal(30, 10)
+  longLiquidationUsd Decimal @map("aggregated_long_liquidation_usd") @db.Decimal(30, 10)
 
   /// 空头爆仓金额（USD）
   shortLiquidationUsd Decimal @map("aggregated_short_liquidation_usd") @db.Decimal(30, 10)
@@ -200,4 +199,79 @@ model HyperliquidWhaleAlert {
   @@index([createTime], map: "idx_whale_alert_time")
   @@index([positionValueUsd], map: "idx_whale_alert_value")
   @@map("hyperliquid_whale_alerts")
+}
+
+/// 加密股票报价数据模型 - 记录加密货币相关股票的实时报价信息
+///
+/// 设计说明：
+/// - 存储加密货币相关股票（如 MSTR, COIN, MARA 等）的报价数据
+/// - 支持多个数据源（如 BBX 等）
+/// - 记录完整的报价信息包括价格、成交量、涨跌幅等
+model CryptoStockQuote {
+  id Int @id @default(autoincrement())
+
+  /// 股票代码，如 MSTR, COIN, MARA
+  symbol String
+
+  /// 股票名称
+  name String?
+
+  /// 交易所代码，如 NASDAQ, NYSE
+  exchange String?
+
+  /// 当前价格
+  price Decimal @db.Decimal(20, 8)
+
+  /// 开盘价
+  openPrice Decimal? @map("open_price") @db.Decimal(20, 8)
+
+  /// 最高价
+  highPrice Decimal? @map("high_price") @db.Decimal(20, 8)
+
+  /// 最低价
+  lowPrice Decimal? @map("low_price") @db.Decimal(20, 8)
+
+  /// 收盘价（前一交易日）
+  closePrice Decimal? @map("close_price") @db.Decimal(20, 8)
+
+  /// 成交量
+  volume Decimal? @db.Decimal(30, 10)
+
+  /// 成交额
+  turnover Decimal? @db.Decimal(30, 10)
+
+  /// 涨跌额
+  priceChange Decimal? @map("price_change") @db.Decimal(20, 8)
+
+  /// 涨跌幅（百分比）
+  priceChangePercent Decimal? @map("price_change_percent") @db.Decimal(10, 4)
+
+  /// 市值
+  marketCap Decimal? @map("market_cap") @db.Decimal(30, 2)
+
+  /// 市盈率
+  peRatio Decimal? @map("pe_ratio") @db.Decimal(10, 4)
+
+  /// 52周最高价
+  high52Week Decimal? @map("high_52_week") @db.Decimal(20, 8)
+
+  /// 52周最低价
+  low52Week Decimal? @map("low_52_week") @db.Decimal(20, 8)
+
+  /// 数据源，例如：'BBX'
+  source String @default("BBX")
+
+  /// 报价时间戳
+  quoteTimestamp DateTime @map("quote_timestamp")
+
+  /// 额外的 JSON 数据，用于存储 API 返回的其他字段
+  rawData Json? @map("raw_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, source, quoteTimestamp], map: "uniq_crypto_stock_quote_symbol_source_time")
+  @@index([symbol, quoteTimestamp], map: "idx_crypto_stock_quote_symbol_time")
+  @@index([source, quoteTimestamp], map: "idx_crypto_stock_quote_source_time")
+  @@map("crypto_stock_quotes")
 }
