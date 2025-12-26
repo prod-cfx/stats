@@ -49,20 +49,19 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
 
   async run(currentCursor: string | null): Promise<JobRunResult> {
     const marketData = this.configService.get<{
-      provider: string
-      restBaseUrl?: string
       restTimeoutMs?: number
     }>('marketData')
     const client = this.redisService.getClient()
 
-    // 不再强依赖全局 MARKET_DATA_PROVIDER，仅在缺失配置时回退到 Binance 默认 REST 配置。
+    // 不再依赖全局 MARKET_DATA_API_BASE_URL，始终使用 Binance 官方 REST 基础地址；
+    // 仅从 marketData 中读取可选的超时时间。
     if (!marketData) {
       this.logger.warn(
-        'marketData config not found, using default Binance REST config for BinanceOrderBookSnapshotJob',
+        'marketData config not found, using default timeout for BinanceOrderBookSnapshotJob',
       )
     }
 
-    const restBaseUrl = marketData?.restBaseUrl ?? 'https://api.binance.com'
+    const restBaseUrl = 'https://api.binance.com'
     const restTimeoutMs = marketData?.restTimeoutMs ?? 10_000
 
     // 统一来源：订单薄配置表（orderbook_pair_configs）
