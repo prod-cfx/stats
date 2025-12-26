@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Copy, Play, Pause, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Copy, RefreshCw } from 'lucide-react';
 
 interface WhaleTransaction {
   address: string;
@@ -121,18 +121,39 @@ const mockTransactions: WhaleTransaction[] = [
 
 export const RealtimeWhalesTable = () => {
   const [isPaused, setIsPaused] = useState(true);
+  const [countdown, setCountdown] = useState(60);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (!isPaused && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    } else if (countdown === 0) {
+      setCountdown(60);
+      // Here you would typically trigger a data refresh
+    }
+    return () => clearInterval(timer);
+  }, [isPaused, countdown]);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-4xl font-bold text-white">实时巨鲸</h1>
-        <button 
-          onClick={() => setIsPaused(!isPaused)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-full text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
-        >
-          {isPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5 fill-current" />}
-          <span>{isPaused ? '已暂停' : '实时中'}</span>
-        </button>
+        <div className="relative group">
+          <button 
+            onClick={() => setIsPaused(!isPaused)}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-full text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${!isPaused ? 'animate-spin' : ''}`} />
+            <span>{isPaused ? '已暂停' : `${countdown}秒后更新`}</span>
+          </button>
+          
+          {/* Custom Tooltip */}
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[#161b22] border border-[#30363d] rounded text-xs text-[#e6edf3] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+            {isPaused ? '开始自动更新' : '暂停自动更新'}
+          </div>
+        </div>
       </div>
 
       <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden">
