@@ -101,7 +101,7 @@ export const TraderCard = ({
 
       <div className="flex flex-col gap-2">
         <span className="text-[#777777] text-xs font-medium">账户总价值</span>
-        <span className="text-white text-4xl font-extrabold tracking-tight">{totalValue}</span>
+        <span className="text-white text-2xl font-bold tracking-tight">{totalValue}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-b border-[#222222] pb-6">
