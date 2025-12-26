@@ -65,23 +65,24 @@ export class PolymarketMarketsJob implements DataPullJob {
     }
 
     const nextCursorValue = response.nextCursor ?? null
+    const apiReturned = response.markets.length  // API 实际返回的数量
     
     // 计算下一次的 offset
+    // 关键：必须基于 API 实际返回的数量（apiReturned），而不是过滤后的数量（processed）
+    // 因为过滤后 crypto 市场可能只有个位数，会导致永远重置 offset=0，永远循环第一页
     // 注意：使用 effectiveLimit 而不是 batchSize 来判断，
     // 因为 gamma-client 会将 limit clamp 到 POLYMARKET_GAMMA_LIMIT
-    // 如果有 nextCursor，使用它（重置 offset 为 0）
-    // 否则累加 offset，如果已经处理完所有数据（返回少于 effectiveLimit），则重置为 0 开始新一轮
     let nextOffset = 0
     if (nextCursorValue) {
       // 有 cursor，重置 offset
       nextOffset = 0
-    } else if (processed >= this.effectiveLimit) {
-      // 没有 cursor 但返回了满批数据，继续下一页
-      nextOffset = (cursor.offset ?? 0) + processed
+    } else if (apiReturned >= this.effectiveLimit) {
+      // 没有 cursor 但 API 返回了满批数据，继续下一页
+      nextOffset = (cursor.offset ?? 0) + apiReturned
     } else {
-      // 没有 cursor 且数据不满，说明到达末尾，重置为 0 开始新一轮
+      // 没有 cursor 且 API 返回数据不满，说明到达末尾，重置为 0 开始新一轮
       nextOffset = 0
-      this.logger.log(`Reached end of markets (processed=${processed} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`)
+      this.logger.log(`Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`)
     }
     
     const newCursor: PolymarketMarketsCursor = {
