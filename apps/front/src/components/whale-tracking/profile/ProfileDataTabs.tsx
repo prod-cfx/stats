@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Filter, ArrowUpDown } from 'lucide-react';
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'history' | 'delegation';
 
@@ -40,14 +41,54 @@ export const ProfileDataTabs = () => {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#1e1e1e] text-[#999999] text-[10px] font-bold uppercase tracking-wider border-b border-[#2c2c2c]">
-              <th className="px-6 py-4 text-left">币种</th>
-              <th className="px-6 py-4 text-right">持仓价值</th>
-              <th className="px-6 py-4 text-right">未实现盈亏</th>
-              <th className="px-6 py-4 text-right">入场均价</th>
-              <th className="px-6 py-4 text-right">标记价</th>
-              <th className="px-6 py-4 text-right">清算价</th>
-              <th className="px-6 py-4 text-right">保证金</th>
-              <th className="px-6 py-4 text-right">资金费用</th>
+              <th className="px-6 py-4 text-left">
+                <div className="flex items-center gap-1.5">
+                  <span>币种</span>
+                  <Filter className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>持仓价值</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>未实现盈亏</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>入场均价</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>标记价</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>清算价</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>保证金</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
+              <th className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>资金费用</span>
+                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                </div>
+              </th>
               <th className="px-6 py-4 text-center">止盈/止损</th>
             </tr>
           </thead>

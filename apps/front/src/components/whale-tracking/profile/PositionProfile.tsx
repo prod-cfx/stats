@@ -58,27 +58,28 @@ export const PositionProfile = () => {
       {/* Value Distribution */}
       <div className="space-y-4 pt-2">
         <div className="text-[#999999] text-sm">仓位分布</div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col items-center gap-1">
+        <div className="flex justify-between items-end mb-1">
+          <div className="flex flex-col gap-1">
+            <span className="text-[#999999] text-xs font-medium">多头价值</span>
             <span className="text-white text-lg font-bold">$ 0</span>
-            <span className="text-[#999999] text-xs">多头价值</span>
           </div>
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-white text-lg font-bold">$ 239,670,330.26</span>
-            <span className="text-[#999999] text-xs">空头价值</span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-[#999999] text-xs font-medium">空头价值</span>
+            <span className="text-white text-lg font-bold">$ 31,034,500</span>
           </div>
         </div>
+        <div className="h-2 w-full bg-[#ef4444] rounded-full" />
       </div>
 
       {/* ROI & PnL */}
-      <div className="space-y-3 pt-4 border-t border-[#2c2c2c]">
+      <div className="space-y-4 pt-4">
         <div className="flex justify-between items-center">
           <span className="text-[#999999] text-sm">投资回报率</span>
-          <span className="text-[#4ade80] text-base font-bold">+11.39 %</span>
+          <span className="text-[#f87171] text-base font-bold">-7.63 %</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[#999999] text-sm">未实现盈亏</span>
-          <span className="text-[#4ade80] text-base font-bold">$ +2,414,096.73</span>
+          <span className="text-[#f87171] text-base font-bold">$ -54,885.83</span>
         </div>
       </div>
     </div>
