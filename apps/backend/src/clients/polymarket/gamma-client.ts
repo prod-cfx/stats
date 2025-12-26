@@ -92,7 +92,9 @@ export class PolymarketGammaClient {
       markets = json.markets
       nextCursor = json.next_cursor ?? json.nextCursor ?? null
     } else {
-      markets = []
+      // 非预期格式，视为错误而非空数据
+      this.logger.error(`Unexpected Gamma API response format: ${JSON.stringify(json).substring(0, 500)}`)
+      throw new Error(`Gamma API returned unexpected response format. Expected array or object with 'markets' field, got: ${typeof json}`)
     }
 
     return {

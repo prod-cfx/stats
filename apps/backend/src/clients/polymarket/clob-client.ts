@@ -100,8 +100,9 @@ export class PolymarketClobClient {
       const subscribePayload = {
         type: 'subscribe',
         channel: 'market',
-        assets_ids: options.assetIds,
+        asset_ids: options.assetIds,  // 修复：字段名应为 asset_ids，不是 assets_ids
       }
+      this.logger.log(`Subscribing to Polymarket market channel for ${options.assetIds.length} assets`)
       ws.send(JSON.stringify(subscribePayload))
     })
 
