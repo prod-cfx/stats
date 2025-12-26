@@ -142,6 +142,22 @@ export class PolymarketMarketsJob implements DataPullJob {
   }
 
   private parseOutcomes(market: PolymarketGammaMarket): PolymarketGammaOutcome[] {
+    // 0. 统一处理 clobTokenIds，如果是字符串先解析成数组
+    let clobTokenIds: string[] | undefined
+    const rawClobTokenIds = (market as any).clobTokenIds
+    if (typeof rawClobTokenIds === 'string') {
+      try {
+        const parsed = JSON.parse(rawClobTokenIds)
+        if (Array.isArray(parsed)) {
+          clobTokenIds = parsed.map(String)
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to parse clobTokenIds JSON for market ${market.id}: ${String(error)}`)
+      }
+    } else if (Array.isArray(rawClobTokenIds)) {
+      clobTokenIds = rawClobTokenIds.map(String)
+    }
+
     // 1. 如果 outcomes 是数组，直接返回
     if (Array.isArray(market.outcomes)) {
       return market.outcomes
@@ -155,7 +171,7 @@ export class PolymarketMarketsJob implements DataPullJob {
           // 如果是简单的字符串数组 ["Yes", "No"]，转换为 outcome 对象
           return parsed.map((name, index) => ({
             id: `${market.id}-outcome-${index}`,
-            token_id: (market as any).clobTokenIds?.[index] ?? `${market.id}-${index}`,
+            token_id: clobTokenIds?.[index] ?? `${market.id}-${index}`,
             name: String(name),
           }))
         }
@@ -165,11 +181,10 @@ export class PolymarketMarketsJob implements DataPullJob {
     }
 
     // 3. 检查 clobTokenIds 字段
-    const clobTokenIds = (market as any).clobTokenIds
-    if (Array.isArray(clobTokenIds) && clobTokenIds.length > 0) {
+    if (clobTokenIds && clobTokenIds.length > 0) {
       return clobTokenIds.map((tokenId, index) => ({
         id: `${market.id}-outcome-${index}`,
-        token_id: String(tokenId),
+        token_id: tokenId,
         name: `Outcome ${index + 1}`,
       }))
     }
