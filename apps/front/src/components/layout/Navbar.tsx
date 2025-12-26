@@ -18,12 +18,20 @@ export const Navbar = () => {
         { name: '清算地图', href: '/liquidation-map' },
         { name: '交易所多空比', href: '/long-short-ratio' },
         { name: '聚合挂单', href: '/aggregated-orderbook' },
-        { name: '爆仓数据', href: '#' },
-        { name: '预测市场', href: '#' },
-        { name: '币股', href: '#' },
+        { name: '爆仓数据', href: '/liquidation-data' },
+        { name: '预测市场', href: '/prediction-market' },
+        { name: '币股', href: '/public-companies' },
       ]
     },
-    { name: '鲸鱼', href: '#' },
+    { 
+      name: '鲸鱼', 
+      href: '/whale-tracking/discover',
+      children: [
+        { name: '发现', href: '/whale-tracking/discover' },
+        { name: '实时巨鲸', href: '/whale-tracking/realtime' },
+        { name: '鲸鱼持仓', href: '/whale-tracking/holdings' },
+      ]
+    },
     { name: '看板', href: '#' },
   ];
 
@@ -45,8 +53,9 @@ export const Navbar = () => {
             if (link.children) {
               return (
                 <div key={link.name} className="relative group h-full flex items-center">
-                  <button 
-                    className={`font-medium transition-colors flex items-center gap-1 h-full border-b-2 transition-all cursor-pointer ${
+                  <Link 
+                    href={link.href}
+                    className={`font-medium transition-colors flex items-center gap-1 h-full border-b-2 transition-all cursor-pointer no-underline ${
                       isActive 
                         ? 'text-[#e6edf3] border-blue-500' 
                         : 'text-[#8b949e] hover:text-[#e6edf3] border-transparent'
@@ -54,7 +63,7 @@ export const Navbar = () => {
                   >
                     {link.name}
                     <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
-                  </button>
+                  </Link>
                   
                   {/* Dropdown Menu */}
                   <div className="absolute top-[95%] left-0 w-48 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 overflow-hidden z-50">
