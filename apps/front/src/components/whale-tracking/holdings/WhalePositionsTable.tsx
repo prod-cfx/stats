@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Copy, ChevronDown, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhalePosition {
@@ -180,7 +181,12 @@ export const WhalePositionsTable = () => {
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-white text-xs font-medium">{pos.address}</span>
+                        <Link 
+                          href={`/whale-tracking/profile/${pos.address}`}
+                          className="text-white text-xs font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                        >
+                          {pos.address}
+                        </Link>
                         <button className="text-[#666666] hover:text-white transition-colors">
                           <Copy className="w-3.5 h-3.5" />
                         </button>

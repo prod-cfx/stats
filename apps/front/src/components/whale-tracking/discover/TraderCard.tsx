@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Copy, ExternalLink, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
 
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
@@ -48,7 +49,12 @@ export const TraderCard = ({
             </div>
             <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
-                <span className="text-white font-bold text-lg">{address}</span>
+                <Link 
+                  href={`/whale-tracking/profile/${address}`}
+                  className="text-white font-bold text-lg hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                >
+                  {address}
+                </Link>
                 <button className="text-[#666666] hover:text-white transition-colors">
                   <Copy className="w-4 h-4" />
                 </button>
@@ -96,7 +102,12 @@ export const TraderCard = ({
     <div className="bg-[#121212] border border-[#222222] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/30 transition-all group">
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2">
-          <span className="text-white font-bold text-xl">{address}</span>
+          <Link 
+            href={`/whale-tracking/profile/${address}`}
+            className="text-white font-bold text-xl hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+          >
+            {address}
+          </Link>
           <button className="text-[#555555] hover:text-white transition-colors">
             <Copy className="w-4.5 h-4.5" />
           </button>
