@@ -86,7 +86,8 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }:
     series: [
       {
         type: 'pie',
-        radius: ['65%', '90%'],
+        radius: ['60%', '85%'],
+        center: ['50%', '50%'],
         avoidLabelOverlap: false,
         label: { show: false },
         emphasis: { scale: false },
@@ -97,40 +98,40 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }:
   };
 
   return (
-    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
-      <div className="text-[#999999] text-xs font-medium">{label}</div>
+    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl p-6 flex flex-col gap-6 relative min-h-[180px]">
+      <div className="text-[#999999] text-sm font-medium">{label}</div>
       {isPerformance ? (
-        <div className="flex flex-col gap-4 mt-auto">
-          <div className="grid grid-cols-2 gap-8">
-            <div className="flex flex-col">
-              <span className="text-[#999999] text-[10px] font-medium mb-1">胜率</span>
-              <span className="text-white text-xl font-bold">28.57 %</span>
+        <div className="flex flex-col gap-6 mt-auto">
+          <div className="grid grid-cols-2 gap-10">
+            <div className="flex flex-col gap-1">
+              <span className="text-[#999999] text-xs font-medium">胜率</span>
+              <span className="text-white text-2xl font-bold">28.57 %</span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-[#999999] text-[10px] font-medium mb-1">最大回撤</span>
-              <span className="text-white text-xl font-bold">59.03 %</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[#999999] text-xs font-medium">最大回撤</span>
+              <span className="text-white text-2xl font-bold">59.03 %</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-2 gap-10">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#999999] text-[10px] font-medium">已成交订单</span>
-              <span className="text-white text-[10px] font-bold ml-auto">77</span>
+              <div className="w-2 h-2 rounded-full bg-[#fac858]" />
+              <span className="text-[#999999] text-xs font-medium">已成交订单</span>
+              <span className="text-white text-sm font-bold ml-auto">77</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#999999] text-[10px] font-medium">平仓次数</span>
-              <span className="text-white text-[10px] font-bold ml-auto">7</span>
+              <div className="w-2 h-2 rounded-full bg-[#fac858]" />
+              <span className="text-[#999999] text-xs font-medium">平仓次数</span>
+              <span className="text-white text-sm font-bold ml-auto">7</span>
             </div>
           </div>
         </div>
       ) : (
-        <div className="flex items-end justify-between mt-auto">
-          <div className="flex flex-col gap-4 flex-1">
-            <div className="text-white text-xl font-bold tracking-tight">{value}</div>
+        <div className="flex items-center justify-between mt-auto">
+          <div className="flex flex-col gap-5 flex-1">
+            <div className="text-white text-3xl font-bold tracking-tight">{value}</div>
             <div className="w-full">{subText}</div>
           </div>
-          <div className="w-16 h-16 flex-none">
+          <div className="w-20 h-20 flex-none ml-4">
             <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
           </div>
         </div>
