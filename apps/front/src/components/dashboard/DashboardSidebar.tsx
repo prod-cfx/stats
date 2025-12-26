@@ -36,13 +36,13 @@ export const DashboardSidebar = () => {
           </div>
           <ChevronRight className="w-3 h-3 text-[#5a5a5a] group-hover:text-white transition-colors" />
         </button>
-      </div>
 
-      {/* Create Button */}
-      <button className="mt-auto w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
-        <Plus className="w-4 h-4" />
-        <span className="text-sm">CREATE DASHBOARD</span>
-      </button>
+        {/* Create Button moved here */}
+        <button className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+          <Plus className="w-4 h-4" />
+          <span className="text-sm">CREATE DASHBOARD</span>
+        </button>
+      </div>
     </aside>
   );
 };
