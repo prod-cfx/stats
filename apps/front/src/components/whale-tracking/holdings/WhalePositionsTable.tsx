@@ -4,6 +4,129 @@ import React, { useState } from 'react';
 import { Copy, ChevronDown, TrendingUp } from 'lucide-react';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
+interface WhalePosition {
+  address: string;
+  tags: { label: string; color: string; bg: string }[];
+  asset: string;
+  side: 'Long' | 'Short';
+  leverage: string;
+  marginType: 'Cross' | 'Isolated';
+  positionValueUSD: string;
+  positionValueAsset: string;
+  pnlUSD: string;
+  pnlPercent: string;
+  margin: string;
+  entryPrice: string;
+  liqPrice: string;
+  winRate: string;
+  createdTime: string;
+  remark: string;
+}
+
+const mockPositions: WhalePosition[] = [
+  {
+    address: '0xb5...40',
+    tags: [
+      { label: '巨鲸', color: '#c084fc', bg: '#a855f733' },
+      { label: '高频', color: '#60a5fa', bg: '#3b82f633' },
+    ],
+    asset: 'ETH',
+    side: 'Short',
+    leverage: '20x',
+    marginType: 'Isolated',
+    positionValueUSD: '$1,178,000',
+    positionValueAsset: '-400 ETH',
+    pnlUSD: '$-1,150.80',
+    pnlPercent: '-1.95%',
+    margin: '$58,900.00',
+    entryPrice: '$2942.12',
+    liqPrice: '$4233.52',
+    winRate: '--',
+    createdTime: '15 分钟前',
+    remark: '',
+  },
+  {
+    address: '0x70...10',
+    tags: [
+      { label: '稳健', color: '#facc15', bg: '#eab30833' },
+    ],
+    asset: 'ETH',
+    side: 'Long',
+    leverage: '25x',
+    marginType: 'Isolated',
+    positionValueUSD: '$1,059,876',
+    positionValueAsset: '360 ETH',
+    pnlUSD: '$+9,598.28',
+    pnlPercent: '+22.64%',
+    margin: '$42,395.04',
+    entryPrice: '$2917.43',
+    liqPrice: '$2869.46',
+    winRate: '82%',
+    createdTime: '1 小时前',
+    remark: 'James WynnReal',
+  },
+  {
+    address: '0x6b...b8',
+    tags: [
+      { label: '巨鲸', color: '#c084fc', bg: '#a855f733' },
+    ],
+    asset: 'ETH',
+    side: 'Long',
+    leverage: '25x',
+    marginType: 'Isolated',
+    positionValueUSD: '$1,661,700.08',
+    positionValueAsset: '564.42 ETH',
+    pnlUSD: '$+10,725.08',
+    pnlPercent: '+16.14%',
+    margin: '$66,468.00',
+    entryPrice: '$2925.09',
+    liqPrice: '$2880.70',
+    winRate: '71%',
+    createdTime: '1 小时前',
+    remark: '-',
+  },
+  {
+    address: '0x38...10',
+    tags: [
+      { label: '趋势', color: '#4ade80', bg: '#22c55e33' },
+    ],
+    asset: 'ETH',
+    side: 'Long',
+    leverage: '25x',
+    marginType: 'Isolated',
+    positionValueUSD: '$2,781,032.63',
+    positionValueAsset: '944.8 ETH',
+    pnlUSD: '$+22,578.28',
+    pnlPercent: '+20.30%',
+    margin: '$111,241.31',
+    entryPrice: '$2919.6',
+    liqPrice: '$2859.6',
+    winRate: '91%',
+    createdTime: '1 小时前',
+    remark: 'The Collected Whale...',
+  },
+  {
+    address: '0x35...09',
+    tags: [
+      { label: '风险', color: '#f87171', bg: '#ef444433' },
+    ],
+    asset: 'ETH',
+    side: 'Long',
+    leverage: '20x',
+    marginType: 'Isolated',
+    positionValueUSD: '$2,942,900',
+    positionValueAsset: '1,000 ETH',
+    pnlUSD: '$+23,700.00',
+    pnlPercent: '+16.11%',
+    margin: '$147,145.00',
+    entryPrice: '$2919.2',
+    liqPrice: '$1983.2',
+    winRate: '65%',
+    createdTime: '1 小时前',
+    remark: '-',
+  },
+];
+
 export const WhalePositionsTable = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -148,4 +271,3 @@ export const WhalePositionsTable = () => {
     </div>
   );
 };
-
