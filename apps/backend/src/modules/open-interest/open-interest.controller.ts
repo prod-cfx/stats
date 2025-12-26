@@ -29,6 +29,8 @@ import {
   RequireAuth,
 } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+// QueryOpenInterestDto 需要运行时类构造函数，用于 class-validator 校验和 Swagger 推导，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
 import {
   CreateOpenInterestDto,
   OpenInterestDto,
