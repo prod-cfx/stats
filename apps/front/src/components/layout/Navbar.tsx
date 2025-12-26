@@ -32,7 +32,7 @@ export const Navbar = () => {
         { name: '鲸鱼持仓', href: '/whale-tracking/holdings' },
       ]
     },
-    { name: '看板', href: '#' },
+    { name: '看板', href: '/dashboard' },
   ];
 
   return (

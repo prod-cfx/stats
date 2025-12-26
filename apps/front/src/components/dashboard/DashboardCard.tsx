@@ -1,0 +1,45 @@
+'use client';
+
+import React from 'react';
+
+export interface DashboardCardProps {
+  title: string;
+  tags: string[];
+  saves: number;
+  creator: string;
+  image: string;
+}
+
+export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardCardProps) => {
+  return (
+    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden hover:border-[#3b82f6]/50 transition-all group flex flex-col h-full">
+      <div className="aspect-[16/10] w-full overflow-hidden border-b border-[#2c2c2c]">
+        <img 
+          src={image} 
+          alt={title} 
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+        />
+      </div>
+      <div className="p-5 flex flex-col gap-4 flex-1">
+        <h3 className="text-white text-lg font-bold line-clamp-2 min-h-[56px]">{title}</h3>
+        
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag, idx) => (
+            <span 
+              key={idx} 
+              className="px-2 py-0.5 bg-[#2c2c2c] text-[#cccccc] text-[10px] font-bold rounded border border-[#3a3a3a] uppercase tracking-wider"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-auto flex justify-between items-center text-xs">
+          <span className="text-[#999999]">{saves.toLocaleString()} 保存</span>
+          <span className="text-[#5a5a5a] group-hover:text-[#999999] transition-colors">创建者 @{creator}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
