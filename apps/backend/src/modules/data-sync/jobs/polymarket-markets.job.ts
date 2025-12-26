@@ -38,8 +38,8 @@ export class PolymarketMarketsJob implements DataPullJob {
       cursor: cursor.nextCursor ?? null,
       updatedSince: cursor.updatedSince ?? null,
       category: this.category ?? null,
-      active: true,
-      closed: false,
+      // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
+      // isActive 标志会根据 API 返回的 active/closed 字段在 processMarket 中正确设置
     })
 
     let processed = 0

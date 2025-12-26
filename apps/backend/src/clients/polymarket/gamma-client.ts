@@ -70,16 +70,29 @@ export class PolymarketGammaClient {
     }
 
     const json = await this.fetchJson(url)
-    const markets = Array.isArray(json.markets) ? json.markets : []
-    const nextCursor = json.next_cursor ?? json.nextCursor ?? null
+    
+    // Gamma API 可能返回直接的数组或包含 markets 字段的对象
+    let markets: PolymarketGammaMarket[]
+    let nextCursor: string | null = null
+    
+    if (Array.isArray(json)) {
+      // 直接返回数组的情况
+      markets = json
+    } else if (json && typeof json === 'object' && 'markets' in json && Array.isArray(json.markets)) {
+      // 返回 {markets: [...], next_cursor: ...} 的情况
+      markets = json.markets
+      nextCursor = json.next_cursor ?? json.nextCursor ?? null
+    } else {
+      markets = []
+    }
 
     return {
       markets,
-      nextCursor: nextCursor ?? null,
+      nextCursor,
     }
   }
 
-  private async fetchJson(url: URL): Promise<GammaMarketsResponse> {
+  private async fetchJson(url: URL): Promise<GammaMarketsResponse | PolymarketGammaMarket[]> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeoutMs)
     const headers: Record<string, string> = {
@@ -103,9 +116,9 @@ export class PolymarketGammaClient {
         )
       }
 
-      const json = (await response.json()) as GammaMarketsResponse
-      if (!json || typeof json !== 'object' || !Array.isArray(json.markets)) {
-        throw new Error('Gamma API response missing markets array')
+      const json = (await response.json()) as GammaMarketsResponse | PolymarketGammaMarket[]
+      if (!json || (typeof json !== 'object' && !Array.isArray(json))) {
+        throw new Error('Gamma API response is invalid')
       }
       return json
     } catch (error) {
