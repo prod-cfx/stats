@@ -9,7 +9,7 @@ import { PrismaService } from '@/prisma/prisma.service'
 interface WhaleAlertCursor {
   /**
    * 最新一次成功写入的数据点时间戳（毫秒）
-   * 用于客户端过滤，避免重复插入
+   * 仅用于观测/调试，实际幂等由数据库唯一键 + skipDuplicates 保证
    */
   lastTimestamp?: number
 }
@@ -120,10 +120,9 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
       }
     })
 
-    // 如果有 lastTimestamp，只插入比它新的数据
-    const incrementalPoints = cursor.lastTimestamp
-      ? pointsWithTimestamps.filter(point => point.timestampMs > cursor.lastTimestamp!)
-      : pointsWithTimestamps
+    // 为避免丢数，这里不再基于 lastTimestamp 做客户端过滤，
+    // 直接依赖数据库唯一键 (userAddress, symbol, createTime, positionAction) + skipDuplicates 实现幂等
+    const incrementalPoints = pointsWithTimestamps
 
     let insertedCount = 0
     if (incrementalPoints.length > 0) {
