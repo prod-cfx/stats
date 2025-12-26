@@ -95,31 +95,38 @@ export class PolymarketMarketsJob implements DataPullJob {
   private async processMarket(market: PolymarketGammaMarket): Promise<void> {
     // API 返回 events 数组，取第一个元素作为主事件
     const event = market.event ?? market.events?.[0]
+    const m = market as any
+    
+    // 统一 category 为小写并去除空格
+    const rawCategory = market.category ?? event?.category ?? this.category ?? null
+    const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
     
     const marketRecord = await this.repo.upsertMarket({
       marketId: market.id,
-      eventExternalId: market.event_id ?? (event as Record<string, any>)?.id ?? null,
+      eventExternalId: m.eventId ?? m.event_id ?? event?.id ?? null,
       eventSlug: event?.slug ?? null,
       eventTitle: event?.title ?? null,
-      eventStartTime: this.toDate(event?.start_date),
-      eventEndTime: this.toDate(event?.end_date),
+      // API 返回 camelCase，兼容 snake_case
+      eventStartTime: this.toDate(event?.startDate ?? event?.start_date),
+      eventEndTime: this.toDate(event?.endDate ?? event?.end_date),
       slug: market.slug,
       question: market.question ?? market.title,
-      category: market.category ?? event?.category ?? this.category ?? null,
+      category: normalizedCategory,
       tags: this.extractTags(market, event),
-      outcomeType: market.outcomeType ?? (market as Record<string, any>)?.outcome_type ?? null,
-      status: market.status ?? ((market as Record<string, any>)?.closed ? 'closed' : 'open'),
-      resolutionSource: market.resolution_source ?? null,
-      resolutionTime: this.toDate(market.resolution_time),
-      startTradingAt: this.toDate(market.start_date ?? (market as any)?.created_at),
-      endTradingAt: this.toDate(market.end_date ?? market.close_date ?? event?.end_date),
-      lastUpdatedAt: this.toDate((market as any)?.updated_at),
-      feeRate: this.toDecimal((market as Record<string, any>)?.fee_rate),
-      liquidity: this.toDecimal(market.liquidity ?? (market as Record<string, any>)?.liquidity_num),
-      volume24h: this.toDecimal(market.volume24hr ?? (market as Record<string, any>)?.volume_24h),
-      volumeTotal: this.toDecimal((market as Record<string, any>)?.volume_total),
-      openInterest: this.toDecimal(market.open_interest ?? (market as Record<string, any>)?.openInterest),
-      isActive: (market as Record<string, any>)?.active !== false && (market as Record<string, any>)?.closed !== true,
+      outcomeType: market.outcomeType ?? m.outcome_type ?? null,
+      status: market.status ?? (m.closed ? 'closed' : 'open'),
+      // API 返回 camelCase
+      resolutionSource: m.resolutionSource ?? m.resolution_source ?? null,
+      resolutionTime: this.toDate(m.resolutionTime ?? m.resolution_time),
+      startTradingAt: this.toDate(m.startDate ?? m.start_date ?? m.createdAt ?? m.created_at),
+      endTradingAt: this.toDate(m.endDate ?? m.end_date ?? m.closeDate ?? m.close_date ?? event?.endDate ?? event?.end_date),
+      lastUpdatedAt: this.toDate(m.updatedAt ?? m.updated_at),
+      feeRate: this.toDecimal(m.feeRate ?? m.fee_rate),
+      liquidity: this.toDecimal(market.liquidity ?? m.liquidityNum ?? m.liquidity_num),
+      volume24h: this.toDecimal(m.volume24hr ?? m.volume24h ?? m.volume_24h),
+      volumeTotal: this.toDecimal(m.volumeTotal ?? m.volume_total),
+      openInterest: this.toDecimal(m.openInterest ?? m.open_interest),
+      isActive: m.active !== false && m.closed !== true,
       rawPayload: market as Record<string, unknown>,
     })
 
@@ -216,12 +223,13 @@ export class PolymarketMarketsJob implements DataPullJob {
   }
 
   private pickLatestTimestamp(market: PolymarketGammaMarket): string | null {
+    const m = market as any
     const candidates = [
-      (market as any)?.updated_at,
-      market?.close_date,
-      market?.end_date,
-      market?.start_date,
-      market?.created_at,
+      m?.updatedAt ?? m?.updated_at,
+      m?.closeDate ?? m?.close_date,
+      m?.endDate ?? m?.end_date,
+      m?.startDate ?? m?.start_date,
+      m?.createdAt ?? m?.created_at,
     ].filter(Boolean) as (string | number)[]
 
     const isoTimes = candidates

@@ -14,16 +14,27 @@ export interface PolymarketGammaMarket {
   status?: string
   category?: string
   tags?: string[]
+  // 时间字段：API 返回 camelCase，兼容 snake_case
+  createdAt?: string
   created_at?: string
+  updatedAt?: string
   updated_at?: string
+  startDate?: string
   start_date?: string
+  endDate?: string
   end_date?: string
+  closeDate?: string
   close_date?: string
+  // 其他字段
+  resolutionSource?: string
   resolution_source?: string
+  resolutionTime?: string
   resolution_time?: string
   liquidity?: string
   volume24hr?: string
+  openInterest?: string
   open_interest?: string
+  eventId?: string
   event_id?: string
   event?: PolymarketGammaEvent
   events?: PolymarketGammaEvent[] // API 实际返回的是 events 数组
@@ -52,7 +63,10 @@ export interface PolymarketGammaEvent {
   description?: string
   category?: string
   subcategories?: string[]
+  // 时间字段：API 返回 camelCase，兼容 snake_case
+  startDate?: string
   start_date?: string
+  endDate?: string
   end_date?: string
   resolution_source?: string
   resolution_time?: string
