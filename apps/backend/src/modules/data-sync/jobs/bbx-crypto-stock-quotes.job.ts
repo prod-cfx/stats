@@ -85,16 +85,16 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
     }
 
     // 从配置中读取要拉取的股票代码列表（每次都从配置读取，确保可动态更新）
-    const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS') ?? 'MSTR,COIN,MARA'
+    const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS')
+    
+    if (!symbolsConfig) {
+      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is not configured')
+    }
+
     const symbols = symbolsConfig.split(',').map(s => s.trim()).filter(Boolean)
 
     if (symbols.length === 0) {
-      this.logger.warn('No symbols configured for BBX crypto stock quotes job')
-      return {
-        fetchedCount: 0,
-        newCursor: JSON.stringify(cursor),
-        meta: { note: 'No symbols configured' },
-      }
+      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is configured but contains no valid symbols')
     }
 
     this.logger.log(`Fetching BBX crypto stock quotes for symbols: ${symbols.join(', ')}`)
@@ -145,7 +145,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       // 记录缺失但不中断任务，让部分数据能写入
     }
 
-    // 批量入库
+    // 批量入库（parseTimestamp 会在 timestamp 缺失/无效时抛错，阻止写入脏数据）
     const count = await this.repo.upsertQuotes(
       quotes.map(quote => ({
         symbol: quote.symbol,
@@ -165,7 +165,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
         high52Week: quote.high52w ?? null,
         low52Week: quote.low52w ?? null,
         source: 'BBX',
-        quoteTimestamp: this.parseTimestamp(quote.timestamp),
+        quoteTimestamp: this.parseTimestamp(quote.timestamp, quote.symbol),
         rawData: quote,
       })),
     )
@@ -218,29 +218,61 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
   /**
    * 解析时间戳
    * 支持：数字（秒/毫秒）、字符串形式的 epoch、ISO 8601 字符串
+   * @throws Error 当 timestamp 缺失或无法解析时抛出错误
    */
-  private parseTimestamp(timestamp?: number | string): Date {
+  private parseTimestamp(timestamp?: number | string, symbol?: string): Date {
     if (!timestamp) {
-      return new Date()
+      const errorMsg = symbol 
+        ? `Missing timestamp for symbol ${symbol}` 
+        : 'Missing timestamp in API response'
+      throw new Error(errorMsg)
     }
 
     // 处理数字类型的 timestamp
     if (typeof timestamp === 'number') {
       // 判断是秒还是毫秒
       const ts = timestamp > 1e12 ? timestamp : timestamp * 1000
-      return new Date(ts)
+      const date = new Date(ts)
+      
+      // 验证日期是否有效
+      if (isNaN(date.getTime())) {
+        const errorMsg = symbol
+          ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
+          : `Invalid timestamp ${timestamp} in API response`
+        throw new Error(errorMsg)
+      }
+      
+      return date
     }
 
     // 处理字符串形式的 epoch timestamp（如 "1703607900"）
     if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
       const num = Number(timestamp)
       const ts = num > 1e12 ? num : num * 1000
-      return new Date(ts)
+      const date = new Date(ts)
+      
+      // 验证日期是否有效
+      if (isNaN(date.getTime())) {
+        const errorMsg = symbol
+          ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
+          : `Invalid timestamp ${timestamp} in API response`
+        throw new Error(errorMsg)
+      }
+      
+      return date
     }
 
     // 尝试解析为 ISO 8601 或其他日期字符串
     const parsed = new Date(timestamp)
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed
+    
+    if (isNaN(parsed.getTime())) {
+      const errorMsg = symbol
+        ? `Cannot parse timestamp "${timestamp}" for symbol ${symbol}`
+        : `Cannot parse timestamp "${timestamp}" in API response`
+      throw new Error(errorMsg)
+    }
+    
+    return parsed
   }
 
   /**
