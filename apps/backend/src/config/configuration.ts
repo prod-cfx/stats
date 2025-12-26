@@ -2,6 +2,7 @@ import type {MarketTimeframe} from '@ai/shared';
 import { DEFAULT_MARKET_SYMBOLS, MARKET_TIMEFRAMES  } from '@ai/shared'
 import { registerAs } from '@nestjs/config'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'
+import { polymarketConfig } from './polymarket.config'
 
 const env = defaultEnvAccessor
 const THIRTY_DAYS_IN_SECONDS = 30 * 24 * 60 * 60
@@ -273,6 +274,7 @@ export const backendConfigLoaders = [
   aiConfig, // AI 配置用于策略脚本生成
   marketDataConfig,
   strategySignalsConfig,
+  polymarketConfig,
   // 其他配置在需要时再加入 ConfigModule.load
 ]
 

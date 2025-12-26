@@ -1,8 +1,10 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
+import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
+import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
@@ -15,6 +17,8 @@ import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
+import { PolymarketMarketsJob } from './jobs/polymarket-markets.job'
+import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
@@ -44,6 +48,11 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleOrderbookJob,
     BinanceOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
+    PolymarketMarketsJob,
+    PolymarketOrderbookJob,
+    PolymarketGammaClient,
+    PolymarketClobClient,
+    PolymarketRepository,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -55,6 +64,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob: ExampleOrderbookJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
+        polymarketMarketsJob: PolymarketMarketsJob,
+        polymarketOrderbookJob: PolymarketOrderbookJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
@@ -62,6 +73,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob,
         binanceOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
+        polymarketMarketsJob,
+        polymarketOrderbookJob,
       ],
       inject: [
         ExampleKlineJob,
@@ -70,6 +83,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleOrderbookJob,
         BinanceOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
+        PolymarketMarketsJob,
+        PolymarketOrderbookJob,
       ],
     },
     // 统一编排 & Cron
@@ -84,6 +99,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     BinanceCexFutureOrderbookWsAdapter,
     {
       provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
