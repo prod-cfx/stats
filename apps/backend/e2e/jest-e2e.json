@@ -1,0 +1,25 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "globals": {
+    "ts-jest": {
+      "tsconfig": "<rootDir>/tsconfig.json",
+      "diagnostics": false
+    }
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1",
+    "^@ai/shared$": "<rootDir>/../../packages/shared/src/index.ts",
+    "^@ai/shared/(.*)$": "<rootDir>/../../packages/shared/src/$1",
+    "^@net/config$": "<rootDir>/../../packages/config/src/index.ts",
+    "^@net/config/(.*)$": "<rootDir>/../../packages/config/src/$1"
+  },
+  "testTimeout": 60000,
+  "verbose": false
+}
+

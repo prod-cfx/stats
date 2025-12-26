@@ -220,7 +220,6 @@ const parseTimeframeList = (
 }
 
 export const marketDataConfig = registerAs('marketData', () => ({
-  provider: env.str('MARKET_DATA_PROVIDER', 'binance'),
   restBaseUrl: env.str('MARKET_DATA_API_BASE_URL', 'https://api.binance.com'),
   wsBaseUrl: env.str('MARKET_DATA_WS_URL', 'wss://stream.binance.com:9443'),
   streamPathTemplate: env.str('MARKET_DATA_WS_STREAM_PATH', 'stream?streams='),

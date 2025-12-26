@@ -15,14 +15,12 @@ import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
-import { BinanceOrderBookSnapshotJob } from './jobs/binance-orderbook-snapshot.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
-import { OkxOrderBookSnapshotJob } from './jobs/okx-orderbook-snapshot.job'
 import { PolymarketMarketsJob } from './jobs/polymarket-markets.job'
 import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
@@ -68,8 +66,6 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     CoinglassWhaleAlertJob,
     ExampleOrderbookJob,
     OpenInterestSyncJob,
-    BinanceOrderBookSnapshotJob,
-    OkxOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
     BbxCryptoStockQuotesJob,
     PolymarketMarketsJob,
@@ -88,8 +84,6 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
-        binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
-        okxOrderBookSnapshotJob: OkxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
         polymarketMarketsJob: PolymarketMarketsJob,
@@ -101,8 +95,6 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         coinglassWhaleAlertJob,
         exampleOrderbookJob,
         openInterestSyncJob,
-        binanceOrderBookSnapshotJob,
-        okxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
         bbxCryptoStockQuotesJob,
         polymarketMarketsJob,
@@ -115,8 +107,6 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         CoinglassWhaleAlertJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,
-        BinanceOrderBookSnapshotJob,
-        OkxOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
         BbxCryptoStockQuotesJob,
         PolymarketMarketsJob,

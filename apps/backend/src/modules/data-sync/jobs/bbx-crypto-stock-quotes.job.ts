@@ -233,9 +233,9 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       // 判断是秒还是毫秒
       const ts = timestamp > 1e12 ? timestamp : timestamp * 1000
       const date = new Date(ts)
-      
+
       // 验证日期是否有效
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         const errorMsg = symbol
           ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
           : `Invalid timestamp ${timestamp} in API response`
@@ -250,9 +250,9 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       const num = Number(timestamp)
       const ts = num > 1e12 ? num : num * 1000
       const date = new Date(ts)
-      
+
       // 验证日期是否有效
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         const errorMsg = symbol
           ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
           : `Invalid timestamp ${timestamp} in API response`
@@ -264,8 +264,8 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
 
     // 尝试解析为 ISO 8601 或其他日期字符串
     const parsed = new Date(timestamp)
-    
-    if (isNaN(parsed.getTime())) {
+
+    if (Number.isNaN(parsed.getTime())) {
       const errorMsg = symbol
         ? `Cannot parse timestamp "${timestamp}" for symbol ${symbol}`
         : `Cannot parse timestamp "${timestamp}" in API response`
