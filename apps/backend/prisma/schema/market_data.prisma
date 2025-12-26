@@ -150,6 +150,57 @@ model AggregatedLiquidationHistory {
   @@map("aggregated_liquidation_history")
 }
 
+/// Hyperliquid 鲸鱼持仓预警（Whale Alert）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/hyperliquid-whale-alert
+///
+/// 设计说明：
+/// - 记录 Hyperliquid 平台上的大额持仓开仓/平仓活动
+/// - positionSize 为正数表示多头，负数表示空头
+/// - positionAction: 1 = 开仓, 2 = 平仓
+model HyperliquidWhaleAlert {
+  id Int @id @default(autoincrement())
+
+  /// 用户地址（hash address）
+  userAddress String @map("user_address")
+
+  /// 币种符号，如 BTC / ETH
+  symbol String
+
+  /// 持仓大小（正数=多头，负数=空头）
+  positionSize Decimal @map("position_size") @db.Decimal(30, 10)
+
+  /// 入场价格
+  entryPrice Decimal @map("entry_price") @db.Decimal(30, 10)
+
+  /// 清算价格
+  liquidationPrice Decimal @map("liquidation_price") @db.Decimal(30, 10)
+
+  /// 持仓价值（USD）
+  positionValueUsd Decimal @map("position_value_usd") @db.Decimal(30, 10)
+
+  /// 持仓操作类型：1 = 开仓, 2 = 平仓
+  positionAction Int @map("position_action")
+
+  /// 持仓创建/变动时间
+  createTime DateTime @map("create_time")
+
+  /// 数据来源，默认 'COINGLASS'
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// 联合唯一约束：同一用户、币种、时间点的持仓变动应该是唯一的
+  @@unique([userAddress, symbol, createTime, positionAction], map: "uniq_whale_alert_user_symbol_time_action")
+  @@index([symbol, createTime], map: "idx_whale_alert_symbol_time")
+  @@index([userAddress, createTime], map: "idx_whale_alert_user_time")
+  @@index([createTime], map: "idx_whale_alert_time")
+  @@index([positionValueUsd], map: "idx_whale_alert_value")
+  @@map("hyperliquid_whale_alerts")
+}
+
 /// 加密股票报价数据模型 - 记录加密货币相关股票的实时报价信息
 ///
 /// 设计说明：

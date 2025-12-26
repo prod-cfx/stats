@@ -24,6 +24,16 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       } satisfies { symbol: string; exchange: string }),
     },
     {
+      key: 'coinglass-hyperliquid-whale-alert',
+      name: 'Hyperliquid 鲸鱼持仓预警',
+      source: 'coinglass',
+      type: 'whale-alert',
+      // 每 5 分钟同步一次
+      intervalSeconds: 300,
+      enabled: false,
+      cursor: null,
+    },
+    {
       key: 'polymarket-markets-crypto',
       name: 'Polymarket Crypto 市场列表同步',
       source: 'polymarket',
