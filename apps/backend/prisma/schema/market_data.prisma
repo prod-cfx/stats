@@ -150,3 +150,78 @@ model AggregatedLiquidationHistory {
   @@index([symbol, exchangeCode, timestamp], map: "idx_agg_liq_symbol_exchange_time")
   @@map("aggregated_liquidation_history")
 }
+
+/// 加密股票报价数据模型 - 记录加密货币相关股票的实时报价信息
+///
+/// 设计说明：
+/// - 存储加密货币相关股票（如 MSTR, COIN, MARA 等）的报价数据
+/// - 支持多个数据源（如 BBX 等）
+/// - 记录完整的报价信息包括价格、成交量、涨跌幅等
+model CryptoStockQuote {
+  id Int @id @default(autoincrement())
+
+  /// 股票代码，如 MSTR, COIN, MARA
+  symbol String
+
+  /// 股票名称
+  name String?
+
+  /// 交易所代码，如 NASDAQ, NYSE
+  exchange String?
+
+  /// 当前价格
+  price Decimal @db.Decimal(20, 8)
+
+  /// 开盘价
+  openPrice Decimal? @map("open_price") @db.Decimal(20, 8)
+
+  /// 最高价
+  highPrice Decimal? @map("high_price") @db.Decimal(20, 8)
+
+  /// 最低价
+  lowPrice Decimal? @map("low_price") @db.Decimal(20, 8)
+
+  /// 收盘价（前一交易日）
+  closePrice Decimal? @map("close_price") @db.Decimal(20, 8)
+
+  /// 成交量
+  volume Decimal? @db.Decimal(30, 10)
+
+  /// 成交额
+  turnover Decimal? @db.Decimal(30, 10)
+
+  /// 涨跌额
+  priceChange Decimal? @map("price_change") @db.Decimal(20, 8)
+
+  /// 涨跌幅（百分比）
+  priceChangePercent Decimal? @map("price_change_percent") @db.Decimal(10, 4)
+
+  /// 市值
+  marketCap Decimal? @map("market_cap") @db.Decimal(30, 2)
+
+  /// 市盈率
+  peRatio Decimal? @map("pe_ratio") @db.Decimal(10, 4)
+
+  /// 52周最高价
+  high52Week Decimal? @map("high_52_week") @db.Decimal(20, 8)
+
+  /// 52周最低价
+  low52Week Decimal? @map("low_52_week") @db.Decimal(20, 8)
+
+  /// 数据源，例如：'BBX'
+  source String @default("BBX")
+
+  /// 报价时间戳
+  quoteTimestamp DateTime @map("quote_timestamp")
+
+  /// 额外的 JSON 数据，用于存储 API 返回的其他字段
+  rawData Json? @map("raw_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, source, quoteTimestamp], map: "uniq_crypto_stock_quote_symbol_source_time")
+  @@index([symbol, quoteTimestamp], map: "idx_crypto_stock_quote_symbol_time")
+  @@index([source, quoteTimestamp], map: "idx_crypto_stock_quote_source_time")
+  @@map("crypto_stock_quotes")
+}

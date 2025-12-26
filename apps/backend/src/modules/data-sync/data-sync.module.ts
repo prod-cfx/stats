@@ -1,6 +1,7 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
 import { AuthModule } from '@/modules/auth/auth.module'
+import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
@@ -11,6 +12,7 @@ import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
+import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { BinanceOrderBookSnapshotJob } from './jobs/binance-orderbook-snapshot.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
@@ -47,6 +49,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     OpenInterestModule,
     OrderbookConfigModule,
     SettingsModule,
+    CryptoStockQuotesModule,
   ],
   controllers: [AdminDataPullTaskController],
   providers: [
@@ -62,6 +65,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     BinanceOrderBookSnapshotJob,
     OkxOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
+    BbxCryptoStockQuotesJob,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -75,6 +79,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
         okxOrderBookSnapshotJob: OkxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
+        bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
@@ -84,6 +89,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         binanceOrderBookSnapshotJob,
         okxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
+        bbxCryptoStockQuotesJob,
       ],
       inject: [
         ExampleKlineJob,
@@ -94,6 +100,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         BinanceOrderBookSnapshotJob,
         OkxOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
+        BbxCryptoStockQuotesJob,
       ],
     },
     // 统一编排 & Cron
