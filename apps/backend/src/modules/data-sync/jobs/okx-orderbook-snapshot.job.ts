@@ -302,6 +302,11 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
       return `${base}-${quote}-SWAP`
     }
 
+    if (cfg.instrumentType === 'FUTURE') {
+      const metaContract = this.pickMetadataString(metadata, ['okxContract'])
+      if (metaContract) return metaContract.toUpperCase()
+    }
+
     return null
   }
 
