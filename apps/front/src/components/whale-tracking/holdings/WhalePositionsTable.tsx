@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Copy, ChevronDown, Info } from 'lucide-react';
+import { Copy, ChevronDown, TrendingUp } from 'lucide-react';
 
 interface WhalePosition {
   address: string;
@@ -162,6 +162,7 @@ export const WhalePositionsTable = () => {
                 <th className="px-6 py-4 text-left">胜率</th>
                 <th className="px-6 py-4 text-left">创建时间</th>
                 <th className="px-6 py-4 text-left">备注</th>
+                <th className="px-6 py-4 text-center w-16">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2c2c2c]">
@@ -171,7 +172,9 @@ export const WhalePositionsTable = () => {
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-white text-xs font-medium">{pos.address}</span>
-                        <Info className="w-3 h-3 text-[#666666] cursor-help" />
+                        <button className="text-[#666666] hover:text-white transition-colors">
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                       <div className="flex gap-1">
                         {pos.tags.map((tag, tIdx) => (
@@ -232,6 +235,17 @@ export const WhalePositionsTable = () => {
                   </td>
                   <td className="px-6 py-4 text-[#cccccc] text-[10px] max-w-[150px] truncate">
                     {pos.remark}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button 
+                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Logic to show detailed stats
+                      }}
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
