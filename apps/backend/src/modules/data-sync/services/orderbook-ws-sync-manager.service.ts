@@ -16,6 +16,8 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
   private readonly logger = new Logger(OrderbookWsSyncManager.name)
   private timer: NodeJS.Timeout | null = null
   private isRunning = false
+  // 记录当前哪些 adapter 处于「活跃」状态（至少有一个目标配置）
+  private readonly activeAdapters = new Map<OrderbookAdapterKey, boolean>()
 
   constructor(
     @Inject(ConfigService)
@@ -77,12 +79,26 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
       const configs = await this.orderbookPairConfigService.findEnabledConfigs()
       const grouped = this.groupByAdapterKey(configs)
 
-      // 先确保连接，后同步订阅；即使目标为空也调用，以便做退订清理
+      // 按 adapter 维度增量管理连接：
+      // - 有目标配置 → 确保连接 + 同步订阅
+      // - 无目标配置且之前有过 → 做一次退订清理后关闭连接
+      // - 无目标配置且之前也没有 → 不做任何操作，避免无意义连接
       for (const adapter of this.adapters) {
         const target = grouped.get(adapter.key) ?? []
+        const hasTarget = target.length > 0
+        const wasActive = this.activeAdapters.get(adapter.key) === true
+
         try {
-          await adapter.ensureConnected()
-          await adapter.syncTargetConfigs(target)
+          if (hasTarget) {
+            await adapter.ensureConnected()
+            await adapter.syncTargetConfigs(target)
+            if (!wasActive) this.activeAdapters.set(adapter.key, true)
+          } else if (wasActive) {
+            // 目标从非空变为空：做一次退订/状态清理，然后关闭连接
+            await adapter.syncTargetConfigs([])
+            await adapter.shutdown()
+            this.activeAdapters.set(adapter.key, false)
+          }
         } catch (error) {
           this.logger.error(
             `Orderbook WS adapter sync failed: key=${adapter.key} error=${error instanceof Error ? error.message : String(error)}`,

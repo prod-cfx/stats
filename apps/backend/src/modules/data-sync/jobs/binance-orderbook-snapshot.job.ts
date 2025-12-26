@@ -48,28 +48,12 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
   ) {}
 
   async run(currentCursor: string | null): Promise<JobRunResult> {
-    const marketData = this.configService.get<{
-      provider: string
-      restBaseUrl: string
-      restTimeoutMs: number
-    }>('marketData')
     const client = this.redisService.getClient()
 
-    if (!marketData) {
-      this.logger.warn('marketData config not found, skip BinanceOrderBookSnapshotJob')
-      await this.cleanupDisabledSnapshots(client, new Set())
-      return { fetchedCount: 0, newCursor: currentCursor, meta: { reason: 'no_marketdata_config' } }
-    }
-
-    if (marketData.provider !== 'binance') {
-      this.logger.debug(`marketData.provider=${marketData.provider}, skip (expect "binance")`)
-      await this.cleanupDisabledSnapshots(client, new Set())
-      return {
-        fetchedCount: 0,
-        newCursor: currentCursor,
-        meta: { reason: 'provider_not_binance', provider: marketData.provider },
-      }
-    }
+    const restBaseUrl =
+      this.configService.get<string>('marketData.restBaseUrl') ?? 'https://api.binance.com'
+    const restTimeoutMs =
+      this.configService.get<number>('marketData.restTimeoutMs') ?? 10_000
 
     // 统一来源：订单薄配置表（orderbook_pair_configs）
     const allConfigs = await this.orderbookPairConfigService.findEnabledConfigs()
@@ -118,7 +102,7 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
       const limit = cfg.depthLevels ?? 100
 
       try {
-        const res = await this.fetchDepth(marketData.restBaseUrl, symbol, marketData.restTimeoutMs, limit)
+        const res = await this.fetchDepth(restBaseUrl, symbol, restTimeoutMs, limit)
         const book = this.toVenueOrderBook(cfg, res)
         fetchedBooks.push(book)
 
