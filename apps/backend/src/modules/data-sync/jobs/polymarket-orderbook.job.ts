@@ -129,10 +129,22 @@ export class PolymarketOrderbookJob implements DataPullJob {
 
   private toDate(value?: number | string | null): Date | null {
     if (value == null) return null
+    
+    // 如果是数字，直接处理
     if (typeof value === 'number') {
       const ms = value > 1_000_000_000_000 ? value : value * 1000
       return new Date(ms)
     }
+    
+    // 如果是字符串，尝试两种方式：
+    // 1. 先尝试作为数字字符串解析（Polymarket 返回 "1766738570134" 这种格式）
+    const numericValue = Number(value)
+    if (!Number.isNaN(numericValue) && numericValue > 0) {
+      const ms = numericValue > 1_000_000_000_000 ? numericValue : numericValue * 1000
+      return new Date(ms)
+    }
+    
+    // 2. 尝试作为 ISO 日期字符串解析
     const parsed = Date.parse(value)
     return Number.isNaN(parsed) ? null : new Date(parsed)
   }
