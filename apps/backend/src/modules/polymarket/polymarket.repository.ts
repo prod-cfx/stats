@@ -223,16 +223,17 @@ export class PolymarketRepository {
     const limit = Math.max(1, Math.min(params.limit ?? 50, 500))
     const offset = Math.max(0, params.offset ?? 0)
 
-    const where: any = {}
-    if (params.category && params.category.length) {
-      where.market = {
-        category: params.category,
-        isActive: true,
-      }
-    } else {
-      where.market = {
-        isActive: true,
-      }
+    // 标准化 category：确保与存储格式一致（小写 + trim）
+    const normalizedCategory = params.category?.trim().toLowerCase()
+
+    // Prisma relation filter 需要用 is/isNot 包裹
+    const where: Prisma.PolymarketOutcomeWhereInput = {
+      market: {
+        is: {
+          isActive: true,
+          ...(normalizedCategory ? { category: normalizedCategory } : {}),
+        },
+      },
     }
 
     const rows = await client.polymarketOutcome.findMany({

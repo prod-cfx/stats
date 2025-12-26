@@ -26,7 +26,9 @@ export class PolymarketOrderbookJob implements DataPullJob {
     private readonly configService: ConfigService,
   ) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
-    this.category = cfg?.filters.category ?? 'crypto'
+    // 确保 category 已标准化（配置层已处理，这里是防御性检查）
+    const rawCategory = cfg?.filters.category ?? 'crypto'
+    this.category = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
   }
 
   async run(currentCursor: string | null): Promise<JobRunResult> {

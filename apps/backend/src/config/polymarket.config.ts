@@ -15,7 +15,6 @@ export interface PolymarketConfig {
     restBaseUrl: string
     wsUrl: string
     timeoutMs: number
-    reconnectDelayMs: number
   }
   filters: {
     category?: string
@@ -32,7 +31,10 @@ const parseStringList = (value: string | undefined): string[] =>
     : []
 
 export const polymarketConfig = registerAs('polymarket', (): PolymarketConfig => {
-  const defaultCategory = env.str('POLYMARKET_CATEGORY', 'crypto')
+  // 标准化 category：统一转小写并去空格，确保与数据库存储格式一致
+  const rawCategory = env.str('POLYMARKET_CATEGORY', 'crypto')
+  const normalizedCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
+  
   return {
     gamma: {
       apiKey: env.str('POLYMARKET_GAMMA_API_KEY'),
@@ -45,10 +47,9 @@ export const polymarketConfig = registerAs('polymarket', (): PolymarketConfig =>
       restBaseUrl: env.str('POLYMARKET_CLOB_BASE_URL', 'https://clob.polymarket.com'),
       wsUrl: env.str('POLYMARKET_CLOB_WS_URL', 'wss://ws-subscriptions.polymarket.com'),
       timeoutMs: parsePositiveInt(env.str('POLYMARKET_CLOB_TIMEOUT_MS'), 10_000),
-      reconnectDelayMs: parsePositiveInt(env.str('POLYMARKET_CLOB_RECONNECT_DELAY_MS'), 5_000),
     },
     filters: {
-      category: defaultCategory,
+      category: normalizedCategory,
       tags: parseStringList(env.str('POLYMARKET_TAGS')),
     },
   }
