@@ -105,15 +105,29 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
 
     const json = await this.fetchQuotesJson(url, apiKey)
 
+    // 检查 BBX API 业务错误码
+    if (json.success === false || (json.code && json.code !== 0 && json.code !== '0')) {
+      const errorMsg = `BBX API returned error: code=${json.code}, message=${json.message ?? 'unknown'}`
+      this.logger.error(errorMsg, { response: json })
+      throw new Error(errorMsg)
+    }
+
     // 根据实际的 BBX API 响应格式调整解析逻辑
     const quotes = this.parseApiResponse(json)
 
     if (quotes.length === 0) {
-      this.logger.warn('No quotes returned from BBX API')
+      this.logger.warn('No quotes returned from BBX API', {
+        code: json.code,
+        message: json.message,
+      })
       return {
         fetchedCount: 0,
         newCursor: JSON.stringify({ ...cursor, lastFetchTime: new Date().toISOString() }),
-        meta: { note: 'No quotes returned' },
+        meta: {
+          note: 'No quotes returned',
+          code: json.code,
+          message: json.message,
+        },
       }
     }
 

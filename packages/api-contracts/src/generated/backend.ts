@@ -1915,22 +1915,17 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "limit",
-        type: "Query",
-        schema: z.number().optional(),
-      },
-      {
         name: "page",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.number().gte(1).optional(),
       },
       {
-        name: "endTime",
+        name: "limit",
         type: "Query",
-        schema: z.string().optional(),
+        schema: z.number().gte(1).lte(100).optional(),
       },
       {
-        name: "startTime",
+        name: "exchange",
         type: "Query",
         schema: z.string().optional(),
       },
@@ -1940,7 +1935,12 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
-        name: "exchange",
+        name: "startTime",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "endTime",
         type: "Query",
         schema: z.string().optional(),
       },

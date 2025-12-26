@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
+import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 
 /**
  * 加密股票报价响应 DTO
@@ -73,18 +75,44 @@ export class CryptoStockQuoteResponseDto {
  */
 export class QueryCryptoStockQuotesDto {
   @ApiPropertyOptional({ description: '股票代码', example: 'MSTR' })
+  @IsOptional()
+  @IsString()
   symbol?: string
 
   @ApiPropertyOptional({ description: '数据源', example: 'BBX' })
+  @IsOptional()
+  @IsString()
   source?: string
 
-  @ApiPropertyOptional({ description: '开始时间' })
+  @ApiPropertyOptional({
+    description: '开始时间（ISO 8601 格式）',
+    example: '2024-01-01T00:00:00Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  @Type(() => Date)
   startTime?: Date
 
-  @ApiPropertyOptional({ description: '结束时间' })
+  @ApiPropertyOptional({
+    description: '结束时间（ISO 8601 格式）',
+    example: '2024-12-31T23:59:59Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  @Type(() => Date)
   endTime?: Date
 
-  @ApiPropertyOptional({ description: '返回记录数量限制', example: 100 })
+  @ApiPropertyOptional({
+    description: '返回记录数量限制（最大 500）',
+    example: 100,
+    minimum: 1,
+    maximum: 500,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '返回数量必须是整数' })
+  @Min(1, { message: '返回数量必须大于或等于 1' })
+  @Max(500, { message: '返回数量不能超过 500' })
   limit?: number
 }
 

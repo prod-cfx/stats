@@ -172,7 +172,8 @@ export class CryptoStockQuotesRepository {
       orderBy: {
         quoteTimestamp: 'desc',
       },
-      take: query.limit ?? 100,
+      // 兜底：确保 limit 不超过 500，防止绕过上层校验
+      take: Math.min(query.limit ?? 100, 500),
     })
   }
 

@@ -40,4 +40,3 @@ model ExchangeConfig {
   @@index([sort])
   @@map("exchange_configs")
 }
-
