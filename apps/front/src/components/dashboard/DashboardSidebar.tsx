@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Layout, Bookmark, Plus, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 
 export const DashboardSidebar = () => {
   return (
@@ -38,10 +39,10 @@ export const DashboardSidebar = () => {
         </button>
 
         {/* Create Button moved here */}
-        <button className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+        <Link href="/dashboard/editor" className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
           <Plus className="w-4 h-4" />
           <span className="text-sm">CREATE DASHBOARD</span>
-        </button>
+        </Link>
       </div>
     </aside>
   );
