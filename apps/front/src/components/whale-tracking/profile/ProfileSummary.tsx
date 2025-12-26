@@ -128,7 +128,7 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }:
       ) : (
         <div className="flex items-center justify-between mt-auto">
           <div className="flex flex-col gap-5 flex-1">
-            <div className="text-white text-3xl font-bold tracking-tight">{value}</div>
+            <div className="text-white text-2xl font-bold tracking-tight">{value}</div>
             <div className="w-full">{subText}</div>
           </div>
           <div className="w-20 h-20 flex-none ml-4">

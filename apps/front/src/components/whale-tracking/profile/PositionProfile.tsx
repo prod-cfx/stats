@@ -11,7 +11,7 @@ export const PositionProfile = () => {
           <span className="text-[#999999] text-base font-medium">永续合约总价值</span>
           <span className="px-2 py-1 bg-[#2c2c2c] text-[#888888] text-xs font-bold rounded uppercase">当前持仓</span>
         </div>
-        <div className="text-white text-3xl font-bold tracking-tight">$ 31,034,500</div>
+        <div className="text-white text-2xl font-bold tracking-tight">$ 31,034,500</div>
       </div>
 
       {/* Margin Usage Bar */}
