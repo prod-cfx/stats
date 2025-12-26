@@ -12,6 +12,7 @@ import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository
 interface PolymarketMarketsCursor {
   nextCursor?: string | null
   offset?: number // offset 分页：用于持续轮询所有市场
+  usedCursor?: boolean // 上一轮是否使用了 cursor 模式（用于状态转换判断）
 }
 
 @Injectable()
@@ -73,21 +74,33 @@ export class PolymarketMarketsJob implements DataPullJob {
     // 注意：使用 effectiveLimit 而不是 batchSize 来判断，
     // 因为 gamma-client 会将 limit clamp 到 POLYMARKET_GAMMA_LIMIT
     let nextOffset = 0
+    let usedCursor = false
+    
     if (nextCursorValue) {
-      // 有 cursor，重置 offset
+      // 有 cursor，进入 cursor 模式，offset 重置为 0
       nextOffset = 0
+      usedCursor = true
+    } else if (cursor.usedCursor) {
+      // 上一轮使用了 cursor，但这一轮没有 nextCursor，说明 cursor 模式结束
+      // 必须重置 offset=0 重新开始 offset 模式，否则会跳过前面的数据
+      nextOffset = 0
+      usedCursor = false
+      this.logger.log(`Cursor mode ended, resetting offset to 0 for next cycle`)
     } else if (apiReturned >= this.effectiveLimit) {
-      // 没有 cursor 但 API 返回了满批数据，继续下一页
+      // 在 offset 模式下，API 返回了满批数据，继续下一页
       nextOffset = (cursor.offset ?? 0) + apiReturned
+      usedCursor = false
     } else {
-      // 没有 cursor 且 API 返回数据不满，说明到达末尾，重置为 0 开始新一轮
+      // 在 offset 模式下，API 返回数据不满，说明到达末尾，重置为 0 开始新一轮
       nextOffset = 0
+      usedCursor = false
       this.logger.log(`Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`)
     }
     
     const newCursor: PolymarketMarketsCursor = {
       nextCursor: nextCursorValue,
       offset: nextOffset,
+      usedCursor,
     }
 
     return {
