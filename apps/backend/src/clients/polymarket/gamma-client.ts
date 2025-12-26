@@ -1,5 +1,6 @@
 import type { GammaMarketsResponse, PolymarketGammaMarket } from './types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
+import * as path from 'node:path'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
@@ -43,8 +44,9 @@ export class PolymarketGammaClient {
 
   async listMarkets(params: ListMarketsParams = {}): Promise<ListMarketsResult> {
     // 安全拼接路径，保留 baseUrl 中的路径段
-    const baseUrlWithSlash = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`
-    const url = new URL('markets', baseUrlWithSlash)
+    const url = new URL(this.baseUrl)
+    // 使用 path.posix.join 保留原有路径并追加新路径
+    url.pathname = path.posix.join(url.pathname, 'markets')
     const limit = Math.max(1, Math.min(this.maxLimit, params.limit ?? this.maxLimit))
     url.searchParams.set('limit', String(limit))
 

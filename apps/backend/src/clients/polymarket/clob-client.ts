@@ -4,6 +4,7 @@ import type {
   PolymarketRestBook,
 } from './types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
+import * as path from 'node:path'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
@@ -45,8 +46,9 @@ export class PolymarketClobClient {
       throw new Error('tokenId is required for fetchOrderbook')
     }
     // 安全拼接路径，保留 restBaseUrl 中的路径段
-    const baseUrlWithSlash = this.restBaseUrl.endsWith('/') ? this.restBaseUrl : `${this.restBaseUrl}/`
-    const url = new URL('book', baseUrlWithSlash)
+    const url = new URL(this.restBaseUrl)
+    // 使用 path.posix.join 保留原有路径并追加新路径
+    url.pathname = path.posix.join(url.pathname, 'book')
     url.searchParams.set('token_id', params.tokenId)
 
     const json = await this.fetchJson(url)

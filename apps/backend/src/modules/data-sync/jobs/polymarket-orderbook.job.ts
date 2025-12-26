@@ -47,9 +47,14 @@ export class PolymarketOrderbookJob implements DataPullJob {
     })
 
     if (!targets.length) {
+      // 保留 failedTokens 和 skippedTokens，避免在无数据时清空保护状态
       return {
         fetchedCount: 0,
-        newCursor: JSON.stringify({ offset: 0 }),
+        newCursor: JSON.stringify({ 
+          offset: 0,
+          failedTokens: cursor.failedTokens,
+          skippedTokens: cursor.skippedTokens,
+        }),
         meta: {
           note: 'No Polymarket outcomes available for orderbook snapshot',
         },
