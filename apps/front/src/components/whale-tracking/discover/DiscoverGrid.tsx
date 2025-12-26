@@ -1,10 +1,18 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { TraderCard, TraderCardProps } from './TraderCard';
 import { ChevronDown } from 'lucide-react';
+import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 export const DiscoverGrid = () => {
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleShowStats = (address: string) => {
+    setSelectedAddress(address);
+    setIsModalOpen(true);
+  };
   const recommendedTraders: TraderCardProps[] = [
     {
       variant: 'recommended',
@@ -142,7 +150,11 @@ export const DiscoverGrid = () => {
       {/* Recommended Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {recommendedTraders.map((trader, index) => (
-          <TraderCard key={`rec-${index}`} {...trader} />
+          <TraderCard 
+            key={`rec-${index}`} 
+            {...trader} 
+            onShowStats={handleShowStats}
+          />
         ))}
       </div>
 
@@ -166,9 +178,20 @@ export const DiscoverGrid = () => {
       {/* Detail Grid Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
         {detailTraders.map((trader, index) => (
-          <TraderCard key={`det-${index}`} {...trader} />
+          <TraderCard 
+            key={`det-${index}`} 
+            {...trader} 
+            onShowStats={handleShowStats}
+          />
         ))}
       </div>
+
+      {/* Trading Stats Modal */}
+      <WhaleTradingStatsModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        address={selectedAddress || ''}
+      />
     </div>
   );
 };

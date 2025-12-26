@@ -17,6 +17,7 @@ export interface TraderCardProps {
   winRateLabel?: string;
   avatarColor: string;
   aiTags?: { label: string; color: string; bgColor: string }[];
+  onShowStats?: (address: string) => void;
 }
 
 export const TraderCard = ({
@@ -32,7 +33,8 @@ export const TraderCard = ({
   winRate,
   winRateLabel = '胜率',
   avatarColor,
-  aiTags
+  aiTags,
+  onShowStats
 }: TraderCardProps) => {
   const isPnlPositive = pnl.startsWith('+');
 
@@ -58,7 +60,7 @@ export const TraderCard = ({
             className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
             onClick={(e) => {
               e.stopPropagation();
-              // Logic to show detailed stats would go here
+              onShowStats?.(address);
             }}
           >
             <TrendingUp className="w-5 h-5" />
@@ -104,7 +106,7 @@ export const TraderCard = ({
           className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
           onClick={(e) => {
             e.stopPropagation();
-            // Logic to show detailed stats would go here
+            onShowStats?.(address);
           }}
         >
           <TrendingUp className="w-5 h-5" />

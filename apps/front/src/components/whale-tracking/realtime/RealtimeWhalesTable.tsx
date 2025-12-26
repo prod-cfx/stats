@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Copy, RefreshCw } from 'lucide-react';
+import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
+import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhaleTransaction {
   address: string;
@@ -122,6 +123,8 @@ const mockTransactions: WhaleTransaction[] = [
 export const RealtimeWhalesTable = () => {
   const [isPaused, setIsPaused] = useState(true);
   const [countdown, setCountdown] = useState(60);
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -135,6 +138,11 @@ export const RealtimeWhalesTable = () => {
     }
     return () => clearInterval(timer);
   }, [isPaused, countdown]);
+
+  const handleShowStats = (address: string) => {
+    setSelectedAddress(address);
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -167,6 +175,7 @@ export const RealtimeWhalesTable = () => {
                 <th className="px-6 py-4 text-left font-medium">开盘价</th>
                 <th className="px-6 py-4 text-left font-medium">胜率</th>
                 <th className="px-6 py-4 text-right font-medium">时间</th>
+                <th className="px-6 py-4 text-center w-16">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2c2c2c]">
@@ -214,13 +223,29 @@ export const RealtimeWhalesTable = () => {
                   <td className="px-6 py-5 text-[#999999] text-sm text-right">
                     {tx.time}
                   </td>
+                  <td className="px-6 py-5 text-center">
+                    <button 
+                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShowStats(tx.address);
+                      }}
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      <WhaleTradingStatsModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        address={selectedAddress || ''}
+      />
     </div>
   );
 };
-
