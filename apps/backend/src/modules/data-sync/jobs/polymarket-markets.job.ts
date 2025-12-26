@@ -20,6 +20,7 @@ export class PolymarketMarketsJob implements DataPullJob {
   private readonly logger = new Logger(PolymarketMarketsJob.name)
   private readonly batchSize = 100
   private readonly category?: string | null
+  private readonly effectiveLimit: number // 实际请求的 limit（考虑 API maxLimit 限制）
 
   constructor(
     private readonly gammaClient: PolymarketGammaClient,
@@ -30,6 +31,10 @@ export class PolymarketMarketsJob implements DataPullJob {
     // 确保 category 已标准化（配置层已处理，这里是防御性检查）
     const rawCategory = cfg?.filters.category ?? 'crypto'
     this.category = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
+    
+    // 计算实际请求的 limit（gamma-client 会 clamp 到 maxLimit）
+    const maxLimit = cfg?.gamma.maxLimit ?? 200
+    this.effectiveLimit = Math.min(this.batchSize, maxLimit)
   }
 
   async run(currentCursor: string | null): Promise<JobRunResult> {
@@ -57,19 +62,21 @@ export class PolymarketMarketsJob implements DataPullJob {
     const nextCursorValue = response.nextCursor ?? null
     
     // 计算下一次的 offset
+    // 注意：使用 effectiveLimit 而不是 batchSize 来判断，
+    // 因为 gamma-client 会将 limit clamp 到 POLYMARKET_GAMMA_LIMIT
     // 如果有 nextCursor，使用它（重置 offset 为 0）
-    // 否则累加 offset，如果已经处理完所有数据（返回少于 batchSize），则重置为 0 开始新一轮
+    // 否则累加 offset，如果已经处理完所有数据（返回少于 effectiveLimit），则重置为 0 开始新一轮
     let nextOffset = 0
     if (nextCursorValue) {
       // 有 cursor，重置 offset
       nextOffset = 0
-    } else if (processed >= this.batchSize) {
+    } else if (processed >= this.effectiveLimit) {
       // 没有 cursor 但返回了满批数据，继续下一页
       nextOffset = (cursor.offset ?? 0) + processed
     } else {
       // 没有 cursor 且数据不满，说明到达末尾，重置为 0 开始新一轮
       nextOffset = 0
-      this.logger.log(`Reached end of markets, will restart from offset 0 on next run`)
+      this.logger.log(`Reached end of markets (processed=${processed} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`)
     }
     
     const newCursor: PolymarketMarketsCursor = {
@@ -166,11 +173,23 @@ export class PolymarketMarketsJob implements DataPullJob {
         const parsed = JSON.parse(market.outcomes)
         if (Array.isArray(parsed)) {
           // 如果是简单的字符串数组 ["Yes", "No"]，转换为 outcome 对象
-          return parsed.map((name, index) => ({
-            id: `${market.id}-outcome-${index}`,
-            token_id: clobTokenIds?.[index] ?? `${market.id}-${index}`,
-            name: String(name),
-          }))
+          // 注意：只有当有真实的 clobTokenIds 时才创建 outcome
+          // 否则订单簿作业会对假 token_id 永远返回 404
+          if (!clobTokenIds || clobTokenIds.length === 0) {
+            this.logger.debug(`Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`)
+            return []
+          }
+          return parsed
+            .map((name, index) => {
+              const tokenId = clobTokenIds[index]
+              if (!tokenId) return null
+              return {
+                id: `${market.id}-outcome-${index}`,
+                token_id: tokenId,
+                name: String(name),
+              }
+            })
+            .filter((outcome): outcome is NonNullable<typeof outcome> => outcome !== null)
         }
       } catch (error) {
         this.logger.warn(`Failed to parse outcomes JSON for market ${market.id}: ${String(error)}`)
