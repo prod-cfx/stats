@@ -1,0 +1,85 @@
+/// Polymarket 市场 / Outcome / 盘口快照
+
+model PolymarketMarket {
+  id              Int      @id @default(autoincrement())
+  /// 外部市场 ID
+  marketId        String   @unique
+  eventExternalId String?
+  eventSlug       String?
+  eventTitle      String?
+  eventStartTime  DateTime?
+  eventEndTime    DateTime?
+  slug            String?
+  question        String?
+  category        String?
+  tags            String[] @default([])
+  outcomeType     String?
+  status          String?
+  resolutionSource String?
+  resolutionTime  DateTime?
+  startTradingAt  DateTime?
+  endTradingAt    DateTime?
+  lastUpdatedAt   DateTime?
+  feeRate         Decimal? @db.Decimal(10, 6)
+  liquidity       Decimal? @db.Decimal(32, 16)
+  volume24h       Decimal? @db.Decimal(32, 16) @map("volume_24h")
+  volumeTotal     Decimal? @db.Decimal(32, 16)
+  openInterest    Decimal? @db.Decimal(32, 16)
+  isActive        Boolean  @default(true) @map("is_active")
+  rawPayload      Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  outcomes PolymarketOutcome[]
+  orderbookSnapshots PolymarketOrderbookSnapshot[]
+
+  @@index([category], map: "idx_polymarket_markets_category")
+  @@map("polymarket_markets")
+}
+
+model PolymarketOutcome {
+  id             Int      @id @default(autoincrement())
+  marketId       Int
+  outcomeTokenId String   @unique
+  name           String?
+  shortName      String?
+  side           String?
+  price          Decimal? @db.Decimal(32, 16)
+  probability    Decimal? @db.Decimal(32, 16)
+  liquidity      Decimal? @db.Decimal(32, 16)
+  poolBalance    Decimal? @db.Decimal(32, 16)
+  lastTradePrice Decimal? @db.Decimal(32, 16)
+  lastTradeAt    DateTime?
+  rawPayload     Json
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  market PolymarketMarket @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  orderbookSnapshots PolymarketOrderbookSnapshot[]
+
+  @@index([marketId], map: "idx_polymarket_outcomes_market")
+  @@map("polymarket_outcomes")
+}
+
+model PolymarketOrderbookSnapshot {
+  id               BigInt   @id @default(autoincrement())
+  marketId         Int?
+  outcomeId        Int?
+  marketExternalId String
+  outcomeTokenId   String
+  seq              BigInt?  @db.BigInt
+  bids             Json
+  asks             Json
+  spread           Decimal? @db.Decimal(32, 16)
+  capturedAt       DateTime
+  source           String   @default("POLYMARKET")
+  rawPayload       Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  market  PolymarketMarket? @relation(fields: [marketId], references: [id], onDelete: SetNull)
+  outcome PolymarketOutcome? @relation(fields: [outcomeId], references: [id], onDelete: SetNull)
+
+  @@unique([marketExternalId, outcomeTokenId, capturedAt], map: "uniq_polymarket_orderbook_slice")
+  @@index([capturedAt], map: "idx_polymarket_orderbook_time")
+  @@map("polymarket_orderbook_snapshots")
+}

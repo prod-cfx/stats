@@ -1,11 +1,13 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { Module } from '@nestjs/common'
+import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
+import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
@@ -19,6 +21,8 @@ import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
+import { PolymarketMarketsJob } from './jobs/polymarket-markets.job'
+import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
@@ -64,6 +68,11 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     OpenInterestSyncJob,
     CoinglassAggregatedLiquidationJob,
     BbxCryptoStockQuotesJob,
+    PolymarketMarketsJob,
+    PolymarketOrderbookJob,
+    PolymarketGammaClient,
+    PolymarketClobClient,
+    PolymarketRepository,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
@@ -77,6 +86,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         openInterestSyncJob: OpenInterestSyncJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
+        polymarketMarketsJob: PolymarketMarketsJob,
+        polymarketOrderbookJob: PolymarketOrderbookJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
@@ -86,6 +97,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         openInterestSyncJob,
         coinglassAggregatedLiquidationJob,
         bbxCryptoStockQuotesJob,
+        polymarketMarketsJob,
+        polymarketOrderbookJob,
       ],
       inject: [
         ExampleKlineJob,
@@ -96,6 +109,8 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         OpenInterestSyncJob,
         CoinglassAggregatedLiquidationJob,
         BbxCryptoStockQuotesJob,
+        PolymarketMarketsJob,
+        PolymarketOrderbookJob,
       ],
     },
     // 统一编排 & Cron
