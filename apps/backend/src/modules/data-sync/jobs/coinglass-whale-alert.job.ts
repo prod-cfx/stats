@@ -15,14 +15,40 @@ interface WhaleAlertCursor {
 }
 
 interface WhaleAlertDataPoint {
+  /**
+   * 鲸鱼地址
+   */
   user: string
+  /**
+   * 币种符号，如 BTC / ETH
+   */
   symbol: string
-  positionSize: number
-  entryPrice: number
-  liqPrice: number
-  positionValueUsd: number
-  positionAction: number
-  createTime: number
+  /**
+   * 持仓大小（正数=多头，负数=空头）
+   * Coinglass 文档字段：position_size
+   */
+  position_size: number
+  /**
+   * 入场价格
+   */
+  entry_price: number
+  /**
+   * 清算价格
+   * Coinglass 文档字段通常为 liq_price
+   */
+  liq_price: number
+  /**
+   * 持仓价值（USD）
+   */
+  position_value_usd: number
+  /**
+   * 持仓操作类型：1 = 开仓, 2 = 平仓
+   */
+  position_action: number
+  /**
+   * 持仓创建/变动时间（时间戳，毫秒或秒）
+   */
+  create_time: number
 }
 
 interface WhaleAlertApiResponse {
@@ -49,7 +75,9 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
       this.configService.get<string>('COINGLASS_WHALE_ALERT_ENDPOINT') ??
-      'https://open-api-v4.coinglass.com/hyperliquid/whale-alert'
+      // 参考文档：https://docs.coinglass.com/v4.0-zh/reference/hyperliquid-whale-alert
+      // v4 统一使用 /api 前缀
+      'https://open-api-v4.coinglass.com/api/hyperliquid/whale-alert'
 
     if (!apiKey) {
       throw new Error('COINGLASS_API_KEY is not configured')
@@ -84,7 +112,8 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
     // 将返回的数据点转换为带毫秒时间戳的格式
     const pointsWithTimestamps = json.data.map(point => {
       // Coinglass API 返回的时间戳应该已经是毫秒，但为了保险起见做个检查
-      const timestampMs = point.createTime >= 1_000_000_000_000 ? point.createTime : point.createTime * 1000
+      const timestampMs =
+        point.create_time >= 1_000_000_000_000 ? point.create_time : point.create_time * 1000
       return {
         ...point,
         timestampMs,
@@ -101,11 +130,11 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
       const rows = incrementalPoints.map(point => ({
         userAddress: point.user,
         symbol: point.symbol,
-        positionSize: point.positionSize.toString(),
-        entryPrice: point.entryPrice.toString(),
-        liquidationPrice: point.liqPrice.toString(),
-        positionValueUsd: point.positionValueUsd.toString(),
-        positionAction: point.positionAction,
+        positionSize: point.position_size.toString(),
+        entryPrice: point.entry_price.toString(),
+        liquidationPrice: point.liq_price.toString(),
+        positionValueUsd: point.position_value_usd.toString(),
+        positionAction: point.position_action,
         createTime: new Date(point.timestampMs),
         source: 'COINGLASS',
       }))
@@ -135,10 +164,10 @@ export class CoinglassWhaleAlertJob implements DataPullJob {
     }
 
     // 统计所有 API 返回的数据（而非仅增量数据）
-    const longPositions = pointsWithTimestamps.filter(p => p.positionSize > 0).length
-    const shortPositions = pointsWithTimestamps.filter(p => p.positionSize < 0).length
-    const openActions = pointsWithTimestamps.filter(p => p.positionAction === 1).length
-    const closeActions = pointsWithTimestamps.filter(p => p.positionAction === 2).length
+    const longPositions = pointsWithTimestamps.filter(p => p.position_size > 0).length
+    const shortPositions = pointsWithTimestamps.filter(p => p.position_size < 0).length
+    const openActions = pointsWithTimestamps.filter(p => p.position_action === 1).length
+    const closeActions = pointsWithTimestamps.filter(p => p.position_action === 2).length
 
     return {
       fetchedCount: insertedCount,
