@@ -54,8 +54,14 @@ export const TraderCard = ({
               {tag && <span className="text-[#888888] text-xs font-medium tracking-tight uppercase">{tag}</span>}
             </div>
           </div>
-          <button className="w-9 h-9 flex items-center justify-center bg-[#262626] border border-[#333333] rounded-xl text-[#888888] group-hover:text-white transition-colors">
-            <ExternalLink className="w-4.5 h-4.5" />
+          <button 
+            className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Logic to show detailed stats would go here
+            }}
+          >
+            <TrendingUp className="w-5 h-5" />
           </button>
         </div>
 
@@ -94,8 +100,14 @@ export const TraderCard = ({
           </button>
           {handle && <span className="text-[#555555] text-sm font-medium ml-2">{handle}</span>}
         </div>
-        <button className="w-9 h-9 flex items-center justify-center bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl text-[#555555] group-hover:text-white transition-colors">
-          <TrendingUp className="w-4.5 h-4.5" />
+        <button 
+          className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+          onClick={(e) => {
+            e.stopPropagation();
+            // Logic to show detailed stats would go here
+          }}
+        >
+          <TrendingUp className="w-5 h-5" />
         </button>
       </div>
 
