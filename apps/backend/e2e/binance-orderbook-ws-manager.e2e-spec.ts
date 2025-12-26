@@ -65,7 +65,7 @@ describeIf('Binance orderbook WS via OrderbookWsSyncManager (E2E)', () => {
     // 0）清理 Redis 中遗留的快照
     await client.del(redisKey)
 
-    // 1）确保当前没有启用的 BINANCE SPOT 配置（该 pairId 如存在，一律置为 disabled）
+    // 1）记录当前 BINANCE SPOT BTCUSDT 配置原始状态，并确保测试开始时全部处于 disabled
     const pairId = `${SYMBOL}.${VENUE}.SPOT`
     const allConfigs = await orderbookConfigService.findAll({
       venue: VENUE,
@@ -75,111 +75,137 @@ describeIf('Binance orderbook WS via OrderbookWsSyncManager (E2E)', () => {
 
     const existingForPair = allConfigs.filter(cfg => cfg.pairId === pairId)
 
-    for (const cfg of existingForPair) {
-      if (!cfg.enabled) continue
-      // 仅需从「启用集合」里去掉，直接置 enabled=false 即可
-      await orderbookConfigService.update(cfg.id, { enabled: false })
-    }
+    const originalStates = existingForPair.map(cfg => ({
+      id: cfg.id,
+      enabled: cfg.enabled,
+    }))
 
-    // 2）运行一次 tick，此时不应产生任何 Binance WS snapshot
+    // 将所有已存在配置暂时禁用，避免影响“无配置”场景断言
+    await Promise.all(
+      existingForPair
+        .filter(cfg => cfg.enabled)
+        .map(cfg => orderbookConfigService.update(cfg.id, { enabled: false })),
+    )
+
     const managerForTest = wsManager as unknown as { tick: () => Promise<void> }
-    await managerForTest.tick()
-    const payload = await client.get(redisKey)
-    expect(payload).toBeNull()
 
-    // 3）动态添加/启用一条 BINANCE CEX SPOT BTCUSDT 配置
-    const refreshedAll = await orderbookConfigService.findAll({
-      venue: VENUE,
-      venueType: 'CEX',
-      instrumentType: 'SPOT',
-    })
-    let targetConfig =
-      refreshedAll.find(
-        (cfg) =>
-          cfg.pairId === pairId &&
-          cfg.venue.toUpperCase() === VENUE &&
-          cfg.venueType === 'CEX' &&
-          cfg.instrumentType === 'SPOT',
-      ) ?? null
+    let createdConfigId: string | null = null
 
-    if (!targetConfig) {
-      try {
-        targetConfig = await orderbookConfigService.create({
-          pairId,
-          venue: VENUE,
-          symbol: SYMBOL,
-          baseAsset: BASE,
-          quoteAsset: QUOTE,
-          venueType: 'CEX',
-          instrumentType: 'SPOT',
-          enabled: true,
-          depthLevels: 50,
-          priority: 100,
-          metadata: {},
-          description: 'E2E: Binance BTCUSDT spot orderbook via manager',
-          pullIntervalSeconds: null,
-        })
-      } catch {
-        const retryAll = await orderbookConfigService.findAll({
-          venue: VENUE,
-          venueType: 'CEX',
-          instrumentType: 'SPOT',
-        })
-        targetConfig =
-          retryAll.find(
-            (cfg) =>
-              cfg.pairId === pairId &&
-              cfg.venue.toUpperCase() === VENUE &&
-              cfg.venueType === 'CEX' &&
-              cfg.instrumentType === 'SPOT',
-          ) ?? null
-      }
-    }
+    try {
+      // 2）运行一次 tick，此时不应产生任何 Binance WS snapshot
+      await managerForTest.tick()
+      const payload = await client.get(redisKey)
+      expect(payload).toBeNull()
 
-    if (!targetConfig) {
-      throw new Error('Failed to ensure BINANCE CEX SPOT BTCUSDT orderbook config exists (manager)')
-    }
-
-    if (!targetConfig.enabled) {
-      targetConfig = await orderbookConfigService.update(targetConfig.id, {
-        enabled: true,
+      // 3）动态添加/启用一条 BINANCE CEX SPOT BTCUSDT 配置
+      const refreshedAll = await orderbookConfigService.findAll({
+        venue: VENUE,
+        venueType: 'CEX',
+        instrumentType: 'SPOT',
       })
-    }
+      let targetConfig =
+        refreshedAll.find(
+          (cfg) =>
+            cfg.pairId === pairId &&
+            cfg.venue.toUpperCase() === VENUE &&
+            cfg.venueType === 'CEX' &&
+            cfg.instrumentType === 'SPOT',
+        ) ?? null
 
-    // 4）再次运行 tick，此时 manager 应该为该配置建立 WS 连接 + snapshot
-    await managerForTest.tick()
-
-    // 轮询 Redis，等待首个 snapshot
-    const firstMaxAttempts = 10
-    const intervalMs = 2000
-    let firstPayload: string | null = null
-
-    for (let i = 0; i < firstMaxAttempts; i += 1) {
-      firstPayload = await client.get(redisKey)
-      if (firstPayload) break
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, intervalMs))
-    }
-
-    expect(firstPayload).toBeTruthy()
-
-    // 5）动态关闭该配置（enabled=false），再次运行 tick，应删除 Redis snapshot
-    await orderbookConfigService.update(targetConfig.id, { enabled: false })
-    await managerForTest.tick()
-
-    // 轮询 Redis，等待快照删除
-    const deleteMaxAttempts = 10
-    let deleted = false
-
-    for (let i = 0; i < deleteMaxAttempts; i += 1) {
-      const val = await client.get(redisKey)
-      if (!val) {
-        deleted = true
-        break
+      if (!targetConfig) {
+        try {
+          const created = await orderbookConfigService.create({
+            pairId,
+            venue: VENUE,
+            symbol: SYMBOL,
+            baseAsset: BASE,
+            quoteAsset: QUOTE,
+            venueType: 'CEX',
+            instrumentType: 'SPOT',
+            enabled: true,
+            depthLevels: 50,
+            priority: 100,
+            metadata: {},
+            description: 'E2E: Binance BTCUSDT spot orderbook via manager',
+            pullIntervalSeconds: null,
+          })
+          targetConfig = created
+          createdConfigId = created.id
+        } catch {
+          const retryAll = await orderbookConfigService.findAll({
+            venue: VENUE,
+            venueType: 'CEX',
+            instrumentType: 'SPOT',
+          })
+          targetConfig =
+            retryAll.find(
+              (cfg) =>
+                cfg.pairId === pairId &&
+                cfg.venue.toUpperCase() === VENUE &&
+                cfg.venueType === 'CEX' &&
+                cfg.instrumentType === 'SPOT',
+            ) ?? null
+        }
       }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, intervalMs))
-    }
 
-    expect(deleted).toBe(true)
+      if (!targetConfig) {
+        throw new Error('Failed to ensure BINANCE CEX SPOT BTCUSDT orderbook config exists (manager)')
+      }
+
+      if (!targetConfig.enabled) {
+        targetConfig = await orderbookConfigService.update(targetConfig.id, {
+          enabled: true,
+        })
+      }
+
+      // 4）再次运行 tick，此时 manager 应该为该配置建立 WS 连接 + snapshot
+      await managerForTest.tick()
+
+      // 轮询 Redis，等待首个 snapshot
+      const firstMaxAttempts = 10
+      const intervalMs = 2000
+      let firstPayload: string | null = null
+
+      for (let i = 0; i < firstMaxAttempts; i += 1) {
+        firstPayload = await client.get(redisKey)
+        if (firstPayload) break
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, intervalMs))
+      }
+
+      expect(firstPayload).toBeTruthy()
+
+      // 5）动态关闭该配置（enabled=false），再次运行 tick，应删除 Redis snapshot
+      await orderbookConfigService.update(targetConfig.id, { enabled: false })
+      await managerForTest.tick()
+
+      // 轮询 Redis，等待快照删除
+      const deleteMaxAttempts = 10
+      let deleted = false
+
+      for (let i = 0; i < deleteMaxAttempts; i += 1) {
+        const val = await client.get(redisKey)
+        if (!val) {
+          deleted = true
+          break
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, intervalMs))
+      }
+
+      expect(deleted).toBe(true)
+    } finally {
+      // 恢复数据库中该 pairId 的原始状态，避免影响共享环境
+      if (createdConfigId) {
+        await orderbookConfigService.delete(createdConfigId)
+      }
+
+      if (originalStates.length) {
+        await Promise.all(
+          originalStates.map(state =>
+            orderbookConfigService.update(state.id, { enabled: state.enabled }),
+          ),
+        )
+      }
+    }
   })
 })
 
