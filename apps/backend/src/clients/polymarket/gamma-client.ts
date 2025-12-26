@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config'
 export interface ListMarketsParams {
   limit?: number
   cursor?: string | null
+  offset?: number // offset 分页参数
   updatedSince?: string | null
   category?: string | null
   tags?: string[]
@@ -49,6 +50,10 @@ export class PolymarketGammaClient {
 
     const cursor = params.cursor ?? undefined
     if (cursor) url.searchParams.set('cursor', cursor)
+    
+    // offset 分页参数（Gamma API 实际使用）
+    const offset = params.offset ?? undefined
+    if (offset != null && offset >= 0) url.searchParams.set('offset', String(offset))
 
     const updatedSince = params.updatedSince ?? undefined
     if (updatedSince) url.searchParams.set('updated_since', updatedSince)

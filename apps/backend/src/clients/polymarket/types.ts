@@ -26,6 +26,7 @@ export interface PolymarketGammaMarket {
   open_interest?: string
   event_id?: string
   event?: PolymarketGammaEvent
+  events?: PolymarketGammaEvent[] // API 实际返回的是 events 数组
   outcomes?: PolymarketGammaOutcome[]
   [key: string]: unknown
 }

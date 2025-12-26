@@ -1,5 +1,5 @@
 import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
-import type { PolymarketGammaMarket, PolymarketGammaOutcome } from '@/clients/polymarket/types'
+import type { PolymarketGammaEvent, PolymarketGammaMarket, PolymarketGammaOutcome } from '@/clients/polymarket/types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -41,6 +41,7 @@ export class PolymarketMarketsJob implements DataPullJob {
     const response = await this.gammaClient.listMarkets({
       limit: this.batchSize,
       cursor: cursor.nextCursor ?? null,
+      offset: useIncrementalSync ? undefined : (cursor.offset ?? 0), // 增量模式不使用 offset
       updatedSince: useIncrementalSync ? (cursor.updatedSince ?? null) : null,
       category: this.category ?? null,
       // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
@@ -92,23 +93,26 @@ export class PolymarketMarketsJob implements DataPullJob {
   }
 
   private async processMarket(market: PolymarketGammaMarket): Promise<void> {
+    // API 返回 events 数组，取第一个元素作为主事件
+    const event = market.event ?? market.events?.[0]
+    
     const marketRecord = await this.repo.upsertMarket({
       marketId: market.id,
-      eventExternalId: market.event_id ?? (market.event as Record<string, any>)?.id ?? null,
-      eventSlug: market.event?.slug ?? null,
-      eventTitle: market.event?.title ?? null,
-      eventStartTime: this.toDate(market.event?.start_date),
-      eventEndTime: this.toDate(market.event?.end_date),
+      eventExternalId: market.event_id ?? (event as Record<string, any>)?.id ?? null,
+      eventSlug: event?.slug ?? null,
+      eventTitle: event?.title ?? null,
+      eventStartTime: this.toDate(event?.start_date),
+      eventEndTime: this.toDate(event?.end_date),
       slug: market.slug,
       question: market.question ?? market.title,
-      category: market.category ?? market.event?.category ?? this.category ?? null,
-      tags: this.extractTags(market),
+      category: market.category ?? event?.category ?? this.category ?? null,
+      tags: this.extractTags(market, event),
       outcomeType: market.outcomeType ?? (market as Record<string, any>)?.outcome_type ?? null,
       status: market.status ?? ((market as Record<string, any>)?.closed ? 'closed' : 'open'),
       resolutionSource: market.resolution_source ?? null,
       resolutionTime: this.toDate(market.resolution_time),
       startTradingAt: this.toDate(market.start_date ?? (market as any)?.created_at),
-      endTradingAt: this.toDate(market.end_date ?? market.close_date ?? market.event?.end_date),
+      endTradingAt: this.toDate(market.end_date ?? market.close_date ?? event?.end_date),
       lastUpdatedAt: this.toDate((market as any)?.updated_at),
       feeRate: this.toDecimal((market as Record<string, any>)?.fee_rate),
       liquidity: this.toDecimal(market.liquidity ?? (market as Record<string, any>)?.liquidity_num),
@@ -146,10 +150,10 @@ export class PolymarketMarketsJob implements DataPullJob {
     }
   }
 
-  private extractTags(market: PolymarketGammaMarket): string[] {
+  private extractTags(market: PolymarketGammaMarket, event?: PolymarketGammaEvent): string[] {
     const tags = new Set<string>()
     ;(market.tags ?? []).forEach(tag => tag && tags.add(tag))
-    ;(market.event?.tags ?? []).forEach(tag => tag && tags.add(tag))
+    ;(event?.tags ?? []).forEach(tag => tag && tags.add(tag))
     const legacyTags = (market as Record<string, any>)?.tag_ids ?? []
     if (Array.isArray(legacyTags)) {
       legacyTags.forEach(tag => {
