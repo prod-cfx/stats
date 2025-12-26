@@ -44,7 +44,7 @@ interface BbxApiResponse {
 
 interface BbxJobCursor {
   lastFetchTime?: string
-  symbols?: string[]
+  // symbols 不再保存在 cursor 中，确保每次都从配置读取
 }
 
 /**
@@ -84,9 +84,9 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       throw new Error('BBX_API_KEY is not configured')
     }
 
-    // 从配置中读取要拉取的股票代码列表
+    // 从配置中读取要拉取的股票代码列表（每次都从配置读取，确保可动态更新）
     const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS') ?? 'MSTR,COIN,MARA'
-    const symbols = cursor.symbols ?? symbolsConfig.split(',').map(s => s.trim())
+    const symbols = symbolsConfig.split(',').map(s => s.trim()).filter(Boolean)
 
     if (symbols.length === 0) {
       this.logger.warn('No symbols configured for BBX crypto stock quotes job')
@@ -158,7 +158,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
 
     const newCursor: BbxJobCursor = {
       lastFetchTime: new Date().toISOString(),
-      symbols,
+      // 不再保存 symbols 到 cursor，确保每次都从配置读取
     }
 
     return {
@@ -167,6 +167,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       meta: {
         symbols: quotes.map(q => q.symbol),
         fetchTime: newCursor.lastFetchTime,
+        configuredSymbols: symbols, // 记录实际生效的配置列表
       },
     }
   }
@@ -201,18 +202,28 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
 
   /**
    * 解析时间戳
+   * 支持：数字（秒/毫秒）、字符串形式的 epoch、ISO 8601 字符串
    */
   private parseTimestamp(timestamp?: number | string): Date {
     if (!timestamp) {
       return new Date()
     }
 
+    // 处理数字类型的 timestamp
     if (typeof timestamp === 'number') {
       // 判断是秒还是毫秒
       const ts = timestamp > 1e12 ? timestamp : timestamp * 1000
       return new Date(ts)
     }
 
+    // 处理字符串形式的 epoch timestamp（如 "1703607900"）
+    if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
+      const num = Number(timestamp)
+      const ts = num > 1e12 ? num : num * 1000
+      return new Date(ts)
+    }
+
+    // 尝试解析为 ISO 8601 或其他日期字符串
     const parsed = new Date(timestamp)
     return Number.isNaN(parsed.getTime()) ? new Date() : parsed
   }
