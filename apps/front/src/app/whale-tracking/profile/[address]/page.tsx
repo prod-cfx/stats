@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useParams } from 'next/navigation';
-import Navbar from '@/components/layout/Navbar';
+import { Navbar } from '@/components/layout/Navbar';
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader';
 import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary';
 import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile';
