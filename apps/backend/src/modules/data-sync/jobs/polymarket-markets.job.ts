@@ -11,9 +11,7 @@ import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository
 
 interface PolymarketMarketsCursor {
   nextCursor?: string | null
-  updatedSince?: string | null
-  offset?: number // 备用分页：当 API 不返回 nextCursor 时使用 offset
-  initialSyncComplete?: boolean // 标记初次全量同步是否完成
+  offset?: number // offset 分页：用于持续轮询所有市场
 }
 
 @Injectable()
@@ -37,48 +35,46 @@ export class PolymarketMarketsJob implements DataPullJob {
   async run(currentCursor: string | null): Promise<JobRunResult> {
     const cursor = this.parseCursor(currentCursor)
 
-    // 初次全量同步完成后，才使用 updatedSince 做增量更新
-    const useIncrementalSync = cursor.initialSyncComplete === true
-    
+    // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
+    // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
     const response = await this.gammaClient.listMarkets({
       limit: this.batchSize,
       cursor: cursor.nextCursor ?? null,
-      offset: useIncrementalSync ? undefined : (cursor.offset ?? 0), // 增量模式不使用 offset
-      updatedSince: useIncrementalSync ? (cursor.updatedSince ?? null) : null,
+      offset: cursor.offset ?? 0,
+      updatedSince: null, // API 不支持，保持 null
       category: this.category ?? null,
       // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
       // isActive 标志会根据 API 返回的 active/closed 字段在 processMarket 中正确设置
     })
 
     let processed = 0
-    let latestUpdatedIso = cursor.updatedSince ?? null
 
     for (const market of response.markets) {
       await this.processMarket(market)
       processed += 1
-
-      const updatedIso = this.pickLatestTimestamp(market)
-      if (updatedIso && (!latestUpdatedIso || updatedIso > latestUpdatedIso)) {
-        latestUpdatedIso = updatedIso
-      }
     }
 
     const nextCursorValue = response.nextCursor ?? null
-    const hasMore = processed >= this.batchSize
     
-    // 判断初次同步是否完成
-    let initialSyncComplete = cursor.initialSyncComplete ?? false
-    if (!initialSyncComplete && !nextCursorValue && !hasMore) {
-      // 当没有 nextCursor 且返回数据少于批次大小时，认为初次同步完成
-      initialSyncComplete = true
-      this.logger.log(`Initial sync completed, will switch to incremental updates`)
+    // 计算下一次的 offset
+    // 如果有 nextCursor，使用它（重置 offset 为 0）
+    // 否则累加 offset，如果已经处理完所有数据（返回少于 batchSize），则重置为 0 开始新一轮
+    let nextOffset = 0
+    if (nextCursorValue) {
+      // 有 cursor，重置 offset
+      nextOffset = 0
+    } else if (processed >= this.batchSize) {
+      // 没有 cursor 但返回了满批数据，继续下一页
+      nextOffset = (cursor.offset ?? 0) + processed
+    } else {
+      // 没有 cursor 且数据不满，说明到达末尾，重置为 0 开始新一轮
+      nextOffset = 0
+      this.logger.log(`Reached end of markets, will restart from offset 0 on next run`)
     }
     
     const newCursor: PolymarketMarketsCursor = {
       nextCursor: nextCursorValue,
-      updatedSince: initialSyncComplete ? (latestUpdatedIso ?? cursor.updatedSince ?? null) : null,
-      offset: nextCursorValue ? 0 : (cursor.offset ?? 0) + processed,
-      initialSyncComplete,
+      offset: nextOffset,
     }
 
     return {
@@ -87,9 +83,7 @@ export class PolymarketMarketsJob implements DataPullJob {
       meta: {
         markets: processed,
         nextCursor: response.nextCursor ?? null,
-        latestUpdatedIso,
-        offset: newCursor.offset,
-        initialSyncComplete,
+        offset: nextOffset,
       },
     }
   }
@@ -100,7 +94,8 @@ export class PolymarketMarketsJob implements DataPullJob {
     const m = market as any
     
     // 统一 category 为小写并去除空格
-    const rawCategory = market.category ?? event?.category ?? this.category ?? null
+    // 注意：不应该用配置的默认 category 回填，否则会将无分类的市场错误地标记为 crypto
+    const rawCategory = market.category ?? event?.category ?? null
     const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
     
     const marketRecord = await this.repo.upsertMarket({
@@ -237,25 +232,6 @@ export class PolymarketMarketsJob implements DataPullJob {
       this.logger.warn(`Invalid cursor detected for ${this.key}, resetting.`)
       return {}
     }
-  }
-
-  private pickLatestTimestamp(market: PolymarketGammaMarket): string | null {
-    const m = market as any
-    const candidates = [
-      m?.updatedAt ?? m?.updated_at,
-      m?.closeDate ?? m?.close_date,
-      m?.endDate ?? m?.end_date,
-      m?.startDate ?? m?.start_date,
-      m?.createdAt ?? m?.created_at,
-    ].filter(Boolean) as (string | number)[]
-
-    const isoTimes = candidates
-      .map(value => this.toDate(value))
-      .filter((value): value is Date => value instanceof Date)
-      .map(date => date.toISOString())
-
-    if (!isoTimes.length) return null
-    return isoTimes.sort().at(-1) ?? null
   }
 
   private toDate(value?: string | number | Date | null): Date | null {
