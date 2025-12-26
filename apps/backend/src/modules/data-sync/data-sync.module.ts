@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common'
 import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
+import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
+import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
@@ -17,6 +19,7 @@ import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
+import { OkxOrderBookSnapshotJob } from './jobs/okx-orderbook-snapshot.job'
 import { PolymarketMarketsJob } from './jobs/polymarket-markets.job'
 import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
@@ -24,6 +27,12 @@ import { DataPullTaskRepository } from './repositories/data-pull-task.repository
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
 import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
+import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
+import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
+import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
+import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
+import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-perpetual-orderbook-ws.adapter'
+import { OkxCexSpotOrderbookWsAdapter } from './services/adapters/okx-cex-spot-orderbook-ws.adapter'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 
@@ -35,7 +44,14 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
  */
 
 @Module({
-  imports: [PrismaModule, AuthModule, LiquidationHeatmapModule, OrderbookConfigModule, SettingsModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    LiquidationHeatmapModule,
+    OpenInterestModule,
+    OrderbookConfigModule,
+    SettingsModule,
+  ],
   controllers: [AdminDataPullTaskController],
   providers: [
     // 仓储
@@ -46,7 +62,9 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleNewsJob,
     CoinglassHeatmapJob,
     ExampleOrderbookJob,
+    OpenInterestSyncJob,
     BinanceOrderBookSnapshotJob,
+    OkxOrderBookSnapshotJob,
     CoinglassAggregatedLiquidationJob,
     PolymarketMarketsJob,
     PolymarketOrderbookJob,
@@ -62,7 +80,9 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         exampleOrderbookJob: ExampleOrderbookJob,
+        openInterestSyncJob: OpenInterestSyncJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
+        okxOrderBookSnapshotJob: OkxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         polymarketMarketsJob: PolymarketMarketsJob,
         polymarketOrderbookJob: PolymarketOrderbookJob,
@@ -71,7 +91,9 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob,
         coinglassHeatmapJob,
         exampleOrderbookJob,
+        openInterestSyncJob,
         binanceOrderBookSnapshotJob,
+        okxOrderBookSnapshotJob,
         coinglassAggregatedLiquidationJob,
         polymarketMarketsJob,
         polymarketOrderbookJob,
@@ -81,7 +103,9 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleNewsJob,
         CoinglassHeatmapJob,
         ExampleOrderbookJob,
+        OpenInterestSyncJob,
         BinanceOrderBookSnapshotJob,
+        OkxOrderBookSnapshotJob,
         CoinglassAggregatedLiquidationJob,
         PolymarketMarketsJob,
         PolymarketOrderbookJob,
@@ -97,6 +121,12 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     BinanceCexSpotOrderbookWsAdapter,
     BinanceCexPerpetualOrderbookWsAdapter,
     BinanceCexFutureOrderbookWsAdapter,
+    BybitCexSpotOrderbookWsAdapter,
+    BybitCexPerpetualOrderbookWsAdapter,
+    BybitCexFutureOrderbookWsAdapter,
+    OkxCexSpotOrderbookWsAdapter,
+    OkxCexPerpetualOrderbookWsAdapter,
+    OkxCexFutureOrderbookWsAdapter,
     {
       provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
       // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
@@ -104,19 +134,36 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter: BinanceCexFutureOrderbookWsAdapter,
+        bybitCexSpotOrderbookWsAdapter: BybitCexSpotOrderbookWsAdapter,
+        bybitCexPerpetualOrderbookWsAdapter: BybitCexPerpetualOrderbookWsAdapter,
+        bybitCexFutureOrderbookWsAdapter: BybitCexFutureOrderbookWsAdapter,
+        okxCexSpotOrderbookWsAdapter: OkxCexSpotOrderbookWsAdapter,
+        okxCexPerpetualOrderbookWsAdapter: OkxCexPerpetualOrderbookWsAdapter,
+        okxCexFutureOrderbookWsAdapter: OkxCexFutureOrderbookWsAdapter,
       ) => [
         binanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter,
+        bybitCexSpotOrderbookWsAdapter,
+        bybitCexPerpetualOrderbookWsAdapter,
+        bybitCexFutureOrderbookWsAdapter,
+        okxCexSpotOrderbookWsAdapter,
+        okxCexPerpetualOrderbookWsAdapter,
+        okxCexFutureOrderbookWsAdapter,
       ],
       inject: [
         BinanceCexSpotOrderbookWsAdapter,
         BinanceCexPerpetualOrderbookWsAdapter,
         BinanceCexFutureOrderbookWsAdapter,
+        BybitCexSpotOrderbookWsAdapter,
+        BybitCexPerpetualOrderbookWsAdapter,
+        BybitCexFutureOrderbookWsAdapter,
+        OkxCexSpotOrderbookWsAdapter,
+        OkxCexPerpetualOrderbookWsAdapter,
+        OkxCexFutureOrderbookWsAdapter,
       ],
     },
     OrderbookWsSyncManager,
   ],
 })
 export class DataSyncModule {}
-

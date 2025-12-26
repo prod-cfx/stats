@@ -32,7 +32,7 @@
     "UNIAPI_API_KEY",
     "UNIAPI_BASE_URL",
 
-    // Coinglass（DataSync: Heatmap / Aggregated Liquidation / OI 等）
+    // Coinglass（DataSync: Heatmap / Aggregated Liquidation / Open Interest 等）
     "COINGLASS_API_KEY",
     "COINGLASS_HEATMAP_ENDPOINT",
     "COINGLASS_AGG_LIQUIDATION_ENDPOINT",
