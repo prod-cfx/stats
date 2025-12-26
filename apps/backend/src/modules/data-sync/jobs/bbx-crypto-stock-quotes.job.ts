@@ -131,6 +131,20 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       }
     }
 
+    // 数据完整性检查：验证是否所有配置的 symbols 都有返回数据
+    const returnedSymbols = new Set(quotes.map(q => q.symbol.toUpperCase()))
+    const missingSymbols = symbols.filter(s => !returnedSymbols.has(s.toUpperCase()))
+
+    if (missingSymbols.length > 0) {
+      const errorMsg = `BBX API missing data for symbols: ${missingSymbols.join(', ')}`
+      this.logger.error(errorMsg, {
+        configured: symbols,
+        returned: Array.from(returnedSymbols),
+        missing: missingSymbols,
+      })
+      // 记录缺失但不中断任务，让部分数据能写入
+    }
+
     // 批量入库
     const count = await this.repo.upsertQuotes(
       quotes.map(quote => ({
@@ -168,6 +182,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
         symbols: quotes.map(q => q.symbol),
         fetchTime: newCursor.lastFetchTime,
         configuredSymbols: symbols, // 记录实际生效的配置列表
+        missingSymbols: missingSymbols.length > 0 ? missingSymbols : undefined, // 记录缺失的标的
       },
     }
   }

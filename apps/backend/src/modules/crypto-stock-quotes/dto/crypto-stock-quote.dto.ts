@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { IsDate, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 
 /**
  * 加密股票报价响应 DTO
@@ -89,8 +89,8 @@ export class QueryCryptoStockQuotesDto {
     example: '2024-01-01T00:00:00Z',
   })
   @IsOptional()
-  @IsDateString()
   @Type(() => Date)
+  @IsDate({ message: '开始时间必须是有效的日期' })
   startTime?: Date
 
   @ApiPropertyOptional({
@@ -98,8 +98,8 @@ export class QueryCryptoStockQuotesDto {
     example: '2024-12-31T23:59:59Z',
   })
   @IsOptional()
-  @IsDateString()
   @Type(() => Date)
+  @IsDate({ message: '结束时间必须是有效的日期' })
   endTime?: Date
 
   @ApiPropertyOptional({
