@@ -179,6 +179,8 @@ export class PolymarketOrderbookJob implements DataPullJob {
       return {
         offset: Number.isFinite(parsed?.offset) ? Math.max(0, Math.trunc(parsed.offset)) : 0,
         failedTokens: parsed?.failedTokens && typeof parsed.failedTokens === 'object' ? parsed.failedTokens : undefined,
+        // 解析并转换 skippedTokens（持久化的跳过列表）
+        skippedTokens: Array.isArray(parsed?.skippedTokens) ? parsed.skippedTokens : undefined,
       }
     } catch {
       this.logger.warn(`Invalid cursor detected for ${this.key}, resetting.`)
