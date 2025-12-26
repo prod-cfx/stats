@@ -1,9 +1,27 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { AddWidgetModal } from './AddWidgetModal';
 
 export const EditorCanvas = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeCellIndex, setActiveCellIndex] = useState<number | null>(null);
+  const [widgets, setWidgets] = useState<(string | null)[]>(Array(15).fill(null));
+
+  const handleOpenModal = (index: number) => {
+    setActiveCellIndex(index);
+    setIsModalOpen(true);
+  };
+
+  const handleSelectWidget = (widget: string) => {
+    if (activeCellIndex !== null) {
+      const newWidgets = [...widgets];
+      newWidgets[activeCellIndex] = widget;
+      setWidgets(newWidgets);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-10">
       {/* Header Section */}
@@ -22,17 +40,35 @@ export const EditorCanvas = () => {
 
       {/* Grid Canvas Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[600px]">
-        {[...Array(15)].map((_, idx) => (
+        {widgets.map((widget, idx) => (
           <div 
             key={idx} 
-            className="aspect-square bg-[#1e1e1e]/50 border-2 border-dashed border-[#2c2c2c] rounded-xl flex items-center justify-center group hover:border-[#3b82f6]/30 hover:bg-[#1e1e1e] transition-all cursor-pointer"
+            onClick={() => handleOpenModal(idx)}
+            className={`aspect-square bg-[#1e1e1e]/50 border-2 rounded-xl flex items-center justify-center group transition-all cursor-pointer overflow-hidden ${
+              widget 
+                ? 'border-solid border-[#2c2c2c] bg-[#1e1e1e] hover:border-[#3b82f6]/50' 
+                : 'border-dashed border-[#2c2c2c] hover:border-[#3b82f6]/30 hover:bg-[#1e1e1e]'
+            }`}
           >
-            <div className="w-8 h-8 rounded-full bg-[#2c2c2c] flex items-center justify-center text-[#5a5a5a] group-hover:text-[#3b82f6] group-hover:bg-[#3b82f6]/10 transition-all">
-              <Plus className="w-5 h-5" />
-            </div>
+            {widget ? (
+              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+                <span className="text-white font-bold text-sm">{widget}</span>
+                <span className="text-[#5a5a5a] text-[10px] mt-2 font-medium uppercase tracking-wider">组件详情已就绪</span>
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-[#2c2c2c] flex items-center justify-center text-[#5a5a5a] group-hover:text-[#3b82f6] group-hover:bg-[#3b82f6]/10 transition-all">
+                <Plus className="w-5 h-5" />
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      <AddWidgetModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSelect={handleSelectWidget}
+      />
     </div>
   );
 };
