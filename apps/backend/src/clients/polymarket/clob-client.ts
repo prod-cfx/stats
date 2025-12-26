@@ -44,7 +44,9 @@ export class PolymarketClobClient {
     if (!params.tokenId) {
       throw new Error('tokenId is required for fetchOrderbook')
     }
-    const url = new URL('/book', this.restBaseUrl)
+    // 安全拼接路径，保留 restBaseUrl 中的路径段
+    const baseUrlWithSlash = this.restBaseUrl.endsWith('/') ? this.restBaseUrl : `${this.restBaseUrl}/`
+    const url = new URL('book', baseUrlWithSlash)
     url.searchParams.set('token_id', params.tokenId)
 
     const json = await this.fetchJson(url)

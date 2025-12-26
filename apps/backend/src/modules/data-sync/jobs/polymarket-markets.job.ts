@@ -12,6 +12,8 @@ import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository
 interface PolymarketMarketsCursor {
   nextCursor?: string | null
   updatedSince?: string | null
+  offset?: number // 备用分页：当 API 不返回 nextCursor 时使用 offset
+  initialSyncComplete?: boolean // 标记初次全量同步是否完成
 }
 
 @Injectable()
@@ -33,10 +35,13 @@ export class PolymarketMarketsJob implements DataPullJob {
   async run(currentCursor: string | null): Promise<JobRunResult> {
     const cursor = this.parseCursor(currentCursor)
 
+    // 初次全量同步完成后，才使用 updatedSince 做增量更新
+    const useIncrementalSync = cursor.initialSyncComplete === true
+    
     const response = await this.gammaClient.listMarkets({
       limit: this.batchSize,
       cursor: cursor.nextCursor ?? null,
-      updatedSince: cursor.updatedSince ?? null,
+      updatedSince: useIncrementalSync ? (cursor.updatedSince ?? null) : null,
       category: this.category ?? null,
       // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
       // isActive 标志会根据 API 返回的 active/closed 字段在 processMarket 中正确设置
@@ -56,11 +61,21 @@ export class PolymarketMarketsJob implements DataPullJob {
     }
 
     const nextCursorValue = response.nextCursor ?? null
+    const hasMore = processed >= this.batchSize
+    
+    // 判断初次同步是否完成
+    let initialSyncComplete = cursor.initialSyncComplete ?? false
+    if (!initialSyncComplete && !nextCursorValue && !hasMore) {
+      // 当没有 nextCursor 且返回数据少于批次大小时，认为初次同步完成
+      initialSyncComplete = true
+      this.logger.log(`Initial sync completed, will switch to incremental updates`)
+    }
+    
     const newCursor: PolymarketMarketsCursor = {
       nextCursor: nextCursorValue,
-      updatedSince: nextCursorValue
-        ? cursor.updatedSince ?? latestUpdatedIso ?? null
-        : latestUpdatedIso ?? cursor.updatedSince ?? null,
+      updatedSince: initialSyncComplete ? (latestUpdatedIso ?? cursor.updatedSince ?? null) : null,
+      offset: nextCursorValue ? 0 : (cursor.offset ?? 0) + processed,
+      initialSyncComplete,
     }
 
     return {
@@ -70,6 +85,8 @@ export class PolymarketMarketsJob implements DataPullJob {
         markets: processed,
         nextCursor: response.nextCursor ?? null,
         latestUpdatedIso,
+        offset: newCursor.offset,
+        initialSyncComplete,
       },
     }
   }

@@ -41,7 +41,9 @@ export class PolymarketGammaClient {
   }
 
   async listMarkets(params: ListMarketsParams = {}): Promise<ListMarketsResult> {
-    const url = new URL('/markets', this.baseUrl)
+    // 安全拼接路径，保留 baseUrl 中的路径段
+    const baseUrlWithSlash = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`
+    const url = new URL('markets', baseUrlWithSlash)
     const limit = Math.max(1, Math.min(this.maxLimit, params.limit ?? this.maxLimit))
     url.searchParams.set('limit', String(limit))
 
