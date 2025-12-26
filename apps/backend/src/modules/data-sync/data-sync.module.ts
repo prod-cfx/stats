@@ -16,6 +16,7 @@ import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { BinanceOrderBookSnapshotJob } from './jobs/binance-orderbook-snapshot.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
+import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
@@ -60,6 +61,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleKlineJob,
     ExampleNewsJob,
     CoinglassHeatmapJob,
+    CoinglassWhaleAlertJob,
     ExampleOrderbookJob,
     OpenInterestSyncJob,
     BinanceOrderBookSnapshotJob,
@@ -74,6 +76,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
+        coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
         binanceOrderBookSnapshotJob: BinanceOrderBookSnapshotJob,
@@ -84,6 +87,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleKlineJob,
         exampleNewsJob,
         coinglassHeatmapJob,
+        coinglassWhaleAlertJob,
         exampleOrderbookJob,
         openInterestSyncJob,
         binanceOrderBookSnapshotJob,
@@ -95,6 +99,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleKlineJob,
         ExampleNewsJob,
         CoinglassHeatmapJob,
+        CoinglassWhaleAlertJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,
         BinanceOrderBookSnapshotJob,
