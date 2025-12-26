@@ -13,6 +13,8 @@ interface OrderbookCursor {
   offset: number
   // 记录连续失败的 token 及其失败次数，用于判断是否跳过
   failedTokens?: Record<string, number>
+  // 记录已永久跳过的 token（失败次数超过阈值），持久化跳过状态
+  skippedTokens?: Set<string> | string[]
 }
 
 @Injectable()
@@ -56,23 +58,42 @@ export class PolymarketOrderbookJob implements DataPullJob {
 
     let success = 0
     let failed = 0
-    let skipped = 0  // 跳过的（连续失败超过阈值）
+    let skipped = 0  // 跳过的（连续失败超过阈值或已在永久跳过列表）
     const failedTokens = cursor.failedTokens ?? {}
     const newFailedTokens: Record<string, number> = {}
+    
+    // 读取并转换 skippedTokens（持久化的跳过列表）
+    const skippedTokens = new Set<string>(
+      Array.isArray(cursor.skippedTokens) ? cursor.skippedTokens : []
+    )
+    const newSkippedTokens = new Set(skippedTokens)  // 复制一份，用于更新
+    
     let consecutiveProcessed = 0  // 从开始到第一个"需要重试的失败"之前的处理数量
     let hasEncounteredRetryableFailure = false
     
     for (const target of targets) {
       const tokenId = target.outcomeTokenId
+      
+      // 检查是否在永久跳过列表中（持久化的跳过状态）
+      if (skippedTokens.has(tokenId)) {
+        skipped += 1
+        // 跳过的 token 也算"已处理"
+        if (!hasEncounteredRetryableFailure) {
+          consecutiveProcessed += 1
+        }
+        continue
+      }
+      
       const currentFailCount = failedTokens[tokenId] ?? 0
       
-      // 如果该 token 连续失败次数已超过阈值，跳过它（避免永久卡死）
+      // 如果该 token 连续失败次数已超过阈值，加入永久跳过列表
       if (currentFailCount >= this.maxRetries) {
         skipped += 1
+        newSkippedTokens.add(tokenId)  // 持久化跳过状态
         this.logger.warn(
-          `Skipping token=${tokenId} after ${currentFailCount} consecutive failures (max=${this.maxRetries})`,
+          `Permanently skipping token=${tokenId} after ${currentFailCount} consecutive failures (max=${this.maxRetries})`,
         )
-        // 跳过的 token 也算"已处理"，但不计入失败
+        // 跳过的 token 也算"已处理"
         if (!hasEncounteredRetryableFailure) {
           consecutiveProcessed += 1
         }
@@ -113,17 +134,30 @@ export class PolymarketOrderbookJob implements DataPullJob {
     }
 
     // 关键：按"连续处理"的数量推进 offset（包括成功、跳过，但不包括需要重试的失败）
-    // - 如果第1个就失败（且未超阈值）：consecutiveProcessed=0，offset不变，下次重试同一批
-    // - 如果第1个失败但超阈值被跳过：consecutiveProcessed=1，offset推进1，下次从第2个开始
-    // - 如果前10个成功第11个失败：consecutiveProcessed=10，offset推进10，下次从失败的那个开始
-    // - 如果全部成功/跳过：consecutiveProcessed=targets.length，正常推进
-    const nextOffset = targets.length < this.batchSize ? 0 : cursor.offset + consecutiveProcessed
+    // 特别处理最后一页：如果有失败需要重试，不要重置 offset 为 0（否则 failedTokens 会被清空）
+    let nextOffset: number
+    if (targets.length < this.batchSize) {
+      // 最后一页
+      if (hasEncounteredRetryableFailure) {
+        // 有失败需要重试，继续推进 offset（不重置为 0）
+        nextOffset = cursor.offset + consecutiveProcessed
+        this.logger.log(`Last page with retryable failures, keeping offset at ${nextOffset} for retry`)
+      } else {
+        // 没有失败，或全部已跳过，重置为 0 开始新一轮
+        nextOffset = 0
+        this.logger.log(`Completed full cycle, resetting offset to 0`)
+      }
+    } else {
+      // 非最后一页，正常推进
+      nextOffset = cursor.offset + consecutiveProcessed
+    }
 
     return {
       fetchedCount: success,
       newCursor: JSON.stringify({ 
         offset: nextOffset,
         failedTokens: Object.keys(newFailedTokens).length > 0 ? newFailedTokens : undefined,
+        skippedTokens: newSkippedTokens.size > 0 ? Array.from(newSkippedTokens) : undefined,
       }),
       meta: {
         tokensProcessed: targets.length,
@@ -133,6 +167,7 @@ export class PolymarketOrderbookJob implements DataPullJob {
         consecutiveProcessed,
         nextOffset,
         failedTokensCount: Object.keys(newFailedTokens).length,
+        skippedTokensCount: newSkippedTokens.size,
       },
     }
   }
