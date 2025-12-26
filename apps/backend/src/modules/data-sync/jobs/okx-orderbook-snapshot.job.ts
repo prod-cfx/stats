@@ -167,8 +167,9 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
   }
 
   private getBatchSize(): number {
-    const raw = this.configService.get<number>('ORDERBOOK_OKX_SNAPSHOT_BATCH_SIZE')
-    const size = typeof raw === 'number' && Number.isFinite(raw) ? raw : 10
+    const raw = this.configService.get<string>('ORDERBOOK_OKX_SNAPSHOT_BATCH_SIZE')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+    const size = Number.isFinite(parsed) ? parsed : 10
     return Math.max(1, Math.floor(size))
   }
 
@@ -177,8 +178,9 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
   }
 
   private getRestTimeoutMs(): number {
-    const raw = this.configService.get<number>('ORDERBOOK_OKX_REST_TIMEOUT_MS')
-    const timeout = typeof raw === 'number' && Number.isFinite(raw) ? raw : 10_000
+    const raw = this.configService.get<string>('ORDERBOOK_OKX_REST_TIMEOUT_MS')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+    const timeout = Number.isFinite(parsed) ? parsed : 10_000
     return Math.max(1_000, Math.floor(timeout))
   }
 

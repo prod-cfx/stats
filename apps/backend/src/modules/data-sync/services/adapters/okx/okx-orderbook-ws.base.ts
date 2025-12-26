@@ -668,7 +668,11 @@ class OkxWsConnection {
       return
     }
     if (text === 'ping') {
-      void this.send('pong')
+      if (this.ws && this.open) {
+        try {
+          this.ws.send('pong')
+        } catch {}
+      }
       return
     }
 
