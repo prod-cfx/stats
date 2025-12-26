@@ -51,6 +51,7 @@ export class PolymarketOrderbookJob implements DataPullJob {
     }
 
     let success = 0
+    let failed = 0
     for (const target of targets) {
       try {
         const snapshot = await this.clobClient.fetchOrderbook({ tokenId: target.outcomeTokenId })
@@ -69,13 +70,17 @@ export class PolymarketOrderbookJob implements DataPullJob {
         })
         success += 1
       } catch (error) {
+        failed += 1
         this.logger.warn(
           `Failed to fetch Polymarket orderbook for token=${target.outcomeTokenId}: ${error instanceof Error ? error.message : String(error)}`,
         )
       }
     }
 
-    const nextOffset = targets.length < this.batchSize ? 0 : cursor.offset + targets.length
+    // 关键：只根据成功数量推进 offset，失败的 token 会在下次轮询时重试
+    // 如果全部失败，offset 不变，下次会重试相同的 token
+    // 如果部分成功，offset 按成功数量推进，失败的会在后续轮询中处理
+    const nextOffset = targets.length < this.batchSize ? 0 : cursor.offset + success
 
     return {
       fetchedCount: success,
@@ -83,6 +88,8 @@ export class PolymarketOrderbookJob implements DataPullJob {
       meta: {
         tokensProcessed: targets.length,
         success,
+        failed,
+        nextOffset,
       },
     }
   }

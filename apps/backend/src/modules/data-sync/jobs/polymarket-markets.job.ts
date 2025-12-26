@@ -53,10 +53,15 @@ export class PolymarketMarketsJob implements DataPullJob {
     })
 
     let processed = 0
+    let skipped = 0
 
     for (const market of response.markets) {
-      await this.processMarket(market)
-      processed += 1
+      const result = await this.processMarket(market)
+      if (result.skipped) {
+        skipped += 1
+      } else {
+        processed += 1
+      }
     }
 
     const nextCursorValue = response.nextCursor ?? null
@@ -89,13 +94,15 @@ export class PolymarketMarketsJob implements DataPullJob {
       newCursor: JSON.stringify(newCursor),
       meta: {
         markets: processed,
+        skipped,
+        total: response.markets.length,
         nextCursor: response.nextCursor ?? null,
         offset: nextOffset,
       },
     }
   }
 
-  private async processMarket(market: PolymarketGammaMarket): Promise<void> {
+  private async processMarket(market: PolymarketGammaMarket): Promise<{ skipped: boolean }> {
     // API 返回 events 数组，取第一个元素作为主事件
     const event = market.event ?? market.events?.[0]
     const m = market as any
@@ -104,6 +111,13 @@ export class PolymarketMarketsJob implements DataPullJob {
     // 注意：不应该用配置的默认 category 回填，否则会将无分类的市场错误地标记为 crypto
     const rawCategory = market.category ?? event?.category ?? null
     const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+    
+    // 关键：Gamma API 的 category 参数不工作（忽略该查询参数），
+    // 必须在本地过滤，否则会把所有历史市场全量 upsert 导致数据库膨胀
+    if (this.category && normalizedCategory !== this.category) {
+      // 不匹配配置的 category，跳过此市场
+      return { skipped: true }
+    }
     
     const marketRecord = await this.repo.upsertMarket({
       marketId: market.id,
@@ -143,6 +157,8 @@ export class PolymarketMarketsJob implements DataPullJob {
     if (outcomeInputs.length) {
       await this.repo.upsertOutcomes(outcomeInputs)
     }
+    
+    return { skipped: false }
   }
 
   private parseOutcomes(market: PolymarketGammaMarket): PolymarketGammaOutcome[] {
