@@ -223,11 +223,23 @@ export class PolymarketRepository {
     const limit = Math.max(1, Math.min(params.limit ?? 50, 500))
     const offset = Math.max(0, params.offset ?? 0)
 
+    const where: any = {}
+    if (params.category && params.category.length) {
+      where.market = {
+        category: params.category,
+        isActive: true,
+      }
+    } else {
+      where.market = {
+        isActive: true,
+      }
+    }
+
     const rows = await client.polymarketOutcome.findMany({
       take: limit,
       skip: offset,
       orderBy: {
-        updatedAt: 'desc',
+        id: 'asc',
       },
       include: {
         market: {
@@ -239,18 +251,10 @@ export class PolymarketRepository {
           },
         },
       },
-      where:
-        params.category && params.category.length
-          ? {
-              market: {
-                category: params.category,
-              },
-            }
-          : undefined,
+      where,
     })
 
     return rows
-      .filter(row => row.market?.isActive !== false)
       .map(row => ({
         marketDbId: row.market?.id ?? 0,
         marketExternalId: row.market?.marketId ?? '',
