@@ -503,7 +503,7 @@ class OkxWsConnection {
     private readonly configService: ConfigService,
     private readonly baseLogger: Logger,
     private readonly getWsBaseUrl: () => string,
-    private readonly onBooksMessage: (msg: OkxBooksMessage) => void,
+    private readonly onBooksMessage: (msg: OkxBooksMessage) => Promise<void>,
     private readonly getChannel: () => string,
   ) {}
 
@@ -693,7 +693,11 @@ class OkxWsConnection {
     }
 
     if (msg.arg && msg.data) {
-      this.onBooksMessage(msg)
+      void this.onBooksMessage(msg).catch(err => {
+        this.baseLogger.error(
+          `OKX WS#${this.index} onBooksMessage error: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
     }
   }
 }
