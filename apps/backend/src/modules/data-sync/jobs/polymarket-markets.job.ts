@@ -123,13 +123,52 @@ export class PolymarketMarketsJob implements DataPullJob {
       rawPayload: market as Record<string, unknown>,
     })
 
-    const outcomeInputs = (market.outcomes ?? [])
+    // 处理 outcomes 字段的多种格式
+    const outcomes = this.parseOutcomes(market)
+    const outcomeInputs = outcomes
       .map(outcome => this.mapOutcome(outcome, marketRecord.id))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
 
     if (outcomeInputs.length) {
       await this.repo.upsertOutcomes(outcomeInputs)
     }
+  }
+
+  private parseOutcomes(market: PolymarketGammaMarket): PolymarketGammaOutcome[] {
+    // 1. 如果 outcomes 是数组，直接返回
+    if (Array.isArray(market.outcomes)) {
+      return market.outcomes
+    }
+
+    // 2. 如果 outcomes 是字符串，尝试解析为 JSON
+    if (typeof market.outcomes === 'string') {
+      try {
+        const parsed = JSON.parse(market.outcomes)
+        if (Array.isArray(parsed)) {
+          // 如果是简单的字符串数组 ["Yes", "No"]，转换为 outcome 对象
+          return parsed.map((name, index) => ({
+            id: `${market.id}-outcome-${index}`,
+            token_id: (market as any).clobTokenIds?.[index] ?? `${market.id}-${index}`,
+            name: String(name),
+          }))
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to parse outcomes JSON for market ${market.id}: ${String(error)}`)
+      }
+    }
+
+    // 3. 检查 clobTokenIds 字段
+    const clobTokenIds = (market as any).clobTokenIds
+    if (Array.isArray(clobTokenIds) && clobTokenIds.length > 0) {
+      return clobTokenIds.map((tokenId, index) => ({
+        id: `${market.id}-outcome-${index}`,
+        token_id: String(tokenId),
+        name: `Outcome ${index + 1}`,
+      }))
+    }
+
+    // 4. 返回空数组
+    return []
   }
 
   private mapOutcome(outcome: PolymarketGammaOutcome, marketDbId: number) {
