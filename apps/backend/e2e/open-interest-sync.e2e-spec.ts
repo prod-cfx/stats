@@ -3,25 +3,19 @@ import type { TestingModule } from '@nestjs/testing'
 import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 
-import { AppModule } from '../src/modules/app.module'
-import { OpenInterestSyncJob } from '../src/modules/open-interest/jobs/open-interest-sync.job'
-import { OpenInterestService } from '../src/modules/open-interest/open-interest.service'
-import { PrismaService } from '../src/prisma/prisma.service'
-
 // 通过环境变量控制是否实际访问 Coinglass，避免在 CI 默认跑外网依赖
 const E2E_ENABLED = process.env.OPEN_INTEREST_E2E === 'true'
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Open interest sync via Coinglass (E2E)', () => {
   let app: INestApplication
-  let prisma: PrismaService
-  let openInterestService: OpenInterestService
-  let openInterestSyncJob: OpenInterestSyncJob
+  let prisma: any
+  let openInterestService: any
+  let openInterestSyncJob: any
 
   beforeAll(async () => {
     // 强制保护：仅允许在 APP_ENV === 'e2e' 环境下运行，防止误删非 e2e 数据库中的真实数据
     if (process.env.APP_ENV && process.env.APP_ENV !== 'e2e') {
-      // 显式抛错而不是静默跳过，避免在错误环境下执行破坏性操作
       throw new Error(
         `Open interest Coinglass E2E must run with APP_ENV=e2e, current APP_ENV=${process.env.APP_ENV}`,
       )
@@ -32,6 +26,17 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
 
     // 与 main.ts 保持一致，从 monorepo 根目录加载环境
     process.chdir(resolve(__dirname, '../../..'))
+
+    // 确保在设置 APP_ENV / cwd 之后再加载 Nest 应用及 Prisma，防止连接到非 e2e 数据库
+    // 通过重置模块缓存并动态导入相关模块，避免 defaultEnvAccessor 在错误环境中初始化
+    jest.resetModules()
+    const [{ AppModule }, { PrismaService }, { OpenInterestService }, { OpenInterestSyncJob }] =
+      await Promise.all([
+        import('../src/modules/app.module'),
+        import('../src/prisma/prisma.service'),
+        import('../src/modules/open-interest/open-interest.service'),
+        import('../src/modules/open-interest/jobs/open-interest-sync.job'),
+      ])
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -93,3 +98,4 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
     expect(Number((latestAll as any).openInterestUsd ?? 0)).toBeGreaterThan(0)
   })
 })
+
