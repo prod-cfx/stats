@@ -18,14 +18,14 @@ export const ExploreDashboards = () => {
           <input 
             type="text" 
             placeholder="Search for dashboards" 
-            className="w-full bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#adaebc]"
+            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#adaebc]"
           />
         </div>
       </div>
 
       {/* Featured Section */}
       <div className="space-y-6">
-        <div className="flex items-center gap-4 border-b border-[#2c2c2c]">
+        <div className="flex items-center gap-4 border-b border-[#30363d]">
           <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-white pb-4 -mb-[1px]">特色看板</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

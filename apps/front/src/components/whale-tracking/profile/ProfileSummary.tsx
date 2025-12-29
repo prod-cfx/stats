@@ -98,7 +98,7 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }:
   };
 
   return (
-    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
       <div className="text-[#999999] text-label font-medium">{label}</div>
       {isPerformance ? (
         <div className="flex flex-col gap-4 mt-auto">

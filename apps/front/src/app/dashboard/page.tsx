@@ -29,7 +29,7 @@ export default function DashboardPage() {
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-8">
           <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
             {/* Tabs */}
-            <div className="flex items-center gap-2 border-b border-[#2c2c2c]">
+            <div className="flex items-center gap-2 border-b border-[#30363d]">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -39,7 +39,7 @@ export default function DashboardPage() {
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 -mb-[2px] ${
                       isActive 
-                        ? 'text-white border-[#3b82f6] bg-[#1e1e1e]' 
+                        ? 'text-white border-[#3b82f6] bg-[#161b22]' 
                         : 'text-[#888888] border-transparent hover:text-white'
                     }`}
                   >
@@ -53,7 +53,7 @@ export default function DashboardPage() {
             {/* Tab Content */}
             {activeTab === 'explore' && <ExploreDashboards />}
             {activeTab === 'my' && (
-              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#2c2c2c] rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
                 <Layout className="w-12 h-12" />
                 <p className="text-lg font-medium">You don't have any dashboards yet.</p>
                 <button className="text-white bg-[#2563eb] px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition-all">
@@ -62,10 +62,10 @@ export default function DashboardPage() {
               </div>
             )}
             {activeTab === 'saved' && (
-              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#2c2c2c] rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
                 <Bookmark className="w-12 h-12" />
                 <p className="text-lg font-medium">No saved dashboards yet.</p>
-                <button className="text-white bg-[#1e1e1e] border border-[#2c2c2c] px-6 py-2 rounded-lg font-bold hover:text-white hover:border-[#3b82f6]/50 transition-all">
+                <button className="text-white bg-[#161b22] border border-[#30363d] px-6 py-2 rounded-lg font-bold hover:text-white hover:border-[#3b82f6]/50 transition-all">
                   Explore Trending Dashboards
                 </button>
               </div>

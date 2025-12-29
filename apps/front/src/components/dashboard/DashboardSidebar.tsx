@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export const DashboardSidebar = () => {
   return (
-    <aside className="w-64 flex-none border-r border-[#2c2c2c] p-6 flex flex-col gap-10">
+    <aside className="w-64 flex-none border-r border-[#30363d] p-6 flex flex-col gap-10">
       <div className="space-y-8">
         {/* My Dashboards Section */}
         <div className="space-y-4">

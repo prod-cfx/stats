@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export const DashboardEditorSidebar = () => {
   return (
-    <aside className="w-64 flex-none border-r border-[#2c2c2c] p-6 flex flex-col gap-10">
+    <aside className="w-64 flex-none border-r border-[#30363d] p-6 flex flex-col gap-10">
       <div className="flex flex-col gap-8 h-full">
         {/* Navigation Section */}
         <div className="space-y-8">
@@ -48,7 +48,7 @@ export const DashboardEditorSidebar = () => {
             <span className="text-sm">CREATE DASHBOARD</span>
           </button>
           
-          <button className="w-full bg-[#2c2c2c] hover:bg-[#3a3a3a] text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-[#3a3a3a]">
+          <button className="w-full bg-[#161b22] hover:bg-[#30363d] text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-[#30363d]">
             <Send className="w-4 h-4" />
             <span className="text-sm uppercase tracking-wider">发布</span>
           </button>

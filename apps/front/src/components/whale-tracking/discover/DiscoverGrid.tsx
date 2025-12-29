@@ -163,7 +163,7 @@ export const DiscoverGrid = () => {
         {['胜率', '账户总价值', '已实现盈亏'].map((filter) => (
           <button 
             key={filter}
-            className="px-6 py-2.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl text-[#888888] text-label font-bold flex items-center gap-3 hover:border-[#3b82f6]/50 transition-colors"
+            className="px-6 py-2.5 bg-[#161b22] border border-[#30363d] rounded-xl text-[#888888] text-label font-bold flex items-center gap-3 hover:border-[#3b82f6]/50 transition-colors"
           >
             {filter}
             <div className="w-4 h-4 flex items-center justify-center">

@@ -146,26 +146,26 @@ export const WhalePositionsTable = () => {
           <BodyText>追踪大额持仓者的最新动态</BodyText>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>ETH</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有方向</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有未实现盈亏</span>
             <ChevronDown className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[#999999] border-b border-[#2c2c2c]">
+              <tr className="text-[#999999] border-b border-[#30363d]">
                 <th className="px-6 py-4 text-left">地址</th>
                 <th className="px-6 py-4 text-left">币种</th>
                 <th className="px-6 py-4 text-left">持仓价值</th>
@@ -179,9 +179,9 @@ export const WhalePositionsTable = () => {
                 <th className="px-6 py-4 text-center w-16">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2c2c2c]">
+            <tbody className="divide-y divide-[#30363d]">
               {mockPositions.map((pos, idx) => (
-                <tr key={idx} className="hover:bg-[#252525] transition-colors group">
+                <tr key={idx} className="hover:bg-[#1f2937] transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
@@ -257,7 +257,7 @@ export const WhalePositionsTable = () => {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button 
-                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleShowStats(pos.address);

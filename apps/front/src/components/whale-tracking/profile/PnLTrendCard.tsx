@@ -33,7 +33,7 @@ export const PnLTrendCard = () => {
   const mockData = generateMockData();
 
   return (
-    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl p-6 flex flex-col gap-6 h-full">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 flex flex-col gap-6 h-full">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="space-y-1">
@@ -42,15 +42,15 @@ export const PnLTrendCard = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>1周</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>仅永续合约</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>总盈亏</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>

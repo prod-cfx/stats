@@ -66,13 +66,13 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative w-full max-w-[1152px] h-[90vh] bg-[#1e1e1e] border border-[#2c2c2c] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          className="relative w-full max-w-[1152px] h-[90vh] bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         >
           {/* Modal Header */}
-          <div className="flex-none px-8 py-5 border-b border-[#2c2c2c] flex items-center justify-between bg-[#1e1e1e] sticky top-0 z-10">
+          <div className="flex-none px-8 py-5 border-b border-[#30363d] flex items-center justify-between bg-[#161b22] sticky top-0 z-10">
             <div className="flex items-center gap-8">
               <SectionTitle className="text-2xl">交易统计</SectionTitle>
-              <div className="px-4 py-2 bg-[#121212] border border-[#2c2c2c] rounded-xl flex items-center gap-3">
+              <div className="px-4 py-2 bg-[#0d1117] border border-[#30363d] rounded-xl flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
                 <span className="text-[#cccccc] text-base font-semibold">{formatAddress(address)}</span>
               </div>
@@ -80,7 +80,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
             <div className="flex items-center gap-6">
               <div className="relative group">
-                <button className="flex items-center gap-3 px-4 py-2 bg-[#2c2c2c] border border-[#3a3a3a] rounded-xl text-[#cccccc] text-sm font-bold hover:border-[#3b82f6]/50 transition-all">
+                <button className="flex items-center gap-3 px-4 py-2 bg-[#30363d] border border-[#30363d] rounded-xl text-[#cccccc] text-sm font-bold hover:border-[#3b82f6]/50 transition-all">
                   {timeRange}
                   <ChevronDown className="w-4 h-4" />
                 </button>
@@ -106,7 +106,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
                   { label: '费用', value: '$+42,733.00', color: 'text-white' }
                 ]}
               />
-              <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 relative">
+              <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative">
                 <span className="text-[#999999] text-sm font-medium">交易次数</span>
                 <div className="h-[96px] w-full">
                   <ReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
@@ -150,7 +150,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
             {/* Performance Tabs */}
             <div className="space-y-6">
-              <div className="flex items-center gap-8 border-b border-[#2c2c2c]">
+              <div className="flex items-center gap-8 border-b border-[#30363d]">
                 <button
                   onClick={() => setActiveTab('asset')}
                   className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-white border-[#3b82f6]' : 'text-[#888888] border-transparent hover:text-white'}`}
@@ -195,7 +195,7 @@ interface StatCardProps {
 }
 
 const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2, subStats }: StatCardProps) => (
-  <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4">
     <span className="text-[#999999] text-caption font-medium">{label}</span>
     <div className="flex items-baseline gap-1">
       <span className={`text-h1 font-bold ${valueColor}`}>{value}</span>
@@ -224,7 +224,7 @@ interface TradeCardProps {
 }
 
 const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) => (
-  <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all group">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all group">
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-3">
         <div className="w-6 h-6 flex items-center justify-center">
@@ -241,7 +241,7 @@ const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) =
       <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
-    <div className="flex justify-between items-center text-caption pt-2 border-t border-[#2c2c2c]/50">
+    <div className="flex justify-between items-center text-caption pt-2 border-t border-[#30363d]/50">
       <span className="text-[#888888] font-medium">持续时间</span>
       <span className="text-white font-semibold">{duration}</span>
     </div>
@@ -258,7 +258,7 @@ interface PerformanceCardProps {
 }
 
 const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: PerformanceCardProps) => (
-  <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-3">
         <div className="w-6 h-6 flex items-center justify-center">
@@ -266,13 +266,13 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
         </div>
         <span className="text-white font-bold text-body">{asset}</span>
       </div>
-      <span className="text-[#999999] text-caption font-bold bg-[#1e1e1e] px-2 py-1 rounded">{trades} 笔交易</span>
+      <span className="text-[#999999] text-caption font-bold bg-[#161b22] px-2 py-1 rounded">{trades} 笔交易</span>
     </div>
     <div className="flex flex-col">
       <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
-    <div className="space-y-2 pt-2 border-t border-[#2c2c2c]/50">
+    <div className="space-y-2 pt-2 border-t border-[#30363d]/50">
       <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">净盈亏</span>
         <span className={`font-bold ${netPnl.includes('+') ? 'text-green-400' : 'text-red-400'}`}>{netPnl}</span>
@@ -296,7 +296,7 @@ interface PositionCardProps {
 }
 
 const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCardProps) => (
-  <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-3">
         <div className="w-6 h-6 flex items-center justify-center">
@@ -312,7 +312,7 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
     <div className="flex flex-col py-1">
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h1 tracking-tight`}>{pnl}</span>
     </div>
-    <div className="space-y-2 pt-2 border-t border-[#2c2c2c]/50 mt-auto">
+    <div className="space-y-2 pt-2 border-t border-[#30363d]/50 mt-auto">
       <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">规模</span>
         <span className="text-white font-bold">{size}</span>

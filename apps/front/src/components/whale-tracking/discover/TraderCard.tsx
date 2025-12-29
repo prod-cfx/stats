@@ -41,7 +41,7 @@ export const TraderCard = ({
 
   if (variant === 'recommended') {
     return (
-      <div className="bg-[#1c1c1c] border border-[#2c2c2c] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/50 transition-all group">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/50 transition-all group">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
@@ -63,7 +63,7 @@ export const TraderCard = ({
             </div>
           </div>
           <button 
-            className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+            className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
             onClick={(e) => {
               e.stopPropagation();
               onShowStats?.(address);
@@ -99,7 +99,7 @@ export const TraderCard = ({
 
   // Detail variant
   return (
-    <div className="bg-[#121212] border border-[#222222] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/30 transition-all group">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/30 transition-all group">
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2">
           <Link 
@@ -114,7 +114,7 @@ export const TraderCard = ({
           {handle && <span className="text-[#555555] text-body font-medium ml-2">{handle}</span>}
         </div>
         <button 
-          className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+          className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -129,7 +129,7 @@ export const TraderCard = ({
         <span className="text-white text-h1 font-bold tracking-tight">{totalValue}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 border-b border-[#222222] pb-6">
+      <div className="grid grid-cols-3 gap-2 border-b border-[#30363d] pb-6">
         <div className="flex flex-col gap-1">
           <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">{pnlLabel}</span>
           <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>

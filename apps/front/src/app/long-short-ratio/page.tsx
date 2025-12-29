@@ -142,15 +142,15 @@ export default function LongShortRatioPage() {
             </div>
             
             <div className="flex items-center gap-3">
-              <div className="flex bg-[#1e1e1e] border border-[#2c2c2c] rounded-md p-1 gap-1">
-                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#2c2c2c] rounded text-sm font-medium text-[#e6edf3]">
+              <div className="flex bg-[#161b22] border border-[#30363d] rounded-md p-1 gap-1">
+                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#30363d] rounded text-sm font-medium text-[#e6edf3]">
                   {symbol} <ChevronDown className="w-4 h-4" />
                 </button>
-                <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#2c2c2c] rounded text-sm font-medium text-[#8b949e] transition-colors">
+                <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#30363d] rounded text-sm font-medium text-[#8b949e] transition-colors">
                   {timeRange} <ChevronDown className="w-4 h-4" />
                 </button>
               </div>
-              <button className="p-2.5 bg-[#1e1e1e] border border-[#2c2c2c] rounded-md text-[#8b949e] hover:text-[#e6edf3] transition-colors">
+              <button className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#e6edf3] transition-colors">
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
@@ -168,9 +168,9 @@ export default function LongShortRatioPage() {
             />
 
             {/* Table Area */}
-            <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden">
+            <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden">
               {/* Table Header Labels */}
-              <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#2c2c2c]">
+              <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d]">
                 <span className="w-[180px] pl-10">交易所</span>
                 <span className="flex-1 text-center">持仓占比 (多 vs 空)</span>
                 <div className="flex w-[300px]">
@@ -180,9 +180,9 @@ export default function LongShortRatioPage() {
               </div>
 
               {/* Exchange List */}
-              <div className="flex flex-col divide-y divide-[#2c2c2c]">
+              <div className="flex flex-col divide-y divide-[#30363d]">
                 {exchanges.map((ex) => (
-                  <div key={ex.name} className="px-6 py-4 hover:bg-[#252525] transition-colors">
+                  <div key={ex.name} className="px-6 py-4 hover:bg-[#1f2937] transition-colors">
                     <ExchangeRow data={ex} />
                   </div>
                 ))}

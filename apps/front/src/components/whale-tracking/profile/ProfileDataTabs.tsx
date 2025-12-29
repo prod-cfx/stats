@@ -18,9 +18,9 @@ export const ProfileDataTabs = () => {
   ];
 
   return (
-    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden flex flex-col">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden flex flex-col">
       {/* Tabs Header */}
-      <div className="flex px-6 border-b border-[#2c2c2c]">
+      <div className="flex px-6 border-b border-[#30363d]">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -40,7 +40,7 @@ export const ProfileDataTabs = () => {
       <div className="p-0 overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-[#1e1e1e] text-[#999999] text-caption font-bold uppercase tracking-wider border-b border-[#2c2c2c]">
+            <tr className="bg-[#161b22] text-[#999999] text-caption font-bold uppercase tracking-wider border-b border-[#30363d]">
               <th className="px-6 py-4 text-left">
                 <div className="flex items-center gap-1.5">
                   <span>币种</span>
@@ -92,9 +92,9 @@ export const ProfileDataTabs = () => {
               <th className="px-6 py-4 text-center">止盈/止损</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#2c2c2c]">
+          <tbody className="divide-y divide-[#30363d]">
             {mockPerpetualPositions.map((pos, idx) => (
-              <tr key={idx} className="hover:bg-[#252525] transition-colors">
+              <tr key={idx} className="hover:bg-[#1f2937] transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <span className={`px-1.5 py-0.5 rounded text-caption font-bold ${pos.side === 'Long' ? 'bg-[#22c55e20] text-[#4ade80]' : 'bg-[#ef444420] text-[#f87171]'}`}>

@@ -13,8 +13,8 @@ export interface DashboardCardProps {
 
 export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardCardProps) => {
   return (
-    <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden hover:border-[#3b82f6]/50 transition-all group flex flex-col h-full">
-      <div className="aspect-[16/10] w-full overflow-hidden border-b border-[#2c2c2c]">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden hover:border-[#3b82f6]/50 transition-all group flex flex-col h-full">
+      <div className="aspect-[16/10] w-full overflow-hidden border-b border-[#30363d]">
         <img 
           src={image} 
           alt={title} 
@@ -28,7 +28,7 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
           {tags.map((tag, idx) => (
             <span 
               key={idx} 
-              className="px-2 py-0.5 bg-[#2c2c2c] text-[#cccccc] text-caption font-bold rounded border border-[#3a3a3a] uppercase tracking-wider"
+              className="px-2 py-0.5 bg-[#0d1117] text-[#cccccc] text-caption font-bold rounded border border-[#30363d] uppercase tracking-wider"
             >
               {tag}
             </span>
