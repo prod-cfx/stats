@@ -28,7 +28,7 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
           {tags.map((tag, idx) => (
             <span 
               key={idx} 
-              className="px-2 py-0.5 bg-[#0d1117] text-[#cccccc] text-caption font-bold rounded border border-[#30363d] uppercase tracking-wider"
+              className="px-2 py-0.5 bg-[#0d1117] text-[#c9d1d9] text-caption font-bold rounded border border-[#30363d] uppercase tracking-wider"
             >
               {tag}
             </span>
@@ -36,8 +36,8 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
         </div>
 
         <div className="mt-auto flex justify-between items-center text-caption">
-          <span className="text-[#999999]">{saves.toLocaleString()} 保存</span>
-          <span className="text-[#5a5a5a] group-hover:text-[#999999] transition-colors">创建者 @{creator}</span>
+          <span className="text-[#8b949e]">{saves.toLocaleString()} 保存</span>
+          <span className="text-[#8b949e] group-hover:text-[#c9d1d9] transition-colors">创建者 @{creator}</span>
         </div>
       </div>
     </div>

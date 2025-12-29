@@ -40,10 +40,10 @@ export default function DashboardEditorPage() {
                     className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 -mb-[2px] ${
                       isActive 
                         ? 'text-white border-[#3b82f6] bg-[#161b22]' 
-                        : 'text-[#888888] border-transparent hover:text-white'
+                        : 'text-[#8b949e] border-transparent hover:text-white'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#3b82f6]' : 'text-[#5a5a5a]'}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#3b82f6]' : 'text-[#8b949e]'}`} />
                     <span>{tab.label}</span>
                   </button>
                 );

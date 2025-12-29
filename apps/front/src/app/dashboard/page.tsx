@@ -40,10 +40,10 @@ export default function DashboardPage() {
                     className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 -mb-[2px] ${
                       isActive 
                         ? 'text-white border-[#3b82f6] bg-[#161b22]' 
-                        : 'text-[#888888] border-transparent hover:text-white'
+                        : 'text-[#8b949e] border-transparent hover:text-white'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#3b82f6]' : 'text-[#5a5a5a]'}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#3b82f6]' : 'text-[#8b949e]'}`} />
                     <span>{tab.label}</span>
                   </button>
                 );
@@ -53,7 +53,7 @@ export default function DashboardPage() {
             {/* Tab Content */}
             {activeTab === 'explore' && <ExploreDashboards />}
             {activeTab === 'my' && (
-              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
                 <Layout className="w-12 h-12" />
                 <p className="text-lg font-medium">You don't have any dashboards yet.</p>
                 <button className="text-white bg-[#2563eb] px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition-all">
@@ -62,7 +62,7 @@ export default function DashboardPage() {
               </div>
             )}
             {activeTab === 'saved' && (
-              <div className="flex flex-col items-center justify-center py-20 text-[#5a5a5a] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
+              <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
                 <Bookmark className="w-12 h-12" />
                 <p className="text-lg font-medium">No saved dashboards yet.</p>
                 <button className="text-white bg-[#161b22] border border-[#30363d] px-6 py-2 rounded-lg font-bold hover:text-white hover:border-[#3b82f6]/50 transition-all">

@@ -14,30 +14,30 @@ export const DashboardEditorSidebar = () => {
           <div className="space-y-4">
             <button className="w-full flex items-center justify-between group">
               <div className="flex items-center gap-3">
-                <Layout className="w-4 h-4 text-[#cccccc]" />
-                <span className="text-[#cccccc] text-base font-semibold">我的看板</span>
+                <Layout className="w-4 h-4 text-[#c9d1d9]" />
+                <span className="text-[#c9d1d9] text-base font-semibold">我的看板</span>
               </div>
-              <ChevronRight className="w-3 h-3 text-[#5a5a5a] group-hover:text-white transition-colors" />
+              <ChevronRight className="w-3 h-3 text-[#8b949e] group-hover:text-white transition-colors" />
             </button>
             <div className="pl-7 space-y-4">
-              <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
-              <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
-              <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+              <div className="text-[#8b949e] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+              <div className="text-[#8b949e] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+              <div className="text-[#8b949e] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
             </div>
           </div>
 
           {/* Tracked Entities */}
-          <div className="text-[#5a5a5a] text-[10px] font-bold uppercase tracking-[0.1em]">
+          <div className="text-[#8b949e] text-[10px] font-bold uppercase tracking-[0.1em]">
             TRACKED ENTITIES
           </div>
 
           {/* Saved Dashboards Section */}
           <button className="w-full flex items-center justify-between group">
             <div className="flex items-center gap-3">
-              <Bookmark className="w-4 h-4 text-[#cccccc]" />
-              <span className="text-[#cccccc] text-base font-semibold">已保存的看板</span>
+              <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
+              <span className="text-[#c9d1d9] text-base font-semibold">已保存的看板</span>
             </div>
-            <ChevronRight className="w-3 h-3 text-[#5a5a5a] group-hover:text-white transition-colors" />
+            <ChevronRight className="w-3 h-3 text-[#8b949e] group-hover:text-white transition-colors" />
           </button>
         </div>
 
@@ -53,7 +53,7 @@ export const DashboardEditorSidebar = () => {
             <span className="text-sm uppercase tracking-wider">发布</span>
           </button>
 
-          <button className="w-full bg-transparent hover:bg-red-500/10 text-[#999999] hover:text-red-500 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+          <button className="w-full bg-transparent hover:bg-red-500/10 text-[#8b949e] hover:text-red-500 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
             <Trash2 className="w-4 h-4" />
             <span className="text-sm uppercase tracking-wider">DELETE</span>
           </button>

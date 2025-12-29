@@ -14,11 +14,11 @@ export const ExploreDashboards = () => {
         
         {/* Search Input */}
         <div className="relative max-w-4xl">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5a5a5a]" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e]" />
           <input 
             type="text" 
             placeholder="Search for dashboards" 
-            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#adaebc]"
+            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#8b949e]"
           />
         </div>
       </div>
