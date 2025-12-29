@@ -101,33 +101,97 @@ export class OpenInterestSyncJob implements DataPullJob {
       }
 
       const nowIso = new Date().toISOString()
-      const items: CreateOpenInterestDto[] = json.data.map(item => ({
-        exchange: item.exchange || 'All',
-        symbol: item.symbol,
-        open_interest_usd: item.openInterest,
-        open_interest_quantity: item.openInterestAmount,
-        open_interest_by_coin_margin:
-          item.openInterestByCoinMargin ?? undefined,
-        open_interest_by_stable_coin_margin:
-          item.openInterestByStableCoinMargin ?? undefined,
-        open_interest_quantity_by_coin_margin:
-          item.openInterestAmountByCoinMargin ?? undefined,
-        open_interest_quantity_by_stable_coin_margin:
-          item.openInterestAmountByStableCoinMargin ?? undefined,
-        open_interest_change_percent_5m:
-          item.openInterestChangePercent5m ?? undefined,
-        open_interest_change_percent_15m:
-          item.openInterestChangePercent15m ?? undefined,
-        open_interest_change_percent_30m:
-          item.openInterestChangePercent30m ?? undefined,
-        open_interest_change_percent_1h:
-          item.openInterestChangePercent1h ?? undefined,
-        open_interest_change_percent_4h:
-          item.openInterestChangePercent4h ?? undefined,
-        open_interest_change_percent_24h:
-          item.openInterestChangePercent24h ?? undefined,
-        data_timestamp: nowIso,
-      }))
+
+      // 过滤并规范化关键数值字段：
+      // - Coinglass 部分字段可能以字符串形式返回，这里显式做 Number(...) 转换
+      // - 仅保留同时具有有效 openInterest / openInterestAmount 的记录
+      const items: CreateOpenInterestDto[] = []
+
+      const toNumberOrUndefined = (raw: unknown): number | undefined => {
+        if (raw == null) return undefined
+        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined
+        const parsed = Number(raw)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
+
+      for (const item of json.data as CoinglassOiItem[]) {
+        // Coinglass 文档示例使用的是下划线命名（open_interest_usd / open_interest_quantity 等），
+        // 为了兼容潜在的不同字段命名，这里同时尝试多种字段名。
+        const rawUsd =
+          (item as any).open_interest_usd ??
+          (item as any).openInterest ??
+          (item as any).openInterestUsd
+        const rawQty =
+          (item as any).open_interest_quantity ??
+          (item as any).openInterestAmount ??
+          (item as any).openInterestQty
+
+        const oiUsd = toNumberOrUndefined(rawUsd) ?? Number.NaN
+        const oiQty = toNumberOrUndefined(rawQty) ?? Number.NaN
+
+        if (!Number.isFinite(oiUsd) || !Number.isFinite(oiQty)) {
+          this.logger.warn(
+            `Skip Coinglass OI row due to invalid values: exchange=${item.exchange ?? 'unknown'}, symbol=${item.symbol}, open_interest_usd=${String(
+              rawUsd,
+            )}, open_interest_quantity=${String(rawQty)}`,
+          )
+          continue
+        }
+
+        items.push({
+          exchange: item.exchange || 'All',
+          symbol: item.symbol,
+          open_interest_usd: oiUsd,
+          open_interest_quantity: oiQty,
+          open_interest_by_coin_margin: toNumberOrUndefined(
+            (item as any).open_interest_by_coin_margin ??
+              (item as any).openInterestByCoinMargin,
+          ),
+          open_interest_by_stable_coin_margin: toNumberOrUndefined(
+            (item as any).open_interest_by_stable_coin_margin ??
+              (item as any).openInterestByStableCoinMargin,
+          ),
+          open_interest_quantity_by_coin_margin: toNumberOrUndefined(
+            (item as any).open_interest_quantity_by_coin_margin ??
+              (item as any).openInterestAmountByCoinMargin,
+          ),
+          open_interest_quantity_by_stable_coin_margin: toNumberOrUndefined(
+            (item as any).open_interest_quantity_by_stable_coin_margin ??
+              (item as any).openInterestAmountByStableCoinMargin,
+          ),
+          open_interest_change_percent_5m: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_5m ??
+              (item as any).openInterestChangePercent5m,
+          ),
+          open_interest_change_percent_15m: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_15m ??
+              (item as any).openInterestChangePercent15m,
+          ),
+          open_interest_change_percent_30m: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_30m ??
+              (item as any).openInterestChangePercent30m,
+          ),
+          open_interest_change_percent_1h: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_1h ??
+              (item as any).openInterestChangePercent1h,
+          ),
+          open_interest_change_percent_4h: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_4h ??
+              (item as any).openInterestChangePercent4h,
+          ),
+          open_interest_change_percent_24h: toNumberOrUndefined(
+            (item as any).open_interest_change_percent_24h ??
+              (item as any).openInterestChangePercent24h,
+          ),
+          data_timestamp: nowIso,
+        })
+      }
+
+      if (items.length === 0) {
+        const emptyMsg = `Coinglass OI API returned no valid records with both openInterest & openInterestAmount for symbol=${cursor.symbol}, exchange=${cursor.exchange ?? 'All'}`
+        this.logger.error(emptyMsg)
+        throw new Error(emptyMsg)
+      }
 
       const aggregatedAllRecords = this.buildAllExchangeRecords(items, nowIso)
       const payload =
