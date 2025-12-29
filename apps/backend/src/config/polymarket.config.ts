@@ -20,7 +20,7 @@ export interface PolymarketConfig {
 
 // 注意：与 Polymarket 相关的分类与标签（category/tags）
 // 现在只在具体 Job 的任务 meta 中配置，避免通过全局 env 控制。
-// 这里仅保留访问 Gamma/CLOB API 所需的基础配置与固定默认值。
+// 这里仅保留访问 Gamma/CLOB API 所需的基础配置与固定默认值（timeout/maxLimit 如需调整，请直接修改本配置）。
 export const polymarketConfig = registerAs('polymarket', (): PolymarketConfig => {
   return {
     gamma: {

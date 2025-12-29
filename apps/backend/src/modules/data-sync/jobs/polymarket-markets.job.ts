@@ -18,7 +18,7 @@ interface PolymarketMarketsCursor {
 export interface PolymarketTaskMeta {
   /**
    * 任务级覆盖的 category（例如 "crypto" / "sports"），
-   * 将覆盖 env / config 中的默认值。
+   * 将覆盖 Job 内的默认值（例如 'crypto'）。
    */
   category?: string
   /**

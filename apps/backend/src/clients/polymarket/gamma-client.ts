@@ -57,10 +57,13 @@ export class PolymarketGammaClient {
     if (updatedSince) url.searchParams.set('updated_since', updatedSince)
 
     // category/tags 现在完全由调用方（Job meta）控制，不再从全局 config 派生
-    const category = params.category ?? null
+    const rawCategory = params.category
+    const category = rawCategory ? rawCategory.trim().toLowerCase() : null
     if (category) url.searchParams.set('category', category)
 
-    const tags = (params.tags ?? []).filter(Boolean)
+    const tags = (params.tags ?? [])
+      .map(tag => tag.trim())
+      .filter(Boolean)
     if (tags.length) url.searchParams.set('tags', tags.join(','))
 
     if (typeof params.closed === 'boolean') {
