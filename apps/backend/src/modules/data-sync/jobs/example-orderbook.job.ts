@@ -1,4 +1,4 @@
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 Service，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -26,8 +26,8 @@ export class ExampleOrderbookJob implements DataPullJob {
     private readonly orderbookConfigService: OrderbookPairConfigService,
   ) {}
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    this.logger.log(`ExampleOrderbookJob.run called, cursor=${currentCursor ?? 'null'}`)
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    this.logger.log(`ExampleOrderbookJob.run called, cursor=${ctx.cursor ?? 'null'}`)
 
     try {
       // 1. 获取所有启用的订单薄配置
@@ -37,7 +37,7 @@ export class ExampleOrderbookJob implements DataPullJob {
       if (configs.length === 0) {
         return {
           fetchedCount: 0,
-          newCursor: currentCursor,
+          newCursor: ctx.cursor,
           meta: {
             note: 'No enabled orderbook configs found',
           },

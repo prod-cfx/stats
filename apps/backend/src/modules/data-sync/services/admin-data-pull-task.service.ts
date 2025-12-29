@@ -66,6 +66,7 @@ export class AdminDataPullTaskService {
       intervalSeconds: dto.intervalSeconds,
       enabled: dto.enabled,
       cursor: dto.cursor,
+      meta: dto.meta ?? null,
     })
     return this.toResponseDto(created)
   }
@@ -91,6 +92,7 @@ export class AdminDataPullTaskService {
       intervalSeconds: dto.intervalSeconds,
       enabled: dto.enabled,
       cursor: dto.cursor,
+      meta: dto.meta,
     })
 
     return this.toResponseDto(updated)
@@ -120,6 +122,7 @@ export class AdminDataPullTaskService {
     dto.lastRunAt = task.lastRunAt
     dto.lastSuccessAt = task.lastSuccessAt
     dto.lastError = task.lastError
+    dto.meta = (task.meta ?? null) as any
     dto.createdAt = task.createdAt
     dto.updatedAt = task.updatedAt
     return dto

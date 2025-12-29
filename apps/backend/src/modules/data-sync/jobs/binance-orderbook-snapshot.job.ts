@@ -3,7 +3,7 @@
 import type { Logger as WinstonLogger } from 'winston'
 import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
 // eslint-disable-next-line ts/consistent-type-imports
@@ -47,7 +47,7 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
     private readonly winstonLogger: WinstonLogger,
   ) {}
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const client = this.redisService.getClient()
 
     const restBaseUrl =
@@ -69,13 +69,13 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
       await this.cleanupDisabledSnapshots(client, new Set())
       return {
         fetchedCount: 0,
-        newCursor: currentCursor,
+        newCursor: ctx.cursor,
         meta: { reason: 'no_orderbook_configs' },
       }
     }
 
     // 为避免在大量交易对场景下触发交易所限频，每次只处理一小批（轮询）
-    const cursor = this.parseCursor(currentCursor)
+    const cursor = this.parseCursor(ctx.cursor)
     const total = configs.length
     const startIndex = cursor.nextIndex >= 0 && cursor.nextIndex < total ? cursor.nextIndex : 0
     const maxPerRun =

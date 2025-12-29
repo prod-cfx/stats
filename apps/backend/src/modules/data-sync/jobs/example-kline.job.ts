@@ -1,4 +1,4 @@
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 
 /**
@@ -11,8 +11,8 @@ export class ExampleKlineJob implements DataPullJob {
   readonly key = 'example-kline-1m'
   private readonly logger = new Logger(ExampleKlineJob.name)
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    this.logger.log(`ExampleKlineJob.run called, cursor=${currentCursor ?? 'null'}`)
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    this.logger.log(`ExampleKlineJob.run called, cursor=${ctx.cursor ?? 'null'}`)
 
     // TODO: 在这里实现：
     // 1. 解析 cursor（例如 { symbol, from, to }）
@@ -24,7 +24,7 @@ export class ExampleKlineJob implements DataPullJob {
     // 为了让整个管线可以先跑起来，这里先返回一个虚拟结果
     // 实际使用时请删除这段模拟逻辑
     const fetchedCount = 0
-    const newCursor = currentCursor ?? null
+    const newCursor = ctx.cursor ?? null
 
     return {
       fetchedCount,
