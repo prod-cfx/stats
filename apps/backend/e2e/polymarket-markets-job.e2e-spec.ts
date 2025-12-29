@@ -35,7 +35,6 @@ describe('Polymarket markets job (E2E)', () => {
     prisma = app.get(PrismaService)
     job = app.get(PolymarketMarketsJob)
     gammaClient = app.get(PolymarketGammaClient)
-    repo = app.get(PolymarketRepository)
 
     // 清理 Polymarket 相关表，避免历史数据干扰
     const client = prisma.getClient()
@@ -285,4 +284,5 @@ describe('Polymarket markets job (E2E)', () => {
     listMarketsSpy.mockRestore()
   })
 })
+
 
