@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
+import type { PolymarketGammaMarket } from '../src/clients/polymarket/types'
 import type { DataPullJobContext } from '../src/modules/data-sync/contracts/data-pull-job'
-
 import type { PolymarketTaskMeta } from '../src/modules/data-sync/jobs/polymarket-markets.job'
 import { resolve } from 'node:path'
 
@@ -104,7 +104,7 @@ describe('Polymarket markets job (E2E)', () => {
      */
 
     // 第一页模拟“满页”数据：长度 = job 内部 batchSize(100)，以触发 offset 递增逻辑
-    const mockedMarketsPage1: any[] = []
+    const mockedMarketsPage1: PolymarketGammaMarket[] = []
 
     // 1. 一个 crypto 市场（会被实际 upsert）
     mockedMarketsPage1.push({
@@ -200,7 +200,7 @@ describe('Polymarket markets job (E2E)', () => {
       })
     }
 
-    const mockedMarketsPage2 = [
+    const mockedMarketsPage2: PolymarketGammaMarket[] = [
       {
         id: 'm-3',
         slug: 'eth-up-or-down',
@@ -237,11 +237,11 @@ describe('Polymarket markets job (E2E)', () => {
     listMarketsSpy = jest
       .spyOn(gammaClient, 'listMarkets')
       .mockImplementationOnce(async () => ({
-        markets: mockedMarketsPage1 as any,
+        markets: mockedMarketsPage1,
         nextCursor: null,
       }))
       .mockImplementationOnce(async () => ({
-        markets: mockedMarketsPage2 as any,
+        markets: mockedMarketsPage2,
         nextCursor: null,
       }))
 
@@ -263,6 +263,7 @@ describe('Polymarket markets job (E2E)', () => {
     expect(cursor1.usedCursor).toBe(false)
 
     const marketsAfterRun1 = await client.polymarketMarket.findMany({
+      where: { marketId: 'm-1' },
       orderBy: { id: 'asc' },
     })
     expect(marketsAfterRun1.length).toBe(1)
@@ -270,6 +271,11 @@ describe('Polymarket markets job (E2E)', () => {
     expect(marketsAfterRun1[0].category).toBe('crypto')
 
     const outcomesAfterRun1 = await client.polymarketOutcome.findMany({
+      where: {
+        outcomeTokenId: {
+          in: ['token-no', 'token-yes'],
+        },
+      },
       orderBy: { outcomeTokenId: 'asc' },
     })
     expect(outcomesAfterRun1.length).toBe(2)
@@ -308,11 +314,21 @@ describe('Polymarket markets job (E2E)', () => {
     })
 
     const marketsAfterRun2 = await client.polymarketMarket.findMany({
+      where: {
+        marketId: {
+          in: ['m-1', 'm-3'],
+        },
+      },
       orderBy: { marketId: 'asc' },
     })
     expect(marketsAfterRun2.map(m => m.marketId)).toEqual(['m-1', 'm-3'])
 
     const outcomesAfterRun2 = await client.polymarketOutcome.findMany({
+      where: {
+        outcomeTokenId: {
+          in: ['token-eth-yes', 'token-no', 'token-yes'],
+        },
+      },
       orderBy: { outcomeTokenId: 'asc' },
     })
     expect(outcomesAfterRun2.map(o => o.outcomeTokenId)).toEqual([
