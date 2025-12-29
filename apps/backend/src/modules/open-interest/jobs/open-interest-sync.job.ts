@@ -107,6 +107,13 @@ export class OpenInterestSyncJob implements DataPullJob {
       // - 仅保留同时具有有效 openInterest / openInterestAmount 的记录
       const items: CreateOpenInterestDto[] = []
 
+      const toNumberOrUndefined = (raw: unknown): number | undefined => {
+        if (raw == null) return undefined
+        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined
+        const parsed = Number(raw)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
+
       for (const item of json.data as CoinglassOiItem[]) {
         // Coinglass 文档示例使用的是下划线命名（open_interest_usd / open_interest_quantity 等），
         // 为了兼容潜在的不同字段命名，这里同时尝试多种字段名。
@@ -119,18 +126,8 @@ export class OpenInterestSyncJob implements DataPullJob {
           (item as any).openInterestAmount ??
           (item as any).openInterestQty
 
-        const oiUsd =
-          typeof rawUsd === 'number'
-            ? rawUsd
-            : rawUsd != null
-              ? Number(rawUsd)
-              : Number.NaN
-        const oiQty =
-          typeof rawQty === 'number'
-            ? rawQty
-            : rawQty != null
-              ? Number(rawQty)
-              : Number.NaN
+        const oiUsd = toNumberOrUndefined(rawUsd) ?? Number.NaN
+        const oiQty = toNumberOrUndefined(rawQty) ?? Number.NaN
 
         if (!Number.isFinite(oiUsd) || !Number.isFinite(oiQty)) {
           this.logger.warn(
@@ -146,46 +143,46 @@ export class OpenInterestSyncJob implements DataPullJob {
           symbol: item.symbol,
           open_interest_usd: oiUsd,
           open_interest_quantity: oiQty,
-          open_interest_by_coin_margin:
+          open_interest_by_coin_margin: toNumberOrUndefined(
             (item as any).open_interest_by_coin_margin ??
-            (item as any).openInterestByCoinMargin ??
-            undefined,
-          open_interest_by_stable_coin_margin:
+              (item as any).openInterestByCoinMargin,
+          ),
+          open_interest_by_stable_coin_margin: toNumberOrUndefined(
             (item as any).open_interest_by_stable_coin_margin ??
-            (item as any).openInterestByStableCoinMargin ??
-            undefined,
-          open_interest_quantity_by_coin_margin:
+              (item as any).openInterestByStableCoinMargin,
+          ),
+          open_interest_quantity_by_coin_margin: toNumberOrUndefined(
             (item as any).open_interest_quantity_by_coin_margin ??
-            (item as any).openInterestAmountByCoinMargin ??
-            undefined,
-          open_interest_quantity_by_stable_coin_margin:
+              (item as any).openInterestAmountByCoinMargin,
+          ),
+          open_interest_quantity_by_stable_coin_margin: toNumberOrUndefined(
             (item as any).open_interest_quantity_by_stable_coin_margin ??
-            (item as any).openInterestAmountByStableCoinMargin ??
-            undefined,
-          open_interest_change_percent_5m:
+              (item as any).openInterestAmountByStableCoinMargin,
+          ),
+          open_interest_change_percent_5m: toNumberOrUndefined(
             (item as any).open_interest_change_percent_5m ??
-            (item as any).openInterestChangePercent5m ??
-            undefined,
-          open_interest_change_percent_15m:
+              (item as any).openInterestChangePercent5m,
+          ),
+          open_interest_change_percent_15m: toNumberOrUndefined(
             (item as any).open_interest_change_percent_15m ??
-            (item as any).openInterestChangePercent15m ??
-            undefined,
-          open_interest_change_percent_30m:
+              (item as any).openInterestChangePercent15m,
+          ),
+          open_interest_change_percent_30m: toNumberOrUndefined(
             (item as any).open_interest_change_percent_30m ??
-            (item as any).openInterestChangePercent30m ??
-            undefined,
-          open_interest_change_percent_1h:
+              (item as any).openInterestChangePercent30m,
+          ),
+          open_interest_change_percent_1h: toNumberOrUndefined(
             (item as any).open_interest_change_percent_1h ??
-            (item as any).openInterestChangePercent1h ??
-            undefined,
-          open_interest_change_percent_4h:
+              (item as any).openInterestChangePercent1h,
+          ),
+          open_interest_change_percent_4h: toNumberOrUndefined(
             (item as any).open_interest_change_percent_4h ??
-            (item as any).openInterestChangePercent4h ??
-            undefined,
-          open_interest_change_percent_24h:
+              (item as any).openInterestChangePercent4h,
+          ),
+          open_interest_change_percent_24h: toNumberOrUndefined(
             (item as any).open_interest_change_percent_24h ??
-            (item as any).openInterestChangePercent24h ??
-            undefined,
+              (item as any).openInterestChangePercent24h,
+          ),
           data_timestamp: nowIso,
         })
       }
