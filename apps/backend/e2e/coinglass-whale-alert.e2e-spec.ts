@@ -1,11 +1,8 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
+import type { CoinglassWhaleAlertJob } from '../src/modules/data-sync/jobs/coinglass-whale-alert.job'
+import type { PrismaService } from '../src/prisma/prisma.service'
 import { resolve } from 'node:path'
-import { Test } from '@nestjs/testing'
-
-import { AppModule } from '../src/modules/app.module'
-import { CoinglassWhaleAlertJob } from '../src/modules/data-sync/jobs/coinglass-whale-alert.job'
-import { PrismaService } from '../src/prisma/prisma.service'
 
 describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
   let app: INestApplication
@@ -13,9 +10,14 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
   let job: CoinglassWhaleAlertJob
 
   beforeAll(async () => {
-    // 确保使用 e2e 环境配置（.env.e2e / .env.e2e.local）
+    // 确保在导入 AppModule/Prisma 之前就切到 e2e 环境，避免误连非测试库
     if (!process.env.APP_ENV) {
       process.env.APP_ENV = 'e2e'
+    }
+    if (process.env.APP_ENV !== 'e2e') {
+      throw new Error(
+        `Coinglass Hyperliquid whale alert E2E must run with APP_ENV=\"e2e\" to avoid touching non-test databases, current: ${process.env.APP_ENV}`,
+      )
     }
 
     // 为 job 提供一个可用的 API KEY（实际请求会在测试中被 mock 掉）
@@ -23,8 +25,18 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
       process.env.COINGLASS_API_KEY = 'test-api-key'
     }
 
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
+    // 与 main.ts 保持一致，从 monorepo 根目录加载环境（ConfigModule/Prisma 会基于 cwd 解析 .env.e2e）
     process.chdir(resolve(__dirname, '../../..'))
+
+    // 确保后续动态导入使用更新后的环境快照
+    jest.resetModules()
+
+    const [{ Test }, { AppModule }, { PrismaService }, { CoinglassWhaleAlertJob }] = await Promise.all([
+      import('@nestjs/testing'),
+      import('../src/modules/app.module'),
+      import('../src/prisma/prisma.service'),
+      import('../src/modules/data-sync/jobs/coinglass-whale-alert.job'),
+    ])
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
