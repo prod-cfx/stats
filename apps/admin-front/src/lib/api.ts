@@ -43,7 +43,6 @@ type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
-type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -269,10 +268,14 @@ export interface CreateDataPullTaskPayload {
   intervalSeconds?: number | null
   enabled?: boolean
   cursor?: string | null
+  /**
+   * 任务级配置参数（任意 JSON 对象），将直接透传给后端的 data_pull_tasks.meta 字段
+   */
+  meta?: Record<string, unknown> | null
 }
 
 export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto = {
+  const dto: any = {
     key: payload.key,
     name: payload.name,
     source: payload.source,
@@ -281,6 +284,9 @@ export async function createDataPullTask(payload: CreateDataPullTaskPayload): Pr
     intervalSeconds: payload.intervalSeconds,
     enabled: payload.enabled,
     cursor: payload.cursor,
+  }
+  if (payload.meta !== undefined) {
+    dto.meta = payload.meta
   }
   const response = await client.AdminDataPullTaskController_create(dto, {
     headers: requireAuthHeaders(),
@@ -296,10 +302,14 @@ export interface UpdateDataPullTaskPayload {
   intervalSeconds?: number | null
   enabled?: boolean
   cursor?: string | null
+  /**
+   * 任务级配置参数（任意 JSON 对象），将直接透传给后端的 data_pull_tasks.meta 字段
+   */
+  meta?: Record<string, unknown> | null
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto: _UpdateDataPullTaskDto = {}
+  const dto: any = {}
   if (payload.name !== undefined) dto.name = payload.name
   if (payload.source !== undefined) dto.source = payload.source
   if (payload.type !== undefined) dto.type = payload.type
@@ -307,6 +317,7 @@ export async function updateDataPullTask(id: number, payload: UpdateDataPullTask
   if (payload.intervalSeconds !== undefined) dto.intervalSeconds = payload.intervalSeconds
   if (payload.enabled !== undefined) dto.enabled = payload.enabled
   if (payload.cursor !== undefined) dto.cursor = payload.cursor
+  if (payload.meta !== undefined) dto.meta = payload.meta
   const response = await client.AdminDataPullTaskController_update(dto, {
     headers: requireAuthHeaders(),
     params: { id },

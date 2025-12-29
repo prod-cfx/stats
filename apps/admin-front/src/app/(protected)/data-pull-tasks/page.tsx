@@ -34,6 +34,10 @@ interface TaskFormValues {
   intervalSeconds?: number
   enabled?: boolean
   cursor?: string
+  /**
+   * 任务级配置参数（JSON 字符串），会在提交前解析为对象写入 data_pull_tasks.meta
+   */
+  meta?: string
 }
 
 export default function DataPullTasksPage() {
@@ -100,6 +104,7 @@ export default function DataPullTasksPage() {
       intervalSeconds: task.intervalSeconds ?? undefined,
       enabled: task.enabled,
       cursor: task.cursor ?? undefined,
+      meta: (task as any).meta ? JSON.stringify((task as any).meta, null, 2) : undefined,
     })
     setModalVisible(true)
   }, [form])
@@ -107,6 +112,15 @@ export default function DataPullTasksPage() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      let parsedMeta: Record<string, unknown> | null | undefined
+      if (values.meta && values.meta.trim()) {
+        try {
+          parsedMeta = JSON.parse(values.meta) as Record<string, unknown>
+        } catch {
+          message.error('任务配置 meta 必须是合法的 JSON')
+          return
+        }
+      }
       if (currentTask) {
         await updateDataPullTask(currentTask.id, {
           name: values.name,
@@ -116,6 +130,7 @@ export default function DataPullTasksPage() {
           intervalSeconds: values.intervalSeconds ?? null,
           enabled: values.enabled ?? true,
           cursor: values.cursor ?? null,
+          meta: parsedMeta ?? null,
         })
         message.success('任务已更新')
       } else {
@@ -128,6 +143,7 @@ export default function DataPullTasksPage() {
           intervalSeconds: values.intervalSeconds,
           enabled: values.enabled,
           cursor: values.cursor,
+          meta: parsedMeta ?? null,
         })
         message.success('任务已创建')
       }
