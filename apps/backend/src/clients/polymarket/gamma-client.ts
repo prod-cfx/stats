@@ -29,8 +29,6 @@ export class PolymarketGammaClient {
   private readonly apiKey?: string
   private readonly timeoutMs: number
   private readonly maxLimit: number
-  private readonly defaultCategory?: string
-  private readonly defaultTags: string[]
 
   constructor(private readonly configService: ConfigService) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
@@ -38,8 +36,6 @@ export class PolymarketGammaClient {
     this.apiKey = cfg?.gamma.apiKey
     this.timeoutMs = cfg?.gamma.timeoutMs ?? 10_000
     this.maxLimit = cfg?.gamma.maxLimit ?? 200
-    this.defaultCategory = cfg?.filters.category
-    this.defaultTags = cfg?.filters.tags ?? []
   }
 
   async listMarkets(params: ListMarketsParams = {}): Promise<ListMarketsResult> {
@@ -60,10 +56,11 @@ export class PolymarketGammaClient {
     const updatedSince = params.updatedSince ?? undefined
     if (updatedSince) url.searchParams.set('updated_since', updatedSince)
 
-    const category = params.category ?? this.defaultCategory
+    // category/tags 现在完全由调用方（Job meta）控制，不再从全局 config 派生
+    const category = params.category ?? null
     if (category) url.searchParams.set('category', category)
 
-    const tags = (params.tags ?? this.defaultTags).filter(Boolean)
+    const tags = (params.tags ?? []).filter(Boolean)
     if (tags.length) url.searchParams.set('tags', tags.join(','))
 
     if (typeof params.closed === 'boolean') {

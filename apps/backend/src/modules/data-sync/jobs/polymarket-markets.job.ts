@@ -36,7 +36,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
   private readonly logger = new Logger(PolymarketMarketsJob.name)
   private readonly batchSize = 100
   /**
-   * 来自全局配置的默认 category（已标准化为小写、去掉首尾空格）
+   * 默认 category（已标准化为小写、去掉首尾空格）
    * 实际使用时会与任务级 meta 合并，允许按任务覆盖。
    */
   private readonly defaultCategory?: string | null
@@ -48,9 +48,9 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     private readonly configService: ConfigService,
   ) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
-    // 确保 category 已标准化（配置层已处理，这里是防御性检查）
-    const rawCategory = cfg?.filters.category ?? 'crypto'
-    this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
+    // 默认 category 现在不再通过全局 config/env 配置，而是固定为 'crypto'，
+    // 并允许通过任务级 meta 覆盖（resolveCategory 中处理）。
+    this.defaultCategory = 'crypto'
     
     // 计算实际请求的 limit（gamma-client 会 clamp 到 maxLimit）
     const maxLimit = cfg?.gamma.maxLimit ?? 200
