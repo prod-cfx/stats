@@ -130,10 +130,13 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
         timestampMs,
       }
     })
+    const validPoints = pointsWithTimestamps.filter(
+      point => typeof point.global_account_long_short_ratio === 'number',
+    )
 
     const incrementalPoints = lastTimestampMs
-      ? pointsWithTimestamps.filter(point => point.timestampMs > lastTimestampMs)
-      : pointsWithTimestamps
+      ? validPoints.filter(point => point.timestampMs > lastTimestampMs)
+      : validPoints
 
     let insertedCount = 0
     if (incrementalPoints.length > 0) {
@@ -141,10 +144,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
         tradingPairId: cursor.tradingPairId,
         interval: prismaInterval as any,
         timestamp: new Date(point.timestampMs),
-        longShortRatio:
-          point.global_account_long_short_ratio != null
-            ? point.global_account_long_short_ratio.toString()
-            : null,
+        longShortRatio: point.global_account_long_short_ratio!.toString(),
         longAccountRatio:
           point.global_account_long_percent != null
             ? point.global_account_long_percent.toString()
@@ -167,8 +167,8 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     }
 
     const latestTimestampCandidates: number[] = []
-    if (pointsWithTimestamps.length > 0) {
-      for (const point of pointsWithTimestamps) {
+    if (validPoints.length > 0) {
+      for (const point of validPoints) {
         latestTimestampCandidates.push(point.timestampMs)
       }
     }
@@ -331,4 +331,5 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     }
   }
 }
+
 

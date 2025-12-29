@@ -15,6 +15,7 @@ describe('Coinglass long/short ratio job (E2E)', () => {
   let job: CoinglassLongShortRatioJob
 
   const originalFetch: typeof fetch | undefined = (globalThis as any).fetch
+  const originalCwd = process.cwd()
 
   beforeAll(async () => {
     if (!process.env.APP_ENV) {
@@ -51,6 +52,9 @@ describe('Coinglass long/short ratio job (E2E)', () => {
   afterAll(async () => {
     // 恢复原始 fetch 实现，避免污染其他测试
     ;(globalThis as any).fetch = originalFetch
+
+    // 恢复工作目录，避免影响其他 e2e 用例
+    process.chdir(originalCwd)
 
     if (app) {
       await app.close()
@@ -171,4 +175,5 @@ describe('Coinglass long/short ratio job (E2E)', () => {
     expect(rowsAfterSecondRun.length).toBe(2)
   })
 })
+
 
