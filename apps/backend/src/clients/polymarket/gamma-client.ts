@@ -38,8 +38,9 @@ export class PolymarketGammaClient {
     this.apiKey = cfg?.gamma.apiKey
     this.timeoutMs = cfg?.gamma.timeoutMs ?? 10_000
     this.maxLimit = cfg?.gamma.maxLimit ?? 200
-    this.defaultCategory = cfg?.filters.category
-    this.defaultTags = cfg?.filters.tags ?? []
+    const rawCategory = cfg?.filters.category
+    this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : undefined
+    this.defaultTags = (cfg?.filters.tags ?? []).map(tag => tag.trim()).filter(Boolean)
   }
 
   async listMarkets(params: ListMarketsParams = {}): Promise<ListMarketsResult> {
@@ -60,10 +61,14 @@ export class PolymarketGammaClient {
     const updatedSince = params.updatedSince ?? undefined
     if (updatedSince) url.searchParams.set('updated_since', updatedSince)
 
-    const category = params.category ?? this.defaultCategory
+    // category/tags：优先任务 meta 传入，其次回退到全局 config 中的默认 filters
+    const rawCategory = params.category ?? this.defaultCategory ?? null
+    const category = rawCategory ? rawCategory.trim().toLowerCase() : null
     if (category) url.searchParams.set('category', category)
 
-    const tags = (params.tags ?? this.defaultTags).filter(Boolean)
+    const tags = (params.tags ?? this.defaultTags ?? [])
+      .map(tag => tag.trim())
+      .filter(Boolean)
     if (tags.length) url.searchParams.set('tags', tags.join(','))
 
     if (typeof params.closed === 'boolean') {

@@ -30,6 +30,9 @@ const parseStringList = (value: string | undefined): string[] =>
         .filter(Boolean)
     : []
 
+// 注意：与 Polymarket 相关的分类与标签（category/tags）
+// 现在通过 env 提供全局默认值，再由具体 Job 的任务 meta 进行覆盖；
+// timeout/maxLimit 也保留 env 覆盖能力（不同环境可通过 .env.* 调优），默认值仍为 10s / 200。
 export const polymarketConfig = registerAs('polymarket', (): PolymarketConfig => {
   // 标准化 category：统一转小写并去空格，确保与数据库存储格式一致
   const rawCategory = env.str('POLYMARKET_CATEGORY', 'crypto')
