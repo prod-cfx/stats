@@ -17,6 +17,7 @@ import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sy
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
+import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -67,6 +68,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleOrderbookJob,
     OpenInterestSyncJob,
     CoinglassAggregatedLiquidationJob,
+    CoinglassLongShortRatioJob,
     BbxCryptoStockQuotesJob,
     PolymarketMarketsJob,
     PolymarketOrderbookJob,
@@ -85,6 +87,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
+        coinglassLongShortRatioJob: CoinglassLongShortRatioJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
         polymarketMarketsJob: PolymarketMarketsJob,
         polymarketOrderbookJob: PolymarketOrderbookJob,
@@ -96,6 +99,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleOrderbookJob,
         openInterestSyncJob,
         coinglassAggregatedLiquidationJob,
+        coinglassLongShortRatioJob,
         bbxCryptoStockQuotesJob,
         polymarketMarketsJob,
         polymarketOrderbookJob,
@@ -108,6 +112,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleOrderbookJob,
         OpenInterestSyncJob,
         CoinglassAggregatedLiquidationJob,
+        CoinglassLongShortRatioJob,
         BbxCryptoStockQuotesJob,
         PolymarketMarketsJob,
         PolymarketOrderbookJob,
