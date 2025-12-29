@@ -68,7 +68,7 @@ export class OpenInterestSyncJob implements DataPullJob {
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
       this.configService.get<string>('COINGLASS_OI_ENDPOINT') ??
-      'https://open-api.coinglass.com/api/pro/v4/futures/oi-exchange-list'
+      'https://open-api-v4.coinglass.com/api/futures/open-interest/exchange-list'
 
     if (!apiKey) {
       throw new Error('COINGLASS_API_KEY is not configured')

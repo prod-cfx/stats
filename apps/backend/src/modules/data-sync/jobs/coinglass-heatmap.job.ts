@@ -43,7 +43,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
       this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT') ??
-      'https://open-api.coinglass.com/api/pro/v4/futures/liquidation-heatmap'
+      'https://open-api-v4.coinglass.com/api/pro/v4/futures/liquidation-heatmap'
 
     if (!apiKey) {
       // 不应“默默成功”，否则后台无法感知配置缺失
