@@ -48,9 +48,10 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     private readonly configService: ConfigService,
   ) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
-    // 默认 category 现在不再通过全局 config/env 配置，而是固定为 'crypto'，
-    // 并允许通过任务级 meta 覆盖（resolveCategory 中处理）。
-    this.defaultCategory = 'crypto'
+    // 默认 category 仍然来源于全局 config/env（兼容历史行为），
+    // 同时允许通过任务级 meta 覆盖（resolveCategory 中处理）。
+    const rawCategory = cfg?.filters.category ?? 'crypto'
+    this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
     
     // 计算实际请求的 limit（gamma-client 会 clamp 到 maxLimit）
     const maxLimit = cfg?.gamma.maxLimit ?? 200
