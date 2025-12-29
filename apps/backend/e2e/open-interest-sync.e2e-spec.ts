@@ -19,7 +19,13 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
   let openInterestSyncJob: OpenInterestSyncJob
 
   beforeAll(async () => {
-    // 确保使用 e2e 环境配置（.env.e2e / .env.e2e.local）
+    // 强制保护：仅允许在 APP_ENV === 'e2e' 环境下运行，防止误删非 e2e 数据库中的真实数据
+    if (process.env.APP_ENV && process.env.APP_ENV !== 'e2e') {
+      // 显式抛错而不是静默跳过，避免在错误环境下执行破坏性操作
+      throw new Error(
+        `Open interest Coinglass E2E must run with APP_ENV=e2e, current APP_ENV=${process.env.APP_ENV}`,
+      )
+    }
     if (!process.env.APP_ENV) {
       process.env.APP_ENV = 'e2e'
     }
