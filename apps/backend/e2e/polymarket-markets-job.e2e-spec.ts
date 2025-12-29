@@ -16,11 +16,11 @@ describe('Polymarket markets job (E2E)', () => {
   let prisma: PrismaService
   let job: PolymarketMarketsJob
   let gammaClient: PolymarketGammaClient
+  let listMarketsSpy: jest.SpyInstance | undefined
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
+    // 强制使用 e2e 环境，避免误连开发/生产库
+    process.env.APP_ENV = 'e2e'
 
     // 与 main.ts 保持一致，从 monorepo 根目录加载环境
     process.chdir(resolve(__dirname, '../../..'))
@@ -36,16 +36,45 @@ describe('Polymarket markets job (E2E)', () => {
     job = app.get(PolymarketMarketsJob)
     gammaClient = app.get(PolymarketGammaClient)
 
-    // 清理 Polymarket 相关表，避免历史数据干扰
+    // 在清理数据前增加安全保护：仅允许在 e2e 测试数据库上执行
+    const appEnv = process.env.APP_ENV
+    const databaseUrl = process.env.DATABASE_URL ?? ''
+    if (appEnv !== 'e2e' || (!databaseUrl.includes('e2e') && !databaseUrl.includes('test'))) {
+      throw new Error(
+        `Unsafe database environment for E2E test: APP_ENV=${appEnv}, DATABASE_URL=${databaseUrl}`,
+      )
+    }
+
+    // 仅清理本测试中会用到的测试数据，避免误删其他数据
     const client = prisma.getClient()
     await client.$transaction([
-      client.polymarketOrderbookSnapshot.deleteMany({}),
-      client.polymarketOutcome.deleteMany({}),
-      client.polymarketMarket.deleteMany({}),
+      client.polymarketOrderbookSnapshot.deleteMany({
+        where: {
+          OR: [
+            { marketExternalId: { in: ['m-1', 'm-3'] } },
+            { outcomeTokenId: { in: ['token-yes', 'token-no', 'token-eth-yes'] } },
+          ],
+        },
+      }),
+      client.polymarketOutcome.deleteMany({
+        where: {
+          outcomeTokenId: { in: ['token-yes', 'token-no', 'token-eth-yes'] },
+        },
+      }),
+      client.polymarketMarket.deleteMany({
+        where: {
+          marketId: { in: ['m-1', 'm-3'] },
+        },
+      }),
     ])
   })
 
   afterAll(async () => {
+    // 确保 spy 总能被恢复，避免污染其他测试
+    if (listMarketsSpy) {
+      listMarketsSpy.mockRestore()
+    }
+
     if (app) {
       await app.close()
     }
@@ -205,7 +234,7 @@ describe('Polymarket markets job (E2E)', () => {
       },
     ]
 
-    const listMarketsSpy = jest
+    listMarketsSpy = jest
       .spyOn(gammaClient, 'listMarkets')
       .mockImplementationOnce(async () => ({
         markets: mockedMarketsPage1 as any,
@@ -264,6 +293,20 @@ describe('Polymarket markets job (E2E)', () => {
     expect(cursor2.nextCursor).toBeNull()
     expect(cursor2.usedCursor).toBe(false)
 
+    // 验证 offset/cursor 策略：第二轮调用应基于第一轮返回数量推进 offset
+    expect(listMarketsSpy).toHaveBeenCalledTimes(2)
+    const firstCallArgs = listMarketsSpy.mock.calls[0]?.[0] as Record<string, unknown>
+    const secondCallArgs = listMarketsSpy.mock.calls[1]?.[0] as Record<string, unknown>
+
+    expect(firstCallArgs).toMatchObject({
+      offset: 0,
+      cursor: null,
+    })
+    expect(secondCallArgs).toMatchObject({
+      offset: mockedMarketsPage1.length,
+      cursor: null,
+    })
+
     const marketsAfterRun2 = await client.polymarketMarket.findMany({
       orderBy: { marketId: 'asc' },
     })
@@ -277,11 +320,6 @@ describe('Polymarket markets job (E2E)', () => {
       'token-no',
       'token-yes',
     ])
-
-    expect(listMarketsSpy).toHaveBeenCalledTimes(2)
-
-    // 清理 spy，避免影响其他测试
-    listMarketsSpy.mockRestore()
   })
 })
 
