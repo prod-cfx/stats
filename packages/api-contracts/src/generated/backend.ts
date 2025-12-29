@@ -265,6 +265,7 @@ const AdminDataPullTaskResponseDto = z
     lastRunAt: z.string().datetime({ offset: true }).nullish(),
     lastSuccessAt: z.string().datetime({ offset: true }).nullish(),
     lastError: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
     createdAt: z.string().datetime({ offset: true }),
     updatedAt: z.string().datetime({ offset: true }),
   })
@@ -279,6 +280,7 @@ const CreateAdminDataPullTaskDto = z
     intervalSeconds: z.number().nullish(),
     enabled: z.boolean().optional().default(true),
     cursor: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
   })
   .passthrough();
 const UpdateAdminDataPullTaskDto = z
@@ -290,6 +292,7 @@ const UpdateAdminDataPullTaskDto = z
     intervalSeconds: z.number().nullable(),
     enabled: z.boolean(),
     cursor: z.string().nullable(),
+    meta: z.object({}).partial().passthrough().nullable(),
   })
   .partial()
   .passthrough();
