@@ -43,6 +43,8 @@ type UpdateRolePayload = z.infer<typeof schemas.UpdateAdminRoleDto>
 type CreateAdminUserPayload = z.infer<typeof schemas.CreateAdminUserDto>
 type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
+type _CreateDataPullTaskDto = z.infer<typeof schemas.CreateAdminDataPullTaskDto>
+type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -275,18 +277,16 @@ export interface CreateDataPullTaskPayload {
 }
 
 export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto: any = {
+  const dto: _CreateDataPullTaskDto = {
     key: payload.key,
     name: payload.name,
-    source: payload.source,
-    type: payload.type,
-    cron: payload.cron,
-    intervalSeconds: payload.intervalSeconds,
-    enabled: payload.enabled,
-    cursor: payload.cursor,
-  }
-  if (payload.meta !== undefined) {
-    dto.meta = payload.meta
+    source: payload.source ?? null,
+    type: payload.type ?? null,
+    cron: payload.cron ?? null,
+    intervalSeconds: payload.intervalSeconds ?? null,
+    enabled: payload.enabled ?? true,
+    cursor: payload.cursor ?? null,
+    meta: payload.meta ?? null,
   }
   const response = await client.AdminDataPullTaskController_create(dto, {
     headers: requireAuthHeaders(),
@@ -309,7 +309,7 @@ export interface UpdateDataPullTaskPayload {
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  const dto: any = {}
+  const dto: _UpdateDataPullTaskDto = {}
   if (payload.name !== undefined) dto.name = payload.name
   if (payload.source !== undefined) dto.source = payload.source
   if (payload.type !== undefined) dto.type = payload.type

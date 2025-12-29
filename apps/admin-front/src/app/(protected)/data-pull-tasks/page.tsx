@@ -364,6 +364,17 @@ export default function DataPullTasksPage() {
               placeholder="可选，用于控制增量拉取的起点，如时间戳或 ID"
             />
           </Form.Item>
+
+          <Form.Item
+            label="任务配置 meta（JSON，可选）"
+            name="meta"
+            tooltip="用于为该任务传入自定义配置，例如 Polymarket 的 category/tags，必须是合法的 JSON 对象"
+          >
+            <Input.TextArea
+              autoSize={{ minRows: 3, maxRows: 8 }}
+              placeholder='例如：{"category":"crypto","tags":["BTC","ETH"]}'
+            />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
