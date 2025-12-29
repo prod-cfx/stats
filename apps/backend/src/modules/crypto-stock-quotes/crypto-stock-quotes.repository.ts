@@ -105,7 +105,7 @@ export class CryptoStockQuotesRepository {
 
     return client.cryptoStockQuote.upsert({
       where: {
-        uniq_crypto_stock_quote_symbol_source_time: {
+        symbol_source_quoteTimestamp: {
           symbol: input.symbol,
           source,
           quoteTimestamp: input.quoteTimestamp,
@@ -126,7 +126,7 @@ export class CryptoStockQuotesRepository {
         const source = input.source ?? 'BBX'
         await tx.cryptoStockQuote.upsert({
           where: {
-            uniq_crypto_stock_quote_symbol_source_time: {
+            symbol_source_quoteTimestamp: {
               symbol: input.symbol,
               source,
               quoteTimestamp: input.quoteTimestamp,
