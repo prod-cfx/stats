@@ -28,7 +28,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
           </div>
           <div className="flex items-center gap-3">
             <PageTitle>{formatAddress(address)}</PageTitle>
-            <button className="text-[#666666] hover:text-white transition-colors">
+            <button className="text-[#8b949e] hover:text-white transition-colors">
               <Copy className="w-4.5 h-4.5" />
             </button>
           </div>
@@ -48,7 +48,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
 
       <div className="flex items-center gap-3">
         <button className="flex items-center gap-2 px-4 py-2 bg-transparent text-[#e5e5e5] text-label font-medium hover:text-white transition-all group">
-          <RefreshCw className="w-4.5 h-4.5 text-[#888888] group-hover:text-white transition-colors" />
+          <RefreshCw className="w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-colors" />
           <span className="text-body font-bold">实时数据</span>
         </button>
       </div>

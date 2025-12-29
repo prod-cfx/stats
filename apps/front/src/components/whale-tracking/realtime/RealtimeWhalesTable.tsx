@@ -153,7 +153,7 @@ export const RealtimeWhalesTable = () => {
         <div className="relative group">
           <button 
             onClick={() => setIsPaused(!isPaused)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-full text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-full text-[#c9d1d9] text-label font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${!isPaused ? 'animate-spin' : ''}`} />
             <span>{isPaused ? '已暂停' : `${countdown}秒后更新`}</span>
@@ -170,7 +170,7 @@ export const RealtimeWhalesTable = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[#999999] border-b border-[#30363d]">
+              <tr className="text-[#8b949e] border-b border-[#30363d]">
                 <th className="px-6 py-4 text-left">地址</th>
                 <th className="px-6 py-4 text-left">币种</th>
                 <th className="px-6 py-4 text-left">持仓价值</th>
@@ -192,7 +192,7 @@ export const RealtimeWhalesTable = () => {
                         >
                           {tx.address}
                         </Link>
-                        <button className="text-[#666666] hover:text-white transition-colors">
+                        <button className="text-[#8b949e] hover:text-white transition-colors">
                           <Copy className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -211,14 +211,14 @@ export const RealtimeWhalesTable = () => {
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="text-white text-body font-bold">{tx.asset}</span>
-                        <span className="text-[#999999] text-caption">{tx.marginType === 'Cross' ? '全仓' : '逐仓'}</span>
+                        <span className="text-[#8b949e] text-caption">{tx.marginType === 'Cross' ? '全仓' : '逐仓'}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-white text-body font-medium">{tx.positionValueUSD}</span>
-                      <span className="text-[#999999] text-caption">{tx.positionValueAsset}</span>
+                      <span className="text-[#8b949e] text-caption">{tx.positionValueAsset}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5 text-white text-body">
@@ -227,12 +227,12 @@ export const RealtimeWhalesTable = () => {
                   <td className="px-6 py-5 text-[#4ade80] text-body font-semibold">
                     {tx.winRate}
                   </td>
-                  <td className="px-6 py-5 text-[#999999] text-caption text-right">
+                  <td className="px-6 py-5 text-[#8b949e] text-caption text-right">
                     {tx.time}
                   </td>
                   <td className="px-6 py-5 text-center">
                     <button 
-                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#8b949e] hover:text-white active:scale-95 transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleShowStats(tx.address);

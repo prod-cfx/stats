@@ -80,14 +80,14 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
             <div className="flex items-center gap-6">
               <div className="relative group">
-                <button className="flex items-center gap-3 px-4 py-2 bg-[#30363d] border border-[#30363d] rounded-xl text-[#cccccc] text-sm font-bold hover:border-[#3b82f6]/50 transition-all">
+                <button className="flex items-center gap-3 px-4 py-2 bg-[#30363d] border border-[#30363d] rounded-xl text-[#c9d1d9] text-sm font-bold hover:border-[#3b82f6]/50 transition-all">
                   {timeRange}
                   <ChevronDown className="w-4 h-4" />
                 </button>
               </div>
               <button
                 onClick={onClose}
-                className="w-10 h-10 flex items-center justify-center text-[#999999] hover:text-white hover:bg-white/10 rounded-full transition-all"
+                className="w-10 h-10 flex items-center justify-center text-[#8b949e] hover:text-white hover:bg-white/10 rounded-full transition-all"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -107,7 +107,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
                 ]}
               />
               <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative">
-                <span className="text-[#999999] text-sm font-medium">交易次数</span>
+                <span className="text-[#8b949e] text-sm font-medium">交易次数</span>
                 <div className="h-[96px] w-full">
                   <ReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
                 </div>
@@ -153,13 +153,13 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
               <div className="flex items-center gap-8 border-b border-[#30363d]">
                 <button
                   onClick={() => setActiveTab('asset')}
-                  className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-white border-[#3b82f6]' : 'text-[#888888] border-transparent hover:text-white'}`}
+                  className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
                 >
                   按资产的表现
                 </button>
                 <button
                   onClick={() => setActiveTab('position')}
-                  className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'position' ? 'text-white border-[#3b82f6]' : 'text-[#888888] border-transparent hover:text-white'}`}
+                  className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'position' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
                 >
                   按仓位的表现
                 </button>
@@ -196,7 +196,7 @@ interface StatCardProps {
 
 const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2, subStats }: StatCardProps) => (
   <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4">
-    <span className="text-[#999999] text-caption font-medium">{label}</span>
+    <span className="text-[#8b949e] text-caption font-medium">{label}</span>
     <div className="flex items-baseline gap-1">
       <span className={`text-h1 font-bold ${valueColor}`}>{value}</span>
       {unit && <span className="text-caption text-white font-medium">{unit}</span>}
@@ -206,7 +206,7 @@ const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2
     <div className="space-y-2 mt-auto">
       {subStats.map((stat, idx) => (
         <div key={idx} className="flex justify-between items-center text-caption">
-          <span className="text-[#999999] font-medium">{stat.label}</span>
+          <span className="text-[#8b949e] font-medium">{stat.label}</span>
           <span className={`font-semibold ${stat.color}`}>{stat.value}</span>
         </div>
       ))}
@@ -235,14 +235,14 @@ const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) =
           {side === 'Long' ? '多' : '空'}
         </span>
       </div>
-      <span className="text-[#5a5a5a] text-caption font-medium">{time}</span>
+      <span className="text-[#8b949e] text-caption font-medium">{time}</span>
     </div>
     <div className="flex flex-col">
-      <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
+      <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
     <div className="flex justify-between items-center text-caption pt-2 border-t border-[#30363d]/50">
-      <span className="text-[#888888] font-medium">持续时间</span>
+      <span className="text-[#8b949e] font-medium">持续时间</span>
       <span className="text-white font-semibold">{duration}</span>
     </div>
   </div>
@@ -266,19 +266,19 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
         </div>
         <span className="text-white font-bold text-body">{asset}</span>
       </div>
-      <span className="text-[#999999] text-caption font-bold bg-[#161b22] px-2 py-1 rounded">{trades} 笔交易</span>
+      <span className="text-[#8b949e] text-caption font-bold bg-[#161b22] px-2 py-1 rounded">{trades} 笔交易</span>
     </div>
     <div className="flex flex-col">
-      <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
+      <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
     <div className="space-y-2 pt-2 border-t border-[#30363d]/50">
       <div className="flex justify-between items-center text-caption font-medium">
-        <span className="text-[#888888]">净盈亏</span>
+        <span className="text-[#8b949e]">净盈亏</span>
         <span className={`font-bold ${netPnl.includes('+') ? 'text-green-400' : 'text-red-400'}`}>{netPnl}</span>
       </div>
       <div className="flex justify-between items-center text-caption font-medium">
-        <span className="text-[#888888]">费用</span>
+        <span className="text-[#8b949e]">费用</span>
         <span className="text-white font-bold">{fees}</span>
       </div>
     </div>
@@ -307,18 +307,18 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
           {side === 'Long' ? '多' : '空'}
         </span>
       </div>
-      <span className="text-[#5a5a5a] text-caption font-medium">{time}</span>
+      <span className="text-[#8b949e] text-caption font-medium">{time}</span>
     </div>
     <div className="flex flex-col py-1">
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h1 tracking-tight`}>{pnl}</span>
     </div>
     <div className="space-y-2 pt-2 border-t border-[#30363d]/50 mt-auto">
       <div className="flex justify-between items-center text-caption font-medium">
-        <span className="text-[#888888]">规模</span>
+        <span className="text-[#8b949e]">规模</span>
         <span className="text-white font-bold">{size}</span>
       </div>
       <div className="flex justify-between items-center text-caption font-medium">
-        <span className="text-[#888888]">费用</span>
+        <span className="text-[#8b949e]">费用</span>
         <span className="text-white font-bold">{fees}</span>
       </div>
     </div>

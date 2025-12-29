@@ -55,15 +55,15 @@ export const TraderCard = ({
                 >
                   {address}
                 </Link>
-                <button className="text-[#666666] hover:text-white transition-colors">
+                <button className="text-[#8b949e] hover:text-white transition-colors">
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
-              {tag && <span className="text-[#888888] text-caption font-medium uppercase">{tag}</span>}
+              {tag && <span className="text-[#8b949e] text-caption font-medium uppercase">{tag}</span>}
             </div>
           </div>
           <button 
-            className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+            className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all"
             onClick={(e) => {
               e.stopPropagation();
               onShowStats?.(address);
@@ -75,21 +75,21 @@ export const TraderCard = ({
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-5">
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-caption font-medium">账户总价值</span>
+            <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
             <span className="text-white font-bold text-h2">{totalValue}</span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-caption font-medium">已实现盈亏</span>
+            <span className="text-[#8b949e] text-caption font-medium">已实现盈亏</span>
             <span className={`font-bold text-h2 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
               {pnl}
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-caption font-medium">交易次数</span>
+            <span className="text-[#8b949e] text-caption font-medium">交易次数</span>
             <span className="text-white font-bold text-h2">{trades}</span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-caption font-medium">胜率</span>
+            <span className="text-[#8b949e] text-caption font-medium">胜率</span>
             <span className="text-white font-bold text-h2">{winRate}</span>
           </div>
         </div>
@@ -108,13 +108,13 @@ export const TraderCard = ({
           >
             {address}
           </Link>
-          <button className="text-[#555555] hover:text-white transition-colors">
+          <button className="text-[#8b949e] hover:text-white transition-colors">
             <Copy className="w-4.5 h-4.5" />
           </button>
-          {handle && <span className="text-[#555555] text-body font-medium ml-2">{handle}</span>}
+          {handle && <span className="text-[#8b949e] text-body font-medium ml-2">{handle}</span>}
         </div>
         <button 
-          className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+          className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -125,30 +125,30 @@ export const TraderCard = ({
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-[#777777] text-caption font-medium">账户总价值</span>
+        <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
         <span className="text-white text-h1 font-bold tracking-tight">{totalValue}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-b border-[#30363d] pb-6">
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">{pnlLabel}</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{pnlLabel}</span>
           <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
             {pnl}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">当前持仓</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">当前持仓</span>
           <span className="text-white font-bold text-body">{positions}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">{winRateLabel}</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{winRateLabel}</span>
           <span className="text-white font-bold text-body">{winRate}</span>
         </div>
       </div>
 
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[#555555] text-caption font-bold uppercase tracking-tighter">AI标签:</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-tighter">AI标签:</span>
           {aiTags.map((t, i) => (
             <span 
               key={i} 

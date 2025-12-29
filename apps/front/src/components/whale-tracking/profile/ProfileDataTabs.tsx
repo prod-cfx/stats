@@ -28,7 +28,7 @@ export const ProfileDataTabs = () => {
             className={`px-6 py-4 text-body font-bold transition-all border-b-2 -mb-[2px] ${
               activeTab === tab.id 
                 ? 'text-white border-[#3b82f6]' 
-                : 'text-[#888888] border-transparent hover:text-white'
+                : 'text-[#8b949e] border-transparent hover:text-white'
             }`}
           >
             {tab.label}
@@ -40,53 +40,53 @@ export const ProfileDataTabs = () => {
       <div className="p-0 overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-[#161b22] text-[#999999] text-caption font-bold uppercase tracking-wider border-b border-[#30363d]">
+            <tr className="bg-[#161b22] text-[#8b949e] text-caption font-bold uppercase tracking-wider border-b border-[#30363d]">
               <th className="px-6 py-4 text-left">
                 <div className="flex items-center gap-1.5">
                   <span>币种</span>
-                  <Filter className="w-3 h-3 text-[#555555]" />
+                  <Filter className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>持仓价值</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>未实现盈亏</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>入场均价</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>标记价</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>清算价</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>保证金</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>资金费用</span>
-                  <ArrowUpDown className="w-3 h-3 text-[#555555]" />
+                  <ArrowUpDown className="w-3 h-3 text-[#8b949e]" />
                 </div>
               </th>
               <th className="px-6 py-4 text-center">止盈/止损</th>
@@ -102,14 +102,14 @@ export const ProfileDataTabs = () => {
                     </span>
                     <div className="flex flex-col">
                       <span className="text-white text-body font-bold">{pos.asset}</span>
-                      <span className="text-[#999999] text-caption font-medium uppercase">{pos.marginType} {pos.leverage}</span>
+                      <span className="text-[#8b949e] text-caption font-medium uppercase">{pos.marginType} {pos.leverage}</span>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex flex-col">
                     <span className="text-white text-body font-bold">{pos.valueUSD}</span>
-                    <span className="text-[#999999] text-caption">{pos.valueAsset}</span>
+                    <span className="text-[#8b949e] text-caption">{pos.valueAsset}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
@@ -123,7 +123,7 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.liqPrice}</td>
                 <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.margin}</td>
                 <td className="px-6 py-4 text-right text-[#4ade80] text-body font-medium">{pos.fundingFee}</td>
-                <td className="px-6 py-4 text-center text-[#999999] text-body font-medium">-/-</td>
+                <td className="px-6 py-4 text-center text-[#8b949e] text-body font-medium">-/-</td>
               </tr>
             ))}
           </tbody>

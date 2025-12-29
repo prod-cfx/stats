@@ -16,12 +16,12 @@ export const ProfileSummary = () => {
         ]}
         subText={
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-caption text-[#999999]">
+            <div className="flex items-center gap-2 text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#5470c6]" />
               <span>永续合约</span>
               <span className="text-[#e5e5e5] ml-auto">$ 792,013.09</span>
             </div>
-            <div className="flex items-center gap-2 text-caption text-[#999999]">
+            <div className="flex items-center gap-2 text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#91cc75]" />
               <span>现货</span>
               <span className="text-[#e5e5e5] ml-auto">$ 0.01</span>
@@ -37,7 +37,7 @@ export const ProfileSummary = () => {
           { value: 90.78, name: '可用', itemStyle: { color: '#3a3a3a' } }
         ]}
         subText={
-          <div className="flex items-center gap-2 text-caption text-[#999999]">
+          <div className="flex items-center gap-2 text-caption text-[#8b949e]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span>可提取</span>
             <span className="text-[#e5e5e5] ml-auto">9.22 %</span>
@@ -51,10 +51,10 @@ export const ProfileSummary = () => {
           { value: 100, name: '空头', itemStyle: { color: '#fac858' } }
         ]}
         subText={
-          <div className="flex items-center gap-2 text-caption text-[#999999]">
+          <div className="flex items-center gap-2 text-caption text-[#8b949e]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span>杠杆比</span>
-            <Info className="w-3 h-3 text-[#555555]" />
+            <Info className="w-3 h-3 text-[#8b949e]" />
             <span className="text-[#e5e5e5] ml-auto">39.18x</span>
           </div>
         }
@@ -99,28 +99,28 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }:
 
   return (
     <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
-      <div className="text-[#999999] text-label font-medium">{label}</div>
+      <div className="text-[#8b949e] text-label font-medium">{label}</div>
       {isPerformance ? (
         <div className="flex flex-col gap-4 mt-auto">
           <div className="grid grid-cols-2 gap-6">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#999999] text-caption font-medium">胜率</span>
+              <span className="text-[#8b949e] text-caption font-medium">胜率</span>
               <span className="text-white text-h2 font-bold">28.57 %</span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#999999] text-caption font-medium">最大回撤</span>
+              <span className="text-[#8b949e] text-caption font-medium">最大回撤</span>
               <span className="text-white text-h2 font-bold">59.03 %</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#999999] text-caption font-medium">已成交订单</span>
+              <span className="text-[#8b949e] text-caption font-medium">已成交订单</span>
               <span className="text-white text-body font-bold ml-auto">77</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#999999] text-caption font-medium">平仓次数</span>
+              <span className="text-[#8b949e] text-caption font-medium">平仓次数</span>
               <span className="text-white text-body font-bold ml-auto">7</span>
             </div>
           </div>

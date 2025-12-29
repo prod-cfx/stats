@@ -146,15 +146,15 @@ export const WhalePositionsTable = () => {
           <BodyText>追踪大额持仓者的最新动态</BodyText>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#c9d1d9] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>ETH</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#c9d1d9] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有方向</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-lg text-[#c9d1d9] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有未实现盈亏</span>
             <ChevronDown className="w-4 h-4" />
           </button>
@@ -165,7 +165,7 @@ export const WhalePositionsTable = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[#999999] border-b border-[#30363d]">
+              <tr className="text-[#8b949e] border-b border-[#30363d]">
                 <th className="px-6 py-4 text-left">地址</th>
                 <th className="px-6 py-4 text-left">币种</th>
                 <th className="px-6 py-4 text-left">持仓价值</th>
@@ -191,7 +191,7 @@ export const WhalePositionsTable = () => {
                         >
                           {pos.address}
                         </Link>
-                        <button className="text-[#666666] hover:text-white transition-colors">
+                        <button className="text-[#8b949e] hover:text-white transition-colors">
                           <Copy className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -215,14 +215,14 @@ export const WhalePositionsTable = () => {
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="text-white text-body font-bold">{pos.asset}</span>
-                        <span className="text-[#999999] text-caption">{pos.marginType} {pos.leverage}</span>
+                        <span className="text-[#8b949e] text-caption">{pos.marginType} {pos.leverage}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-white text-body font-medium">{pos.positionValueUSD}</span>
-                      <span className="text-[#999999] text-caption">{pos.positionValueAsset}</span>
+                      <span className="text-[#8b949e] text-caption">{pos.positionValueAsset}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -249,15 +249,15 @@ export const WhalePositionsTable = () => {
                       {pos.winRate}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-[#999999]">
+                  <td className="px-6 py-4 text-[#8b949e]">
                     {pos.createdTime}
                   </td>
-                  <td className="px-6 py-4 text-[#cccccc] text-caption max-w-[150px] truncate">
+                  <td className="px-6 py-4 text-[#8b949e] text-caption max-w-[150px] truncate">
                     {pos.remark}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button 
-                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
+                      className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#8b949e] hover:text-white active:scale-95 transition-all"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleShowStats(pos.address);
