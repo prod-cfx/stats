@@ -169,3 +169,4 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
+

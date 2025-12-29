@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { SectionTitle } from '@/components/ui/Typography';
 
 interface LiquidationCardProps {
   title: string;
@@ -39,8 +40,8 @@ export const LiquidationSummary = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">总爆仓</h2>
+    <div className="flex flex-col gap-6">
+      <SectionTitle>总爆仓</SectionTitle>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryData.map((data, index) => (
           <LiquidationCard key={index} {...data} />
@@ -49,4 +50,5 @@ export const LiquidationSummary = () => {
     </div>
   );
 };
+
 

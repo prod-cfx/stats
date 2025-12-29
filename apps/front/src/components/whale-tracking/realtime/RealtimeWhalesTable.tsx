@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
+import { PageTitle } from '@/components/ui/Typography';
 
 interface WhaleTransaction {
   address: string;
@@ -148,18 +149,18 @@ export const RealtimeWhalesTable = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-4xl font-bold text-white">实时巨鲸</h1>
+        <PageTitle>实时巨鲸</PageTitle>
         <div className="relative group">
           <button 
             onClick={() => setIsPaused(!isPaused)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-full text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-full text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all active:scale-95"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${!isPaused ? 'animate-spin' : ''}`} />
             <span>{isPaused ? '已暂停' : `${countdown}秒后更新`}</span>
           </button>
           
           {/* Custom Tooltip */}
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[#161b22] border border-[#30363d] rounded text-xs text-[#e6edf3] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[#161b22] border border-[#30363d] rounded text-caption text-[#e6edf3] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
             {isPaused ? '开始自动更新' : '暂停自动更新'}
           </div>
         </div>
@@ -169,13 +170,13 @@ export const RealtimeWhalesTable = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[#999999] text-sm font-medium border-b border-[#2c2c2c]">
-                <th className="px-6 py-4 text-left font-medium">地址</th>
-                <th className="px-6 py-4 text-left font-medium">币种</th>
-                <th className="px-6 py-4 text-left font-medium">持仓价值</th>
-                <th className="px-6 py-4 text-left font-medium">开盘价</th>
-                <th className="px-6 py-4 text-left font-medium">胜率</th>
-                <th className="px-6 py-4 text-right font-medium">时间</th>
+              <tr className="text-[#999999] border-b border-[#2c2c2c]">
+                <th className="px-6 py-4 text-left">地址</th>
+                <th className="px-6 py-4 text-left">币种</th>
+                <th className="px-6 py-4 text-left">持仓价值</th>
+                <th className="px-6 py-4 text-left">开盘价</th>
+                <th className="px-6 py-4 text-left">胜率</th>
+                <th className="px-6 py-4 text-right">时间</th>
                 <th className="px-6 py-4 text-center w-16">操作</th>
               </tr>
             </thead>
@@ -187,7 +188,7 @@ export const RealtimeWhalesTable = () => {
                       <div className="flex items-center gap-2">
                         <Link 
                           href={`/whale-tracking/profile/${tx.address}`}
-                          className="text-white text-base font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                          className="text-white text-body font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
                         >
                           {tx.address}
                         </Link>
@@ -196,7 +197,7 @@ export const RealtimeWhalesTable = () => {
                         </button>
                       </div>
                       <span 
-                        className="w-fit px-2 py-0.5 rounded text-[10px] font-medium"
+                        className="w-fit px-2 py-0.5 rounded text-caption font-medium"
                         style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                       >
                         {tx.tag}
@@ -205,28 +206,28 @@ export const RealtimeWhalesTable = () => {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">
-                      <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${tx.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
+                      <div className={`px-1.5 py-0.5 rounded text-caption font-bold ${tx.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
                         {tx.side === 'Long' ? '多' : '空'}
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-white text-base font-bold">{tx.asset}</span>
-                        <span className="text-[#999999] text-[10px]">{tx.marginType === 'Cross' ? '全仓' : '逐仓'}</span>
+                        <span className="text-white text-body font-bold">{tx.asset}</span>
+                        <span className="text-[#999999] text-caption">{tx.marginType === 'Cross' ? '全仓' : '逐仓'}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-white text-base font-medium">{tx.positionValueUSD}</span>
-                      <span className="text-[#999999] text-xs">{tx.positionValueAsset}</span>
+                      <span className="text-white text-body font-medium">{tx.positionValueUSD}</span>
+                      <span className="text-[#999999] text-caption">{tx.positionValueAsset}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 text-white text-base">
+                  <td className="px-6 py-5 text-white text-body">
                     {tx.entryPrice}
                   </td>
-                  <td className="px-6 py-5 text-[#4ade80] text-base font-semibold">
+                  <td className="px-6 py-5 text-[#4ade80] text-body font-semibold">
                     {tx.winRate}
                   </td>
-                  <td className="px-6 py-5 text-[#999999] text-sm text-right">
+                  <td className="px-6 py-5 text-[#999999] text-caption text-right">
                     {tx.time}
                   </td>
                   <td className="px-6 py-5 text-center">

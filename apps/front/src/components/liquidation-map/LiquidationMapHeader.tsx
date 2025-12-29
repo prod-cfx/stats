@@ -1,5 +1,6 @@
 import React from 'react';
 import { RefreshCcw, ChevronDown } from 'lucide-react';
+import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 interface LiquidationMapHeaderProps {
   symbol: string;
@@ -49,9 +50,12 @@ const FilterButton = ({ label, value, options, onChange }: {
 
 export const LiquidationMapHeader = ({ symbol, setSymbol, range, setRange, onRefresh }: LiquidationMapHeaderProps) => {
   return (
-    <div className="flex flex-col gap-6 mb-6">
+    <div className="flex flex-col gap-8 mb-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#e6edf3]">比特币交易所清算地图</h1>
+        <div className="flex flex-col gap-3">
+          <PageTitle>比特币交易所清算地图</PageTitle>
+          <BodyText>实时全网爆仓热力图数据</BodyText>
+        </div>
         <div className="flex items-center gap-3">
           <FilterButton 
             label="CEX/DEX" 

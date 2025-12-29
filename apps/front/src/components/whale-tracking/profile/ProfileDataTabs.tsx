@@ -25,7 +25,7 @@ export const ProfileDataTabs = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as TabType)}
-            className={`px-6 py-4 text-sm font-bold transition-all border-b-2 -mb-[2px] ${
+            className={`px-6 py-4 text-body font-bold transition-all border-b-2 -mb-[2px] ${
               activeTab === tab.id 
                 ? 'text-white border-[#3b82f6]' 
                 : 'text-[#888888] border-transparent hover:text-white'
@@ -40,7 +40,7 @@ export const ProfileDataTabs = () => {
       <div className="p-0 overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-[#1e1e1e] text-[#999999] text-[10px] font-bold uppercase tracking-wider border-b border-[#2c2c2c]">
+            <tr className="bg-[#1e1e1e] text-[#999999] text-caption font-bold uppercase tracking-wider border-b border-[#2c2c2c]">
               <th className="px-6 py-4 text-left">
                 <div className="flex items-center gap-1.5">
                   <span>币种</span>
@@ -97,33 +97,33 @@ export const ProfileDataTabs = () => {
               <tr key={idx} className="hover:bg-[#252525] transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pos.side === 'Long' ? 'bg-[#22c55e20] text-[#4ade80]' : 'bg-[#ef444420] text-[#f87171]'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-caption font-bold ${pos.side === 'Long' ? 'bg-[#22c55e20] text-[#4ade80]' : 'bg-[#ef444420] text-[#f87171]'}`}>
                       {pos.side === 'Long' ? '多' : '空'}
                     </span>
                     <div className="flex flex-col">
-                      <span className="text-white text-sm font-bold">{pos.asset}</span>
-                      <span className="text-[#999999] text-[10px] font-medium uppercase">{pos.marginType} {pos.leverage}</span>
+                      <span className="text-white text-body font-bold">{pos.asset}</span>
+                      <span className="text-[#999999] text-caption font-medium uppercase">{pos.marginType} {pos.leverage}</span>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex flex-col">
-                    <span className="text-white text-sm font-bold">{pos.valueUSD}</span>
-                    <span className="text-[#999999] text-xs">{pos.valueAsset}</span>
+                    <span className="text-white text-body font-bold">{pos.valueUSD}</span>
+                    <span className="text-[#999999] text-caption">{pos.valueAsset}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex flex-col">
-                    <span className="text-[#4ade80] text-sm font-bold">{pos.pnlUSD}</span>
-                    <span className="text-[#4ade80] text-xs">{pos.pnlPercent}</span>
+                    <span className="text-[#4ade80] text-body font-bold">{pos.pnlUSD}</span>
+                    <span className="text-[#4ade80] text-caption">{pos.pnlPercent}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-right text-white text-sm font-medium">{pos.entryPrice}</td>
-                <td className="px-6 py-4 text-right text-white text-sm font-medium">{pos.markPrice}</td>
-                <td className="px-6 py-4 text-right text-white text-sm font-medium">{pos.liqPrice}</td>
-                <td className="px-6 py-4 text-right text-white text-sm font-medium">{pos.margin}</td>
-                <td className="px-6 py-4 text-right text-[#4ade80] text-sm font-medium">{pos.fundingFee}</td>
-                <td className="px-6 py-4 text-center text-[#999999] text-sm font-medium">-/-</td>
+                <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.entryPrice}</td>
+                <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.markPrice}</td>
+                <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.liqPrice}</td>
+                <td className="px-6 py-4 text-right text-white text-body font-medium">{pos.margin}</td>
+                <td className="px-6 py-4 text-right text-[#4ade80] text-body font-medium">{pos.fundingFee}</td>
+                <td className="px-6 py-4 text-center text-[#999999] text-body font-medium">-/-</td>
               </tr>
             ))}
           </tbody>

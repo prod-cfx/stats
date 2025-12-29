@@ -4,12 +4,13 @@ import React from 'react';
 import { Search } from 'lucide-react';
 import { DashboardCard } from './DashboardCard';
 import { DashboardListItem } from './DashboardListItem';
+import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 
 export const ExploreDashboards = () => {
   return (
     <div className="flex flex-col gap-10">
       <div className="space-y-6">
-        <h1 className="text-4xl font-bold text-white tracking-tight">探索看板</h1>
+        <PageTitle>探索看板</PageTitle>
         
         {/* Search Input */}
         <div className="relative max-w-4xl">
@@ -17,7 +18,7 @@ export const ExploreDashboards = () => {
           <input 
             type="text" 
             placeholder="Search for dashboards" 
-            className="w-full bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl pl-12 pr-4 py-3.5 text-base text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#adaebc]"
+            className="w-full bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#adaebc]"
           />
         </div>
       </div>
@@ -25,7 +26,7 @@ export const ExploreDashboards = () => {
       {/* Featured Section */}
       <div className="space-y-6">
         <div className="flex items-center gap-4 border-b border-[#2c2c2c]">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider border-b-2 border-white pb-4 -mb-[1px]">特色看板</h2>
+          <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-white pb-4 -mb-[1px]">特色看板</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {featuredDashboards.map((card, idx) => (
@@ -38,7 +39,7 @@ export const ExploreDashboards = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Hot Dashboards */}
         <div className="space-y-6">
-          <h3 className="text-xl font-bold text-white tracking-tight">热门看板</h3>
+          <SectionTitle>热门看板</SectionTitle>
           <div className="flex flex-col gap-4">
             {hotDashboards.map((item, idx) => (
               <DashboardListItem key={idx} {...item} />
@@ -48,7 +49,7 @@ export const ExploreDashboards = () => {
 
         {/* Community Dashboards */}
         <div className="space-y-6">
-          <h3 className="text-xl font-bold text-white tracking-tight">社区看板</h3>
+          <SectionTitle>社区看板</SectionTitle>
           <div className="flex flex-col gap-4">
             {communityDashboards.map((item, idx) => (
               <DashboardListItem key={idx} {...item} />

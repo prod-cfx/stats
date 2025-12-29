@@ -37,20 +37,20 @@ export const PnLTrendCard = () => {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="space-y-1">
-          <div className="text-[#999999] text-sm font-medium">1周 总盈亏 (仅永续合约)</div>
-          <div className="text-[#4ade80] text-2xl font-bold tracking-tight">$ +1,978,371.60</div>
+          <div className="text-[#999999] text-body font-medium">1周 总盈亏 (仅永续合约)</div>
+          <div className="text-[#4ade80] text-h1 font-bold tracking-tight">$ +1,978,371.60</div>
         </div>
         
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-xs font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>1周</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-xs font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>仅永续合约</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-xs font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-3 py-1.5 bg-[#2c2c2c] border border-[#3a3a3a] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>总盈亏</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#555555]" />
           </button>
@@ -64,4 +64,5 @@ export const PnLTrendCard = () => {
     </div>
   );
 };
+
 

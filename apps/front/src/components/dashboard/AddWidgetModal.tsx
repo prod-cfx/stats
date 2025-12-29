@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { X, Map, BarChart2, Layers, Activity, Database, TrendingUp, PieChart, Info } from 'lucide-react';
+import { PageTitle } from '@/components/ui/Typography';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -36,8 +37,8 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
         {/* Header */}
         <div className="p-8 border-b border-[#30363d] flex justify-between items-start">
           <div className="space-y-1">
-            <h2 className="text-3xl font-bold text-white tracking-tight">添加一个组件</h2>
-            <p className="text-[#8b949e] text-sm font-medium tracking-[0.1em] uppercase">
+            <PageTitle>添加一个组件</PageTitle>
+            <p className="text-[#8b949e] text-label font-medium tracking-[0.1em] uppercase">
               WHAT KIND OF INTEL DO YOU WANT TO SEE?
             </p>
           </div>
@@ -68,7 +69,7 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
                   <item.icon className="w-6 h-6" />
                 </div>
                 <div className="flex-1">
-                  <span className="text-white font-semibold text-lg">{item.label}</span>
+                  <span className="text-white font-semibold text-h3">{item.label}</span>
                 </div>
                 <div className="text-[#8b949e] group-hover:text-white transition-colors">
                   <PlusIcon />
@@ -79,7 +80,7 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
         </div>
 
         {/* Footer info (optional) */}
-        <div className="p-4 bg-[#0d1117]/50 border-t border-[#30363d] text-center text-xs text-[#5a5a5a]">
+        <div className="p-4 bg-[#0d1117]/50 border-t border-[#30363d] text-center text-caption text-[#5a5a5a]">
           选择一个组件添加到您的看板中
         </div>
       </div>

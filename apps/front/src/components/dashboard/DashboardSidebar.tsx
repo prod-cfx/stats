@@ -13,19 +13,19 @@ export const DashboardSidebar = () => {
           <button className="w-full flex items-center justify-between group">
             <div className="flex items-center gap-3">
               <Layout className="w-4 h-4 text-[#cccccc]" />
-              <span className="text-[#cccccc] text-base font-semibold">我的看板</span>
+              <span className="text-[#cccccc] text-body font-semibold">我的看板</span>
             </div>
             <ChevronRight className="w-3 h-3 text-[#5a5a5a] group-hover:text-white transition-colors" />
           </button>
           <div className="pl-7 space-y-4">
-            <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
-            <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
-            <div className="text-[#999999] text-sm hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+            <div className="text-[#999999] text-caption hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+            <div className="text-[#999999] text-caption hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
+            <div className="text-[#999999] text-caption hover:text-white cursor-pointer transition-colors uppercase tracking-wider">UNTITLED</div>
           </div>
         </div>
 
         {/* Tracked Entities */}
-        <div className="text-[#5a5a5a] text-[10px] font-bold uppercase tracking-[0.1em]">
+        <div className="text-[#5a5a5a] text-caption font-bold uppercase tracking-[0.1em]">
           TRACKED ENTITIES
         </div>
 
@@ -33,7 +33,7 @@ export const DashboardSidebar = () => {
         <button className="w-full flex items-center justify-between group">
           <div className="flex items-center gap-3">
             <Bookmark className="w-4 h-4 text-[#cccccc]" />
-            <span className="text-[#cccccc] text-base font-semibold">已保存的看板</span>
+            <span className="text-[#cccccc] text-body font-semibold">已保存的看板</span>
           </div>
           <ChevronRight className="w-3 h-3 text-[#5a5a5a] group-hover:text-white transition-colors" />
         </button>
@@ -41,7 +41,7 @@ export const DashboardSidebar = () => {
         {/* Create Button moved here */}
         <Link href="/dashboard/editor" className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
           <Plus className="w-4 h-4" />
-          <span className="text-sm">CREATE DASHBOARD</span>
+          <span className="text-label">CREATE DASHBOARD</span>
         </Link>
       </div>
     </aside>

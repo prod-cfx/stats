@@ -19,13 +19,13 @@ export const DashboardListItem = ({ title, description, creator, saves, image, t
       </div>
       
       <div className="flex-1 min-w-0 flex flex-col gap-1">
-        <h4 className="text-white text-base font-semibold truncate">{title}</h4>
-        <p className="text-[#999999] text-sm truncate">{description}</p>
+        <h4 className="text-white text-body font-semibold truncate">{title}</h4>
+        <p className="text-[#999999] text-caption truncate">{description}</p>
         <div className="flex items-center gap-3 mt-1">
-          <span className="text-[#5a5a5a] text-xs font-medium uppercase tracking-tight">创建者 @{creator}</span>
-          <span className="text-[#5a5a5a] text-xs font-medium uppercase tracking-tight">{saves.toLocaleString()} 保存</span>
+          <span className="text-[#5a5a5a] text-caption font-medium uppercase tracking-tight">创建者 @{creator}</span>
+          <span className="text-[#5a5a5a] text-caption font-medium uppercase tracking-tight">{saves.toLocaleString()} 保存</span>
           {tags && tags.map((tag, idx) => (
-            <span key={idx} className="px-1.5 py-0.5 bg-[#2c2c2c] text-[#999999] text-[9px] font-bold rounded uppercase border border-[#3a3a3a]">
+            <span key={idx} className="px-1.5 py-0.5 bg-[#2c2c2c] text-[#999999] text-caption font-bold rounded uppercase border border-[#3a3a3a]">
               {tag}
             </span>
           ))}

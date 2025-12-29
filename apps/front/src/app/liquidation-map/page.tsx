@@ -97,19 +97,19 @@ export default function LiquidationMapPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#e6edf3] font-sans">
+    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
       
-      <div className="max-w-7xl mx-auto p-8">
-        <LiquidationMapHeader 
-          symbol={symbol} 
-          setSymbol={setSymbol} 
-          range={range} 
-          setRange={setRange} 
-          onRefresh={handleRefresh}
-        />
-        
-        <main className="flex flex-col gap-8">
+      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
+        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
+          <LiquidationMapHeader 
+            symbol={symbol} 
+            setSymbol={setSymbol} 
+            range={range} 
+            setRange={setRange} 
+            onRefresh={handleRefresh}
+          />
+          
           <div className="flex flex-col gap-4">
             <LiquidationMapChart data={data} currentPrice={currentPrice} />
           </div>
@@ -131,8 +131,8 @@ export default function LiquidationMapPage() {
               <a href="#" className="hover:text-white transition-colors no-underline">Docs</a>
             </div>
           </footer>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

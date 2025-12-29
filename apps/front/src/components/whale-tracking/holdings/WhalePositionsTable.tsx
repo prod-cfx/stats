@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Copy, ChevronDown, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
+import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 interface WhalePosition {
   address: string;
@@ -139,18 +140,21 @@ export const WhalePositionsTable = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-4xl font-bold text-white">鲸鱼持仓</h1>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <PageTitle>鲸鱼持仓</PageTitle>
+          <BodyText>追踪大额持仓者的最新动态</BodyText>
+        </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>ETH</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有方向</span>
             <ChevronDown className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-sm font-medium hover:border-[#3b82f6]/50 transition-all">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#1e1e1e] border border-[#2c2c2c] rounded-lg text-[#cccccc] text-label font-medium hover:border-[#3b82f6]/50 transition-all">
             <span>所有未实现盈亏</span>
             <ChevronDown className="w-4 h-4" />
           </button>
@@ -161,7 +165,7 @@ export const WhalePositionsTable = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[#999999] text-[10px] font-bold uppercase tracking-wider border-b border-[#2c2c2c]">
+              <tr className="text-[#999999] border-b border-[#2c2c2c]">
                 <th className="px-6 py-4 text-left">地址</th>
                 <th className="px-6 py-4 text-left">币种</th>
                 <th className="px-6 py-4 text-left">持仓价值</th>
@@ -183,7 +187,7 @@ export const WhalePositionsTable = () => {
                       <div className="flex items-center gap-2">
                         <Link 
                           href={`/whale-tracking/profile/${pos.address}`}
-                          className="text-white text-xs font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                          className="text-white text-body font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
                         >
                           {pos.address}
                         </Link>
@@ -195,7 +199,7 @@ export const WhalePositionsTable = () => {
                         {pos.tags.map((tag, tIdx) => (
                           <span 
                             key={tIdx}
-                            className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                            className="px-1.5 py-0.5 rounded text-caption font-medium"
                             style={{ color: tag.color, backgroundColor: tag.bg }}
                           >
                             {tag.label}
@@ -206,49 +210,49 @@ export const WhalePositionsTable = () => {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
+                      <div className={`px-1.5 py-0.5 rounded text-caption font-bold ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
                         {pos.side === 'Long' ? '多' : '空'}
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-white text-sm font-bold">{pos.asset}</span>
-                        <span className="text-[#999999] text-[10px]">{pos.marginType} {pos.leverage}</span>
+                        <span className="text-white text-body font-bold">{pos.asset}</span>
+                        <span className="text-[#999999] text-caption">{pos.marginType} {pos.leverage}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-white text-sm font-medium">{pos.positionValueUSD}</span>
-                      <span className="text-[#999999] text-[10px]">{pos.positionValueAsset}</span>
+                      <span className="text-white text-body font-medium">{pos.positionValueUSD}</span>
+                      <span className="text-[#999999] text-caption">{pos.positionValueAsset}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-0.5">
-                      <span className={`text-sm font-medium ${pos.pnlUSD.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                      <span className={`text-body font-medium ${pos.pnlUSD.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
                         {pos.pnlUSD}
                       </span>
-                      <span className={`text-[10px] ${pos.pnlPercent.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                      <span className={`text-caption ${pos.pnlPercent.includes('+') ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
                         {pos.pnlPercent}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-white text-sm">
+                  <td className="px-6 py-4 text-white">
                     {pos.margin}
                   </td>
-                  <td className="px-6 py-4 text-white text-sm">
+                  <td className="px-6 py-4 text-white">
                     {pos.entryPrice}
                   </td>
-                  <td className="px-6 py-4 text-white text-sm">
+                  <td className="px-6 py-4 text-white">
                     {pos.liqPrice}
                   </td>
-                  <td className="px-6 py-4 text-white text-sm">
+                  <td className="px-6 py-4 text-white">
                     <span className={pos.winRate !== '--' && parseInt(pos.winRate) > 70 ? 'text-[#4ade80]' : ''}>
                       {pos.winRate}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-[#999999] text-sm">
+                  <td className="px-6 py-4 text-[#999999]">
                     {pos.createdTime}
                   </td>
-                  <td className="px-6 py-4 text-[#cccccc] text-[10px] max-w-[150px] truncate">
+                  <td className="px-6 py-4 text-[#cccccc] text-caption max-w-[150px] truncate">
                     {pos.remark}
                   </td>
                   <td className="px-6 py-4 text-center">

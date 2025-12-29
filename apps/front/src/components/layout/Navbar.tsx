@@ -12,27 +12,26 @@ export const Navbar = () => {
     { name: '行情', href: '/' },
     { 
       name: '数据', 
-      href: '/liquidation-map',
+      href: '/liquidation-map/',
       children: [
-        { name: '数据聚合', href: '#' },
-        { name: '清算地图', href: '/liquidation-map' },
-        { name: '交易所多空比', href: '/long-short-ratio' },
-        { name: '聚合挂单', href: '/aggregated-orderbook' },
-        { name: '爆仓数据', href: '/liquidation-data' },
-        { name: '预测市场', href: '/prediction-market' },
-        { name: '币股', href: '/public-companies' },
+        { name: '清算地图', href: '/liquidation-map/' },
+        { name: '交易所多空比', href: '/long-short-ratio/' },
+        { name: '聚合挂单', href: '/aggregated-orderbook/' },
+        { name: '爆仓数据', href: '/liquidation-data/' },
+        { name: '预测市场', href: '/prediction-market/' },
+        { name: '币股', href: '/public-companies/' },
       ]
     },
     { 
       name: '鲸鱼', 
-      href: '/whale-tracking/discover',
+      href: '/whale-tracking/discover/',
       children: [
-        { name: '发现', href: '/whale-tracking/discover' },
-        { name: '实时巨鲸', href: '/whale-tracking/realtime' },
-        { name: '鲸鱼持仓', href: '/whale-tracking/holdings' },
+        { name: '发现', href: '/whale-tracking/discover/' },
+        { name: '实时巨鲸', href: '/whale-tracking/realtime/' },
+        { name: '鲸鱼持仓', href: '/whale-tracking/holdings/' },
       ]
     },
-    { name: '看板', href: '/dashboard' },
+    { name: '看板', href: '/dashboard/' },
   ];
 
   return (
@@ -59,7 +58,7 @@ export const Navbar = () => {
                       isActive 
                         ? 'text-[#e6edf3] border-blue-500' 
                         : 'text-[#8b949e] hover:text-[#e6edf3] border-transparent'
-                    }`}
+                    } text-body`}
                   >
                     {link.name}
                     <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
@@ -72,7 +71,7 @@ export const Navbar = () => {
                         <Link 
                           key={child.name} 
                           href={child.href}
-                          className={`block px-4 py-2.5 text-sm transition-colors ${
+                          className={`block px-4 py-2.5 text-caption transition-colors ${
                             pathname === child.href 
                               ? 'bg-blue-600 text-white' 
                               : 'text-[#c9d1d9] hover:bg-[#1f2937] hover:text-white'
@@ -95,7 +94,7 @@ export const Navbar = () => {
                   isActive 
                     ? 'text-[#e6edf3] border-blue-500' 
                     : 'text-[#8b949e] hover:text-[#e6edf3] border-transparent'
-                }`}
+                } text-body`}
               >
                 {link.name}
               </Link>
@@ -110,11 +109,11 @@ export const Navbar = () => {
           <input 
             type="text" 
             placeholder="搜索" 
-            className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-sm text-[#e6edf3] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-64"
+            className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-64"
           />
         </div>
-        <button className="px-4 py-2 text-sm font-medium text-[#e6edf3] hover:text-white transition-colors">登录</button>
-        <button className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-blue-500 to-purple-600 rounded-md text-white shadow-lg shadow-blue-500/20 hover:opacity-90 transition-all active:scale-95">
+        <button className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors">登录</button>
+        <button className="px-6 py-2 text-label font-medium bg-gradient-to-r from-blue-500 to-purple-600 rounded-md text-white shadow-lg shadow-blue-500/20 hover:opacity-90 transition-all active:scale-95">
           注册
         </button>
       </div>

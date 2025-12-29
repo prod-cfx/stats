@@ -104,3 +104,4 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({ asks, bids, curr
 };
 
 
+

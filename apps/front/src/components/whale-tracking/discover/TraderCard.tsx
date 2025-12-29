@@ -51,7 +51,7 @@ export const TraderCard = ({
               <div className="flex items-center gap-2">
                 <Link 
                   href={`/whale-tracking/profile/${address}`}
-                  className="text-white font-bold text-lg hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                  className="text-white font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
                 >
                   {address}
                 </Link>
@@ -59,7 +59,7 @@ export const TraderCard = ({
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
-              {tag && <span className="text-[#888888] text-xs font-medium tracking-tight uppercase">{tag}</span>}
+              {tag && <span className="text-[#888888] text-caption font-medium uppercase">{tag}</span>}
             </div>
           </div>
           <button 
@@ -75,22 +75,22 @@ export const TraderCard = ({
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-5">
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-xs font-medium">账户总价值</span>
-            <span className="text-white font-bold text-base">{totalValue}</span>
+            <span className="text-[#888888] text-caption font-medium">账户总价值</span>
+            <span className="text-white font-bold text-h2">{totalValue}</span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-xs font-medium">已实现盈亏</span>
-            <span className={`font-bold text-base ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+            <span className="text-[#888888] text-caption font-medium">已实现盈亏</span>
+            <span className={`font-bold text-h2 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
               {pnl}
             </span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-xs font-medium">交易次数</span>
-            <span className="text-white font-bold text-base">{trades}</span>
+            <span className="text-[#888888] text-caption font-medium">交易次数</span>
+            <span className="text-white font-bold text-h2">{trades}</span>
           </div>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[#888888] text-xs font-medium">胜率</span>
-            <span className="text-white font-bold text-base">{winRate}</span>
+            <span className="text-[#888888] text-caption font-medium">胜率</span>
+            <span className="text-white font-bold text-h2">{winRate}</span>
           </div>
         </div>
       </div>
@@ -104,14 +104,14 @@ export const TraderCard = ({
         <div className="flex items-center gap-2">
           <Link 
             href={`/whale-tracking/profile/${address}`}
-            className="text-white font-bold text-xl hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+            className="text-white font-bold text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
           >
             {address}
           </Link>
           <button className="text-[#555555] hover:text-white transition-colors">
             <Copy className="w-4.5 h-4.5" />
           </button>
-          {handle && <span className="text-[#555555] text-sm font-medium ml-2">{handle}</span>}
+          {handle && <span className="text-[#555555] text-body font-medium ml-2">{handle}</span>}
         </div>
         <button 
           className="w-9 h-9 flex items-center justify-center bg-[#2a2a2a] border border-[#3a3a3a] rounded-xl text-[#aaaaaa] hover:text-white active:scale-95 transition-all"
@@ -125,34 +125,34 @@ export const TraderCard = ({
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-[#777777] text-xs font-medium">账户总价值</span>
-        <span className="text-white text-2xl font-bold tracking-tight">{totalValue}</span>
+        <span className="text-[#777777] text-caption font-medium">账户总价值</span>
+        <span className="text-white text-h1 font-bold tracking-tight">{totalValue}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-b border-[#222222] pb-6">
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-[10px] font-bold uppercase tracking-wider">{pnlLabel}</span>
-          <span className={`font-bold text-sm ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">{pnlLabel}</span>
+          <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
             {pnl}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-[10px] font-bold uppercase tracking-wider">当前持仓</span>
-          <span className="text-white font-bold text-sm">{positions}</span>
+          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">当前持仓</span>
+          <span className="text-white font-bold text-body">{positions}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#777777] text-[10px] font-bold uppercase tracking-wider">{winRateLabel}</span>
-          <span className="text-white font-bold text-sm">{winRate}</span>
+          <span className="text-[#777777] text-caption font-bold uppercase tracking-wider">{winRateLabel}</span>
+          <span className="text-white font-bold text-body">{winRate}</span>
         </div>
       </div>
 
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[#555555] text-xs font-bold uppercase tracking-tighter">AI标签:</span>
+          <span className="text-[#555555] text-caption font-bold uppercase tracking-tighter">AI标签:</span>
           {aiTags.map((t, i) => (
             <span 
               key={i} 
-              className="px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-tight"
+              className="px-2.5 py-1 rounded-md text-caption font-extrabold uppercase tracking-tight"
               style={{ color: t.color, backgroundColor: t.bgColor }}
             >
               {t.label}

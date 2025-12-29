@@ -26,3 +26,4 @@ export const TradeRow = ({ price, amount, time, type }: TradeRowProps) => {
 };
 
 
+

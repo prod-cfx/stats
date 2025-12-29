@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronDown, TrendingUp, TrendingDown, Clock, PieChart, Activity, DollarSign, ArrowUpRight } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { SectionTitle, SubTitle, BodyText, CaptionText } from '@/components/ui/Typography';
 
 interface WhaleTradingStatsModalProps {
   isOpen: boolean;
@@ -70,7 +71,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
           {/* Modal Header */}
           <div className="flex-none px-8 py-5 border-b border-[#2c2c2c] flex items-center justify-between bg-[#1e1e1e] sticky top-0 z-10">
             <div className="flex items-center gap-8">
-              <h2 className="text-2xl font-bold text-white">交易统计</h2>
+              <SectionTitle className="text-2xl">交易统计</SectionTitle>
               <div className="px-4 py-2 bg-[#121212] border border-[#2c2c2c] rounded-xl flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
                 <span className="text-[#cccccc] text-base font-semibold">{formatAddress(address)}</span>
@@ -139,7 +140,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
             {/* Top Trades Section */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">十大最佳交易</h3>
+              <SectionTitle className="text-lg">十大最佳交易</SectionTitle>
               <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {topTrades.map((trade, idx) => (
                   <TradeCard key={idx} {...trade} />
@@ -195,16 +196,16 @@ interface StatCardProps {
 
 const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2, subStats }: StatCardProps) => (
   <div className="bg-[#121212]/50 border border-[#2c2c2c] rounded-xl p-5 flex flex-col gap-4">
-    <span className="text-[#999999] text-sm font-medium">{label}</span>
+    <span className="text-[#999999] text-caption font-medium">{label}</span>
     <div className="flex items-baseline gap-1">
-      <span className={`text-2xl font-bold ${valueColor}`}>{value}</span>
-      {unit && <span className="text-sm text-white font-medium">{unit}</span>}
-      {value2 && <span className="text-2xl font-bold text-white ml-2">{value2}</span>}
-      {unit2 && <span className="text-sm text-white font-medium">{unit2}</span>}
+      <span className={`text-h1 font-bold ${valueColor}`}>{value}</span>
+      {unit && <span className="text-caption text-white font-medium">{unit}</span>}
+      {value2 && <span className="text-h1 font-bold text-white ml-2">{value2}</span>}
+      {unit2 && <span className="text-caption text-white font-medium">{unit2}</span>}
     </div>
     <div className="space-y-2 mt-auto">
       {subStats.map((stat, idx) => (
-        <div key={idx} className="flex justify-between items-center text-sm">
+        <div key={idx} className="flex justify-between items-center text-caption">
           <span className="text-[#999999] font-medium">{stat.label}</span>
           <span className={`font-semibold ${stat.color}`}>{stat.value}</span>
         </div>
@@ -229,18 +230,18 @@ const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) =
         <div className="w-6 h-6 flex items-center justify-center">
           <img src={icon} alt={asset} className="w-full h-full object-contain" />
         </div>
-        <span className="text-white font-bold text-base">{asset}</span>
+        <span className="text-white font-bold text-body">{asset}</span>
         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {side === 'Long' ? '多' : '空'}
         </span>
       </div>
-      <span className="text-[#5a5a5a] text-xs font-medium">{time}</span>
+      <span className="text-[#5a5a5a] text-caption font-medium">{time}</span>
     </div>
     <div className="flex flex-col">
-      <span className="text-[#999999] text-xs font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
-      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-xl`}>{pnl}</span>
+      <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
+      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
-    <div className="flex justify-between items-center text-sm pt-2 border-t border-[#2c2c2c]/50">
+    <div className="flex justify-between items-center text-caption pt-2 border-t border-[#2c2c2c]/50">
       <span className="text-[#888888] font-medium">持续时间</span>
       <span className="text-white font-semibold">{duration}</span>
     </div>
@@ -263,20 +264,20 @@ const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: Performance
         <div className="w-6 h-6 flex items-center justify-center">
           <img src={icon} alt={asset} className="w-full h-full object-contain" />
         </div>
-        <span className="text-white font-bold text-base">{asset}</span>
+        <span className="text-white font-bold text-body">{asset}</span>
       </div>
-      <span className="text-[#999999] text-xs font-bold bg-[#1e1e1e] px-2 py-1 rounded">{trades} 笔交易</span>
+      <span className="text-[#999999] text-caption font-bold bg-[#1e1e1e] px-2 py-1 rounded">{trades} 笔交易</span>
     </div>
     <div className="flex flex-col">
-      <span className="text-[#999999] text-xs font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
-      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-xl`}>{pnl}</span>
+      <span className="text-[#999999] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
+      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
     <div className="space-y-2 pt-2 border-t border-[#2c2c2c]/50">
-      <div className="flex justify-between items-center text-sm font-medium">
+      <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">净盈亏</span>
         <span className={`font-bold ${netPnl.includes('+') ? 'text-green-400' : 'text-red-400'}`}>{netPnl}</span>
       </div>
-      <div className="flex justify-between items-center text-sm font-medium">
+      <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">费用</span>
         <span className="text-white font-bold">{fees}</span>
       </div>
@@ -301,22 +302,22 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
         <div className="w-6 h-6 flex items-center justify-center">
           <img src={icon} alt={asset} className="w-full h-full object-contain" />
         </div>
-        <span className="text-white font-bold text-base">{asset}</span>
+        <span className="text-white font-bold text-body">{asset}</span>
         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {side === 'Long' ? '多' : '空'}
         </span>
       </div>
-      <span className="text-[#5a5a5a] text-xs font-medium">{time}</span>
+      <span className="text-[#5a5a5a] text-caption font-medium">{time}</span>
     </div>
     <div className="flex flex-col py-1">
-      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-2xl tracking-tight`}>{pnl}</span>
+      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h1 tracking-tight`}>{pnl}</span>
     </div>
     <div className="space-y-2 pt-2 border-t border-[#2c2c2c]/50 mt-auto">
-      <div className="flex justify-between items-center text-sm font-medium">
+      <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">规模</span>
         <span className="text-white font-bold">{size}</span>
       </div>
-      <div className="flex justify-between items-center text-sm font-medium">
+      <div className="flex justify-between items-center text-caption font-medium">
         <span className="text-[#888888]">费用</span>
         <span className="text-white font-bold">{fees}</span>
       </div>

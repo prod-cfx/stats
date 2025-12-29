@@ -34,3 +34,4 @@ export const OrderbookRow = ({ price, amount, total, type, depthPercent }: Order
 };
 
 
+

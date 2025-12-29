@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Search, ArrowUpDown } from 'lucide-react';
+import { SectionTitle } from '@/components/ui/Typography';
 
 interface OIData {
   rank: number | string;
@@ -171,7 +172,7 @@ export const AggregatedOI = () => {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#e6edf3]">{activeSymbol} 合约总持仓</h1>
+        <SectionTitle>{activeSymbol} 合约总持仓</SectionTitle>
       </div>
 
       <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl">

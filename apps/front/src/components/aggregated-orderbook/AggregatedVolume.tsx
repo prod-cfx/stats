@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
+import { SubTitle } from '@/components/ui/Typography';
 
 interface VolumeItem {
   name: string;
@@ -21,7 +22,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
     <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 shadow-xl h-full">
       {/* Card Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-[#e6edf3]">{title}</h3>
+        <SubTitle>{title}</SubTitle>
         <button className="flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-1.5 text-sm font-medium text-[#8b949e] hover:border-[#8b949e] transition-all">
           <span>{symbol}</span>
           <ChevronDown className="w-4 h-4" />

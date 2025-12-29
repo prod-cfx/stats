@@ -7,6 +7,7 @@ import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable
 import { DepthChart } from '@/components/aggregated-orderbook/DepthChart';
 import { AggregatedOI } from '@/components/aggregated-orderbook/AggregatedOI';
 import { AggregatedVolume } from '@/components/aggregated-orderbook/AggregatedVolume';
+import { PageTitle, SectionTitle, BodyText } from '@/components/ui/Typography';
 
 // Exchange logos (CDN resources used in previous pages)
 const EXCHANGE_LOGOS = [
@@ -147,14 +148,16 @@ export default function AggregatedOrderBookPage() {
     return { bids: bidPoints, asks: askPoints };
   }, [orderbook]);
 
-  if (!isMounted) return null;
-
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
       
-      <main className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-6">
-        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6">
+      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
+        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
+          <div className="flex flex-col gap-3">
+            <PageTitle>聚合挂单数据</PageTitle>
+            <BodyText>全网深度及订单流聚合分析</BodyText>
+          </div>
           
           {/* Top Tabs */}
           <div className="flex border-b border-[#30363d] w-fit">
@@ -237,7 +240,7 @@ export default function AggregatedOrderBookPage() {
                 {/* Left Column: Orderbook Table */}
                 <div className="w-1/2 flex flex-col border-r border-[#30363d]">
                   <div className="p-4 border-b border-[#30363d] flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-[#e6edf3]">{symbol}/USDT 实时订单({marketType === 'futures' ? '合约' : '现货'})</h2>
+                    <SectionTitle className="text-lg">{symbol}/USDT 实时订单({marketType === 'futures' ? '合约' : '现货'})</SectionTitle>
                     
                     <div className="flex items-center gap-4">
                       {/* Display Mode */}
@@ -273,18 +276,22 @@ export default function AggregatedOrderBookPage() {
                   </div>
 
                   <div className="flex-1 overflow-hidden">
-                    <OrderbookTable 
-                      asks={orderbook.asks} 
-                      bids={orderbook.bids} 
-                      currentPrice={orderbook.currentPrice}
-                    />
+                    {isMounted ? (
+                      <OrderbookTable 
+                        asks={orderbook.asks} 
+                        bids={orderbook.bids} 
+                        currentPrice={orderbook.currentPrice}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-[#8b949e]">加载中...</div>
+                    )}
                   </div>
                 </div>
 
                 {/* Right Column: Depth Chart */}
                 <div className="w-1/2 flex flex-col">
                   <div className="p-4 border-b border-[#30363d] flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-[#e6edf3]">订单深度</h2>
+                    <SectionTitle className="text-lg">订单深度</SectionTitle>
                     <div className="flex items-center gap-2 text-yellow-500 cursor-pointer hover:opacity-80 transition-all">
                       <Info className="w-4 h-4" />
                       <span className="text-sm">流动性热力图</span>
@@ -293,10 +300,14 @@ export default function AggregatedOrderBookPage() {
 
                   <div className="flex-1 p-4 flex flex-col">
                     <div className="flex-1 min-h-0">
-                      <DepthChart 
-                        bids={depthChartData.bids} 
-                        asks={depthChartData.asks} 
-                      />
+                      {isMounted ? (
+                        <DepthChart 
+                          bids={depthChartData.bids} 
+                          asks={depthChartData.asks} 
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-[#8b949e]">加载中...</div>
+                      )}
                     </div>
                     
                     {/* Legend/Labels */}

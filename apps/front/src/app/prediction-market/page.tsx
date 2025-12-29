@@ -3,16 +3,17 @@
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { PredictionMarketGrid } from '@/components/prediction-market/PredictionMarketGrid';
+import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 export default function PredictionMarketPage() {
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
-      <main className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-6">
-        <div className="max-w-[1280px] mx-auto w-full flex flex-col gap-8">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold text-white">预测市场</h1>
-            <p className="text-[#8b949e]">基于链上数据的未来趋势预测</p>
+      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
+        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
+          <div className="flex flex-col gap-3">
+            <PageTitle>预测市场</PageTitle>
+            <BodyText>基于链上数据的未来趋势预测</BodyText>
           </div>
           
           <PredictionMarketGrid />
@@ -21,4 +22,5 @@ export default function PredictionMarketPage() {
     </div>
   );
 }
+
 

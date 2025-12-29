@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Info, MoreHorizontal } from 'lucide-react';
+import { SubTitle } from '@/components/ui/Typography';
 
 export interface PredictionOption {
   label: string;
@@ -36,9 +37,9 @@ export const PredictionCard = ({
               {icon}
             </div>
           )}
-          <h3 className="text-white font-semibold text-base leading-snug line-clamp-2 pr-6">
+          <SubTitle className="leading-snug line-clamp-2 pr-6">
             {title}
-          </h3>
+          </SubTitle>
         </div>
         <button className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
           <Info className="w-4 h-4" />
@@ -80,4 +81,5 @@ export const PredictionCard = ({
     </div>
   );
 };
+
 

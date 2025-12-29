@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { SectionTitle } from '@/components/ui/Typography';
 
 interface ExchangeData {
   exchange: string;
@@ -124,9 +125,9 @@ export const ExchangeLiquidationTable = () => {
   const [timeFilter, setTimeFilter] = useState('4小时');
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">交易所爆仓</h2>
+        <SectionTitle>交易所爆仓</SectionTitle>
         <div className="flex gap-3">
           <div className="relative group">
             <button className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors">
@@ -208,4 +209,5 @@ export const ExchangeLiquidationTable = () => {
     </div>
   );
 };
+
 

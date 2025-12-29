@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { ChevronDown, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 // --- Types ---
 interface ExchangeData {
@@ -127,66 +128,69 @@ export default function LongShortRatioPage() {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted) return null;
-
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
-      <div className="flex-none">
-        <Navbar />
-      </div>
+    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
+      <Navbar />
       
-      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar pb-12">
-        {/* Header Section */}
-        <div className="flex items-center justify-between p-6 bg-[#161b22] border-b border-[#30363d]">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-bold text-[#e6edf3]">交易所 多空比 {symbol}</h1>
-            <span className="text-sm text-[#8b949e]">主动买卖量比</span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="flex bg-[#21262d] border border-[#30363d] rounded-md p-1 gap-1">
-              <button className="flex items-center gap-2 px-4 py-1.5 bg-[#30363d] rounded text-sm font-medium text-[#e6edf3]">
-                {symbol} <ChevronDown className="w-4 h-4" />
-              </button>
-              <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#30363d] rounded text-sm font-medium text-[#8b949e] transition-colors">
-                {timeRange} <ChevronDown className="w-4 h-4" />
-              </button>
+      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
+        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
+          {/* Header Section */}
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3">
+              <PageTitle>交易所 多空比 {symbol}</PageTitle>
+              <BodyText>交易所多空持仓人数及持仓量比</BodyText>
             </div>
-            <button className="p-2.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#e6edf3] transition-colors">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content Section */}
-        <div className="p-8 max-w-[1400px] mx-auto w-full flex flex-col">
-          {/* Summary Card */}
-          <SummaryCard 
-            symbol={symbol}
-            longPercent={50.61}
-            shortPercent={49.39}
-            longAmount="$43.53亿"
-            shortAmount="$42.49亿"
-          />
-
-          {/* Table Header Labels */}
-          <div className="flex items-center px-3 py-2 text-[11px] text-[#8b949e] uppercase tracking-wider font-semibold">
-            <span className="w-[180px] pl-10">交易所</span>
-            <span className="flex-1 text-center">持仓占比 (多 vs 空)</span>
-            <div className="flex w-[300px]">
-              <span className="w-32">做多金额</span>
-              <span className="w-32">做空金额</span>
+            
+            <div className="flex items-center gap-3">
+              <div className="flex bg-[#1e1e1e] border border-[#2c2c2c] rounded-md p-1 gap-1">
+                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#2c2c2c] rounded text-sm font-medium text-[#e6edf3]">
+                  {symbol} <ChevronDown className="w-4 h-4" />
+                </button>
+                <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#2c2c2c] rounded text-sm font-medium text-[#8b949e] transition-colors">
+                  {timeRange} <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+              <button className="p-2.5 bg-[#1e1e1e] border border-[#2c2c2c] rounded-md text-[#8b949e] hover:text-[#e6edf3] transition-colors">
+                <RefreshCw className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* Exchange List */}
-          <div className="flex flex-col">
-            {exchanges.map((ex) => (
-              <ExchangeRow key={ex.name} data={ex} />
-            ))}
+          {/* Content Section */}
+          <div className="flex flex-col gap-6">
+            {/* Summary Card */}
+            <SummaryCard 
+              symbol={symbol}
+              longPercent={50.61}
+              shortPercent={49.39}
+              longAmount="$43.53亿"
+              shortAmount="$42.49亿"
+            />
+
+            {/* Table Area */}
+            <div className="bg-[#1e1e1e] border border-[#2c2c2c] rounded-xl overflow-hidden">
+              {/* Table Header Labels */}
+              <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#2c2c2c]">
+                <span className="w-[180px] pl-10">交易所</span>
+                <span className="flex-1 text-center">持仓占比 (多 vs 空)</span>
+                <div className="flex w-[300px]">
+                  <span className="w-32">做多金额</span>
+                  <span className="w-32">做空金额</span>
+                </div>
+              </div>
+
+              {/* Exchange List */}
+              <div className="flex flex-col divide-y divide-[#2c2c2c]">
+                {exchanges.map((ex) => (
+                  <div key={ex.name} className="px-6 py-4 hover:bg-[#252525] transition-colors">
+                    <ExchangeRow data={ex} />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -18,6 +18,9 @@
     "POSTGRES_HOST",
     "REDIS_HOST",
 
+    // Redis DB 索引（非敏感）
+    "REDIS_DB",
+
     // 前端公开的 API 服务器地址（浏览器可见，非敏感）
     "NEXT_PUBLIC_API_SERVER_URL",
     "NEXT_PUBLIC_API_BASE_URL",

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Copy, RefreshCw } from 'lucide-react';
+import { PageTitle } from '@/components/ui/Typography';
 
 interface ProfileHeaderProps {
   address: string;
@@ -26,7 +27,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
             <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${address}`} alt="avatar" className="w-full h-full" />
           </div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white tracking-tight">{formatAddress(address)}</h1>
+            <PageTitle>{formatAddress(address)}</PageTitle>
             <button className="text-[#666666] hover:text-white transition-colors">
               <Copy className="w-4.5 h-4.5" />
             </button>
@@ -37,7 +38,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
           {tags.map((tag, idx) => (
             <span 
               key={idx} 
-              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight ${tag.color} ${tag.bg}`}
+              className={`px-2 py-0.5 rounded text-caption font-bold tracking-tight ${tag.color} ${tag.bg}`}
             >
               {tag.label}
             </span>
@@ -46,9 +47,9 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="flex items-center gap-2 px-4 py-2 bg-transparent text-[#e5e5e5] text-sm font-medium hover:text-white transition-all group">
+        <button className="flex items-center gap-2 px-4 py-2 bg-transparent text-[#e5e5e5] text-label font-medium hover:text-white transition-all group">
           <RefreshCw className="w-4.5 h-4.5 text-[#888888] group-hover:text-white transition-colors" />
-          <span className="text-lg">实时数据</span>
+          <span className="text-body font-bold">实时数据</span>
         </button>
       </div>
     </div>

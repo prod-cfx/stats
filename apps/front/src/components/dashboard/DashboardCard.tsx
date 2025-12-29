@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { SubTitle } from '@/components/ui/Typography';
 
 export interface DashboardCardProps {
   title: string;
@@ -21,20 +22,20 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
         />
       </div>
       <div className="p-5 flex flex-col gap-4 flex-1">
-        <h3 className="text-white text-lg font-bold line-clamp-2 min-h-[56px]">{title}</h3>
+        <SubTitle className="line-clamp-2 min-h-[56px]">{title}</SubTitle>
         
         <div className="flex flex-wrap gap-2">
           {tags.map((tag, idx) => (
             <span 
               key={idx} 
-              className="px-2 py-0.5 bg-[#2c2c2c] text-[#cccccc] text-[10px] font-bold rounded border border-[#3a3a3a] uppercase tracking-wider"
+              className="px-2 py-0.5 bg-[#2c2c2c] text-[#cccccc] text-caption font-bold rounded border border-[#3a3a3a] uppercase tracking-wider"
             >
               {tag}
             </span>
           ))}
         </div>
 
-        <div className="mt-auto flex justify-between items-center text-xs">
+        <div className="mt-auto flex justify-between items-center text-caption">
           <span className="text-[#999999]">{saves.toLocaleString()} 保存</span>
           <span className="text-[#5a5a5a] group-hover:text-[#999999] transition-colors">创建者 @{creator}</span>
         </div>

@@ -18,7 +18,7 @@ export default function DashboardEditorPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#121212] text-white overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-[#0d1117] text-white overflow-hidden">
       <Navbar />
       
       <main className="flex-1 flex min-h-0">

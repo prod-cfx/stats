@@ -3,16 +3,17 @@
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { DiscoverGrid } from '@/components/whale-tracking/discover/DiscoverGrid';
+import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 export default function DiscoverPage() {
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#121212] text-[#c9d1d9] overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
-      <main className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-8">
+      <main className="flex-1 overflow-y-auto no-scrollbar p-8">
         <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
           <div className="flex flex-col gap-3">
-            <h1 className="text-4xl font-bold text-white tracking-tight">发现</h1>
-            <p className="text-[#999999] text-lg">发现最有价值的交易者</p>
+            <PageTitle>发现</PageTitle>
+            <BodyText>发现最有价值的交易者</BodyText>
           </div>
           
           <DiscoverGrid />
@@ -21,4 +22,3 @@ export default function DiscoverPage() {
     </div>
   );
 }
-
