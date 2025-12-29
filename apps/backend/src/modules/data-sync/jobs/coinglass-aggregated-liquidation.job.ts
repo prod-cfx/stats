@@ -1,5 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -64,8 +64,8 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob {
     private readonly prisma: PrismaService,
   ) {}
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    const cursor = this.parseCursor(currentCursor)
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =

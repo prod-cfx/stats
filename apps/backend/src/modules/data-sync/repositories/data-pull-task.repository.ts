@@ -118,7 +118,7 @@ export class DataPullTaskRepository {
     taskId: number,
     finishedAt: Date,
     newCursor: string | null,
-    resultMeta: Record<string, any> | undefined,
+    _resultMeta: Record<string, any> | undefined,
   ): Promise<void> {
     const client = this.getClient()
     await client.dataPullTask.update({
@@ -129,7 +129,6 @@ export class DataPullTaskRepository {
         lastSuccessAt: finishedAt,
         cursor: newCursor,
         lastError: null,
-        meta: resultMeta ?? undefined,
       },
     })
   }
@@ -244,6 +243,10 @@ export class DataPullTaskRepository {
     intervalSeconds?: number | null
     enabled?: boolean
     cursor?: string | null
+    /**
+     * 任务级自定义配置参数，将直接写入 data_pull_tasks.meta（Json）
+     */
+    meta?: Record<string, any> | null
   }): Promise<DataPullTask> {
     const client = this.getClient()
     return client.dataPullTask.create({
@@ -256,6 +259,7 @@ export class DataPullTaskRepository {
         intervalSeconds: payload.intervalSeconds ?? null,
         enabled: payload.enabled ?? true,
         cursor: payload.cursor ?? null,
+        meta: payload.meta ?? undefined,
       },
     })
   }
@@ -270,6 +274,10 @@ export class DataPullTaskRepository {
       intervalSeconds?: number | null
       enabled?: boolean
       cursor?: string | null
+      /**
+       * 任务级自定义配置参数，将直接写入 data_pull_tasks.meta（Json）
+       */
+      meta?: Record<string, any> | null
     },
   ): Promise<DataPullTask> {
     const client = this.getClient()

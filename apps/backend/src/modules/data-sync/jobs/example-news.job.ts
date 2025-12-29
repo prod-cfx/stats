@@ -1,4 +1,4 @@
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 
 /**
@@ -11,8 +11,8 @@ export class ExampleNewsJob implements DataPullJob {
   readonly key = 'example-news-latest'
   private readonly logger = new Logger(ExampleNewsJob.name)
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    this.logger.log(`ExampleNewsJob.run called, cursor=${currentCursor ?? 'null'}`)
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    this.logger.log(`ExampleNewsJob.run called, cursor=${ctx.cursor ?? 'null'}`)
 
     // TODO: 在这里实现：
     // 1. 解析 cursor（例如 lastPublishedAt）
@@ -22,7 +22,7 @@ export class ExampleNewsJob implements DataPullJob {
     // 5. 计算新的游标（例如最新一条新闻的发布时间）
 
     const fetchedCount = 0
-    const newCursor = currentCursor ?? null
+    const newCursor = ctx.cursor ?? null
 
     return {
       fetchedCount,

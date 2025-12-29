@@ -97,6 +97,15 @@ export class CreateAdminDataPullTaskDto {
   @IsString()
   @MaxLength(500)
   cursor?: string | null
+
+  @ApiPropertyOptional({
+    description: '任务级自定义配置参数（JSON），例如不同数据源的过滤条件等',
+    nullable: true,
+    type: Object,
+  })
+  @IsOptional()
+  // 这里不对结构做强校验，由具体 Job 自行解析和校验
+  meta?: Record<string, any> | null
 }
 
 export class UpdateAdminDataPullTaskDto {
@@ -159,6 +168,14 @@ export class UpdateAdminDataPullTaskDto {
   @IsString()
   @MaxLength(500)
   cursor?: string | null
+
+  @ApiPropertyOptional({
+    description: '任务级自定义配置参数（JSON），将覆盖原有 meta',
+    nullable: true,
+    type: Object,
+  })
+  @IsOptional()
+  meta?: Record<string, any> | null
 }
 
 export class AdminDataPullTaskResponseDto {
@@ -200,6 +217,9 @@ export class AdminDataPullTaskResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   lastError?: string | null
+
+  @ApiPropertyOptional({ nullable: true, type: Object })
+  meta?: Record<string, any> | null
 
   @ApiProperty()
   createdAt!: Date

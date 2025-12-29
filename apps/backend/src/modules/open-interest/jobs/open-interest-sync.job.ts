@@ -1,5 +1,6 @@
 import type {
   DataPullJob,
+  DataPullJobContext,
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
 import type { CreateOpenInterestDto } from '../dto/open-interest.dto'
@@ -58,11 +59,11 @@ export class OpenInterestSyncJob implements DataPullJob {
 
   /**
    * 执行数据拉取任务
-   * @param currentCursor 当前保存的游标位置
-   * @returns 任务执行结果
+   *
+   * 当前未使用任务级 meta，仅依赖 cursor 和环境变量。
    */
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    const cursor = this.parseCursor(currentCursor)
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
@@ -81,7 +82,7 @@ export class OpenInterestSyncJob implements DataPullJob {
     }
 
     this.logger.log(
-      `Requesting Coinglass open interest: ${url.toString()} (cursor: ${currentCursor})`,
+      `Requesting Coinglass open interest: ${url.toString()} (cursor: ${ctx.cursor ?? 'null'})`,
     )
 
     try {

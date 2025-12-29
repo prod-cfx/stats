@@ -1,4 +1,6 @@
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+// 复用与市场同步任务相同的任务级 meta 结构
+import type { PolymarketTaskMeta } from './polymarket-markets.job'
 import type { PolymarketRestBook } from '@/clients/polymarket/types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import { Injectable, Logger } from '@nestjs/common'
@@ -18,11 +20,15 @@ interface OrderbookCursor {
 }
 
 @Injectable()
-export class PolymarketOrderbookJob implements DataPullJob {
+export class PolymarketOrderbookJob implements DataPullJob<PolymarketTaskMeta> {
   readonly key = 'polymarket-orderbook-crypto'
   private readonly logger = new Logger(PolymarketOrderbookJob.name)
   private readonly batchSize = 25
-  private readonly category?: string | null
+  /**
+   * 来自全局配置的默认 category（已标准化为小写、去掉首尾空格）
+   * 实际使用时会与任务级 meta 合并，允许按任务覆盖。
+   */
+  private readonly defaultCategory?: string | null
   // 单个 token 连续失败超过此次数，将被跳过（offset 推进，避免卡死）
   private readonly maxRetries = 5
 
@@ -34,14 +40,16 @@ export class PolymarketOrderbookJob implements DataPullJob {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
     // 确保 category 已标准化（配置层已处理，这里是防御性检查）
     const rawCategory = cfg?.filters.category ?? 'crypto'
-    this.category = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
+    this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
   }
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    const cursor = this.parseCursor(currentCursor)
+  async run(ctx: DataPullJobContext<PolymarketTaskMeta>): Promise<JobRunResult> {
+    const cursor = this.parseCursor(ctx.cursor)
+
+    const category = this.resolveCategory(ctx.meta)
 
     const targets = await this.repo.listOutcomeTokens({
-      category: this.category ?? null,
+      category: category ?? null,
       limit: this.batchSize,
       offset: cursor.offset,
     })
@@ -173,6 +181,7 @@ export class PolymarketOrderbookJob implements DataPullJob {
         nextOffset,
         failedTokensCount: Object.keys(newFailedTokens).length,
         skippedTokensCount: newSkippedTokens.size,
+        category,
       },
     }
   }
@@ -191,6 +200,12 @@ export class PolymarketOrderbookJob implements DataPullJob {
       this.logger.warn(`Invalid cursor detected for ${this.key}, resetting.`)
       return { offset: 0 }
     }
+  }
+
+  private resolveCategory(meta: PolymarketTaskMeta | null): string | null {
+    const fromMeta = meta?.category
+    const value = (fromMeta ?? this.defaultCategory ?? 'crypto') || 'crypto'
+    return value.trim().toLowerCase()
   }
 
   private extractSeq(snapshot: PolymarketRestBook): bigint | number | null {

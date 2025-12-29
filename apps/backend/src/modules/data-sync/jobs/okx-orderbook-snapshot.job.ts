@@ -3,7 +3,7 @@
 import type { Logger as WinstonLogger } from 'winston'
 import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import type { OrderbookPairConfig } from '@prisma/client'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
@@ -60,14 +60,14 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
     private readonly winstonLogger: WinstonLogger,
   ) {}
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
+  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const client = this.redisService.getClient()
 
     if (!this.isEnabled()) {
       this.logger.log('OKX orderbook snapshot job disabled (ORDERBOOK_OKX_SNAPSHOT_ENABLED=false)')
       return {
         fetchedCount: 0,
-        newCursor: currentCursor,
+        newCursor: ctx.cursor,
         meta: { reason: 'disabled' },
       }
     }
@@ -99,12 +99,12 @@ export class OkxOrderBookSnapshotJob implements DataPullJob {
       await this.cleanupDisabledSnapshots(client, enabledByVenue)
       return {
         fetchedCount: 0,
-        newCursor: currentCursor,
+        newCursor: ctx.cursor,
         meta: { reason: 'no_orderbook_configs' },
       }
     }
 
-    const cursor = this.parseCursor(currentCursor)
+    const cursor = this.parseCursor(ctx.cursor)
     const total = targets.length
     const startIndex = cursor.nextIndex >= 0 && cursor.nextIndex < total ? cursor.nextIndex : 0
     const batchSize = this.getBatchSize()

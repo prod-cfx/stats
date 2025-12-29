@@ -1,4 +1,5 @@
-import type { DataPullJob } from './contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext } from './contracts/data-pull-job'
+import type { DataPullTask } from './repositories/data-pull-task.repository'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
@@ -48,39 +49,45 @@ export class DataSyncOrchestrator {
         continue
       }
 
-      await this.runSingleTask(task.id, job, task.cursor)
+      await this.runSingleTask(task, job, now)
     }
   }
 
-  private async runSingleTask(
-    taskId: number,
-    job: DataPullJob,
-    cursor: string | null,
-  ): Promise<void> {
+  private async runSingleTask(task: DataPullTask, job: DataPullJob, now: Date): Promise<void> {
     const start = new Date()
-    const exec = await this.execRepo.createStart(taskId, start)
+    const exec = await this.execRepo.createStart(task.id, start)
 
     try {
-      this.logger.log(`Running data-pull task key=${job.key}, cursor=${cursor ?? 'null'}`)
+      const ctx: DataPullJobContext = {
+        taskId: task.id,
+        key: task.key,
+        cursor: task.cursor ?? null,
+        meta: (task.meta ?? null) as any,
+        now,
+      }
 
-      const result = await job.run(cursor)
+      this.logger.log(
+        `Running data-pull task key=${job.key}, cursor=${ctx.cursor ?? 'null'}`,
+      )
+
+      const result = await job.run(ctx)
 
       const finished = new Date()
       await this.execRepo.markSuccess(exec.id, finished, result)
       await this.taskRepo.markSuccess(
-        taskId,
+        task.id,
         finished,
-        result.newCursor ?? cursor,
+        result.newCursor ?? task.cursor,
         result.meta,
       )
 
       this.logger.log(
-        `Data-pull task key=${job.key} success, fetched=${result.fetchedCount}, cursor=${result.newCursor ?? cursor}`,
+        `Data-pull task key=${job.key} success, fetched=${result.fetchedCount}, cursor=${result.newCursor ?? task.cursor}`,
       )
     } catch (error) {
       const finished = new Date()
       await this.execRepo.markFailed(exec.id, finished, error)
-      await this.taskRepo.markFailed(taskId, finished, error)
+      await this.taskRepo.markFailed(task.id, finished, error)
 
       this.logger.error(
         `Data-pull task key=${job.key} failed: ${error instanceof Error ? error.message : String(error)}`,

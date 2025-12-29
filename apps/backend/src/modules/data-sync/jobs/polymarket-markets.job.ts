@@ -1,4 +1,4 @@
-import type { DataPullJob, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import type { PolymarketGammaEvent, PolymarketGammaMarket, PolymarketGammaOutcome } from '@/clients/polymarket/types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import { Injectable, Logger } from '@nestjs/common'
@@ -15,12 +15,31 @@ interface PolymarketMarketsCursor {
   usedCursor?: boolean // 上一轮是否使用了 cursor 模式（用于状态转换判断）
 }
 
+export interface PolymarketTaskMeta {
+  /**
+   * 任务级覆盖的 category（例如 "crypto" / "sports"），
+   * 将覆盖 env / config 中的默认值。
+   */
+  category?: string
+  /**
+   * 任务级覆盖的 tags：
+   * - 建议使用字符串数组；
+   * - 也兼容 tagsCsv（逗号分隔字符串）形式。
+   */
+  tags?: string[]
+  tagsCsv?: string
+}
+
 @Injectable()
-export class PolymarketMarketsJob implements DataPullJob {
+export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
   readonly key = 'polymarket-markets-crypto'
   private readonly logger = new Logger(PolymarketMarketsJob.name)
   private readonly batchSize = 100
-  private readonly category?: string | null
+  /**
+   * 来自全局配置的默认 category（已标准化为小写、去掉首尾空格）
+   * 实际使用时会与任务级 meta 合并，允许按任务覆盖。
+   */
+  private readonly defaultCategory?: string | null
   private readonly effectiveLimit: number // 实际请求的 limit（考虑 API maxLimit 限制）
 
   constructor(
@@ -31,15 +50,18 @@ export class PolymarketMarketsJob implements DataPullJob {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
     // 确保 category 已标准化（配置层已处理，这里是防御性检查）
     const rawCategory = cfg?.filters.category ?? 'crypto'
-    this.category = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
+    this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
     
     // 计算实际请求的 limit（gamma-client 会 clamp 到 maxLimit）
     const maxLimit = cfg?.gamma.maxLimit ?? 200
     this.effectiveLimit = Math.min(this.batchSize, maxLimit)
   }
 
-  async run(currentCursor: string | null): Promise<JobRunResult> {
-    const cursor = this.parseCursor(currentCursor)
+  async run(ctx: DataPullJobContext<PolymarketTaskMeta>): Promise<JobRunResult> {
+    const cursor = this.parseCursor(ctx.cursor)
+
+    const category = this.resolveCategory(ctx.meta)
+    const tags = this.resolveTags(ctx.meta)
 
     // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
     // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
@@ -48,7 +70,8 @@ export class PolymarketMarketsJob implements DataPullJob {
       cursor: cursor.nextCursor ?? null,
       offset: cursor.offset ?? 0,
       updatedSince: null, // API 不支持，保持 null
-      category: this.category ?? null,
+      category: category ?? null,
+      tags: tags ?? undefined,
       // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
       // isActive 标志会根据 API 返回的 active/closed 字段在 processMarket 中正确设置
     })
@@ -57,7 +80,7 @@ export class PolymarketMarketsJob implements DataPullJob {
     let skipped = 0
 
     for (const market of response.markets) {
-      const result = await this.processMarket(market)
+      const result = await this.processMarket(market, category)
       if (result.skipped) {
         skipped += 1
       } else {
@@ -112,11 +135,16 @@ export class PolymarketMarketsJob implements DataPullJob {
         total: response.markets.length,
         nextCursor: response.nextCursor ?? null,
         offset: nextOffset,
+        category,
+        tags,
       },
     }
   }
 
-  private async processMarket(market: PolymarketGammaMarket): Promise<{ skipped: boolean }> {
+  private async processMarket(
+    market: PolymarketGammaMarket,
+    configuredCategory: string | null,
+  ): Promise<{ skipped: boolean }> {
     // API 返回 events 数组，取第一个元素作为主事件
     const event = market.event ?? market.events?.[0]
     const m = market as any
@@ -128,7 +156,7 @@ export class PolymarketMarketsJob implements DataPullJob {
     
     // 关键：Gamma API 的 category 参数不工作（忽略该查询参数），
     // 必须在本地过滤，否则会把所有历史市场全量 upsert 导致数据库膨胀
-    if (this.category && normalizedCategory !== this.category) {
+    if (configuredCategory && normalizedCategory !== configuredCategory) {
       // 不匹配配置的 category，跳过此市场
       return { skipped: true }
     }
@@ -281,6 +309,38 @@ export class PolymarketMarketsJob implements DataPullJob {
       this.logger.warn(`Invalid cursor detected for ${this.key}, resetting.`)
       return {}
     }
+  }
+
+  private resolveCategory(meta: PolymarketTaskMeta | null): string | null {
+    const fromMeta = meta?.category
+    const value = (fromMeta ?? this.defaultCategory ?? 'crypto') || 'crypto'
+    return value.trim().toLowerCase()
+  }
+
+  private resolveTags(meta: PolymarketTaskMeta | null): string[] | null {
+    if (!meta) return null
+
+    const tags: string[] = []
+
+    if (Array.isArray(meta.tags)) {
+      for (const tag of meta.tags) {
+        if (typeof tag === 'string' && tag.trim()) {
+          tags.push(tag.trim())
+        }
+      }
+    }
+
+    if (typeof meta.tagsCsv === 'string' && meta.tagsCsv.trim()) {
+      const parts = meta.tagsCsv
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+      tags.push(...parts)
+    }
+
+    if (!tags.length) return null
+    // 去重
+    return Array.from(new Set(tags))
   }
 
   private toDate(value?: string | number | Date | null): Date | null {
