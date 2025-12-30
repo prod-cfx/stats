@@ -21,6 +21,35 @@ export class AdminDataPullTaskListQueryDto extends BasePaginationRequestDto {
   enabled?: boolean
 }
 
+/**
+ * 单条任务执行记录
+ */
+export class AdminDataPullExecutionResponseDto {
+  @ApiProperty()
+  id!: number
+
+  @ApiProperty()
+  taskId!: number
+
+  @ApiProperty()
+  status!: string
+
+  @ApiProperty()
+  fetchedCount!: number
+
+  @ApiProperty()
+  startedAt!: Date
+
+  @ApiPropertyOptional({ nullable: true })
+  finishedAt?: Date | null
+
+  @ApiPropertyOptional({ nullable: true })
+  errorMessage?: string | null
+
+  @ApiPropertyOptional({ nullable: true, type: Object })
+  meta?: Record<string, any> | null
+}
+
 export class CreateAdminDataPullTaskDto {
   @ApiProperty({
     description: '任务唯一标识，应与具体 Job 的 key 保持一致',

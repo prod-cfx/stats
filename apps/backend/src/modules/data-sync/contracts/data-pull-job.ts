@@ -47,6 +47,36 @@ export interface DataPullJobContext<TMeta = any> {
 }
 
 /**
+ * Meta 字段的格式说明（用于前端展示）
+ */
+export interface JobMetaFieldSchema {
+  /** 字段名 */
+  name: string
+  /** 字段类型 */
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  /** 是否必填 */
+  required: boolean
+  /** 字段说明 */
+  description: string
+  /** 可选值列表（如果有） */
+  options?: string[]
+  /** 默认值 */
+  defaultValue?: any
+}
+
+/**
+ * Job 的 Meta 配置说明
+ */
+export interface JobMetaSchema {
+  /** 简要说明 */
+  description: string
+  /** 字段列表 */
+  fields: JobMetaFieldSchema[]
+  /** 示例 JSON */
+  example: Record<string, any>
+}
+
+/**
  * 所有定时数据拉取任务的统一接口
  *
  * - 一个任务对应一类数据（例如：kline-1m / news-latest）
@@ -57,6 +87,16 @@ export interface DataPullJob<TMeta = any> {
    * 任务唯一标识，应与 data_pull_task 表中的 key 一致
    */
   readonly key: string
+
+  /**
+   * 任务名称（用于前端展示）
+   */
+  readonly name?: string
+
+  /**
+   * Meta 配置格式说明（用于前端展示，帮助用户填写正确的配置）
+   */
+  readonly metaSchema?: JobMetaSchema
 
   /**
    * 执行一次完整的数据拉取流程

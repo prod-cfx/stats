@@ -231,6 +231,75 @@ export async function updateSystemPromptSetting(
 
 // ===== 数据拉取任务管理（Admin） =====
 
+/**
+ * 获取所有已注册的 Job key 列表（用于创建任务时的下拉选择）
+ */
+export async function fetchRegisteredJobKeys(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
+    headers: requireAuthHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error('获取已注册 key 列表失败')
+  }
+  const data = await response.json()
+  return data?.keys ?? data?.data?.keys ?? []
+}
+
+/**
+ * Meta 字段格式说明
+ */
+export interface JobMetaFieldSchema {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  required: boolean
+  description: string
+  options?: string[]
+  defaultValue?: any
+}
+
+/**
+ * Job Meta 配置格式说明
+ */
+export interface JobMetaSchema {
+  description: string
+  fields: JobMetaFieldSchema[]
+  example: Record<string, any>
+}
+
+/**
+ * 已注册的 Job 信息
+ */
+export interface RegisteredJobInfo {
+  key: string
+  name: string
+  metaSchema: JobMetaSchema | null
+}
+
+/**
+ * 获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）
+ */
+export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
+  const response = await client.AdminDataPullTaskController_getRegisteredJobs({
+    headers: requireAuthHeaders(),
+  })
+  const data = unwrapResponse<any>(response as any)
+  return data?.jobs ?? []
+}
+
+/**
+ * 单条任务执行日志
+ */
+export interface DataPullExecutionLog {
+  id: number
+  taskId: number
+  status: string
+  fetchedCount: number
+  startedAt: string
+  finishedAt?: string | null
+  errorMessage?: string | null
+  meta?: Record<string, any> | null
+}
+
 export interface DataPullTaskListQuery {
   page?: number
   limit?: number
@@ -261,6 +330,29 @@ export async function fetchDataPullTasks(
   }
 }
 
+/**
+ * 分页获取指定任务的执行日志
+ */
+export async function fetchDataPullTaskExecutions(
+  taskId: number,
+  page = 1,
+  limit = 20,
+): Promise<_PaginationResult<DataPullExecutionLog>> {
+  const response = await client.AdminDataPullTaskController_listExecutions({
+    headers: requireAuthHeaders(),
+    params: { id: taskId },
+    queries: { page, limit },
+  })
+  const payload = unwrapResponse<any>(response as any)
+
+  return {
+    total: payload.total ?? 0,
+    page: payload.page ?? page,
+    limit: payload.limit ?? limit,
+    items: Array.isArray(payload.items) ? (payload.items as DataPullExecutionLog[]) : [],
+  }
+}
+
 export interface CreateDataPullTaskPayload {
   key: string
   name: string
@@ -288,10 +380,21 @@ export async function createDataPullTask(payload: CreateDataPullTaskPayload): Pr
     cursor: payload.cursor ?? null,
     meta: payload.meta ?? null,
   }
-  const response = await client.AdminDataPullTaskController_create(dto, {
-    headers: requireAuthHeaders(),
-  })
-  return unwrapResponse<DataPullTask>(response as any)
+  try {
+    const response = await client.AdminDataPullTaskController_create(dto, {
+      headers: requireAuthHeaders(),
+    })
+    return unwrapResponse<DataPullTask>(response as any)
+  } catch (error: any) {
+    // 提取错误信息
+    const errorMsg =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.data?.message ||
+      error?.message ||
+      '创建任务失败'
+    throw new Error(errorMsg)
+  }
 }
 
 export interface UpdateDataPullTaskPayload {
