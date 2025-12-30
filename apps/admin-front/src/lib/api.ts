@@ -2,7 +2,8 @@ import type { schemas } from '@ai/api-contracts';
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
-import { clearStoredSession, getToken } from './session'
+import { useAuthStore } from './auth-store'
+import { getToken } from './session'
 
 interface BaseResponse<T> {
   data?: T
@@ -84,8 +85,14 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
     const status = error?.response?.status ?? error?.status
 
     if (status === 401) {
-      // 管理员登录态失效：清理本地会话并跳转登录页
-      clearStoredSession()
+      // 管理员登录态失效：统一清理 Zustand 会话（内存 + localStorage），并跳转登录页
+      try {
+        // 通过 Zustand store 清理，会自动同步 localStorage 与内存 session 状态
+        useAuthStore.getState().clearSession()
+      } catch {
+        // 兜底：即便 Zustand 不可用（极端环境），也保证不会抛出异常阻断后续逻辑
+      }
+
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
       }
