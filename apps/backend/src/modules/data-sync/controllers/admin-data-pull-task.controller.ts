@@ -1,4 +1,3 @@
-import type { AdminDataPullTaskListQueryDto } from '../dto/admin-data-pull-task.dto'
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -14,7 +13,11 @@ import { BaseResponseDto } from '@/common/dto/base.dto'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+// DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
+// eslint-disable-next-line ts/consistent-type-imports
 import {
+  AdminDataPullExecutionResponseDto,
+  AdminDataPullTaskListQueryDto,
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
@@ -56,6 +59,95 @@ export class AdminDataPullTaskController {
   })
   async list(@Query() query: AdminDataPullTaskListQueryDto) {
     return this.service.list(query)
+  }
+
+  @Get('registered-keys')
+  @ReadAny(AppResource.DATA_PULL_TASK)
+  @ApiOperation({ summary: '获取所有已注册的 Job key 列表' })
+  @ApiOkResponse({
+    description: '获取成功',
+    schema: {
+      type: 'object',
+      properties: {
+        keys: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['example-kline-1m', 'example-news-latest', 'coinglass-heatmap'],
+        },
+      },
+    },
+  })
+  getRegisteredKeys() {
+    return { keys: this.service.getRegisteredKeys() }
+  }
+
+  @Get('registered-jobs')
+  @ReadAny(AppResource.DATA_PULL_TASK)
+  @ApiOperation({ summary: '获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）' })
+  @ApiOkResponse({
+    description: '获取成功',
+    schema: {
+      type: 'object',
+      properties: {
+        jobs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string', example: 'coinglass-aggregated-liquidation' },
+              name: { type: 'string', example: 'Coinglass 聚合清算数据' },
+              metaSchema: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  description: { type: 'string' },
+                  fields: { type: 'array' },
+                  example: { type: 'object' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  getRegisteredJobs() {
+    return { jobs: this.service.getRegisteredJobs() }
+  }
+
+  @Get(':id/executions')
+  @ReadAny(AppResource.DATA_PULL_TASK)
+  @ApiOperation({ summary: '分页获取指定任务的执行历史' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '页码（从 1 开始）', example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: '每页数量',
+    example: 20,
+  })
+  @ApiOkResponse({
+    description: '获取执行历史成功',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(AdminDataPullExecutionResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  async listExecutions(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.service.listExecutions(id, Number(page) || 1, Number(limit) || 20)
   }
 
   @Get(':id')

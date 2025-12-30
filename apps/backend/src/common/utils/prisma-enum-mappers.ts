@@ -23,11 +23,16 @@ export type PrismaSymbolStatus = string
  */
 export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   M1: 'm1' as PrismaMarketTimeframe,
+  M3: 'm3' as PrismaMarketTimeframe,
   M5: 'm5' as PrismaMarketTimeframe,
   M15: 'm15' as PrismaMarketTimeframe,
   H1: 'h1' as PrismaMarketTimeframe,
   H4: 'h4' as PrismaMarketTimeframe,
+  H6: 'h6' as PrismaMarketTimeframe,
+  H8: 'h8' as PrismaMarketTimeframe,
+  H12: 'h12' as PrismaMarketTimeframe,
   D1: 'd1' as PrismaMarketTimeframe,
+  W1: 'w1' as PrismaMarketTimeframe,
 } as const
 
 /**
@@ -42,11 +47,17 @@ export function mapTimeframe(
 ): PrismaMarketTimeframe {
   const mapping: Record<string, PrismaMarketTimeframe> = {
     '1m': PRISMA_TIMEFRAME.M1,
+    '3m': PRISMA_TIMEFRAME.M3,
     '5m': PRISMA_TIMEFRAME.M5,
     '15m': PRISMA_TIMEFRAME.M15,
+    '30m': PRISMA_TIMEFRAME.M30,
     '1h': PRISMA_TIMEFRAME.H1,
     '4h': PRISMA_TIMEFRAME.H4,
+    '6h': PRISMA_TIMEFRAME.H6,
+    '8h': PRISMA_TIMEFRAME.H8,
+    '12h': PRISMA_TIMEFRAME.H12,
     '1d': PRISMA_TIMEFRAME.D1,
+    '1w': PRISMA_TIMEFRAME.W1,
   }
   
   const mapped = mapping[timeframe]
@@ -69,11 +80,17 @@ export function mapTimeframe(
 export function reverseMapTimeframe(timeframe: PrismaMarketTimeframe): MarketTimeframe {
   const reverseMapping: Record<string, MarketTimeframe> = {
     'm1': '1m',
+    'm3': '3m',
     'm5': '5m',
     'm15': '15m',
+    'm30': '30m',
     'h1': '1h',
     'h4': '4h',
+    'h6': '6h',
+    'h8': '8h',
+    'h12': '12h',
     'd1': '1d',
+    'w1': '1w',
   }
   
   const mapped = reverseMapping[timeframe]

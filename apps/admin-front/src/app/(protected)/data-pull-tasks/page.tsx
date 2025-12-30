@@ -1,32 +1,23 @@
-'use client'
+ 'use client'
 
 import type { ColumnsType } from 'antd/es/table'
-import type { DataPullTask } from '@/lib/api'
-import {
-  App,
-  Badge,
-  Button,
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Switch,
-  Table,
-  Tag,
-} from 'antd'
-
+import type { DataPullExecutionLog, DataPullTask, RegisteredJobInfo } from '@/lib/api'
+import { App, Badge, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createDataPullTask,
   deleteDataPullTask,
+  fetchDataPullTaskExecutions,
   fetchDataPullTasks,
+  fetchRegisteredJobs,
   updateDataPullTask,
 } from '@/lib/api'
 
 interface TaskFormValues {
-  key: string
+  /** Job 类型（从已注册的 key 中选择） */
+  jobKey: string
+  /** 任务后缀（可选，用于区分同类型的多个任务实例，如 BTC、ETH） */
+  keySuffix?: string
   name: string
   source?: string
   type?: string
@@ -38,6 +29,31 @@ interface TaskFormValues {
    * 任务级配置参数（JSON 字符串），会在提交前解析为对象写入 data_pull_tasks.meta
    */
   meta?: string
+}
+
+/**
+ * 解析任务 key，拆分为 jobKey 和 suffix
+ * 例如："coinglass-aggregated-liquidation:BTC" => { jobKey: "coinglass-aggregated-liquidation", suffix: "BTC" }
+ */
+function parseTaskKey(taskKey: string): { jobKey: string; suffix?: string } {
+  const colonIndex = taskKey.indexOf(':')
+  if (colonIndex > 0) {
+    return {
+      jobKey: taskKey.slice(0, colonIndex),
+      suffix: taskKey.slice(colonIndex + 1),
+    }
+  }
+  return { jobKey: taskKey }
+}
+
+/**
+ * 组合 jobKey 和 suffix 为完整的任务 key
+ */
+function buildTaskKey(jobKey: string, suffix?: string): string {
+  if (suffix && suffix.trim()) {
+    return `${jobKey}:${suffix.trim()}`
+  }
+  return jobKey
 }
 
 export default function DataPullTasksPage() {
@@ -53,6 +69,19 @@ export default function DataPullTasksPage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [currentTask, setCurrentTask] = useState<DataPullTask | null>(null)
   const [form] = Form.useForm<TaskFormValues>()
+  // 已注册的 Job 信息（用于下拉选择和显示 meta 格式说明）
+  const [registeredJobs, setRegisteredJobs] = useState<RegisteredJobInfo[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  // 当前选中的 Job（用于显示 meta 格式说明）
+  const [selectedJobKey, setSelectedJobKey] = useState<string | undefined>()
+  // 日志抽屉相关状态
+  const [logDrawerVisible, setLogDrawerVisible] = useState(false)
+  const [logLoading, setLogLoading] = useState(false)
+  const [logTask, setLogTask] = useState<DataPullTask | null>(null)
+  const [logItems, setLogItems] = useState<DataPullExecutionLog[]>([])
+  const [logTotal, setLogTotal] = useState(0)
+  const [logPage, setLogPage] = useState(1)
+  const [logLimit, setLogLimit] = useState(20)
 
   const loadTasks = useCallback(
     async (pageParam: number, limitParam: number, filters?: { key?: string; name?: string; enabled?: boolean }) => {
@@ -78,13 +107,61 @@ export default function DataPullTasksPage() {
     [message],
   )
 
+  const loadTaskLogs = useCallback(
+    async (task: DataPullTask, pageParam: number, limitParam: number) => {
+      setLogLoading(true)
+      try {
+        const result = await fetchDataPullTaskExecutions(task.id, pageParam, limitParam)
+        setLogTask(task)
+        setLogItems(result.items)
+        setLogTotal(result.total)
+        setLogPage(result.page)
+        setLogLimit(result.limit)
+        setLogDrawerVisible(true)
+      } catch (error: any) {
+        message.error(error?.message ?? '获取任务执行日志失败')
+      } finally {
+        setLogLoading(false)
+      }
+    },
+    [message],
+  )
+
+  const openLogDrawer = useCallback(
+    (task: DataPullTask) => {
+      void loadTaskLogs(task, 1, logLimit)
+    },
+    [loadTaskLogs, logLimit],
+  )
+
+  // 加载已注册的 Job 信息
+  const loadRegisteredJobs = useCallback(async () => {
+    setJobsLoading(true)
+    try {
+      const jobs = await fetchRegisteredJobs()
+      setRegisteredJobs(jobs)
+    } catch (error: any) {
+      message.error(error?.message ?? '获取已注册 Job 信息失败')
+    } finally {
+      setJobsLoading(false)
+    }
+  }, [message])
+
+  // 获取当前选中的 Job 信息
+  const selectedJob = useMemo(() => {
+    if (!selectedJobKey) return null
+    return registeredJobs.find(job => job.key === selectedJobKey) ?? null
+  }, [selectedJobKey, registeredJobs])
+
   useEffect(() => {
     void loadTasks(1, 20)
+    void loadRegisteredJobs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const openCreateModal = useCallback(() => {
     setCurrentTask(null)
+    setSelectedJobKey(undefined)
     form.resetFields()
     form.setFieldsValue({
       enabled: true,
@@ -95,8 +172,11 @@ export default function DataPullTasksPage() {
 
   const openEditModal = useCallback((task: DataPullTask) => {
     setCurrentTask(task)
+    const { jobKey, suffix } = parseTaskKey(task.key)
+    setSelectedJobKey(jobKey)
     form.setFieldsValue({
-      key: task.key,
+      jobKey,
+      keySuffix: suffix,
       name: task.name,
       source: task.source ?? undefined,
       type: task.type ?? undefined,
@@ -121,6 +201,10 @@ export default function DataPullTasksPage() {
           return
         }
       }
+
+      // 组合完整的任务 key
+      const fullKey = buildTaskKey(values.jobKey, values.keySuffix)
+
       if (currentTask) {
         await updateDataPullTask(currentTask.id, {
           name: values.name,
@@ -135,7 +219,7 @@ export default function DataPullTasksPage() {
         message.success('任务已更新')
       } else {
         await createDataPullTask({
-          key: values.key,
+          key: fullKey,
           name: values.name,
           source: values.source,
           type: values.type,
@@ -150,9 +234,15 @@ export default function DataPullTasksPage() {
       setModalVisible(false)
       void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
     } catch (error: any) {
-      if (error?.message) {
-        message.error(error.message)
-      }
+      // 处理各种错误格式
+      const errorMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.data?.message ||
+        error?.message ||
+        '操作失败，请重试'
+      message.error(errorMsg)
+      console.error('创建/更新任务失败:', error)
     }
   }
 
@@ -227,11 +317,14 @@ export default function DataPullTasksPage() {
       {
         title: '操作',
         fixed: 'right',
-        width: 180,
+        width: 260,
         render: (_, record) => (
           <>
             <Button type="link" onClick={() => openEditModal(record)}>
               编辑
+            </Button>
+            <Button type="link" onClick={() => openLogDrawer(record)}>
+              查看日志
             </Button>
             <Button type="link" danger onClick={() => handleDelete(record)}>
               删除
@@ -240,7 +333,7 @@ export default function DataPullTasksPage() {
         ),
       },
     ],
-    [handleDelete, openEditModal, statusBadge],
+    [handleDelete, openEditModal, openLogDrawer, statusBadge],
   )
 
   return (
@@ -311,6 +404,69 @@ export default function DataPullTasksPage() {
         />
       </Card>
 
+      <Drawer
+        title={logTask ? `执行日志 - ${logTask.name}` : '执行日志'}
+        width={840}
+        open={logDrawerVisible}
+        onClose={() => setLogDrawerVisible(false)}
+        destroyOnClose
+      >
+        <Table<DataPullExecutionLog>
+          rowKey="id"
+          size="small"
+          loading={logLoading}
+          dataSource={logItems}
+          pagination={{
+            current: logPage,
+            pageSize: logLimit,
+            total: logTotal,
+            showSizeChanger: true,
+            onChange: (p, ps) => {
+              if (logTask) {
+                void loadTaskLogs(logTask, p, ps)
+              }
+            },
+          }}
+          columns={[
+            { title: 'ID', dataIndex: 'id', width: 80 },
+            {
+              title: '状态',
+              dataIndex: 'status',
+              width: 100,
+              render: (status: string) => {
+                if (status === 'SUCCESS') return <Badge status="success" text="成功" />
+                if (status === 'FAILED') return <Badge status="error" text="失败" />
+                if (status === 'SKIPPED') return <Tag>跳过</Tag>
+                return <Tag>{status}</Tag>
+              },
+            },
+            {
+              title: '开始时间',
+              dataIndex: 'startedAt',
+              width: 200,
+              render: (value: string) => new Date(value).toLocaleString(),
+            },
+            {
+              title: '结束时间',
+              dataIndex: 'finishedAt',
+              width: 200,
+              render: (value?: string | null) => (value ? new Date(value).toLocaleString() : '—'),
+            },
+            {
+              title: '拉取条数',
+              dataIndex: 'fetchedCount',
+              width: 100,
+            },
+            {
+              title: '错误信息',
+              dataIndex: 'errorMessage',
+              ellipsis: true,
+              render: (value?: string | null) => value || '—',
+            },
+          ]}
+        />
+      </Drawer>
+
       <Modal
         title={currentTask ? '编辑数据拉取任务' : '新建数据拉取任务'}
         open={modalVisible}
@@ -319,16 +475,83 @@ export default function DataPullTasksPage() {
         afterClose={() => {
           form.resetFields()
           setCurrentTask(null)
+          setSelectedJobKey(undefined)
         }}
       >
         <Form layout="vertical" form={form}>
           <Form.Item
-            label="任务 Key"
-            name="key"
-            rules={[{ required: true, message: '请输入任务 key' }]}
+            label={
+              <Space>
+                任务 Key
+                <Tooltip title="格式：Job类型:后缀（后缀可选）。例如 coinglass-aggregated-liquidation:BTC 表示拉取 BTC 的清算数据">
+                  <span style={{ color: '#999', cursor: 'help' }}>ⓘ</span>
+                </Tooltip>
+              </Space>
+            }
+            required
           >
-            <Input placeholder="example.kline_1m" disabled={!!currentTask} />
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item
+                name="jobKey"
+                noStyle
+                rules={[{ required: true, message: '请选择 Job 类型' }]}
+              >
+                <Select
+                  placeholder="选择 Job 类型"
+                  disabled={!!currentTask}
+                  loading={jobsLoading}
+                  showSearch
+                  optionFilterProp="label"
+                  style={{ width: '60%' }}
+                  options={registeredJobs.map(job => ({ value: job.key, label: job.name || job.key }))}
+                  notFoundContent={jobsLoading ? '加载中...' : '暂无可用的 Job'}
+                  onChange={(value: string) => {
+                    setSelectedJobKey(value)
+                    // 如果有 metaSchema.example，自动填充 meta
+                    const job = registeredJobs.find(j => j.key === value)
+                    if (job?.metaSchema?.example) {
+                      // 深拷贝一次，避免潜在的循环引用或共享引用导致 rc-field-form 报告
+                      const safeExample = JSON.parse(JSON.stringify(job.metaSchema.example))
+                      form.setFieldValue('meta', JSON.stringify(safeExample, null, 2))
+                    }
+                  }}
+                />
+              </Form.Item>
+              <Form.Item name="keySuffix" noStyle>
+                <Input
+                  prefix=":"
+                  placeholder="后缀（可选，如 BTC、ETH）"
+                  disabled={!!currentTask}
+                  style={{ width: '40%' }}
+                />
+              </Form.Item>
+            </Space.Compact>
           </Form.Item>
+
+          {/* 显示选中 Job 的 meta 格式说明 */}
+          {selectedJob?.metaSchema && (
+            <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6, fontSize: 13 }}>
+              <div style={{ fontWeight: 500, marginBottom: 8 }}>{selectedJob.metaSchema.description}</div>
+              <div style={{ marginBottom: 8 }}>
+                <strong>配置字段：</strong>
+                <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                  {selectedJob.metaSchema.fields.map(field => (
+                    <li key={field.name}>
+                      <code>{field.name}</code>
+                      {field.required && <Tag color="red" style={{ marginLeft: 4, fontSize: 10 }}>必填</Tag>}
+                      <span style={{ color: '#666' }}> - {field.description}</span>
+                      {field.options && (
+                        <span style={{ color: '#999' }}> 可选值: {field.options.join(', ')}</span>
+                      )}
+                      {field.defaultValue !== undefined && (
+                        <span style={{ color: '#999' }}> 默认: {String(field.defaultValue)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
           <Form.Item
             label="任务名称"
