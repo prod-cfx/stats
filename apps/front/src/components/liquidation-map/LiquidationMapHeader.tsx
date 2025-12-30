@@ -1,6 +1,6 @@
+import { ChevronDown, RefreshCcw } from 'lucide-react';
 import React from 'react';
-import { RefreshCcw, ChevronDown } from 'lucide-react';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 interface LiquidationMapHeaderProps {
   symbol: string;

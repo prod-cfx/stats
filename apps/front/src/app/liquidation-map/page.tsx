@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
-import { LiquidationMapHeader } from '@/components/liquidation-map/LiquidationMapHeader';
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart';
+import { LiquidationMapHeader } from '@/components/liquidation-map/LiquidationMapHeader';
 
 const generateMockData = (symbol: string, range: string) => {
   const labels = [];
@@ -25,7 +25,7 @@ const generateMockData = (symbol: string, range: string) => {
   const dex: number[] = [];
 
   labels.forEach((label) => {
-    const price = parseFloat(label);
+    const price = Number.parseFloat(label);
     const dist = Math.abs(price - currentPrice);
     
     // Smooth intensity based on distance from current price
@@ -48,10 +48,10 @@ const generateMockData = (symbol: string, range: string) => {
   });
 
   // Calculate Cumulative values starting FROM the center
-  const cumulativeLong = new Array(labels.length).fill(null);
-  const cumulativeShort = new Array(labels.length).fill(null);
+  const cumulativeLong = Array.from({length: labels.length}).fill(null);
+  const cumulativeShort = Array.from({length: labels.length}).fill(null);
   
-  const currentIdx = labels.findIndex(l => Math.abs(parseFloat(l) - currentPrice) < 150);
+  const currentIdx = labels.findIndex(l => Math.abs(Number.parseFloat(l) - currentPrice) < 150);
 
   // Cumulative Long: Sum from center towards LEFT (lower prices)
   // Start with 0 at the current price

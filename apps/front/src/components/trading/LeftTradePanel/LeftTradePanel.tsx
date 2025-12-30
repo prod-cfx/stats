@@ -102,7 +102,7 @@ export const LeftTradePanel = () => {
           min="0"
           max="100"
           value={percent}
-          onChange={(e) => setPercent(parseInt(e.target.value))}
+          onChange={(e) => setPercent(Number.parseInt(e.target.value))}
           className="w-full h-1 bg-[#30363d] rounded-lg appearance-none cursor-pointer accent-orange-400 mb-3"
         />
         <div className="flex justify-between text-[10px] text-[#8b949e]">

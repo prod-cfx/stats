@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
-import { LiquidationSummary } from '@/components/liquidation-data/LiquidationSummary';
-import { LiquidationInfoBar } from '@/components/liquidation-data/LiquidationInfoBar';
 import { ExchangeLiquidationTable } from '@/components/liquidation-data/ExchangeLiquidationTable';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { LiquidationInfoBar } from '@/components/liquidation-data/LiquidationInfoBar';
+import { LiquidationSummary } from '@/components/liquidation-data/LiquidationSummary';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 export default function LiquidationDataPage() {
   return (

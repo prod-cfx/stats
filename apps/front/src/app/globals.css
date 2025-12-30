@@ -63,6 +63,20 @@
   --text-label-weight: 500;
 }
 
+@layer utilities {
+  .gradient-border-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .gradient-border-hover:hover {
+    border-color: transparent;
+    background: linear-gradient(#161b22, #161b22) padding-box,
+                linear-gradient(to bottom right, var(--color-primary), var(--color-secondary)) border-box;
+    box-shadow: 0 10px 30px -10px rgba(57, 107, 255, 0.3);
+    transform: translateY(-2px);
+  }
+}
+
 body {
   margin: 0;
   padding: 0;

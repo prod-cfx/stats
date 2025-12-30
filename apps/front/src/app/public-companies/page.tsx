@@ -3,7 +3,7 @@
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { PublicCompaniesTable } from '@/components/public-companies/PublicCompaniesTable';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 export default function PublicCompaniesPage() {
   return (

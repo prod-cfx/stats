@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronDown, TrendingUp, TrendingDown, Clock, PieChart, Activity, DollarSign, ArrowUpRight } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import { SectionTitle, SubTitle, BodyText, CaptionText } from '@/components/ui/Typography';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronDown, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { SectionTitle } from '@/components/ui/Typography';
 
 interface WhaleTradingStatsModalProps {
   isOpen: boolean;

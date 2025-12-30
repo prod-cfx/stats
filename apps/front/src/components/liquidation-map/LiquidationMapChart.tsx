@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
+import React, { useEffect, useRef } from 'react';
 
 interface LiquidationMapChartProps {
   data: {
@@ -38,7 +38,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
     let currentPriceIndex = 0;
     let minDiff = Infinity;
     data.labels.forEach((label, index) => {
-      const priceVal = parseFloat(label);
+      const priceVal = Number.parseFloat(label);
       const diff = Math.abs(priceVal - currentPrice);
       if (diff < minDiff) {
         minDiff = diff;
@@ -199,7 +199,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
               show: true,
               position: 'end',
               distance: 10,
-              formatter: '{label|当前价格: }{value|' + currentPrice.toLocaleString() + '}',
+              formatter: `{label|当前价格: }{value|${  currentPrice.toLocaleString()  }}`,
               rich: {
                 label: {
                   color: '#e6edf3',

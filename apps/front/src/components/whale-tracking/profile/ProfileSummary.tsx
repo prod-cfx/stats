@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
-import { Info } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { Info } from 'lucide-react';
+import React from 'react';
 
 export const ProfileSummary = () => {
   return (

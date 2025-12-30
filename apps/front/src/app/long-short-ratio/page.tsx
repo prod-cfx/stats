@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { ChevronDown, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
-import { ChevronDown, Copy, ExternalLink, RefreshCw } from 'lucide-react';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 // --- Types ---
 interface ExchangeData {

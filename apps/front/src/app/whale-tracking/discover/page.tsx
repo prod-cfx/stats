@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { DiscoverGrid } from '@/components/whale-tracking/discover/DiscoverGrid';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 export default function DiscoverPage() {
   return (

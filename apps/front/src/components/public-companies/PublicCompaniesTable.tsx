@@ -1,7 +1,7 @@
 'use client';
 
+import { ArrowUpDown } from 'lucide-react';
 import React from 'react';
-import { ArrowUpDown, Info } from 'lucide-react';
 
 interface CompanyData {
   asset: string;
@@ -190,7 +190,7 @@ export const PublicCompaniesTable = () => {
                   </div>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  <span className={row.mNav !== '-' && parseFloat(row.mNav) < 1 ? 'text-red-400' : 'text-[#e6edf3]'}>
+                  <span className={row.mNav !== '-' && Number.parseFloat(row.mNav) < 1 ? 'text-red-400' : 'text-[#e6edf3]'}>
                     {row.mNav}
                   </span>
                 </td>

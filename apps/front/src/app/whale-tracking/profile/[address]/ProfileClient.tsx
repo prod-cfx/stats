@@ -2,11 +2,11 @@
 
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
+import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard';
+import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile';
+import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs';
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader';
 import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary';
-import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile';
-import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard';
-import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs';
 
 export function ProfileClient({ address }: { address: string }) {
   return (

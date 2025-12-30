@@ -1,7 +1,7 @@
 'use client';
 
+import { ArrowUpDown, Filter } from 'lucide-react';
 import React, { useState } from 'react';
-import { Filter, ArrowUpDown } from 'lucide-react';
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'history' | 'delegation';
 

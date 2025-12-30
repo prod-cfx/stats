@@ -3,7 +3,7 @@
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { PredictionMarketGrid } from '@/components/prediction-market/PredictionMarketGrid';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 export default function PredictionMarketPage() {
   return (

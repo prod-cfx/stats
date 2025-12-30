@@ -1,7 +1,7 @@
 'use client';
 
+import { Activity, BarChart2, Database, Info, Layers, Map, PieChart, TrendingUp, X } from 'lucide-react';
 import React from 'react';
-import { X, Map, BarChart2, Layers, Activity, Database, TrendingUp, PieChart, Info } from 'lucide-react';
 import { PageTitle } from '@/components/ui/Typography';
 
 interface AddWidgetModalProps {
@@ -20,6 +20,13 @@ const widgetItems = [
   { id: 'public-companies', label: '币股', icon: PieChart, color: '#06b6d4' },
   { id: 'prediction-market', label: '预测市场', icon: Info, color: '#6366f1' },
 ];
+
+const PlusIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+    <line x1="12" y1="5" x2="12" y2="19"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+  </svg>
+);
 
 export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProps) => {
   if (!isOpen) return null;
@@ -42,12 +49,9 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
               WHAT KIND OF INTEL DO YOU WANT TO SEE?
             </p>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-[#21262d] rounded-full text-[#8b949e] hover:text-white transition-all"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <button type="button" onClick={onClose} className="absolute top-4 right-4 p-2 text-[#8b949e] hover:text-white transition-colors">
+        <X className="w-6 h-6" />
+      </button>
         </div>
 
         {/* List */}
@@ -55,12 +59,13 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
           <div className="grid grid-cols-1 gap-3">
             {widgetItems.map((item) => (
               <button
+                type="button"
                 key={item.id}
                 onClick={() => {
                   onSelect(item.label);
                   onClose();
                 }}
-                className="flex items-center gap-4 p-4 rounded-xl bg-[#21262d] border border-transparent hover:border-[#3b82f6]/50 hover:bg-[#2a2f36] transition-all group text-left"
+                className="flex items-center gap-4 p-4 rounded-xl bg-[#21262d] border border-transparent gradient-border-hover transition-all group text-left"
               >
                 <div 
                   className="w-10 h-10 rounded-lg flex items-center justify-center transition-all group-hover:scale-110"
@@ -88,10 +93,4 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
   );
 };
 
-const PlusIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-    <line x1="12" y1="5" x2="12" y2="19"></line>
-    <line x1="5" y1="12" x2="19" y2="12"></line>
-  </svg>
-);
 

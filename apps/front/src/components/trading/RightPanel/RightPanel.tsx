@@ -133,7 +133,7 @@ export const RightPanel = () => {
         {/* Action Buttons */}
         <div className="px-3 pb-2 flex items-center gap-2">
           {['加预警', '加自选', '策略', '简况'].map((label, i) => (
-            <button key={i} className="flex-1 bg-[#21262d] border border-[#30363d] rounded py-1 text-[10px] text-[#c9d1d9] hover:bg-[#30363d] hover:border-[#8b949e] transition-all">
+            <button type="button" key={i} className="flex-1 bg-[#21262d] border border-[#30363d] rounded py-1 text-[10px] text-[#c9d1d9] hover:bg-[#30363d] hover:border-[#8b949e] transition-all">
               {label}
             </button>
           ))}

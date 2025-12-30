@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
-import { Layout, Bookmark, Plus, ChevronRight } from 'lucide-react';
+import { Bookmark, ChevronRight, Layout, Plus } from 'lucide-react';
 import Link from 'next/link';
+import React from 'react';
 
 export const DashboardSidebar = () => {
   return (
@@ -10,7 +10,7 @@ export const DashboardSidebar = () => {
       <div className="space-y-8">
         {/* My Dashboards Section */}
         <div className="space-y-4">
-          <button className="w-full flex items-center justify-between group">
+          <button type="button" className="w-full flex items-center justify-between group">
             <div className="flex items-center gap-3">
               <Layout className="w-4 h-4 text-[#c9d1d9]" />
               <span className="text-[#c9d1d9] text-body font-semibold">我的看板</span>
@@ -30,7 +30,7 @@ export const DashboardSidebar = () => {
         </div>
 
         {/* Saved Dashboards Section */}
-        <button className="w-full flex items-center justify-between group">
+        <button type="button" className="w-full flex items-center justify-between group">
           <div className="flex items-center gap-3">
             <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
             <span className="text-[#c9d1d9] text-body font-semibold">已保存的看板</span>
@@ -39,7 +39,7 @@ export const DashboardSidebar = () => {
         </button>
 
         {/* Create Button moved here */}
-        <Link href="/dashboard/editor" className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+        <Link href="/dashboard/editor" className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/20">
           <Plus className="w-4 h-4" />
           <span className="text-label">CREATE DASHBOARD</span>
         </Link>

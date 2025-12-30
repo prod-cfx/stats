@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
 import { Search } from 'lucide-react';
+import React from 'react';
+import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 import { DashboardCard } from './DashboardCard';
 import { DashboardListItem } from './DashboardListItem';
-import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 
 export const ExploreDashboards = () => {
   return (

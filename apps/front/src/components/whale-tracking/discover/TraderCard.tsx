@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
-import { Copy, ExternalLink, TrendingUp } from 'lucide-react';
+import { Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import React from 'react';
 
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
@@ -41,7 +41,7 @@ export const TraderCard = ({
 
   if (variant === 'recommended') {
     return (
-      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/50 transition-all group">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
@@ -55,7 +55,7 @@ export const TraderCard = ({
                 >
                   {address}
                 </Link>
-                <button className="text-[#8b949e] hover:text-white transition-colors">
+                <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
@@ -63,6 +63,7 @@ export const TraderCard = ({
             </div>
           </div>
           <button 
+            type="button"
             className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all"
             onClick={(e) => {
               e.stopPropagation();
@@ -99,7 +100,7 @@ export const TraderCard = ({
 
   // Detail variant
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 hover:border-[#3b82f6]/30 transition-all group">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group">
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2">
           <Link 
@@ -108,12 +109,13 @@ export const TraderCard = ({
           >
             {address}
           </Link>
-          <button className="text-[#8b949e] hover:text-white transition-colors">
+          <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
             <Copy className="w-4.5 h-4.5" />
           </button>
           {handle && <span className="text-[#8b949e] text-body font-medium ml-2">{handle}</span>}
         </div>
         <button 
+          type="button"
           className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all"
           onClick={(e) => {
             e.stopPropagation();

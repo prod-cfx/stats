@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import { ChevronDown, Info } from 'lucide-react';
+import React from 'react';
 
 export const TopBar = () => {
   return (

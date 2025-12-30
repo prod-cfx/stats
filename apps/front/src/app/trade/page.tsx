@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import { TopBar } from '@/components/trading/TopBar/TopBar';
-import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
 import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
+import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
+import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
+import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
+import { TopBar } from '@/components/trading/TopBar/TopBar';
 
 export default function TradingPage() {
   return (
@@ -13,23 +13,29 @@ export default function TradingPage() {
       {/* Top Bar fixed at the top */}
       <TopBar />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel */}
-        <LeftTradePanel />
-
-        {/* Center Content (Chart + Bottom Area) */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 flex min-h-0">
-            {/* Main Chart Section */}
-            <CenterChartPanel />
+      <div className="flex-1 flex overflow-hidden p-8">
+        <div className="w-full max-w-[1440px] mx-auto flex overflow-hidden gap-4">
+          {/* Left Panel - Fixed Width */}
+          <div className="w-[280px] flex-none flex flex-col min-h-0">
+            <LeftTradePanel />
           </div>
 
-          {/* Bottom Tabs Section */}
-          <BottomPanel />
-        </div>
+          {/* Center Content (Chart + Bottom Area) */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex min-h-0">
+              {/* Main Chart Section */}
+              <CenterChartPanel />
+            </div>
 
-        {/* Right Panel */}
-        <RightPanel />
+            {/* Bottom Tabs Section */}
+            <BottomPanel />
+          </div>
+
+          {/* Right Panel - Fixed Width */}
+          <div className="w-[320px] flex-none flex flex-col min-h-0">
+            <RightPanel />
+          </div>
+        </div>
       </div>
     </div>
   );

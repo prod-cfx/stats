@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
 import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
+import React, { useEffect, useState } from 'react';
 import { PageTitle } from '@/components/ui/Typography';
+import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhaleTransaction {
   address: string;

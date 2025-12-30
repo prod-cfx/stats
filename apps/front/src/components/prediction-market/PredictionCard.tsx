@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import { Info, MoreHorizontal } from 'lucide-react';
+import React from 'react';
 import { SubTitle } from '@/components/ui/Typography';
 
 export interface PredictionOption {
@@ -29,7 +29,7 @@ export const PredictionCard = ({
   volume 
 }: PredictionCardProps) => {
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col h-full relative group hover:border-[#8b949e] transition-colors">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col h-full relative group gradient-border-hover">
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-3 items-start">
           {icon && (

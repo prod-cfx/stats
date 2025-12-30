@@ -1,7 +1,7 @@
 'use client';
 
+import { ArrowUpDown, Search } from 'lucide-react';
 import React, { useState } from 'react';
-import { Search, ArrowUpDown } from 'lucide-react';
 import { SectionTitle } from '@/components/ui/Typography';
 
 interface OIData {
@@ -181,15 +181,22 @@ export const AggregatedOI = () => {
           <div className="flex items-center overflow-x-auto no-scrollbar">
             {symbols.map(s => (
               <button
+                type="button"
                 key={s}
                 onClick={() => setActiveTabSymbol(s)}
-                className={`px-4 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+                className={`px-4 py-3 text-sm font-semibold transition-all relative whitespace-nowrap ${
                   activeSymbol === s 
-                    ? 'text-blue-500 border-blue-500 bg-blue-500/5' 
+                    ? 'text-white' 
                     : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
                 }`}
               >
                 {s}
+                {activeSymbol === s && (
+                  <>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+                  </>
+                )}
               </button>
             ))}
           </div>
@@ -199,7 +206,7 @@ export const AggregatedOI = () => {
               <input 
                 type="text" 
                 placeholder="搜索" 
-                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-3 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-blue-500 transition-all w-48"
+                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-3 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48"
               />
             </div>
           </div>

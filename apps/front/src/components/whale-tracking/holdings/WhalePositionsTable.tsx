@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Copy, ChevronDown, TrendingUp } from 'lucide-react';
+import { ChevronDown, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import React, { useState } from 'react';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 interface WhalePosition {
   address: string;
@@ -245,7 +245,7 @@ export const WhalePositionsTable = () => {
                     {pos.liqPrice}
                   </td>
                   <td className="px-6 py-4 text-white">
-                    <span className={pos.winRate !== '--' && parseInt(pos.winRate) > 70 ? 'text-[#4ade80]' : ''}>
+                    <span className={pos.winRate !== '--' && Number.parseInt(pos.winRate) > 70 ? 'text-[#4ade80]' : ''}>
                       {pos.winRate}
                     </span>
                   </td>

@@ -1,7 +1,7 @@
 'use client';
 
+import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, CandlestickSeries, ColorType, CrosshairMode, LineSeries, HistogramSeries } from 'lightweight-charts';
 
 export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: string, interval: string }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);

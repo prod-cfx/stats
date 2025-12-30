@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Navbar } from '@/components/layout/Navbar';
-import { Settings, Info, ChevronDown, LayoutGrid, LayoutList, List } from 'lucide-react';
-import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable';
-import { DepthChart } from '@/components/aggregated-orderbook/DepthChart';
+import { ChevronDown, Info, LayoutGrid, LayoutList, List, Settings } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AggregatedOI } from '@/components/aggregated-orderbook/AggregatedOI';
 import { AggregatedVolume } from '@/components/aggregated-orderbook/AggregatedVolume';
-import { PageTitle, SectionTitle, BodyText } from '@/components/ui/Typography';
+import { DepthChart } from '@/components/aggregated-orderbook/DepthChart';
+import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable';
+import { Navbar } from '@/components/layout/Navbar';
+import { BodyText, PageTitle, SectionTitle } from '@/components/ui/Typography';
 
 // Exchange logos (CDN resources used in previous pages)
 const EXCHANGE_LOGOS = [
@@ -22,7 +22,7 @@ export default function AggregatedOrderBookPage() {
   const [activeTab, setActiveTab] = useState('aggregated-orderbook');
   const [marketType, setMarketType] = useState('futures'); // 'futures' | 'spot'
   const [symbol, setSymbol] = useState('BTC');
-  const [rowCount, setRowCount] = useState(20);
+  const [rowCount] = useState(20);
   const [displayMode, setDisplayMode] = useState('both'); // 'both' | 'asks' | 'bids'
   const [isMounted, setIsMounted] = useState(false);
 
@@ -84,7 +84,7 @@ export default function AggregatedOrderBookPage() {
 
     const interval = setInterval(() => {
       setOrderbook(prev => {
-        const midPrice = parseFloat(prev.currentPrice.price) + (Math.random() - 0.5) * 2;
+        const midPrice = Number.parseFloat(prev.currentPrice.price) + (Math.random() - 0.5) * 2;
         return {
           ...prev,
           currentPrice: {
@@ -94,12 +94,12 @@ export default function AggregatedOrderBookPage() {
           },
           asks: prev.asks.map(a => ({
             ...a,
-            amount: (parseFloat(a.amount) + (Math.random() - 0.5) * 0.5).toFixed(4),
+            amount: (Number.parseFloat(a.amount) + (Math.random() - 0.5) * 0.5).toFixed(4),
             depthPercent: Math.min(100, Math.max(10, a.depthPercent + (Math.random() - 0.5) * 5))
           })),
           bids: prev.bids.map(b => ({
             ...b,
-            amount: (parseFloat(b.amount) + (Math.random() - 0.5) * 0.5).toFixed(4),
+            amount: (Number.parseFloat(b.amount) + (Math.random() - 0.5) * 0.5).toFixed(4),
             depthPercent: Math.min(100, Math.max(10, b.depthPercent + (Math.random() - 0.5) * 5))
           }))
         };
@@ -113,11 +113,11 @@ export default function AggregatedOrderBookPage() {
     // Generate cumulative data for depth chart
     let bidTotal = 0;
     const bidPoints = orderbook.bids.map(b => {
-      bidTotal += parseFloat(b.amount);
-      const amount = parseFloat(b.amount);
+      bidTotal += Number.parseFloat(b.amount);
+      const amount = Number.parseFloat(b.amount);
       return { 
-        price: parseFloat(b.price), 
-        amount: amount, 
+        price: Number.parseFloat(b.price), 
+        amount, 
         total: bidTotal,
         exchangeBreakdown: [
           { name: 'Bybit', amount: amount * 0.15, color: '#22c55e' },
@@ -130,11 +130,11 @@ export default function AggregatedOrderBookPage() {
 
     let askTotal = 0;
     const askPoints = orderbook.asks.map(a => {
-      askTotal += parseFloat(a.amount);
-      const amount = parseFloat(a.amount);
+      askTotal += Number.parseFloat(a.amount);
+      const amount = Number.parseFloat(a.amount);
       return { 
-        price: parseFloat(a.price), 
-        amount: amount, 
+        price: Number.parseFloat(a.price), 
+        amount, 
         total: askTotal,
         exchangeBreakdown: [
           { name: 'Bybit', amount: amount * 0.15, color: '#ef4444' },
@@ -159,23 +159,29 @@ export default function AggregatedOrderBookPage() {
             <BodyText>全网深度及订单流聚合分析</BodyText>
           </div>
           
-          {/* Top Tabs */}
           <div className="flex border-b border-[#30363d] w-fit">
             {[
               { id: 'aggregated-orderbook', name: '聚合挂单' },
               { id: 'aggregated-oi', name: '聚合持仓量' },
-              { id: 'aggregated-volume', name: '聚合成交量' }
+              { id: 'aggregated-volume', name: '聚成成交量' }
             ].map(tab => (
               <button
+                type="button"
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-8 py-3 text-sm font-semibold transition-all border-b-2 ${
+                className={`px-8 py-3 text-sm font-semibold transition-all relative ${
                   activeTab === tab.id 
-                    ? 'text-white border-blue-500 bg-blue-500/5' 
+                    ? 'text-white' 
                     : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
                 }`}
               >
                 {tab.name}
+                {activeTab === tab.id && (
+                  <>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+                  </>
+                )}
               </button>
             ))}
           </div>
@@ -190,17 +196,19 @@ export default function AggregatedOrderBookPage() {
                   {/* Market Type Switch */}
                   <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
                     <button 
+                      type="button"
                       onClick={() => setMarketType('futures')}
                       className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        marketType === 'futures' ? 'bg-blue-600 text-white shadow-lg' : 'text-[#8b949e] hover:text-[#e6edf3]'
+                        marketType === 'futures' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#e6edf3]'
                       }`}
                     >
                       合约
                     </button>
                     <button 
+                      type="button"
                       onClick={() => setMarketType('spot')}
                       className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        marketType === 'spot' ? 'bg-blue-600 text-white shadow-lg' : 'text-[#8b949e] hover:text-[#e6edf3]'
+                        marketType === 'spot' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#e6edf3]'
                       }`}
                     >
                       现货
@@ -210,17 +218,19 @@ export default function AggregatedOrderBookPage() {
                   {/* Symbol Switch */}
                   <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
                     <button 
+                      type="button"
                       onClick={() => setSymbol('BTC')}
                       className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        symbol === 'BTC' ? 'bg-[#30363d] text-white' : 'text-[#8b949e] hover:text-[#e6edf3]'
+                        symbol === 'BTC' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md' : 'text-[#8b949e] hover:text-[#e6edf3]'
                       }`}
                     >
                       BTC
                     </button>
                     <button 
+                      type="button"
                       onClick={() => setSymbol('ETH')}
                       className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        symbol === 'ETH' ? 'bg-[#30363d] text-white' : 'text-[#8b949e] hover:text-[#e6edf3]'
+                        symbol === 'ETH' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md' : 'text-[#8b949e] hover:text-[#e6edf3]'
                       }`}
                     >
                       ETH
@@ -246,22 +256,28 @@ export default function AggregatedOrderBookPage() {
                       {/* Display Mode */}
                       <div className="flex bg-[#0d1117] border border-[#30363d] rounded-md overflow-hidden">
                         <button 
+                          type="button"
                           onClick={() => setDisplayMode('both')}
-                          className={`p-2 transition-colors ${displayMode === 'both' ? 'bg-[#30363d] text-blue-400' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
+                          className={`p-2 transition-colors relative ${displayMode === 'both' ? 'text-white' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
                         >
-                          <LayoutGrid className="w-4 h-4" />
+                          {displayMode === 'both' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary opacity-90" />}
+                          <LayoutGrid className="w-4 h-4 relative z-10" />
                         </button>
                         <button 
+                          type="button"
                           onClick={() => setDisplayMode('asks')}
-                          className={`p-2 transition-colors ${displayMode === 'asks' ? 'bg-[#30363d] text-red-400' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
+                          className={`p-2 transition-colors relative ${displayMode === 'asks' ? 'text-white' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
                         >
-                          <LayoutList className="w-4 h-4" />
+                          {displayMode === 'asks' && <div className="absolute inset-0 bg-red-500 opacity-90" />}
+                          <LayoutList className="w-4 h-4 relative z-10" />
                         </button>
                         <button 
+                          type="button"
                           onClick={() => setDisplayMode('bids')}
-                          className={`p-2 transition-colors ${displayMode === 'bids' ? 'bg-[#30363d] text-green-400' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
+                          className={`p-2 transition-colors relative ${displayMode === 'bids' ? 'text-white' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
                         >
-                          <List className="w-4 h-4" />
+                          {displayMode === 'bids' && <div className="absolute inset-0 bg-green-500 opacity-90" />}
+                          <List className="w-4 h-4 relative z-10" />
                         </button>
                       </div>
 

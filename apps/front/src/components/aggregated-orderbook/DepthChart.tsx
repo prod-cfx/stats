@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import React, { useMemo } from 'react';
 
 interface DepthDataPoint {
   price: number;
@@ -70,7 +70,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
             { name: 'Bitget', amount: dataPoint.amount * 0.1, color: isBid ? '#22c55e' : '#ef4444' },
           ];
 
-          let breakdownHtml = breakdown.map(ex => `
+          const breakdownHtml = breakdown.map(ex => `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 40px;">
               <div style="display: flex; align-items: center; gap: 8px;">
                 <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${ex.color};"></div>

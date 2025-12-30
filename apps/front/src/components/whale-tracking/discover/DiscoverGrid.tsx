@@ -1,9 +1,9 @@
 'use client';
 
+import type { TraderCardProps } from './TraderCard';
 import React, { useState } from 'react';
-import { TraderCard, TraderCardProps } from './TraderCard';
-import { ChevronDown } from 'lucide-react';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
+import { TraderCard } from './TraderCard';
 
 export const DiscoverGrid = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);

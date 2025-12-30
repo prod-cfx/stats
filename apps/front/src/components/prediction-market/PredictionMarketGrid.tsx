@@ -1,8 +1,9 @@
 'use client';
 
+import type { PredictionCardProps } from './PredictionCard';
+import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield, Zap } from 'lucide-react';
 import React from 'react';
-import { PredictionCard, PredictionCardProps } from './PredictionCard';
-import { Bitcoin, Coins, Rocket, Shield, Globe, Landmark, Zap } from 'lucide-react';
+import { PredictionCard } from './PredictionCard';
 
 export const PredictionMarketGrid = () => {
   const predictions: PredictionCardProps[] = [
@@ -19,7 +20,7 @@ export const PredictionMarketGrid = () => {
     {
       title: 'Lighter market cap (FDV) one day after launch?',
       icon: <Rocket className="w-5 h-5 text-white" />,
-      iconBgColor: 'bg-blue-600',
+      iconBgColor: 'bg-primary',
       options: [
         { label: '>$1B', probability: '86%' },
         { label: '>$2B', probability: '84%' },
@@ -29,7 +30,7 @@ export const PredictionMarketGrid = () => {
     {
       title: 'What price will Ethereum hit in 2025?',
       icon: <Coins className="w-5 h-5 text-white" />,
-      iconBgColor: 'bg-blue-400',
+      iconBgColor: 'bg-secondary',
       options: [
         { label: '$17,000', probability: '16%' },
         { label: '$14,000', probability: '86%' },
@@ -66,7 +67,7 @@ export const PredictionMarketGrid = () => {
     {
       title: 'MicroStrategy sells any Bitcoin by __?',
       icon: <Landmark className="w-5 h-5 text-white" />,
-      iconBgColor: 'bg-blue-700',
+      iconBgColor: 'bg-primary',
       options: [
         { label: 'December 31, 2025', probability: '86%' },
         { label: 'December 30, 2025', probability: '86%' },
@@ -76,7 +77,7 @@ export const PredictionMarketGrid = () => {
     {
       title: 'What price will Ethereum hit in 2026?',
       icon: <Coins className="w-5 h-5 text-white" />,
-      iconBgColor: 'bg-blue-400',
+      iconBgColor: 'bg-secondary',
       options: [
         { label: '$100,000', probability: '86%' },
         { label: '$80,000', probability: '86%' },
