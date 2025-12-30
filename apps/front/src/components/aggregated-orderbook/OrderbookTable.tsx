@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 
 interface OrderItem {
   price: string;
@@ -45,9 +46,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({ asks, bids, curr
             <div className="relative w-full flex items-center z-10">
               <div className="w-1/4 flex items-center gap-1">
                 {ask.exchanges.map((ex, idx) => (
-                  <div key={idx} className="w-4 h-4 rounded-full overflow-hidden border border-[#30363d] bg-[#161b22]">
-                    <img src={ex} alt="ex" className="w-full h-full object-cover" />
-                  </div>
+                  <ExchangeLogo key={idx} logoUrl={ex} size={16} />
                 ))}
               </div>
               <span className="w-1/4 text-right text-red-400">{ask.price}</span>
@@ -86,9 +85,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({ asks, bids, curr
             <div className="relative w-full flex items-center z-10">
               <div className="w-1/4 flex items-center gap-1">
                 {bid.exchanges.map((ex, idx) => (
-                  <div key={idx} className="w-4 h-4 rounded-full overflow-hidden border border-[#30363d] bg-[#161b22]">
-                    <img src={ex} alt="ex" className="w-full h-full object-cover" />
-                  </div>
+                  <ExchangeLogo key={idx} logoUrl={ex} size={16} />
                 ))}
               </div>
               <span className="w-1/4 text-right text-green-400">{bid.price}</span>

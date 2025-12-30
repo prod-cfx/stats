@@ -2,6 +2,7 @@
 
 import { ChevronDown } from 'lucide-react';
 import React, { useState } from 'react';
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 import { SectionTitle } from '@/components/ui/Typography';
 
 interface ExchangeData {
@@ -121,8 +122,8 @@ const mockExchangeData: ExchangeData[] = [
 ];
 
 export const ExchangeLiquidationTable = () => {
-  const [exchangeFilter, setExchangeFilter] = useState('全部');
-  const [timeFilter, setTimeFilter] = useState('4小时');
+  const [exchangeFilter] = useState('全部');
+  const [timeFilter] = useState('4小时');
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,13 +131,19 @@ export const ExchangeLiquidationTable = () => {
         <SectionTitle>交易所爆仓</SectionTitle>
         <div className="flex gap-3">
           <div className="relative group">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors">
+            <button 
+              type="button"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors"
+            >
               交易所 ({exchangeFilter})
               <ChevronDown className="w-4 h-4 text-[#8b949e]" />
             </button>
           </div>
           <div className="relative group">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors">
+            <button 
+              type="button"
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors"
+            >
               时间 ({timeFilter})
               <ChevronDown className="w-4 h-4 text-[#8b949e]" />
             </button>
@@ -167,8 +174,8 @@ export const ExchangeLiquidationTable = () => {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
-                      {row.logo && (
-                        <img src={row.logo} alt={row.exchange} className="w-5 h-5 rounded-full" />
+                      {row.exchange !== '全部' && (
+                        <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={20} />
                       )}
                       <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
                         {row.exchange}

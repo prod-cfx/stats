@@ -35,10 +35,14 @@ const FilterButton = ({ value, options, onChange }: {
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between px-3 py-2 bg-[#21262d] border ${isOpen ? 'border-primary' : 'border-[#30363d]'} rounded-md text-[#e6edf3] text-sm min-w-[100px] hover:bg-[#30363d] transition-all`}
+        className={`flex items-center justify-between px-3 py-2 bg-[#21262d] border rounded-md text-[#e6edf3] text-sm min-w-[100px] transition-all active:scale-95 ${
+          isOpen 
+            ? 'border-transparent bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/20' 
+            : 'border-[#30363d] hover:border-[#8b949e]'
+        }`}
       >
-        <span className="mr-2">{value}</span>
-        <ChevronDown className={`w-4 h-4 text-[#8b949e] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <span className={`mr-2 ${isOpen ? 'text-white font-bold' : ''}`}>{value}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[#8b949e]'}`} />
       </button>
       
       {isOpen && (
@@ -51,10 +55,10 @@ const FilterButton = ({ value, options, onChange }: {
                 onChange(opt);
                 setIsOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+              className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
                 value === opt 
-                  ? 'bg-primary/10 text-primary font-bold' 
-                  : 'text-[#e6edf3] hover:bg-[#21262d]'
+                  ? 'bg-gradient-to-r from-primary to-secondary text-white font-bold' 
+                  : 'text-[#e6edf3] hover:bg-primary/10 hover:text-primary'
               }`}
             >
               {opt}
@@ -113,10 +117,15 @@ export const LiquidationMapHeader = ({
           />
           <button 
             type="button"
-            onClick={onRefresh}
-            className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] transition-colors active:bg-[#3d444d]"
+            onClick={(e) => {
+              const btn = e.currentTarget.querySelector('svg');
+              btn?.classList.add('animate-spin');
+              setTimeout(() => btn?.classList.remove('animate-spin'), 500);
+              onRefresh();
+            }}
+            className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] hover:border-[#8b949e] transition-all active:scale-95 group shadow-sm"
           >
-            <RefreshCcw className="w-5 h-5" />
+            <RefreshCcw className="w-5 h-5 transition-transform" />
           </button>
         </div>
       </div>

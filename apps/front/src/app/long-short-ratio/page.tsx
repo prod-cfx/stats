@@ -1,15 +1,16 @@
 'use client';
 
 import { ChevronDown, RefreshCw } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 // --- Types ---
 interface ExchangeData {
   rank: number;
   name: string;
-  logo?: string;
+  logoUrl?: string;
   longPercent: number;
   shortPercent: number;
   longAmount: string;
@@ -17,6 +18,68 @@ interface ExchangeData {
 }
 
 // --- Components ---
+
+const FilterButton = ({ value, options, onChange, minWidth = "100px" }: { 
+  value: string, 
+  options: string[], 
+  onChange: (v: string) => void,
+  minWidth?: string
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button 
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-between px-3 py-1.5 bg-[#21262d] border rounded-md text-[#e6edf3] text-sm transition-all active:scale-95 ${
+          isOpen 
+            ? 'border-transparent bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/20' 
+            : 'border-[#30363d] hover:border-[#8b949e]'
+        }`}
+        style={{ minWidth }}
+      >
+        <span className={`mr-2 ${isOpen ? 'text-white font-bold' : ''}`}>{value}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[#8b949e]'}`} />
+      </button>
+      
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="max-h-60 overflow-y-auto no-scrollbar">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => {
+                  onChange(opt);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
+                  value === opt 
+                    ? 'bg-gradient-to-r from-primary to-secondary text-white font-bold' 
+                    : 'text-[#e6edf3] hover:bg-primary/10 hover:text-primary'
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ProgressBar = ({ long, short, height = "h-8", showText = true }: { long: number, short: number, height?: string, showText?: boolean }) => {
   return (
@@ -80,9 +143,7 @@ const ExchangeRow = ({ data }: { data: ExchangeData }) => {
         {/* Rank & Name */}
         <div className="flex items-center gap-4 min-w-[180px]">
           <span className="text-[#8b949e] font-semibold w-6 text-center">{data.rank}</span>
-          <div className="w-7 h-7 rounded bg-[#21262d] border border-[#30363d] flex items-center justify-center overflow-hidden">
-            {data.logo ? <img src={data.logo} alt={data.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-blue-500/20" />}
-          </div>
+          <ExchangeLogo name={data.name} logoUrl={data.logoUrl} size={28} />
           <span className="text-white font-medium text-sm">{data.name}</span>
         </div>
 
@@ -115,18 +176,20 @@ export default function LongShortRatioPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   const exchanges: ExchangeData[] = [
-    { rank: 1, name: 'Binance', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png', longPercent: 52.44, shortPercent: 47.56, longAmount: '$11.70亿', shortAmount: '$10.61亿' },
-    { rank: 2, name: 'OKX', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/294.png', longPercent: 54.73, shortPercent: 45.27, longAmount: '$5.74亿', shortAmount: '$4.75亿' },
-    { rank: 3, name: 'Bybit', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/521.png', longPercent: 51.71, shortPercent: 48.29, longAmount: '$4.93亿', shortAmount: '$4.61亿' },
-    { rank: 4, name: 'KuCoin', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png', longPercent: 47.16, shortPercent: 52.84, longAmount: '$2086.67万', shortAmount: '$2338.41万' },
-    { rank: 5, name: 'Gate', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png', longPercent: 47.39, shortPercent: 52.61, longAmount: '$4.92亿', shortAmount: '$5.46亿' },
-    { rank: 6, name: 'Bitget', logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/513.png', longPercent: 48.96, shortPercent: 51.04, longAmount: '$3.00亿', shortAmount: '$3.13亿' },
+    { rank: 1, name: 'Binance', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png', longPercent: 52.44, shortPercent: 47.56, longAmount: '$11.70亿', shortAmount: '$10.61亿' },
+    { rank: 2, name: 'OKX', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/294.png', longPercent: 54.73, shortPercent: 45.27, longAmount: '$5.74亿', shortAmount: '$4.75亿' },
+    { rank: 3, name: 'Bybit', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/521.png', longPercent: 51.71, shortPercent: 48.29, longAmount: '$4.93亿', shortAmount: '$4.61亿' },
+    { rank: 4, name: 'KuCoin', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png', longPercent: 47.16, shortPercent: 52.84, longAmount: '$2086.67万', shortAmount: '$2338.41万' },
+    { rank: 5, name: 'Gate', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png', longPercent: 47.39, shortPercent: 52.61, longAmount: '$4.92亿', shortAmount: '$5.46亿' },
+    { rank: 6, name: 'Bitget', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/513.png', longPercent: 48.96, shortPercent: 51.04, longAmount: '$3.00亿', shortAmount: '$3.13亿' },
     { rank: 7, name: 'DEX', longPercent: 55.21, shortPercent: 44.79, longAmount: '$2.85亿', shortAmount: '$2.31亿' },
   ];
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  if (!isMounted) return null;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
@@ -142,16 +205,33 @@ export default function LongShortRatioPage() {
             </div>
             
             <div className="flex items-center gap-3">
-              <div className="flex bg-[#161b22] border border-[#30363d] rounded-md p-1 gap-1">
-                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#30363d] rounded text-sm font-medium text-[#c9d1d9]">
-                  {symbol} <ChevronDown className="w-4 h-4" />
-                </button>
-                <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#30363d] rounded text-sm font-medium text-[#8b949e] transition-colors">
-                  {timeRange} <ChevronDown className="w-4 h-4" />
-                </button>
+              <div className="flex gap-1">
+                <FilterButton 
+                  value={symbol} 
+                  options={['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'DOGE', 'BNB']} 
+                  onChange={setSymbol} 
+                  minWidth="80px"
+                />
+                <FilterButton 
+                  value={timeRange} 
+                  options={['5分钟', '15分钟', '30分钟', '1小时', '4小时', '12小时', '24小时']} 
+                  onChange={setTimeRange} 
+                  minWidth="100px"
+                />
               </div>
-              <button className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-colors">
-                <RefreshCw className="w-4 h-4" />
+              <button 
+                type="button"
+                className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-all hover:bg-[#30363d] active:scale-95 group"
+                onClick={() => {
+                  const btn = document.querySelector('.refresh-icon');
+                  btn?.classList.add('animate-spin');
+                  setTimeout(() => {
+                    btn?.classList.remove('animate-spin');
+                    window.location.reload();
+                  }, 500);
+                }}
+              >
+                <RefreshCw className="w-4 h-4 refresh-icon" />
               </button>
             </div>
           </div>
@@ -168,9 +248,9 @@ export default function LongShortRatioPage() {
             />
 
             {/* Table Area */}
-            <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden">
+            <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-lg">
               {/* Table Header Labels */}
-              <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d]">
+              <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d] bg-[#0d1117]/50">
                 <span className="w-[180px] pl-10">交易所</span>
                 <span className="flex-1 text-center">持仓占比 (多 vs 空)</span>
                 <div className="flex w-[300px]">
@@ -182,7 +262,7 @@ export default function LongShortRatioPage() {
               {/* Exchange List */}
               <div className="flex flex-col divide-y divide-[#30363d]">
                 {exchanges.map((ex) => (
-                  <div key={ex.name} className="px-6 py-4 hover:bg-[#1f2937] transition-colors">
+                  <div key={ex.name} className="px-6 py-4 hover:bg-[#21262d] transition-colors">
                     <ExchangeRow data={ex} />
                   </div>
                 ))}

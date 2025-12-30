@@ -111,11 +111,27 @@ export const Navbar = () => {
 
       <div className="flex items-center gap-4">
         <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] group-focus-within:text-primary transition-colors" />
+          <svg width="0" height="0" className="absolute">
+            <defs>
+              <linearGradient id="search_icon_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="var(--color-primary)" />
+                <stop offset="100%" stopColor="var(--color-secondary)" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <Search 
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] group-focus-within:text-primary transition-colors z-10" 
+            style={{ 
+              stroke: 'url(#search_icon_gradient)'
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-md opacity-0 group-focus-within:opacity-100 transition-opacity p-[1.5px]">
+            <div className="w-full h-full bg-[#0d1117] rounded-[5px]" />
+          </div>
           <input 
             type="text" 
             placeholder="搜索" 
-            className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all w-64"
+            className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] focus:outline-none focus:bg-[#0d1117] transition-all w-64 relative z-0 group-focus-within:border-transparent"
           />
         </div>
         <button type="button" className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors">登录</button>
