@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 
 interface OrderItem {
@@ -20,80 +20,153 @@ interface OrderbookTableProps {
     change: string;
     changePercent: string;
   };
+  displayMode?: 'both' | 'bids' | 'asks';
 }
 
-export const OrderbookTable: React.FC<OrderbookTableProps> = ({ asks, bids, currentPrice }) => {
+const OrderRow = ({
+  item,
+  type,
+  selected,
+  onSelect,
+}: {
+  item: OrderItem;
+  type: 'ask' | 'bid';
+  selected: boolean;
+  onSelect: () => void;
+}) => {
+  const [isFlash, setIsFlash] = useState(false);
+
+  // Lightweight "tick" effect when data changes (kept subtle, CoinGlass-like)
+  React.useEffect(() => {
+    setIsFlash(true);
+    const timer = setTimeout(() => setIsFlash(false), 180);
+    return () => clearTimeout(timer);
+  }, [item.price, item.amount]);
+
+  const isAsk = type === 'ask';
+  const barColor = isAsk ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)'; // red-500 / green-500 low opacity
+  const rowTint = 'transparent';
+  const hoverTint = isAsk ? 'rgba(239, 68, 68, 0.08)' : 'rgba(34, 197, 94, 0.08)';
+
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] font-mono text-sm overflow-hidden">
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`
+        relative group flex items-center px-3 py-[5px] transition-colors cursor-pointer text-left w-full
+      `}
+      style={{
+        background: selected ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)') : rowTint,
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background = hoverTint;
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background = selected
+          ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)')
+          : rowTint;
+      }}
+    >
+      {/* selected indicator */}
+      {selected && (
+        <div className={`absolute left-0 top-0 bottom-0 w-[2px] ${isAsk ? 'bg-red-500' : 'bg-green-500'}`} />
+      )}
+
+      {/* Depth background bar (CoinGlass-style) */}
+      <div
+        className="absolute right-0 top-0 bottom-0 transition-[width] duration-300 ease-out"
+        style={{ width: `${Math.min(100, Math.max(0, item.depthPercent))}%`, background: barColor }}
+      />
+
+      {/* tiny flash on updates */}
+      {isFlash && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: isAsk ? 'rgba(239, 68, 68, 0.06)' : 'rgba(34, 197, 94, 0.06)' }}
+        />
+      )}
+      
+      <div className="relative w-full flex items-center z-10 text-[12px] leading-4 font-mono">
+        <div className="w-[22%] flex items-center gap-1 opacity-70">
+          {item.exchanges.slice(0, 3).map((ex, idx) => (
+            <ExchangeLogo key={idx} logoUrl={ex} size={13} />
+          ))}
+        </div>
+        <span className={`w-[26%] text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
+        <span className="w-[26%] text-right text-[#e6edf3]">{item.amount}</span>
+        <span className="w-[26%] text-right text-[#8b949e]">{item.total}</span>
+      </div>
+    </button>
+  );
+};
+
+export const OrderbookTable: React.FC<OrderbookTableProps> = ({ 
+  asks, 
+  bids, 
+  displayMode = 'both'
+}) => {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  // Define a precise row height to ensure alignment (font + padding)
+  const ROW_HEIGHT = 28; 
+  const VISIBLE_ROWS = 26;
+  const TOTAL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
+
+  const { rows, canScroll } = useMemo(() => {
+    const asksSorted = [...asks].sort((a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price));
+    const bidsSorted = [...bids].sort((a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price));
+
+    if (displayMode === 'asks') {
+      return { 
+        rows: asksSorted.map((x) => ({ ...x, _type: 'ask' as const })), 
+        canScroll: true 
+      };
+    } 
+    if (displayMode === 'bids') {
+      return { 
+        rows: bidsSorted.map((x) => ({ ...x, _type: 'bid' as const })), 
+        canScroll: true 
+      };
+    }
+    
+    // Both mode: Fixed 13 asks and 13 bids
+    return {
+      rows: [
+        ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
+        ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
+      ],
+      canScroll: false
+    };
+  }, [asks, bids, displayMode]);
+
+  return (
+    <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
       {/* Table Header */}
-      <div className="flex items-center px-4 py-2 border-b border-[#30363d] text-[#8b949e] text-xs">
-        <span className="w-1/4">交易所</span>
-        <span className="w-1/4 text-right">价格(USDT)</span>
-        <span className="w-1/4 text-right">数量(BTC)</span>
-        <span className="w-1/4 text-right">总计(BTC)</span>
+      <div className="flex items-center px-3 py-2 border-b border-[#30363d] text-[#8b949e] text-[12px] font-semibold flex-none bg-[#0d1117] z-10 h-[36px]">
+        <span className="w-[22%]">交易所</span>
+        <span className="w-[26%] text-right">价格(USDT)</span>
+        <span className="w-[26%] text-right">数量(BTC)</span>
+        <span className="w-[26%] text-right">总计(BTC)</span>
       </div>
 
-      {/* Asks (Sell Orders) - Low to High from bottom to top */}
-      <div className="flex-1 flex flex-col-reverse overflow-y-auto no-scrollbar">
-        {asks.map((ask, i) => (
-          <div key={`ask-${i}`} className="relative group flex items-center px-4 py-0.5 hover:bg-[#1f2937]/50 transition-colors">
-            {/* Depth background */}
-            <div 
-              className="absolute right-0 top-0 bottom-0 bg-red-500/10 transition-all duration-300"
-              style={{ width: `${ask.depthPercent}%` }}
-            />
-            
-            <div className="relative w-full flex items-center z-10">
-              <div className="w-1/4 flex items-center gap-1">
-                {ask.exchanges.map((ex, idx) => (
-                  <ExchangeLogo key={idx} logoUrl={ex} size={16} />
-                ))}
-              </div>
-              <span className="w-1/4 text-right text-red-400">{ask.price}</span>
-              <span className="w-1/4 text-right text-[#e6edf3]">{ask.amount}</span>
-              <span className="w-1/4 text-right text-[#8b949e]">{ask.total}</span>
+      {/* Table Body - Fixed height for exactly 26 rows */}
+      <div 
+        className={`flex-1 min-h-0 ${canScroll ? 'overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent' : 'overflow-hidden'}`}
+        style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
+      >
+        {rows.map((r, idx) => {
+          const key = `${r._type}-${r.price}-${idx}`;
+          return (
+            <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">
+              <OrderRow
+                item={r}
+                type={r._type}
+                selected={selectedKey === key}
+                onSelect={() => setSelectedKey(key)}
+              />
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Current Price / Mark Price */}
-      <div className="flex items-center justify-between px-4 py-3 bg-[#161b22] border-y border-[#30363d] z-20">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-green-400">{currentPrice.price}</span>
-            <span className="text-xs text-green-400 font-semibold">{currentPrice.changePercent}</span>
-          </div>
-          <span className="text-xs text-[#8b949e]">${currentPrice.usdPrice}</span>
-        </div>
-        <div className="text-right flex flex-col items-end">
-          <span className="text-xs text-[#8b949e]">标记价格</span>
-          <span className="text-xs text-[#e6edf3]">{currentPrice.price}</span>
-        </div>
-      </div>
-
-      {/* Bids (Buy Orders) - High to Low */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
-        {bids.map((bid, i) => (
-          <div key={`bid-${i}`} className="relative group flex items-center px-4 py-0.5 hover:bg-[#1f2937]/50 transition-colors">
-            {/* Depth background */}
-            <div 
-              className="absolute right-0 top-0 bottom-0 bg-green-500/10 transition-all duration-300"
-              style={{ width: `${bid.depthPercent}%` }}
-            />
-            
-            <div className="relative w-full flex items-center z-10">
-              <div className="w-1/4 flex items-center gap-1">
-                {bid.exchanges.map((ex, idx) => (
-                  <ExchangeLogo key={idx} logoUrl={ex} size={16} />
-                ))}
-              </div>
-              <span className="w-1/4 text-right text-green-400">{bid.price}</span>
-              <span className="w-1/4 text-right text-[#e6edf3]">{bid.amount}</span>
-              <span className="w-1/4 text-right text-[#8b949e]">{bid.total}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

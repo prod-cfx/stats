@@ -4,6 +4,75 @@ import ReactECharts from 'echarts-for-react';
 import { Info } from 'lucide-react';
 import React from 'react';
 
+interface SummaryCardProps {
+  label: string;
+  value?: string;
+  subText?: React.ReactNode;
+  isPerformance?: boolean;
+  chartData?: any[];
+  stats?: { label: string; value: string; sub: string; subVal: string }[];
+}
+
+const SummaryCard = ({ label, value, subText, isPerformance, chartData }: SummaryCardProps) => {
+  const chartOption = {
+    backgroundColor: 'transparent',
+    series: [
+      {
+        type: 'pie',
+        radius: ['60%', '85%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: false,
+        label: { show: false },
+        emphasis: { scale: false },
+        labelLine: { show: false },
+        data: chartData || []
+      }
+    ]
+  };
+
+  return (
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
+      <div className="text-[#8b949e] text-label font-medium">{label}</div>
+      {isPerformance ? (
+        <div className="flex flex-col gap-4 mt-auto">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[#8b949e] text-caption font-medium">胜率</span>
+              <span className="text-white text-h2 font-bold">28.57 %</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[#8b949e] text-caption font-medium">最大回撤</span>
+              <span className="text-white text-h2 font-bold">59.03 %</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
+              <span className="text-[#8b949e] text-caption font-medium">已成交订单</span>
+              <span className="text-white text-body font-bold ml-auto">77</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
+              <span className="text-[#8b949e] text-caption font-medium">平仓次数</span>
+              <span className="text-white text-body font-bold ml-auto">7</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between mt-auto">
+          <div className="flex flex-col gap-2.5 flex-1">
+            <div className="text-white text-h2 font-bold tracking-tight">{value}</div>
+            <div className="w-full">{subText}</div>
+          </div>
+          <div className="w-16 h-16 flex-none ml-4">
+            <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ProfileSummary = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -67,75 +136,6 @@ export const ProfileSummary = () => {
           { label: '最大回撤', value: '59.03 %', sub: '平仓次数', subVal: '7' }
         ]}
       />
-    </div>
-  );
-};
-
-interface SummaryCardProps {
-  label: string;
-  value?: string;
-  subText?: React.ReactNode;
-  isPerformance?: boolean;
-  chartData?: any[];
-  stats?: { label: string; value: string; sub: string; subVal: string }[];
-}
-
-const SummaryCard = ({ label, value, subText, isPerformance, chartData, stats }: SummaryCardProps) => {
-  const chartOption = {
-    backgroundColor: 'transparent',
-    series: [
-      {
-        type: 'pie',
-        radius: ['60%', '85%'],
-        center: ['50%', '50%'],
-        avoidLabelOverlap: false,
-        label: { show: false },
-        emphasis: { scale: false },
-        labelLine: { show: false },
-        data: chartData || []
-      }
-    ]
-  };
-
-  return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative min-h-[160px]">
-      <div className="text-[#8b949e] text-label font-medium">{label}</div>
-      {isPerformance ? (
-        <div className="flex flex-col gap-4 mt-auto">
-          <div className="grid grid-cols-2 gap-6">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-caption font-medium">胜率</span>
-              <span className="text-white text-h2 font-bold">28.57 %</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-caption font-medium">最大回撤</span>
-              <span className="text-white text-h2 font-bold">59.03 %</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-caption font-medium">已成交订单</span>
-              <span className="text-white text-body font-bold ml-auto">77</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-caption font-medium">平仓次数</span>
-              <span className="text-white text-body font-bold ml-auto">7</span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between mt-auto">
-          <div className="flex flex-col gap-2.5 flex-1">
-            <div className="text-white text-h2 font-bold tracking-tight">{value}</div>
-            <div className="w-full">{subText}</div>
-          </div>
-          <div className="w-16 h-16 flex-none ml-4">
-            <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -126,34 +126,72 @@ export function TableRowSkeleton({ columns = 5 }: { columns?: number }) {
 }
 
 /**
+ * Error state component with retry
+ */
+export function ErrorState({ message = '数据加载失败（Mock）', onRetry }: { message?: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center animate-in fade-in duration-300">
+      <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
+        <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <h3 className="text-xl font-bold text-[#e6edf3] mb-2">{message}</h3>
+      <p className="text-[#8b949e] mb-8 max-w-md">当前处于 Mock 环境，您可以点击下方按钮重试或通过 URL 参数触发正常状态。</p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-md font-bold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all"
+        >
+          重新加载
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
  * Loading state wrapper component
  */
 export function LoadingState({
   isLoading,
   error,
+  isEmpty,
   children,
   loadingFallback,
-  errorFallback,
+  onRetry,
 }: {
   isLoading: boolean
-  error?: Error | null
+  error?: boolean
+  isEmpty?: boolean
   children: React.ReactNode
   loadingFallback?: React.ReactNode
-  errorFallback?: React.ReactNode
+  onRetry?: () => void
 }) {
   if (isLoading) {
-    return <>{loadingFallback || <Spinner className="text-[#396bff] mx-auto my-8" />}</>
+    return <>{loadingFallback || (
+      <div className="py-20 flex justify-center">
+        <Spinner size="lg" className="text-primary" />
+      </div>
+    )}</>
   }
 
   if (error) {
+    return <ErrorState onRetry={onRetry} />
+  }
+
+  if (isEmpty) {
     return (
-      <>
-        {errorFallback || (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center">
-            <p className="text-sm text-red-400">{error.message || '加载失败'}</p>
-          </div>
+      <EmptyState 
+        title="暂无数据" 
+        description="当前条件下未找到相关数据，请尝试调整筛选条件。"
+        action={onRetry && (
+          <button onClick={onRetry} className="text-primary hover:underline text-sm font-medium">
+            清除筛选并重试
+          </button>
         )}
-      </>
+      />
     )
   }
 
@@ -175,11 +213,17 @@ export function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      {icon && <div className="mb-4 text-gray-600">{icon}</div>}
-      <h3 className="text-lg font-semibold text-gray-300">{title}</h3>
-      {description && <p className="mt-2 text-sm text-gray-400">{description}</p>}
-      {action && <div className="mt-6">{action}</div>}
+    <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-300">
+      {icon || (
+        <div className="w-16 h-16 rounded-full bg-[#21262d] flex items-center justify-center mb-6">
+          <svg className="w-8 h-8 text-[#8b949e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+        </div>
+      )}
+      <h3 className="text-xl font-bold text-[#e6edf3] mb-2">{title}</h3>
+      {description && <p className="text-[#8b949e] mb-8 max-w-md">{description}</p>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   )
 }

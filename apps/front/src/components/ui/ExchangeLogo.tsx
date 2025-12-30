@@ -63,3 +63,4 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
     </div>
   );
 };
+

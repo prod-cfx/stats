@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { PredictionMarketGrid } from '@/components/prediction-market/PredictionMarketGrid';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
@@ -16,11 +16,11 @@ export default function PredictionMarketPage() {
             <BodyText>基于链上数据的未来趋势预测</BodyText>
           </div>
           
-          <PredictionMarketGrid />
+          <Suspense fallback={<div className="h-96 flex items-center justify-center text-[#8b949e]">加载中...</div>}>
+            <PredictionMarketGrid />
+          </Suspense>
         </div>
       </main>
     </div>
   );
 }
-
-

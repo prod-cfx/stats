@@ -63,30 +63,25 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
 
           if (!dataPoint) return '';
           
-          const breakdown = dataPoint.exchangeBreakdown || [
-            { name: 'Binance', amount: dataPoint.amount * 0.4, color: isBid ? '#22c55e' : '#ef4444' },
-            { name: 'OKX', amount: dataPoint.amount * 0.3, color: isBid ? '#22c55e' : '#ef4444' },
-            { name: 'Bybit', amount: dataPoint.amount * 0.2, color: isBid ? '#22c55e' : '#ef4444' },
-            { name: 'Bitget', amount: dataPoint.amount * 0.1, color: isBid ? '#22c55e' : '#ef4444' },
-          ];
+          const breakdown = dataPoint.exchangeBreakdown || [];
 
           const breakdownHtml = breakdown.map(ex => `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 40px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 40px;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${ex.color};"></div>
-                <span style="color: #4b5563; font-weight: 500;">${ex.name}</span>
+                <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${isBid ? '#22c55e' : '#ef4444'};"></div>
+                <span style="color: #4b5563; font-weight: 500; font-size: 13px;">${ex.name}</span>
               </div>
-              <span style="font-weight: 600; color: #111827;">${ex.amount.toFixed(2)} BTC</span>
+              <span style="font-weight: 600; color: #111827; font-size: 13px;">${ex.amount.toFixed(2)} BTC</span>
             </div>
           `).join('');
 
           return `
-            <div style="min-width: 200px;">
-              <div style="font-weight: 700; font-size: 16px; margin-bottom: 12px; color: #111827;">${dataPoint.price.toFixed(2)}</div>
+            <div style="min-width: 220px; background: white; padding: 4px;">
+              <div style="font-weight: 700; font-size: 15px; margin-bottom: 16px; color: #111827; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px;">${dataPoint.price.toFixed(2)}</div>
               ${breakdownHtml}
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #4b5563; font-weight: 600;">总计</span>
-                <span style="font-weight: 700; color: #111827;">${dataPoint.total.toFixed(2)} BTC</span>
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                <span style="color: #4b5563; font-weight: 600; font-size: 13px;">总计</span>
+                <span style="font-weight: 700; color: #111827; font-size: 14px;">${dataPoint.total.toFixed(2)} BTC</span>
               </div>
             </div>
           `;

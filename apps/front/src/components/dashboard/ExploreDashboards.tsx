@@ -1,65 +1,11 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
+import { Modal } from '@/components/ui/Modal';
 import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 import { DashboardCard } from './DashboardCard';
 import { DashboardListItem } from './DashboardListItem';
-
-export const ExploreDashboards = () => {
-  return (
-    <div className="flex flex-col gap-10">
-      <div className="space-y-6">
-        <PageTitle>探索看板</PageTitle>
-        
-        {/* Search Input */}
-        <div className="relative max-w-4xl">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e]" />
-          <input 
-            type="text" 
-            placeholder="Search for dashboards" 
-            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-[#3b82f6]/50 transition-all placeholder:text-[#8b949e]"
-          />
-        </div>
-      </div>
-
-      {/* Featured Section */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-4 border-b border-[#30363d]">
-          <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-white pb-4 -mb-[1px]">特色看板</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {featuredDashboards.map((card, idx) => (
-            <DashboardCard key={idx} {...card} />
-          ))}
-        </div>
-      </div>
-
-      {/* List Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        {/* Hot Dashboards */}
-        <div className="space-y-6">
-          <SectionTitle>热门看板</SectionTitle>
-          <div className="flex flex-col gap-4">
-            {hotDashboards.map((item, idx) => (
-              <DashboardListItem key={idx} {...item} />
-            ))}
-          </div>
-        </div>
-
-        {/* Community Dashboards */}
-        <div className="space-y-6">
-          <SectionTitle>社区看板</SectionTitle>
-          <div className="flex flex-col gap-4">
-            {communityDashboards.map((item, idx) => (
-              <DashboardListItem key={idx} {...item} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const featuredDashboards = [
   {
@@ -128,3 +74,105 @@ const communityDashboards = [
   }
 ];
 
+export const ExploreDashboards = () => {
+  const [selectedDashboard, setSelectedDashboard] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleCardClick = (card: any) => {
+    setLoading(true);
+    setSelectedDashboard(card);
+    // Standard mock modal delay: 800-1200ms
+    setTimeout(() => setLoading(false), 1000);
+  };
+
+  return (
+    <div className="flex flex-col gap-10">
+      <div className="space-y-6">
+        <PageTitle>探索看板</PageTitle>
+        
+        {/* Search Input */}
+        <div className="relative max-w-4xl group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
+          <input 
+            type="text" 
+            placeholder="搜索看板、交易员或策略..." 
+            className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-primary focus:bg-[#0d1117] transition-all placeholder:text-[#8b949e]"
+          />
+        </div>
+      </div>
+
+      {/* Featured Section */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-4 border-b border-[#30363d]">
+          <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-primary pb-4 -mb-[1px]">特色看板</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {featuredDashboards.map((card, idx) => (
+            <div key={idx} onClick={() => handleCardClick(card)} className="cursor-pointer h-full">
+              <DashboardCard {...card} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* List Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 pb-12">
+        {/* Hot Dashboards */}
+        <div className="space-y-6">
+          <SectionTitle>热门看板</SectionTitle>
+          <div className="flex flex-col gap-4">
+            {hotDashboards.map((item, idx) => (
+              <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
+                <DashboardListItem {...item} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Community Dashboards */}
+        <div className="space-y-6">
+          <SectionTitle>社区看板</SectionTitle>
+          <div className="flex flex-col gap-4">
+            {communityDashboards.map((item, idx) => (
+              <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
+                <DashboardListItem {...item} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={!!selectedDashboard}
+        onClose={() => setSelectedDashboard(null)}
+        title={selectedDashboard?.title}
+        width="max-w-4xl"
+        loading={loading}
+      >
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="aspect-video w-full rounded-2xl overflow-hidden border border-[#30363d]">
+            <img src={selectedDashboard?.image} className="w-full h-full object-cover" alt="" />
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
+                {selectedDashboard?.creator?.charAt(0)}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-body">@{selectedDashboard?.creator}</span>
+                <span className="text-[#8b949e] text-xs">发布于 3 天前</span>
+              </div>
+              <button type="button" className="ml-auto px-6 py-2 bg-primary text-white rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all">
+                保存到我的看板
+              </button>
+            </div>
+            <p className="text-[#c9d1d9] leading-relaxed">
+              {selectedDashboard?.description || '这是一个精选的数据看板，聚合了实时的链上交易指标、资产流动性分析以及巨鲸动向追踪。通过可视化的图表和深度的数据表格，帮助交易者快速捕捉市场信号。'}
+            </p>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
