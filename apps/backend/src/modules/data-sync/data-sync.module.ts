@@ -18,6 +18,7 @@ import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.job'
+import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -65,6 +66,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     ExampleNewsJob,
     CoinglassHeatmapJob,
     CoinglassWhaleAlertJob,
+    CoinglassFuturesPriceHistoryJob,
     ExampleOrderbookJob,
     OpenInterestSyncJob,
     CoinglassAggregatedLiquidationJob,
@@ -84,6 +86,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
+        coinglassFuturesPriceHistoryJob: CoinglassFuturesPriceHistoryJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
@@ -96,6 +99,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         exampleNewsJob,
         coinglassHeatmapJob,
         coinglassWhaleAlertJob,
+        coinglassFuturesPriceHistoryJob,
         exampleOrderbookJob,
         openInterestSyncJob,
         coinglassAggregatedLiquidationJob,
@@ -109,6 +113,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
         ExampleNewsJob,
         CoinglassHeatmapJob,
         CoinglassWhaleAlertJob,
+        CoinglassFuturesPriceHistoryJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,
         CoinglassAggregatedLiquidationJob,
