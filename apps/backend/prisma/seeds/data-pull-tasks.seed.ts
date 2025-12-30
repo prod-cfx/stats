@@ -34,6 +34,26 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       cursor: null,
     },
     {
+      key: 'coinglass-futures-price-history',
+      name: 'Coinglass 合约价格 K 线历史',
+      source: 'coinglass',
+      type: 'futures-price-history',
+      // 默认每 15 分钟同步一次，按需在后台调整
+      intervalSeconds: 900,
+      enabled: false,
+      cursor: JSON.stringify({
+        symbol: 'BTCUSDT',
+        exchangeCode: 'BINANCE',
+        contractType: 'PERPETUAL',
+        interval: '4h',
+      } satisfies {
+        symbol: string
+        exchangeCode: string
+        contractType: string
+        interval: string
+      }),
+    },
+    {
       key: 'polymarket-markets-crypto',
       name: 'Polymarket Crypto 市场列表同步',
       source: 'polymarket',
