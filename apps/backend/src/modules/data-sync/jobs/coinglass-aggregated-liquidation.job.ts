@@ -222,9 +222,12 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
     const latestTimestampMs =
       latestTimestampCandidates.length > 0 ? Math.max(...latestTimestampCandidates) : undefined
 
-    // newCursor 只保存运行时状态（lastTimestamp），配置参数在 meta 中
+    // newCursor 中继续保留 symbol/exchange/interval，兼容旧版 cursor 结构，避免升级后丢失配置
     const newCursor: AggregatedLiquidationCursor = {
       lastTimestamp: latestTimestampMs,
+      symbol,
+      exchangeCode: exchange,
+      interval,
     }
 
     return {
