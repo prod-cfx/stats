@@ -1,5 +1,5 @@
 import { ChevronDown, RefreshCcw } from 'lucide-react';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 interface LiquidationMapHeaderProps {
@@ -7,37 +7,55 @@ interface LiquidationMapHeaderProps {
   setSymbol: (s: string) => void;
   range: string;
   setRange: (r: string) => void;
+  exchangeType: string;
+  setExchangeType: (e: string) => void;
   onRefresh: () => void;
 }
 
-const FilterButton = ({ label, value, options, onChange }: { 
-  label: string, 
+const FilterButton = ({ value, options, onChange }: { 
   value: string, 
   options: string[], 
   onChange: (v: string) => void 
 }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button 
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between px-3 py-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm min-w-[100px] hover:bg-[#30363d] transition-colors"
+        className={`flex items-center justify-between px-3 py-2 bg-[#21262d] border ${isOpen ? 'border-primary' : 'border-[#30363d]'} rounded-md text-[#e6edf3] text-sm min-w-[100px] hover:bg-[#30363d] transition-all`}
       >
         <span className="mr-2">{value}</span>
-        <ChevronDown className={`w-4 h-4 text-[#8b949e] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-[#8b949e] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-20">
+        <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150">
           {options.map((opt) => (
             <button
               key={opt}
+              type="button"
               onClick={() => {
                 onChange(opt);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-3 py-2 text-sm text-[#e6edf3] hover:bg-[#21262d] transition-colors first:rounded-t-md last:rounded-b-md"
+              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                value === opt 
+                  ? 'bg-primary/10 text-primary font-bold' 
+                  : 'text-[#e6edf3] hover:bg-[#21262d]'
+              }`}
             >
               {opt}
             </button>
@@ -48,34 +66,53 @@ const FilterButton = ({ label, value, options, onChange }: {
   );
 };
 
-export const LiquidationMapHeader = ({ symbol, setSymbol, range, setRange, onRefresh }: LiquidationMapHeaderProps) => {
+const symbolNames: Record<string, string> = {
+  'BTC': '比特币',
+  'ETH': '以太坊',
+  'SOL': 'Solana',
+  'XRP': '瑞波币',
+  'DOGE': '狗狗币',
+  'BNB': '币安币',
+  'HYPE': 'Hyperliquid',
+  'LINK': 'Chainlink',
+  'AVAX': 'Avalanche',
+  'ADA': 'Cardano'
+};
+
+export const LiquidationMapHeader = ({ 
+  symbol, 
+  setSymbol, 
+  range, 
+  setRange, 
+  exchangeType,
+  setExchangeType,
+  onRefresh 
+}: LiquidationMapHeaderProps) => {
   return (
     <div className="flex flex-col gap-8 mb-10">
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-3">
-          <PageTitle>比特币交易所清算地图</PageTitle>
+          <PageTitle>{symbolNames[symbol] || symbol}交易所清算地图</PageTitle>
           <BodyText>实时全网爆仓热力图数据</BodyText>
         </div>
         <div className="flex items-center gap-3">
           <FilterButton 
-            label="CEX/DEX" 
-            value="All" 
+            value={exchangeType} 
             options={['All', 'CEX', 'DEX']} 
-            onChange={() => {}} 
+            onChange={setExchangeType} 
           />
           <FilterButton 
-            label="Symbol" 
             value={symbol} 
-            options={['BTC', 'ETH', 'SOL']} 
+            options={['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'LINK', 'AVAX', 'ADA']} 
             onChange={setSymbol} 
           />
           <FilterButton 
-            label="TimeRange" 
             value={range} 
-            options={['1小时', '4小时', '1天', '7天']} 
+            options={['1天', '7天', '30天']} 
             onChange={setRange} 
           />
           <button 
+            type="button"
             onClick={onRefresh}
             className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] transition-colors active:bg-[#3d444d]"
           >

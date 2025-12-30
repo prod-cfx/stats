@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
 import { FileSearch } from 'lucide-react';
+import React, { useState } from 'react';
 
 export const BottomPanel = () => {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'history' | 'positions' | 'assets'

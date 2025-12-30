@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Copy, ChevronDown, Settings, RotateCcw, AlignJustify, ArrowDownUp, ExternalLink } from 'lucide-react';
+import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw, Settings } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
 
@@ -56,12 +56,12 @@ export const RightPanel = () => {
       setOrderbook(prev => ({
         sells: prev.sells.map(s => ({
           ...s,
-          amount: (parseFloat(s.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
+          amount: (Number.parseFloat(s.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
           depth: Math.min(100, Math.max(5, s.depth + (Math.random() - 0.5) * 10))
         })),
         buys: prev.buys.map(b => ({
           ...b,
-          amount: (parseFloat(b.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
+          amount: (Number.parseFloat(b.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
           depth: Math.min(100, Math.max(5, b.depth + (Math.random() - 0.5) * 10))
         }))
       }));

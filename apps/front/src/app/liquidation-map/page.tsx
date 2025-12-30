@@ -5,19 +5,41 @@ import { Navbar } from '@/components/layout/Navbar';
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart';
 import { LiquidationMapHeader } from '@/components/liquidation-map/LiquidationMapHeader';
 
-const generateMockData = (symbol: string, range: string) => {
+const symbolPrices: Record<string, number> = {
+  'BTC': 89083,
+  'ETH': 3345,
+  'SOL': 168,
+  'XRP': 2.5,
+  'DOGE': 0.4,
+  'BNB': 620,
+  'HYPE': 18.5,
+  'LINK': 15.2,
+  'AVAX': 35.8,
+  'ADA': 0.8
+};
+
+const generateMockData = (symbol: string, range: string, exchangeType: string = 'All') => {
   const labels = [];
-  const startPrice = symbol === 'BTC' ? 80000 : symbol === 'ETH' ? 2800 : 120;
-  const endPrice = symbol === 'BTC' ? 100000 : symbol === 'ETH' ? 3800 : 200;
-  const currentPrice = symbol === 'BTC' ? 89083 : symbol === 'ETH' ? 3345 : 168;
+  const currentPrice = symbolPrices[symbol] || 100;
+  // Use a +/- 15% range to ensure current price is exactly centered
+  const startPrice = currentPrice * 0.85;
+  const endPrice = currentPrice * 1.15;
   const stepCount = 150;
   const step = (endPrice - startPrice) / stepCount;
   
   for (let i = 0; i <= stepCount; i++) {
-    labels.push(Math.round(startPrice + i * step).toString());
+    const price = startPrice + i * step;
+    // For BTC/ETH/BNB (high price), round to int. For others, keep 2 decimals if > 10, or 3 decimals if < 10.
+    if (price > 100) {
+      labels.push(Math.round(price).toString());
+    } else if (price > 10) {
+      labels.push(price.toFixed(2));
+    } else {
+      labels.push(price.toFixed(3));
+    }
   }
 
-  const multiplier = range === '1天' ? 1 : range === '7天' ? 2.5 : 0.5;
+  const multiplier = range === '1天' ? 1 : range === '7天' ? 2.5 : 5;
 
   const bybit: number[] = [];
   const okx: number[] = [];
@@ -35,10 +57,14 @@ const generateMockData = (symbol: string, range: string) => {
     const minIntensity = dist < (currentPrice * 0.01) ? intensity * 0.3 : intensity;
 
     if (intensity > 0) {
-      bybit.push(Math.round(minIntensity * 0.2));
-      okx.push(Math.round(minIntensity * 0.3));
-      binance.push(Math.round(minIntensity * 0.35));
-      dex.push(Math.round(minIntensity * 0.15));
+      // Respect CEX/DEX filtering
+      const showCEX = exchangeType === 'All' || exchangeType === 'CEX';
+      const showDEX = exchangeType === 'All' || exchangeType === 'DEX';
+
+      bybit.push(showCEX ? Math.round(minIntensity * 0.2) : 0);
+      okx.push(showCEX ? Math.round(minIntensity * 0.3) : 0);
+      binance.push(showCEX ? Math.round(minIntensity * 0.35) : 0);
+      dex.push(showDEX ? Math.round(minIntensity * 0.15) : 0);
     } else {
       bybit.push(0);
       okx.push(0);
@@ -51,7 +77,8 @@ const generateMockData = (symbol: string, range: string) => {
   const cumulativeLong = Array.from({length: labels.length}).fill(null);
   const cumulativeShort = Array.from({length: labels.length}).fill(null);
   
-  const currentIdx = labels.findIndex(l => Math.abs(Number.parseFloat(l) - currentPrice) < 150);
+  // Find index of current price (middle of labels)
+  const currentIdx = Math.floor(labels.length / 2);
 
   // Cumulative Long: Sum from center towards LEFT (lower prices)
   // Start with 0 at the current price
@@ -79,21 +106,19 @@ const generateMockData = (symbol: string, range: string) => {
 export default function LiquidationMapPage() {
   const [symbol, setSymbol] = useState('BTC');
   const [range, setRange] = useState('1天');
+  const [exchangeType, setExchangeType] = useState('All');
   const [currentPrice, setCurrentPrice] = useState(89083);
-  const [data, setData] = useState(() => generateMockData('BTC', '1天'));
+  const [data, setData] = useState(() => generateMockData('BTC', '1天', 'All'));
 
   useEffect(() => {
-    let newPrice = 89083;
-    if (symbol === 'BTC') newPrice = 89083;
-    else if (symbol === 'ETH') newPrice = 3345;
-    else newPrice = 168;
+    const newPrice = symbolPrices[symbol] || 100;
     
     setCurrentPrice(newPrice);
-    setData(generateMockData(symbol, range));
-  }, [symbol, range]);
+    setData(generateMockData(symbol, range, exchangeType));
+  }, [symbol, range, exchangeType]);
 
   const handleRefresh = () => {
-    setData(generateMockData(symbol, range));
+    setData(generateMockData(symbol, range, exchangeType));
   };
 
   return (
@@ -107,6 +132,8 @@ export default function LiquidationMapPage() {
             setSymbol={setSymbol} 
             range={range} 
             setRange={setRange} 
+            exchangeType={exchangeType}
+            setExchangeType={setExchangeType}
             onRefresh={handleRefresh}
           />
           
