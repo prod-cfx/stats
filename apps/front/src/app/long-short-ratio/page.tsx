@@ -75,7 +75,7 @@ const SummaryCard = ({ symbol, longPercent, shortPercent, longAmount, shortAmoun
 
 const ExchangeRow = ({ data }: { data: ExchangeData }) => {
   return (
-    <div className="w-full bg-[#0d1117]/50 hover:bg-[#1c2128] border border-[#30363d]/30 rounded-lg p-3 mb-2 transition-colors group">
+    <div className="w-full transition-colors group">
       <div className="flex items-center gap-6">
         {/* Rank & Name */}
         <div className="flex items-center gap-4 min-w-[180px]">
@@ -94,11 +94,11 @@ const ExchangeRow = ({ data }: { data: ExchangeData }) => {
         {/* Amounts */}
         <div className="flex items-center min-w-[300px]">
           <div className="flex flex-col w-32">
-            <span className="text-[#8b949e] text-[10px]">做多</span>
+            <span className="text-[#8b949e] text-xs">做多</span>
             <span className="text-[#4ade80] font-semibold text-xs">{data.longAmount}</span>
           </div>
           <div className="flex flex-col w-32 ml-auto md:ml-0">
-            <span className="text-[#8b949e] text-[10px]">做空</span>
+            <span className="text-[#8b949e] text-xs">做空</span>
             <span className="text-[#ef4444] font-semibold text-xs">{data.shortAmount}</span>
           </div>
         </div>
@@ -143,14 +143,14 @@ export default function LongShortRatioPage() {
             
             <div className="flex items-center gap-3">
               <div className="flex bg-[#161b22] border border-[#30363d] rounded-md p-1 gap-1">
-                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#30363d] rounded text-sm font-medium text-[#e6edf3]">
+                <button className="flex items-center gap-2 px-4 py-1.5 bg-[#30363d] rounded text-sm font-medium text-[#c9d1d9]">
                   {symbol} <ChevronDown className="w-4 h-4" />
                 </button>
                 <button className="flex items-center gap-2 px-4 py-1.5 hover:bg-[#30363d] rounded text-sm font-medium text-[#8b949e] transition-colors">
                   {timeRange} <ChevronDown className="w-4 h-4" />
                 </button>
               </div>
-              <button className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#e6edf3] transition-colors">
+              <button className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-colors">
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
