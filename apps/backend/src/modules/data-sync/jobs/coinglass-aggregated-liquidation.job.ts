@@ -27,6 +27,11 @@ interface AggregatedLiquidationMeta {
 
 /**
  * 运行时状态（存放在 data_pull_tasks.cursor 中，每次执行后更新）
+ *
+ * 兼容说明：
+ * - 旧版本会在 cursor 中同时保存 symbol/exchangeCode/interval + lastTimestamp
+ * - 新版本仅在 cursor 中保存 lastTimestamp，配置参数迁移到 meta
+ * - 为兼容历史任务，这里仍保留旧字段的可选解析
  */
 interface AggregatedLiquidationCursor {
   /**
@@ -34,6 +39,10 @@ interface AggregatedLiquidationCursor {
    * 用于后续增量抓取
    */
   lastTimestamp?: number
+  // 兼容历史 cursor：旧格式中保存的配置字段
+  symbol?: string
+  exchangeCode?: string | null
+  interval?: string | null
 }
 
 interface AggregatedLiquidationPoint {
@@ -107,10 +116,10 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
   ) {}
 
   async run(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {
-    // 从 meta 读取任务配置（不会被运行时修改）
-    const config = this.parseConfig(ctx.meta)
-    // 从 cursor 读取运行时状态（lastTimestamp）
+    // 先解析 cursor（可能包含历史格式中的 symbol/exchange/interval）
     const cursor = this.parseCursor(ctx.cursor)
+    // 再从 meta 读取任务配置（不会被运行时修改），meta 为空时兼容从旧 cursor 中读取配置
+    const config = this.parseConfig(ctx.meta, cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
@@ -328,26 +337,40 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
   }
 
   /**
-   * 解析任务配置（从 meta 中读取）
+   * 解析任务配置。
+   *
+   * 优先从 meta 中读取；如果 meta 为空，则尝试从旧版 cursor 中恢复 symbol/exchange/interval，
+   * 以避免线上已有任务在升级后退回默认配置导致拉取错误数据。
    */
-  private parseConfig(meta: AggregatedLiquidationMeta | null): AggregatedLiquidationMeta {
+  private parseConfig(
+    meta: AggregatedLiquidationMeta | null,
+    legacyCursor: AggregatedLiquidationCursor | null,
+  ): AggregatedLiquidationMeta {
+    const legacySymbol = legacyCursor?.symbol
+    const legacyExchangeCode = legacyCursor?.exchangeCode ?? undefined
+    const legacyInterval = legacyCursor?.interval
+
     if (!meta) {
       return {
-        symbol: this.defaultSymbol,
-        exchangeCode: this.normalizeExchangeCode(undefined),
-        interval: this.defaultInterval,
+        symbol: legacySymbol || this.defaultSymbol,
+        exchangeCode: this.normalizeExchangeCode(legacyExchangeCode),
+        interval: (legacyInterval as MarketTimeframe | undefined) || this.defaultInterval,
       }
     }
 
     return {
-      symbol: meta.symbol || this.defaultSymbol,
-      exchangeCode: this.normalizeExchangeCode(meta.exchangeCode),
-      interval: meta.interval || this.defaultInterval,
+      symbol: meta.symbol || legacySymbol || this.defaultSymbol,
+      exchangeCode: this.normalizeExchangeCode(meta.exchangeCode ?? legacyExchangeCode),
+      interval: (meta.interval as MarketTimeframe | undefined) || legacyInterval || this.defaultInterval,
     }
   }
 
   /**
-   * 解析运行时状态（从 cursor 中读取，只包含 lastTimestamp）
+   * 解析运行时状态（从 cursor 中读取）
+   *
+   * 兼容说明：
+   * - 旧格式：{"symbol":"BTC","exchangeCode":"Binance","interval":"4h","lastTimestamp":...}
+   * - 新格式：{"lastTimestamp":...}
    */
   private parseCursor(currentCursor: string | null): AggregatedLiquidationCursor {
     if (!currentCursor) {
@@ -358,6 +381,12 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
       const parsed = JSON.parse(currentCursor) as Partial<AggregatedLiquidationCursor>
       return {
         lastTimestamp: typeof parsed.lastTimestamp === 'number' ? parsed.lastTimestamp : undefined,
+        symbol: typeof parsed.symbol === 'string' ? parsed.symbol : undefined,
+        exchangeCode:
+          typeof parsed.exchangeCode === 'string' || parsed.exchangeCode === null
+            ? parsed.exchangeCode
+            : undefined,
+        interval: typeof parsed.interval === 'string' ? parsed.interval : undefined,
       }
     } catch {
       this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)

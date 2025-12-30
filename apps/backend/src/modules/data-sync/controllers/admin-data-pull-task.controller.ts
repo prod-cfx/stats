@@ -29,7 +29,12 @@ import { AdminDataPullTaskService } from '../services/admin-data-pull-task.servi
 @Controller('admin/data-pull-tasks')
 @ApiBearerAuth('bearer')
 @RequireAuth()
-@ApiExtraModels(BaseResponseDto, BasePaginationResponseDto, AdminDataPullTaskResponseDto)
+@ApiExtraModels(
+  BaseResponseDto,
+  BasePaginationResponseDto,
+  AdminDataPullTaskResponseDto,
+  AdminDataPullExecutionResponseDto,
+)
 export class AdminDataPullTaskController {
   constructor(private readonly service: AdminDataPullTaskService) {}
 

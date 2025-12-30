@@ -24,6 +24,7 @@ export type PrismaSymbolStatus = string
 export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   M1: 'm1' as PrismaMarketTimeframe,
   M3: 'm3' as PrismaMarketTimeframe,
+  M30: 'm30' as PrismaMarketTimeframe,
   M5: 'm5' as PrismaMarketTimeframe,
   M15: 'm15' as PrismaMarketTimeframe,
   H1: 'h1' as PrismaMarketTimeframe,

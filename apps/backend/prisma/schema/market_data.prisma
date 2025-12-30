@@ -109,7 +109,7 @@ model OpenInterest {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
   // 索引
-  @@unique([exchange, symbol, dataTimestamp], name: "unique_oi_record")
+  @@unique([exchange, symbol, dataTimestamp], name: "open_interest_exchange_symbol_data_timestamp_key")
   @@index([symbol, dataTimestamp], name: "idx_oi_symbol_timestamp")
   @@index([exchange, dataTimestamp], name: "idx_oi_exchange_timestamp")
   @@index([dataTimestamp], name: "idx_oi_timestamp")
