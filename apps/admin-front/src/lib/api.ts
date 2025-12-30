@@ -279,14 +279,11 @@ export interface RegisteredJobInfo {
  * 获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）
  */
 export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-jobs`, {
+  const response = await client.AdminDataPullTaskController_getRegisteredJobs({
     headers: requireAuthHeaders(),
   })
-  if (!response.ok) {
-    throw new Error('获取已注册 Job 信息失败')
-  }
-  const data = await response.json()
-  return data?.jobs ?? data?.data?.jobs ?? []
+  const data = unwrapResponse<any>(response as any)
+  return data?.jobs ?? []
 }
 
 /**
@@ -341,20 +338,12 @@ export async function fetchDataPullTaskExecutions(
   page = 1,
   limit = 20,
 ): Promise<_PaginationResult<DataPullExecutionLog>> {
-  const url = new URL(`${API_BASE_URL}/admin/data-pull-tasks/${taskId}/executions`)
-  url.searchParams.set('page', String(page))
-  url.searchParams.set('limit', String(limit))
-
-  const response = await fetch(url.toString(), {
+  const response = await client.AdminDataPullTaskController_listExecutions({
     headers: requireAuthHeaders(),
+    params: { id: taskId },
+    queries: { page, limit },
   })
-
-  if (!response.ok) {
-    throw new Error('获取任务执行日志失败')
-  }
-
-  const data = (await response.json()) as any
-  const payload = data?.data ?? data
+  const payload = unwrapResponse<any>(response as any)
 
   return {
     total: payload.total ?? 0,
