@@ -45,6 +45,7 @@ const nextConfig = {
     unoptimized: true,
   },
   reactStrictMode: false,
+  output: 'export',
   trailingSlash: false,
   transpilePackages: ['@ai/shared', '@ai/api-contracts'],
   experimental: {

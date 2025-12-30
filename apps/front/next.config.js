@@ -84,13 +84,13 @@ const nextConfig = {
   // Help with hydration errors
   reactStrictMode: false,
 
-  // MIGRATED: 移除 output: 'export' 以支持 Cache Components
-  // 之前: output: 'export' (静态导出模式)
-  // 现在: 服务器模式，支持动态路由和缓存功能
+  // 启用静态导出模式 (Static HTML Export)
+  // 这将生成独立的 HTML/CSS/JS 文件，可以直接通过 Nginx 或 Caddy 部署，无需 Node.js 环境
+  output: 'export',
 
-  // 禁用尾部斜杠，避免 OAuth 回调时丢失 query 参数
-  // 问题：trailingSlash: true 会导致 /auth/callback?ticket=xxx 被重定向到 /auth/callback/（丢失参数）
-  trailingSlash: false,
+  // 启用尾部斜杠，确保静态导出下子目录路由正常工作
+  // 开启后，/whale-tracking/discover 会生成为 /whale-tracking/discover/index.html
+  trailingSlash: true,
 
   // 优化配置，明确指定需要转译的本地包
   transpilePackages: ['@ai/shared', '@ai/api-contracts'],
