@@ -3,11 +3,17 @@ enum MarketTimeframe {
   /// 说明：Prisma Client 侧使用 m1/m5/... 作为枚举键名，数据库存储 "1m"/"5m"/...
   /// 这样可以复用后端现有的 mapTimeframe/reverseMapTimeframe 映射工具，确保 API/SDK 看到的始终是 "1m" 等值
   m1  @map("1m")
+  m3  @map("3m")
   m5  @map("5m")
   m15 @map("15m")
+  m30 @map("30m")
   h1  @map("1h")
   h4  @map("4h")
+  h6  @map("6h")
+  h8  @map("8h")
+  h12 @map("12h")
   d1  @map("1d")
+  w1  @map("1w")
 }
 
 /// 市场数据相关模型：多空比（long/short ratio）
@@ -54,6 +60,58 @@ model LongShortRatio {
   @@unique([tradingPairId, interval, timestamp], map: "uniq_long_short_ratio_pair_interval_time")
   @@index([tradingPairId, timestamp], map: "idx_long_short_ratio_pair_time")
   @@map("long_short_ratios")
+}
+
+/// 期货价格历史 OHLC 模型（Coinglass Futures Price History）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/price-ohlc-history
+///
+/// 设计说明：
+/// - 每条记录表示某个币种在特定时间粒度 & 交易所 & 合约类型上的 K 线数据
+/// - interval 复用 MarketTimeframe，方便与其他市场数据对齐
+model FuturesPriceHistory {
+  id Int @id @default(autoincrement())
+
+  /// 币种基础资产或交易对符号，例如 BTC / BTCUSDT
+  symbol String
+
+  /// 交易所代码，例如 BINANCE / OKX
+  exchangeCode String @map("exchange_code")
+
+  /// 合约类型（如 PERPETUAL、CURRENT_QUARTER 等），可选
+  contractType String? @map("contract_type")
+
+  /// 时间粒度（例如 4h / 1h），使用枚举统一管理
+  interval MarketTimeframe
+
+  /// 该时间粒度对应的时间点（通常为区间起始时间），来自响应中的 time 字段
+  timestamp DateTime
+
+  /// 开盘价
+  open Decimal @db.Decimal(30, 10)
+
+  /// 最高价
+  high Decimal @db.Decimal(30, 10)
+
+  /// 最低价
+  low Decimal @db.Decimal(30, 10)
+
+  /// 收盘价
+  close Decimal @db.Decimal(30, 10)
+
+  /// 成交量（USD 名义价值），对应 volume_usd 字段
+  volumeUsd Decimal? @map("volume_usd") @db.Decimal(30, 10)
+
+  /// 数据来源，例如：'COINGLASS'
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, exchangeCode, contractType, interval, timestamp], map: "uniq_futures_price_symbol_exchange_contract_interval_time")
+  @@index([symbol, exchangeCode, interval, timestamp], map: "idx_futures_price_symbol_exchange_interval_time")
+  @@map("futures_price_history")
 }
 
 /// 持仓量数据模型 - 记录加密货币期货的未平仓合约数据
@@ -103,7 +161,7 @@ model OpenInterest {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
   // 索引
-  @@unique([exchange, symbol, dataTimestamp], name: "unique_oi_record")
+  @@unique([exchange, symbol, dataTimestamp], name: "open_interest_exchange_symbol_data_timestamp_key")
   @@index([symbol, dataTimestamp], name: "idx_oi_symbol_timestamp")
   @@index([exchange, dataTimestamp], name: "idx_oi_exchange_timestamp")
   @@index([dataTimestamp], name: "idx_oi_timestamp")
@@ -127,8 +185,9 @@ model AggregatedLiquidationHistory {
   /// 交易所 (如 BINANCE / OKX)，'AGGREGATED' 表示全市场聚合
   exchangeCode String @default("AGGREGATED") @map("exchange_code")
 
-  /// 时间粒度（例如 4h / 1h），使用枚举统一管理
-  interval MarketTimeframe
+  /// 时间粒度字符串（例如 1m / 4h / 12h / 1w）
+  /// 使用字符串而不是枚举，避免受全局 MarketTimeframe 限制
+  interval String
 
   /// 该时间粒度对应的时间点（通常为区间起始时间），来自响应中的 time 字段
   timestamp DateTime

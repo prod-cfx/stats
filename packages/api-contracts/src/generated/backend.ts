@@ -283,6 +283,18 @@ const CreateAdminDataPullTaskDto = z
     meta: z.object({}).partial().passthrough().nullish(),
   })
   .passthrough();
+const AdminDataPullExecutionResponseDto = z
+  .object({
+    id: z.number(),
+    taskId: z.number(),
+    status: z.string(),
+    fetchedCount: z.number(),
+    startedAt: z.string().datetime({ offset: true }),
+    finishedAt: z.string().datetime({ offset: true }).nullish(),
+    errorMessage: z.string().nullish(),
+    meta: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough();
 const UpdateAdminDataPullTaskDto = z
   .object({
     name: z.string(),
@@ -452,7 +464,20 @@ const TradingPairConfigResponseDto = z
 const LongShortRatioPointResponseDto = z
   .object({
     tradingPairId: z.string(),
-    interval: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    interval: z.enum([
+      "1m",
+      "3m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "4h",
+      "6h",
+      "8h",
+      "12h",
+      "1d",
+      "1w",
+    ]),
     timestamp: z.string(),
     longShortRatio: z.string(),
     longAccountRatio: z.string().nullish(),
@@ -538,6 +563,7 @@ export const schemas = {
   UpdateAdminMenuDto,
   AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
+  AdminDataPullExecutionResponseDto,
   UpdateAdminDataPullTaskDto,
   LiquidationHeatmapResponseDto,
   CreateOpenInterestDto,
@@ -611,14 +637,14 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "enabled",
+        name: "page",
         type: "Query",
-        schema: z.boolean().optional(),
+        schema: z.number().gte(1).optional(),
       },
       {
-        name: "name",
+        name: "limit",
         type: "Query",
-        schema: z.string().optional(),
+        schema: z.number().gte(1).lte(100).optional(),
       },
       {
         name: "key",
@@ -626,14 +652,14 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
-        name: "limit",
+        name: "name",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.string().optional(),
       },
       {
-        name: "page",
+        name: "enabled",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.boolean().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -703,6 +729,74 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/:id/executions",
+    alias: "AdminDataPullTaskController_listExecutions",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AdminDataPullExecutionResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/registered-jobs",
+    alias: "AdminDataPullTaskController_getRegisteredJobs",
+    requestFormat: "json",
+    response: z
+      .object({
+        jobs: z.array(
+          z
+            .object({
+              key: z.string(),
+              name: z.string(),
+              metaSchema: z
+                .object({
+                  description: z.string(),
+                  fields: z.array(z.any()),
+                  example: z.object({}).partial().passthrough(),
+                })
+                .partial()
+                .passthrough()
+                .nullable(),
+            })
+            .partial()
+            .passthrough()
+        ),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/data-pull-tasks/registered-keys",
+    alias: "AdminDataPullTaskController_getRegisteredKeys",
+    requestFormat: "json",
+    response: z
+      .object({ keys: z.array(z.string()) })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",
@@ -1844,7 +1938,20 @@ const endpoints = makeApi([
       {
         name: "interval",
         type: "Query",
-        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+        schema: z.enum([
+          "1m",
+          "3m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "4h",
+          "6h",
+          "8h",
+          "12h",
+          "1d",
+          "1w",
+        ]),
       },
       {
         name: "from",

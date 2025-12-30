@@ -1,4 +1,21 @@
-export const MARKET_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
+// 市场数据统一支持的时间粒度
+// 注意：如需扩展，请同时更新：
+// - apps/backend/prisma/schema/market_data.prisma 中的 MarketTimeframe 枚举
+// - apps/backend/src/common/utils/prisma-enum-mappers.ts 中的 mapTimeframe/reverseMapTimeframe
+export const MARKET_TIMEFRAMES = [
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '1w',
+] as const
 
 export type MarketTimeframe = (typeof MARKET_TIMEFRAMES)[number]
 

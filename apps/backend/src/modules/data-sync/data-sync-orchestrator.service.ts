@@ -25,6 +25,33 @@ export class DataSyncOrchestrator {
   }
 
   /**
+   * 根据任务 key 查找对应的 Job 实现
+   * 支持两种匹配模式：
+   * 1. 精确匹配：taskKey === job.key
+   * 2. 前缀匹配：taskKey 以 "job.key:" 开头（用于支持同一 Job 类型的多个任务实例）
+   *
+   * 例如：
+   * - taskKey = "coinglass-aggregated-liquidation" 精确匹配 job.key = "coinglass-aggregated-liquidation"
+   * - taskKey = "coinglass-aggregated-liquidation:BTC" 前缀匹配 job.key = "coinglass-aggregated-liquidation"
+   */
+  private findJobForTask(taskKey: string): DataPullJob | undefined {
+    // 优先精确匹配
+    const exactMatch = this.jobMap.get(taskKey)
+    if (exactMatch) {
+      return exactMatch
+    }
+
+    // 前缀匹配：taskKey 格式为 "jobKey:suffix"
+    const colonIndex = taskKey.indexOf(':')
+    if (colonIndex > 0) {
+      const jobKeyPrefix = taskKey.slice(0, colonIndex)
+      return this.jobMap.get(jobKeyPrefix)
+    }
+
+    return undefined
+  }
+
+  /**
    * 由 Cron 周期性调用，负责：
    * - 找出当前需要执行的任务
    * - 为每个任务创建执行记录
@@ -43,7 +70,7 @@ export class DataSyncOrchestrator {
     this.logger.log(`Found ${tasks.length} due data-pull tasks`)
 
     for (const task of tasks) {
-      const job = this.jobMap.get(task.key)
+      const job = this.findJobForTask(task.key)
       if (!job) {
         this.logger.error(`No DataPullJob implementation found for key=${task.key}`)
         continue
