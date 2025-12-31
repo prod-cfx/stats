@@ -150,14 +150,42 @@ export const PublicCompaniesTable = () => {
       const num = Number(numStr);
       if (!Number.isFinite(num)) return Number.NEGATIVE_INFINITY;
 
-      // Detect unit right after the number (e.g. 47.4B, 671.27K BTC, 66.10万 BTC)
-      const rest = val.slice(match.index + numStr.length).trimStart();
+      // Detect unit right after the number (e.g. 3.1T, 47.4B, 671.27K BTC, 66.10万 BTC, 3.1万亿)
+      // Note: only treat compact units when they are directly attached (or after trimming leading spaces).
+      // If the suffix is separated by whitespace and looks like a symbol/code (e.g. "BTC"), we treat it as "no unit".
+      const restRaw = val.slice(match.index + numStr.length);
+      const rest = restRaw.trimStart();
+      if (!rest) return num;
+
+      // CJK units (order matters: handle "万亿" before "万")
+      if (rest.startsWith('万亿')) return num * 1e12;
+      if (rest.startsWith('兆')) return num * 1e12;
+      if (rest.startsWith('千亿')) return num * 1e11;
+      if (rest.startsWith('百亿')) return num * 1e10;
+      if (rest.startsWith('十亿')) return num * 1e9;
+      if (rest.startsWith('亿')) return num * 1e8;
+      if (rest.startsWith('万')) return num * 1e4;
+
+      // Latin compact units: K/M/B/T (only if the next char is not a letter, to avoid matching "BTC"/"MSFT"...)
       const unit = rest[0];
-      if (unit === 'B' || unit === 'b') return num * 1e9;
-      if (unit === 'M' || unit === 'm') return num * 1e6;
-      if (unit === 'K' || unit === 'k') return num * 1e3;
-      if (unit === '亿') return num * 1e8;
-      if (unit === '万') return num * 1e4;
+      const next = rest[1];
+      const nextIsLetter = typeof next === 'string' && /[A-Za-z]/.test(next);
+      if (!nextIsLetter) {
+        if (unit === 'T' || unit === 't') return num * 1e12;
+        if (unit === 'B' || unit === 'b') return num * 1e9;
+        if (unit === 'M' || unit === 'm') return num * 1e6;
+        if (unit === 'K' || unit === 'k') return num * 1e3;
+      }
+
+      // Unknown compact unit directly attached: fail loudly (but keep UI working by pushing it to top in desc sorts)
+      const hasDirectSuffix = restRaw.length > 0 && !/^\s/.test(restRaw);
+      const looksLikeCompactUnit = /^[A-Za-z]$/.test(unit) && !nextIsLetter;
+      if (hasDirectSuffix && looksLikeCompactUnit) {
+        // eslint-disable-next-line no-console
+        console.error(`[PublicCompaniesTable] 未识别的数值单位: "${val}"（suffix="${rest}"）`);
+        return Number.POSITIVE_INFINITY;
+      }
+
       return num;
     };
 
