@@ -229,11 +229,12 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
     const pnlVal = (multiplier * 3975.55).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const feeVal = (multiplier * 42733.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Helper to scale currency strings
     const scaleCurrency = (val: string, m: number) => {
       const num = parseFloat(val.replace(/[$,+]/g, ''));
-      const sign = val.includes('+') ? '+' : (val.includes('-') ? '-' : '');
-      return `$${sign}${(num * m).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const finalNum = num * m;
+      const formatted = Math.abs(finalNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const sign = finalNum > 0 ? '+' : (finalNum < 0 ? '-' : '');
+      return `$${sign}${formatted}`;
     };
 
     // Helper to adjust time labels
@@ -242,6 +243,15 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       return time.replace(/天|小时/g, scale);
     };
 
+    // Define different data subsets for different time ranges
+    let sliceStart = 0;
+    if (timeRange === '1月') sliceStart = 2;
+    if (timeRange === '全部') sliceStart = 4;
+
+    const tradesForRange = [...topTrades].slice(sliceStart, sliceStart + 5);
+    const assetPerfForRange = [...assetPerformance].slice(sliceStart % 2, (sliceStart % 2) + 3);
+    const posPerfForRange = [...positionPerformance].slice(sliceStart, sliceStart + 6);
+
     return {
       profitTrades: p,
       lossTrades: l,
@@ -249,19 +259,19 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       winRate: wr + '%',
       pnl: `$+${pnlVal}`,
       fees: `$+${feeVal}`,
-      currentTopTrades: topTrades.map(t => ({
+      currentTopTrades: tradesForRange.map((t, i) => ({
         ...t,
-        pnl: scaleCurrency(t.pnl, multiplier * 0.8), // Slightly vary scaling
+        pnl: scaleCurrency(t.pnl, multiplier * (0.7 + i * 0.1)), 
         time: adjustTime(t.time, timeScale)
       })),
-      currentAssetPerformance: assetPerformance.map(ap => ({
+      currentAssetPerformance: assetPerfForRange.map(ap => ({
         ...ap,
         trades: Math.floor(ap.trades * multiplier),
         pnl: scaleCurrency(ap.pnl, multiplier),
         netPnl: scaleCurrency(ap.netPnl, multiplier),
         fees: scaleCurrency(ap.fees, multiplier)
       })),
-      currentPositionPerformance: positionPerformance.map(pp => ({
+      currentPositionPerformance: posPerfForRange.map(pp => ({
         ...pp,
         pnl: scaleCurrency(pp.pnl, multiplier),
         fees: scaleCurrency(pp.fees, multiplier),
