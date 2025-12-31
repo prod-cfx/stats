@@ -5,7 +5,6 @@ import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react';
 import React, { useState } from 'react';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
-import { useToast } from '@/components/ui/toast';
 import { useMockData } from '@/hooks/use-mock-data';
 import { PredictionCard } from './PredictionCard';
 
@@ -189,7 +188,6 @@ const initialPredictions: PredictionMarketItem[] = [
 export const PredictionMarketGrid = () => {
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
-  const { success } = useToast();
 
   const { data: predictions, loading, error, reload } = useMockData(
     async () => initialPredictions,
@@ -201,11 +199,6 @@ export const PredictionMarketGrid = () => {
     setSelectedPrediction(p);
     // Modal internal loading: 800-1200ms
     setTimeout(() => setModalLoading(false), 1000);
-  };
-
-  const handleVote = (label: string) => {
-    success('已选择（Mock）', `您已为 "${label}" 投下一票`);
-    setSelectedPrediction(null);
   };
 
   return (
@@ -244,44 +237,30 @@ export const PredictionMarketGrid = () => {
             </div>
           </div>
 
-          {/* Options / Probability */}
-          <div className="space-y-3">
-            <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">选择一个选项进行预测</p>
-            {selectedPrediction?.options?.length ? (
-              <div className="space-y-3">
-                {selectedPrediction.options.map((opt, idx) => (
-                  <button
-                    key={`${opt.label}-${idx}`}
-                    type="button"
-                    onClick={() => handleVote(opt.label)}
-                    className="w-full flex justify-between items-center p-4 bg-[#0d1117] border border-[#30363d] rounded-xl hover:border-primary transition-all group active:scale-[0.98]"
-                  >
-                    <span className="text-white font-bold">{opt.label}</span>
-                    <div className="flex items-center gap-3">
+          {/* Outcomes (read-only) */}
+          {(selectedPrediction?.options?.length || selectedPrediction?.probability) && (
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">Outcomes</p>
+              {selectedPrediction?.options?.length ? (
+                <div className="space-y-3">
+                  {selectedPrediction.options.map((opt, idx) => (
+                    <div
+                      key={`${opt.label}-${idx}`}
+                      className="w-full flex justify-between items-center p-4 bg-[#0d1117] border border-[#30363d] rounded-xl"
+                    >
+                      <span className="text-white font-bold">{opt.label}</span>
                       <span className="text-primary font-bold">{opt.probability}</span>
-                      <div className="w-5 h-5 rounded-full border-2 border-[#30363d] group-hover:border-primary transition-colors" />
                     </div>
-                  </button>
-                ))}
-              </div>
-            ) : selectedPrediction?.probability ? (
-              <div className="py-8 text-center bg-[#0d1117] rounded-xl border border-[#30363d]">
-                <p className="text-3xl font-bold text-white mb-1">{selectedPrediction.probability}</p>
-                <p className="text-[#8b949e] text-xs uppercase tracking-widest">当前概率</p>
-                <button
-                  type="button"
-                  onClick={() => handleVote('YES')}
-                  className="mt-6 px-10 py-2 bg-primary text-white rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-primary/20"
-                >
-                  参与预测
-                </button>
-              </div>
-            ) : (
-              <div className="py-6 text-center text-sm text-[#8b949e] border border-[#30363d] rounded-xl bg-[#0d1117]/30">
-                暂无可选项（Mock）
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center bg-[#0d1117] rounded-xl border border-[#30363d]">
+                  <p className="text-3xl font-bold text-white mb-1">{selectedPrediction?.probability}</p>
+                  <p className="text-[#8b949e] text-xs uppercase tracking-widest">probability</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Rules */}
           <div className="space-y-4 pt-2">
