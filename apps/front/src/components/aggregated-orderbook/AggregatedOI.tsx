@@ -173,8 +173,24 @@ export const AggregatedOI = () => {
   };
 
   const sortedData = useMemo(() => {
-    const data = [...mockOIData];
-    // Keep "Total" row separate if needed, but here we can just sort all
+    // Generate different data values based on the symbol to avoid data mismatch
+    const symbolSeed = activeSymbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const data = mockOIData.map(row => {
+      if (row.isTotal) return row;
+      
+      // Slightly vary the numbers based on the symbol for realistic mock behavior
+      const factor = 1 + (symbolSeed % 10 - 5) / 100;
+      const val = parseValue(row.oiBtc);
+      const newVal = (val * factor).toFixed(2);
+      
+      return {
+        ...row,
+        oiBtc: `${newVal}万 ${activeSymbol}`,
+        // For USD, just keep it or slightly vary it too
+        oiUsd: `$${(parseValue(row.oiUsd) * factor).toFixed(2)}亿`,
+      };
+    });
+
     if (!sortField || !sortDirection) return data;
 
     const exchangeRows = data.filter(row => !row.isTotal);
@@ -187,7 +203,7 @@ export const AggregatedOI = () => {
     });
 
     return totalRow ? [totalRow, ...exchangeRows] : exchangeRows;
-  }, [sortField, sortDirection]);
+  }, [sortField, sortDirection, activeSymbol]);
 
   const filteredSymbols = useMemo(() => {
     return symbols.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -364,9 +380,9 @@ export const AggregatedOI = () => {
               </tr>
             </thead>
             <tbody className="text-sm">
-              {sortedData.map((row, idx) => (
+              {sortedData.map((row) => (
                 <tr 
-                  key={idx} 
+                  key={row.isTotal ? 'total' : row.exchange} 
                   className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
                     row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                   }`}
@@ -382,7 +398,7 @@ export const AggregatedOI = () => {
                       <span className={row.isTotal ? 'text-white' : 'text-[#e6edf3]'}>{row.exchange}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiBtc.replace('BTC', activeSymbol)}</td>
+                  <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiBtc}</td>
                   <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiUsd}</td>
                   <td className="px-4 py-4 text-right text-[#e6edf3]">{row.ratio}</td>
                   <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change1h)}</td>
