@@ -118,7 +118,7 @@ export default function OrderbookConfigsPage() {
       setOrderbookPreview({
         bids: book.bids,
         asks: book.asks,
-        exchangeTs: book.exchangeTs,
+        exchangeTs: book.exchangeTs ?? undefined,
         receivedTs: book.receivedTs,
       })
     }

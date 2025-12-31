@@ -1,5 +1,4 @@
 import type { schemas } from '@ai/api-contracts';
-import type { VenueOrderBook } from '@ai/shared'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
@@ -85,8 +84,8 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
   } catch (error: any) {
     const status = error?.response?.status ?? error?.status
 
-    // 401 未授权 / 403 禁止访问：均视为登录态失效或权限不足，统一清理会话并跳转登录
-    if (status === 401 || status === 403) {
+    // 401 未授权：登录态失效，统一清理会话并跳转登录
+    if (status === 401) {
       // 管理员登录态失效：统一清理 Zustand 会话（内存 + localStorage），并跳转登录页
       try {
         // 通过 Zustand store 清理，会自动同步 localStorage 与内存 session 状态
@@ -100,9 +99,11 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
       }
     }
 
+    // 403 禁止访问：表示当前账号缺少操作权限，不清理 session，由调用方处理提示
     throw error
   }
 }
+
 export interface AdminRole {
   id: string
   code: string
@@ -149,88 +150,58 @@ export async function registerAdmin(payload: AdminRegisterPayload) {
 }
 
 export async function fetchAdminMenus(): Promise<AdminMenuNode[]> {
-  return withAuthErrorHandling(async () => {
-    const response = await client['AdminMenuController_findMenuTree[0]']({
-      headers: requireAuthHeaders(),
-    })
-    return unwrapListResponse<AdminMenuNode>(response)
-  })
+  const response = await client['AdminMenuController_findMenuTree[0]']({ headers: requireAuthHeaders() })
+  return unwrapListResponse<AdminMenuNode>(response)
 }
 
 export function createMenu(payload: CreateMenuPayload) {
-  return withAuthErrorHandling(() =>
-    client['AdminMenuController_create[0]'](payload, {
-      headers: requireAuthHeaders(),
-    }).then(unwrapResponse),
-  )
+  return client['AdminMenuController_create[0]'](payload, { headers: requireAuthHeaders() }).then(unwrapResponse)
 }
 
 export async function fetchAdminRoles(): Promise<AdminRole[]> {
-  return withAuthErrorHandling(async () => {
-    const response = await client['AdminRoleController_list[0]']({
-      headers: requireAuthHeaders(),
-    })
-    return unwrapListResponse<AdminRole>(response)
-  })
+  const response = await client['AdminRoleController_list[0]']({ headers: requireAuthHeaders() })
+  return unwrapListResponse<AdminRole>(response)
 }
 
 export function createRole(payload: CreateRolePayload) {
-  return withAuthErrorHandling(() =>
-    client['AdminRoleController_create[0]'](payload, {
-      headers: requireAuthHeaders(),
-    }).then(unwrapResponse),
-  )
+  return client['AdminRoleController_create[0]'](payload, { headers: requireAuthHeaders() }).then(unwrapResponse)
 }
 
 export function updateRole(id: string, payload: UpdateRolePayload) {
-  return withAuthErrorHandling(() =>
-    client['AdminRoleController_update[0]'](payload, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    }).then(unwrapResponse),
-  )
+  return client['AdminRoleController_update[0]'](payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  }).then(unwrapResponse)
 }
 
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
-  return withAuthErrorHandling(async () => {
-    const response = await client['AdminUserController_list[0]']({
-      headers: requireAuthHeaders(),
-    })
-    return unwrapListResponse<AdminUser>(response)
-  })
+  const response = await client['AdminUserController_list[0]']({ headers: requireAuthHeaders() })
+  return unwrapListResponse<AdminUser>(response)
 }
 
 export function createAdminUser(payload: CreateAdminUserPayload) {
-  return withAuthErrorHandling(() =>
-    client['AdminUserController_create[0]'](payload, {
-      headers: requireAuthHeaders(),
-    }).then(unwrapResponse),
-  )
+  return client['AdminUserController_create[0]'](payload, { headers: requireAuthHeaders() }).then(unwrapResponse)
 }
 
 export function updateAdminUser(id: string, payload: UpdateAdminUserPayload) {
-  return withAuthErrorHandling(() =>
-    client['AdminUserController_update[0]'](payload, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    }).then(unwrapResponse),
-  )
+  return client['AdminUserController_update[0]'](payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
+  }).then(unwrapResponse)
 }
 
 // 系统提示词配置相关 API
 export async function fetchSystemPromptSettings(): Promise<SettingResponse[]> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminSettingsController_getAllSettings({
-      headers: requireAuthHeaders(),
-      queries: { category: SYSTEM_PROMPT_CATEGORY },
-    })
-    const data = unwrapResponse<SettingResponse[] | { items: SettingResponse[] }>(response as any)
-    if (Array.isArray(data))
-      return data
-    if (data && Array.isArray((data as any).items))
-      return (data as any).items
-    return []
+  const response = await client.AdminSettingsController_getAllSettings({
+    headers: requireAuthHeaders(),
+    queries: { category: SYSTEM_PROMPT_CATEGORY },
   })
+  const data = unwrapResponse<SettingResponse[] | { items: SettingResponse[] }>(response as any)
+  if (Array.isArray(data))
+    return data
+  if (data && Array.isArray((data as any).items))
+    return (data as any).items
+  return []
 }
 
 export interface CreateSystemPromptSettingPayload {
@@ -243,22 +214,20 @@ export interface CreateSystemPromptSettingPayload {
 export async function createSystemPromptSetting(
   payload: CreateSystemPromptSettingPayload,
 ): Promise<SettingResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminSettingsController_createSetting(
-      {
-        key: payload.key,
-        value: payload.value,
-        type: (payload.type || 'string') as 'string' | 'number' | 'boolean' | 'json',
-        description: payload.description,
-        category: SYSTEM_PROMPT_CATEGORY,
-        isSystem: true,
-      },
-      {
-        headers: requireAuthHeaders(),
-      },
-    )
-    return unwrapResponse<SettingResponse>(response as any)
-  })
+  const response = await client.AdminSettingsController_createSetting(
+    {
+      key: payload.key,
+      value: payload.value,
+      type: (payload.type || 'string') as 'string' | 'number' | 'boolean' | 'json',
+      description: payload.description,
+      category: SYSTEM_PROMPT_CATEGORY,
+      isSystem: true,
+    },
+    {
+      headers: requireAuthHeaders(),
+    },
+  )
+  return unwrapResponse<SettingResponse>(response as any)
 }
 
 export interface UpdateSystemPromptSettingPayload {
@@ -271,39 +240,23 @@ export async function updateSystemPromptSetting(
   key: string,
   payload: UpdateSystemPromptSettingPayload,
 ): Promise<SettingResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminSettingsController_updateSetting(
-      {
-        value: payload.value,
-        type: (payload.type || 'string') as 'string' | 'number' | 'boolean' | 'json',
-        description: payload.description,
-        category: SYSTEM_PROMPT_CATEGORY,
-        isSystem: true,
-      },
-      {
-        headers: requireAuthHeaders(),
-        params: { key },
-      },
-    )
-    return ((response as any)?.data ?? response) as SettingResponse
-  })
+  const response = await client.AdminSettingsController_updateSetting(
+    {
+      value: payload.value,
+      type: (payload.type || 'string') as 'string' | 'number' | 'boolean' | 'json',
+      description: payload.description,
+      category: SYSTEM_PROMPT_CATEGORY,
+      isSystem: true,
+    },
+    {
+      headers: requireAuthHeaders(),
+      params: { key },
+    },
+  )
+  return ((response as any)?.data ?? response) as SettingResponse
 }
 
 // ===== 数据拉取任务管理（Admin） =====
-
-/**
- * 获取所有已注册的 Job key 列表（用于创建任务时的下拉选择）
- */
-export async function fetchRegisteredJobKeys(): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
-    headers: requireAuthHeaders(),
-  })
-  if (!response.ok) {
-    throw new Error('获取已注册 key 列表失败')
-  }
-  const data = await response.json()
-  return data?.keys ?? data?.data?.keys ?? []
-}
 
 /**
  * Meta 字段格式说明
@@ -327,7 +280,7 @@ export interface JobMetaSchema {
 }
 
 /**
- * 已注册的 Job 信息
+ * 已注册 Job Meta 信息（用于创建/编辑任务时的下拉与表单动态生成）
  */
 export interface RegisteredJobInfo {
   key: string
@@ -335,15 +288,14 @@ export interface RegisteredJobInfo {
   metaSchema: JobMetaSchema | null
 }
 
-/**
- * 获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）
- */
 export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
-  const response = await client.AdminDataPullTaskController_getRegisteredJobs({
-    headers: requireAuthHeaders(),
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_getRegisteredJobs({
+      headers: requireAuthHeaders(),
+    })
+    const data = unwrapResponse<any>(response as any)
+    return data?.jobs ?? []
   })
-  const data = unwrapResponse<any>(response as any)
-  return data?.jobs ?? []
 }
 
 /**
@@ -392,27 +344,26 @@ export async function fetchDataPullTasks(
   })
 }
 
-/**
- * 分页获取指定任务的执行日志
- */
 export async function fetchDataPullTaskExecutions(
   taskId: number,
   page = 1,
   limit = 20,
 ): Promise<_PaginationResult<DataPullExecutionLog>> {
-  const response = await client.AdminDataPullTaskController_listExecutions({
-    headers: requireAuthHeaders(),
-    params: { id: taskId },
-    queries: { page, limit },
-  })
-  const payload = unwrapResponse<any>(response as any)
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_listExecutions({
+      headers: requireAuthHeaders(),
+      params: { id: taskId },
+      queries: { page, limit },
+    })
+    const payload = unwrapResponse<any>(response as any)
 
-  return {
-    total: payload.total ?? 0,
-    page: payload.page ?? page,
-    limit: payload.limit ?? limit,
-    items: Array.isArray(payload.items) ? (payload.items as DataPullExecutionLog[]) : [],
-  }
+    return {
+      total: payload.total ?? 0,
+      page: payload.page ?? page,
+      limit: payload.limit ?? limit,
+      items: Array.isArray(payload.items) ? (payload.items as DataPullExecutionLog[]) : [],
+    }
+  })
 }
 
 export interface CreateDataPullTaskPayload {
@@ -431,35 +382,21 @@ export interface CreateDataPullTaskPayload {
 }
 
 export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
-  return withAuthErrorHandling(async () => {
-    const dto: _CreateDataPullTaskDto = {
-      key: payload.key,
-      name: payload.name,
-      source: payload.source ?? null,
-      type: payload.type ?? null,
-      cron: payload.cron ?? null,
-      intervalSeconds: payload.intervalSeconds ?? null,
-      enabled: payload.enabled ?? true,
-      cursor: payload.cursor ?? null,
-      meta: payload.meta ?? null,
-    }
-
-    try {
-      const response = await client.AdminDataPullTaskController_create(dto, {
-        headers: requireAuthHeaders(),
-      })
-      return unwrapResponse<DataPullTask>(response as any)
-    } catch (error: any) {
-      // 提取错误信息，向上抛出用户可读的错误文案
-      const errorMsg =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.data?.message ||
-        error?.message ||
-        '创建任务失败'
-      throw new Error(errorMsg)
-    }
+  const dto: _CreateDataPullTaskDto = {
+    key: payload.key,
+    name: payload.name,
+    source: payload.source ?? null,
+    type: payload.type ?? null,
+    cron: payload.cron ?? null,
+    intervalSeconds: payload.intervalSeconds ?? null,
+    enabled: payload.enabled ?? true,
+    cursor: payload.cursor ?? null,
+    meta: payload.meta ?? null,
+  }
+  const response = await client.AdminDataPullTaskController_create(dto, {
+    headers: requireAuthHeaders(),
   })
+  return unwrapResponse<DataPullTask>(response as any)
 }
 
 export interface UpdateDataPullTaskPayload {
@@ -477,73 +414,61 @@ export interface UpdateDataPullTaskPayload {
 }
 
 export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
-  return withAuthErrorHandling(async () => {
-    const dto: _UpdateDataPullTaskDto = {}
-    if (payload.name !== undefined) dto.name = payload.name
-    if (payload.source !== undefined) dto.source = payload.source
-    if (payload.type !== undefined) dto.type = payload.type
-    if (payload.cron !== undefined) dto.cron = payload.cron
-    if (payload.intervalSeconds !== undefined) dto.intervalSeconds = payload.intervalSeconds
-    if (payload.enabled !== undefined) dto.enabled = payload.enabled
-    if (payload.cursor !== undefined) dto.cursor = payload.cursor
-    if (payload.meta !== undefined) dto.meta = payload.meta
-    const response = await client.AdminDataPullTaskController_update(dto, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
-    return unwrapResponse<DataPullTask>(response as any)
+  const dto: _UpdateDataPullTaskDto = {}
+  if (payload.name !== undefined) dto.name = payload.name
+  if (payload.source !== undefined) dto.source = payload.source
+  if (payload.type !== undefined) dto.type = payload.type
+  if (payload.cron !== undefined) dto.cron = payload.cron
+  if (payload.intervalSeconds !== undefined) dto.intervalSeconds = payload.intervalSeconds
+  if (payload.enabled !== undefined) dto.enabled = payload.enabled
+  if (payload.cursor !== undefined) dto.cursor = payload.cursor
+  if (payload.meta !== undefined) dto.meta = payload.meta
+  const response = await client.AdminDataPullTaskController_update(dto, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
+  return unwrapResponse<DataPullTask>(response as any)
 }
 
 export async function deleteDataPullTask(id: number): Promise<void> {
-  await withAuthErrorHandling(async () => {
-    await (client as any).AdminDataPullTaskController_delete({
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
+  await (client as any).AdminDataPullTaskController_delete({
+    headers: requireAuthHeaders(),
+    params: { id },
   })
 }
 
 // 订单薄交易对配置相关 API
 export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminOrderbookPairConfigController_getAllConfigs({
-      headers: requireAuthHeaders(),
-    })
-    return unwrapListResponse<OrderbookPairConfigResponse>(response)
+  const response = await client.AdminOrderbookPairConfigController_getAllConfigs({
+    headers: requireAuthHeaders(),
   })
+  return unwrapListResponse<OrderbookPairConfigResponse>(response)
 }
 
 export async function createOrderbookConfig(
   payload: CreateOrderbookPairConfigPayload,
 ): Promise<OrderbookPairConfigResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminOrderbookPairConfigController_createConfig(payload, {
-      headers: requireAuthHeaders(),
-    })
-    return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+  const response = await client.AdminOrderbookPairConfigController_createConfig(payload, {
+    headers: requireAuthHeaders(),
   })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
 }
 
 export async function updateOrderbookConfig(
   id: string,
   payload: UpdateOrderbookPairConfigPayload,
 ): Promise<OrderbookPairConfigResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminOrderbookPairConfigController_updateConfig(payload, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
-    return unwrapResponse<OrderbookPairConfigResponse>(response as any)
+  const response = await client.AdminOrderbookPairConfigController_updateConfig(payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
+  return unwrapResponse<OrderbookPairConfigResponse>(response as any)
 }
 
 export async function deleteOrderbookConfig(id: string): Promise<void> {
-  await withAuthErrorHandling(async () => {
-    await client.AdminOrderbookPairConfigController_deleteConfig(undefined, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
+  await client.AdminOrderbookPairConfigController_deleteConfig(undefined, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
 }
 
@@ -560,72 +485,67 @@ export interface ExchangeConfigListQuery {
 export async function fetchExchangeConfigs(
   query: ExchangeConfigListQuery = {},
 ): Promise<_PaginationResult<ExchangeConfigResponse>> {
-  return withAuthErrorHandling(async () => {
-    const page = query.page ?? 1
-    const limit = query.limit ?? 20
-    const response = await client.AdminExchangeConfigController_getAllConfigs({
-      headers: requireAuthHeaders(),
-      queries: {
-        page,
-        limit,
-        code: query.code,
-        name: query.name,
-        venueType: query.venueType,
-        enabled: query.enabled,
-      },
-    })
-    const data = unwrapResponse<any>(response)
-    return {
-      total: data.total ?? 0,
-      page: data.page ?? page,
-      limit: data.limit ?? limit,
-      items: Array.isArray(data.items) ? (data.items as ExchangeConfigResponse[]) : [],
-    }
+  const page = query.page ?? 1
+  const limit = query.limit ?? 20
+  const response = await client.AdminExchangeConfigController_getAllConfigs({
+    headers: requireAuthHeaders(),
+    queries: {
+      page,
+      limit,
+      code: query.code,
+      name: query.name,
+      venueType: query.venueType,
+      enabled: query.enabled,
+    },
   })
+  const data = unwrapResponse<any>(response)
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    limit: data.limit ?? limit,
+    items: Array.isArray(data.items) ? (data.items as ExchangeConfigResponse[]) : [],
+  }
 }
 
 export async function createExchangeConfig(payload: CreateExchangeConfigPayload): Promise<ExchangeConfigResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminExchangeConfigController_createConfig(payload, {
-      headers: requireAuthHeaders(),
-    })
-    return unwrapResponse<ExchangeConfigResponse>(response as any)
+  const response = await client.AdminExchangeConfigController_createConfig(payload, {
+    headers: requireAuthHeaders(),
   })
+  return unwrapResponse<ExchangeConfigResponse>(response as any)
 }
 
 export async function updateExchangeConfig(
   id: string,
   payload: UpdateExchangeConfigPayload,
 ): Promise<ExchangeConfigResponse> {
-  return withAuthErrorHandling(async () => {
-    const response = await client.AdminExchangeConfigController_updateConfig(payload, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
-    return unwrapResponse<ExchangeConfigResponse>(response as any)
+  const response = await client.AdminExchangeConfigController_updateConfig(payload, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
+  return unwrapResponse<ExchangeConfigResponse>(response as any)
 }
 
 export async function deleteExchangeConfig(id: string): Promise<void> {
-  await withAuthErrorHandling(async () => {
-    await client.AdminExchangeConfigController_deleteConfig(undefined, {
-      headers: requireAuthHeaders(),
-      params: { id },
-    })
+  await client.AdminExchangeConfigController_deleteConfig(undefined, {
+    headers: requireAuthHeaders(),
+    params: { id },
   })
 }
 
 // ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
 
+// 使用 SDK 生成的 VenueOrderBookDto 类型，避免直接依赖 @ai/shared 的编译产物
+type VenueOrderBookDto = z.infer<typeof schemas.VenueOrderBookDto>
+
 export async function fetchOrderbookSnapshotByConfigId(
   id: string,
-): Promise<VenueOrderBook | null> {
+): Promise<VenueOrderBookDto | null> {
   return withAuthErrorHandling(async () => {
     const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
       headers: requireAuthHeaders(),
       params: { id },
     })
-    const data = unwrapResponse<VenueOrderBook | null>(response as any)
+    const data = unwrapResponse<VenueOrderBookDto | null>(response as any)
     return data ?? null
   })
 }
