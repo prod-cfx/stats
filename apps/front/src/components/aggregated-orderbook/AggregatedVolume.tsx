@@ -104,7 +104,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                 style={{ 
                   width: `${item.percent}%`, 
                   backgroundColor: item.color,
-                  boxShadow: hoveredItem?.name === item.name ? `0 0 15px ${item.color}` : `0 0-10px ${item.color}40`
+                  boxShadow: hoveredItem?.name === item.name ? `0 0 15px ${item.color}` : `0 0 10px ${item.color}40`
                 }}
               />
             </div>
@@ -150,9 +150,17 @@ export const AggregatedVolume = () => {
   const [leftSymbol, setLeftSymbol] = useState('BTC');
   const [rightSymbol, setRightSymbol] = useState('ETH');
 
+  // Stable seed-based "random" for mock data consistency
+  const getStableAmount = (symbol: string) => {
+    if (symbol === 'BTC') return 44.59;
+    if (symbol === 'ETH') return 38.24;
+    const seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return ((seed * 9301 + 49297) % 233280) / 233280 * 20 + 5;
+  };
+
   // Mock data generator based on symbol
   const getItemsForSymbol = (symbol: string) => {
-    const baseAmount = symbol === 'BTC' ? 44.59 : symbol === 'ETH' ? 38.24 : Math.random() * 20 + 5;
+    const baseAmount = getStableAmount(symbol);
     
     return [
       { name: 'Total', amount: `$${baseAmount.toFixed(2)}B`, percent: 100, color: '#3b82f6' },
@@ -170,8 +178,8 @@ export const AggregatedVolume = () => {
     ];
   };
 
-  const leftItems = getItemsForSymbol(leftSymbol);
-  const rightItems = getItemsForSymbol(rightSymbol);
+  const leftItems = React.useMemo(() => getItemsForSymbol(leftSymbol), [leftSymbol]);
+  const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [rightSymbol]);
 
   return (
     <div className="flex flex-col gap-8 pb-12">
