@@ -2,11 +2,11 @@
 
 import React from 'react';
 import { Navbar } from '@/components/layout/Navbar';
-import { TopBar } from '@/components/trading/TopBar/TopBar';
-import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
 import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
+import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
+import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
+import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
+import { TopBar } from '@/components/trading/TopBar/TopBar';
 
 export default function MarketPage() {
   return (

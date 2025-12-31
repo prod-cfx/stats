@@ -1,12 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
+import { FilterButton } from '@/components/ui/FilterButton';
+import { LoadingState } from '@/components/ui/loading';
+import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
+import { useMockData } from '@/hooks/use-mock-data';
+
+type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE';
 
 interface ExchangeData {
   exchange: string;
   logo: string;
+  coin: CoinSymbol | 'ALL';
   amount: string;
   long: string;
   short: string;
@@ -16,198 +23,305 @@ interface ExchangeData {
   isTotal?: boolean;
 }
 
-const mockExchangeData: ExchangeData[] = [
-  {
-    exchange: '全部',
-    logo: '',
-    amount: '$3659.98万',
-    long: '$3071.64万',
-    short: '$588.33万',
-    ratio: '100%',
-    longShortRatio: '83.93%做多',
-    isLongDominant: true,
-    isTotal: true,
-  },
+const COIN_OPTIONS: Array<'全部' | CoinSymbol> = ['全部', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+const TIME_OPTIONS = ['1小时', '4小时', '12小时', '24小时'] as const;
+
+const EXCHANGES = [
   {
     exchange: 'Hyperliquid',
     logo: 'https://app.hyperliquid.xyz/favicon.ico',
-    amount: '$1429.44万',
-    long: '$1312.02万',
-    short: '$117.42万',
-    ratio: '39.06%',
-    longShortRatio: '91.79%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'Binance',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
-    amount: '$740.53万',
-    long: '$576.40万',
-    short: '$164.13万',
-    ratio: '20.23%',
-    longShortRatio: '77.84%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'Bybit',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
-    amount: '$500.87万',
-    long: '$403.68万',
-    short: '$97.19万',
-    ratio: '13.69%',
-    longShortRatio: '80.6%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'OKX',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
-    amount: '$352.55万',
-    long: '$249.13万',
-    short: '$103.42万',
-    ratio: '9.63%',
-    longShortRatio: '70.66%做多',
-    isLongDominant: true,
-  },
-  {
-    exchange: 'HTX',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/102.png',
-    amount: '$333.13万',
-    long: '$306.05万',
-    short: '$27.09万',
-    ratio: '9.1%',
-    longShortRatio: '91.87%做多',
-    isLongDominant: true,
-  },
-  {
-    exchange: 'Gate',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/87.png',
-    amount: '$286.57万',
-    long: '$210.00万',
-    short: '$76.57万',
-    ratio: '7.83%',
-    longShortRatio: '73.28%做多',
-    isLongDominant: true,
-  },
-  {
-    exchange: 'CoinEx',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/294.png',
-    amount: '$15.73万',
-    long: '$13.38万',
-    short: '$2.36万',
-    ratio: '0.43%',
-    longShortRatio: '85.02%做多',
-    isLongDominant: true,
-  },
-  {
-    exchange: 'Aster',
-    logo: 'https://via.placeholder.com/20/dc2626/ffffff?text=A',
-    amount: '$9854.48',
-    long: '$9854.48',
-    short: '$0',
-    ratio: '0.03%',
-    longShortRatio: '100%做多',
-    isLongDominant: true,
-  },
-  {
-    exchange: 'Bitfinex',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/37.png',
-    amount: '$1524.42',
-    long: '$0',
-    short: '$1524.42',
-    ratio: '0%',
-    longShortRatio: '100%做空',
-    isLongDominant: false,
   },
 ];
 
+function parseWanAmount(v: string): number {
+  return Number.parseFloat(v.replace('$', '').replace('万', ''));
+}
+
+function formatWanAmount(v: number): string {
+  return `$${v.toFixed(2)}万`;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function hashToUnit(str: string): number {
+  // deterministic 0..1 based on string hash
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 2 ** 32;
+}
+
+function timeToHours(timeFilter: string): number {
+  switch (timeFilter) {
+    case '1小时':
+      return 1;
+    case '4小时':
+      return 4;
+    case '12小时':
+      return 12;
+    case '24小时':
+      return 24;
+    default:
+      return 4;
+  }
+}
+
 export const ExchangeLiquidationTable = () => {
-  const [exchangeFilter, setExchangeFilter] = useState('全部');
+  const [coinFilter, setCoinFilter] = useState('全部');
   const [timeFilter, setTimeFilter] = useState('4小时');
+  const [selectedExchange, setSelectedExchange] = useState<ExchangeData | null>(null);
+
+  const selectedCoin = (coinFilter === '全部' ? '全部' : (coinFilter as CoinSymbol));
+  const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
+
+  const { data: tableData, loading, error, reload } = useMockData(
+    async () => {
+      // Mock dataset: each row has coin metadata and varies by coin + time.
+      const coins: CoinSymbol[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+
+      const timeScale = clamp(hours / 4, 0.5, 6); // baseline 4h
+
+      // Build per-exchange-per-coin records
+      const perCoinRows: Array<ExchangeData & { _amount: number; _long: number; _short: number }> = [];
+      for (const ex of EXCHANGES) {
+        for (const coin of coins) {
+          const base = 200 + 1200 * hashToUnit(`${ex.exchange}:${coin}`); // 200..1400 (万)
+          const volatility = 0.85 + 0.35 * hashToUnit(`${ex.exchange}:${coin}:${hours}`); // 0.85..1.2
+          const amount = base * timeScale * volatility;
+
+          const longShare = clamp(0.35 + 0.55 * hashToUnit(`${ex.exchange}:${coin}:long:${hours}`), 0.05, 0.95);
+          const long = amount * longShare;
+          const short = amount - long;
+
+          perCoinRows.push({
+            exchange: ex.exchange,
+            logo: ex.logo,
+            coin,
+            amount: formatWanAmount(amount),
+            long: formatWanAmount(long),
+            short: formatWanAmount(short),
+            ratio: '0%',
+            longShortRatio: `${(longShare * 100).toFixed(2)}%做多`,
+            isLongDominant: long > short,
+            _amount: amount,
+            _long: long,
+            _short: short,
+          });
+        }
+      }
+
+      // Filter by coin, or aggregate "全部" across coins.
+      const visibleRowsRaw = selectedCoin === '全部'
+        ? EXCHANGES.map(ex => {
+          const rows = perCoinRows.filter(r => r.exchange === ex.exchange);
+          const amount = rows.reduce((acc, r) => acc + r._amount, 0);
+          const long = rows.reduce((acc, r) => acc + r._long, 0);
+          const short = rows.reduce((acc, r) => acc + r._short, 0);
+          const longShare = amount === 0 ? 0 : long / amount;
+          return {
+            exchange: ex.exchange,
+            logo: ex.logo,
+            coin: 'ALL' as const,
+            amount: formatWanAmount(amount),
+            long: formatWanAmount(long),
+            short: formatWanAmount(short),
+            ratio: '0%',
+            longShortRatio: `${(longShare * 100).toFixed(2)}%做多`,
+            isLongDominant: long > short,
+          };
+        })
+        : perCoinRows
+          .filter(r => r.coin === selectedCoin)
+          .map(r => ({
+            exchange: r.exchange,
+            logo: r.logo,
+            coin: r.coin,
+            amount: r.amount,
+            long: r.long,
+            short: r.short,
+            ratio: '0%',
+            longShortRatio: r.longShortRatio,
+            isLongDominant: r.isLongDominant,
+          }));
+
+      const visibleRows = visibleRowsRaw
+        .map(r => ({
+          ...r,
+          _amount: parseWanAmount(r.amount),
+          _long: parseWanAmount(r.long),
+          _short: parseWanAmount(r.short),
+        }))
+        .sort((a, b) => b._amount - a._amount);
+
+      const totalAmount = visibleRows.reduce((acc, r) => acc + r._amount, 0);
+      const totalLong = visibleRows.reduce((acc, r) => acc + r._long, 0);
+      const totalShort = visibleRows.reduce((acc, r) => acc + r._short, 0);
+
+      const enrichedRows: ExchangeData[] = visibleRows.map(r => {
+        const ratio = totalAmount === 0 ? 0 : (r._amount / totalAmount) * 100;
+        const longShare = r._amount === 0 ? 0 : (r._long / r._amount) * 100;
+        return {
+          exchange: r.exchange,
+          logo: r.logo,
+          coin: r.coin,
+          amount: r.amount,
+          long: r.long,
+          short: r.short,
+          ratio: `${ratio.toFixed(2)}%`,
+          longShortRatio: `${longShare.toFixed(2)}%做多`,
+          isLongDominant: r._long > r._short,
+        };
+      });
+
+      const total: ExchangeData = {
+        exchange: '全部',
+        logo: '',
+        coin: selectedCoin === '全部' ? 'ALL' : selectedCoin,
+        amount: formatWanAmount(totalAmount),
+        long: formatWanAmount(totalLong),
+        short: formatWanAmount(totalShort),
+        ratio: '100%',
+        longShortRatio: `${(totalAmount === 0 ? 0 : (totalLong / totalAmount) * 100).toFixed(2)}%做多`,
+        isLongDominant: totalLong > totalShort,
+        isTotal: true,
+      };
+
+      return [total, ...enrichedRows];
+    },
+    [coinFilter, timeFilter, hours]
+  );
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <SectionTitle>交易所爆仓</SectionTitle>
         <div className="flex gap-3">
-          <div className="relative group">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors">
-              交易所 ({exchangeFilter})
-              <ChevronDown className="w-4 h-4 text-[#8b949e]" />
-            </button>
-          </div>
-          <div className="relative group">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm hover:border-[#8b949e] transition-colors">
-              时间 ({timeFilter})
-              <ChevronDown className="w-4 h-4 text-[#8b949e]" />
-            </button>
-          </div>
+          <FilterButton 
+            value={coinFilter} 
+            options={COIN_OPTIONS as unknown as string[]} 
+            onChange={setCoinFilter} 
+          />
+          <FilterButton 
+            value={timeFilter} 
+            options={TIME_OPTIONS as unknown as string[]} 
+            onChange={setTimeFilter} 
+          />
         </div>
       </div>
 
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d]">
-                <th className="px-6 py-4 text-center">交易所</th>
-                <th className="px-6 py-4 text-center">爆仓金额</th>
-                <th className="px-6 py-4 text-center">多单爆仓</th>
-                <th className="px-6 py-4 text-center">空单爆仓</th>
-                <th className="px-6 py-4 text-center">占比</th>
-                <th className="px-6 py-4 text-center">多空比</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockExchangeData.map((row, index) => (
-                <tr 
-                  key={index} 
-                  className={`border-b border-[#30363d] transition-colors hover:bg-[#1f2937]/30 ${
-                    row.isTotal ? 'bg-[#21262d]' : ''
-                  }`}
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-center gap-2">
-                      {row.logo && (
-                        <img src={row.logo} alt={row.exchange} className="w-5 h-5 rounded-full" />
-                      )}
-                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                        {row.exchange}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                      {row.amount}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                      {row.long}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                      {row.short}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                      {row.ratio}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`text-sm font-bold ${row.isLongDominant ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
-                      {row.longShortRatio}
-                    </span>
-                  </td>
+      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg animate-in fade-in duration-500">
+        <LoadingState isLoading={loading} error={error} onRetry={reload}>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
+                  <th className="px-6 py-4 text-center">交易所</th>
+                  <th className="px-6 py-4 text-center">爆仓金额</th>
+                  <th className="px-6 py-4 text-center">多单爆仓</th>
+                  <th className="px-6 py-4 text-center">空单爆仓</th>
+                  <th className="px-6 py-4 text-center">占比</th>
+                  <th className="px-6 py-4 text-center">多空比</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-[#30363d]">
+                {tableData?.map((row, index) => (
+                  <tr 
+                    key={index} 
+                    className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
+                      row.isTotal ? 'bg-[#21262d]/50' : ''
+                    }`}
+                    onClick={() => setSelectedExchange(row)}
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {row.exchange !== '全部' && (
+                          <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={20} />
+                        )}
+                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
+                          {row.exchange}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
+                        {row.amount}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono">
+                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#4ade80]'}`}>
+                        {row.long}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center font-mono">
+                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#f87171]'}`}>
+                        {row.short}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#8b949e]'}`}>
+                        {row.ratio}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`text-sm font-bold ${row.isLongDominant ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                        {row.longShortRatio}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </LoadingState>
       </div>
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={!!selectedExchange}
+        onClose={() => setSelectedExchange(null)}
+        title={`${selectedExchange?.exchange} 爆仓详情 (Mock)`}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+              <p className="text-xs text-[#8b949e] mb-1">主要爆仓资产</p>
+              <p className="text-xl font-bold text-white">
+                {selectedExchange?.coin && selectedExchange.coin !== 'ALL' ? selectedExchange.coin : 'BTC / ETH'}
+              </p>
+            </div>
+            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+              <p className="text-xs text-[#8b949e] mb-1">最大单笔金额</p>
+              <p className="text-xl font-bold text-orange-400">$124.50万</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-[#e6edf3]">近期爆仓流水</p>
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30">
+                <span className="text-[#e6edf3]">0x{Math.random().toString(16).substring(2, 8)}...</span>
+                <span className="text-red-400">-$4.20万 (Short)</span>
+                <span className="text-[#8b949e] text-xs">2分钟前</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
-
-

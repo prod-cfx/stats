@@ -1,85 +1,74 @@
+import { RefreshCcw } from 'lucide-react';
 import React from 'react';
-import { RefreshCcw, ChevronDown } from 'lucide-react';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
+import { FilterButton } from '@/components/ui/FilterButton';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 interface LiquidationMapHeaderProps {
   symbol: string;
   setSymbol: (s: string) => void;
   range: string;
   setRange: (r: string) => void;
+  exchangeType: string;
+  setExchangeType: (e: string) => void;
   onRefresh: () => void;
 }
 
-const FilterButton = ({ label, value, options, onChange }: { 
-  label: string, 
-  value: string, 
-  options: string[], 
-  onChange: (v: string) => void 
-}) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-
-  return (
-    <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between px-3 py-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] text-sm min-w-[100px] hover:bg-[#30363d] transition-colors"
-      >
-        <span className="mr-2">{value}</span>
-        <ChevronDown className={`w-4 h-4 text-[#8b949e] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-20">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => {
-                onChange(opt);
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-[#e6edf3] hover:bg-[#21262d] transition-colors first:rounded-t-md last:rounded-b-md"
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+const symbolNames: Record<string, string> = {
+  'BTC': '比特币',
+  'ETH': '以太坊',
+  'SOL': 'Solana',
+  'XRP': '瑞波币',
+  'DOGE': '狗狗币',
+  'BNB': '币安币',
+  'HYPE': 'Hyperliquid',
+  'LINK': 'Chainlink',
+  'AVAX': 'Avalanche',
+  'ADA': 'Cardano'
 };
 
-export const LiquidationMapHeader = ({ symbol, setSymbol, range, setRange, onRefresh }: LiquidationMapHeaderProps) => {
+export const LiquidationMapHeader = ({ 
+  symbol, 
+  setSymbol, 
+  range, 
+  setRange, 
+  exchangeType,
+  setExchangeType,
+  onRefresh 
+}: LiquidationMapHeaderProps) => {
   return (
     <div className="flex flex-col gap-8 mb-10">
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-3">
-          <PageTitle>比特币交易所清算地图</PageTitle>
+          <PageTitle>{symbolNames[symbol] || symbol}交易所清算地图</PageTitle>
           <BodyText>实时全网爆仓热力图数据</BodyText>
         </div>
         <div className="flex items-center gap-3">
           <FilterButton 
-            label="CEX/DEX" 
-            value="All" 
+            value={exchangeType} 
             options={['All', 'CEX', 'DEX']} 
-            onChange={() => {}} 
+            onChange={setExchangeType} 
           />
           <FilterButton 
-            label="Symbol" 
             value={symbol} 
-            options={['BTC', 'ETH', 'SOL']} 
+            options={['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'LINK', 'AVAX', 'ADA']} 
             onChange={setSymbol} 
           />
           <FilterButton 
-            label="TimeRange" 
             value={range} 
-            options={['1小时', '4小时', '1天', '7天']} 
+            options={['1天', '7天', '30天']} 
             onChange={setRange} 
           />
           <button 
-            onClick={onRefresh}
-            className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] transition-colors active:bg-[#3d444d]"
+            type="button"
+            onClick={(e) => {
+              const btn = e.currentTarget.querySelector('svg');
+              btn?.classList.add('animate-spin');
+              setTimeout(() => btn?.classList.remove('animate-spin'), 500);
+              onRefresh();
+            }}
+            className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] hover:border-[#8b949e] transition-all active:scale-95 group shadow-sm"
           >
-            <RefreshCcw className="w-5 h-5" />
+            <RefreshCcw className="w-5 h-5 transition-transform" />
           </button>
         </div>
       </div>

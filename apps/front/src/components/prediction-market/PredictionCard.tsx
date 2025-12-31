@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import { Info, MoreHorizontal } from 'lucide-react';
+import React from 'react';
 import { SubTitle } from '@/components/ui/Typography';
 
 export interface PredictionOption {
@@ -9,7 +9,13 @@ export interface PredictionOption {
   probability: string;
 }
 
+export interface PredictionRulesMeta {
+  paragraphs: string[];
+  createdAt?: string;
+}
+
 export interface PredictionCardProps {
+  id?: string;
   title: string;
   icon?: React.ReactNode;
   iconBgColor?: string;
@@ -17,6 +23,7 @@ export interface PredictionCardProps {
   probability?: string;
   status?: 'LIVE' | string;
   volume?: string;
+  rules?: PredictionRulesMeta;
 }
 
 export const PredictionCard = ({ 
@@ -29,7 +36,7 @@ export const PredictionCard = ({
   volume 
 }: PredictionCardProps) => {
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col h-full relative group hover:border-[#8b949e] transition-colors">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col h-full relative group gradient-border-hover">
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-3 items-start">
           {icon && (
@@ -41,7 +48,7 @@ export const PredictionCard = ({
             {title}
           </SubTitle>
         </div>
-        <button className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
+        <button type="button" className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
           <Info className="w-4 h-4" />
         </button>
       </div>
@@ -74,7 +81,7 @@ export const PredictionCard = ({
             <span className="text-[#8b949e] text-xs font-medium">{volume} Vol.</span>
           )}
         </div>
-        <button className="text-[#8b949e] hover:text-white transition-colors">
+        <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>

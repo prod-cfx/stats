@@ -80,7 +80,11 @@ export class DataPullTaskRepository {
       const result = await client.dataPullTask.updateMany({
         where: {
           id: task.id,
-          lastStatus: { not: 'RUNNING' },
+          // 显式处理 null：lastStatus 为 null 或不等于 'RUNNING'
+          OR: [
+            { lastStatus: null },
+            { lastStatus: { not: 'RUNNING' } },
+          ],
         },
         data: {
           lastStatus: 'RUNNING',

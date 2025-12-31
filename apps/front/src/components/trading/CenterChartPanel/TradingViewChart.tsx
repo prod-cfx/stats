@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import dynamic from 'next/dynamic';
+import React from 'react';
 
 const LightweightChart = dynamic(
   () => import('./TradingViewLightweightChart').then(mod => mod.TradingViewLightweightChart),

@@ -3,11 +3,17 @@ enum MarketTimeframe {
   /// 说明：Prisma Client 侧使用 m1/m5/... 作为枚举键名，数据库存储 "1m"/"5m"/...
   /// 这样可以复用后端现有的 mapTimeframe/reverseMapTimeframe 映射工具，确保 API/SDK 看到的始终是 "1m" 等值
   m1  @map("1m")
+  m3  @map("3m")
   m5  @map("5m")
   m15 @map("15m")
+  m30 @map("30m")
   h1  @map("1h")
   h4  @map("4h")
+  h6  @map("6h")
+  h8  @map("8h")
+  h12 @map("12h")
   d1  @map("1d")
+  w1  @map("1w")
 }
 
 /// 市场数据相关模型：多空比（long/short ratio）
@@ -155,7 +161,7 @@ model OpenInterest {
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
   // 索引
-  @@unique([exchange, symbol, dataTimestamp], name: "unique_oi_record")
+  @@unique([exchange, symbol, dataTimestamp], name: "open_interest_exchange_symbol_data_timestamp_key")
   @@index([symbol, dataTimestamp], name: "idx_oi_symbol_timestamp")
   @@index([exchange, dataTimestamp], name: "idx_oi_exchange_timestamp")
   @@index([dataTimestamp], name: "idx_oi_timestamp")
@@ -179,8 +185,9 @@ model AggregatedLiquidationHistory {
   /// 交易所 (如 BINANCE / OKX)，'AGGREGATED' 表示全市场聚合
   exchangeCode String @default("AGGREGATED") @map("exchange_code")
 
-  /// 时间粒度（例如 4h / 1h），使用枚举统一管理
-  interval MarketTimeframe
+  /// 时间粒度字符串（例如 1m / 4h / 12h / 1w）
+  /// 使用字符串而不是枚举，避免受全局 MarketTimeframe 限制
+  interval String
 
   /// 该时间粒度对应的时间点（通常为区间起始时间），来自响应中的 time 字段
   timestamp DateTime

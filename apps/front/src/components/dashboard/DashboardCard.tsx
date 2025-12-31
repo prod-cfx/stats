@@ -13,7 +13,7 @@ export interface DashboardCardProps {
 
 export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardCardProps) => {
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden hover:border-[#3b82f6]/50 transition-all group flex flex-col h-full">
+    <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden gradient-border-hover group flex flex-col h-full">
       <div className="aspect-[16/10] w-full overflow-hidden border-b border-[#30363d]">
         <img 
           src={image} 

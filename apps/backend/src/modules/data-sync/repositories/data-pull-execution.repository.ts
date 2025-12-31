@@ -59,6 +59,29 @@ export class DataPullExecutionRepository {
     })
   }
 
+  /**
+   * 按任务 ID 分页查询执行历史（按 id 倒序）
+   */
+  async listByTaskId(taskId: number, page: number, limit: number): Promise<{
+    total: number
+    items: DataPullExecution[]
+  }> {
+    const client = this.getClient()
+    const [total, items] = await client.$transaction([
+      client.dataPullExecution.count({
+        where: { taskId },
+      }),
+      client.dataPullExecution.findMany({
+        where: { taskId },
+        orderBy: { id: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ])
+
+    return { total, items }
+  }
+
   private truncateError(error: any, maxLength = 2000): string {
     const raw =
       typeof error === 'string'
