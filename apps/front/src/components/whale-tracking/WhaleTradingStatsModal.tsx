@@ -194,6 +194,11 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Mock data for the donut chart - should eventually come from props or API
+  const profitTrades = 5;
+  const lossTrades = 5;
+  const totalTrades = profitTrades + lossTrades;
+
   // Simulate internal loading when address changes or modal opens
   useEffect(() => {
     if (isOpen) {
@@ -225,7 +230,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         label: {
           show: true,
           position: 'center',
-          formatter: '5', // Hardcoded total for now as per mock
+          formatter: () => totalTrades.toString(),
           fontSize: 18,
           fontWeight: 'bold',
           color: '#ffffff'
@@ -237,8 +242,8 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
           show: false
         },
         data: [
-          { value: 5, name: '盈利', itemStyle: { color: '#22c55e' } },
-          { value: 5, name: '亏损', itemStyle: { color: '#ef4444' } }
+          { value: profitTrades, name: '盈利', itemStyle: { color: '#22c55e' } },
+          { value: lossTrades, name: '亏损', itemStyle: { color: '#ef4444' } }
         ]
       }
     ]
@@ -318,11 +323,11 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
             <div className="flex flex-col gap-1 z-10 mt-auto">
               <div className="flex items-center gap-2 text-caption font-medium">
                 <span className="text-[#8b949e]">盈利</span>
-                <span className="text-green-400 font-bold">5</span>
+                <span className="text-green-400 font-bold">{profitTrades}</span>
               </div>
               <div className="flex items-center gap-2 text-caption font-medium">
                 <span className="text-[#8b949e]">亏损</span>
-                <span className="text-red-400 font-bold">5</span>
+                <span className="text-red-400 font-bold">{lossTrades}</span>
               </div>
             </div>
           </div>
