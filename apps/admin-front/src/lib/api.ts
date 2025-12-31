@@ -3,6 +3,7 @@ import type { VenueOrderBook } from '@ai/shared'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
+import { useAuthStore } from './auth-store'
 import { getToken } from './session'
 
 interface BaseResponse<T> {
@@ -76,6 +77,33 @@ function requireAuthHeaders() {
   const token = getToken()
   if (!token) throw new Error('登录状态已失效，请重新登录')
   return { Authorization: `Bearer ${token}` }
+}
+
+function isAuthError(error: unknown): boolean {
+  if (!error || typeof error !== 'object')
+    return false
+  const anyErr = error as any
+  const status = anyErr.status ?? anyErr.response?.status
+  return status === 401 || status === 403
+}
+
+async function withAuthErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  }
+  catch (error) {
+    if (isAuthError(error) && typeof window !== 'undefined') {
+      try {
+        const clearSession = useAuthStore.getState().clearSession
+        clearSession()
+      }
+      catch {
+        // ignore store errors, still try redirect
+      }
+      window.location.href = '/login'
+    }
+    throw error instanceof Error ? error : new Error('请求失败，请稍后重试')
+  }
 }
 
 export interface AdminRole {
@@ -433,12 +461,14 @@ export async function deleteExchangeConfig(id: string): Promise<void> {
 export async function fetchOrderbookSnapshotByConfigId(
   id: string,
 ): Promise<VenueOrderBook | null> {
-  const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
-    headers: requireAuthHeaders(),
-    params: { id },
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    const data = unwrapResponse<VenueOrderBook | null>(response as any)
+    return data ?? null
   })
-  const data = unwrapResponse<VenueOrderBook | null>(response as any)
-  return data ?? null
 }
 
 // ===== 旧业务逻辑已移除 =====

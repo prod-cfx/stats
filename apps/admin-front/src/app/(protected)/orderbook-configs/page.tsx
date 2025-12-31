@@ -47,6 +47,7 @@ export default function OrderbookConfigsPage() {
   const [loading, setLoading] = useState(true)
   const [venues, setVenues] = useState<ExchangeConfigResponse[]>([])
   const [venueLoading, setVenueLoading] = useState(false)
+  const [useCustomVenueInput, setUseCustomVenueInput] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingConfig, setEditingConfig] = useState<OrderbookPairConfigResponse | null>(null)
@@ -131,6 +132,13 @@ export default function OrderbookConfigsPage() {
     void loadConfigs()
     void loadVenues()
   }, [loadConfigs, loadVenues])
+
+  useEffect(() => {
+    if (!venueLoading && venues.length === 0) {
+      setUseCustomVenueInput(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueLoading])
 
   const handleCreateConfig = async (values: CreateOrderbookPairConfigPayload) => {
     try {
@@ -375,17 +383,26 @@ export default function OrderbookConfigsPage() {
             rules={[{ required: true, message: '请输入交易所标识' }]}
             tooltip="例如：BINANCE, OKX, UNISWAP_V3"
           >
-            <Select
-              placeholder="请选择交易所"
-              loading={venueLoading}
-              options={venues.map((v) => ({
-                label: `${v.name ?? v.code} (${v.code})`,
-                value: v.code,
-                disabled: !v.enabled,
-              }))}
-              showSearch
-              optionFilterProp="label"
-            />
+            {useCustomVenueInput ? (
+              <Input placeholder="BINANCE" />
+            ) : (
+              <Select
+                placeholder="请选择交易所"
+                loading={venueLoading}
+                options={venues.map(v => ({
+                  label: `${v.name ?? v.code} (${v.code})`,
+                  value: v.code,
+                  disabled: !v.enabled,
+                }))}
+                showSearch
+                optionFilterProp="label"
+              />
+            )}
+            <div style={{ marginTop: 4, fontSize: 12 }}>
+              <a onClick={() => setUseCustomVenueInput(v => !v)}>
+                {useCustomVenueInput ? '切换为下拉选择' : '切换为手动输入'}
+              </a>
+            </div>
           </Form.Item>
           <Form.Item
             label="交易对符号"
