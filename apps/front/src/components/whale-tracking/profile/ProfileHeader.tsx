@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy, RefreshCw } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PageTitle } from '@/components/ui/Typography';
 
 interface ProfileHeaderProps {
@@ -11,18 +11,31 @@ interface ProfileHeaderProps {
 export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const refreshTimer = useRef<NodeJS.Timeout | null>(null);
+  const copyTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
   const formatAddress = (addr: string) => `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
 
   const handleRefresh = () => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
     setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 1500);
+    refreshTimer.current = setTimeout(() => setIsRefreshing(false), 1500);
   };
 
   const handleCopyAddress = async () => {
     try {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
       await navigator.clipboard.writeText(address);
       setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+      copyTimer.current = setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy address:', err);
       alert('复制地址失败');

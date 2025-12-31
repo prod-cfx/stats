@@ -2,7 +2,7 @@
 
 import ReactECharts from 'echarts-for-react';
 import { ChevronDown } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 
@@ -194,12 +194,46 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Mock data for the donut chart - should eventually come from props or API
-  const profitTrades = 5;
-  const lossTrades = 5;
-  const totalTrades = profitTrades + lossTrades;
+  // Trigger loading when timeRange changes
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true);
+      const timer = setTimeout(() => setLoading(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [timeRange, isOpen]);
 
-  // Simulate internal loading when address changes or modal opens
+  // Mock data for the donut chart and stats - depends on timeRange
+  const { profitTrades, lossTrades, totalTrades, winRate, pnl, fees } = useMemo(() => {
+    // Basic multipliers for mock differentiation
+    let multiplier = 1;
+    if (timeRange === '1月') multiplier = 4.2;
+    if (timeRange === '全部') multiplier = 12.5;
+
+    const baseProfit = 5;
+    const baseLoss = 5;
+    
+    // Seeded random-like logic for consistency
+    const p = Math.floor(baseProfit * multiplier);
+    const l = Math.floor(baseLoss * multiplier);
+    const total = p + l;
+    const wr = total > 0 ? ((p / total) * 100).toFixed(2) : '0.00';
+    
+    // Formatting PnL and Fees based on range
+    const pnlVal = (multiplier * 3975.55).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const feeVal = (multiplier * 42733.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    return {
+      profitTrades: p,
+      lossTrades: l,
+      totalTrades: total,
+      winRate: wr + '%',
+      pnl: `$+${pnlVal}`,
+      fees: `$+${feeVal}`
+    };
+  }, [timeRange]);
+
+  // Simulate initial loading when address changes or modal opens
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
@@ -307,10 +341,10 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard
             label="胜率"
-            value="50.00%"
+            value={winRate}
             subStats={[
-              { label: '已平仓盈亏（未扣除费用）', value: '$+3,975.55', color: 'text-green-400' },
-              { label: '扣除费用', value: '$+42,733.00', color: 'text-white' }
+              { label: '已平仓盈亏（未扣除费用）', value: pnl, color: 'text-green-400' },
+              { label: '扣除费用', value: fees, color: 'text-white' }
             ]}
           />
           <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-4 flex flex-col justify-between gap-3 relative overflow-hidden h-full">
