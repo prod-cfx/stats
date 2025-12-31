@@ -139,16 +139,16 @@ export const PublicCompaniesTable = () => {
     if (!companies) return [];
     if (!sortField || !sortDirection) return companies;
 
-    const parseCompactNumber = (raw: string): number => {
+    const parseCompactNumber = (raw: string): number | null => {
       const val = raw.trim();
-      if (!val || val === '-') return Number.NEGATIVE_INFINITY;
+      if (!val || val === '-') return null;
 
       // Keep sign; extract first number.
       const match = val.match(/[-+]?\d+(\.\d+)?/);
-      if (!match || match.index == null) return Number.NEGATIVE_INFINITY;
+      if (!match || match.index == null) return null;
       const numStr = match[0];
       const num = Number(numStr);
-      if (!Number.isFinite(num)) return Number.NEGATIVE_INFINITY;
+      if (!Number.isFinite(num)) return null;
 
       // Detect unit right after the number (e.g. 3.1T, 47.4B, 671.27K BTC, 66.10万 BTC, 3.1万亿)
       // Note: only treat compact units when they are directly attached (or after trimming leading spaces).
@@ -196,21 +196,21 @@ export const PublicCompaniesTable = () => {
 
         // Unknown unit token: fail loudly (but keep UI working by pushing it to top in desc sorts)
         console.error(`[PublicCompaniesTable] 未识别的数值单位 token: "${token}"（raw="${val}"，rest="${rest}"）`);
-        return Number.POSITIVE_INFINITY;
+        return null;
       }
 
       return num;
     };
 
-    const parsePercent = (raw: string): number => {
+    const parsePercent = (raw: string): number | null => {
       const v = raw.trim();
-      if (!v || v === '-') return Number.NEGATIVE_INFINITY;
+      if (!v || v === '-') return null;
       const num = Number(v.replace('%', ''));
-      return Number.isFinite(num) ? num : Number.NEGATIVE_INFINITY;
+      return Number.isFinite(num) ? num : null;
     };
 
-    const sortValueOf = (row: CompanyData, field: SortField): number => {
-      if (!field) return 0;
+    const sortValueOf = (row: CompanyData, field: SortField): number | null => {
+      if (!field) return null;
       const raw = row[field];
       // Percent fields
       if (field === 'change24h' || field === 'change1d' || field === 'change7d') return parsePercent(raw);
@@ -226,6 +226,13 @@ export const PublicCompaniesTable = () => {
     return [...companies].sort((a, b) => {
       const aVal = sortValueOf(a, sortField);
       const bVal = sortValueOf(b, sortField);
+      // Always push missing/invalid values to the bottom, regardless of sort direction.
+      const aMissing = aVal == null;
+      const bMissing = bVal == null;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
   }, [companies, sortField, sortDirection]);
