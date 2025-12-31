@@ -66,6 +66,8 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
   private readonly logger = new Logger(this.constructor.name)
   private readonly connections: BinanceWsConnection[] = []
   private readonly states = new Map<string, BookState>() // symbol -> state
+  // 降噪：记录每个 symbol 最近一次深度断档告警时间，避免日志刷屏
+  private readonly lastGapWarnAt = new Map<string, number>()
   private redis: Redis | null = null
 
   constructor(
@@ -267,9 +269,16 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     if (evt.u <= state.lastUpdateId) return
     const expected = state.lastUpdateId + 1
     if (!(evt.U <= expected && expected <= evt.u)) {
-      this.logger.warn(
-        `Depth sequence gap for ${symbol}: last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u}, resync`,
-      )
+      const now = Date.now()
+      const intervalMs =
+        this.configService.get<number>('ORDERBOOK_WS_GAP_WARN_INTERVAL_MS') ?? 10_000
+      const lastWarn = this.lastGapWarnAt.get(symbol) ?? 0
+      if (now - lastWarn >= intervalMs) {
+        this.lastGapWarnAt.set(symbol, now)
+        this.logger.warn(
+          `Depth sequence gap for ${symbol}: last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u}, resync`,
+        )
+      }
       state.isReady = false
       state.buffer = [evt]
       await this.initSnapshot(symbol, state)

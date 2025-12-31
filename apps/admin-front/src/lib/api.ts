@@ -1,4 +1,5 @@
 import type { schemas } from '@ai/api-contracts';
+import type { VenueOrderBook } from '@ai/shared'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
@@ -425,6 +426,41 @@ export async function deleteExchangeConfig(id: string): Promise<void> {
     headers: requireAuthHeaders(),
     params: { id },
   })
+}
+
+// ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
+
+export async function fetchOrderbookSnapshotByConfigId(
+  id: string,
+): Promise<VenueOrderBook | null> {
+  const token = getToken()
+  if (!token)
+    throw new Error('登录状态已失效，请重新登录')
+
+  const res = await fetch(
+    `${API_BASE_URL}/admin/orderbook-configs/${encodeURIComponent(id)}/orderbook`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    },
+  )
+
+  if (res.status === 404)
+    return null
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || '获取订单薄失败')
+  }
+
+  const json = await res.json()
+  const book = (json && typeof json === 'object' && 'data' in json ? (json as any).data : json) as
+    | VenueOrderBook
+    | undefined
+
+  return book ?? null
 }
 
 // ===== 旧业务逻辑已移除 =====

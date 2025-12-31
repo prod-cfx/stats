@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
   ApiBody,
@@ -8,7 +8,10 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
+import type { MarketId, VenueOrderBook } from '@ai/shared'
+import { toMarketKey } from '@ai/shared'
 import { BaseResponseDto } from '@/common/dto/base.dto'
+import { RedisService } from '@/common/services/redis.service'
 import {
   CreateAny,
   DeleteAny,
@@ -24,6 +27,8 @@ import { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.
 import { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { OrderbookPairConfigService } from '../services/orderbook-pair-config.service'
+// eslint-disable-next-line ts/consistent-type-imports
+import type { OrderbookPairConfig } from '@prisma/client'
 
 @ApiTags('admin-orderbook-config')
 @Controller('admin/orderbook-configs')
@@ -31,7 +36,10 @@ import { OrderbookPairConfigService } from '../services/orderbook-pair-config.se
 @RequireAuth()
 @ApiExtraModels(BaseResponseDto, OrderbookPairConfigResponseDto)
 export class AdminOrderbookPairConfigController {
-  constructor(private readonly service: OrderbookPairConfigService) {}
+  constructor(
+    private readonly service: OrderbookPairConfigService,
+    private readonly redisService: RedisService,
+  ) {}
 
   @Get()
   @ReadAny(AppResource.ORDERBOOK_CONFIG)
@@ -80,6 +88,58 @@ export class AdminOrderbookPairConfigController {
   async getConfig(@Param('id') id: string): Promise<OrderbookPairConfigResponseDto> {
     const config = await this.service.findById(id)
     return this.toResponseDto(config)
+  }
+
+  @Get(':id/orderbook')
+  @ReadAny(AppResource.ORDERBOOK_CONFIG)
+  @ApiOperation({ summary: '查看指定订单薄配置的当前订单薄快照（来自 Redis）' })
+  @ApiResponse({
+    status: 200,
+    description: '成功获取订单薄快照',
+  })
+  async getCurrentOrderbook(@Param('id') id: string): Promise<VenueOrderBook> {
+    const config = await this.service.findById(id)
+
+    // 如果配置被禁用，则视为“当前不再拉取数据”，直接返回 404
+    if (!config.enabled) {
+      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
+    }
+
+    const marketKey = this.buildMarketKeyFromConfig(config)
+    const client = this.redisService.getClient()
+
+    const pattern = `orderbook:*:${marketKey}`
+    let cursor = '0'
+    let foundKey: string | null = null
+
+    // 按照 pattern 在 Redis 中查找第一个匹配的订单薄 key
+    do {
+      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 20)
+      cursor = nextCursor
+      if (keys.length > 0) {
+        foundKey = keys[0]!
+        break
+      }
+    } while (cursor !== '0')
+
+    if (!foundKey) {
+      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
+    }
+
+    const raw = await client.get(foundKey)
+    if (!raw) {
+      throw new NotFoundException('订单薄数据已过期或不存在')
+    }
+
+    let book: VenueOrderBook
+    try {
+      book = JSON.parse(raw) as VenueOrderBook
+    }
+    catch {
+      throw new NotFoundException('订单薄数据格式不正确')
+    }
+
+    return book
   }
 
   @Post()
@@ -183,6 +243,20 @@ export class AdminOrderbookPairConfigController {
       createdAt: config.createdAt,
       updatedAt: config.updatedAt,
     }
+  }
+
+  private buildMarketKeyFromConfig(config: OrderbookPairConfig): string {
+    const market: MarketId = {
+      base: config.baseAsset.toUpperCase(),
+      quote: config.quoteAsset.toUpperCase(),
+      venueType:
+        config.instrumentType === 'SPOT'
+          ? 'spot'
+          : config.instrumentType === 'PERPETUAL'
+            ? 'perp'
+            : 'future',
+    }
+    return toMarketKey(market)
   }
 }
 
