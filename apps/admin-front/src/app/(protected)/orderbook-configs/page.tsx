@@ -47,6 +47,7 @@ export default function OrderbookConfigsPage() {
   const [loading, setLoading] = useState(true)
   const [venues, setVenues] = useState<ExchangeConfigResponse[]>([])
   const [venueLoading, setVenueLoading] = useState(false)
+  const [venuesLoaded, setVenuesLoaded] = useState(false)
   const [useCustomVenueInput, setUseCustomVenueInput] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -90,6 +91,7 @@ export default function OrderbookConfigsPage() {
     }
     finally {
       setVenueLoading(false)
+      setVenuesLoaded(true)
     }
   }, [message])
 
@@ -134,11 +136,11 @@ export default function OrderbookConfigsPage() {
   }, [loadConfigs, loadVenues])
 
   useEffect(() => {
-    if (!venueLoading && venues.length === 0) {
+    // 只在 venues 真正加载完成后，且确认为空时，才切换到手动输入模式
+    if (venuesLoaded && venues.length === 0) {
       setUseCustomVenueInput(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venueLoading])
+  }, [venuesLoaded, venues.length])
 
   const handleCreateConfig = async (values: CreateOrderbookPairConfigPayload) => {
     try {

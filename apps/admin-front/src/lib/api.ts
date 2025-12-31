@@ -103,9 +103,6 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
     throw error
   }
 }
-  }
-}
-
 export interface AdminRole {
   id: string
   code: string
