@@ -1,7 +1,7 @@
 'use client';
 
 import { Copy, RefreshCw } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
 import { PageTitle } from '@/components/ui/Typography';
 
 interface ProfileHeaderProps {
@@ -9,7 +9,13 @@ interface ProfileHeaderProps {
 }
 
 export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const formatAddress = (addr: string) => `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 1500);
+  };
 
   const tags = [
     { label: '中等资金', color: 'text-primary', bg: 'bg-primary/10' },
@@ -47,9 +53,14 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
       </div>
 
       <div className="flex items-center gap-3">
-        <button type="button" className="flex items-center gap-2 px-4 py-2 bg-transparent text-[#e5e5e5] text-label font-medium hover:text-white transition-all group">
-          <RefreshCw className="w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-colors" />
-          <span className="text-body font-bold">实时数据</span>
+        <button 
+          type="button" 
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className={`flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-xl text-[#e5e5e5] text-label font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all group ${isRefreshing ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
+        >
+          <RefreshCw className={`w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-all ${isRefreshing ? 'animate-spin text-white' : ''}`} />
+          <span className={`text-body font-bold text-white transition-colors`}>{isRefreshing ? '更新中...' : '实时数据'}</span>
         </button>
       </div>
     </div>

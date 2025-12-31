@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDownAZ, ArrowUpAZ, ChevronDown } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { LoadingState } from '@/components/ui/loading';
 import { useMockData } from '@/hooks/use-mock-data';
@@ -10,8 +10,8 @@ import { TraderCard } from './TraderCard';
 export const DiscoverGrid = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sortField, setSortField] = useState('胜率');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [sortField, setSortField] = useState<'胜率' | '账户总价值' | '已实现盈亏' | null>('胜率');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
 
   const handleShowStats = (address: string) => {
     setSelectedAddress(address);
@@ -118,15 +118,125 @@ export const DiscoverGrid = () => {
             { label: '波段之王', color: '#d8b4fe', bgColor: '#581c8733' },
             { label: '多头战神', color: '#93c5fd', bgColor: '#1e3a8a33' },
           ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0xa7b31234567890abcdef1234567890abcdef0a7b3',
+          handle: '@swing_sniper',
+          totalValue: '$6,220,900.12',
+          pnl: '+$872,301.11',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 7,
+          winRate: '66.67%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#f97316',
+          aiTags: [
+            { label: '波段之王', color: '#d8b4fe', bgColor: '#581c8733' },
+            { label: '聪明交易者', color: '#fde047', bgColor: '#713f1233' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x3c1a1234567890abcdef1234567890abcdef3c1a',
+          handle: '@macro_whale',
+          totalValue: '$42,350,000.00',
+          pnl: '+$3,150,000.00',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 2,
+          winRate: '83.33%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#22c55e',
+          aiTags: [
+            { label: '金库管家', color: '#fde047', bgColor: '#713f1233' },
+            { label: '多头战神', color: '#93c5fd', bgColor: '#1e3a8a33' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x9fef1234567890abcdef1234567890abcdef9fef',
+          handle: '@contrarian',
+          totalValue: '$3,950,120.54',
+          pnl: '-$210,334.22',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 9,
+          winRate: '47.62%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#ef4444',
+          aiTags: [
+            { label: '聪明交易者', color: '#fde047', bgColor: '#713f1233' },
+            { label: '推特KOL', color: '#fde047', bgColor: '#713f1233' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x51e21234567890abcdef1234567890abcdef51e2',
+          handle: '@range_rider',
+          totalValue: '$11,420,000.00',
+          pnl: '+$920,000.00',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 4,
+          winRate: '71.43%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#06b6d4',
+          aiTags: [
+            { label: '波段之王', color: '#d8b4fe', bgColor: '#581c8733' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x7aa91234567890abcdef1234567890abcdef7aa9',
+          handle: '@trend_follower',
+          totalValue: '$9,880,410.77',
+          pnl: '+$1,040,110.05',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 6,
+          winRate: '60.00%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#8b5cf6',
+          aiTags: [
+            { label: '多头战神', color: '#93c5fd', bgColor: '#1e3a8a33' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x2d0b1234567890abcdef1234567890abcdef2d0b',
+          handle: '@low_risk',
+          totalValue: '$1,820,000.00',
+          pnl: '+$58,000.00',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 1,
+          winRate: '55.00%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#84cc16',
+          aiTags: [
+            { label: '金库管家', color: '#fde047', bgColor: '#713f1233' },
+          ]
+        },
+        {
+          variant: 'detail' as const,
+          address: '0x8c0d1234567890abcdef1234567890abcdef8c0d',
+          handle: '@altcoin_beta',
+          totalValue: '$4,760,000.00',
+          pnl: '+$640,000.00',
+          pnlLabel: '已实现盈亏(1月)',
+          positions: 15,
+          winRate: '52.00%',
+          winRateLabel: '胜率(1月)',
+          avatarColor: '#f59e0b',
+          aiTags: [
+            { label: '推特KOL', color: '#fde047', bgColor: '#713f1233' },
+            { label: '波段之王', color: '#d8b4fe', bgColor: '#581c8733' },
+          ]
         }
       ]
     };
   };
 
-  const { data, loading, error, reload } = useMockData(tradersFetcher, [sortField]);
+  const { data, loading, error, reload } = useMockData(tradersFetcher, []);
 
   const sortedDetails = useMemo(() => {
     if (!data?.details) return [];
+    if (!sortField || !sortOrder) return data.details;
     return [...data.details].sort((a, b) => {
       let valA, valB;
       if (sortField === '胜率') {
@@ -144,6 +254,29 @@ export const DiscoverGrid = () => {
       return sortOrder === 'desc' ? valB - valA : valA - valB;
     });
   }, [data, sortField, sortOrder]);
+
+  const handleSort = (field: Exclude<typeof sortField, null>) => {
+    if (sortField === field) {
+      if (sortOrder === 'desc') {
+        setSortOrder('asc');
+      } else if (sortOrder === 'asc') {
+        setSortField(null);
+        setSortOrder(null);
+      } else {
+        setSortOrder('desc');
+      }
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const renderSortIcon = (field: Exclude<typeof sortField, null>) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />;
+    }
+    return sortOrder === 'desc' ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />;
+  };
 
   return (
     <div className="space-y-12">
@@ -169,34 +302,16 @@ export const DiscoverGrid = () => {
               key={field}
               type="button"
               onClick={() => {
-                if (sortField === field) {
-                  setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
-                } else {
-                  setSortField(field);
-                  setSortOrder('desc');
-                }
-                reload();
+                handleSort(field as Exclude<typeof sortField, null>);
               }}
-              className={`px-6 py-2 bg-[#161b22] border rounded-xl text-label font-bold flex items-center gap-3 transition-all ${
-                sortField === field 
-                  ? 'border-primary text-primary bg-primary/5' 
-                  : 'border-[#30363d] text-[#c9d1d9] hover:border-[#8b949e]'
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors group ${
+                sortField === field ? 'text-white bg-white/5' : 'text-[#8b949e] hover:text-white'
               }`}
             >
-              {field}
-              <div className="w-4 h-4 flex items-center justify-center">
-                {sortField === field ? (
-                  sortOrder === 'desc' ? <ArrowDownAZ className="w-4 h-4" /> : <ArrowUpAZ className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 opacity-30" />
-                )}
-              </div>
+              <span className="uppercase">{field}</span>
+              {renderSortIcon(field as Exclude<typeof sortField, null>)}
             </button>
           ))}
-        </div>
-        
-        <div className="text-[#8b949e] text-sm">
-          展示 <span className="text-white font-bold">{sortedDetails.length}</span> 位顶级交易员
         </div>
       </div>
 

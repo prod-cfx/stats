@@ -23,15 +23,17 @@ interface StatCardProps {
 }
 
 const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2, subStats }: StatCardProps) => (
-  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4">
-    <span className="text-[#8b949e] text-caption font-medium">{label}</span>
-    <div className="flex items-baseline gap-1">
-      <span className={`text-h1 font-bold ${valueColor}`}>{value}</span>
-      {unit && <span className="text-caption text-white font-medium">{unit}</span>}
-      {value2 && <span className="text-h1 font-bold text-white ml-2">{value2}</span>}
-      {unit2 && <span className="text-caption text-white font-medium">{unit2}</span>}
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-4 flex flex-col justify-between gap-3 h-full">
+    <div className="flex flex-col gap-1">
+      <span className="text-[#8b949e] text-caption font-medium">{label}</span>
+      <div className="flex items-baseline gap-1">
+        <span className={`text-h2 font-bold ${valueColor}`}>{value}</span>
+        {unit && <span className="text-caption text-white font-medium">{unit}</span>}
+        {value2 && <span className="text-h2 font-bold text-white ml-2">{value2}</span>}
+        {unit2 && <span className="text-caption text-white font-medium">{unit2}</span>}
+      </div>
     </div>
-    <div className="space-y-2 mt-auto">
+    <div className="space-y-1">
       {subStats.map((stat, idx) => (
         <div key={idx} className="flex justify-between items-center text-caption">
           <span className="text-[#8b949e] font-medium">{stat.label}</span>
@@ -52,24 +54,24 @@ interface TradeCardProps {
 }
 
 const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) => (
-  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all group">
-    <div className="flex justify-between items-center">
-      <div className="flex items-center gap-3">
-        <div className="w-6 h-6 flex items-center justify-center">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all group h-full">
+    <div className="flex justify-between items-center gap-2">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
           <img src={icon} alt={asset} className="w-full h-full object-contain" />
         </div>
-        <span className="text-white font-bold text-body">{asset}</span>
-        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+        <span className="text-white font-bold text-body truncate">{asset}</span>
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {side === 'Long' ? '多' : '空'}
         </span>
       </div>
-      <span className="text-[#8b949e] text-caption font-medium">{time}</span>
+      <span className="text-[#8b949e] text-caption font-medium whitespace-nowrap flex-shrink-0">{time}</span>
     </div>
     <div className="flex flex-col">
       <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider mb-1">已实现盈亏</span>
       <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
     </div>
-    <div className="flex justify-between items-center text-caption pt-2 border-t border-[#30363d]/50">
+    <div className="flex justify-between items-center text-caption pt-2 border-t border-[#30363d]/50 mt-auto">
       <span className="text-[#8b949e] font-medium">持续时间</span>
       <span className="text-white font-semibold">{duration}</span>
     </div>
@@ -86,7 +88,7 @@ interface PerformanceCardProps {
 }
 
 const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: PerformanceCardProps) => (
-  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all h-full">
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-3">
         <div className="w-6 h-6 flex items-center justify-center">
@@ -124,7 +126,7 @@ interface PositionCardProps {
 }
 
 const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCardProps) => (
-  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all">
+  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all h-full">
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-3">
         <div className="w-6 h-6 flex items-center justify-center">
@@ -138,7 +140,7 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
       <span className="text-[#8b949e] text-caption font-medium">{time}</span>
     </div>
     <div className="flex flex-col py-1">
-      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h1 tracking-tight`}>{pnl}</span>
+      <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2 tracking-tight`}>{pnl}</span>
     </div>
     <div className="space-y-2 pt-2 border-t border-[#30363d]/50 mt-auto">
       <div className="flex justify-between items-center text-caption font-medium">
@@ -188,7 +190,8 @@ const positionPerformance: PositionCardProps[] = [
 
 export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradingStatsModalProps) => {
   const [activeTab, setActiveTab] = useState('asset'); // 'asset' | 'position'
-  const [timeRange] = useState('1周');
+  const [timeRange, setTimeRange] = useState<'1周' | '1月' | '全部'>('1周');
+  const [timeRangeOpen, setTimeRangeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Simulate internal loading when address changes or modal opens
@@ -200,18 +203,30 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
     }
   }, [isOpen, address]);
 
+  // Close dropdown on outside click / when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setTimeRangeOpen(false);
+      return;
+    }
+    if (!timeRangeOpen) return;
+    const onDocPointerDown = () => setTimeRangeOpen(false);
+    document.addEventListener('pointerdown', onDocPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown);
+  }, [isOpen, timeRangeOpen]);
+
   const donutOption = {
     backgroundColor: 'transparent',
     series: [
       {
         type: 'pie',
-        radius: ['65%', '85%'],
+        radius: ['60%', '80%'],
         avoidLabelOverlap: false,
         label: {
           show: true,
           position: 'center',
-          formatter: '{c}',
-          fontSize: 24,
+          formatter: '5', // Hardcoded total for now as per mock
+          fontSize: 18,
           fontWeight: 'bold',
           color: '#ffffff'
         },
@@ -239,17 +254,48 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       width="max-w-[1152px]"
       loading={loading}
     >
-      <div className="space-y-8">
+      <div className="flex flex-col gap-8">
         {/* Header Extra Info */}
-        <div className="flex items-center justify-between -mt-4 mb-4">
+        <div className="flex items-center justify-between -mt-4 mb-0">
           <div className="px-4 py-2 bg-[#0d1117] border border-[#30363d] rounded-xl flex items-center gap-3">
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
             <span className="text-[#cccccc] text-base font-semibold">{formatAddress(address)}</span>
           </div>
-          <button type="button" className="flex items-center gap-3 px-4 py-2 bg-[#30363d] border border-[#30363d] rounded-xl text-[#c9d1d9] text-sm font-bold hover:border-[#3b82f6]/50 transition-all">
-            {timeRange}
-            <ChevronDown className="w-4 h-4" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTimeRangeOpen(v => !v);
+              }}
+              className="flex items-center gap-3 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-xl text-[#c9d1d9] text-sm font-bold hover:border-[#3b82f6]/50 transition-all"
+            >
+              {timeRange}
+              <ChevronDown className={`w-4 h-4 transition-transform ${timeRangeOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {timeRangeOpen && (
+              <div
+                className="absolute right-0 mt-2 w-[120px] bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden z-30"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {(['1周', '1月', '全部'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      setTimeRange(opt);
+                      setTimeRangeOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors ${
+                      timeRange === opt ? 'bg-white/5 text-white' : 'text-[#c9d1d9] hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Summary Grid */}
@@ -258,18 +304,26 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
             label="胜率"
             value="50.00%"
             subStats={[
-              { label: '净盈亏', value: '$+3,975.55', color: 'text-green-400' },
-              { label: '费用', value: '$+42,733.00', color: 'text-white' }
+              { label: '已平仓盈亏（未扣除费用）', value: '$+3,975.55', color: 'text-green-400' },
+              { label: '扣除费用', value: '$+42,733.00', color: 'text-white' }
             ]}
           />
-          <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 relative">
-            <span className="text-[#8b949e] text-sm font-medium">交易次数</span>
-            <div className="h-[96px] w-full">
+          <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-4 flex flex-col justify-between gap-3 relative overflow-hidden h-full">
+            <span className="text-[#8b949e] text-caption font-medium z-10">交易次数</span>
+            
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[80px] h-[80px]">
               <ReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="flex justify-between text-sm font-medium">
-              <span className="text-green-400">盈利 5</span>
-              <span className="text-red-400">亏损 5</span>
+
+            <div className="flex flex-col gap-1 z-10 mt-auto">
+              <div className="flex items-center gap-2 text-caption font-medium">
+                <span className="text-[#8b949e]">盈利</span>
+                <span className="text-green-400 font-bold">5</span>
+              </div>
+              <div className="flex items-center gap-2 text-caption font-medium">
+                <span className="text-[#8b949e]">亏损</span>
+                <span className="text-red-400 font-bold">5</span>
+              </div>
             </div>
           </div>
           <StatCard
@@ -295,7 +349,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         </div>
 
         {/* Top Trades Section */}
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <SectionTitle className="text-lg">十大最佳交易</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {topTrades.map((trade, idx) => (
@@ -305,7 +359,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         </div>
 
         {/* Performance Tabs */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-4">
           <div className="flex items-center gap-8 border-b border-[#30363d]">
             <button
               onClick={() => setActiveTab('asset')}
