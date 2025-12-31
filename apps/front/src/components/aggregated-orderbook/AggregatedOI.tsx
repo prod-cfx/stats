@@ -1,7 +1,7 @@
 'use client';
 
-import { ArrowUpDown, Search } from 'lucide-react';
-import React, { useState } from 'react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SectionTitle } from '@/components/ui/Typography';
 
 interface OIData {
@@ -17,6 +17,9 @@ interface OIData {
   oiVolRatio: string;
   isTotal?: boolean;
 }
+
+type SortField = 'oiBtc' | 'oiUsd' | 'ratio' | 'change1h' | 'change4h' | 'change24h' | null;
+type SortDirection = 'asc' | 'desc' | null;
 
 const mockOIData: OIData[] = [
   {
@@ -158,6 +161,86 @@ const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH'
 
 export const AggregatedOI = () => {
   const [activeSymbol, setActiveTabSymbol] = useState('BTC');
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Parse numeric values for sorting
+  const parseValue = (val: string) => {
+    return Number(val.replace(/[^\d.-]/g, '')) || 0;
+  };
+
+  const sortedData = useMemo(() => {
+    // Generate different data values based on the symbol to avoid data mismatch
+    const symbolSeed = activeSymbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const data = mockOIData.map(row => {
+      if (row.isTotal) return row;
+      
+      // Slightly vary the numbers based on the symbol for realistic mock behavior
+      const factor = 1 + (symbolSeed % 10 - 5) / 100;
+      const val = parseValue(row.oiBtc);
+      const newVal = (val * factor).toFixed(2);
+      
+      return {
+        ...row,
+        oiBtc: `${newVal}万 ${activeSymbol}`,
+        // For USD, just keep it or slightly vary it too
+        oiUsd: `$${(parseValue(row.oiUsd) * factor).toFixed(2)}亿`,
+      };
+    });
+
+    if (!sortField || !sortDirection) return data;
+
+    const exchangeRows = data.filter(row => !row.isTotal);
+    const totalRow = data.find(row => row.isTotal);
+
+    exchangeRows.sort((a, b) => {
+      const aVal = parseValue(a[sortField as keyof OIData] as string);
+      const bVal = parseValue(b[sortField as keyof OIData] as string);
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+
+    return totalRow ? [totalRow, ...exchangeRows] : exchangeRows;
+  }, [sortField, sortDirection, activeSymbol]);
+
+  const filteredSymbols = useMemo(() => {
+    return symbols.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      if (sortDirection === 'desc') {
+        setSortDirection('asc');
+      } else if (sortDirection === 'asc') {
+        setSortField(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('desc');
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />;
+    return sortDirection === 'desc' 
+      ? <ChevronDown className="w-3 h-3 text-primary" /> 
+      : <ChevronUp className="w-3 h-3 text-primary" />;
+  };
 
   const renderValueWithColor = (val: string) => {
     const isPositive = val.startsWith('+');
@@ -201,13 +284,39 @@ export const AggregatedOI = () => {
             ))}
           </div>
           <div className="flex items-center gap-2 pl-4 py-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e]" />
+            <div className="relative" ref={dropdownRef}>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] z-10" />
               <input 
                 type="text" 
                 placeholder="搜索" 
-                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-3 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-10 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48 relative z-10"
               />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+                <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+              {isDropdownOpen && filteredSymbols.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto">
+                  {filteredSymbols.map(s => (
+                    <div 
+                      key={s}
+                      onClick={() => {
+                        setActiveTabSymbol(s);
+                        setSearchQuery('');
+                        setIsDropdownOpen(false);
+                      }}
+                      className="px-4 py-2 text-sm text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
+                    >
+                      {s}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -220,42 +329,60 @@ export const AggregatedOI = () => {
                 <th className="px-4 py-4 font-bold text-center border-b border-[#30363d] w-16">排名</th>
                 <th className="px-4 py-4 font-bold border-b border-[#30363d]">交易所</th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    持仓(BTC) <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('oiBtc')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    持仓({activeSymbol}) {renderSortIcon('oiBtc')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    持仓 <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('oiUsd')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    持仓 {renderSortIcon('oiUsd')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    占比 <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('ratio')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    占比 {renderSortIcon('ratio')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    持仓变化(1小时) <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('change1h')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    持仓变化(1小时) {renderSortIcon('change1h')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    持仓变化(4小时) <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('change4h')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    持仓变化(4小时) {renderSortIcon('change4h')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <div className="flex items-center justify-end gap-1">
-                    持仓变化(24小时) <ArrowUpDown className="w-3 h-3" />
-                  </div>
+                  <button 
+                    onClick={() => handleSort('change24h')}
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                  >
+                    持仓变化(24小时) {renderSortIcon('change24h')}
+                  </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-center border-b border-[#30363d]">持仓/24小时成交额</th>
               </tr>
             </thead>
             <tbody className="text-sm">
-              {mockOIData.map((row, idx) => (
+              {sortedData.map((row) => (
                 <tr 
-                  key={idx} 
+                  key={row.isTotal ? 'total' : row.exchange} 
                   className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
                     row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                   }`}
