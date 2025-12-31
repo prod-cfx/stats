@@ -166,23 +166,36 @@ export const PublicCompaniesTable = () => {
       if (rest.startsWith('亿')) return num * 1e8;
       if (rest.startsWith('万')) return num * 1e4;
 
-      // Latin compact units: K/M/B/T (only if the next char is not a letter, to avoid matching "BTC"/"MSFT"...)
-      const unit = rest[0];
-      const next = rest[1];
-      const nextIsLetter = typeof next === 'string' && /[A-Za-z]/.test(next);
-      if (!nextIsLetter) {
-        if (unit === 'T' || unit === 't') return num * 1e12;
-        if (unit === 'B' || unit === 'b') return num * 1e9;
-        if (unit === 'M' || unit === 'm') return num * 1e6;
-        if (unit === 'K' || unit === 'k') return num * 1e3;
-      }
+      // Latin compact units: extract first token (until whitespace or a non-letter symbol)
+      // Examples:
+      // - "1.2bn" => token "bn"
+      // - "1.2 bn" => token "bn"
+      // - "671.27K BTC" => token "K"
+      // - "1.2B" => token "B"
+      const tokenMatch = rest.match(/^[a-z]+/i);
+      const token = tokenMatch?.[0]?.toLowerCase();
+      if (token) {
+        const multipliers: Record<string, number> = {
+          // trillion
+          t: 1e12,
+          tn: 1e12,
+          trn: 1e12,
+          // billion
+          b: 1e9,
+          bn: 1e9,
+          // million
+          m: 1e6,
+          mn: 1e6,
+          // thousand
+          k: 1e3,
+          kn: 1e3,
+        };
 
-      // Unknown compact unit directly attached: fail loudly (but keep UI working by pushing it to top in desc sorts)
-      const hasDirectSuffix = restRaw.length > 0 && !/^\s/.test(restRaw);
-      const looksLikeCompactUnit = /^[A-Za-z]$/.test(unit) && !nextIsLetter;
-      if (hasDirectSuffix && looksLikeCompactUnit) {
-        // eslint-disable-next-line no-console
-        console.error(`[PublicCompaniesTable] 未识别的数值单位: "${val}"（suffix="${rest}"）`);
+        const multiplier = multipliers[token];
+        if (multiplier != null) return num * multiplier;
+
+        // Unknown unit token: fail loudly (but keep UI working by pushing it to top in desc sorts)
+        console.error(`[PublicCompaniesTable] 未识别的数值单位 token: "${token}"（raw="${val}"，rest="${rest}"）`);
         return Number.POSITIVE_INFINITY;
       }
 
