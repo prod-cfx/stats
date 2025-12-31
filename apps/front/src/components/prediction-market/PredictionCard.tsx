@@ -9,7 +9,13 @@ export interface PredictionOption {
   probability: string;
 }
 
+export interface PredictionRulesMeta {
+  paragraphs: string[];
+  createdAt?: string;
+}
+
 export interface PredictionCardProps {
+  id?: string;
   title: string;
   icon?: React.ReactNode;
   iconBgColor?: string;
@@ -17,6 +23,7 @@ export interface PredictionCardProps {
   probability?: string;
   status?: 'LIVE' | string;
   volume?: string;
+  rules?: PredictionRulesMeta;
 }
 
 export const PredictionCard = ({ 
@@ -41,7 +48,7 @@ export const PredictionCard = ({
             {title}
           </SubTitle>
         </div>
-        <button className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
+        <button type="button" className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
           <Info className="w-4 h-4" />
         </button>
       </div>
@@ -74,7 +81,7 @@ export const PredictionCard = ({
             <span className="text-[#8b949e] text-xs font-medium">{volume} Vol.</span>
           )}
         </div>
-        <button className="text-[#8b949e] hover:text-white transition-colors">
+        <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>

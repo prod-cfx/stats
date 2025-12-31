@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 import { FilterButton } from '@/components/ui/FilterButton';
 import { LoadingState } from '@/components/ui/loading';
@@ -8,9 +8,12 @@ import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
 
+type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE';
+
 interface ExchangeData {
   exchange: string;
   logo: string;
+  coin: CoinSymbol | 'ALL';
   amount: string;
   long: string;
   short: string;
@@ -20,96 +23,188 @@ interface ExchangeData {
   isTotal?: boolean;
 }
 
-const initialExchangeData: ExchangeData[] = [
+const COIN_OPTIONS: Array<'全部' | CoinSymbol> = ['全部', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+const TIME_OPTIONS = ['1小时', '4小时', '12小时', '24小时'] as const;
+
+const EXCHANGES = [
   {
     exchange: 'Hyperliquid',
     logo: 'https://app.hyperliquid.xyz/favicon.ico',
-    amount: '$1429.44万',
-    long: '$1312.02万',
-    short: '$117.42万',
-    ratio: '39.06%',
-    longShortRatio: '91.79%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'Binance',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
-    amount: '$740.53万',
-    long: '$576.40万',
-    short: '$164.13万',
-    ratio: '20.23%',
-    longShortRatio: '77.84%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'Bybit',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
-    amount: '$500.87万',
-    long: '$403.68万',
-    short: '$97.19万',
-    ratio: '13.69%',
-    longShortRatio: '80.6%做多',
-    isLongDominant: true,
   },
   {
     exchange: 'OKX',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
-    amount: '$352.55万',
-    long: '$249.13万',
-    short: '$103.42万',
-    ratio: '9.63%',
-    longShortRatio: '70.66%做多',
-    isLongDominant: true,
-  }
+  },
 ];
+
+function parseWanAmount(v: string): number {
+  return Number.parseFloat(v.replace('$', '').replace('万', ''));
+}
+
+function formatWanAmount(v: number): string {
+  return `$${v.toFixed(2)}万`;
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function hashToUnit(str: string): number {
+  // deterministic 0..1 based on string hash
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 2 ** 32;
+}
+
+function timeToHours(timeFilter: string): number {
+  switch (timeFilter) {
+    case '1小时':
+      return 1;
+    case '4小时':
+      return 4;
+    case '12小时':
+      return 12;
+    case '24小时':
+      return 24;
+    default:
+      return 4;
+  }
+}
 
 export const ExchangeLiquidationTable = () => {
   const [coinFilter, setCoinFilter] = useState('全部');
   const [timeFilter, setTimeFilter] = useState('4小时');
   const [selectedExchange, setSelectedExchange] = useState<ExchangeData | null>(null);
 
+  const selectedCoin = (coinFilter === '全部' ? '全部' : (coinFilter as CoinSymbol));
+  const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
+
   const { data: tableData, loading, error, reload } = useMockData(
     async () => {
-      // Simulate data generation
-      const data = initialExchangeData.map(ex => {
-        // Mock: make it feel like data changed based on filters
-        const multiplier = coinFilter === '全部' ? 1 : (Math.random() * 0.5 + 0.5);
+      // Mock dataset: each row has coin metadata and varies by coin + time.
+      const coins: CoinSymbol[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+
+      const timeScale = clamp(hours / 4, 0.5, 6); // baseline 4h
+
+      // Build per-exchange-per-coin records
+      const perCoinRows: Array<ExchangeData & { _amount: number; _long: number; _short: number }> = [];
+      for (const ex of EXCHANGES) {
+        for (const coin of coins) {
+          const base = 200 + 1200 * hashToUnit(`${ex.exchange}:${coin}`); // 200..1400 (万)
+          const volatility = 0.85 + 0.35 * hashToUnit(`${ex.exchange}:${coin}:${hours}`); // 0.85..1.2
+          const amount = base * timeScale * volatility;
+
+          const longShare = clamp(0.35 + 0.55 * hashToUnit(`${ex.exchange}:${coin}:long:${hours}`), 0.05, 0.95);
+          const long = amount * longShare;
+          const short = amount - long;
+
+          perCoinRows.push({
+            exchange: ex.exchange,
+            logo: ex.logo,
+            coin,
+            amount: formatWanAmount(amount),
+            long: formatWanAmount(long),
+            short: formatWanAmount(short),
+            ratio: '0%',
+            longShortRatio: `${(longShare * 100).toFixed(2)}%做多`,
+            isLongDominant: long > short,
+            _amount: amount,
+            _long: long,
+            _short: short,
+          });
+        }
+      }
+
+      // Filter by coin, or aggregate "全部" across coins.
+      const visibleRowsRaw = selectedCoin === '全部'
+        ? EXCHANGES.map(ex => {
+          const rows = perCoinRows.filter(r => r.exchange === ex.exchange);
+          const amount = rows.reduce((acc, r) => acc + r._amount, 0);
+          const long = rows.reduce((acc, r) => acc + r._long, 0);
+          const short = rows.reduce((acc, r) => acc + r._short, 0);
+          const longShare = amount === 0 ? 0 : long / amount;
+          return {
+            exchange: ex.exchange,
+            logo: ex.logo,
+            coin: 'ALL' as const,
+            amount: formatWanAmount(amount),
+            long: formatWanAmount(long),
+            short: formatWanAmount(short),
+            ratio: '0%',
+            longShortRatio: `${(longShare * 100).toFixed(2)}%做多`,
+            isLongDominant: long > short,
+          };
+        })
+        : perCoinRows
+          .filter(r => r.coin === selectedCoin)
+          .map(r => ({
+            exchange: r.exchange,
+            logo: r.logo,
+            coin: r.coin,
+            amount: r.amount,
+            long: r.long,
+            short: r.short,
+            ratio: '0%',
+            longShortRatio: r.longShortRatio,
+            isLongDominant: r.isLongDominant,
+          }));
+
+      const visibleRows = visibleRowsRaw
+        .map(r => ({
+          ...r,
+          _amount: parseWanAmount(r.amount),
+          _long: parseWanAmount(r.long),
+          _short: parseWanAmount(r.short),
+        }))
+        .sort((a, b) => b._amount - a._amount);
+
+      const totalAmount = visibleRows.reduce((acc, r) => acc + r._amount, 0);
+      const totalLong = visibleRows.reduce((acc, r) => acc + r._long, 0);
+      const totalShort = visibleRows.reduce((acc, r) => acc + r._short, 0);
+
+      const enrichedRows: ExchangeData[] = visibleRows.map(r => {
+        const ratio = totalAmount === 0 ? 0 : (r._amount / totalAmount) * 100;
+        const longShare = r._amount === 0 ? 0 : (r._long / r._amount) * 100;
         return {
-          ...ex,
-          amount: `$${(Math.random() * 1000 * multiplier + 100).toFixed(2)}万`,
-          long: `$${(Math.random() * 800 * multiplier + 50).toFixed(2)}万`,
-          short: `$${(Math.random() * 200 * multiplier + 10).toFixed(2)}万`,
+          exchange: r.exchange,
+          logo: r.logo,
+          coin: r.coin,
+          amount: r.amount,
+          long: r.long,
+          short: r.short,
+          ratio: `${ratio.toFixed(2)}%`,
+          longShortRatio: `${longShare.toFixed(2)}%做多`,
+          isLongDominant: r._long > r._short,
         };
       });
-      
-      const totalAmount = data.reduce(
-        (acc, curr) => acc + Number.parseFloat(curr.amount.replace('$', '').replace('万', '')),
-        0
-      );
-      const totalLong = data.reduce(
-        (acc, curr) => acc + Number.parseFloat(curr.long.replace('$', '').replace('万', '')),
-        0
-      );
-      const totalShort = data.reduce(
-        (acc, curr) => acc + Number.parseFloat(curr.short.replace('$', '').replace('万', '')),
-        0
-      );
 
-      const total = {
+      const total: ExchangeData = {
         exchange: '全部',
         logo: '',
-        amount: `$${totalAmount.toFixed(2)}万`,
-        long: `$${totalLong.toFixed(2)}万`,
-        short: `$${totalShort.toFixed(2)}万`,
+        coin: selectedCoin === '全部' ? 'ALL' : selectedCoin,
+        amount: formatWanAmount(totalAmount),
+        long: formatWanAmount(totalLong),
+        short: formatWanAmount(totalShort),
         ratio: '100%',
-        longShortRatio: `${((totalLong / totalAmount) * 100).toFixed(2)}%做多`,
+        longShortRatio: `${(totalAmount === 0 ? 0 : (totalLong / totalAmount) * 100).toFixed(2)}%做多`,
         isLongDominant: totalLong > totalShort,
         isTotal: true,
       };
 
-      return [total, ...data];
+      return [total, ...enrichedRows];
     },
-    [coinFilter, timeFilter]
+    [coinFilter, timeFilter, hours]
   );
 
   return (
@@ -119,12 +214,12 @@ export const ExchangeLiquidationTable = () => {
         <div className="flex gap-3">
           <FilterButton 
             value={coinFilter} 
-            options={['全部', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE']} 
+            options={COIN_OPTIONS as unknown as string[]} 
             onChange={setCoinFilter} 
           />
           <FilterButton 
             value={timeFilter} 
-            options={['1小时', '4小时', '12小时', '24小时']} 
+            options={TIME_OPTIONS as unknown as string[]} 
             onChange={setTimeFilter} 
           />
         </div>
@@ -206,7 +301,9 @@ export const ExchangeLiquidationTable = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
               <p className="text-xs text-[#8b949e] mb-1">主要爆仓资产</p>
-              <p className="text-xl font-bold text-white">BTC / ETH</p>
+              <p className="text-xl font-bold text-white">
+                {selectedExchange?.coin && selectedExchange.coin !== 'ALL' ? selectedExchange.coin : 'BTC / ETH'}
+              </p>
             </div>
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
               <p className="text-xs text-[#8b949e] mb-1">最大单笔金额</p>
