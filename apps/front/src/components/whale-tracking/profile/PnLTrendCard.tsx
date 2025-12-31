@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
 import { ChevronDown } from 'lucide-react';
+import React from 'react';
 import { PnLTrendChart } from './PnLTrendChart';
 
 export const PnLTrendCard = () => {

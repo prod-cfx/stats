@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
+import { ToastProvider } from '@/components/ui/toast'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'AI Scaffold 前台',
-  description: '最小化邮箱登录/注册脚手架',
+  title: 'Coinflux - Advanced Crypto Data Aggregator',
+  description: '专业的加密资产数据聚合与多维行情分析终端',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,8 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black text-white antialiased" suppressHydrationWarning>
-        {children}
+      <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   )

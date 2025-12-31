@@ -1,9 +1,57 @@
 'use client';
 
+import { ArrowUpDown, Filter } from 'lucide-react';
 import React, { useState } from 'react';
-import { Filter, ArrowUpDown } from 'lucide-react';
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'history' | 'delegation';
+
+const mockPerpetualPositions = [
+  {
+    asset: 'BTC',
+    side: 'Short',
+    marginType: '全仓',
+    leverage: '10x',
+    valueUSD: '$ 166,034,001.73',
+    valueAsset: '-1,899.07241 BTC',
+    pnlUSD: '$ +1,232,483.39',
+    pnlPercent: '+7.42 %',
+    entryPrice: '$ 88,077.9',
+    markPrice: '$ 87,429.0',
+    liqPrice: '$ 97,656.0',
+    margin: '$ 16,603,400.17',
+    fundingFee: '$ 32,146.82'
+  },
+  {
+    asset: 'ETH',
+    side: 'Short',
+    marginType: '全仓',
+    leverage: '15x',
+    valueUSD: '$ 54,863,721.24',
+    valueAsset: '-18,527.5298 ETH',
+    pnlUSD: '$ +956,913.25',
+    pnlPercent: '+26.16 %',
+    entryPrice: '$ 3,012.84',
+    markPrice: '$ 2,961.2',
+    liqPrice: '$ 4,014.61',
+    margin: '$ 3,657,581.42',
+    fundingFee: '$ 7,966.62'
+  },
+  {
+    asset: 'SOL',
+    side: 'Short',
+    marginType: '全仓',
+    leverage: '20x',
+    valueUSD: '$ 18,772,607.28',
+    valueAsset: '-151,209.08 SOL',
+    pnlUSD: '$ +224,700.09',
+    pnlPercent: '+23.94 %',
+    entryPrice: '$ 125.636',
+    markPrice: '$ 124.15',
+    liqPrice: '$ 252.594',
+    margin: '$ 1,877,260.73',
+    fundingFee: '$ 1,246.82'
+  }
+];
 
 export const ProfileDataTabs = () => {
   const [activeTab, setActiveTab] = useState<TabType>('perpetual');
@@ -132,52 +180,4 @@ export const ProfileDataTabs = () => {
     </div>
   );
 };
-
-const mockPerpetualPositions = [
-  {
-    asset: 'BTC',
-    side: 'Short',
-    marginType: '全仓',
-    leverage: '10x',
-    valueUSD: '$ 166,034,001.73',
-    valueAsset: '-1,899.07241 BTC',
-    pnlUSD: '$ +1,232,483.39',
-    pnlPercent: '+7.42 %',
-    entryPrice: '$ 88,077.9',
-    markPrice: '$ 87,429.0',
-    liqPrice: '$ 97,656.0',
-    margin: '$ 16,603,400.17',
-    fundingFee: '$ 32,146.82'
-  },
-  {
-    asset: 'ETH',
-    side: 'Short',
-    marginType: '全仓',
-    leverage: '15x',
-    valueUSD: '$ 54,863,721.24',
-    valueAsset: '-18,527.5298 ETH',
-    pnlUSD: '$ +956,913.25',
-    pnlPercent: '+26.16 %',
-    entryPrice: '$ 3,012.84',
-    markPrice: '$ 2,961.2',
-    liqPrice: '$ 4,014.61',
-    margin: '$ 3,657,581.42',
-    fundingFee: '$ 7,966.62'
-  },
-  {
-    asset: 'SOL',
-    side: 'Short',
-    marginType: '全仓',
-    leverage: '20x',
-    valueUSD: '$ 18,772,607.28',
-    valueAsset: '-151,209.08 SOL',
-    pnlUSD: '$ +224,700.09',
-    pnlPercent: '+23.94 %',
-    entryPrice: '$ 125.636',
-    markPrice: '$ 124.15',
-    liqPrice: '$ 252.594',
-    margin: '$ 1,877,260.73',
-    fundingFee: '$ 1,246.82'
-  }
-];
 

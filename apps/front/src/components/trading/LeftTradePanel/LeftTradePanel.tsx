@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 export const LeftTradePanel = () => {
   const [activeTab, setActiveTab] = useState('open'); // 'open' | 'close'
   const [orderType, setOrderType] = useState('limit'); // 'limit' | 'market' | 'stop'
-  const [leverage, setLeverage] = useState(50);
+  const [leverage] = useState(50);
   const [price, setPrice] = useState('87100.8');
   const [amount, setAmount] = useState('0.00');
   const [percent, setPercent] = useState(0);
@@ -17,6 +17,7 @@ export const LeftTradePanel = () => {
       {/* Open/Close Tabs */}
       <div className="flex bg-[#21262d] rounded-md p-1 mb-4 flex-none">
         <button
+          type="button"
           onClick={() => setActiveTab('open')}
           className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${
             activeTab === 'open' ? 'bg-[#2ea043] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
@@ -25,6 +26,7 @@ export const LeftTradePanel = () => {
           开仓
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('close')}
           className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${
             activeTab === 'close' ? 'bg-[#374151] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
@@ -51,6 +53,7 @@ export const LeftTradePanel = () => {
         {['limit', 'market', 'stop'].map((type) => (
           <button
             key={type}
+            type="button"
             onClick={() => setOrderType(type)}
             className={`flex-1 pb-2 text-xs transition-colors relative ${
               orderType === type
@@ -77,7 +80,7 @@ export const LeftTradePanel = () => {
               onChange={(e) => setPrice(e.target.value)}
               className="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
             />
-            <button className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[#374151] px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#48566a] transition-colors">
+            <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[#374151] px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#48566a] transition-colors">
               最优价
             </button>
           </div>
@@ -102,7 +105,7 @@ export const LeftTradePanel = () => {
           min="0"
           max="100"
           value={percent}
-          onChange={(e) => setPercent(parseInt(e.target.value))}
+          onChange={(e) => setPercent(Number.parseInt(e.target.value, 10))}
           className="w-full h-1 bg-[#30363d] rounded-lg appearance-none cursor-pointer accent-orange-400 mb-3"
         />
         <div className="flex justify-between text-[10px] text-[#8b949e]">
@@ -137,12 +140,14 @@ export const LeftTradePanel = () => {
       {/* Buy/Sell Buttons */}
       <div className="flex gap-3 mb-6 flex-none">
         <button
+          type="button"
           onClick={() => console.log('TODO: Open Long')}
           className="flex-1 bg-[#2ea043] hover:bg-[#3fb950] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-green-900/20"
         >
           开多
         </button>
         <button
+          type="button"
           onClick={() => console.log('TODO: Open Short')}
           className="flex-1 bg-[#da3633] hover:bg-[#f85149] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-red-900/20"
         >

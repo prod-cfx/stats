@@ -1,8 +1,8 @@
 'use client';
 
+import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
 import React, { useState } from 'react';
 import { TradingViewChart } from './TradingViewChart';
-import { ChevronDown, BarChart2, Eye, Settings, Search, X, Star } from 'lucide-react';
 
 export const CenterChartPanel = () => {
   const [interval, setInterval] = useState('15m');

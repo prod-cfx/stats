@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
+import React, { useEffect, useRef } from 'react';
 
 interface LiquidationMapChartProps {
   data: {
@@ -34,17 +34,9 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
       currentPrice: '#ff4d4d'
     };
 
-    // Find the closest index to current price
-    let currentPriceIndex = 0;
-    let minDiff = Infinity;
-    data.labels.forEach((label, index) => {
-      const priceVal = parseFloat(label);
-      const diff = Math.abs(priceVal - currentPrice);
-      if (diff < minDiff) {
-        minDiff = diff;
-        currentPriceIndex = index;
-      }
-    });
+    // Use the intersection point of the two cumulative trends (where they both start from 0)
+    // This ensures the current price line is always exactly where the red/green curves meet
+    const currentPriceIndex = data.cumulativeLong.findIndex(v => v === 0);
 
     const option = {
       backgroundColor: '#0d1117',
@@ -59,7 +51,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
         formatter: (params: any) => {
           let res = `<div style="font-weight: bold; margin-bottom: 4px;">价格: ${params[0].axisValue}</div>`;
           params.forEach((item: any) => {
-            if (item.value === 0 || item.value === undefined || item.value === null) return;
+            if (item.value === 0 || item.value === undefined || item.value === null || item.seriesName === 'CurrentPriceAnchor') return;
             const valueStr = item.seriesName.includes('累计') 
               ? `$${item.value.toFixed(2)}B` 
               : `$${item.value}M`;
@@ -184,7 +176,15 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           stack: 'total',
           data: data.dex,
           itemStyle: { color: colors.dex },
-          z: 5,
+          z: 5
+        },
+        {
+          name: 'CurrentPriceAnchor',
+          type: 'line',
+          silent: true,
+          data: Array.from({length: data.labels.length}).fill(0),
+          showSymbol: false,
+          lineStyle: { opacity: 0 },
           markLine: {
             silent: true,
             symbol: ['none', 'arrow'],
@@ -199,7 +199,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
               show: true,
               position: 'end',
               distance: 10,
-              formatter: '{label|当前价格: }{value|' + currentPrice.toLocaleString() + '}',
+              formatter: `{label|当前价格: }{value|${  currentPrice.toLocaleString()  }}`,
               rich: {
                 label: {
                   color: '#e6edf3',
@@ -221,11 +221,11 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
               [
                 { 
                   xAxis: currentPriceIndex, 
-                  yAxis: 0 // Start exactly at the bottom axis, no protrusion
+                  yAxis: 0 
                 },
                 { 
                   xAxis: currentPriceIndex, 
-                  y: '15%' // End at the top grid area
+                  y: '15%' 
                 }
               ]
             ],

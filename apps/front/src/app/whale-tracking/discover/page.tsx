@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
+import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { DiscoverGrid } from '@/components/whale-tracking/discover/DiscoverGrid';
-import { PageTitle, BodyText } from '@/components/ui/Typography';
 
 export default function DiscoverPage() {
   return (
@@ -16,7 +16,9 @@ export default function DiscoverPage() {
             <BodyText>发现最有价值的交易者</BodyText>
           </div>
           
-          <DiscoverGrid />
+          <Suspense fallback={<div className="h-96 flex items-center justify-center text-[#8b949e]">加载中...</div>}>
+            <DiscoverGrid />
+          </Suspense>
         </div>
       </main>
     </div>

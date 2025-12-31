@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
 import { FileSearch } from 'lucide-react';
+import React, { useState } from 'react';
 
 export const BottomPanel = () => {
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'history' | 'positions' | 'assets'
@@ -65,7 +65,7 @@ export const BottomPanel = () => {
                     <td className="py-2.5 px-4">{order.total}</td>
                     <td className="py-2.5 px-4">{order.status}</td>
                     <td className="py-2.5 px-4 text-right">
-                      <button className="text-blue-400 hover:text-blue-300">撤单</button>
+                      <button type="button" className="text-primary hover:opacity-80">撤单</button>
                     </td>
                   </tr>
                 ))}
