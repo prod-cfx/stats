@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpDown, Search } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
@@ -21,6 +21,7 @@ interface CompanyData {
   change24h: string;
   change1d: string;
   change7d: string;
+  infoParagraphs?: string[];
 }
 
 const initialCompanyData: CompanyData[] = [
@@ -55,6 +56,12 @@ const initialCompanyData: CompanyData[] = [
     change24h: '+0.00%',
     change1d: '+0.10%',
     change7d: '+2.30%',
+    infoParagraphs: [
+      '微策略是一家美国的软件公司，提供商业智能、移动软件和云端服务。',
+      '该公司于1989年由迈克尔·塞勒（Michael J. Saylor）、桑朱·班萨尔（Sanju Bansal）和托马斯·斯宾纳（Thomas Spahr）创立，专门开发用于分析内部与外部数据的软件，协助进行商业决策以及开发移动应用程序。',
+      '公司总部位于弗吉尼亚州泰森斯（Tysons），属于华盛顿都会区的一部分。塞勒为执行主席，自1989年至2022年担任CEO。',
+      '该公司因为持有巨量比特币而被认为是与比特币挂钩的“概念股”。',
+    ],
   },
   {
     asset: 'USDC',
@@ -90,11 +97,24 @@ const initialCompanyData: CompanyData[] = [
   }
 ];
 
+type SortField = keyof Pick<
+  CompanyData,
+  | 'mNav'
+  | 'marketCap'
+  | 'holdingsValue'
+  | 'holdingsAmount'
+  | 'sharePrice'
+  | 'change24h'
+  | 'change1d'
+  | 'change7d'
+> | null;
+type SortDirection = 'asc' | 'desc' | null;
+
 export const PublicCompaniesTable = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortField, setSortField] = useState<string>('marketCap');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<SortField>('marketCap');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
 
   // Debounce search
@@ -112,19 +132,110 @@ export const PublicCompaniesTable = () => {
         c.ticker.toLowerCase().includes(debouncedSearch.toLowerCase())
       );
     },
-    [debouncedSearch, sortField, sortOrder]
+    [debouncedSearch]
   );
 
   const sortedData = useMemo(() => {
     if (!companies) return [];
+    if (!sortField || !sortDirection) return companies;
+
+    const parseCompactNumber = (raw: string): number | null => {
+      const val = raw.trim();
+      if (!val || val === '-') return null;
+
+      // Keep sign; extract first number.
+      const match = val.match(/[-+]?\d+(\.\d+)?/);
+      if (!match || match.index == null) return null;
+      const numStr = match[0];
+      const num = Number(numStr);
+      if (!Number.isFinite(num)) return null;
+
+      // Detect unit right after the number (e.g. 3.1T, 47.4B, 671.27K BTC, 66.10万 BTC, 3.1万亿)
+      // Note: only treat compact units when they are directly attached (or after trimming leading spaces).
+      // If the suffix is separated by whitespace and looks like a symbol/code (e.g. "BTC"), we treat it as "no unit".
+      const restRaw = val.slice(match.index + numStr.length);
+      const rest = restRaw.trimStart();
+      if (!rest) return num;
+
+      // CJK units (order matters: handle "万亿" before "万")
+      if (rest.startsWith('万亿')) return num * 1e12;
+      if (rest.startsWith('兆')) return num * 1e12;
+      if (rest.startsWith('千亿')) return num * 1e11;
+      if (rest.startsWith('百亿')) return num * 1e10;
+      if (rest.startsWith('十亿')) return num * 1e9;
+      if (rest.startsWith('亿')) return num * 1e8;
+      if (rest.startsWith('万')) return num * 1e4;
+
+      // Latin compact units: extract first token (until whitespace or a non-letter symbol)
+      // Examples:
+      // - "1.2bn" => token "bn"
+      // - "1.2 bn" => token "bn"
+      // - "671.27K BTC" => token "K"
+      // - "1.2B" => token "B"
+      const tokenMatch = rest.match(/^[a-z]+/i);
+      const token = tokenMatch?.[0]?.toLowerCase();
+      if (token) {
+        const multipliers: Record<string, number> = {
+          // trillion
+          t: 1e12,
+          tn: 1e12,
+          trn: 1e12,
+          // billion
+          b: 1e9,
+          bn: 1e9,
+          // million
+          m: 1e6,
+          mn: 1e6,
+          // thousand
+          k: 1e3,
+          kn: 1e3,
+        };
+
+        const multiplier = multipliers[token];
+        if (multiplier != null) return num * multiplier;
+
+        // Unknown unit token: fail loudly (but keep UI working by pushing it to top in desc sorts)
+        console.error(`[PublicCompaniesTable] 未识别的数值单位 token: "${token}"（raw="${val}"，rest="${rest}"）`);
+        return null;
+      }
+
+      return num;
+    };
+
+    const parsePercent = (raw: string): number | null => {
+      const v = raw.trim();
+      if (!v || v === '-') return null;
+      const num = Number(v.replace('%', ''));
+      return Number.isFinite(num) ? num : null;
+    };
+
+    const sortValueOf = (row: CompanyData, field: SortField): number | null => {
+      if (!field) return null;
+      const raw = row[field];
+      // Percent fields
+      if (field === 'change24h' || field === 'change1d' || field === 'change7d') return parsePercent(raw);
+      // mNAV: plain number or '-'
+      if (field === 'mNav') return parseCompactNumber(raw);
+      // Currency / compact values: $xxB, $xx, etc.
+      if (field === 'marketCap' || field === 'holdingsValue' || field === 'sharePrice') return parseCompactNumber(raw.replace('$', '').replaceAll(',', ''));
+      // holdingsAmount: e.g. "671.27K BTC", "64.50B USDC"
+      if (field === 'holdingsAmount') return parseCompactNumber(raw.replaceAll(',', ''));
+      return parseCompactNumber(raw);
+    };
+
     return [...companies].sort((a, b) => {
-      const valA = a[sortField as keyof CompanyData] || '';
-      const valB = b[sortField as keyof CompanyData] || '';
-      return sortOrder === 'desc' 
-        ? String(valB).localeCompare(String(valA)) 
-        : String(valA).localeCompare(String(valB));
+      const aVal = sortValueOf(a, sortField);
+      const bVal = sortValueOf(b, sortField);
+      // Always push missing/invalid values to the bottom, regardless of sort direction.
+      const aMissing = aVal == null;
+      const bMissing = bVal == null;
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [companies, sortField, sortOrder]);
+  }, [companies, sortField, sortDirection]);
 
   const renderValueWithColor = (val: string) => {
     const isPositive = val.startsWith('+');
@@ -136,27 +247,53 @@ export const PublicCompaniesTable = () => {
     );
   };
 
-  const handleSort = (field: string) => {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+      if (sortDirection === 'desc') {
+        setSortDirection('asc');
+      } else if (sortDirection === 'asc') {
+        setSortField(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('desc');
+      }
     } else {
       setSortField(field);
-      setSortOrder('desc');
+      setSortDirection('desc');
     }
-    reload();
   };
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />;
+    return sortDirection === 'desc'
+      ? <ChevronDown className="w-3 h-3 text-primary" />
+      : <ChevronUp className="w-3 h-3 text-primary" />;
+  };
+
+  const selectedCompanyInfoParagraphs = useMemo(() => {
+    if (!selectedCompany) return [];
+    if (selectedCompany.infoParagraphs?.length) return selectedCompany.infoParagraphs;
+    return [
+      `${selectedCompany.name}（${selectedCompany.ticker}）公司信息暂未补齐，当前为 Mock 占位。`,
+      `交易所：${selectedCompany.exchange}；持有资产：${selectedCompany.asset}；mNAV：${selectedCompany.mNav}。`,
+    ];
+  }, [selectedCompany]);
 
   return (
     <div className="space-y-6">
-      <div className="relative max-w-md group">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
-        <input 
-          type="text" 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="搜索公司名称或股票代码..." 
-          className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-primary transition-all placeholder:text-[#8b949e]"
-        />
+      <div className="relative max-w-md">
+        <div className="group rounded-xl p-[1px] bg-[#30363d] transition-colors focus-within:bg-gradient-to-r focus-within:from-primary focus-within:to-secondary">
+          <div className="relative rounded-xl bg-[#161b22]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
+            <input 
+              type="text" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="搜索公司名称或股票代码..." 
+              className="w-full bg-transparent border-0 rounded-xl pl-12 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-0 transition-all placeholder:text-[#8b949e]"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
@@ -167,45 +304,77 @@ export const PublicCompaniesTable = () => {
                 <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
                   <th className="px-6 py-6 text-left">币种</th>
                   <th className="px-6 py-6 text-left">公司</th>
-                  <th className="px-4 py-6 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('mNav')}>
-                    <div className="flex items-center justify-center gap-1 uppercase">
-                      mNAV <ArrowUpDown className="w-3 h-3" />
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('mNav')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors uppercase"
+                    >
+                      mNAV {renderSortIcon('mNav')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('marketCap')}>
-                    <div className="flex items-center justify-center gap-1">
-                      市值 <ArrowUpDown className="w-3 h-3" />
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('marketCap')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                    >
+                      市值 {renderSortIcon('marketCap')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('holdingsValue')}>
-                    <div className="flex items-center justify-center gap-1">
-                      持币价值 <ArrowUpDown className="w-3 h-3" />
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('holdingsValue')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                    >
+                      持币价值 {renderSortIcon('holdingsValue')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6">
-                    <div className="flex items-center justify-center gap-1">
-                      持币量
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('holdingsAmount')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                    >
+                      持币量 {renderSortIcon('holdingsAmount')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('sharePrice')}>
-                    <div className="flex items-center justify-center gap-1">
-                      股价 <ArrowUpDown className="w-3 h-3" />
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('sharePrice')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                    >
+                      股价 {renderSortIcon('sharePrice')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6">
-                    <div className="flex items-center justify-center gap-1 text-center">
-                      24h涨跌
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('change24h')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                    >
+                      24h涨跌 {renderSortIcon('change24h')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6">
-                    <div className="flex items-center justify-center gap-1 text-center">
-                      1天增减
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('change1d')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                    >
+                      1天增减 {renderSortIcon('change1d')}
+                    </button>
                   </th>
-                  <th className="px-4 py-6">
-                    <div className="flex items-center justify-center gap-1 text-center">
-                      7天增减
-                    </div>
+                  <th className="px-4 py-6 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort('change7d')}
+                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                    >
+                      7天增减 {renderSortIcon('change7d')}
+                    </button>
                   </th>
                 </tr>
               </thead>
@@ -225,13 +394,26 @@ export const PublicCompaniesTable = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-start gap-3">
+                      <div className="flex items-center justify-start gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-full bg-white p-1 flex-none overflow-hidden">
                           <img src={row.logo} alt={row.name} className="w-full h-full object-contain" />
                         </div>
-                        <div className="flex flex-col">
-                          <span className="text-white font-semibold">{row.name}</span>
-                          <span className="text-[#8b949e] text-xs uppercase">{row.ticker} {row.exchange}</span>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-start gap-1 min-w-0">
+                            <span className="text-white font-semibold truncate min-w-0">{row.name}</span>
+                            <button
+                              type="button"
+                              aria-label="查看公司信息"
+                              className="text-[#8b949e] hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 flex-none -mt-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCompany(row);
+                              }}
+                            >
+                              <Info className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <span className="text-[#8b949e] text-xs uppercase truncate">{row.ticker} {row.exchange}</span>
                         </div>
                       </div>
                     </td>
@@ -259,36 +441,33 @@ export const PublicCompaniesTable = () => {
       <Modal
         isOpen={!!selectedCompany}
         onClose={() => setSelectedCompany(null)}
-        title={selectedCompany?.name}
-        width="max-w-2xl"
+        title="公司信息"
+        width="max-w-xl"
       >
         <div className="space-y-6">
-          <div className="flex gap-6 p-4 bg-[#0d1117] rounded-2xl border border-[#30363d]">
-            <div className="w-20 h-20 bg-white rounded-2xl p-2 flex-none">
+          <div className="flex gap-4 items-start pb-4 border-b border-[#30363d]">
+            <div className="w-12 h-12 rounded-xl bg-white p-2 flex-none">
               <img src={selectedCompany?.logo} className="w-full h-full object-contain" alt="" />
             </div>
-            <div className="flex flex-col justify-center">
-              <h4 className="text-2xl font-bold text-white">{selectedCompany?.ticker}</h4>
-              <p className="text-[#8b949e]">{selectedCompany?.exchange}</p>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-[#0d1117]/50 rounded-xl border border-[#30363d]/50">
-              <p className="text-xs text-[#8b949e] uppercase mb-1">当前股价</p>
-              <p className="text-xl font-bold text-white">{selectedCompany?.sharePrice}</p>
-            </div>
-            <div className="p-4 bg-[#0d1117]/50 rounded-xl border border-[#30363d]/50">
-              <p className="text-xs text-[#8b949e] uppercase mb-1">持有 {selectedCompany?.asset} 价值</p>
-              <p className="text-xl font-bold text-primary">{selectedCompany?.holdingsValue}</p>
+            <div className="min-w-0">
+              <h3 className="text-xl font-bold text-white leading-tight truncate">{selectedCompany?.name}</h3>
+              <div className="flex flex-wrap gap-3 mt-2">
+                <span className="text-xs text-[#8b949e]">股票代码: <span className="font-bold text-[#e6edf3]">{selectedCompany?.ticker}</span></span>
+                <span className="text-xs text-[#8b949e]">交易所: <span className="font-bold text-[#e6edf3]">{selectedCompany?.exchange}</span></span>
+              </div>
             </div>
           </div>
 
-          <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
-            <p className="text-sm text-primary font-bold mb-2">💡 分析结论 (Mock)</p>
-            <p className="text-sm text-[#c9d1d9] leading-relaxed">
-              该上市公司目前持有巨额 {selectedCompany?.asset} 资产，其股价走势与加密市场高度正相关。当前 mNAV 指标为 {selectedCompany?.mNav}，显示出其市场溢价状态。
-            </p>
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">公司信息</p>
+            <div className="text-sm leading-relaxed text-[#e6edf3] px-1">
+              {selectedCompanyInfoParagraphs.map((p, idx) => (
+                <React.Fragment key={idx}>
+                  <p>{p}</p>
+                  {idx !== selectedCompanyInfoParagraphs.length - 1 && <div className="h-4" />}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </div>
       </Modal>
