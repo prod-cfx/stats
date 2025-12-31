@@ -155,37 +155,23 @@ const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCard
   </div>
 );
 
-const topTrades: TradeCardProps[] = [
-  { asset: 'BTC', side: 'Short', time: '4天前', pnl: '$+25,597.98', duration: '27分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/btc.png' },
-  { asset: 'DOGE', side: 'Short', time: '13小时前', pnl: '$+4,657.59', duration: '58分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/doge.png' },
-  { asset: 'LINK', side: 'Short', time: '13小时前', pnl: '$+3,676.92', duration: '57分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/link.png' },
-  { asset: 'SOL', side: 'Short', time: '1天前', pnl: '$+2,585.89', duration: '23分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/sol.png' },
-  { asset: 'FARTCOIN', side: 'Short', time: '12小时前', pnl: '$+1,686.22', duration: '1小时 44分', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=fart' },
-  { asset: 'ETH', side: 'Long', time: '1天前', pnl: '$-7.78', duration: '2分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
-  { asset: 'SOL', side: 'Long', time: '1天前', pnl: '$-1,011.00', duration: '3分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/sol.png' },
-  { asset: 'ETH', side: 'Short', time: '1天前', pnl: '$-71,878.55', duration: '76小时 17分', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
-];
-
-const assetPerformance: PerformanceCardProps[] = [
-  { asset: 'BTC', trades: 1, pnl: '$+25,597.98', netPnl: '$-9,486.33', fees: '$+35,084.30', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/btc.png' },
-  { asset: 'DOGE', trades: 1, pnl: '$+4,657.59', netPnl: '$+4,119.39', fees: '$+538.21', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/doge.png' },
-  { asset: 'LINK', trades: 1, pnl: '$+3,676.92', netPnl: '$+3,018.44', fees: '$+658.48', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/link.png' },
-  { asset: 'ETH', trades: 2, pnl: '$-71,886.32', netPnl: '$-73,549.28', fees: '$+1,662.95', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
-];
-
-const positionPerformance: PositionCardProps[] = [
-  { asset: 'PENDLE', side: 'Short', time: '2 小时前', pnl: '$+16,549.49', size: '753 PENDLE', fees: '$+54.38', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=pendle' },
-  { asset: 'ONDO', side: 'Short', time: '3 小时前', pnl: '$+13,609.38', size: '1,865 ONDO', fees: '$+55.37', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=ondo' },
-  { asset: 'ATOM', side: 'Short', time: '3 小时前', pnl: '$+8,515.55', size: '223.04 ATOM', fees: '$+57.23', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/atom.png' },
-  { asset: 'TIA', side: 'Short', time: '3 小时前', pnl: '$+19,204.09', size: '2,868.6 TIA', fees: '$+53.78', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=tia' },
-  { asset: 'APT', side: 'Short', time: '3 小时前', pnl: '$-3,436.12', size: '1,905.2 APT', fees: '$+179.24', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/apt.png' },
-  { asset: 'AVAX', side: 'Short', time: '3 小时前', pnl: '$-3,195.52', size: '772.78 AVAX', fees: '$+120.09', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/avax.png' },
-  { asset: 'DOGE', side: 'Short', time: '4 天前', pnl: '$-8,107.62', size: '74,132 DOGE', fees: '$+121.51', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/doge.png' },
-  { asset: 'MET', side: 'Short', time: '4 天前', pnl: '$-15,878.99', size: '7,905 MET', fees: '$+64.62', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=met' },
-  { asset: 'ENA', side: 'Short', time: '5 天前', pnl: '$+20,650.45', size: '6,764 ENA', fees: '$+108.18', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=ena' },
-  { asset: 'SOL', side: 'Short', time: '6 天前', pnl: '$-10,913.05', size: '4,013.48 SOL', fees: '$+300.70', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/sol.png' },
-  { asset: 'ETH', side: 'Short', time: '6 天前', pnl: '$-3,568.89', size: '169.4628 ETH', fees: '$+298.41', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
-  { asset: 'ETH', side: 'Short', time: '6 天前', pnl: '$+440.04', size: '169.2448 ETH', fees: '$+297.21', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
+const ASSET_POOL: Array<{ asset: string; icon: string }> = [
+  { asset: 'BTC', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/btc.png' },
+  { asset: 'ETH', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/eth.png' },
+  { asset: 'SOL', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/sol.png' },
+  { asset: 'DOGE', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/doge.png' },
+  { asset: 'LINK', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/link.png' },
+  { asset: 'XRP', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/xrp.png' },
+  { asset: 'ADA', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/ada.png' },
+  { asset: 'AVAX', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/avax.png' },
+  { asset: 'ATOM', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/atom.png' },
+  { asset: 'APT', icon: 'https://cdn.jsdelivr.net/gh/clowwindy/crypto-icons@master/32/color/apt.png' },
+  { asset: 'PENDLE', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=pendle' },
+  { asset: 'ONDO', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=ondo' },
+  { asset: 'TIA', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=tia' },
+  { asset: 'ENA', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=ena' },
+  { asset: 'FARTCOIN', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=fart' },
+  { asset: 'MET', icon: 'https://api.dicebear.com/7.x/identicon/svg?seed=met' },
 ];
 
 export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradingStatsModalProps) => {
@@ -208,98 +194,150 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
     profitTrades, lossTrades, totalTrades, winRate, pnl, fees,
     currentTopTrades, currentAssetPerformance, currentPositionPerformance 
   } = useMemo(() => {
-    let multiplier = 1;
-    let timeScale = '天';
-    if (timeRange === '1月') {
-      multiplier = 4.2;
-      timeScale = '周';
-    }
-    if (timeRange === '全部') {
-      multiplier = 12.5;
-      timeScale = '月';
-    }
+    const now = Date.now();
+    const windowMs = timeRange === '1周'
+      ? 7 * 24 * 60 * 60 * 1000
+      : timeRange === '1月'
+        ? 30 * 24 * 60 * 60 * 1000
+        : 365 * 24 * 60 * 60 * 1000;
 
-    const baseProfit = 5;
-    const baseLoss = 5;
-    const p = Math.floor(baseProfit * multiplier);
-    const l = Math.floor(baseLoss * multiplier);
-    const total = p + l;
-    const wr = total > 0 ? ((p / total) * 100).toFixed(2) : '0.00';
-    
-    const pnlVal = (multiplier * 3975.55).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const feeVal = (multiplier * 42733.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // deterministic RNG per timeRange (avoid re-render random jump)
+    const mulberry32 = (seed: number) => {
+      return () => {
+        let t = (seed += 0x6D2B79F5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const seed = timeRange === '1周' ? 17 : (timeRange === '1月' ? 31 : 365);
+    const rnd = mulberry32(seed);
+    const randInt = (min: number, max: number) => Math.floor(rnd() * (max - min + 1)) + min;
+    const randFloat = (min: number, max: number) => rnd() * (max - min) + min;
 
-    const scaleCurrency = (val: string, m: number) => {
-      const num = parseFloat(val.replace(/[$,+]/g, ''));
-      const finalNum = num * m;
-      const formatted = Math.abs(finalNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const sign = finalNum >= 0 ? '+' : '-';
+    const formatCurrency = (amount: number) => {
+      const sign = amount >= 0 ? '+' : '-';
+      const formatted = Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       return `$${sign}${formatted}`;
     };
 
-    // Helper to adjust time labels logically
-    const adjustTime = (time: string) => {
-      if (timeRange === '1周') return time;
-      
-      const numMatch = time.match(/(\d+)/);
-      if (!numMatch) return time;
-      
-      const num = parseInt(numMatch[1]);
-      const isHours = time.includes('小时');
-      const isDays = time.includes('天');
-      
-      if (timeRange === '1月') {
-        if (isHours) return `${Math.max(1, Math.floor(num / 24) + 7)}天前`;
-        if (isDays) return `${num + 14}天前`;
-      }
-      if (timeRange === '全部') {
-        if (isHours) return `${Math.max(1, Math.floor(num / 24) + 1)}个月前`;
-        if (isDays) return `${Math.max(1, Math.floor(num / 7) + 1)}个月前`;
-      }
-      return time;
+    const formatRelativeTime = (ts: number) => {
+      const diffMs = Math.max(0, now - ts);
+      const minutes = Math.floor(diffMs / 60000);
+      if (minutes < 60) return `${Math.max(1, minutes)}分钟前`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}小时前`;
+      const days = Math.floor(hours / 24);
+      if (days < 7) return `${days}天前`;
+      if (days < 30) return `${Math.floor(days / 7)}周前`;
+      // months are approximate but derived from actual date diff window, not hard-coded offsets
+      return `${Math.max(1, Math.floor(days / 30))}个月前`;
     };
 
-    // Define different data subsets for different time ranges
-    let sliceStart = 0;
-    let assetSliceStart = 0;
-    if (timeRange === '1月') {
-      sliceStart = 2;
-      assetSliceStart = 1;
-    }
-    if (timeRange === '全部') {
-      sliceStart = 3;
-      assetSliceStart = 2;
-    }
+    const pickAsset = (used: Set<string>) => {
+      // try a few times to reduce duplicates, then fallback
+      for (let i = 0; i < 10; i++) {
+        const candidate = ASSET_POOL[randInt(0, ASSET_POOL.length - 1)];
+        if (!used.has(candidate.asset)) {
+          used.add(candidate.asset);
+          return candidate;
+        }
+      }
+      const candidate = ASSET_POOL[randInt(0, ASSET_POOL.length - 1)];
+      used.add(candidate.asset);
+      return candidate;
+    };
 
-    const tradesForRange = [...topTrades].slice(sliceStart, sliceStart + 5);
-    const assetPerfForRange = [...assetPerformance].slice(assetSliceStart, assetSliceStart + 3);
-    const posPerfForRange = [...positionPerformance].slice(sliceStart, sliceStart + 6);
+    // Generate independent datasets per timeRange (avoid slice on a shared constant list)
+    const usedTopAssets = new Set<string>();
+    const currentTopTradesGenerated: TradeCardProps[] = Array.from({ length: 10 }).map((_, idx) => {
+      const { asset, icon } = pickAsset(usedTopAssets);
+      const side: TradeCardProps['side'] = rnd() > 0.55 ? 'Short' : 'Long';
+      const ts = now - Math.floor(rnd() * windowMs);
+      const durationMin = randInt(2, timeRange === '1周' ? 360 : (timeRange === '1月' ? 24 * 60 * 5 : 24 * 60 * 20));
+      const durH = Math.floor(durationMin / 60);
+      const durM = durationMin % 60;
+      const duration = durH > 0 ? `${durH}小时 ${durM}分` : `${durM}分`;
+
+      // make pnl scale by range so "全部" has larger numbers, but still realistic
+      const baseScale = timeRange === '1周' ? 1 : (timeRange === '1月' ? 4 : 12);
+      const pnlAbs = randFloat(50, 80000) * baseScale * (1 + idx * 0.08);
+      const pnlSigned = (rnd() > 0.25 ? 1 : -1) * pnlAbs;
+
+      return {
+        asset,
+        side,
+        icon,
+        time: formatRelativeTime(ts),
+        pnl: formatCurrency(pnlSigned),
+        duration,
+      };
+    });
+
+    const usedPerfAssets = new Set<string>();
+    const currentAssetPerformanceGenerated: PerformanceCardProps[] = Array.from({ length: timeRange === '1周' ? 4 : (timeRange === '1月' ? 6 : 8) }).map(() => {
+      const { asset, icon } = pickAsset(usedPerfAssets);
+      const baseScale = timeRange === '1周' ? 1 : (timeRange === '1月' ? 4 : 12);
+      const trades = randInt(1, 6) * baseScale;
+      const pnl = randFloat(-90000, 150000) * baseScale;
+      const fee = Math.abs(pnl) * randFloat(0.01, 0.08);
+      const net = pnl - fee;
+      return {
+        asset,
+        icon,
+        trades,
+        pnl: formatCurrency(pnl),
+        netPnl: formatCurrency(net),
+        fees: formatCurrency(fee),
+      };
+    });
+
+    const usedPosAssets = new Set<string>();
+    const currentPositionPerformanceGenerated: PositionCardProps[] = Array.from({ length: timeRange === '1周' ? 8 : (timeRange === '1月' ? 10 : 12) }).map(() => {
+      const { asset, icon } = pickAsset(usedPosAssets);
+      const side: PositionCardProps['side'] = rnd() > 0.55 ? 'Short' : 'Long';
+      const ts = now - Math.floor(rnd() * windowMs);
+      const baseScale = timeRange === '1周' ? 1 : (timeRange === '1月' ? 3.5 : 10);
+      const pnl = randFloat(-40000, 60000) * baseScale;
+      const fee = Math.abs(pnl) * randFloat(0.005, 0.03);
+      const sizeNum = randFloat(20, 5000);
+      const size = `${sizeNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${asset}`;
+      return {
+        asset,
+        icon,
+        side,
+        time: formatRelativeTime(ts),
+        pnl: formatCurrency(pnl),
+        fees: formatCurrency(fee),
+        size,
+      };
+    });
+
+    const profitCount = currentTopTradesGenerated.filter(t => t.pnl.includes('$+')).length;
+    const lossCount = currentTopTradesGenerated.length - profitCount;
+    const total = currentTopTradesGenerated.length;
+    const wr = total > 0 ? ((profitCount / total) * 100).toFixed(2) : '0.00';
+
+    // summary stats are derived from generated lists (avoid lying with unrelated numbers)
+    const pnlSum = currentTopTradesGenerated.reduce((acc, t) => {
+      const n = Number.parseFloat(t.pnl.replace(/[$,]/g, ''));
+      return acc + n;
+    }, 0);
+    const feesSum = currentPositionPerformanceGenerated.reduce((acc, p) => {
+      const n = Number.parseFloat(p.fees.replace(/[$,]/g, ''));
+      return acc + n;
+    }, 0);
 
     return {
-      profitTrades: p,
-      lossTrades: l,
+      profitTrades: profitCount,
+      lossTrades: lossCount,
       totalTrades: total,
       winRate: wr + '%',
-      pnl: `$+${pnlVal}`,
-      fees: `$+${feeVal}`,
-      currentTopTrades: tradesForRange.map((t, i) => ({
-        ...t,
-        pnl: scaleCurrency(t.pnl, multiplier * (0.7 + i * 0.1)), 
-        time: adjustTime(t.time)
-      })),
-      currentAssetPerformance: assetPerfForRange.map(ap => ({
-        ...ap,
-        trades: Math.floor(ap.trades * multiplier),
-        pnl: scaleCurrency(ap.pnl, multiplier),
-        netPnl: scaleCurrency(ap.netPnl, multiplier),
-        fees: scaleCurrency(ap.fees, multiplier)
-      })),
-      currentPositionPerformance: posPerfForRange.map(pp => ({
-        ...pp,
-        pnl: scaleCurrency(pp.pnl, multiplier),
-        fees: scaleCurrency(pp.fees, multiplier),
-        time: adjustTime(pp.time)
-      }))
+      pnl: formatCurrency(pnlSum),
+      fees: formatCurrency(feesSum),
+      currentTopTrades: currentTopTradesGenerated,
+      currentAssetPerformance: currentAssetPerformanceGenerated,
+      currentPositionPerformance: currentPositionPerformanceGenerated,
     };
   }, [timeRange]);
 
