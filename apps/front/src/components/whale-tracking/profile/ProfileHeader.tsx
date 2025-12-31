@@ -1,7 +1,7 @@
 'use client';
 
-import { Copy, RefreshCw } from 'lucide-react';
-import React from 'react';
+import { Check, Copy, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PageTitle } from '@/components/ui/Typography';
 
 interface ProfileHeaderProps {
@@ -9,7 +9,38 @@ interface ProfileHeaderProps {
 }
 
 export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const refreshTimer = useRef<NodeJS.Timeout | null>(null);
+  const copyTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
   const formatAddress = (addr: string) => `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+
+  const handleRefresh = () => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    setIsRefreshing(true);
+    refreshTimer.current = setTimeout(() => setIsRefreshing(false), 1500);
+  };
+
+  const handleCopyAddress = async () => {
+    try {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      await navigator.clipboard.writeText(address);
+      setIsCopied(true);
+      copyTimer.current = setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy address:', err);
+      alert('复制地址失败');
+    }
+  };
 
   const tags = [
     { label: '中等资金', color: 'text-primary', bg: 'bg-primary/10' },
@@ -28,8 +59,13 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
           </div>
           <div className="flex items-center gap-3">
             <PageTitle>{formatAddress(address)}</PageTitle>
-          <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
-            <Copy className="w-4.5 h-4.5" />
+          <button 
+            type="button" 
+            onClick={handleCopyAddress}
+            className={`transition-colors ${isCopied ? 'text-green-400' : 'text-[#8b949e] hover:text-white'}`}
+            title="复制地址"
+          >
+            {isCopied ? <Check className="w-4.5 h-4.5" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
           </div>
         </div>
@@ -47,9 +83,14 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
       </div>
 
       <div className="flex items-center gap-3">
-        <button type="button" className="flex items-center gap-2 px-4 py-2 bg-transparent text-[#e5e5e5] text-label font-medium hover:text-white transition-all group">
-          <RefreshCw className="w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-colors" />
-          <span className="text-body font-bold">实时数据</span>
+        <button 
+          type="button" 
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className={`flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-xl text-[#e5e5e5] text-label font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all group ${isRefreshing ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
+        >
+          <RefreshCw className={`w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-all ${isRefreshing ? 'animate-spin text-white' : ''}`} />
+          <span className={`text-body font-bold text-white transition-colors`}>{isRefreshing ? '更新中...' : '实时数据'}</span>
         </button>
       </div>
     </div>

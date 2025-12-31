@@ -56,7 +56,9 @@ export const Modal = ({
       />
       
       {/* Content */}
-      <div className={`relative w-full ${width} bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 z-10`}>
+      <div
+        className={`relative w-full ${width} max-h-[calc(100vh-2rem)] bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 z-10 min-h-0`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#30363d]">
           <h3 className="text-lg font-bold text-white">{title}</h3>
@@ -70,7 +72,7 @@ export const Modal = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto min-h-[200px] relative">
+        <div className="flex-1 overflow-y-auto min-h-0 relative">
           {loading && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#161b22]/80 backdrop-blur-[2px]">
               <div className="flex flex-col items-center gap-3">

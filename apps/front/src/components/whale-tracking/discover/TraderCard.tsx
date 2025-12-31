@@ -83,21 +83,21 @@ export const TraderCard = ({
       <div className="grid grid-cols-2 gap-x-8 gap-y-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
-          <span className="text-white font-bold text-h2">{totalValue}</span>
+          <span className="text-white font-bold text-h3">{totalValue}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[#8b949e] text-caption font-medium">已实现盈亏</span>
-          <span className={`font-bold text-h2 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+          <span className={`font-bold text-h3 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
             {pnl}
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[#8b949e] text-caption font-medium">交易次数</span>
-          <span className="text-white font-bold text-h2">{trades}</span>
+          <span className="text-white font-bold text-h3">{trades}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[#8b949e] text-caption font-medium">胜率</span>
-          <span className="text-white font-bold text-h2">{winRate}</span>
+          <span className="text-white font-bold text-h3">{winRate}</span>
         </div>
       </div>
     </div>
@@ -131,7 +131,7 @@ export const TraderCard = ({
 
       <div className="flex flex-col gap-2">
         <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
-        <span className="text-white text-h1 font-bold tracking-tight">{totalValue}</span>
+        <span className="text-white text-h2 font-bold tracking-tight">{totalValue}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-b border-[#30363d] pb-6">
