@@ -2501,42 +2501,35 @@
         "operationId": "OpenInterestController_query",
         "parameters": [
           {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "description": "每页数量",
-            "schema": {
-              "example": 100,
-              "type": "number"
-            }
-          },
-          {
             "name": "page",
             "required": false,
             "in": "query",
             "description": "页码（从1开始）",
             "schema": {
+              "minimum": 1,
               "example": 1,
               "type": "number"
             }
           },
           {
-            "name": "endTime",
+            "name": "limit",
             "required": false,
             "in": "query",
-            "description": "结束时间",
+            "description": "每页数量",
             "schema": {
-              "example": "2025-12-24T23:59:59Z",
-              "type": "string"
+              "minimum": 1,
+              "maximum": 100,
+              "example": 100,
+              "type": "number"
             }
           },
           {
-            "name": "startTime",
+            "name": "exchange",
             "required": false,
             "in": "query",
-            "description": "开始时间",
+            "description": "交易所名称",
             "schema": {
-              "example": "2025-12-24T00:00:00Z",
+              "example": "All",
               "type": "string"
             }
           },
@@ -2551,12 +2544,22 @@
             }
           },
           {
-            "name": "exchange",
+            "name": "startTime",
             "required": false,
             "in": "query",
-            "description": "交易所名称",
+            "description": "开始时间",
             "schema": {
-              "example": "All",
+              "example": "2025-12-24T00:00:00Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "endTime",
+            "required": false,
+            "in": "query",
+            "description": "结束时间",
+            "schema": {
+              "example": "2025-12-24T23:59:59Z",
               "type": "string"
             }
           }
@@ -3066,6 +3069,51 @@
           }
         ],
         "summary": "删除订单薄交易对配置",
+        "tags": [
+          "admin-orderbook-config"
+        ]
+      }
+    },
+    "/admin/orderbook-configs/{id}/orderbook": {
+      "get": {
+        "operationId": "AdminOrderbookPairConfigController_getCurrentOrderbook",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取订单薄快照",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/VenueOrderBookDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "查看指定订单薄配置的当前订单薄快照（来自 Redis）",
         "tags": [
           "admin-orderbook-config"
         ]
@@ -4621,6 +4669,10 @@
             "type": "string",
             "nullable": true
           },
+          "meta": {
+            "type": "object",
+            "nullable": true
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4683,6 +4735,11 @@
             "type": "string",
             "description": "初始游标（例如起始时间戳、自增 ID 等）",
             "nullable": true
+          },
+          "meta": {
+            "type": "object",
+            "description": "任务级自定义配置参数（JSON），例如不同数据源的过滤条件等",
+            "nullable": true
           }
         },
         "required": [
@@ -4724,6 +4781,11 @@
           "cursor": {
             "type": "string",
             "description": "当前游标（强制重置时使用）",
+            "nullable": true
+          },
+          "meta": {
+            "type": "object",
+            "description": "任务级自定义配置参数（JSON），将覆盖原有 meta",
             "nullable": true
           }
         }

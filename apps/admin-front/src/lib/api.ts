@@ -433,34 +433,12 @@ export async function deleteExchangeConfig(id: string): Promise<void> {
 export async function fetchOrderbookSnapshotByConfigId(
   id: string,
 ): Promise<VenueOrderBook | null> {
-  const token = getToken()
-  if (!token)
-    throw new Error('登录状态已失效，请重新登录')
-
-  const res = await fetch(
-    `${API_BASE_URL}/admin/orderbook-configs/${encodeURIComponent(id)}/orderbook`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      cache: 'no-store',
-    },
-  )
-
-  if (res.status === 404)
-    return null
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || '获取订单薄失败')
-  }
-
-  const json = await res.json()
-  const book = (json && typeof json === 'object' && 'data' in json ? (json as any).data : json) as
-    | VenueOrderBook
-    | undefined
-
-  return book ?? null
+  const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
+    headers: requireAuthHeaders(),
+    params: { id },
+  })
+  const data = unwrapResponse<VenueOrderBook | null>(response as any)
+  return data ?? null
 }
 
 // ===== 旧业务逻辑已移除 =====

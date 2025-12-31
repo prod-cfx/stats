@@ -22,6 +22,7 @@ import {
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import { OrderbookPairConfigResponseDto } from '../dto/orderbook-pair-config.response.dto'
+import { OrderBookLevelDto, VenueOrderBookDto } from '../dto/orderbook-snapshot.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
@@ -34,7 +35,7 @@ import type { OrderbookPairConfig } from '@prisma/client'
 @Controller('admin/orderbook-configs')
 @ApiBearerAuth('bearer')
 @RequireAuth()
-@ApiExtraModels(BaseResponseDto, OrderbookPairConfigResponseDto)
+@ApiExtraModels(BaseResponseDto, OrderbookPairConfigResponseDto, VenueOrderBookDto, OrderBookLevelDto)
 export class AdminOrderbookPairConfigController {
   constructor(
     private readonly service: OrderbookPairConfigService,
@@ -96,8 +97,18 @@ export class AdminOrderbookPairConfigController {
   @ApiResponse({
     status: 200,
     description: '成功获取订单薄快照',
+    schema: {
+      type: 'object',
+      properties: {
+        data: { $ref: getSchemaPath(VenueOrderBookDto) },
+        message: {
+          type: 'string',
+          example: 'Success',
+        },
+      },
+    },
   })
-  async getCurrentOrderbook(@Param('id') id: string): Promise<VenueOrderBook> {
+  async getCurrentOrderbook(@Param('id') id: string): Promise<BaseResponseDto<VenueOrderBookDto>> {
     const config = await this.service.findById(id)
 
     // 如果配置被禁用，则视为“当前不再拉取数据”，直接返回 404
@@ -139,7 +150,26 @@ export class AdminOrderbookPairConfigController {
       throw new NotFoundException('订单薄数据格式不正确')
     }
 
-    return book
+    const dto = new VenueOrderBookDto()
+    dto.venueId = book.venueId
+    dto.marketKey = book.marketKey
+    dto.bids = (book.bids ?? []).map(level => {
+      const l = new OrderBookLevelDto()
+      l.price = level.price
+      l.size = level.size
+      return l
+    })
+    dto.asks = (book.asks ?? []).map(level => {
+      const l = new OrderBookLevelDto()
+      l.price = level.price
+      l.size = level.size
+      return l
+    })
+    dto.exchangeTs = book.exchangeTs ?? null
+    dto.receivedTs = book.receivedTs
+    dto.version = book.version
+
+    return new BaseResponseDto<VenueOrderBookDto>(dto)
   }
 
   @Post()

@@ -423,6 +423,20 @@ const UpdateOrderbookPairConfigDto = z
   })
   .partial()
   .passthrough();
+const OrderBookLevelDto = z
+  .object({ price: z.number(), size: z.number() })
+  .passthrough();
+const VenueOrderBookDto = z
+  .object({
+    venueId: z.string(),
+    marketKey: z.string(),
+    bids: z.array(OrderBookLevelDto),
+    asks: z.array(OrderBookLevelDto),
+    exchangeTs: z.number().nullish(),
+    receivedTs: z.number(),
+    version: z.number(),
+  })
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -547,6 +561,8 @@ export const schemas = {
   OrderbookPairConfigResponseDto,
   CreateOrderbookPairConfigDto,
   UpdateOrderbookPairConfigDto,
+  OrderBookLevelDto,
+  VenueOrderBookDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   ExchangeConfigResponseDto,
@@ -1096,6 +1112,23 @@ const endpoints = makeApi([
         data: z.object({ success: z.boolean() }).partial().passthrough(),
         message: z.string(),
       })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/orderbook-configs/:id/orderbook",
+    alias: "AdminOrderbookPairConfigController_getCurrentOrderbook",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: VenueOrderBookDto, message: z.string() })
       .partial()
       .passthrough(),
   },
