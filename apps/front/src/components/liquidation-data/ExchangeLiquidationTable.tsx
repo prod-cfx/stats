@@ -64,33 +64,52 @@ const initialExchangeData: ExchangeData[] = [
 ];
 
 export const ExchangeLiquidationTable = () => {
-  const [exchangeFilter, setExchangeFilter] = useState('全部交易所');
+  const [coinFilter, setCoinFilter] = useState('全部');
   const [timeFilter, setTimeFilter] = useState('4小时');
   const [selectedExchange, setSelectedExchange] = useState<ExchangeData | null>(null);
 
   const { data: tableData, loading, error, reload } = useMockData(
     async () => {
       // Simulate data generation
-      const data = initialExchangeData.map(ex => ({
-        ...ex,
-        amount: `$${(Math.random() * 1000 + 100).toFixed(2)}万`,
-      }));
+      const data = initialExchangeData.map(ex => {
+        // Mock: make it feel like data changed based on filters
+        const multiplier = coinFilter === '全部' ? 1 : (Math.random() * 0.5 + 0.5);
+        return {
+          ...ex,
+          amount: `$${(Math.random() * 1000 * multiplier + 100).toFixed(2)}万`,
+          long: `$${(Math.random() * 800 * multiplier + 50).toFixed(2)}万`,
+          short: `$${(Math.random() * 200 * multiplier + 10).toFixed(2)}万`,
+        };
+      });
       
+      const totalAmount = data.reduce(
+        (acc, curr) => acc + Number.parseFloat(curr.amount.replace('$', '').replace('万', '')),
+        0
+      );
+      const totalLong = data.reduce(
+        (acc, curr) => acc + Number.parseFloat(curr.long.replace('$', '').replace('万', '')),
+        0
+      );
+      const totalShort = data.reduce(
+        (acc, curr) => acc + Number.parseFloat(curr.short.replace('$', '').replace('万', '')),
+        0
+      );
+
       const total = {
         exchange: '全部',
         logo: '',
-        amount: '$3659.98万',
-        long: '$3071.64万',
-        short: '$588.33万',
+        amount: `$${totalAmount.toFixed(2)}万`,
+        long: `$${totalLong.toFixed(2)}万`,
+        short: `$${totalShort.toFixed(2)}万`,
         ratio: '100%',
-        longShortRatio: '83.93%做多',
-        isLongDominant: true,
+        longShortRatio: `${((totalLong / totalAmount) * 100).toFixed(2)}%做多`,
+        isLongDominant: totalLong > totalShort,
         isTotal: true,
       };
 
       return [total, ...data];
     },
-    [exchangeFilter, timeFilter]
+    [coinFilter, timeFilter]
   );
 
   return (
@@ -99,9 +118,9 @@ export const ExchangeLiquidationTable = () => {
         <SectionTitle>交易所爆仓</SectionTitle>
         <div className="flex gap-3">
           <FilterButton 
-            value={exchangeFilter} 
-            options={['全部交易所', 'Binance', 'OKX', 'Bybit', 'Hyperliquid']} 
-            onChange={setExchangeFilter} 
+            value={coinFilter} 
+            options={['全部', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE']} 
+            onChange={setCoinFilter} 
           />
           <FilterButton 
             value={timeFilter} 
