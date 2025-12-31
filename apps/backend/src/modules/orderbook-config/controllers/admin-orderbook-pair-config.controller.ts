@@ -117,27 +117,11 @@ export class AdminOrderbookPairConfigController {
     }
 
     const marketKey = this.buildMarketKeyFromConfig(config)
+    const venueId = this.resolveVenueIdFromConfig(config)
     const client = this.redisService.getClient()
 
-    const pattern = `orderbook:*:${marketKey}`
-    let cursor = '0'
-    let foundKey: string | null = null
-
-    // 按照 pattern 在 Redis 中查找第一个匹配的订单薄 key
-    do {
-      const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 20)
-      cursor = nextCursor
-      if (keys.length > 0) {
-        foundKey = keys[0]!
-        break
-      }
-    } while (cursor !== '0')
-
-    if (!foundKey) {
-      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
-    }
-
-    const raw = await client.get(foundKey)
+    const redisKey = `orderbook:${venueId}:${marketKey}`
+    const raw = await client.get(redisKey)
     if (!raw) {
       throw new NotFoundException('订单薄数据已过期或不存在')
     }
@@ -287,6 +271,37 @@ export class AdminOrderbookPairConfigController {
             : 'future',
     }
     return toMarketKey(market)
+  }
+
+  private resolveVenueIdFromConfig(config: OrderbookPairConfig): string {
+    const venue = config.venue.toUpperCase()
+    const venueType = config.venueType
+    const instrumentType = config.instrumentType
+
+    // 目前 WS 适配器与快照任务中使用的 venueId 约定：
+    // - binance-spot / binance-perp / binance-future
+    // - bybit-spot / bybit-perp / bybit-future
+    // - okx-spot / okx-perp / okx-future
+    if (venueType === 'CEX') {
+      if (venue === 'BINANCE') {
+        if (instrumentType === 'SPOT') return 'binance-spot'
+        if (instrumentType === 'PERPETUAL') return 'binance-perp'
+        if (instrumentType === 'FUTURE') return 'binance-future'
+      }
+      if (venue === 'BYBIT') {
+        if (instrumentType === 'SPOT') return 'bybit-spot'
+        if (instrumentType === 'PERPETUAL') return 'bybit-perp'
+        if (instrumentType === 'FUTURE') return 'bybit-future'
+      }
+      if (venue === 'OKX') {
+        if (instrumentType === 'SPOT') return 'okx-spot'
+        if (instrumentType === 'PERPETUAL') return 'okx-perp'
+        if (instrumentType === 'FUTURE') return 'okx-future'
+      }
+    }
+
+    // 兜底：按 "<venue>-<instrumentType>" 规则生成，以避免静默命中错误 venue
+    return `${venue.toLowerCase()}-${instrumentType.toLowerCase()}`
   }
 }
 

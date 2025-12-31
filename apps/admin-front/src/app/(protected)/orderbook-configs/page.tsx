@@ -20,7 +20,7 @@ import {
   Table,
   Tag,
 } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createOrderbookConfig,
   deleteOrderbookConfig,
@@ -62,6 +62,7 @@ export default function OrderbookConfigsPage() {
   const [viewError, setViewError] = useState<string | null>(null)
   const [createForm] = Form.useForm<CreateOrderbookPairConfigPayload>()
   const [editForm] = Form.useForm<UpdateOrderbookPairConfigPayload>()
+  const viewRequestIdRef = useRef(0)
 
   const loadConfigs = useCallback(async () => {
     setLoading(true)
@@ -92,6 +93,10 @@ export default function OrderbookConfigsPage() {
   }, [message])
 
   const openViewModal = async (config: OrderbookPairConfigResponse) => {
+    // 为本次查看生成唯一请求 ID，用于避免关闭后再次被异步结果唤起
+    const requestId = viewRequestIdRef.current + 1
+    viewRequestIdRef.current = requestId
+
     setViewingConfig(config)
     setViewModalOpen(true)
     setOrderbookPreview(null)
@@ -99,6 +104,10 @@ export default function OrderbookConfigsPage() {
     setViewLoading(true)
     try {
       const book = await fetchOrderbookSnapshotByConfigId(config.id)
+
+      // 如果在请求过程中用户已经关闭或切换了查看对象，则丢弃此次结果
+      if (viewRequestIdRef.current !== requestId)
+        return
       if (!book || ((!book.bids || book.bids.length === 0) && (!book.asks || book.asks.length === 0))) {
         setViewError('当前没有该交易对的订单薄数据，请确认订单薄同步任务或快照任务是否已开启')
         return
@@ -116,7 +125,6 @@ export default function OrderbookConfigsPage() {
     finally {
       setViewLoading(false)
     }
-    setViewModalOpen(true)
   }
 
   useEffect(() => {
@@ -475,6 +483,8 @@ export default function OrderbookConfigsPage() {
         title={viewingConfig ? `订单薄预览：${viewingConfig.pairId}` : '订单薄预览'}
         open={viewModalOpen}
         onCancel={() => {
+          // 标记当前查看请求已失效，避免异步结果在关闭后重新打开弹窗或覆盖状态
+          viewRequestIdRef.current += 1
           setViewModalOpen(false)
           setViewingConfig(null)
           setOrderbookPreview(null)
