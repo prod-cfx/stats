@@ -233,23 +233,46 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       const num = parseFloat(val.replace(/[$,+]/g, ''));
       const finalNum = num * m;
       const formatted = Math.abs(finalNum).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const sign = finalNum > 0 ? '+' : (finalNum < 0 ? '-' : '');
+      const sign = finalNum >= 0 ? '+' : '-';
       return `$${sign}${formatted}`;
     };
 
-    // Helper to adjust time labels
-    const adjustTime = (time: string, scale: string) => {
+    // Helper to adjust time labels logically
+    const adjustTime = (time: string) => {
       if (timeRange === '1周') return time;
-      return time.replace(/天|小时/g, scale);
+      
+      const numMatch = time.match(/(\d+)/);
+      if (!numMatch) return time;
+      
+      const num = parseInt(numMatch[1]);
+      const isHours = time.includes('小时');
+      const isDays = time.includes('天');
+      
+      if (timeRange === '1月') {
+        if (isHours) return `${Math.max(1, Math.floor(num / 24) + 7)}天前`;
+        if (isDays) return `${num + 14}天前`;
+      }
+      if (timeRange === '全部') {
+        if (isHours) return `${Math.max(1, Math.floor(num / 24) + 1)}个月前`;
+        if (isDays) return `${Math.max(1, Math.floor(num / 7) + 1)}个月前`;
+      }
+      return time;
     };
 
     // Define different data subsets for different time ranges
     let sliceStart = 0;
-    if (timeRange === '1月') sliceStart = 2;
-    if (timeRange === '全部') sliceStart = 4;
+    let assetSliceStart = 0;
+    if (timeRange === '1月') {
+      sliceStart = 2;
+      assetSliceStart = 1;
+    }
+    if (timeRange === '全部') {
+      sliceStart = 3;
+      assetSliceStart = 2;
+    }
 
     const tradesForRange = [...topTrades].slice(sliceStart, sliceStart + 5);
-    const assetPerfForRange = [...assetPerformance].slice(sliceStart % 2, (sliceStart % 2) + 3);
+    const assetPerfForRange = [...assetPerformance].slice(assetSliceStart, assetSliceStart + 3);
     const posPerfForRange = [...positionPerformance].slice(sliceStart, sliceStart + 6);
 
     return {
@@ -262,7 +285,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       currentTopTrades: tradesForRange.map((t, i) => ({
         ...t,
         pnl: scaleCurrency(t.pnl, multiplier * (0.7 + i * 0.1)), 
-        time: adjustTime(t.time, timeScale)
+        time: adjustTime(t.time)
       })),
       currentAssetPerformance: assetPerfForRange.map(ap => ({
         ...ap,
@@ -275,7 +298,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         ...pp,
         pnl: scaleCurrency(pp.pnl, multiplier),
         fees: scaleCurrency(pp.fees, multiplier),
-        time: adjustTime(pp.time, timeScale)
+        time: adjustTime(pp.time)
       }))
     };
   }, [timeRange]);
