@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, RefreshCw } from 'lucide-react';
+import { Check, Copy, RefreshCw } from 'lucide-react';
 import React, { useState } from 'react';
 import { PageTitle } from '@/components/ui/Typography';
 
@@ -10,11 +10,23 @@ interface ProfileHeaderProps {
 
 export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const formatAddress = (addr: string) => `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
 
   const handleRefresh = () => {
     setIsRefreshing(true);
     setTimeout(() => setIsRefreshing(false), 1500);
+  };
+
+  const handleCopyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy address:', err);
+      alert('复制地址失败');
+    }
   };
 
   const tags = [
@@ -34,8 +46,13 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
           </div>
           <div className="flex items-center gap-3">
             <PageTitle>{formatAddress(address)}</PageTitle>
-          <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
-            <Copy className="w-4.5 h-4.5" />
+          <button 
+            type="button" 
+            onClick={handleCopyAddress}
+            className={`transition-colors ${isCopied ? 'text-green-400' : 'text-[#8b949e] hover:text-white'}`}
+            title="复制地址"
+          >
+            {isCopied ? <Check className="w-4.5 h-4.5" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
           </div>
         </div>

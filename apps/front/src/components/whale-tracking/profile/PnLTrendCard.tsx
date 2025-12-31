@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PnLTrendChart } from './PnLTrendChart';
 
 export const PnLTrendCard = () => {
@@ -19,32 +19,41 @@ export const PnLTrendCard = () => {
     return () => document.removeEventListener('click', handleDocClick);
   }, [dropdownOpen]);
 
-  // Generate mock data for 1 week at ~2 hour intervals
-  const generateMockData = () => {
+  // Generate mock data for the selected filters
+  const mockData = useMemo(() => {
     const data = [];
     const now = new Date();
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
-    let currentValue = -200000; // Starting point
-    const hoursInWeek = 7 * 24;
+    let days = 7;
+    if (timeRange === '1天') days = 1;
+    if (timeRange === '1月') days = 30;
+    if (timeRange === '全部') days = 90;
+
+    const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     
-    for (let i = 0; i <= hoursInWeek; i += 2) {
-      const date = new Date(oneWeekAgo.getTime() + i * 60 * 60 * 1000);
+    let currentValue = -200000;
+    const intervals = days * 12; // 2 hour intervals
+    
+    for (let i = 0; i <= intervals; i++) {
+      const date = new Date(startTime.getTime() + i * 2 * 60 * 60 * 1000);
       const ts = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, '0')}:00`;
       
-      // Random walk with a trend towards the Figma value -414,743.38
-      const change = (Math.random() - 0.6) * 50000; // More likely to go down
+      // Seed based on filter values to keep data consistent for the same filter combo
+      const seedValue = (timeRange.length + contractType.length + pnlType.length + i) * 12345;
+      const pseudoRandom = (Math.sin(seedValue) + 1) / 2; // Value between 0 and 1
+      
+      const change = (pseudoRandom - 0.6) * 50000; 
       currentValue += change;
       
       data.push({ ts, value: currentValue });
     }
     
-    // Ensure final value is close to Figma design
-    data[data.length - 1].value = -414743.38;
+    // Ensure final value is close to Figma design if 1 week
+    if (timeRange === '1周') {
+      data[data.length - 1].value = -414743.38;
+    }
     return data;
-  };
-
-  const mockData = generateMockData();
+  }, [timeRange, contractType, pnlType]);
 
   return (
     <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 flex flex-col gap-6 h-full">
