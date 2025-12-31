@@ -203,25 +203,44 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
     }
   }, [timeRange, isOpen]);
 
-  // Mock data for the donut chart and stats - depends on timeRange
-  const { profitTrades, lossTrades, totalTrades, winRate, pnl, fees } = useMemo(() => {
-    // Basic multipliers for mock differentiation
+  // Mock data generation based on timeRange
+  const { 
+    profitTrades, lossTrades, totalTrades, winRate, pnl, fees,
+    currentTopTrades, currentAssetPerformance, currentPositionPerformance 
+  } = useMemo(() => {
     let multiplier = 1;
-    if (timeRange === '1月') multiplier = 4.2;
-    if (timeRange === '全部') multiplier = 12.5;
+    let timeScale = '天';
+    if (timeRange === '1月') {
+      multiplier = 4.2;
+      timeScale = '周';
+    }
+    if (timeRange === '全部') {
+      multiplier = 12.5;
+      timeScale = '月';
+    }
 
     const baseProfit = 5;
     const baseLoss = 5;
-    
-    // Seeded random-like logic for consistency
     const p = Math.floor(baseProfit * multiplier);
     const l = Math.floor(baseLoss * multiplier);
     const total = p + l;
     const wr = total > 0 ? ((p / total) * 100).toFixed(2) : '0.00';
     
-    // Formatting PnL and Fees based on range
     const pnlVal = (multiplier * 3975.55).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const feeVal = (multiplier * 42733.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Helper to scale currency strings
+    const scaleCurrency = (val: string, m: number) => {
+      const num = parseFloat(val.replace(/[$,+]/g, ''));
+      const sign = val.includes('+') ? '+' : (val.includes('-') ? '-' : '');
+      return `$${sign}${(num * m).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    // Helper to adjust time labels
+    const adjustTime = (time: string, scale: string) => {
+      if (timeRange === '1周') return time;
+      return time.replace(/天|小时/g, scale);
+    };
 
     return {
       profitTrades: p,
@@ -229,7 +248,25 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       totalTrades: total,
       winRate: wr + '%',
       pnl: `$+${pnlVal}`,
-      fees: `$+${feeVal}`
+      fees: `$+${feeVal}`,
+      currentTopTrades: topTrades.map(t => ({
+        ...t,
+        pnl: scaleCurrency(t.pnl, multiplier * 0.8), // Slightly vary scaling
+        time: adjustTime(t.time, timeScale)
+      })),
+      currentAssetPerformance: assetPerformance.map(ap => ({
+        ...ap,
+        trades: Math.floor(ap.trades * multiplier),
+        pnl: scaleCurrency(ap.pnl, multiplier),
+        netPnl: scaleCurrency(ap.netPnl, multiplier),
+        fees: scaleCurrency(ap.fees, multiplier)
+      })),
+      currentPositionPerformance: positionPerformance.map(pp => ({
+        ...pp,
+        pnl: scaleCurrency(pp.pnl, multiplier),
+        fees: scaleCurrency(pp.fees, multiplier),
+        time: adjustTime(pp.time, timeScale)
+      }))
     };
   }, [timeRange]);
 
@@ -391,7 +428,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         <div className="flex flex-col gap-4">
           <SectionTitle className="text-lg">十大最佳交易</SectionTitle>
           <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {topTrades.map((trade, idx) => (
+            {currentTopTrades.map((trade, idx) => (
               <TradeCard key={idx} {...trade} />
             ))}
           </div>
@@ -416,11 +453,11 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {activeTab === 'asset' ? (
-              assetPerformance.map((item, idx) => (
+              currentAssetPerformance.map((item, idx) => (
                 <PerformanceCard key={idx} {...item} />
               ))
             ) : (
-              positionPerformance.map((item, idx) => (
+              currentPositionPerformance.map((item, idx) => (
                 <PositionCard key={idx} {...item} />
               ))
             )}

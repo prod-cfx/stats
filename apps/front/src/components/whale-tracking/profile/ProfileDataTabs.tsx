@@ -233,12 +233,12 @@ export const ProfileDataTabs = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [assetFilter, setAssetFilter] = useState('');
   const [isFilterOpen, setIsAssetFilterOpen] = useState(false);
-  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
-  const toggleOrderExpansion = (idx: number) => {
+  const toggleOrderExpansion = (orderId: string) => {
     const newSet = new Set(expandedOrders);
-    if (newSet.has(idx)) newSet.delete(idx);
-    else newSet.add(idx);
+    if (newSet.has(orderId)) newSet.delete(orderId);
+    else newSet.add(orderId);
     setExpandedOrders(newSet);
   };
 
@@ -678,36 +678,38 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4 text-right text-green-400 text-sm font-medium">{pos.fundingFee}</td>
                 <td className="px-6 py-4 text-center text-[#8b949e] text-sm font-medium">-/-</td>
               </tr>
-            )) : activeTab === 'orders' ? filteredOpenOrders.map((order, idx) => (
-              <React.Fragment key={idx}>
-                <tr className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer" onClick={() => toggleOrderExpansion(idx)}>
-                  <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
-                    {order.time}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-white text-sm font-bold uppercase">{order.asset}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${order.side === 'Buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                        {order.side === 'Buy' ? '买入' : '卖出'}
-                      </span>
-                      <span className="text-[#8b949e] text-xs font-medium">{order.count} 笔订单</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.value}</td>
-                  <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{order.amount}</td>
-                  <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.price}</td>
-                  <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
-                  <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
-                  <td className="px-6 py-4 text-right">
-                    <button type="button" className={`text-[#8b949e] hover:text-white transition-all ${expandedOrders.has(idx) ? 'rotate-180' : ''}`}>
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-                {expandedOrders.has(idx) && order.details.map((detail, dIdx) => (
-                  <tr key={`${idx}-${dIdx}`} className="bg-[#0d1117]/30 text-[#8b949e]">
+            )) : activeTab === 'orders' ? filteredOpenOrders.map((order, idx) => {
+              const stableId = `${order.asset}-${order.time}-${order.side}`;
+              return (
+                <React.Fragment key={stableId}>
+                  <tr className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer" onClick={() => toggleOrderExpansion(stableId)}>
+                    <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
+                      {order.time}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-white text-sm font-bold uppercase">{order.asset}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${order.side === 'Buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {order.side === 'Buy' ? '买入' : '卖出'}
+                        </span>
+                        <span className="text-[#8b949e] text-xs font-medium">{order.count} 笔订单</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.value}</td>
+                    <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{order.amount}</td>
+                    <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.price}</td>
+                    <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
+                    <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
+                    <td className="px-6 py-4 text-right">
+                      <button type="button" className={`text-[#8b949e] hover:text-white transition-all ${expandedOrders.has(stableId) ? 'rotate-180' : ''}`}>
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedOrders.has(stableId) && order.details.map((detail, dIdx) => (
+                    <tr key={detail.id || dIdx} className="bg-[#0d1117]/30 text-[#8b949e]">
                     <td className="px-6 py-3 pl-12 text-xs">
                       {detail.time}
                     </td>
@@ -731,7 +733,8 @@ export const ProfileDataTabs = () => {
                   </tr>
                 ))}
               </React.Fragment>
-            )) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
+            );
+          }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
                   {trade.time}
