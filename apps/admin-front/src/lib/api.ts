@@ -1,6 +1,6 @@
-import type { schemas } from '@ai/api-contracts';
-import type { z } from 'zod'
-import { createApiClient } from '@ai/api-contracts'
+/* eslint-disable perfectionist/sort-imports, perfectionist/sort-named-imports, ts/consistent-type-imports */
+import { z } from 'zod'
+import { schemas, createApiClient } from '@ai/api-contracts'
 
 import { useAuthStore } from './auth-store'
 import { getToken } from './session'

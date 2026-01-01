@@ -5366,6 +5366,72 @@
           }
         }
       },
+      "OrderBookLevelDto": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number",
+            "description": "价格（统一为 base-quote 价格，例如 BTC/USDT）"
+          },
+          "size": {
+            "type": "number",
+            "description": "数量（base 数量，例如 0.1 BTC）"
+          }
+        },
+        "required": [
+          "price",
+          "size"
+        ]
+      },
+      "VenueOrderBookDto": {
+        "type": "object",
+        "properties": {
+          "venueId": {
+            "type": "string",
+            "description": "流动性来源唯一标识，例如 binance-spot、okx-spot 等"
+          },
+          "marketKey": {
+            "type": "string",
+            "description": "内部统一市场标识，格式如 BTC-USDT:spot / BTC-USDT:perp",
+            "example": "BTC-USDT:spot"
+          },
+          "bids": {
+            "type": "array",
+            "description": "买盘深度（按价格从高到低排序）",
+            "items": {
+              "$ref": "#/components/schemas/OrderBookLevelDto"
+            }
+          },
+          "asks": {
+            "type": "array",
+            "description": "卖盘深度（按价格从低到高排序）",
+            "items": {
+              "$ref": "#/components/schemas/OrderBookLevelDto"
+            }
+          },
+          "exchangeTs": {
+            "type": "number",
+            "description": "交易所侧事件时间戳（毫秒），如有",
+            "nullable": true
+          },
+          "receivedTs": {
+            "type": "number",
+            "description": "本地接收时间戳（毫秒）"
+          },
+          "version": {
+            "type": "number",
+            "description": "本地版本号 / 序列号，用于去重与连续性检查"
+          }
+        },
+        "required": [
+          "venueId",
+          "marketKey",
+          "bids",
+          "asks",
+          "receivedTs",
+          "version"
+        ]
+      },
       "TradingPairConfigResponseDto": {
         "type": "object",
         "properties": {

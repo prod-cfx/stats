@@ -145,8 +145,9 @@ export default function OrderbookConfigsPage() {
 
   useEffect(() => {
     // 只在 venues 真正加载完成后，且确认为空时，才切换到手动输入模式
+    // 这里的 setUseCustomVenueInput 是依赖异步加载结果的「状态修正」，不会造成副作用循环
     if (venuesLoaded && venues.length === 0) {
-      setUseCustomVenueInput(true)
+      setUseCustomVenueInput(true) // eslint-disable-line react-hooks-extra/no-direct-set-state-in-use-effect
     }
   }, [venuesLoaded, venues.length])
 
