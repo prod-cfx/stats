@@ -2,6 +2,7 @@
 
 import type {
   CreateOrderbookPairConfigPayload,
+  ExchangeConfigResponse,
   OrderbookPairConfigResponse,
   UpdateOrderbookPairConfigPayload,
 } from '@/lib/api'
@@ -19,11 +20,13 @@ import {
   Table,
   Tag,
 } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createOrderbookConfig,
   deleteOrderbookConfig,
+  fetchExchangeConfigs,
   fetchOrderbookConfigs,
+  fetchOrderbookSnapshotByConfigId,
   updateOrderbookConfig,
 } from '@/lib/api'
 
@@ -42,11 +45,26 @@ export default function OrderbookConfigsPage() {
   const { message, modal } = App.useApp()
   const [configs, setConfigs] = useState<OrderbookPairConfigResponse[]>([])
   const [loading, setLoading] = useState(true)
+  const [venues, setVenues] = useState<ExchangeConfigResponse[]>([])
+  const [venueLoading, setVenueLoading] = useState(false)
+  const [venuesLoaded, setVenuesLoaded] = useState(false)
+  const [useCustomVenueInput, setUseCustomVenueInput] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingConfig, setEditingConfig] = useState<OrderbookPairConfigResponse | null>(null)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [viewingConfig, setViewingConfig] = useState<OrderbookPairConfigResponse | null>(null)
+  const [orderbookPreview, setOrderbookPreview] = useState<{
+    bids: { price: number; size: number }[]
+    asks: { price: number; size: number }[]
+    exchangeTs?: number
+    receivedTs?: number
+  } | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
   const [createForm] = Form.useForm<CreateOrderbookPairConfigPayload>()
   const [editForm] = Form.useForm<UpdateOrderbookPairConfigPayload>()
+  const viewRequestIdRef = useRef(0)
 
   const loadConfigs = useCallback(async () => {
     setLoading(true)
@@ -62,9 +80,76 @@ export default function OrderbookConfigsPage() {
     }
   }, [message])
 
+  const loadVenues = useCallback(async () => {
+    setVenueLoading(true)
+    try {
+      const data = await fetchExchangeConfigs({ page: 1, limit: 100, enabled: true })
+      setVenues(data.items)
+    }
+    catch (error: any) {
+      message.error(error?.message ?? '获取交易所列表失败')
+    }
+    finally {
+      setVenueLoading(false)
+      setVenuesLoaded(true)
+    }
+  }, [message])
+
+  const openViewModal = async (config: OrderbookPairConfigResponse) => {
+    // 为本次查看生成唯一请求 ID，用于避免关闭后再次被异步结果唤起
+    const requestId = viewRequestIdRef.current + 1
+    viewRequestIdRef.current = requestId
+
+    setViewingConfig(config)
+    setViewModalOpen(true)
+    setOrderbookPreview(null)
+    setViewError(null)
+    setViewLoading(true)
+    try {
+      const book = await fetchOrderbookSnapshotByConfigId(config.id)
+
+      // 如果在请求过程中用户已经关闭或切换了查看对象，则丢弃此次结果
+      if (viewRequestIdRef.current !== requestId)
+        return
+      if (!book || ((!book.bids || book.bids.length === 0) && (!book.asks || book.asks.length === 0))) {
+        setViewError('当前没有该交易对的订单薄数据，请确认订单薄同步任务或快照任务是否已开启')
+        return
+      }
+      setOrderbookPreview({
+        bids: book.bids,
+        asks: book.asks,
+        exchangeTs: book.exchangeTs ?? undefined,
+        receivedTs: book.receivedTs,
+      })
+    }
+    catch (error: any) {
+      // 优先显示后端返回的友好提示信息，fallback 到通用错误消息
+      const errorMessage = error?.response?.data?.message || error?.message || '获取订单薄失败，请稍后重试'
+      // 只有当前请求仍然是最新的才更新错误状态
+      if (viewRequestIdRef.current === requestId) {
+        setViewError(errorMessage)
+      }
+    }
+    finally {
+      // 只有当前请求仍然是最新的才清除 loading 状态，避免旧请求影响新请求的 UI
+      if (viewRequestIdRef.current === requestId) {
+        setViewLoading(false)
+      }
+    }
+  }
+
   useEffect(() => {
     void loadConfigs()
-  }, [loadConfigs])
+    void loadVenues()
+  }, [loadConfigs, loadVenues])
+
+  useEffect(() => {
+    // 只在 venues 真正加载完成后，且确认为空时，才切换到手动输入模式
+    // 这里的 setUseCustomVenueInput 是依赖异步加载结果的「状态修正」，不会造成副作用循环
+    if (venuesLoaded && venues.length === 0) {
+      setUseCustomVenueInput(true) // eslint-disable-line react-hooks-extra/no-direct-set-state-in-use-effect
+    }
+  }, [venuesLoaded, venues.length])
 
   const handleCreateConfig = async (values: CreateOrderbookPairConfigPayload) => {
     try {
@@ -250,9 +335,12 @@ export default function OrderbookConfigsPage() {
               {
                 title: '操作',
                 fixed: 'right',
-                width: 150,
+                width: 210,
                 render: (_, record) => (
                   <Space>
+                    <Button type="link" size="small" onClick={() => { void openViewModal(record) }}>
+                      查看
+                    </Button>
                     <Button type="link" size="small" onClick={() => openEditModal(record)}>
                       编辑
                     </Button>
@@ -306,7 +394,26 @@ export default function OrderbookConfigsPage() {
             rules={[{ required: true, message: '请输入交易所标识' }]}
             tooltip="例如：BINANCE, OKX, UNISWAP_V3"
           >
-            <Input placeholder="BINANCE" />
+            {useCustomVenueInput ? (
+              <Input placeholder="BINANCE" />
+            ) : (
+              <Select
+                placeholder="请选择交易所"
+                loading={venueLoading}
+                options={venues.map(v => ({
+                  label: `${v.name ?? v.code} (${v.code})`,
+                  value: v.code,
+                  disabled: !v.enabled,
+                }))}
+                showSearch
+                optionFilterProp="label"
+              />
+            )}
+            <div style={{ marginTop: 4, fontSize: 12 }}>
+              <a onClick={() => setUseCustomVenueInput(v => !v)}>
+                {useCustomVenueInput ? '切换为下拉选择' : '切换为手动输入'}
+              </a>
+            </div>
           </Form.Item>
           <Form.Item
             label="交易对符号"
@@ -397,6 +504,119 @@ export default function OrderbookConfigsPage() {
             <Input.TextArea rows={2} placeholder="可选" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 查看订单薄 Modal（实时数据，如果 Redis 中存在对应订单薄快照） */}
+      <Modal
+        title={viewingConfig ? `订单薄预览：${viewingConfig.pairId}` : '订单薄预览'}
+        open={viewModalOpen}
+        onCancel={() => {
+          // 标记当前查看请求已失效，避免异步结果在关闭后重新打开弹窗或覆盖状态
+          viewRequestIdRef.current += 1
+          setViewModalOpen(false)
+          setViewingConfig(null)
+          setOrderbookPreview(null)
+          setViewError(null)
+          setViewLoading(false)
+        }}
+        footer={null}
+        width={900}
+      >
+        {viewingConfig && (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Card size="small" title="基础信息">
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Space size={24}>
+                  <span>交易对：{viewingConfig.baseAsset}/{viewingConfig.quoteAsset}</span>
+                  <span>交易所：{viewingConfig.venue}</span>
+                  <span>类型：{viewingConfig.instrumentType}</span>
+                  <span>深度档位：{viewingConfig.depthLevels ?? '默认'}</span>
+                </Space>
+                {orderbookPreview && (
+                  <Space size={24}>
+                    <span>
+                      交易所时间：
+                      {orderbookPreview.exchangeTs
+                        ? new Date(orderbookPreview.exchangeTs).toLocaleString()
+                        : '未知'}
+                    </span>
+                    <span>
+                      系统接收时间：
+                      {orderbookPreview.receivedTs
+                        ? new Date(orderbookPreview.receivedTs).toLocaleString()
+                        : '未知'}
+                    </span>
+                  </Space>
+                )}
+              </Space>
+            </Card>
+
+            {viewLoading ? (
+              <Card size="small">
+                <div style={{ textAlign: 'center', padding: 24 }}>正在加载订单薄数据...</div>
+              </Card>
+            ) : viewError ? (
+              <Card size="small">
+                <div style={{ color: '#faad14' }}>{viewError}</div>
+              </Card>
+            ) : orderbookPreview ? (
+              <Card size="small" title="订单薄（实时数据）">
+                <Space size={24} style={{ width: '100%' }} align="start">
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ marginBottom: 8 }}>卖盘（Ask）</h4>
+                    <Table
+                      size="small"
+                      pagination={false}
+                      dataSource={(orderbookPreview.asks ?? []).map((row, index) => ({
+                        key: index,
+                        ...row,
+                      }))}
+                      columns={[
+                        {
+                          title: '价格',
+                          dataIndex: 'price',
+                          render: (v: number) => v.toFixed(4),
+                        },
+                        {
+                          title: `数量（${viewingConfig.baseAsset}）`,
+                          dataIndex: 'size',
+                        },
+                      ]}
+                      scroll={{ y: 260 }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ marginBottom: 8 }}>买盘（Bid）</h4>
+                    <Table
+                      size="small"
+                      pagination={false}
+                      dataSource={(orderbookPreview.bids ?? []).map((row, index) => ({
+                        key: index,
+                        ...row,
+                      }))}
+                      columns={[
+                        {
+                          title: '价格',
+                          dataIndex: 'price',
+                          render: (v: number) => v.toFixed(4),
+                        },
+                        {
+                          title: `数量（${viewingConfig.baseAsset}）`,
+                          dataIndex: 'size',
+                        },
+                      ]}
+                      scroll={{ y: 260 }}
+                    />
+                  </div>
+                </Space>
+              </Card>
+            ) : (
+              <Card size="small">
+                <div>暂无订单薄数据</div>
+              </Card>
+            )}
+          </Space>
+        )}
       </Modal>
     </div>
   )

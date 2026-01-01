@@ -1,6 +1,6 @@
-import type { schemas } from '@ai/api-contracts';
-import type { z } from 'zod'
-import { createApiClient } from '@ai/api-contracts'
+/* eslint-disable perfectionist/sort-imports, perfectionist/sort-named-imports, ts/consistent-type-imports */
+import { z } from 'zod'
+import { schemas, createApiClient } from '@ai/api-contracts'
 
 import { useAuthStore } from './auth-store'
 import { getToken } from './session'
@@ -84,6 +84,7 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
   } catch (error: any) {
     const status = error?.response?.status ?? error?.status
 
+    // 401 未授权：登录态失效，统一清理会话并跳转登录
     if (status === 401) {
       // 管理员登录态失效：统一清理 Zustand 会话（内存 + localStorage），并跳转登录页
       try {
@@ -98,6 +99,7 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
       }
     }
 
+    // 403 禁止访问：表示当前账号缺少操作权限，不清理 session，由调用方处理提示
     throw error
   }
 }
@@ -611,6 +613,26 @@ export async function deleteExchangeConfig(id: string): Promise<void> {
       headers: requireAuthHeaders(),
       params: { id },
     })
+  })
+}
+
+// ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
+
+// 使用 SDK 生成的 VenueOrderBookDto 类型，避免直接依赖 @ai/shared 的编译产物
+type VenueOrderBookDto = z.infer<typeof schemas.VenueOrderBookDto>
+
+// ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
+
+export async function fetchOrderbookSnapshotByConfigId(
+  id: string,
+): Promise<VenueOrderBookDto | null> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    const data = unwrapResponse<VenueOrderBookDto | null>(response as any)
+    return data ?? null
   })
 }
 
