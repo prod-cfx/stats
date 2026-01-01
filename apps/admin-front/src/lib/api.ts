@@ -1,5 +1,4 @@
 import type { schemas } from '@ai/api-contracts';
-import type { VenueOrderBook } from '@ai/shared'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
@@ -618,15 +617,20 @@ export async function deleteExchangeConfig(id: string): Promise<void> {
 
 // ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
 
+// 使用 SDK 生成的 VenueOrderBookDto 类型，避免直接依赖 @ai/shared 的编译产物
+type VenueOrderBookDto = z.infer<typeof schemas.VenueOrderBookDto>
+
+// ===== 订单薄快照查看（Admin 专用，直接调用后端自定义接口） =====
+
 export async function fetchOrderbookSnapshotByConfigId(
   id: string,
-): Promise<VenueOrderBook | null> {
+): Promise<VenueOrderBookDto | null> {
   return withAuthErrorHandling(async () => {
     const response = await client.AdminOrderbookPairConfigController_getCurrentOrderbook({
       headers: requireAuthHeaders(),
       params: { id },
     })
-    const data = unwrapResponse<VenueOrderBook | null>(response as any)
+    const data = unwrapResponse<VenueOrderBookDto | null>(response as any)
     return data ?? null
   })
 }

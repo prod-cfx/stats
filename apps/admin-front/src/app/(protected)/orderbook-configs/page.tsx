@@ -123,7 +123,9 @@ export default function OrderbookConfigsPage() {
       })
     }
     catch (error: any) {
-      setViewError(error?.message ?? '获取订单薄失败，请稍后重试')
+      // 优先显示后端返回的友好提示信息，fallback 到通用错误消息
+      const errorMessage = error?.response?.data?.message || error?.message || '获取订单薄失败，请稍后重试'
+      setViewError(errorMessage)
     }
     finally {
       setViewLoading(false)
