@@ -301,7 +301,9 @@ export class AdminOrderbookPairConfigController {
     }
 
     // 兜底：按 "<venue>-<instrumentType>" 规则生成，以避免静默命中错误 venue
-    return `${venue.toLowerCase()}-${instrumentType.toLowerCase()}`
+    // 注意：统一使用 perp（而非 perpetual）、future（保持不变）、spot（保持不变）
+    const normalizedType = instrumentType === 'PERPETUAL' ? 'perp' : instrumentType.toLowerCase()
+    return `${venue.toLowerCase()}-${normalizedType}`
   }
 }
 
