@@ -84,8 +84,8 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
   } catch (error: any) {
     const status = error?.response?.status ?? error?.status
 
-    // 401 未授权 / 403 禁止访问：均视为登录态失效或权限不足，统一清理会话并跳转登录
-    if (status === 401 || status === 403) {
+    // 401 未授权：登录态失效，统一清理会话并跳转登录
+    if (status === 401) {
       // 管理员登录态失效：统一清理 Zustand 会话（内存 + localStorage），并跳转登录页
       try {
         // 通过 Zustand store 清理，会自动同步 localStorage 与内存 session 状态
@@ -99,6 +99,7 @@ async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T>
       }
     }
 
+    // 403 禁止访问：表示当前账号缺少操作权限，不清理 session，由调用方处理提示
     throw error
   }
 }

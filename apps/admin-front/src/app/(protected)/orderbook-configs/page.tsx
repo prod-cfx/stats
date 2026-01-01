@@ -125,10 +125,16 @@ export default function OrderbookConfigsPage() {
     catch (error: any) {
       // 优先显示后端返回的友好提示信息，fallback 到通用错误消息
       const errorMessage = error?.response?.data?.message || error?.message || '获取订单薄失败，请稍后重试'
-      setViewError(errorMessage)
+      // 只有当前请求仍然是最新的才更新错误状态
+      if (viewRequestIdRef.current === requestId) {
+        setViewError(errorMessage)
+      }
     }
     finally {
-      setViewLoading(false)
+      // 只有当前请求仍然是最新的才清除 loading 状态，避免旧请求影响新请求的 UI
+      if (viewRequestIdRef.current === requestId) {
+        setViewLoading(false)
+      }
     }
   }
 
