@@ -63,15 +63,13 @@ function getOpenOrderKey(order: OpenOrder): string {
     .map(d => d.id)
     .filter(Boolean);
   if (detailIds.length > 0) {
-    // 以明细 id 组合生成稳定且唯一的键（同一资产/方向同日多单也不会碰撞）
-    return `${order.asset}:${order.side}:${detailIds.join('|')}`;
+    // 以排序后的明细 id 组合生成稳定且唯一的键（避免 details 顺序变化导致 key 改变）
+    return `${order.asset}:${order.side}:${detailIds.sort().join('|')}`;
   }
 
-  // 兜底：用足够区分度的字段组合（仍尽量保持稳定）
-  const detailSignature = order.details
-    .map(d => `${d.time}:${d.price}:${d.amount}:${d.trigger}:${d.status}`)
-    .join('|');
-  return `${order.asset}:${order.side}:${order.time}:${order.price}:${order.amount}:${order.count}:${detailSignature}`;
+  // 兜底：只用不可变字段（asset + time + side），虽可能碰撞但至少保持 key 稳定性，
+  // 不会因部分成交导致 price/amount/count/status 变化而让展开状态失效
+  return `${order.asset}:${order.time}:${order.side}`;
 }
 
 interface RecentTrade {
