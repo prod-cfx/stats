@@ -1,11 +1,13 @@
 'use client'
 
 import { Check, Globe } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function LanguageSwitcher() {
   const { i18n } = useTranslation()
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -32,11 +34,13 @@ export function LanguageSwitcher() {
     { code: 'zh', label: '中文' },
   ]
 
-  const handleLanguageChange = (code: string) => {
-    i18n.changeLanguage(code)
+  const handleLanguageChange = async (code: string) => {
     // Persist language for server-rendered routes (RSC) via cookie
     document.cookie = `i18next=${code}; Path=/; Max-Age=31536000; SameSite=Lax`
+    await i18n.changeLanguage(code)
     setIsOpen(false)
+    // Re-render Server Components with the new locale cookie to avoid mixed-language UI.
+    router.refresh()
   }
 
   return (
