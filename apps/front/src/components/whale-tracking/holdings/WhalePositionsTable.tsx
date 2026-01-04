@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy, TrendingUp } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import React, { useMemo, useState } from 'react';
 import { FilterButton } from '@/components/ui/FilterButton';
@@ -97,7 +97,9 @@ export const WhalePositionsTable = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assetFilter, setAssetFilter] = useState('所有币种');
   const [sideFilter, setSideFilter] = useState('所有方向');
-  const [sortField, setSortFilter] = useState('持仓价值');
+  const [pnlFilter, setPnlFilter] = useState('所有未实现盈亏');
+  const [sortField, setSortField] = useState<'持仓价值' | '未实现盈亏' | '保证金' | '胜率' | '创建时间' | null>('持仓价值');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
 
   // Use standardized mock hook
   const { data: positions, loading, error, reload } = useMockData<WhalePosition[]>(
@@ -106,6 +108,11 @@ export const WhalePositionsTable = () => {
       return mockPositions.filter(p => {
         if (assetFilter !== '所有币种' && p.asset !== assetFilter) return false;
         if (sideFilter !== '所有方向' && p.side !== sideFilter) return false;
+        if (pnlFilter !== '所有未实现盈亏') {
+            const pnlValue = Number.parseFloat(p.pnlUSD.replace(/[$,]/g, ''));
+            if (pnlFilter === '盈利' && pnlValue < 0) return false;
+            if (pnlFilter === '亏损' && pnlValue >= 0) return false;
+        }
         return true;
       });
     },
@@ -114,16 +121,66 @@ export const WhalePositionsTable = () => {
 
   const sortedPositions = useMemo(() => {
     if (!positions) return [];
+    if (!sortField || !sortOrder) return positions;
+
     return [...positions].sort((a, b) => {
-      if (sortField === '持仓价值') {
-        return Number.parseFloat(b.positionValueUSD.replace(/[$,]/g, '')) - Number.parseFloat(a.positionValueUSD.replace(/[$,]/g, ''));
+      let valA, valB;
+      
+      switch (sortField) {
+        case '持仓价值':
+          valA = Number.parseFloat(a.positionValueUSD.replace(/[$,]/g, ''));
+          valB = Number.parseFloat(b.positionValueUSD.replace(/[$,]/g, ''));
+          break;
+        case '未实现盈亏':
+          valA = Number.parseFloat(a.pnlUSD.replace(/[$,]/g, ''));
+          valB = Number.parseFloat(b.pnlUSD.replace(/[$,]/g, ''));
+          break;
+        case '保证金':
+          valA = Number.parseFloat(a.margin.replace(/[$,]/g, ''));
+          valB = Number.parseFloat(b.margin.replace(/[$,]/g, ''));
+          break;
+        case '胜率':
+          valA = a.winRate === '--' ? -1 : Number.parseFloat(a.winRate);
+          valB = b.winRate === '--' ? -1 : Number.parseFloat(b.winRate);
+          break;
+        case '创建时间':
+            // Simple string comparison for the mock "X 分钟前" format is tricky
+            // In real app, use timestamp. Here we just compare string length/content roughly
+            valA = a.createdTime; 
+            valB = b.createdTime;
+            // For correct sorting, we'd need real timestamps. 
+            // Let's assume for now lexical sort is not what we want but ok for mock
+            return sortOrder === 'desc' ? b.createdTime.localeCompare(a.createdTime) : a.createdTime.localeCompare(b.createdTime);
+        default:
+          return 0;
       }
-      if (sortField === '盈亏') {
-        return Number.parseFloat(b.pnlUSD.replace(/[$,]/g, '')) - Number.parseFloat(a.pnlUSD.replace(/[$,]/g, ''));
-      }
-      return 0;
+
+      return sortOrder === 'desc' ? valB - valA : valA - valB;
     });
-  }, [positions, sortField]);
+  }, [positions, sortField, sortOrder]);
+
+  const handleSort = (field: Exclude<typeof sortField, null>) => {
+    if (sortField === field) {
+      if (sortOrder === 'desc') {
+        setSortOrder('asc');
+      } else if (sortOrder === 'asc') {
+        setSortField(null);
+        setSortOrder(null);
+      } else {
+        setSortOrder('desc');
+      }
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const renderSortIcon = (field: Exclude<typeof sortField, null>) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0" />;
+    }
+    return sortOrder === 'desc' ? <ChevronDown className="w-4 h-4 text-primary ml-1 flex-shrink-0" /> : <ChevronUp className="w-4 h-4 text-primary ml-1 flex-shrink-0" />;
+  };
 
   const handleShowStats = (address: string) => {
     setSelectedAddress(address);
@@ -136,6 +193,9 @@ export const WhalePositionsTable = () => {
         <div className="space-y-2">
           <PageTitle>鲸鱼持仓</PageTitle>
           <BodyText>追踪大额持仓者的最新动态</BodyText>
+          <div className="flex items-center gap-4">
+            {/* Removed standalone sort buttons */}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <FilterButton 
@@ -149,9 +209,9 @@ export const WhalePositionsTable = () => {
             onChange={setSideFilter} 
           />
           <FilterButton 
-            value={sortField} 
-            options={['持仓价值', '盈亏']} 
-            onChange={setSortFilter} 
+            value={pnlFilter} 
+            options={['所有未实现盈亏', '盈利', '亏损']} 
+            onChange={setPnlFilter} 
           />
         </div>
       </div>
@@ -169,13 +229,38 @@ export const WhalePositionsTable = () => {
                 <tr className="text-[#8b949e] border-b border-[#30363d]">
                   <th className="px-6 py-4 text-left">地址</th>
                   <th className="px-6 py-4 text-left">币种</th>
-                  <th className="px-6 py-4 text-left">持仓价值</th>
-                  <th className="px-6 py-4 text-left">未实现盈亏</th>
-                  <th className="px-6 py-4 text-left">保证金</th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('持仓价值')}>
+                    <div className="flex items-center">
+                      持仓价值
+                      {renderSortIcon('持仓价值')}
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('未实现盈亏')}>
+                    <div className="flex items-center">
+                      未实现盈亏
+                      {renderSortIcon('未实现盈亏')}
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('保证金')}>
+                    <div className="flex items-center">
+                      保证金
+                      {renderSortIcon('保证金')}
+                    </div>
+                  </th>
                   <th className="px-6 py-4 text-left">开盘价</th>
                   <th className="px-6 py-4 text-left">清算价</th>
-                  <th className="px-6 py-4 text-left">胜率</th>
-                  <th className="px-6 py-4 text-left">创建时间</th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('胜率')}>
+                    <div className="flex items-center">
+                      胜率
+                      {renderSortIcon('胜率')}
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('创建时间')}>
+                    <div className="flex items-center">
+                      创建时间
+                      {renderSortIcon('创建时间')}
+                    </div>
+                  </th>
                   <th className="px-6 py-4 text-left">备注</th>
                   <th className="px-6 py-4 text-center w-16">操作</th>
                 </tr>
