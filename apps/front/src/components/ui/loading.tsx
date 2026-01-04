@@ -46,7 +46,7 @@ export function Spinner({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 
 /**
  * Full page loading overlay
  */
-export function LoadingOverlay({ message = '加载中...' }: { message?: string }) {
+export function LoadingOverlay({ message }: { message?: string }) {
   const { t } = useTranslation()
   const resolvedMessage = message ?? t('common.loading')
   return (
@@ -133,7 +133,7 @@ export function TableRowSkeleton({ columns = 5 }: { columns?: number }) {
 /**
  * Error state component with retry
  */
-export function ErrorState({ message = '数据加载失败（Mock）', onRetry }: { message?: string; onRetry?: () => void }) {
+export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   const { t } = useTranslation()
   const resolvedMessage = message ?? t('common.loadFailed')
   return (
