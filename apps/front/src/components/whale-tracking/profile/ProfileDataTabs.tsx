@@ -42,6 +42,10 @@ interface OrderDetail {
 }
 
 interface OpenOrder {
+  /**
+   * 后端订单唯一标识（如有）。用于 React key 与展开/收起状态的稳定键，避免同日同资产/方向的碰撞。
+   */
+  id?: string;
   time: string;
   asset: string;
   side: 'Buy' | 'Sell';
@@ -50,6 +54,22 @@ interface OpenOrder {
   amount: string;
   price: string;
   details: OrderDetail[];
+}
+
+function getOpenOrderKey(order: OpenOrder): string {
+  if (order.id) return order.id;
+
+  const detailIds = order.details
+    .map(d => d.id)
+    .filter(Boolean);
+  if (detailIds.length > 0) {
+    // 以排序后的明细 id 组合生成稳定且唯一的键（避免 details 顺序变化导致 key 改变）
+    return `${order.asset}:${order.side}:${detailIds.sort().join('|')}`;
+  }
+
+  // 兜底：只用不可变字段（asset + time + side），虽可能碰撞但至少保持 key 稳定性，
+  // 不会因部分成交导致 price/amount/count/status 变化而让展开状态失效
+  return `${order.asset}:${order.time}:${order.side}`;
 }
 
 interface RecentTrade {
@@ -678,11 +698,11 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4 text-right text-green-400 text-sm font-medium">{pos.fundingFee}</td>
                 <td className="px-6 py-4 text-center text-[#8b949e] text-sm font-medium">-/-</td>
               </tr>
-            )) : activeTab === 'orders' ? filteredOpenOrders.map((order, idx) => {
-              const stableId = `${order.asset}-${order.time}-${order.side}`;
+            )) : activeTab === 'orders' ? filteredOpenOrders.map((order) => {
+              const orderKey = getOpenOrderKey(order);
               return (
-                <React.Fragment key={stableId}>
-                  <tr className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer" onClick={() => toggleOrderExpansion(stableId)}>
+                <React.Fragment key={orderKey}>
+                  <tr className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer" onClick={() => toggleOrderExpansion(orderKey)}>
                     <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
                       {order.time}
                     </td>
@@ -703,12 +723,12 @@ export const ProfileDataTabs = () => {
                     <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
                     <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">-</td>
                     <td className="px-6 py-4 text-right">
-                      <button type="button" className={`text-[#8b949e] hover:text-white transition-all ${expandedOrders.has(stableId) ? 'rotate-180' : ''}`}>
+                      <button type="button" className={`text-[#8b949e] hover:text-white transition-all ${expandedOrders.has(orderKey) ? 'rotate-180' : ''}`}>
                         <ChevronDown className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
-                  {expandedOrders.has(stableId) && order.details.map((detail, dIdx) => (
+                  {expandedOrders.has(orderKey) && order.details.map((detail, dIdx) => (
                     <tr key={detail.id || dIdx} className="bg-[#0d1117]/30 text-[#8b949e]">
                     <td className="px-6 py-3 pl-12 text-xs">
                       {detail.time}
@@ -732,9 +752,9 @@ export const ProfileDataTabs = () => {
                     <td className="px-6 py-3 text-right text-[10px]">{detail.id}</td>
                   </tr>
                 ))}
-              </React.Fragment>
-            );
-          }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
+                </React.Fragment>
+              )
+            }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
                   {trade.time}
