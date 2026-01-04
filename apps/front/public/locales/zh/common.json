@@ -22,7 +22,8 @@
     "whale_holdings": "鲸鱼持仓",
     "search": "搜索",
     "login": "登录",
-    "register": "注册"
+    "register": "注册",
+    "yesterday": "昨天"
   },
   "trade": {
     "title": "交易",
@@ -87,7 +88,16 @@
     "marginLeverage": "保证金(杠杆)",
     "unrealizedPnl": "未实现盈亏(ROE)",
     "close": "平仓",
-    "noData": "暂无数据"
+    "noData": "暂无数据",
+    "orderTypes": {
+      "limit": "限价",
+      "market": "市价"
+    },
+    "statuses": {
+      "open": "进行中",
+      "filled": "已成交",
+      "cancelled": "已撤单"
+    }
   },
   "rightPanel": {
     "exchangeBinance": "币安",

@@ -1,7 +1,7 @@
 'use client';
 
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw, Settings } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/ui/loading';
 import { OrderbookRow } from './components/OrderbookRow';
@@ -91,6 +91,11 @@ export const RightPanel = () => {
     }
   }, [loading]);
 
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+  const compactFormatter = useMemo(() => new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 }), [locale])
+  const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }), [locale])
+  const formatUsd = (n: number) => `$${priceFormatter.format(n)}`
+
   const handleTabChange = (tab: string) => {
     if (tab === tradeTab) return;
     setLoading(true);
@@ -125,19 +130,19 @@ export const RightPanel = () => {
         <div className="px-3 pb-2 grid grid-cols-2 gap-y-1 gap-x-4 text-[10px]">
           <div className="flex justify-between">
             <span className="text-[#8b949e]">{t('rightPanel.turnoverUsd')}:</span>
-            <span>7159万</span>
+            <span>{compactFormatter.format(71_590_000)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[#8b949e]">{t('rightPanel.high')}:</span>
-            <span>¥87,967.5</span>
+            <span>{formatUsd(87_967.5)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[#8b949e]">{t('rightPanel.netInflowUsd')}:</span>
-            <span className="text-red-400">-351万</span>
+            <span className="text-red-400">{compactFormatter.format(-3_510_000)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[#8b949e]">{t('rightPanel.low')}:</span>
-            <span>¥87,508.52</span>
+            <span>{formatUsd(87_508.52)}</span>
           </div>
         </div>
 

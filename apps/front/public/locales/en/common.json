@@ -22,7 +22,8 @@
     "whale_holdings": "Whale Holdings",
     "search": "Search",
     "login": "Login",
-    "register": "Register"
+    "register": "Register",
+    "yesterday": "Yesterday"
   },
   "trade": {
     "title": "Trade",
@@ -87,7 +88,16 @@
     "marginLeverage": "Margin (Lev.)",
     "unrealizedPnl": "Unrealized PnL (ROE)",
     "close": "Close",
-    "noData": "No data"
+    "noData": "No data",
+    "orderTypes": {
+      "limit": "Limit",
+      "market": "Market"
+    },
+    "statuses": {
+      "open": "Open",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    }
   },
   "rightPanel": {
     "exchangeBinance": "Binance",

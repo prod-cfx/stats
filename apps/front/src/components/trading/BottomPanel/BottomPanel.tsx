@@ -17,20 +17,26 @@ export const BottomPanel = () => {
   ];
 
   // Mock Data
+  type OrderTypeKey = 'limit' | 'market'
+  type OrderStatusKey = 'open' | 'filled' | 'cancelled'
+
   const mockOrders = [
-    { id: 1, time: '14:20:33', symbol: 'BTCUSDT', type: '限价', side: 'buy', price: '86,500.00', amount: '0.050', filled: '0.000', total: '4,325.00', status: '进行中' },
-    { id: 2, time: '14:25:12', symbol: 'BTCUSDT', type: '限价', side: 'sell', price: '88,200.00', amount: '0.100', filled: '0.000', total: '8,820.00', status: '进行中' },
+    { id: 1, time: '14:20:33', symbol: 'BTCUSDT', type: 'limit' as OrderTypeKey, side: 'buy', price: '86,500.00', amount: '0.050', filled: '0.000', total: '4,325.00', status: 'open' as OrderStatusKey },
+    { id: 2, time: '14:25:12', symbol: 'BTCUSDT', type: 'limit' as OrderTypeKey, side: 'sell', price: '88,200.00', amount: '0.100', filled: '0.000', total: '8,820.00', status: 'open' as OrderStatusKey },
   ];
 
   const mockHistory = [
-    { id: 101, time: '10:15:22', symbol: 'BTCUSDT', type: '市价', side: 'buy', price: '87,120.50', amount: '0.010', filled: '0.010', total: '871.20', status: '已成交' },
-    { id: 102, time: '09:05:11', symbol: 'ETHUSDT', type: '限价', side: 'sell', price: '3,100.00', amount: '1.500', filled: '1.500', total: '4,650.00', status: '已成交' },
-    { id: 103, time: 'Yesterday', symbol: 'SOLUSDT', type: '限价', side: 'buy', price: '120.00', amount: '10.00', filled: '0.00', total: '0.00', status: '已撤单' },
+    { id: 101, time: '10:15:22', symbol: 'BTCUSDT', type: 'market' as OrderTypeKey, side: 'buy', price: '87,120.50', amount: '0.010', filled: '0.010', total: '871.20', status: 'filled' as OrderStatusKey },
+    { id: 102, time: '09:05:11', symbol: 'ETHUSDT', type: 'limit' as OrderTypeKey, side: 'sell', price: '3,100.00', amount: '1.500', filled: '1.500', total: '4,650.00', status: 'filled' as OrderStatusKey },
+    { id: 103, time: t('common.yesterday'), symbol: 'SOLUSDT', type: 'limit' as OrderTypeKey, side: 'buy', price: '120.00', amount: '10.00', filled: '0.00', total: '0.00', status: 'cancelled' as OrderStatusKey },
   ];
 
   const mockPositions = [
     { id: 'p1', symbol: 'BTCUSDT', side: 'long', size: '0.500', value: '43,510.00', entry: '86,800.00', mark: '87,020.00', liq: '85,100.00', margin: '870.20 (50x)', pnl: '+110.00 (+12.6%)' }
   ];
+
+  const renderOrderType = (key: OrderTypeKey) => t(`bottomPanel.orderTypes.${key}`)
+  const renderOrderStatus = (key: OrderStatusKey) => t(`bottomPanel.statuses.${key}`)
 
   const renderContent = () => {
     switch (activeTab) {
@@ -57,7 +63,7 @@ export const BottomPanel = () => {
                   <tr key={order.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
                     <td className="py-2.5 px-4 text-[#8b949e]">{order.time}</td>
                     <td className="py-2.5 px-4 font-medium">{order.symbol}</td>
-                    <td className="py-2.5 px-4">{order.type}</td>
+                    <td className="py-2.5 px-4">{renderOrderType(order.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${order.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
                       {order.side === 'buy' ? t('bottomPanel.buyOpenLong') : t('bottomPanel.sellOpenShort')}
                     </td>
@@ -65,7 +71,7 @@ export const BottomPanel = () => {
                     <td className="py-2.5 px-4">{order.amount}</td>
                     <td className="py-2.5 px-4">{order.filled}</td>
                     <td className="py-2.5 px-4">{order.total}</td>
-                    <td className="py-2.5 px-4">{order.status}</td>
+                    <td className="py-2.5 px-4">{renderOrderStatus(order.status)}</td>
                     <td className="py-2.5 px-4 text-right">
                       <button type="button" className="text-primary hover:opacity-80">{t('bottomPanel.cancel')}</button>
                     </td>
@@ -97,14 +103,14 @@ export const BottomPanel = () => {
                   <tr key={item.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
                     <td className="py-2.5 px-4 text-[#8b949e]">{item.time}</td>
                     <td className="py-2.5 px-4 font-medium">{item.symbol}</td>
-                    <td className="py-2.5 px-4">{item.type}</td>
+                    <td className="py-2.5 px-4">{renderOrderType(item.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${item.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
                       {item.side === 'buy' ? t('bottomPanel.buy') : t('bottomPanel.sell')}
                     </td>
                     <td className="py-2.5 px-4">{item.price}</td>
                     <td className="py-2.5 px-4">{item.filled}</td>
                     <td className="py-2.5 px-4">{item.total}</td>
-                    <td className="py-2.5 px-4 text-[#8b949e]">{item.status}</td>
+                    <td className="py-2.5 px-4 text-[#8b949e]">{renderOrderStatus(item.status)}</td>
                   </tr>
                 ))}
               </tbody>
