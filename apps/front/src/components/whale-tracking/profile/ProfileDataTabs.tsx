@@ -678,7 +678,7 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4 text-right text-green-400 text-sm font-medium">{pos.fundingFee}</td>
                 <td className="px-6 py-4 text-center text-[#8b949e] text-sm font-medium">-/-</td>
               </tr>
-            )) : activeTab === 'orders' ? filteredOpenOrders.map((order, idx) => {
+            )) : activeTab === 'orders' ? filteredOpenOrders.map((order) => {
               const stableId = `${order.asset}-${order.time}-${order.side}`;
               return (
                 <React.Fragment key={stableId}>
@@ -732,9 +732,9 @@ export const ProfileDataTabs = () => {
                     <td className="px-6 py-3 text-right text-[10px]">{detail.id}</td>
                   </tr>
                 ))}
-              </React.Fragment>
-            );
-          }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
+                </React.Fragment>
+              )
+            }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
                   {trade.time}

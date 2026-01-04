@@ -38,7 +38,6 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
       copyTimer.current = setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy address:', err);
-      alert('复制地址失败');
     }
   };
 

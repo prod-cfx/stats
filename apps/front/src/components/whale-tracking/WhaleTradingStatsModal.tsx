@@ -204,7 +204,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
     // deterministic RNG per timeRange (avoid re-render random jump)
     const mulberry32 = (seed: number) => {
       return () => {
-        let t = (seed += 0x6D2B79F5);
+        let t = (seed += 0x6d2b79f5);
         t = Math.imul(t ^ (t >>> 15), t | 1);
         t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -332,7 +332,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       profitTrades: profitCount,
       lossTrades: lossCount,
       totalTrades: total,
-      winRate: wr + '%',
+      winRate: `${wr}%`,
       pnl: formatCurrency(pnlSum),
       fees: formatCurrency(feesSum),
       currentTopTrades: currentTopTradesGenerated,
