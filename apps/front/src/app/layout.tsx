@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
-import { I18nProvider } from '@/components/providers/I18nProvider'
-import { ToastProvider } from '@/components/ui/toast'
+import { AppProviders } from '@/components/providers/AppProviders'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -29,11 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
-        <I18nProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </I18nProvider>
+        <AppProviders>
+          {children}
+        </AppProviders>
       </body>
     </html>
   )

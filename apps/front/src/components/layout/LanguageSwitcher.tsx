@@ -34,6 +34,8 @@ export function LanguageSwitcher() {
 
   const handleLanguageChange = (code: string) => {
     i18n.changeLanguage(code)
+    // Persist language for server-rendered routes (RSC) via cookie
+    document.cookie = `i18next=${code}; Path=/; Max-Age=31536000; SameSite=Lax`
     setIsOpen(false)
   }
 

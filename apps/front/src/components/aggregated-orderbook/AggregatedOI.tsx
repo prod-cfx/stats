@@ -9,17 +9,17 @@ interface OIData {
   rank: number | string;
   exchange: string;
   logo: string;
-  oiBtc: string;
-  oiUsd: string;
-  ratio: string;
-  change1h: string;
-  change4h: string;
-  change24h: string;
-  oiVolRatio: string;
+  oiAsset: number;
+  oiUsd: number;
+  ratioPct: number;
+  change1hPct: number;
+  change4hPct: number;
+  change24hPct: number;
+  oiVolRatio: number;
   isTotal?: boolean;
 }
 
-type SortField = 'oiBtc' | 'oiUsd' | 'ratio' | 'change1h' | 'change4h' | 'change24h' | null;
+type SortField = 'oiAsset' | 'oiUsd' | 'ratioPct' | 'change1hPct' | 'change4hPct' | 'change24hPct' | null;
 type SortDirection = 'asc' | 'desc' | null;
 
 const mockOIData: OIData[] = [
@@ -27,141 +27,141 @@ const mockOIData: OIData[] = [
     rank: '',
     exchange: 'ALL',
     logo: '',
-    oiBtc: '66.10万 BTC',
-    oiUsd: '$593.86亿',
-    ratio: '100%',
-    change1h: '+0.24%',
-    change4h: '+1.78%',
-    change24h: '+1.39%',
-    oiVolRatio: '0.9476',
+    oiAsset: 661_000,
+    oiUsd: 59_386_000_000,
+    ratioPct: 100,
+    change1hPct: 0.24,
+    change4hPct: 1.78,
+    change24hPct: 1.39,
+    oiVolRatio: 0.9476,
     isTotal: true
   },
   {
     rank: 1,
     exchange: 'Binance',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
-    oiBtc: '12.35万 BTC',
-    oiUsd: '$110.98亿',
-    ratio: '18.68%',
-    change1h: '+0.49%',
-    change4h: '+2.25%',
-    change24h: '+0.40%',
-    oiVolRatio: '0.9406'
+    oiAsset: 123_500,
+    oiUsd: 11_098_000_000,
+    ratioPct: 18.68,
+    change1hPct: 0.49,
+    change4hPct: 2.25,
+    change24hPct: 0.40,
+    oiVolRatio: 0.9406
   },
   {
     rank: 2,
     exchange: 'CME',
     logo: 'https://www.cmegroup.com/favicon.ico',
-    oiBtc: '12.30万 BTC',
-    oiUsd: '$110.49亿',
-    ratio: '18.6%',
-    change1h: '+0.16%',
-    change4h: '+0.99%',
-    change24h: '+1.32%',
-    oiVolRatio: '1.2749'
+    oiAsset: 123_000,
+    oiUsd: 11_049_000_000,
+    ratioPct: 18.6,
+    change1hPct: 0.16,
+    change4hPct: 0.99,
+    change24hPct: 1.32,
+    oiVolRatio: 1.2749
   },
   {
     rank: 3,
     exchange: 'Bybit',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
-    oiBtc: '6.06万 BTC',
-    oiUsd: '$54.47亿',
-    ratio: '9.17%',
-    change1h: '-0.05%',
-    change4h: '+2.17%',
-    change24h: '+0.35%',
-    oiVolRatio: '1.0773'
+    oiAsset: 60_600,
+    oiUsd: 5_447_000_000,
+    ratioPct: 9.17,
+    change1hPct: -0.05,
+    change4hPct: 2.17,
+    change24hPct: 0.35,
+    oiVolRatio: 1.0773
   },
   {
     rank: 4,
     exchange: 'MEXC',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/544.png',
-    oiBtc: '5.86万 BTC',
-    oiUsd: '$52.61亿',
-    ratio: '8.85%',
-    change1h: '+0.35%',
-    change4h: '+2.84%',
-    change24h: '+1.57%',
-    oiVolRatio: '0.4723'
+    oiAsset: 58_600,
+    oiUsd: 5_261_000_000,
+    ratioPct: 8.85,
+    change1hPct: 0.35,
+    change4hPct: 2.84,
+    change24hPct: 1.57,
+    oiVolRatio: 0.4723
   },
   {
     rank: 5,
     exchange: 'Gate',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/87.png',
-    oiBtc: '5.33万 BTC',
-    oiUsd: '$47.89亿',
-    ratio: '8.06%',
-    change1h: '+0.98%',
-    change4h: '+6.05%',
-    change24h: '+4.81%',
-    oiVolRatio: '0.9265'
+    oiAsset: 53_300,
+    oiUsd: 4_789_000_000,
+    ratioPct: 8.06,
+    change1hPct: 0.98,
+    change4hPct: 6.05,
+    change24hPct: 4.81,
+    oiVolRatio: 0.9265
   },
   {
     rank: 6,
     exchange: 'HTX',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/102.png',
-    oiBtc: '3.99万 BTC',
-    oiUsd: '$35.80亿',
-    ratio: '6.02%',
-    change1h: '+0.18%',
-    change4h: '+0.89%',
-    change24h: '+1.29%',
-    oiVolRatio: '0.8976'
+    oiAsset: 39_900,
+    oiUsd: 3_580_000_000,
+    ratioPct: 6.02,
+    change1hPct: 0.18,
+    change4hPct: 0.89,
+    change24hPct: 1.29,
+    oiVolRatio: 0.8976
   },
   {
     rank: 7,
     exchange: 'OKX',
     logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
-    oiBtc: '3.78万 BTC',
-    oiUsd: '$33.91亿',
-    ratio: '5.71%',
-    change1h: '-0.22%',
-    change4h: '+1.64%',
-    change24h: '+1.25%',
-    oiVolRatio: '0.6000'
+    oiAsset: 37_800,
+    oiUsd: 3_391_000_000,
+    ratioPct: 5.71,
+    change1hPct: -0.22,
+    change4hPct: 1.64,
+    change24hPct: 1.25,
+    oiVolRatio: 0.6
   },
   {
     rank: 8,
     exchange: 'Hyperliquid',
     logo: 'https://app.hyperliquid.xyz/favicon.ico',
-    oiBtc: '1.89万 BTC',
-    oiUsd: '$16.98亿',
-    ratio: '2.86%',
-    change1h: '+0.87%',
-    change4h: '+2.34%',
-    change24h: '+1.92%',
-    oiVolRatio: '0.8234'
+    oiAsset: 18_900,
+    oiUsd: 1_698_000_000,
+    ratioPct: 2.86,
+    change1hPct: 0.87,
+    change4hPct: 2.34,
+    change24hPct: 1.92,
+    oiVolRatio: 0.8234
   },
   {
     rank: 9,
     exchange: 'Aster',
     logo: 'https://via.placeholder.com/20/6366f1/ffffff?text=A',
-    oiBtc: '0.98万 BTC',
-    oiUsd: '$8.81亿',
-    ratio: '1.48%',
-    change1h: '+0.56%',
-    change4h: '+1.78%',
-    change24h: '+1.23%',
-    oiVolRatio: '0.7156'
+    oiAsset: 9_800,
+    oiUsd: 881_000_000,
+    ratioPct: 1.48,
+    change1hPct: 0.56,
+    change4hPct: 1.78,
+    change24hPct: 1.23,
+    oiVolRatio: 0.7156
   },
   {
     rank: 10,
     exchange: 'Lighter',
     logo: 'https://lighter.xyz/favicon.ico',
-    oiBtc: '0.67万 BTC',
-    oiUsd: '$6.02亿',
-    ratio: '1.01%',
-    change1h: '-0.12%',
-    change4h: '+0.89%',
-    change24h: '+0.67%',
-    oiVolRatio: '0.6789'
+    oiAsset: 6_700,
+    oiUsd: 602_000_000,
+    ratioPct: 1.01,
+    change1hPct: -0.12,
+    change4hPct: 0.89,
+    change24hPct: 0.67,
+    oiVolRatio: 0.6789
   }
 ];
 
 const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH', 'SUI', 'ADA', 'LINK', 'AVAX'];
 
 export const AggregatedOI = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeSymbol, setActiveTabSymbol] = useState('BTC');
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
@@ -169,10 +169,15 @@ export const AggregatedOI = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Parse numeric values for sorting
-  const parseValue = (val: string) => {
-    return Number(val.replace(/[^\d.-]/g, '')) || 0;
-  };
+  const numberCompact = useMemo(() => {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+    return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 })
+  }, [i18n.language])
+
+  const currencyCompact = useMemo(() => {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
+  }, [i18n.language])
 
   const sortedData = useMemo(() => {
     // Generate different data values based on the symbol to avoid data mismatch
@@ -182,14 +187,11 @@ export const AggregatedOI = () => {
       
       // Slightly vary the numbers based on the symbol for realistic mock behavior
       const factor = 1 + (symbolSeed % 10 - 5) / 100;
-      const val = parseValue(row.oiBtc);
-      const newVal = (val * factor).toFixed(2);
       
       return {
         ...row,
-        oiBtc: `${newVal}万 ${activeSymbol}`,
-        // For USD, just keep it or slightly vary it too
-        oiUsd: `$${(parseValue(row.oiUsd) * factor).toFixed(2)}亿`,
+        oiAsset: row.oiAsset * factor,
+        oiUsd: row.oiUsd * factor,
       };
     });
 
@@ -199,13 +201,17 @@ export const AggregatedOI = () => {
     const totalRow = data.find(row => row.isTotal);
 
     exchangeRows.sort((a, b) => {
-      const aVal = parseValue(a[sortField as keyof OIData] as string);
-      const bVal = parseValue(b[sortField as keyof OIData] as string);
+      const aVal = a[sortField as keyof OIData] as number;
+      const bVal = b[sortField as keyof OIData] as number;
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
 
     return totalRow ? [totalRow, ...exchangeRows] : exchangeRows;
   }, [sortField, sortDirection, activeSymbol]);
+
+  const formatSignedPct = (val: number) => `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+  const formatRatio = (val: number) => `${val.toFixed(2)}%`
+  const formatAssetAmount = (val: number) => `${numberCompact.format(val)} ${activeSymbol}`
 
   const filteredSymbols = useMemo(() => {
     return symbols.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -244,12 +250,12 @@ export const AggregatedOI = () => {
       : <ChevronUp className="w-3 h-3 text-primary" />;
   };
 
-  const renderValueWithColor = (val: string) => {
-    const isPositive = val.startsWith('+');
-    const isNegative = val.startsWith('-');
+  const renderValueWithColor = (val: number) => {
+    const isPositive = val > 0;
+    const isNegative = val < 0;
     return (
       <span className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[#e6edf3]'}>
-        {val}
+        {formatSignedPct(val)}
       </span>
     );
   };
@@ -332,10 +338,10 @@ export const AggregatedOI = () => {
                 <th className="px-4 py-4 font-bold border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
-                    onClick={() => handleSort('oiBtc')}
+                    onClick={() => handleSort('oiAsset')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiBtc')}
+                    {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -348,34 +354,34 @@ export const AggregatedOI = () => {
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
-                    onClick={() => handleSort('ratio')}
+                    onClick={() => handleSort('ratioPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratio')}
+                    {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratioPct')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
-                    onClick={() => handleSort('change1h')}
+                    onClick={() => handleSort('change1hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1h')}
+                    {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1hPct')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
-                    onClick={() => handleSort('change4h')}
+                    onClick={() => handleSort('change4hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4h')}
+                    {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4hPct')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
-                    onClick={() => handleSort('change24h')}
+                    onClick={() => handleSort('change24hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24h')}
+                    {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24hPct')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-center border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
@@ -402,13 +408,13 @@ export const AggregatedOI = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiBtc}</td>
-                  <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiUsd}</td>
-                  <td className="px-4 py-4 text-right text-[#e6edf3]">{row.ratio}</td>
-                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change1h)}</td>
-                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change4h)}</td>
-                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change24h)}</td>
-                  <td className="px-4 py-4 text-center text-[#e6edf3]">{row.oiVolRatio}</td>
+                  <td className="px-4 py-4 text-right text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
+                  <td className="px-4 py-4 text-right text-[#e6edf3]">{currencyCompact.format(row.oiUsd)}</td>
+                  <td className="px-4 py-4 text-right text-[#e6edf3]">{formatRatio(row.ratioPct)}</td>
+                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change1hPct)}</td>
+                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change4hPct)}</td>
+                  <td className="px-4 py-4 text-right font-medium">{renderValueWithColor(row.change24hPct)}</td>
+                  <td className="px-4 py-4 text-center text-[#e6edf3]">{row.oiVolRatio.toFixed(4)}</td>
                 </tr>
               ))}
             </tbody>
