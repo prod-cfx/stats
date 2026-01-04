@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import React, { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ProfileClient } from './ProfileClient';
 
 function ProfileContent() {
@@ -12,8 +13,9 @@ function ProfileContent() {
 }
 
 export default function WhaleProfilePage() {
+  const { t } = useTranslation();
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white">{t('common.loading')}</div>}>
       <ProfileContent />
     </Suspense>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
 
 export interface DashboardCardProps {
@@ -12,6 +13,7 @@ export interface DashboardCardProps {
 }
 
 export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardCardProps) => {
+  const { t } = useTranslation();
   return (
     <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden gradient-border-hover group flex flex-col h-full">
       <div className="aspect-[16/10] w-full overflow-hidden border-b border-[#30363d]">
@@ -36,8 +38,8 @@ export const DashboardCard = ({ title, tags, saves, creator, image }: DashboardC
         </div>
 
         <div className="mt-auto flex justify-between items-center text-caption">
-          <span className="text-[#8b949e]">{saves.toLocaleString()} 保存</span>
-          <span className="text-[#8b949e] group-hover:text-[#c9d1d9] transition-colors">创建者 @{creator}</span>
+          <span className="text-[#8b949e]">{t('dashboard.saves', { count: saves.toLocaleString() })}</span>
+          <span className="text-[#8b949e] group-hover:text-[#c9d1d9] transition-colors">{t('dashboard.creator', { name: creator })}</span>
         </div>
       </div>
     </div>

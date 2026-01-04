@@ -2,8 +2,10 @@
 
 import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: string, interval: string }) => {
+  const { t } = useTranslation();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -185,23 +187,23 @@ export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: stri
         <div className="absolute top-3 left-3 z-10 pointer-events-none flex flex-col gap-1">
           <div className="flex items-center gap-2 text-[13px] font-medium">
             <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-[8px] text-white">₿</div>
-            <span className="text-[#c9d1d9]">{symbol} 永续 · {interval} · OKX</span>
+            <span className="text-[#c9d1d9]">{symbol} {t('chart.perpetual')} · {interval} · OKX</span>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <div className="flex gap-1">
-              <span className="text-[#8b949e]">开=</span>
+              <span className="text-[#8b949e]">{t('chart.ohlc.open')}=</span>
               <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.open.toFixed(2)}</span>
             </div>
             <div className="flex gap-1">
-              <span className="text-[#8b949e]">高=</span>
+              <span className="text-[#8b949e]">{t('chart.ohlc.high')}=</span>
               <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.high.toFixed(2)}</span>
             </div>
             <div className="flex gap-1">
-              <span className="text-[#8b949e]">低=</span>
+              <span className="text-[#8b949e]">{t('chart.ohlc.low')}=</span>
               <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.low.toFixed(2)}</span>
             </div>
             <div className="flex gap-1">
-              <span className="text-[#8b949e]">收=</span>
+              <span className="text-[#8b949e]">{t('chart.ohlc.close')}=</span>
               <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.close.toFixed(2)}</span>
             </div>
             <div className="flex gap-1">
@@ -212,7 +214,7 @@ export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: stri
           </div>
           <div className="flex items-center gap-3 text-xs mt-1">
             <div className="flex gap-1">
-              <span className="text-[#8b949e]">成交量(Volume)</span>
+              <span className="text-[#8b949e]">{t('chart.volume')}</span>
               <span className="text-[#26a69a]">201.94</span>
             </div>
           </div>

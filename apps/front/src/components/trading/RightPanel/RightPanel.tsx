@@ -2,11 +2,13 @@
 
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw, Settings } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/ui/loading';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
 
 export const RightPanel = () => {
+  const { t, i18n } = useTranslation();
   const [tradeTab, setTradeTab] = useState('latest');
   const [loading, setLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -44,7 +46,10 @@ export const RightPanel = () => {
         id: i,
         price: '87029.76',
         amount: (Math.random() * 0.05).toFixed(5),
-        time: new Date(Date.now() - i * 1000).toLocaleTimeString('zh-CN', { hour12: false }),
+        time: new Date(Date.now() - i * 1000).toLocaleTimeString(
+          i18n.language === 'zh' ? 'zh-CN' : 'en-US',
+          { hour12: false }
+        ),
         type: Math.random() > 0.5 ? 'buy' : 'sell'
       }));
 
@@ -71,7 +76,7 @@ export const RightPanel = () => {
         id: Date.now(),
         price: (87029.76 + (Math.random() - 0.5) * 0.1).toFixed(2),
         amount: (Math.random() * 0.05).toFixed(5),
-        time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+        time: new Date().toLocaleTimeString(i18n.language === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }),
         type: Math.random() > 0.5 ? 'buy' : 'sell'
       };
       setTrades(prev => [newTrade, ...prev.slice(0, 59)]);
@@ -112,32 +117,37 @@ export const RightPanel = () => {
             <Copy className="w-3 h-3 text-[#8b949e] cursor-pointer" />
           </div>
           <div className="flex items-center gap-1 text-xs text-primary cursor-pointer hover:underline">
-            <span>币安</span>
+            <span>{t('rightPanel.exchangeBinance')}</span>
             <ExternalLink className="w-3 h-3" />
           </div>
         </div>
 
         <div className="px-3 pb-2 grid grid-cols-2 gap-y-1 gap-x-4 text-[10px]">
           <div className="flex justify-between">
-            <span className="text-[#8b949e]">成交额($):</span>
+            <span className="text-[#8b949e]">{t('rightPanel.turnoverUsd')}:</span>
             <span>7159万</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[#8b949e]">最高:</span>
+            <span className="text-[#8b949e]">{t('rightPanel.high')}:</span>
             <span>¥87,967.5</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[#8b949e]">净流入($):</span>
+            <span className="text-[#8b949e]">{t('rightPanel.netInflowUsd')}:</span>
             <span className="text-red-400">-351万</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[#8b949e]">最低:</span>
+            <span className="text-[#8b949e]">{t('rightPanel.low')}:</span>
             <span>¥87,508.52</span>
           </div>
         </div>
 
         <div className="px-3 pb-2 flex items-center gap-2">
-          {['加预警', '加自选', '策略', '简况'].map((label, i) => (
+          {[
+            t('rightPanel.addAlert'),
+            t('rightPanel.addWatchlist'),
+            t('rightPanel.strategy'),
+            t('rightPanel.overview'),
+          ].map((label, i) => (
             <button key={i} type="button" className="flex-1 bg-[#21262d] border border-[#30363d] rounded py-1 text-[10px] text-[#c9d1d9] hover:bg-[#30363d] transition-all">
               {label}
             </button>
@@ -156,7 +166,7 @@ export const RightPanel = () => {
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 text-[10px] cursor-pointer hover:text-[#c9d1d9]">
-                <span>2位小数</span>
+                <span>{t('rightPanel.decimalPlaces', { count: 2 })}</span>
                 <ChevronDown className="w-3 h-3" />
               </div>
               <Settings className="w-3.5 h-3.5 cursor-pointer hover:text-[#c9d1d9]" />
@@ -164,9 +174,9 @@ export const RightPanel = () => {
           </div>
 
           <div className="flex items-center px-2 py-1 text-[10px] text-[#8b949e]">
-            <span className="w-[35%]">价格(USDT)</span>
-            <span className="w-[30%] text-right">数量(BTC)</span>
-            <span className="w-[35%] text-right pr-1">委托额</span>
+            <span className="w-[35%]">{t('rightPanel.price')}</span>
+            <span className="w-[30%] text-right">{t('rightPanel.amount')}</span>
+            <span className="w-[35%] text-right pr-1">{t('rightPanel.orderValue')}</span>
           </div>
         </div>
 
@@ -207,7 +217,7 @@ export const RightPanel = () => {
                 onClick={() => handleTabChange(id)}
                 className={`py-2 text-[11px] font-bold border-b-2 transition-colors relative ${tradeTab === id ? 'text-white border-primary' : 'text-[#8b949e] border-transparent hover:text-white'}`}
               >
-                {id === 'latest' ? '最新成交' : '大额成交'}
+                {id === 'latest' ? t('rightPanel.latestTrades') : t('rightPanel.largeTrades')}
               </button>
             ))}
           </div>
@@ -218,9 +228,9 @@ export const RightPanel = () => {
         </div>
 
         <div className="flex items-center px-2 py-1 text-[10px] text-[#8b949e] bg-[#161b22]">
-          <span className="w-[35%]">价格(USDT)</span>
-          <span className="w-[30%] text-right">数量(BTC)</span>
-          <span className="w-[35%] text-right pr-1">成交时间</span>
+          <span className="w-[35%]">{t('rightPanel.price')}</span>
+          <span className="w-[30%] text-right">{t('rightPanel.amount')}</span>
+          <span className="w-[35%] text-right pr-1">{t('rightPanel.tradeTime')}</span>
         </div>
 
         <div className="flex-1 overflow-y-auto no-scrollbar bg-[#161b22]">

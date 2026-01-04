@@ -3,6 +3,7 @@
 import type { PredictionCardProps, PredictionRulesMeta } from './PredictionCard';
 import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { useMockData } from '@/hooks/use-mock-data';
@@ -186,6 +187,7 @@ const initialPredictions: PredictionMarketItem[] = [
 ];
 
 export const PredictionMarketGrid = () => {
+  const { t } = useTranslation();
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -219,7 +221,7 @@ export const PredictionMarketGrid = () => {
       <Modal
         isOpen={!!selectedPrediction}
         onClose={() => setSelectedPrediction(null)}
-        title="Market Details"
+        title={t('predictionMarket.modal.title')}
         width="max-w-xl"
         loading={modalLoading}
       >
@@ -231,7 +233,7 @@ export const PredictionMarketGrid = () => {
             <div>
               <h3 className="text-xl font-bold text-white leading-tight">{selectedPrediction?.title}</h3>
               <div className="flex gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">交易量: {selectedPrediction?.volume}</span>
+                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume}</span>
                 <span className="text-xs text-[#f87171] font-bold">● {selectedPrediction?.status || 'LIVE'}</span>
               </div>
             </div>

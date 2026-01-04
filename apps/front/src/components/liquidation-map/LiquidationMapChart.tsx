@@ -2,6 +2,7 @@
 
 import * as echarts from 'echarts';
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LiquidationMapChartProps {
   data: {
@@ -18,6 +19,7 @@ interface LiquidationMapChartProps {
 
 export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -38,6 +40,13 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
     // This ensures the current price line is always exactly where the red/green curves meet
     const currentPriceIndex = data.cumulativeLong.findIndex(v => v === 0);
 
+    const legendBybit = t('liquidationMap.legend.bybit')
+    const legendOkx = t('liquidationMap.legend.okx')
+    const legendBinance = t('liquidationMap.legend.binance')
+    const legendDex = t('liquidationMap.legend.dex')
+    const legendCumLong = t('liquidationMap.legend.cumLong')
+    const legendCumShort = t('liquidationMap.legend.cumShort')
+
     const option = {
       backgroundColor: '#0d1117',
       tooltip: {
@@ -49,10 +58,10 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
         borderColor: '#30363d',
         textStyle: { color: '#e6edf3', fontSize: 12 },
         formatter: (params: any) => {
-          let res = `<div style="font-weight: bold; margin-bottom: 4px;">价格: ${params[0].axisValue}</div>`;
+          let res = `<div style="font-weight: bold; margin-bottom: 4px;">${t('liquidationMap.tooltip.price')}: ${params[0].axisValue}</div>`;
           params.forEach((item: any) => {
             if (item.value === 0 || item.value === undefined || item.value === null || item.seriesName === 'CurrentPriceAnchor') return;
-            const valueStr = item.seriesName.includes('累计') 
+            const valueStr = item.seriesName === legendCumLong || item.seriesName === legendCumShort
               ? `$${item.value.toFixed(2)}B` 
               : `$${item.value}M`;
             res += `
@@ -68,7 +77,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
         }
       },
       legend: {
-        data: ['Bybit', 'OKX', 'Binance', 'DEX', '累计多单清算', '累计空单清算'],
+        data: [legendBybit, legendOkx, legendBinance, legendDex, legendCumLong, legendCumShort],
         top: 20,
         textStyle: { color: '#8b949e', fontSize: 11 },
         icon: 'rect',
@@ -146,7 +155,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
       ],
       series: [
         {
-          name: 'Bybit',
+          name: legendBybit,
           type: 'bar',
           stack: 'total',
           data: data.bybit,
@@ -155,7 +164,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           z: 5
         },
         {
-          name: 'OKX',
+          name: legendOkx,
           type: 'bar',
           stack: 'total',
           data: data.okx,
@@ -163,7 +172,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           z: 5
         },
         {
-          name: 'Binance',
+          name: legendBinance,
           type: 'bar',
           stack: 'total',
           data: data.binance,
@@ -171,7 +180,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           z: 5
         },
         {
-          name: 'DEX',
+          name: legendDex,
           type: 'bar',
           stack: 'total',
           data: data.dex,
@@ -199,7 +208,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
               show: true,
               position: 'end',
               distance: 10,
-              formatter: `{label|当前价格: }{value|${  currentPrice.toLocaleString()  }}`,
+              formatter: `{label|${t('liquidationMap.currentPrice')}: }{value|${currentPrice.toLocaleString()}}`,
               rich: {
                 label: {
                   color: '#e6edf3',
@@ -233,7 +242,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           }
         },
         {
-          name: '累计多单清算',
+          name: legendCumLong,
           type: 'line',
           yAxisIndex: 1,
           data: data.cumulativeLong,
@@ -250,7 +259,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
           z: 10
         },
         {
-          name: '累计空单清算',
+          name: legendCumShort,
           type: 'line',
           yAxisIndex: 1,
           data: data.cumulativeShort,
@@ -278,7 +287,7 @@ export const LiquidationMapChart = ({ data, currentPrice }: LiquidationMapChartP
       chart.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, [data, currentPrice]);
+  }, [data, currentPrice, t]);
 
   return (
     <div className="relative w-full h-[600px] bg-[#0d1117] border border-[#30363d] rounded-lg p-2">

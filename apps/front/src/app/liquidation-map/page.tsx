@@ -18,7 +18,7 @@ const symbolPrices: Record<string, number> = {
   'ADA': 0.8
 };
 
-const generateMockData = (symbol: string, range: string, exchangeType: string = 'All') => {
+const generateMockData = (symbol: string, range: '1d' | '7d' | '30d', exchangeType: string = 'All') => {
   const labels = [];
   const currentPrice = symbolPrices[symbol] || 100;
   // Use a +/- 15% range to ensure current price is exactly centered
@@ -39,7 +39,7 @@ const generateMockData = (symbol: string, range: string, exchangeType: string = 
     }
   }
 
-  const multiplier = range === '1天' ? 1 : range === '7天' ? 2.5 : 5;
+  const multiplier = range === '1d' ? 1 : range === '7d' ? 2.5 : 5;
 
   const bybit: number[] = [];
   const okx: number[] = [];
@@ -105,10 +105,10 @@ const generateMockData = (symbol: string, range: string, exchangeType: string = 
 
 export default function LiquidationMapPage() {
   const [symbol, setSymbol] = useState('BTC');
-  const [range, setRange] = useState('1天');
+  const [range, setRange] = useState<'1d' | '7d' | '30d'>('1d');
   const [exchangeType, setExchangeType] = useState('All');
   const [currentPrice, setCurrentPrice] = useState(89083);
-  const [data, setData] = useState(() => generateMockData('BTC', '1天', 'All'));
+  const [data, setData] = useState(() => generateMockData('BTC', '1d', 'All'));
 
   useEffect(() => {
     const newPrice = symbolPrices[symbol] || 100;

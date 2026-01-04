@@ -2,6 +2,7 @@
 
 import { Check, Copy, RefreshCw } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageTitle } from '@/components/ui/Typography';
 
 interface ProfileHeaderProps {
@@ -9,6 +10,7 @@ interface ProfileHeaderProps {
 }
 
 export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
+  const { t } = useTranslation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const refreshTimer = useRef<NodeJS.Timeout | null>(null);
@@ -41,12 +43,12 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
     }
   };
 
-  const tags = [
-    { label: '中等资金', color: 'text-primary', bg: 'bg-primary/10' },
-    { label: '偏空头', color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
-    { label: '盈亏平衡', color: 'text-gray-400', bg: 'bg-gray-400/10' },
-    { label: '波动策略', color: 'text-teal-400', bg: 'bg-teal-400/10' },
-    { label: '短线', color: 'text-sky-400', bg: 'bg-sky-400/10' },
+  const tags: Array<{ key: 'midCapital' | 'bearBias' | 'breakeven' | 'volatility' | 'shortTerm'; color: string; bg: string }> = [
+    { key: 'midCapital', color: 'text-primary', bg: 'bg-primary/10' },
+    { key: 'bearBias', color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+    { key: 'breakeven', color: 'text-gray-400', bg: 'bg-gray-400/10' },
+    { key: 'volatility', color: 'text-teal-400', bg: 'bg-teal-400/10' },
+    { key: 'shortTerm', color: 'text-sky-400', bg: 'bg-sky-400/10' },
   ];
 
   return (
@@ -62,7 +64,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
             type="button" 
             onClick={handleCopyAddress}
             className={`transition-colors ${isCopied ? 'text-green-400' : 'text-[#8b949e] hover:text-white'}`}
-            title="复制地址"
+            title={t('whaleTracking.profile.header.copyAddress')}
           >
             {isCopied ? <Check className="w-4.5 h-4.5" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
@@ -75,7 +77,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
               key={idx} 
               className={`px-2 py-0.5 rounded text-caption font-bold tracking-tight ${tag.color} ${tag.bg}`}
             >
-              {tag.label}
+              {t(`whaleTracking.tags.${tag.key}`)}
             </span>
           ))}
         </div>
@@ -89,7 +91,7 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
           className={`flex items-center gap-2 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-xl text-[#e5e5e5] text-label font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all group ${isRefreshing ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
         >
           <RefreshCw className={`w-4.5 h-4.5 text-[#8b949e] group-hover:text-white transition-all ${isRefreshing ? 'animate-spin text-white' : ''}`} />
-          <span className={`text-body font-bold text-white transition-colors`}>{isRefreshing ? '更新中...' : '实时数据'}</span>
+          <span className={`text-body font-bold text-white transition-colors`}>{isRefreshing ? t('whaleTracking.profile.header.refreshing') : t('whaleTracking.profile.header.realtimeData')}</span>
         </button>
       </div>
     </div>

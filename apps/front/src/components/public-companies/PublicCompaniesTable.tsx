@@ -2,6 +2,7 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { useMockData } from '@/hooks/use-mock-data';
@@ -111,6 +112,7 @@ type SortField = keyof Pick<
 type SortDirection = 'asc' | 'desc' | null;
 
 export const PublicCompaniesTable = () => {
+  const { t, i18n } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('marketCap');
@@ -195,7 +197,7 @@ export const PublicCompaniesTable = () => {
         if (multiplier != null) return num * multiplier;
 
         // Unknown unit token: fail loudly (but keep UI working by pushing it to top in desc sorts)
-        console.error(`[PublicCompaniesTable] 未识别的数值单位 token: "${token}"（raw="${val}"，rest="${rest}"）`);
+        console.error(`[PublicCompaniesTable] Unknown unit token: "${token}" (raw="${val}", rest="${rest}")`);
         return null;
       }
 
@@ -270,14 +272,30 @@ export const PublicCompaniesTable = () => {
       : <ChevronUp className="w-3 h-3 text-primary" />;
   };
 
+  const formatExchange = (exchange: string) => {
+    if (i18n.language !== 'en') return exchange;
+    if (exchange === '美股-NASDAQ') return 'US-NASDAQ';
+    if (exchange === '美股-NYSE') return 'US-NYSE';
+    return exchange;
+  };
+
   const selectedCompanyInfoParagraphs = useMemo(() => {
     if (!selectedCompany) return [];
-    if (selectedCompany.infoParagraphs?.length) return selectedCompany.infoParagraphs;
+    if (selectedCompany.infoParagraphs?.length) {
+      // If current UI is English but the stored paragraphs are Chinese, fall back to translated template copy.
+      if (i18n.language === 'en' && selectedCompany.infoParagraphs.some(p => /[\u4E00-\u9FFF]/.test(p))) {
+        return [
+          t('publicCompanies.modal.fallbackLine1', { name: selectedCompany.name, ticker: selectedCompany.ticker }),
+          t('publicCompanies.modal.fallbackLine2', { exchange: formatExchange(selectedCompany.exchange), asset: selectedCompany.asset, mNav: selectedCompany.mNav }),
+        ];
+      }
+      return selectedCompany.infoParagraphs;
+    }
     return [
-      `${selectedCompany.name}（${selectedCompany.ticker}）公司信息暂未补齐，当前为 Mock 占位。`,
-      `交易所：${selectedCompany.exchange}；持有资产：${selectedCompany.asset}；mNAV：${selectedCompany.mNav}。`,
+      t('publicCompanies.modal.fallbackLine1', { name: selectedCompany.name, ticker: selectedCompany.ticker }),
+      t('publicCompanies.modal.fallbackLine2', { exchange: formatExchange(selectedCompany.exchange), asset: selectedCompany.asset, mNav: selectedCompany.mNav }),
     ];
-  }, [selectedCompany]);
+  }, [formatExchange, i18n.language, selectedCompany, t]);
 
   return (
     <div className="space-y-6">
@@ -289,7 +307,7 @@ export const PublicCompaniesTable = () => {
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜索公司名称或股票代码..." 
+              placeholder={t('publicCompanies.searchPlaceholder')} 
               className="w-full bg-transparent border-0 rounded-xl pl-12 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-0 transition-all placeholder:text-[#8b949e]"
             />
           </div>
@@ -302,8 +320,8 @@ export const PublicCompaniesTable = () => {
             <table className="w-full border-collapse min-w-[1200px]">
               <thead>
                 <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
-                  <th className="px-6 py-6 text-left">币种</th>
-                  <th className="px-6 py-6 text-left">公司</th>
+                  <th className="px-6 py-6 text-left">{t('publicCompanies.columns.asset')}</th>
+                  <th className="px-6 py-6 text-left">{t('publicCompanies.columns.company')}</th>
                   <th className="px-4 py-6 font-bold">
                     <button
                       type="button"
@@ -319,7 +337,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('marketCap')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
                     >
-                      市值 {renderSortIcon('marketCap')}
+                      {t('publicCompanies.columns.marketCap')} {renderSortIcon('marketCap')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -328,7 +346,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('holdingsValue')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
                     >
-                      持币价值 {renderSortIcon('holdingsValue')}
+                      {t('publicCompanies.columns.holdingsValue')} {renderSortIcon('holdingsValue')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -337,7 +355,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('holdingsAmount')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
                     >
-                      持币量 {renderSortIcon('holdingsAmount')}
+                      {t('publicCompanies.columns.holdingsAmount')} {renderSortIcon('holdingsAmount')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -346,7 +364,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('sharePrice')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
                     >
-                      股价 {renderSortIcon('sharePrice')}
+                      {t('publicCompanies.columns.sharePrice')} {renderSortIcon('sharePrice')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -355,7 +373,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('change24h')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
                     >
-                      24h涨跌 {renderSortIcon('change24h')}
+                      {t('publicCompanies.columns.change24h')} {renderSortIcon('change24h')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -364,7 +382,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('change1d')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
                     >
-                      1天增减 {renderSortIcon('change1d')}
+                      {t('publicCompanies.columns.change1d')} {renderSortIcon('change1d')}
                     </button>
                   </th>
                   <th className="px-4 py-6 font-bold">
@@ -373,7 +391,7 @@ export const PublicCompaniesTable = () => {
                       onClick={() => handleSort('change7d')}
                       className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
                     >
-                      7天增减 {renderSortIcon('change7d')}
+                      {t('publicCompanies.columns.change7d')} {renderSortIcon('change7d')}
                     </button>
                   </th>
                 </tr>
@@ -403,7 +421,7 @@ export const PublicCompaniesTable = () => {
                             <span className="text-white font-semibold truncate min-w-0">{row.name}</span>
                             <button
                               type="button"
-                              aria-label="查看公司信息"
+                              aria-label={t('publicCompanies.aria.viewCompanyInfo')}
                               className="text-[#8b949e] hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 flex-none -mt-1"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -413,7 +431,7 @@ export const PublicCompaniesTable = () => {
                               <Info className="w-4 h-4" />
                             </button>
                           </div>
-                          <span className="text-[#8b949e] text-xs uppercase truncate">{row.ticker} {row.exchange}</span>
+                          <span className="text-[#8b949e] text-xs uppercase truncate">{row.ticker} {formatExchange(row.exchange)}</span>
                         </div>
                       </div>
                     </td>
@@ -441,7 +459,7 @@ export const PublicCompaniesTable = () => {
       <Modal
         isOpen={!!selectedCompany}
         onClose={() => setSelectedCompany(null)}
-        title="公司信息"
+        title={t('publicCompanies.modal.title')}
         width="max-w-xl"
       >
         <div className="space-y-6">
@@ -452,14 +470,14 @@ export const PublicCompaniesTable = () => {
             <div className="min-w-0">
               <h3 className="text-xl font-bold text-white leading-tight truncate">{selectedCompany?.name}</h3>
               <div className="flex flex-wrap gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">股票代码: <span className="font-bold text-[#e6edf3]">{selectedCompany?.ticker}</span></span>
-                <span className="text-xs text-[#8b949e]">交易所: <span className="font-bold text-[#e6edf3]">{selectedCompany?.exchange}</span></span>
+                <span className="text-xs text-[#8b949e]">{t('publicCompanies.modal.ticker')}: <span className="font-bold text-[#e6edf3]">{selectedCompany?.ticker}</span></span>
+                <span className="text-xs text-[#8b949e]">{t('publicCompanies.modal.exchange')}: <span className="font-bold text-[#e6edf3]">{selectedCompany ? formatExchange(selectedCompany.exchange) : ''}</span></span>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">公司信息</p>
+            <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">{t('publicCompanies.modal.sectionTitle')}</p>
             <div className="text-sm leading-relaxed text-[#e6edf3] px-1">
               {selectedCompanyInfoParagraphs.map((p, idx) => (
                 <React.Fragment key={idx}>

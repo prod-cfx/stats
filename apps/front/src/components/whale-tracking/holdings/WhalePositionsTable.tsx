@@ -3,6 +3,7 @@
 import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FilterButton } from '@/components/ui/FilterButton';
 import { LoadingState } from '@/components/ui/loading';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
@@ -11,7 +12,7 @@ import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhalePosition {
   address: string;
-  tags: { label: string; color: string; bg: string }[];
+  tags: { key: 'whale' | 'hft' | 'steady'; color: string; bg: string }[];
   asset: string;
   side: 'Long' | 'Short';
   leverage: string;
@@ -24,7 +25,7 @@ interface WhalePosition {
   entryPrice: string;
   liqPrice: string;
   winRate: string;
-  createdTime: string;
+  createdMinutesAgo: number; // 0 => just now
   remark: string;
 }
 
@@ -32,8 +33,8 @@ const mockPositions: WhalePosition[] = [
   {
     address: '0xb51754025d57d727218ef86b97828135899983ae',
     tags: [
-      { label: '巨鲸', color: '#c084fc', bg: '#a855f733' },
-      { label: '高频', color: '#60a5fa', bg: '#3b82f633' },
+      { key: 'whale', color: '#c084fc', bg: '#a855f733' },
+      { key: 'hft', color: '#60a5fa', bg: '#3b82f633' },
     ],
     asset: 'ETH',
     side: 'Short',
@@ -47,13 +48,13 @@ const mockPositions: WhalePosition[] = [
     entryPrice: '$2942.12',
     liqPrice: '$4233.52',
     winRate: '--',
-    createdTime: '15 分钟前',
+    createdMinutesAgo: 15,
     remark: '',
   },
   {
     address: '0x701234567890abcdef1234567890abcdef12345678',
     tags: [
-      { label: '稳健', color: '#facc15', bg: '#eab30833' },
+      { key: 'steady', color: '#facc15', bg: '#eab30833' },
     ],
     asset: 'BTC',
     side: 'Long',
@@ -67,13 +68,13 @@ const mockPositions: WhalePosition[] = [
     entryPrice: '$2917.43',
     liqPrice: '$2869.46',
     winRate: '82%',
-    createdTime: '1 小时前',
+    createdMinutesAgo: 60,
     remark: 'James WynnReal',
   },
   {
     address: '0x6bb31754025d57d727218ef86b97828135899983ae',
     tags: [
-      { label: '巨鲸', color: '#c084fc', bg: '#a855f733' },
+      { key: 'whale', color: '#c084fc', bg: '#a855f733' },
     ],
     asset: 'SOL',
     side: 'Long',
@@ -87,36 +88,44 @@ const mockPositions: WhalePosition[] = [
     entryPrice: '$2925.09',
     liqPrice: '$2880.70',
     winRate: '71%',
-    createdTime: '1 小时前',
+    createdMinutesAgo: 60,
     remark: '-',
   }
 ];
 
 export const WhalePositionsTable = () => {
+  const { t } = useTranslation();
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [assetFilter, setAssetFilter] = useState('所有币种');
-  const [sideFilter, setSideFilter] = useState('所有方向');
-  const [pnlFilter, setPnlFilter] = useState('所有未实现盈亏');
-  const [sortField, setSortField] = useState<'持仓价值' | '未实现盈亏' | '保证金' | '胜率' | '创建时间' | null>('持仓价值');
+  const [assetFilter, setAssetFilter] = useState<'ALL' | 'BTC' | 'ETH' | 'SOL'>('ALL');
+  const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL');
+  const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
+  const [sortField, setSortField] = useState<'positionValue' | 'pnl' | 'margin' | 'winRate' | 'createdTime' | null>('positionValue');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
+
+  const formatRelativeMinutes = (mins: number) => {
+    if (mins <= 0) return t('whaleTracking.time.justNow');
+    if (mins < 60) return t('whaleTracking.time.minutesAgo', { count: mins });
+    const hours = Math.floor(mins / 60);
+    return t('whaleTracking.time.hoursAgo', { count: hours });
+  };
 
   // Use standardized mock hook
   const { data: positions, loading, error, reload } = useMockData<WhalePosition[]>(
     async () => {
       // Simulate filtering
       return mockPositions.filter(p => {
-        if (assetFilter !== '所有币种' && p.asset !== assetFilter) return false;
-        if (sideFilter !== '所有方向' && p.side !== sideFilter) return false;
-        if (pnlFilter !== '所有未实现盈亏') {
+        if (assetFilter !== 'ALL' && p.asset !== assetFilter) return false;
+        if (sideFilter !== 'ALL' && p.side !== sideFilter) return false;
+        if (pnlFilter !== 'ALL') {
             const pnlValue = Number.parseFloat(p.pnlUSD.replace(/[$,]/g, ''));
-            if (pnlFilter === '盈利' && pnlValue < 0) return false;
-            if (pnlFilter === '亏损' && pnlValue >= 0) return false;
+            if (pnlFilter === 'PROFIT' && pnlValue < 0) return false;
+            if (pnlFilter === 'LOSS' && pnlValue >= 0) return false;
         }
         return true;
       });
     },
-    [assetFilter, sideFilter]
+    [assetFilter, sideFilter, pnlFilter]
   );
 
   const sortedPositions = useMemo(() => {
@@ -127,30 +136,27 @@ export const WhalePositionsTable = () => {
       let valA, valB;
       
       switch (sortField) {
-        case '持仓价值':
+        case 'positionValue':
           valA = Number.parseFloat(a.positionValueUSD.replace(/[$,]/g, ''));
           valB = Number.parseFloat(b.positionValueUSD.replace(/[$,]/g, ''));
           break;
-        case '未实现盈亏':
+        case 'pnl':
           valA = Number.parseFloat(a.pnlUSD.replace(/[$,]/g, ''));
           valB = Number.parseFloat(b.pnlUSD.replace(/[$,]/g, ''));
           break;
-        case '保证金':
+        case 'margin':
           valA = Number.parseFloat(a.margin.replace(/[$,]/g, ''));
           valB = Number.parseFloat(b.margin.replace(/[$,]/g, ''));
           break;
-        case '胜率':
+        case 'winRate':
           valA = a.winRate === '--' ? -1 : Number.parseFloat(a.winRate);
           valB = b.winRate === '--' ? -1 : Number.parseFloat(b.winRate);
           break;
-        case '创建时间':
-            // Simple string comparison for the mock "X 分钟前" format is tricky
-            // In real app, use timestamp. Here we just compare string length/content roughly
-            valA = a.createdTime; 
-            valB = b.createdTime;
-            // For correct sorting, we'd need real timestamps. 
-            // Let's assume for now lexical sort is not what we want but ok for mock
-            return sortOrder === 'desc' ? b.createdTime.localeCompare(a.createdTime) : a.createdTime.localeCompare(b.createdTime);
+        case 'createdTime':
+            valA = a.createdMinutesAgo;
+            valB = b.createdMinutesAgo;
+            // smaller minutesAgo is more recent
+            return sortOrder === 'desc' ? valA - valB : valB - valA;
         default:
           return 0;
       }
@@ -191,8 +197,8 @@ export const WhalePositionsTable = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <PageTitle>鲸鱼持仓</PageTitle>
-          <BodyText>追踪大额持仓者的最新动态</BodyText>
+          <PageTitle>{t('whaleTracking.holdings.title')}</PageTitle>
+          <BodyText>{t('whaleTracking.holdings.subtitle')}</BodyText>
           <div className="flex items-center gap-4">
             {/* Removed standalone sort buttons */}
           </div>
@@ -200,17 +206,30 @@ export const WhalePositionsTable = () => {
         <div className="flex items-center gap-3">
           <FilterButton 
             value={assetFilter} 
-            options={['所有币种', 'BTC', 'ETH', 'SOL']} 
+            options={[
+              { value: 'ALL', label: t('common.all') },
+              { value: 'BTC', label: 'BTC' },
+              { value: 'ETH', label: 'ETH' },
+              { value: 'SOL', label: 'SOL' },
+            ]} 
             onChange={setAssetFilter} 
           />
           <FilterButton 
             value={sideFilter} 
-            options={['所有方向', 'Long', 'Short']} 
+            options={[
+              { value: 'ALL', label: t('common.all') },
+              { value: 'Long', label: t('whaleTracking.side.long') },
+              { value: 'Short', label: t('whaleTracking.side.short') },
+            ]} 
             onChange={setSideFilter} 
           />
           <FilterButton 
             value={pnlFilter} 
-            options={['所有未实现盈亏', '盈利', '亏损']} 
+            options={[
+              { value: 'ALL', label: t('common.all') },
+              { value: 'PROFIT', label: t('whaleTracking.holdings.filters.profit') },
+              { value: 'LOSS', label: t('whaleTracking.holdings.filters.loss') },
+            ]} 
             onChange={setPnlFilter} 
           />
         </div>
@@ -227,42 +246,42 @@ export const WhalePositionsTable = () => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="text-[#8b949e] border-b border-[#30363d]">
-                  <th className="px-6 py-4 text-left">地址</th>
-                  <th className="px-6 py-4 text-left">币种</th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('持仓价值')}>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.address')}</th>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.asset')}</th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('positionValue')}>
                     <div className="flex items-center">
-                      持仓价值
-                      {renderSortIcon('持仓价值')}
+                      {t('whaleTracking.holdings.table.positionValue')}
+                      {renderSortIcon('positionValue')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('未实现盈亏')}>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('pnl')}>
                     <div className="flex items-center">
-                      未实现盈亏
-                      {renderSortIcon('未实现盈亏')}
+                      {t('whaleTracking.holdings.table.unrealizedPnl')}
+                      {renderSortIcon('pnl')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('保证金')}>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('margin')}>
                     <div className="flex items-center">
-                      保证金
-                      {renderSortIcon('保证金')}
+                      {t('whaleTracking.holdings.table.margin')}
+                      {renderSortIcon('margin')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left">开盘价</th>
-                  <th className="px-6 py-4 text-left">清算价</th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('胜率')}>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.entryPrice')}</th>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.liqPrice')}</th>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('winRate')}>
                     <div className="flex items-center">
-                      胜率
-                      {renderSortIcon('胜率')}
+                      {t('whaleTracking.holdings.table.winRate')}
+                      {renderSortIcon('winRate')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('创建时间')}>
+                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('createdTime')}>
                     <div className="flex items-center">
-                      创建时间
-                      {renderSortIcon('创建时间')}
+                      {t('whaleTracking.holdings.table.createdTime')}
+                      {renderSortIcon('createdTime')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left">备注</th>
-                  <th className="px-6 py-4 text-center w-16">操作</th>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.remark')}</th>
+                  <th className="px-6 py-4 text-center w-16">{t('whaleTracking.holdings.table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#30363d]">
@@ -289,7 +308,7 @@ export const WhalePositionsTable = () => {
                               className="px-1.5 py-0.5 rounded text-caption font-medium"
                               style={{ color: tag.color, backgroundColor: tag.bg }}
                             >
-                              {tag.label}
+                              {t(`whaleTracking.tags.${tag.key}`)}
                             </span>
                           ))}
                         </div>
@@ -298,11 +317,11 @@ export const WhalePositionsTable = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className={`px-1.5 py-0.5 rounded text-caption font-bold ${pos.side === 'Long' ? 'bg-[#22c55e33] text-[#4ade80]' : 'bg-[#ef444433] text-[#f87171]'}`}>
-                          {pos.side === 'Long' ? '多' : '空'}
+                          {pos.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-white text-body font-bold">{pos.asset}</span>
-                          <span className="text-[#8b949e] text-caption">{pos.marginType} {pos.leverage}</span>
+                          <span className="text-[#8b949e] text-caption">{pos.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')} {pos.leverage}</span>
                         </div>
                       </div>
                     </td>
@@ -337,7 +356,7 @@ export const WhalePositionsTable = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-[#8b949e]">
-                      {pos.createdTime}
+                      {formatRelativeMinutes(pos.createdMinutesAgo)}
                     </td>
                     <td className="px-6 py-4 text-[#8b949e] text-caption max-w-[150px] truncate">
                       {pos.remark}

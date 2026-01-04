@@ -2,6 +2,7 @@
 
 import { Check, Info, LayoutGrid, Settings } from 'lucide-react';
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AggregatedOI } from '@/components/aggregated-orderbook/AggregatedOI';
 import { AggregatedVolume } from '@/components/aggregated-orderbook/AggregatedVolume';
 import { DepthChart } from '@/components/aggregated-orderbook/DepthChart';
@@ -55,6 +56,7 @@ const AsksIcon = ({ active }: { active: boolean }) => (
 );
 
 function AggregatedOrderBookContent() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('aggregated-orderbook');
   const [marketType, setMarketType] = useState('futures');
   const [symbol, setSymbol] = useState('BTC');
@@ -162,15 +164,15 @@ function AggregatedOrderBookContent() {
   return (
     <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
       <div className="flex flex-col gap-3">
-        <PageTitle>聚合挂单数据</PageTitle>
-        <BodyText>全网深度及订单流聚合分析</BodyText>
+        <PageTitle>{t('aggregatedOrderbook.title')}</PageTitle>
+        <BodyText>{t('aggregatedOrderbook.subtitle')}</BodyText>
       </div>
       
       <div className="flex border-b border-[#30363d] w-fit">
         {[
-          { id: 'aggregated-orderbook', name: '聚合挂单' },
-          { id: 'aggregated-oi', name: '聚合持仓量' },
-          { id: 'aggregated-volume', name: '聚合成交量' }
+          { id: 'aggregated-orderbook', name: t('aggregatedOrderbook.tabs.orderbook') },
+          { id: 'aggregated-oi', name: t('aggregatedOrderbook.tabs.openInterest') },
+          { id: 'aggregated-volume', name: t('aggregatedOrderbook.tabs.volume') }
         ].map(tab => (
           <button
             type="button"
@@ -200,8 +202,8 @@ function AggregatedOrderBookContent() {
               <div className="flex items-center justify-between p-4 border-b border-[#30363d] bg-[#0d1117]/30 flex-none">
                 <div className="flex items-center gap-6">
                   <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
-                    <button type="button" onClick={() => setMarketType('futures')} className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'futures' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}>合约</button>
-                    <button type="button" onClick={() => setMarketType('spot')} className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'spot' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}>现货</button>
+                    <button type="button" onClick={() => setMarketType('futures')} className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'futures' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}>{t('aggregatedOrderbook.market.futures')}</button>
+                    <button type="button" onClick={() => setMarketType('spot')} className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'spot' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20' : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}>{t('aggregatedOrderbook.market.spot')}</button>
                   </div>
                   <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
                     <button type="button" onClick={() => setSymbol('BTC')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${symbol === 'BTC' ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md' : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}>BTC</button>
@@ -209,14 +211,19 @@ function AggregatedOrderBookContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-[#8b949e]">
-                  <span>24小时成交量: <span className="text-[#e6edf3]">6.82万 BTC</span></span>
-                  <span>24小时成交额: <span className="text-[#e6edf3]">¥7159万</span></span>
+                  <span>{t('aggregatedOrderbook.stats.volume24h')}: <span className="text-[#e6edf3]">6.82万 BTC</span></span>
+                  <span>{t('aggregatedOrderbook.stats.turnover24h')}: <span className="text-[#e6edf3]">¥7159万</span></span>
                 </div>
               </div>
               <div className="flex-1 flex min-h-0">
                 <div className="w-1/2 flex flex-col border-r border-[#30363d]">
                   <div className="p-4 border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none">
-                    <SectionTitle className="text-lg">{symbol}/USDT 实时订单({marketType === 'futures' ? '合约' : '现货'})</SectionTitle>
+                    <SectionTitle className="text-lg">
+                      {t('aggregatedOrderbook.sections.realtimeOrderbook', {
+                        symbol: `${symbol}/USDT`,
+                        market: marketType === 'futures' ? t('aggregatedOrderbook.market.futures') : t('aggregatedOrderbook.market.spot'),
+                      })}
+                    </SectionTitle>
                     <div className="flex items-center gap-4">
                       <div className="flex bg-[#0d1117] border border-[#30363d] rounded-md overflow-hidden p-1">
                         <button 
@@ -267,7 +274,7 @@ function AggregatedOrderBookContent() {
 
                         {isSettingsOpen && (
                           <div className="absolute top-full right-0 mt-2 w-48 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-2">
-                            <p className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider px-2 py-1 mb-1">交易所来源</p>
+                            <p className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider px-2 py-1 mb-1">{t('aggregatedOrderbook.settings.exchangeSources')}</p>
                             {(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES).map(ex => (
                               <button
                                 key={ex}
@@ -295,7 +302,7 @@ function AggregatedOrderBookContent() {
                                 onClick={() => { setIsSettingsOpen(false); reload(); }}
                                 className="text-[10px] font-bold text-primary hover:underline"
                               >
-                                应用更改
+                                {t('common.applyChanges')}
                               </button>
                             </div>
                           </div>
@@ -309,10 +316,10 @@ function AggregatedOrderBookContent() {
                 </div>
                 <div className="w-1/2 flex flex-col min-h-0">
                   <div className="p-4 border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none">
-                    <SectionTitle className="text-lg">订单深度</SectionTitle>
+                    <SectionTitle className="text-lg">{t('aggregatedOrderbook.sections.orderDepth')}</SectionTitle>
                     <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-all">
                       <Info className="w-4 h-4" />
-                      <span className="text-sm">流动性热力图</span>
+                      <span className="text-sm">{t('aggregatedOrderbook.sections.liquidityHeatmap')}</span>
                     </div>
                   </div>
                   <div className="flex-1 min-h-0 p-4 flex flex-col">
@@ -321,10 +328,10 @@ function AggregatedOrderBookContent() {
                     </div>
                     <div className="flex items-center justify-between mt-4 text-xs text-[#8b949e] flex-none">
                       <div className="flex items-center gap-8">
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500/50 rounded-sm" /><span>买单累计</span></div>
-                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500/50 rounded-sm" /><span>卖单累计</span></div>
+                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500/50 rounded-sm" /><span>{t('aggregatedOrderbook.legend.bids')}</span></div>
+                        <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500/50 rounded-sm" /><span>{t('aggregatedOrderbook.legend.asks')}</span></div>
                       </div>
-                      <span>单位: BTC</span>
+                      <span>{t('aggregatedOrderbook.legend.unit')}: BTC</span>
                     </div>
                   </div>
                 </div>
@@ -338,7 +345,7 @@ function AggregatedOrderBookContent() {
             <div className="flex-1 flex items-center justify-center bg-[#161b22] border border-[#30363d] rounded-xl min-h-[600px]">
               <div className="flex flex-col items-center gap-4 text-[#8b949e]">
                 <LayoutGrid className="w-12 h-12 opacity-20" />
-                <p>功能开发中...</p>
+                <p>{t('common.featureInProgress')}</p>
               </div>
             </div>
           )}
@@ -349,11 +356,12 @@ function AggregatedOrderBookContent() {
 }
 
 export default function AggregatedOrderBookPage() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
       <main className="flex-1 p-8">
-        <Suspense fallback={<div className="h-96 flex items-center justify-center text-[#8b949e]">加载中...</div>}>
+        <Suspense fallback={<div className="h-96 flex items-center justify-center text-[#8b949e]">{t('common.loading')}</div>}>
           <AggregatedOrderBookContent />
         </Suspense>
       </main>

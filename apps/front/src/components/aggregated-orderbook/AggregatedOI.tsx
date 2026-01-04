@@ -2,6 +2,7 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SectionTitle } from '@/components/ui/Typography';
 
 interface OIData {
@@ -24,7 +25,7 @@ type SortDirection = 'asc' | 'desc' | null;
 const mockOIData: OIData[] = [
   {
     rank: '',
-    exchange: '全部',
+    exchange: 'ALL',
     logo: '',
     oiBtc: '66.10万 BTC',
     oiUsd: '$593.86亿',
@@ -160,6 +161,7 @@ const mockOIData: OIData[] = [
 const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH', 'SUI', 'ADA', 'LINK', 'AVAX'];
 
 export const AggregatedOI = () => {
+  const { t } = useTranslation();
   const [activeSymbol, setActiveTabSymbol] = useState('BTC');
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
@@ -255,7 +257,7 @@ export const AggregatedOI = () => {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <SectionTitle>{activeSymbol} 合约总持仓</SectionTitle>
+        <SectionTitle>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
       </div>
 
       <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl">
@@ -288,7 +290,7 @@ export const AggregatedOI = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] z-10" />
               <input 
                 type="text" 
-                placeholder="搜索" 
+                placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -326,14 +328,14 @@ export const AggregatedOI = () => {
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-[#0d1117]/50 text-[#8b949e] text-xs uppercase tracking-wider">
-                <th className="px-4 py-4 font-bold text-center border-b border-[#30363d] w-16">排名</th>
-                <th className="px-4 py-4 font-bold border-b border-[#30363d]">交易所</th>
+                <th className="px-4 py-4 font-bold text-center border-b border-[#30363d] w-16">{t('aggregatedOrderbook.openInterest.table.rank')}</th>
+                <th className="px-4 py-4 font-bold border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
                   <button 
                     onClick={() => handleSort('oiBtc')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    持仓({activeSymbol}) {renderSortIcon('oiBtc')}
+                    {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiBtc')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -341,7 +343,7 @@ export const AggregatedOI = () => {
                     onClick={() => handleSort('oiUsd')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    持仓 {renderSortIcon('oiUsd')}
+                    {t('aggregatedOrderbook.openInterest.table.oiUsd')} {renderSortIcon('oiUsd')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -349,7 +351,7 @@ export const AggregatedOI = () => {
                     onClick={() => handleSort('ratio')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    占比 {renderSortIcon('ratio')}
+                    {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratio')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -357,7 +359,7 @@ export const AggregatedOI = () => {
                     onClick={() => handleSort('change1h')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    持仓变化(1小时) {renderSortIcon('change1h')}
+                    {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1h')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -365,7 +367,7 @@ export const AggregatedOI = () => {
                     onClick={() => handleSort('change4h')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    持仓变化(4小时) {renderSortIcon('change4h')}
+                    {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4h')}
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
@@ -373,10 +375,10 @@ export const AggregatedOI = () => {
                     onClick={() => handleSort('change24h')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    持仓变化(24小时) {renderSortIcon('change24h')}
+                    {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24h')}
                   </button>
                 </th>
-                <th className="px-4 py-4 font-bold text-center border-b border-[#30363d]">持仓/24小时成交额</th>
+                <th className="px-4 py-4 font-bold text-center border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -395,7 +397,9 @@ export const AggregatedOI = () => {
                           <img src={row.logo} alt={row.exchange} className="w-full h-full object-cover" />
                         </div>
                       )}
-                      <span className={row.isTotal ? 'text-white' : 'text-[#e6edf3]'}>{row.exchange}</span>
+                      <span className={row.isTotal ? 'text-white' : 'text-[#e6edf3]'}>
+                        {row.isTotal ? t('common.all') : row.exchange}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-4 text-right text-[#e6edf3]">{row.oiBtc}</td>

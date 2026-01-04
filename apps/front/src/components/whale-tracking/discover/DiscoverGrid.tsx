@@ -2,15 +2,17 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { useMockData } from '@/hooks/use-mock-data';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 import { TraderCard } from './TraderCard';
 
 export const DiscoverGrid = () => {
+  const { t } = useTranslation();
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sortField, setSortField] = useState<'胜率' | '账户总价值' | '已实现盈亏' | null>('胜率');
+  const [sortField, setSortField] = useState<'winRate' | 'totalValue' | 'realizedPnl' | null>('winRate');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
 
   const handleShowStats = (address: string) => {
@@ -239,13 +241,13 @@ export const DiscoverGrid = () => {
     if (!sortField || !sortOrder) return data.details;
     return [...data.details].sort((a, b) => {
       let valA, valB;
-      if (sortField === '胜率') {
+      if (sortField === 'winRate') {
         valA = Number.parseFloat(a.winRate);
         valB = Number.parseFloat(b.winRate);
-      } else if (sortField === '账户总价值') {
+      } else if (sortField === 'totalValue') {
         valA = Number.parseFloat(a.totalValue.replace(/[$,]/g, ''));
         valB = Number.parseFloat(b.totalValue.replace(/[$,]/g, ''));
-      } else if (sortField === '已实现盈亏') {
+      } else if (sortField === 'realizedPnl') {
         valA = Number.parseFloat(a.pnl.replace(/[$,]/g, ''));
         valB = Number.parseFloat(b.pnl.replace(/[$,]/g, ''));
       } else {
@@ -296,20 +298,24 @@ export const DiscoverGrid = () => {
       {/* Filters Section */}
       <div className="flex flex-wrap items-center justify-between border-y border-[#30363d] py-6">
         <div className="flex items-center gap-4">
-          <span className="text-[#8b949e] text-sm font-medium">排序方式:</span>
-          {['胜率', '账户总价值', '已实现盈亏'].map((field) => (
+          <span className="text-[#8b949e] text-sm font-medium">{t('whaleTracking.discover.sortBy')}:</span>
+          {([
+            { id: 'winRate', label: t('whaleTracking.discover.sortFields.winRate') },
+            { id: 'totalValue', label: t('whaleTracking.discover.sortFields.totalValue') },
+            { id: 'realizedPnl', label: t('whaleTracking.discover.sortFields.realizedPnl') },
+          ] as const).map((field) => (
             <button 
-              key={field}
+              key={field.id}
               type="button"
               onClick={() => {
-                handleSort(field as Exclude<typeof sortField, null>);
+                handleSort(field.id as Exclude<typeof sortField, null>);
               }}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors group ${
-                sortField === field ? 'text-white bg-white/5' : 'text-[#8b949e] hover:text-white'
+                sortField === field.id ? 'text-white bg-white/5' : 'text-[#8b949e] hover:text-white'
               }`}
             >
-              <span className="uppercase">{field}</span>
-              {renderSortIcon(field as Exclude<typeof sortField, null>)}
+              <span className="uppercase">{field.label}</span>
+              {renderSortIcon(field.id as Exclude<typeof sortField, null>)}
             </button>
           ))}
         </div>

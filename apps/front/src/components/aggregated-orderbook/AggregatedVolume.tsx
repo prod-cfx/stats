@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
 
 interface VolumeItem {
@@ -22,9 +23,12 @@ interface VolumeComparisonCardProps {
 const TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'];
 
 const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symbol, items, onSymbolChange }) => {
+  const { t } = useTranslation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<VolumeItem | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const displayName = (name: string) => (name === 'TOTAL' ? t('aggregatedOrderbook.volume.total') : name);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -94,7 +98,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             <span className={`w-24 text-sm font-medium transition-colors ${
               hoveredItem?.name === item.name ? 'text-white bg-[#0d1117] px-2 py-0.5 rounded border border-[#30363d]' : 'text-[#8b949e] group-hover:text-[#e6edf3]'
             }`}>
-              {item.name}
+              {displayName(item.name)}
             </span>
 
             {/* Progress Bar Container */}
@@ -125,11 +129,11 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                   style={{ left: `calc(96px + ${item.percent / 2}%)` }}
                 >
                   <div className="flex flex-col gap-2">
-                    <div className="text-sm font-bold text-white border-b border-white/10 pb-1.5">{item.name}</div>
+                    <div className="text-sm font-bold text-white border-b border-white/10 pb-1.5">{displayName(item.name)}</div>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full ring-2 ring-white/10" style={{ backgroundColor: item.color }} />
-                        <span className="text-xs text-[#8b949e] font-medium">合约成交额</span>
+                        <span className="text-xs text-[#8b949e] font-medium">{t('aggregatedOrderbook.volume.contractTurnover')}</span>
                       </div>
                       <span className="text-sm font-mono font-bold text-white tracking-tight">{item.amount}</span>
                     </div>
@@ -147,6 +151,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
 };
 
 export const AggregatedVolume = () => {
+  const { t } = useTranslation();
   const [leftSymbol, setLeftSymbol] = useState('BTC');
   const [rightSymbol, setRightSymbol] = useState('ETH');
 
@@ -163,7 +168,7 @@ export const AggregatedVolume = () => {
     const baseAmount = getStableAmount(symbol);
     
     return [
-      { name: 'Total', amount: `$${baseAmount.toFixed(2)}B`, percent: 100, color: '#3b82f6' },
+      { name: 'TOTAL', amount: `$${baseAmount.toFixed(2)}B`, percent: 100, color: '#3b82f6' },
       { name: 'MEXC', amount: `$${(baseAmount * 0.28).toFixed(2)}B`, percent: 28.9, color: '#a855f7' },
       { name: 'OKX', amount: `$${(baseAmount * 0.19).toFixed(2)}B`, percent: 19.2, color: '#f43f5e' },
       { name: 'Bybit', amount: `$${(baseAmount * 0.14).toFixed(2)}B`, percent: 14.6, color: '#eab308' },
@@ -185,13 +190,13 @@ export const AggregatedVolume = () => {
     <div className="flex flex-col gap-8 pb-12">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
         <VolumeComparisonCard 
-          title={`${leftSymbol} 合约成交额`} 
+          title={t('aggregatedOrderbook.volume.title', { symbol: leftSymbol })} 
           symbol={leftSymbol} 
           items={leftItems}
           onSymbolChange={setLeftSymbol}
         />
         <VolumeComparisonCard 
-          title={`${rightSymbol} 合约成交额`} 
+          title={t('aggregatedOrderbook.volume.title', { symbol: rightSymbol })} 
           symbol={rightSymbol} 
           items={rightItems}
           onSymbolChange={setRightSymbol}
