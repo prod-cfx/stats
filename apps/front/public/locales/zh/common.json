@@ -186,6 +186,7 @@
     "featureInProgress": "功能开发中...",
     "loading": "加载中...",
     "loadFailed": "数据加载失败（Mock）",
+    "yesterday": "昨天",
     "mockHint": "当前处于 Mock 环境，您可以点击下方按钮重试或通过 URL 参数触发正常状态。",
     "retry": "重新加载",
     "emptyTitle": "暂无数据",
@@ -258,9 +259,18 @@
   "predictionMarket": {
     "title": "预测市场",
     "subtitle": "基于链上数据的未来趋势预测",
+    "status": {
+      "live": "进行中",
+      "resolved": "已结算",
+      "closed": "已关闭"
+    },
     "modal": {
       "title": "市场详情",
-      "volume": "交易量"
+      "volume": "交易量",
+      "outcomes": "结果",
+      "probability": "概率",
+      "rules": "规则",
+      "createdAt": "创建时间：{{date}}"
     }
   },
   "publicCompanies": {

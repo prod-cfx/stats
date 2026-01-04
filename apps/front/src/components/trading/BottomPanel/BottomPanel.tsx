@@ -28,7 +28,7 @@ export const BottomPanel = () => {
   const mockHistory = [
     { id: 101, time: '10:15:22', symbol: 'BTCUSDT', type: 'market' as OrderTypeKey, side: 'buy', price: '87,120.50', amount: '0.010', filled: '0.010', total: '871.20', status: 'filled' as OrderStatusKey },
     { id: 102, time: '09:05:11', symbol: 'ETHUSDT', type: 'limit' as OrderTypeKey, side: 'sell', price: '3,100.00', amount: '1.500', filled: '1.500', total: '4,650.00', status: 'filled' as OrderStatusKey },
-    { id: 103, time: t('common.yesterday'), symbol: 'SOLUSDT', type: 'limit' as OrderTypeKey, side: 'buy', price: '120.00', amount: '10.00', filled: '0.00', total: '0.00', status: 'cancelled' as OrderStatusKey },
+    { id: 103, time: t('common.yesterday', { defaultValue: t('nav.yesterday') }), symbol: 'SOLUSDT', type: 'limit' as OrderTypeKey, side: 'buy', price: '120.00', amount: '10.00', filled: '0.00', total: '0.00', status: 'cancelled' as OrderStatusKey },
   ];
 
   const mockPositions = [

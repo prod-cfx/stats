@@ -186,6 +186,7 @@
     "featureInProgress": "Work in progress...",
     "loading": "Loading...",
     "loadFailed": "Failed to load",
+    "yesterday": "Yesterday",
     "mockHint": "You are viewing mock data. You can retry or use URL params to switch states.",
     "retry": "Retry",
     "emptyTitle": "No data",
@@ -258,9 +259,18 @@
   "predictionMarket": {
     "title": "Prediction Market",
     "subtitle": "Future trend forecasts based on on-chain data",
+    "status": {
+      "live": "LIVE",
+      "resolved": "RESOLVED",
+      "closed": "CLOSED"
+    },
     "modal": {
       "title": "Market Details",
-      "volume": "Volume"
+      "volume": "Volume",
+      "outcomes": "Outcomes",
+      "probability": "Probability",
+      "rules": "Rules",
+      "createdAt": "Created At: {{date}}"
     }
   },
   "publicCompanies": {
