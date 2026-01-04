@@ -148,7 +148,7 @@ export const RealtimeWhalesTable = () => {
             <thead>
               <tr className="text-[#8b949e] border-b border-[#30363d] bg-[#0d1117]/50">
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">交易地址</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">资产/方向</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">币种</th>
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">持仓价值</th>
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">开盘价格</th>
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">胜率</th>
@@ -182,7 +182,7 @@ export const RealtimeWhalesTable = () => {
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                         {tx.side === 'Long' ? '多' : '空'}
                       </div>

@@ -1,3 +1,8 @@
+import type { MarketId, VenueOrderBook } from '@ai/shared'
+ 
+import type { OrderbookPairConfig } from '@prisma/client'
+import type { RedisService } from '@/common/services/redis.service'
+import { toMarketKey } from '@ai/shared'
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -8,10 +13,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import type { MarketId, VenueOrderBook } from '@ai/shared'
-import { toMarketKey } from '@ai/shared'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import { RedisService } from '@/common/services/redis.service'
 import {
   CreateAny,
   DeleteAny,
@@ -28,8 +30,6 @@ import { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.
 import { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { OrderbookPairConfigService } from '../services/orderbook-pair-config.service'
-// eslint-disable-next-line ts/consistent-type-imports
-import type { OrderbookPairConfig } from '@prisma/client'
 
 @ApiTags('admin-orderbook-config')
 @Controller('admin/orderbook-configs')
