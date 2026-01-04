@@ -2,15 +2,14 @@
 
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import Backend from 'i18next-http-backend'
 import { initReactI18next } from 'react-i18next'
+
+import enCommon from '../../public/locales/en/common.json'
+import zhCommon from '../../public/locales/zh/common.json'
 
 // Prevent multiple initializations
 if (!i18n.isInitialized) {
   i18n
-    // load translation using http -> see /public/locales (i.e. https://github.com/i18next/react-i18next/tree/master/example/react/public/locales)
-    // learn more: https://github.com/i18next/i18next-http-backend
-    .use(Backend)
     // detect user language
     // learn more: https://github.com/i18next/i18next-browser-languagedetector
     .use(LanguageDetector)
@@ -29,13 +28,13 @@ if (!i18n.isInitialized) {
       interpolation: {
         escapeValue: false, // not needed for react as it escapes by default
       },
-      
-      backend: {
-        loadPath: '/locales/{{lng}}/{{ns}}.json',
-      },
 
       defaultNS: 'common',
       ns: ['common'],
+      resources: {
+        en: { common: enCommon },
+        zh: { common: zhCommon },
+      },
 
       react: {
         useSuspense: false,

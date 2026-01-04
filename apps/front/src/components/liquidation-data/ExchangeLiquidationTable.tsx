@@ -75,11 +75,24 @@ function timeToHours(timeFilter: TimeFilter): number {
   }
 }
 
+interface ExchangeRowRaw {
+  exchange: string
+  logo: string
+  coin: CoinSymbol | 'ALL'
+  amountUsd: number
+  longUsd: number
+  shortUsd: number
+  longShare: number
+  ratio: number // share of total amount (0-100)
+  isLongDominant: boolean
+  isTotal?: boolean
+}
+
 export const ExchangeLiquidationTable = () => {
   const { t, i18n } = useTranslation();
   const [coinFilter, setCoinFilter] = useState<CoinFilter>('ALL');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('4h');
-  const [selectedExchange, setSelectedExchange] = useState<ExchangeData | null>(null);
+  const [selectedExchange, setSelectedExchange] = useState<ExchangeRowRaw | null>(null);
 
   const selectedCoin = (coinFilter === 'ALL' ? 'ALL' : (coinFilter as CoinSymbol));
   const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
@@ -94,7 +107,7 @@ export const ExchangeLiquidationTable = () => {
     })
   }, [i18n.language])
 
-  const { data: tableData, loading, error, reload } = useMockData(
+  const { data: tableDataRaw, loading, error, reload } = useMockData(
     async () => {
       // Mock dataset: each row has coin metadata and varies by coin + time.
       const coins: CoinSymbol[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
@@ -102,7 +115,15 @@ export const ExchangeLiquidationTable = () => {
       const timeScale = clamp(hours / 4, 0.5, 6); // baseline 4h
 
       // Build per-exchange-per-coin records
-      const perCoinRows: Array<ExchangeData & { _amountUsd: number; _longUsd: number; _shortUsd: number; _longShare: number }> = [];
+      const perCoinRows: Array<{
+        exchange: string
+        logo: string
+        coin: CoinSymbol
+        amountUsd: number
+        longUsd: number
+        shortUsd: number
+        longShare: number
+      }> = [];
       for (const ex of EXCHANGES) {
         for (const coin of coins) {
           // Base in USD (millions), scaled by time filter.
@@ -118,38 +139,21 @@ export const ExchangeLiquidationTable = () => {
             exchange: ex.exchange,
             logo: ex.logo,
             coin,
-            amount: currencyFormatter.format(amountUsd),
-            long: currencyFormatter.format(longUsd),
-            short: currencyFormatter.format(shortUsd),
-            ratio: '0%',
-            longShortRatio: t('liquidationData.table.longShare', { value: (longShare * 100).toFixed(2) }),
-            isLongDominant: longUsd > shortUsd,
-            _amountUsd: amountUsd,
-            _longUsd: longUsd,
-            _shortUsd: shortUsd,
-            _longShare: longShare,
+            amountUsd,
+            longUsd,
+            shortUsd,
+            longShare,
           });
         }
       }
 
-      interface InternalRow {
-        exchange: string
-        logo: string
-        coin: CoinSymbol | 'ALL'
-        amountUsd: number
-        longUsd: number
-        shortUsd: number
-        longShare: number
-        isLongDominant: boolean
-      }
-
       // Filter by coin, or aggregate "ALL" across coins.
-      const internalRows: InternalRow[] = selectedCoin === 'ALL'
+      const internalRows: Array<Omit<ExchangeRowRaw, 'ratio'>> = selectedCoin === 'ALL'
         ? EXCHANGES.map(ex => {
           const rows = perCoinRows.filter(r => r.exchange === ex.exchange)
-          const amountUsd = rows.reduce((acc, r) => acc + r._amountUsd, 0)
-          const longUsd = rows.reduce((acc, r) => acc + r._longUsd, 0)
-          const shortUsd = rows.reduce((acc, r) => acc + r._shortUsd, 0)
+          const amountUsd = rows.reduce((acc, r) => acc + r.amountUsd, 0)
+          const longUsd = rows.reduce((acc, r) => acc + r.longUsd, 0)
+          const shortUsd = rows.reduce((acc, r) => acc + r.shortUsd, 0)
           const longShare = amountUsd === 0 ? 0 : longUsd / amountUsd
           return {
             exchange: ex.exchange,
@@ -168,11 +172,11 @@ export const ExchangeLiquidationTable = () => {
             exchange: r.exchange,
             logo: r.logo,
             coin: r.coin,
-            amountUsd: r._amountUsd,
-            longUsd: r._longUsd,
-            shortUsd: r._shortUsd,
-            longShare: r._longShare,
-            isLongDominant: r._longUsd > r._shortUsd,
+            amountUsd: r.amountUsd,
+            longUsd: r.longUsd,
+            shortUsd: r.shortUsd,
+            longShare: r.longShare,
+            isLongDominant: r.longUsd > r.shortUsd,
           }))
 
       internalRows.sort((a, b) => b.amountUsd - a.amountUsd)
@@ -181,40 +185,77 @@ export const ExchangeLiquidationTable = () => {
       const totalLongUsd = internalRows.reduce((acc, r) => acc + r.longUsd, 0)
       const totalShortUsd = internalRows.reduce((acc, r) => acc + r.shortUsd, 0)
 
-      const enrichedRows: ExchangeData[] = internalRows.map(r => {
+      const rows: ExchangeRowRaw[] = internalRows.map(r => {
         const ratio = totalAmountUsd === 0 ? 0 : (r.amountUsd / totalAmountUsd) * 100
         return {
           exchange: r.exchange,
           logo: r.logo,
           coin: r.coin,
-          amount: currencyFormatter.format(r.amountUsd),
-          long: currencyFormatter.format(r.longUsd),
-          short: currencyFormatter.format(r.shortUsd),
-          ratio: `${ratio.toFixed(2)}%`,
-          longShortRatio: t('liquidationData.table.longShare', { value: (r.longShare * 100).toFixed(2) }),
+          amountUsd: r.amountUsd,
+          longUsd: r.longUsd,
+          shortUsd: r.shortUsd,
+          longShare: r.longShare,
+          ratio,
           isLongDominant: r.isLongDominant,
         }
       })
 
-      const total: ExchangeData = {
-        exchange: t('common.all'),
+      const total: ExchangeRowRaw = {
+        exchange: 'TOTAL',
         logo: '',
         coin: selectedCoin === 'ALL' ? 'ALL' : selectedCoin,
-        amount: currencyFormatter.format(totalAmountUsd),
-        long: currencyFormatter.format(totalLongUsd),
-        short: currencyFormatter.format(totalShortUsd),
-        ratio: '100%',
-        longShortRatio: t('liquidationData.table.longShare', {
-          value: (totalAmountUsd === 0 ? 0 : (totalLongUsd / totalAmountUsd) * 100).toFixed(2),
-        }),
+        amountUsd: totalAmountUsd,
+        longUsd: totalLongUsd,
+        shortUsd: totalShortUsd,
+        longShare: totalAmountUsd === 0 ? 0 : totalLongUsd / totalAmountUsd,
+        ratio: 100,
         isLongDominant: totalLongUsd > totalShortUsd,
         isTotal: true,
       }
 
-      return [total, ...enrichedRows]
+      return [total, ...rows]
     },
     [coinFilter, timeFilter, hours]
   );
+
+  const tableData: ExchangeData[] = useMemo(() => {
+    if (!tableDataRaw)
+      return []
+
+    return tableDataRaw.map((row) => {
+      const exchange = row.isTotal ? t('common.all') : row.exchange
+      return {
+        exchange,
+        logo: row.logo,
+        coin: row.coin,
+        amount: currencyFormatter.format(row.amountUsd),
+        long: currencyFormatter.format(row.longUsd),
+        short: currencyFormatter.format(row.shortUsd),
+        ratio: `${row.ratio.toFixed(2)}%`,
+        longShortRatio: t('liquidationData.table.longShare', { value: (row.longShare * 100).toFixed(2) }),
+        isLongDominant: row.isLongDominant,
+        isTotal: row.isTotal,
+      }
+    })
+  }, [currencyFormatter, t, tableDataRaw])
+
+  const selectedExchangeDisplay: ExchangeData | null = useMemo(() => {
+    if (!selectedExchange)
+      return null
+
+    return {
+      exchange: selectedExchange.isTotal ? t('common.all') : selectedExchange.exchange,
+      logo: selectedExchange.logo,
+      coin: selectedExchange.coin,
+      amount: currencyFormatter.format(selectedExchange.amountUsd),
+      long: currencyFormatter.format(selectedExchange.longUsd),
+      short: currencyFormatter.format(selectedExchange.shortUsd),
+      ratio: `${selectedExchange.ratio.toFixed(2)}%`,
+      longShortRatio: t('liquidationData.table.longShare', { value: (selectedExchange.longShare * 100).toFixed(2) }),
+      isLongDominant: selectedExchange.isLongDominant,
+      isTotal: selectedExchange.isTotal,
+    }
+  }, [currencyFormatter, selectedExchange, t])
 
   return (
     <div className="flex flex-col gap-6">
@@ -262,13 +303,13 @@ export const ExchangeLiquidationTable = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#30363d]">
-                {tableData?.map((row, index) => (
+                {tableData.map((row, index) => (
                   <tr 
                     key={index} 
                     className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
                       row.isTotal ? 'bg-[#21262d]/50' : ''
                     }`}
-                    onClick={() => setSelectedExchange(row)}
+                    onClick={() => setSelectedExchange(tableDataRaw?.[index] ?? null)}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
@@ -315,16 +356,16 @@ export const ExchangeLiquidationTable = () => {
 
       {/* Detail Modal */}
       <Modal
-        isOpen={!!selectedExchange}
+        isOpen={!!selectedExchangeDisplay}
         onClose={() => setSelectedExchange(null)}
-        title={t('liquidationData.modal.title', { exchange: selectedExchange?.exchange ?? '' })}
+        title={t('liquidationData.modal.title', { exchange: selectedExchangeDisplay?.exchange ?? '' })}
       >
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
               <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
               <p className="text-xl font-bold text-white">
-                {selectedExchange?.coin && selectedExchange.coin !== 'ALL' ? selectedExchange.coin : t('liquidationData.modal.multiAsset')}
+                {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL' ? selectedExchangeDisplay.coin : t('liquidationData.modal.multiAsset')}
               </p>
             </div>
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
