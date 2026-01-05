@@ -20,7 +20,7 @@ interface WhaleTransaction {
   positionValueAsset: string;
   entryPrice: string;
   winRate: string;
-  timeMinutesAgo: number; // 0 => just now
+  timestamp: number; // Date.now() when transaction was created
 }
 
 const initialTransactions: WhaleTransaction[] = [
@@ -36,7 +36,7 @@ const initialTransactions: WhaleTransaction[] = [
     positionValueAsset: '-11.62816 BTC',
     entryPrice: '$87502.6',
     winRate: '68%',
-    timeMinutesAgo: 0,
+    timestamp: Date.now(),
   },
   {
     address: '0x7e1234567890abcdef1234567890abcdef1234fd',
@@ -50,7 +50,7 @@ const initialTransactions: WhaleTransaction[] = [
     positionValueAsset: '52.06421 BTC',
     entryPrice: '$86148.8',
     winRate: '72%',
-    timeMinutesAgo: 1,
+    timestamp: Date.now() - 60_000, // 1 minute ago
   }
 ];
 
@@ -62,12 +62,23 @@ export const RealtimeWhalesTable = () => {
   const [loading, setLoading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
   const { success } = useToast();
 
-  const formatRelativeMinutes = (mins: number) => {
-    if (mins <= 0) return t('whaleTracking.time.justNow');
-    return t('whaleTracking.time.minutesAgo', { count: mins });
+  const formatRelativeTime = (timestamp: number) => {
+    const minutesAgo = Math.floor((currentTime - timestamp) / 60_000);
+    if (minutesAgo <= 0) return t('whaleTracking.time.justNow');
+    if (minutesAgo < 60) return t('whaleTracking.time.minutesAgo', { count: minutesAgo });
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    if (hoursAgo < 24) return t('whaleTracking.time.hoursAgo', { count: hoursAgo });
+    const daysAgo = Math.floor(hoursAgo / 24);
+    if (daysAgo < 7) return t('whaleTracking.time.daysAgo', { count: daysAgo });
+    const weeksAgo = Math.floor(daysAgo / 7);
+    if (weeksAgo < 4) return t('whaleTracking.time.weeksAgo', { count: weeksAgo });
+    const monthsAgo = Math.floor(daysAgo / 30);
+    return t('whaleTracking.time.monthsAgo', { count: monthsAgo });
   };
 
   const fetchNewData = useCallback(async () => {
@@ -114,7 +125,7 @@ export const RealtimeWhalesTable = () => {
       positionValueAsset: `${signedQty} ${randomAsset}`,
       entryPrice: `$${entryPrice.toFixed(1)}`,
       winRate: `${Math.round(50 + Math.random() * 45)}%`,
-      timeMinutesAgo: 0,
+      timestamp: Date.now(),
     };
 
     setTransactions(prev => [newTx, ...prev.slice(0, 14)]);
@@ -140,6 +151,17 @@ export const RealtimeWhalesTable = () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isPaused, fetchNewData]);
+
+  // Update currentTime every 10 seconds to refresh relative time display
+  useEffect(() => {
+    timeUpdateRef.current = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 10_000);
+
+    return () => {
+      if (timeUpdateRef.current) clearInterval(timeUpdateRef.current);
+    };
+  }, []);
 
   const handleShowStats = (address: string) => {
     setSelectedAddress(address);
@@ -242,7 +264,7 @@ export const RealtimeWhalesTable = () => {
                     {tx.winRate}
                   </td>
                   <td className="px-6 py-5 text-[#8b949e] text-caption text-right font-medium">
-                    {formatRelativeMinutes(tx.timeMinutesAgo)}
+                    {formatRelativeTime(tx.timestamp)}
                   </td>
                   <td className="px-6 py-5 text-center">
                     <button 

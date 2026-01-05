@@ -147,7 +147,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'BTC',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '10x',
     valueUSD: '$ 166,034,001.73',
     valueAsset: '-1,899.07241 BTC',
@@ -162,7 +162,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'ETH',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '15x',
     valueUSD: '$ 54,863,721.24',
     valueAsset: '-18,527.5298 ETH',
@@ -177,7 +177,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'SOL',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '20x',
     valueUSD: '$ 18,772,607.28',
     valueAsset: '-151,209.08 SOL',
@@ -201,8 +201,8 @@ const mockOpenOrders: OpenOrder[] = [
     amount: '52,000 ETH', 
     price: '$ 4,277 - 4,277',
     details: [
-      { time: '2025年12月11日', type: '限价', value: '$ 94,094,000.00', amount: '22,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: '开仓', id: '# 265007812594' },
-      { time: '2025年12月11日', type: '限价', value: '$ 128,310,000.00', amount: '30,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: '开仓', id: '# 265007673433' },
+      { time: '2025年12月11日', type: 'limit', value: '$ 94,094,000.00', amount: '22,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007812594' },
+      { time: '2025年12月11日', type: 'limit', value: '$ 128,310,000.00', amount: '30,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007673433' },
     ]
   },
   { 
@@ -214,18 +214,18 @@ const mockOpenOrders: OpenOrder[] = [
     amount: '37,934,068 XRP', 
     price: '$ 3.178 - 3.178',
     details: [
-      { time: '2025年11月27日', type: '限价', value: '$ 40,000,000.00', amount: '12,586,532 XRP', price: '$ 3.178', trigger: '-', status: '开仓', id: '# 265007812595' },
-      { time: '2025年11月27日', type: '限价', value: '$ 80,554,468.10', amount: '25,347,536 XRP', price: '$ 3.178', trigger: '-', status: '开仓', id: '# 265007812596' },
+      { time: '2025年11月27日', type: 'limit', value: '$ 40,000,000.00', amount: '12,586,532 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812595' },
+      { time: '2025年11月27日', type: 'limit', value: '$ 80,554,468.10', amount: '25,347,536 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812596' },
     ]
   },
 ];
 
 const mockRecentTrades: RecentTrade[] = [
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '123.3 HYPE', startPosition: '230,598.33 HYPE', price: '$ 24.306', pnl: '-', fee: '0.36 USDC', value: '$ 2,997.13' },
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '34.17 HYPE', startPosition: '230,564.16 HYPE', price: '$ 24.306', pnl: '-', fee: '0.10 USDC', value: '$ 830.54' },
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '39,120.76 HYPE', startPosition: '191,443.4 HYPE', price: '$ 24.3000178902', pnl: '-', fee: '380.25 USDC', value: '$ 950,634.42' },
-  { time: '2025年12月18日', asset: 'HYPE', action: '开多 加仓', amount: '361.27 HYPE', startPosition: '191,082.13 HYPE', price: '$ 25.111', pnl: '-', fee: '1.09 USDC', value: '$ 9,071.85' },
-  { time: '2025年12月18日', asset: 'HYPE', action: '开多 加仓', amount: '126.92 HYPE', startPosition: '190,955.21 HYPE', price: '$ 25.111', pnl: '-', fee: '0.38 USDC', value: '$ 3,187.09' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '123.3 HYPE', startPosition: '230,598.33 HYPE', price: '$ 24.306', pnl: '-', fee: '0.36 USDC', value: '$ 2,997.13' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '34.17 HYPE', startPosition: '230,564.16 HYPE', price: '$ 24.306', pnl: '-', fee: '0.10 USDC', value: '$ 830.54' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '39,120.76 HYPE', startPosition: '191,443.4 HYPE', price: '$ 24.3000178902', pnl: '-', fee: '380.25 USDC', value: '$ 950,634.42' },
+  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '361.27 HYPE', startPosition: '191,082.13 HYPE', price: '$ 25.111', pnl: '-', fee: '1.09 USDC', value: '$ 9,071.85' },
+  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '126.92 HYPE', startPosition: '190,955.21 HYPE', price: '$ 25.111', pnl: '-', fee: '0.38 USDC', value: '$ 3,187.09' },
 ];
 
 const mockCompletedTrades: CompletedTrade[] = [
@@ -239,13 +239,13 @@ const mockCompletedTrades: CompletedTrade[] = [
 ];
 
 const mockHistoryOrders: HistoryOrder[] = [
-  { time: '2025年12月19日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '39,278.23 HYPE', price: '$ 24.306', trigger: '-', status: '已撤单', id: '# 273191937200' },
-  { time: '2025年12月19日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '160,909.26 HYPE', price: '$ 24.306', trigger: '-', status: '挂单', id: '# 273191937200' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '0 HYPE', price: '$ 24.666', trigger: '-', status: '已撤单', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '230,601.34 HYPE', price: '$ 24.666', trigger: '-', status: '挂单', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '45,155.62 HYPE', price: '$ 25.111', trigger: '-', status: '已撤单', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '219,729.19 HYPE', price: '$ 25.111', trigger: '-', status: '挂单', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '116,124.2 HYPE', price: '$ 25.111', trigger: '-', status: '完全成交', id: '# 273021487169' },
+  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '39,278.23 HYPE', price: '$ 24.306', trigger: '-', status: 'cancelled', id: '# 273191937200' },
+  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '160,909.26 HYPE', price: '$ 24.306', trigger: '-', status: 'openOrder', id: '# 273191937200' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '0 HYPE', price: '$ 24.666', trigger: '-', status: 'cancelled', id: '# 273034661279' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '230,601.34 HYPE', price: '$ 24.666', trigger: '-', status: 'openOrder', id: '# 273034661279' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '45,155.62 HYPE', price: '$ 25.111', trigger: '-', status: 'cancelled', id: '# 273022680305' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '219,729.19 HYPE', price: '$ 25.111', trigger: '-', status: 'openOrder', id: '# 273022680305' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '116,124.2 HYPE', price: '$ 25.111', trigger: '-', status: 'filled', id: '# 273021487169' },
 ];
 
 export const ProfileDataTabs = () => {
@@ -276,22 +276,20 @@ export const ProfileDataTabs = () => {
     return t('whaleTracking.time.duration', { hours: hh, minutes: mm });
   };
 
-  const translateOrderType = (value: string) => {
-    if (value === '限价') return t('whaleTracking.profile.orderType.limit');
-    return value;
+  const translateMarginType = (key: string) => {
+    return t(`whaleTracking.margin.${key}`);
   };
 
-  const translateOrderStatus = (value: string) => {
-    if (value === '开仓') return t('whaleTracking.profile.orderStatus.open');
-    if (value === '已撤单') return t('whaleTracking.profile.orderStatus.cancelled');
-    if (value === '挂单') return t('whaleTracking.profile.orderStatus.openOrder');
-    if (value === '完全成交') return t('whaleTracking.profile.orderStatus.filled');
-    return value;
+  const translateOrderType = (key: string) => {
+    return t(`whaleTracking.profile.orderType.${key}`);
   };
 
-  const translateTradeAction = (value: string) => {
-    if (value === '开多 加仓') return t('whaleTracking.profile.tradeAction.openLongAdd');
-    return value;
+  const translateOrderStatus = (key: string) => {
+    return t(`whaleTracking.profile.orderStatus.${key}`);
+  };
+
+  const translateTradeAction = (key: string) => {
+    return t(`whaleTracking.profile.tradeAction.${key}`);
   };
 
   const toggleOrderExpansion = (orderId: string) => {
@@ -715,7 +713,7 @@ export const ProfileDataTabs = () => {
                     <div className="flex flex-col">
                       <span className="text-white text-sm font-bold">{pos.asset}</span>
                       <span className="text-[#8b949e] text-[10px] font-medium uppercase">
-                        {(pos.marginType === '全仓' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated'))} {pos.leverage}
+                        {translateMarginType(pos.marginType)} {pos.leverage}
                       </span>
                     </div>
                   </div>
@@ -859,7 +857,7 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.price}</td>
                 <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">{order.trigger}</td>
                 <td className="px-6 py-4 text-right">
-                  {order.status === '完全成交' ? (
+                  {order.status === 'filled' ? (
                     <div className="flex items-center justify-end gap-1.5 text-green-400">
                       <div className="w-4 h-4 rounded-full border border-green-400 flex items-center justify-center">
                         <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
@@ -867,7 +865,7 @@ export const ProfileDataTabs = () => {
                         </svg>
                       </div>
                     </div>
-                  ) : order.status === '已撤单' ? (
+                  ) : order.status === 'cancelled' ? (
                     <div className="flex items-center justify-end gap-1.5 text-[#8b949e]">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
