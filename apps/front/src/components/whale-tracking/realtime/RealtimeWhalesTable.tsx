@@ -113,8 +113,13 @@ export const RealtimeWhalesTable = () => {
     const signedQty = side === 'Short' ? `-${qtyText}` : qtyText
     const usdMillions = (notionalUsd / 1e6).toFixed(2)
 
+    // Generate full 42-character address (0x + 40 hex chars)
+    const fullAddress = `0x${Array.from({ length: 40 }, () => 
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('')}`
+
     const newTx: WhaleTransaction = {
-      address: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      address: fullAddress,
       tagKey,
       tagColor: tagStyle.tagColor,
       tagBg: tagStyle.tagBg,
@@ -226,7 +231,7 @@ export const RealtimeWhalesTable = () => {
                           className="text-white text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {tx.address}
+                          {`${tx.address.slice(0, 6)}...${tx.address.slice(-4)}`}
                         </Link>
                         <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
                           <Copy className="w-3.5 h-3.5" />
