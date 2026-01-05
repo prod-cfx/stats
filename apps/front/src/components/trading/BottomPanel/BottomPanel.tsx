@@ -1,10 +1,9 @@
-'use client';
-
 import { FileSearch } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getMockBasePrice } from '@/lib/mock/market';
 
-export const BottomPanel = () => {
+export const BottomPanel = ({ symbol }: { symbol: string }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'history' | 'positions' | 'assets'
   
@@ -20,10 +19,16 @@ export const BottomPanel = () => {
   type OrderTypeKey = 'limit' | 'market'
   type OrderStatusKey = 'open' | 'filled' | 'cancelled'
 
-  const mockOrders = [
-    { id: 1, time: '14:20:33', symbol: 'BTCUSDT', type: 'limit' as OrderTypeKey, side: 'buy', price: '86,500.00', amount: '0.050', filled: '0.000', total: '4,325.00', status: 'open' as OrderStatusKey },
-    { id: 2, time: '14:25:12', symbol: 'BTCUSDT', type: 'limit' as OrderTypeKey, side: 'sell', price: '88,200.00', amount: '0.100', filled: '0.000', total: '8,820.00', status: 'open' as OrderStatusKey },
-  ];
+  const basePrice = useMemo(() => getMockBasePrice(symbol), [symbol]);
+  const mockOrders = useMemo(() => {
+    const buyPrice = basePrice * 0.995;
+    const sellPrice = basePrice * 1.01;
+    const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: basePrice >= 1000 ? 1 : 2, maximumFractionDigits: basePrice >= 1000 ? 1 : 4 });
+    return [
+      { id: 1, time: '14:20:33', symbol, type: 'limit' as OrderTypeKey, side: 'buy', price: fmt(buyPrice), amount: '0.050', filled: '0.000', total: fmt(buyPrice * 0.05), status: 'open' as OrderStatusKey },
+      { id: 2, time: '14:25:12', symbol, type: 'limit' as OrderTypeKey, side: 'sell', price: fmt(sellPrice), amount: '0.100', filled: '0.000', total: fmt(sellPrice * 0.1), status: 'open' as OrderStatusKey },
+    ];
+  }, [basePrice, symbol]);
 
   const mockHistory = [
     { id: 101, time: '10:15:22', symbol: 'BTCUSDT', type: 'market' as OrderTypeKey, side: 'buy', price: '87,120.50', amount: '0.010', filled: '0.010', total: '871.20', status: 'filled' as OrderStatusKey },
@@ -32,7 +37,7 @@ export const BottomPanel = () => {
   ];
 
   const mockPositions = [
-    { id: 'p1', symbol: 'BTCUSDT', side: 'long', size: '0.500', value: '43,510.00', entry: '86,800.00', mark: '87,020.00', liq: '85,100.00', margin: '870.20 (50x)', pnl: '+110.00 (+12.6%)' }
+    { id: 'p1', symbol, side: 'long', size: '0.500', value: '43,510.00', entry: '86,800.00', mark: '87,020.00', liq: '85,100.00', margin: '870.20 (50x)', pnl: '+110.00 (+12.6%)' }
   ];
 
   const renderOrderType = (key: OrderTypeKey) => t(`bottomPanel.orderTypes.${key}`)

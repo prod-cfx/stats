@@ -18,14 +18,22 @@ function normalizeLocale(input?: string | null): AppLocale | null {
 }
 
 export function getRequestLocale(): AppLocale {
-  // i18next-browser-languagedetector defaults to `i18next` cookie key
-  const cookieLng = normalizeLocale(cookies().get('i18next')?.value)
-  if (cookieLng)
-    return cookieLng
+  // In static export mode, we can't use cookies() or headers()
+  // Default to 'zh' and let client-side i18n handle language detection
+  try {
+    // i18next-browser-languagedetector defaults to `i18next` cookie key
+    const cookieLng = normalizeLocale(cookies().get('i18next')?.value)
+    if (cookieLng)
+      return cookieLng
 
-  const accept = headers().get('accept-language')
-  const acceptLng = normalizeLocale(accept?.split(',')?.[0])
-  return acceptLng ?? 'zh'
+    const accept = headers().get('accept-language')
+    const acceptLng = normalizeLocale(accept?.split(',')?.[0])
+    return acceptLng ?? 'zh'
+  }
+  catch {
+    // Fallback for static export mode
+    return 'zh'
+  }
 }
 
 export async function getServerTranslator() {
