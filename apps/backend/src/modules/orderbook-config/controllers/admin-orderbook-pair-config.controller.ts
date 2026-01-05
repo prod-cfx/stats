@@ -1,8 +1,7 @@
-import type { OrderbookPairConfig } from '@prisma/client'
-/* eslint-disable perfectionist/sort-imports */
-
 import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
+// eslint-disable-next-line perfectionist/sort-imports
+import type { OrderbookPairConfig } from '@prisma/client'
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
