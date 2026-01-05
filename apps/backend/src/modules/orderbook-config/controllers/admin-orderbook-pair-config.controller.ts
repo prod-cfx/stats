@@ -1,7 +1,7 @@
-import type { MarketId, VenueOrderBook } from '@ai/shared'
- 
 import type { OrderbookPairConfig } from '@prisma/client'
-import type { RedisService } from '@/common/services/redis.service'
+/* eslint-disable perfectionist/sort-imports */
+
+import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
 import {
@@ -14,6 +14,9 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
+// NestJS 依赖注入需要 RedisService 的运行时类型，不能使用 `import type`
+// eslint-disable-next-line ts/consistent-type-imports
+import { RedisService } from '@/common/services/redis.service'
 import {
   CreateAny,
   DeleteAny,
