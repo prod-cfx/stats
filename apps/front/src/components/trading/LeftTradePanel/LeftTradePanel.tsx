@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const LeftTradePanel = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('open'); // 'open' | 'close'
   const [orderType, setOrderType] = useState('limit'); // 'limit' | 'market' | 'stop'
   const [leverage] = useState(50);
@@ -13,6 +13,12 @@ export const LeftTradePanel = () => {
   const [percent, setPercent] = useState(0);
 
   const percents = [0, 25, 50, 75, 100];
+
+  // Mock raw values (keep numbers so locale switching works)
+  const maxBuyPrice = 87_449.9
+  const minSellPrice = 86_579.2
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+  const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
 
   return (
     <div className="w-full h-full bg-[#161b22] flex flex-col p-4 text-[#c9d1d9] overflow-y-auto no-scrollbar">
@@ -169,11 +175,11 @@ export const LeftTradePanel = () => {
         </div>
         <div className="flex justify-between">
           <span className="text-[#8b949e]">{t('tradePanel.maxBuy')}</span>
-          <span className="text-[#c9d1d9]">¥87,449.9</span>
+          <span className="text-[#c9d1d9]">{priceFormatter.format(maxBuyPrice)} USDT</span>
         </div>
         <div className="flex justify-between">
           <span className="text-[#8b949e]">{t('tradePanel.minSell')}</span>
-          <span className="text-[#c9d1d9]">¥86,579.2</span>
+          <span className="text-[#c9d1d9]">{priceFormatter.format(minSellPrice)} USDT</span>
         </div>
       </div>
     </div>

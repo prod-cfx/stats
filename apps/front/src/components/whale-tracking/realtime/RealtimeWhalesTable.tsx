@@ -78,13 +78,43 @@ export const RealtimeWhalesTable = () => {
     // Simulate prepending a new random transaction
     const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'];
     const randomAsset = assets[Math.floor(Math.random() * assets.length)];
+    const side = Math.random() > 0.5 ? 'Long' : 'Short'
+    const tagKey = Math.random() > 0.5 ? 'swing' : 'trend'
+
+    const tagStyle = tagKey === 'swing'
+      ? { tagColor: '#60a5fa', tagBg: '#3b82f633' }
+      : { tagColor: '#c084fc', tagBg: '#a855f733' }
+
+    const basePriceByAsset: Record<string, number> = {
+      BTC: 87_000,
+      ETH: 3_200,
+      SOL: 120,
+      XRP: 2.3,
+      DOGE: 0.12,
+    }
+
+    const entryPrice = (basePriceByAsset[randomAsset] ?? 100) * (0.95 + Math.random() * 0.1)
+    const notionalUsd = (1_000_000 + Math.random() * 5_000_000)
+    const quantity = notionalUsd / entryPrice
+    const qtyAbs = randomAsset === 'BTC' ? 5 : randomAsset === 'ETH' ? 4 : randomAsset === 'SOL' ? 2 : 0
+    const qtyFixed = Math.max(2, Math.min(6, qtyAbs))
+    const qtyText = quantity.toFixed(qtyFixed)
+    const signedQty = side === 'Short' ? `-${qtyText}` : qtyText
+    const usdMillions = (notionalUsd / 1e6).toFixed(2)
+
     const newTx: WhaleTransaction = {
-      ...initialTransactions[0],
       address: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      tagKey,
+      tagColor: tagStyle.tagColor,
+      tagBg: tagStyle.tagBg,
       asset: randomAsset,
-      side: Math.random() > 0.5 ? 'Long' : 'Short',
+      side,
+      marginType: Math.random() > 0.5 ? 'Cross' : 'Isolated',
+      positionValueUSD: `$${usdMillions}M`,
+      positionValueAsset: `${signedQty} ${randomAsset}`,
+      entryPrice: `$${entryPrice.toFixed(1)}`,
+      winRate: `${Math.round(50 + Math.random() * 45)}%`,
       timeMinutesAgo: 0,
-      positionValueUSD: `$${(Math.random() * 5 + 1).toFixed(2)}M`,
     };
 
     setTransactions(prev => [newTx, ...prev.slice(0, 14)]);
