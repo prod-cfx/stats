@@ -2,23 +2,24 @@
 
 import { Activity, BarChart2, Database, Layers, Map, PieChart, Plus, TrendingUp } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 
 interface AddWidgetModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (widget: string) => void;
+  onSelect: (widgetId: string) => void;
 }
 
 const widgetItems = [
-  { id: 'liquidation-map', label: '清算地图', icon: Map, color: '#3b82f6' },
-  { id: 'ls-ratio', label: '各交易所多空比', icon: BarChart2, color: '#10b981' },
-  { id: 'agg-orderbook', label: '聚合挂单', icon: Layers, color: '#f59e0b' },
-  { id: 'agg-oi', label: '聚合持仓量', icon: Activity, color: '#8b5cf6' },
-  { id: 'agg-volume', label: '聚合成交量', icon: Database, color: '#ec4899' },
-  { id: 'liquidation-data', label: '爆仓数据', icon: TrendingUp, color: '#ef4444' },
-  { id: 'public-companies', label: '币股', icon: PieChart, color: '#06b6d4' },
-  { id: 'prediction-market', label: '预测市场', icon: Info, color: '#6366f1' },
+  { id: 'liquidation-map', labelKey: 'dashboard.widgets.liquidationMap', icon: Map, color: '#3b82f6' },
+  { id: 'ls-ratio', labelKey: 'dashboard.widgets.lsRatio', icon: BarChart2, color: '#10b981' },
+  { id: 'agg-orderbook', labelKey: 'dashboard.widgets.aggOrderbook', icon: Layers, color: '#f59e0b' },
+  { id: 'agg-oi', labelKey: 'dashboard.widgets.aggOI', icon: Activity, color: '#8b5cf6' },
+  { id: 'agg-volume', labelKey: 'dashboard.widgets.aggVolume', icon: Database, color: '#ec4899' },
+  { id: 'liquidation-data', labelKey: 'dashboard.widgets.liquidationData', icon: TrendingUp, color: '#ef4444' },
+  { id: 'public-companies', labelKey: 'dashboard.widgets.publicCompanies', icon: PieChart, color: '#06b6d4' },
+  { id: 'prediction-market', labelKey: 'dashboard.widgets.predictionMarket', icon: Info, color: '#6366f1' },
 ];
 
 function Info(props: any) {
@@ -43,6 +44,7 @@ function Info(props: any) {
 }
 
 export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProps) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -58,18 +60,18 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="添加一个组件"
+      title={t('dashboard.editor.addWidgetTitle')}
       width="max-w-2xl"
       loading={loading}
       footer={(
         <div className="text-center text-xs text-[#8b949e]">
-          选择一个组件添加到您的看板中 · 更多功能开发中
+          {t('dashboard.editor.addWidgetFooter')}
         </div>
       )}
     >
       <div className="space-y-4">
         <p className="text-[#8b949e] text-[10px] font-bold tracking-[0.2em] uppercase mb-6">
-          WHAT KIND OF INTEL DO YOU WANT TO SEE?
+          {t('dashboard.editor.addWidgetHint')}
         </p>
         
         <div className="grid grid-cols-1 gap-3">
@@ -78,7 +80,7 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
               type="button"
               key={item.id}
               onClick={() => {
-                onSelect(item.label);
+                onSelect(item.id);
                 onClose();
               }}
               className="flex items-center gap-4 p-4 rounded-xl bg-[#21262d] border border-transparent gradient-border-hover transition-all group text-left animate-in fade-in slide-in-from-bottom-1 duration-300"
@@ -90,7 +92,7 @@ export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProp
                 <item.icon className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <span className="text-white font-bold text-lg">{item.label}</span>
+                <span className="text-white font-bold text-lg">{t(item.labelKey)}</span>
               </div>
               <div className="text-[#8b949e] group-hover:text-white transition-colors">
                 <Plus className="w-5 h-5" />

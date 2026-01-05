@@ -668,6 +668,24 @@
       "defaultDescription": "这是一个精选的数据看板，聚合了实时的链上交易指标、资产流动性分析以及巨鲸动向追踪。通过可视化的图表和深度的数据表格，帮助交易者快速捕捉市场信号。"
     },
     "saves": "{{count}} 保存",
-    "creator": "创建者 @{{name}}"
+    "creator": "创建者 @{{name}}",
+    "widgets": {
+      "liquidationMap": "清算地图",
+      "lsRatio": "各交易所多空比",
+      "aggOrderbook": "聚合挂单",
+      "aggOI": "聚合持仓量",
+      "aggVolume": "聚合成交量",
+      "liquidationData": "爆仓数据",
+      "publicCompanies": "币股",
+      "predictionMarket": "预测市场"
+    },
+    "editor": {
+      "addWidgetTitle": "添加一个组件",
+      "addWidgetFooter": "选择一个组件添加到您的看板中 · 更多功能开发中",
+      "addWidgetHint": "您想看到什么样的信息？",
+      "descriptionPlaceholder": "无说明",
+      "addTag": "添加标签",
+      "widgetReady": "组件详情已就绪"
+    }
   }
 }

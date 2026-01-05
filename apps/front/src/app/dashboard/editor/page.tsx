@@ -2,6 +2,7 @@
 
 import { Bookmark, Compass, Layout } from 'lucide-react';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardEditorSidebar } from '@/components/dashboard/DashboardEditorSidebar';
 import { EditorCanvas } from '@/components/dashboard/EditorCanvas';
 import { Navbar } from '@/components/layout/Navbar';
@@ -9,12 +10,13 @@ import { Navbar } from '@/components/layout/Navbar';
 type TabType = 'explore' | 'my' | 'saved';
 
 export default function DashboardEditorPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('explore');
 
   const tabs = [
-    { id: 'explore', label: 'Explore Dashboards', icon: Compass },
-    { id: 'my', label: 'My Dashboards', icon: Layout },
-    { id: 'saved', label: 'Saved Dashboards', icon: Bookmark },
+    { id: 'explore', labelKey: 'dashboard.tabs.explore', icon: Compass },
+    { id: 'my', labelKey: 'dashboard.tabs.my', icon: Layout },
+    { id: 'saved', labelKey: 'dashboard.tabs.saved', icon: Bookmark },
   ];
 
   return (
@@ -44,7 +46,7 @@ export default function DashboardEditorPage() {
                     }`}
                   >
                     <Icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'text-[#8b949e]'}`} />
-                    <span>{tab.label}</span>
+                    <span>{t(tab.labelKey)}</span>
                     {isActive && (
                       <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
                     )}

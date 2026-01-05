@@ -668,6 +668,24 @@
       "defaultDescription": "A curated dashboard with real-time on-chain trading metrics, liquidity analysis, and whale tracking—built to help traders spot signals faster."
     },
     "saves": "{{count}} saves",
-    "creator": "Creator @{{name}}"
+    "creator": "Creator @{{name}}",
+    "widgets": {
+      "liquidationMap": "Liquidation Map",
+      "lsRatio": "Long/Short Ratio",
+      "aggOrderbook": "Aggregated Orderbook",
+      "aggOI": "Aggregated Open Interest",
+      "aggVolume": "Aggregated Volume",
+      "liquidationData": "Liquidation Data",
+      "publicCompanies": "Crypto Equities",
+      "predictionMarket": "Prediction Market"
+    },
+    "editor": {
+      "addWidgetTitle": "Add a Widget",
+      "addWidgetFooter": "Select a widget to add to your dashboard · More features in development",
+      "addWidgetHint": "What kind of intel do you want to see?",
+      "descriptionPlaceholder": "No description",
+      "addTag": "Add Tag",
+      "widgetReady": "Widget ready"
+    }
   }
 }
