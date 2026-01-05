@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
 import { EmptyState, LoadingState } from '@/components/ui/loading';
 import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard';
@@ -11,6 +12,7 @@ import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSumma
 import { useMockData } from '@/hooks/use-mock-data';
 
 export function ProfileClient({ address }: { address: string }) {
+  const { t } = useTranslation();
   // Check if address is valid or present
   const isValidAddress = address && address.startsWith('0x');
 
@@ -60,8 +62,8 @@ export function ProfileClient({ address }: { address: string }) {
 
           {!loading && !isValidAddress && (
             <EmptyState 
-              title="无效的钱包地址" 
-              description="请提供正确的 EVM 兼容钱包地址以查看深度档案。" 
+              title={t('whaleTracking.profile.invalidAddressTitle')} 
+              description={t('whaleTracking.profile.invalidAddressDescription')} 
             />
           )}
         </div>

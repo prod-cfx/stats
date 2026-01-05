@@ -3,9 +3,11 @@
 import { ChevronDown } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 
+type FilterOption = string | { value: string; label: string };
+
 interface FilterButtonProps {
   value: string;
-  options: string[];
+  options: FilterOption[];
   onChange: (v: string) => void;
   minWidth?: string;
   className?: string;
@@ -14,6 +16,12 @@ interface FilterButtonProps {
 export const FilterButton = ({ value, options, onChange, minWidth = "100px", className = "" }: FilterButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const getOptionValue = (opt: FilterOption) => (typeof opt === 'string' ? opt : opt.value);
+  const getOptionLabel = (opt: FilterOption) => (typeof opt === 'string' ? opt : opt.label);
+  const selectedLabel = getOptionLabel(
+    options.find(opt => getOptionValue(opt) === value) ?? value
+  );
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -37,30 +45,33 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
         }`}
         style={{ minWidth }}
       >
-        <span className={`mr-2 ${isOpen ? 'text-white font-bold' : ''}`}>{value}</span>
+        <span className={`mr-2 ${isOpen ? 'text-white font-bold' : ''}`}>{selectedLabel}</span>
         <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[#8b949e]'}`} />
       </button>
       
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150">
           <div className="max-h-60 overflow-y-auto no-scrollbar">
-            {options.map((opt) => (
+            {options.map((opt) => {
+              const optValue = getOptionValue(opt);
+              const optLabel = getOptionLabel(opt);
+              return (
               <button
-                key={opt}
+                key={optValue}
                 type="button"
                 onClick={() => {
-                  onChange(opt);
+                  onChange(optValue);
                   setIsOpen(false);
                 }}
                 className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
-                  value === opt 
+                  value === optValue 
                     ? 'bg-gradient-to-r from-primary to-secondary text-white font-bold' 
                     : 'text-[#e6edf3] hover:bg-primary/10 hover:text-primary'
                 }`}
               >
-                {opt}
+                {optLabel}
               </button>
-            ))}
+            )})}
           </div>
         </div>
       )}

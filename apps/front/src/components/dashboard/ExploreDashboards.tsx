@@ -2,6 +2,7 @@
 
 import { Search } from 'lucide-react';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 import { DashboardCard } from './DashboardCard';
@@ -75,6 +76,7 @@ const communityDashboards = [
 ];
 
 export const ExploreDashboards = () => {
+  const { t } = useTranslation();
   const [selectedDashboard, setSelectedDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -88,14 +90,14 @@ export const ExploreDashboards = () => {
   return (
     <div className="flex flex-col gap-10">
       <div className="space-y-6">
-        <PageTitle>探索看板</PageTitle>
+        <PageTitle>{t('dashboard.explore.title')}</PageTitle>
         
         {/* Search Input */}
         <div className="relative max-w-4xl group">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
           <input 
             type="text" 
-            placeholder="搜索看板、交易员或策略..." 
+            placeholder={t('dashboard.explore.searchPlaceholder')} 
             className="w-full bg-[#161b22] border border-[#30363d] rounded-xl pl-12 pr-4 py-3.5 text-body text-white focus:outline-none focus:border-primary focus:bg-[#0d1117] transition-all placeholder:text-[#8b949e]"
           />
         </div>
@@ -104,7 +106,7 @@ export const ExploreDashboards = () => {
       {/* Featured Section */}
       <div className="space-y-6">
         <div className="flex items-center gap-4 border-b border-[#30363d]">
-          <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-primary pb-4 -mb-[1px]">特色看板</h2>
+          <h2 className="text-label font-bold text-white uppercase tracking-wider border-b-2 border-primary pb-4 -mb-[1px]">{t('dashboard.explore.featured')}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {featuredDashboards.map((card, idx) => (
@@ -119,7 +121,7 @@ export const ExploreDashboards = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 pb-12">
         {/* Hot Dashboards */}
         <div className="space-y-6">
-          <SectionTitle>热门看板</SectionTitle>
+          <SectionTitle>{t('dashboard.explore.hot')}</SectionTitle>
           <div className="flex flex-col gap-4">
             {hotDashboards.map((item, idx) => (
               <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
@@ -131,7 +133,7 @@ export const ExploreDashboards = () => {
 
         {/* Community Dashboards */}
         <div className="space-y-6">
-          <SectionTitle>社区看板</SectionTitle>
+          <SectionTitle>{t('dashboard.explore.community')}</SectionTitle>
           <div className="flex flex-col gap-4">
             {communityDashboards.map((item, idx) => (
               <div key={idx} onClick={() => handleCardClick(item)} className="cursor-pointer">
@@ -161,14 +163,14 @@ export const ExploreDashboards = () => {
               </div>
               <div className="flex flex-col">
                 <span className="text-white font-bold text-body">@{selectedDashboard?.creator}</span>
-                <span className="text-[#8b949e] text-xs">发布于 3 天前</span>
+                <span className="text-[#8b949e] text-xs">{t('dashboard.explore.publishedAgo', { days: 3 })}</span>
               </div>
               <button type="button" className="ml-auto px-6 py-2 bg-primary text-white rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all">
-                保存到我的看板
+                {t('dashboard.explore.saveToMyDashboards')}
               </button>
             </div>
             <p className="text-[#c9d1d9] leading-relaxed">
-              {selectedDashboard?.description || '这是一个精选的数据看板，聚合了实时的链上交易指标、资产流动性分析以及巨鲸动向追踪。通过可视化的图表和深度的数据表格，帮助交易者快速捕捉市场信号。'}
+              {selectedDashboard?.description || t('dashboard.explore.defaultDescription')}
             </p>
           </div>
         </div>

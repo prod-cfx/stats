@@ -3,6 +3,7 @@
 import ReactECharts from 'echarts-for-react';
 import { Info } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SummaryCardProps {
   label: string;
@@ -14,6 +15,7 @@ interface SummaryCardProps {
 }
 
 const SummaryCard = ({ label, value, subText, isPerformance, chartData }: SummaryCardProps) => {
+  const { t } = useTranslation();
   const chartOption = {
     backgroundColor: 'transparent',
     series: [
@@ -37,23 +39,23 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData }: Summar
         <div className="flex flex-col gap-4 mt-auto">
           <div className="grid grid-cols-2 gap-6">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-caption font-medium">胜率</span>
+              <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.profile.summary.winRate')}</span>
               <span className="text-white text-h2 font-bold">28.57 %</span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-caption font-medium">最大回撤</span>
+              <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.profile.summary.maxDrawdown')}</span>
               <span className="text-white text-h2 font-bold">59.03 %</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-caption font-medium">已成交订单</span>
+              <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.profile.summary.filledOrders')}</span>
               <span className="text-white text-body font-bold ml-auto">77</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-caption font-medium">平仓次数</span>
+              <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.profile.summary.closes')}</span>
               <span className="text-white text-body font-bold ml-auto">7</span>
             </div>
           </div>
@@ -74,67 +76,64 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData }: Summar
 };
 
 export const ProfileSummary = () => {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <SummaryCard 
-        label="账户总价值" 
+        label={t('whaleTracking.profile.summary.accountValue')} 
         value="$ 792,013.10" 
         chartData={[
-          { value: 792013.09, name: '永续合约', itemStyle: { color: '#5470c6' } },
-          { value: 0.01, name: '现货', itemStyle: { color: '#91cc75' } }
+          { value: 792013.09, name: t('whaleTracking.profile.summary.perpetual'), itemStyle: { color: '#5470c6' } },
+          { value: 0.01, name: t('whaleTracking.profile.summary.spot'), itemStyle: { color: '#91cc75' } }
         ]}
         subText={
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#5470c6]" />
-              <span>永续合约</span>
+              <span>{t('whaleTracking.profile.summary.perpetual')}</span>
               <span className="text-[#e5e5e5] ml-auto">$ 792,013.09</span>
             </div>
             <div className="flex items-center gap-2 text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#91cc75]" />
-              <span>现货</span>
+              <span>{t('whaleTracking.profile.summary.spot')}</span>
               <span className="text-[#e5e5e5] ml-auto">$ 0.01</span>
             </div>
           </div>
         }
       />
       <SummaryCard 
-        label="可用保证金" 
+        label={t('whaleTracking.profile.summary.availableMargin')} 
         value="$ 73,015.45" 
         chartData={[
-          { value: 9.22, name: '已用', itemStyle: { color: '#fac858' } },
-          { value: 90.78, name: '可用', itemStyle: { color: '#3a3a3a' } }
+          { value: 9.22, name: t('whaleTracking.profile.summary.used'), itemStyle: { color: '#fac858' } },
+          { value: 90.78, name: t('whaleTracking.profile.summary.available'), itemStyle: { color: '#3a3a3a' } }
         ]}
         subText={
           <div className="flex items-center gap-2 text-caption text-[#8b949e]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-            <span>可提取</span>
+            <span>{t('whaleTracking.profile.summary.withdrawable')}</span>
             <span className="text-[#e5e5e5] ml-auto">9.22 %</span>
           </div>
         }
       />
       <SummaryCard 
-        label="总持仓价值" 
+        label={t('whaleTracking.profile.summary.totalPositionValue')} 
         value="$ 31,034,500" 
         chartData={[
-          { value: 100, name: '空头', itemStyle: { color: '#fac858' } }
+          { value: 100, name: t('whaleTracking.profile.summary.shortExposure'), itemStyle: { color: '#fac858' } }
         ]}
         subText={
           <div className="flex items-center gap-2 text-caption text-[#8b949e]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-            <span>杠杆比</span>
+            <span>{t('whaleTracking.profile.summary.leverageRatio')}</span>
             <Info className="w-3 h-3 text-[#8b949e]" />
             <span className="text-[#e5e5e5] ml-auto">39.18x</span>
           </div>
         }
       />
       <SummaryCard 
-        label="交易表现 (1周)" 
+        label={t('whaleTracking.profile.summary.performanceWeek')} 
         isPerformance
-        stats={[
-          { label: '胜率', value: '28.57 %', sub: '已成交订单', subVal: '77' },
-          { label: '最大回撤', value: '59.03 %', sub: '平仓次数', subVal: '7' }
-        ]}
       />
     </div>
   );

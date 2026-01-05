@@ -85,14 +85,15 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
           color: '#999999',
           fontSize: 12,
           interval: (index) => {
-            // Show labels for 00:00 or at regular intervals to match "20日, 21日..."
+            // Show labels for 00:00 or at regular intervals
             const item = data[index];
             return item.ts.includes(' 00:00') || item.ts.includes(' 12:00');
           },
           formatter: (value: string) => {
-            // Example: 2025年12月23日 00:00 -> 23日
-            const match = value.match(/(\d+)日/);
-            return match ? match[0] : '';
+            // Example: 2025-12-23 00:00 -> 23
+            const match = value.match(/-(\d{2})\s/);
+            if (!match) return '';
+            return String(Number.parseInt(match[1], 10));
           },
         },
       },

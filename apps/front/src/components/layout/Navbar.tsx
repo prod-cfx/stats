@@ -4,34 +4,38 @@ import { ChevronDown, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import '@/lib/i18n'
 
 export const Navbar = () => {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   const navLinks = [
-    { name: '行情', href: '/' },
+    { name: t('nav.home'), href: '/' },
     { 
-      name: '数据', 
-      href: '/liquidation-map/',
+      name: t('nav.data'), 
+      href: '/liquidation-map',
       children: [
-        { name: '清算地图', href: '/liquidation-map/' },
-        { name: '交易所多空比', href: '/long-short-ratio/' },
-        { name: '聚合挂单', href: '/aggregated-orderbook/' },
-        { name: '爆仓数据', href: '/liquidation-data/' },
-        { name: '预测市场', href: '/prediction-market/' },
-        { name: '币股', href: '/public-companies/' },
+        { name: t('nav.liquidation_map'), href: '/liquidation-map' },
+        { name: t('nav.long_short_ratio'), href: '/long-short-ratio' },
+        { name: t('nav.aggregated_orderbook'), href: '/aggregated-orderbook' },
+        { name: t('nav.liquidation_data'), href: '/liquidation-data' },
+        { name: t('nav.prediction_market'), href: '/prediction-market' },
+        { name: t('nav.public_companies'), href: '/public-companies' },
       ]
     },
     { 
-      name: '鲸鱼', 
-      href: '/whale-tracking/discover/',
+      name: t('nav.whales'), 
+      href: '/whale-tracking/discover',
       children: [
-        { name: '发现', href: '/whale-tracking/discover/' },
-        { name: '实时巨鲸', href: '/whale-tracking/realtime/' },
-        { name: '鲸鱼持仓', href: '/whale-tracking/holdings/' },
+        { name: t('nav.discover'), href: '/whale-tracking/discover' },
+        { name: t('nav.realtime_whales'), href: '/whale-tracking/realtime' },
+        { name: t('nav.whale_holdings'), href: '/whale-tracking/holdings' },
       ]
     },
-    { name: '看板', href: '/dashboard/' },
+    { name: t('nav.dashboard'), href: '/dashboard' },
   ];
 
   return (
@@ -130,14 +134,15 @@ export const Navbar = () => {
           </div>
           <input 
             type="text" 
-            placeholder="搜索" 
+            placeholder={t('nav.search')} 
             className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] focus:outline-none focus:bg-[#0d1117] transition-all w-64 relative z-0 group-focus-within:border-transparent"
           />
         </div>
-        <button type="button" className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors">登录</button>
+        <button type="button" className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors">{t('nav.login')}</button>
         <button type="button" className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95">
-          注册
+          {t('nav.register')}
         </button>
+        <LanguageSwitcher />
       </div>
     </nav>
   );

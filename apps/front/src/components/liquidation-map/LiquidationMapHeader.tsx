@@ -1,30 +1,20 @@
+'use client';
+
 import { RefreshCcw } from 'lucide-react';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { FilterButton } from '@/components/ui/FilterButton';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 interface LiquidationMapHeaderProps {
   symbol: string;
   setSymbol: (s: string) => void;
-  range: string;
-  setRange: (r: string) => void;
+  range: '1d' | '7d' | '30d';
+  setRange: (r: '1d' | '7d' | '30d') => void;
   exchangeType: string;
   setExchangeType: (e: string) => void;
   onRefresh: () => void;
 }
-
-const symbolNames: Record<string, string> = {
-  'BTC': '比特币',
-  'ETH': '以太坊',
-  'SOL': 'Solana',
-  'XRP': '瑞波币',
-  'DOGE': '狗狗币',
-  'BNB': '币安币',
-  'HYPE': 'Hyperliquid',
-  'LINK': 'Chainlink',
-  'AVAX': 'Avalanche',
-  'ADA': 'Cardano'
-};
 
 export const LiquidationMapHeader = ({ 
   symbol, 
@@ -35,17 +25,24 @@ export const LiquidationMapHeader = ({
   setExchangeType,
   onRefresh 
 }: LiquidationMapHeaderProps) => {
+  const { t } = useTranslation();
+  const symbolName = t(`symbols.${symbol}`, { defaultValue: symbol });
+
   return (
     <div className="flex flex-col gap-8 mb-10">
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-3">
-          <PageTitle>{symbolNames[symbol] || symbol}交易所清算地图</PageTitle>
-          <BodyText>实时全网爆仓热力图数据</BodyText>
+          <PageTitle>{t('liquidationMap.title', { symbol: symbolName })}</PageTitle>
+          <BodyText>{t('liquidationMap.subtitle')}</BodyText>
         </div>
         <div className="flex items-center gap-3">
           <FilterButton 
             value={exchangeType} 
-            options={['All', 'CEX', 'DEX']} 
+            options={[
+              { value: 'All', label: t('liquidationMap.exchangeType.all') },
+              { value: 'CEX', label: t('liquidationMap.exchangeType.cex') },
+              { value: 'DEX', label: t('liquidationMap.exchangeType.dex') },
+            ]} 
             onChange={setExchangeType} 
           />
           <FilterButton 
@@ -55,8 +52,12 @@ export const LiquidationMapHeader = ({
           />
           <FilterButton 
             value={range} 
-            options={['1天', '7天', '30天']} 
-            onChange={setRange} 
+            options={[
+              { value: '1d', label: t('liquidationMap.range.1d') },
+              { value: '7d', label: t('liquidationMap.range.7d') },
+              { value: '30d', label: t('liquidationMap.range.30d') },
+            ]} 
+            onChange={(v) => setRange(v as any)} 
           />
           <button 
             type="button"

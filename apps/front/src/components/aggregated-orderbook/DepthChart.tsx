@@ -2,6 +2,7 @@
 
 import ReactECharts from 'echarts-for-react';
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface DepthDataPoint {
   price: number;
@@ -20,6 +21,7 @@ interface DepthChartProps {
 }
 
 export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
+  const { t } = useTranslation();
   const option = useMemo(() => {
     // Sort data for depth chart
     const sortedBids = [...bids].sort((a, b) => a.price - b.price); // Low to High for bids
@@ -80,7 +82,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
               <div style="font-weight: 700; font-size: 15px; margin-bottom: 16px; color: #111827; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px;">${dataPoint.price.toFixed(2)}</div>
               ${breakdownHtml}
               <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #4b5563; font-weight: 600; font-size: 13px;">总计</span>
+                <span style="color: #4b5563; font-weight: 600; font-size: 13px;">${t('aggregatedOrderbook.depth.total')}</span>
                 <span style="font-weight: 700; color: #111827; font-size: 14px;">${dataPoint.total.toFixed(2)} BTC</span>
               </div>
             </div>
@@ -163,7 +165,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
         }
       ]
     };
-  }, [bids, asks]);
+  }, [bids, asks, t]);
 
   return (
     <div className="w-full h-full min-h-[400px]">

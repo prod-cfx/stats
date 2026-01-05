@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export const LeftTradePanel = () => {
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('open'); // 'open' | 'close'
   const [orderType, setOrderType] = useState('limit'); // 'limit' | 'market' | 'stop'
   const [leverage] = useState(50);
@@ -11,6 +13,12 @@ export const LeftTradePanel = () => {
   const [percent, setPercent] = useState(0);
 
   const percents = [0, 25, 50, 75, 100];
+
+  // Mock raw values (keep numbers so locale switching works)
+  const maxBuyPrice = 87_449.9
+  const minSellPrice = 86_579.2
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+  const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
 
   return (
     <div className="w-full h-full bg-[#161b22] flex flex-col p-4 text-[#c9d1d9] overflow-y-auto no-scrollbar">
@@ -23,7 +31,7 @@ export const LeftTradePanel = () => {
             activeTab === 'open' ? 'bg-[#2ea043] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
           }`}
         >
-          开仓
+          {t('tradePanel.openPosition')}
         </button>
         <button
           type="button"
@@ -32,14 +40,14 @@ export const LeftTradePanel = () => {
             activeTab === 'close' ? 'bg-[#374151] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
           }`}
         >
-          平仓
+          {t('tradePanel.closePosition')}
         </button>
       </div>
 
       {/* Margin Mode & Leverage */}
       <div className="flex gap-2 mb-4 flex-none">
         <div className="flex-1 bg-[#21262d] border border-[#30363d] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[#30363d] transition-colors">
-          <span className="text-xs">全仓</span>
+          <span className="text-xs">{t('tradePanel.marginCross')}</span>
           <span className="text-[10px] text-[#8b949e]">▼</span>
         </div>
         <div className="flex-1 bg-[#21262d] border border-[#30363d] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[#30363d] transition-colors">
@@ -61,7 +69,11 @@ export const LeftTradePanel = () => {
                 : 'text-[#8b949e] hover:text-[#c9d1d9]'
             }`}
           >
-            {type === 'limit' ? '限价委托' : type === 'market' ? '市价委托' : '止盈止损'}
+            {type === 'limit'
+              ? t('tradePanel.orderTypeLimit')
+              : type === 'market'
+                ? t('tradePanel.orderTypeMarket')
+                : t('tradePanel.orderTypeStop')}
             {orderType === type && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-400" />
             )}
@@ -72,7 +84,7 @@ export const LeftTradePanel = () => {
       {/* Inputs */}
       <div className="space-y-4 mb-6 flex-none">
         <div>
-          <label className="text-xs text-[#8b949e] mb-1.5 block">价格 (USDT)</label>
+          <label className="text-xs text-[#8b949e] mb-1.5 block">{t('tradePanel.priceLabel')}</label>
           <div className="relative">
             <input
               type="text"
@@ -81,13 +93,13 @@ export const LeftTradePanel = () => {
               className="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
             />
             <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[#374151] px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#48566a] transition-colors">
-              最优价
+              {t('tradePanel.bestPrice')}
             </button>
           </div>
         </div>
 
         <div>
-          <label className="text-xs text-[#8b949e] mb-1.5 block">数量 (BTC)</label>
+          <label className="text-xs text-[#8b949e] mb-1.5 block">{t('tradePanel.amountLabel')}</label>
           <input
             type="text"
             value={amount}
@@ -124,15 +136,15 @@ export const LeftTradePanel = () => {
       {/* Stats */}
       <div className="space-y-2 text-xs text-[#8b949e] mb-6 flex-none">
         <div className="flex justify-between items-center">
-          <span>可用</span>
+          <span>{t('tradePanel.available')}</span>
           <span className="text-[#c9d1d9] font-medium">-- USDT</span>
         </div>
         <div className="flex justify-between items-center">
-          <span>可开多</span>
+          <span>{t('tradePanel.maxLong')}</span>
           <span className="text-[#c9d1d9] font-medium">-- BTC</span>
         </div>
         <div className="flex justify-between items-center">
-          <span>可开空</span>
+          <span>{t('tradePanel.maxShort')}</span>
           <span className="text-[#c9d1d9] font-medium">-- BTC</span>
         </div>
       </div>
@@ -144,30 +156,30 @@ export const LeftTradePanel = () => {
           onClick={() => console.log('TODO: Open Long')}
           className="flex-1 bg-[#2ea043] hover:bg-[#3fb950] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-green-900/20"
         >
-          开多
+          {t('tradePanel.openLong')}
         </button>
         <button
           type="button"
           onClick={() => console.log('TODO: Open Short')}
           className="flex-1 bg-[#da3633] hover:bg-[#f85149] text-white font-bold py-2.5 rounded text-sm transition-all active:scale-[0.98] shadow-lg shadow-red-900/20"
         >
-          开空
+          {t('tradePanel.openShort')}
         </button>
       </div>
 
       {/* Cost Info - Fixed below buttons */}
       <div className="space-y-2 text-xs border-t border-[#30363d] pt-4 mt-4 flex-none">
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">成本</span>
+          <span className="text-[#8b949e]">{t('tradePanel.cost')}</span>
           <span className="text-[#c9d1d9]">0.00 USDT</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">最高买价</span>
-          <span className="text-[#c9d1d9]">¥87,449.9</span>
+          <span className="text-[#8b949e]">{t('tradePanel.maxBuy')}</span>
+          <span className="text-[#c9d1d9]">{priceFormatter.format(maxBuyPrice)} USDT</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">最低卖价</span>
-          <span className="text-[#c9d1d9]">¥86,579.2</span>
+          <span className="text-[#8b949e]">{t('tradePanel.minSell')}</span>
+          <span className="text-[#c9d1d9]">{priceFormatter.format(minSellPrice)} USDT</span>
         </div>
       </div>
     </div>

@@ -1,0 +1,691 @@
+{
+  "app": {
+    "title": "Coinflux - 高级加密数据聚合器",
+    "description": "专业的加密资产数据聚合与多维行情分析终端"
+  },
+  "nav": {
+    "dashboard": "看板",
+    "markets": "市场",
+    "analysis": "分析",
+    "settings": "设置",
+    "home": "行情",
+    "data": "数据",
+    "liquidation_map": "清算地图",
+    "long_short_ratio": "交易所多空比",
+    "aggregated_orderbook": "聚合挂单",
+    "liquidation_data": "爆仓数据",
+    "prediction_market": "预测市场",
+    "public_companies": "币股",
+    "whales": "鲸鱼",
+    "discover": "发现",
+    "realtime_whales": "实时巨鲸",
+    "whale_holdings": "鲸鱼持仓",
+    "search": "搜索",
+    "login": "登录",
+    "register": "注册",
+    "yesterday": "昨天"
+  },
+  "trade": {
+    "title": "交易",
+    "tools": "工具",
+    "perpetual": "永续",
+    "symbolWithType": "{{symbol}} {{type}}",
+    "index_price": "指数价格",
+    "mark_price": "标记价格",
+    "funding_rate": "资金费率",
+    "24h_low": "24小时最低",
+    "24h_high": "24小时最高",
+    "open_interest": "持仓量",
+    "24h_volume": "24小时量"
+  },
+  "tradePanel": {
+    "openPosition": "开仓",
+    "closePosition": "平仓",
+    "marginCross": "全仓",
+    "orderTypeLimit": "限价委托",
+    "orderTypeMarket": "市价委托",
+    "orderTypeStop": "止盈止损",
+    "priceLabel": "价格 (USDT)",
+    "bestPrice": "最优价",
+    "amountLabel": "数量 (BTC)",
+    "available": "可用",
+    "maxLong": "可开多",
+    "maxShort": "可开空",
+    "openLong": "开多",
+    "openShort": "开空",
+    "cost": "成本",
+    "maxBuy": "最高买价",
+    "minSell": "最低卖价"
+  },
+  "bottomPanel": {
+    "currentOrders": "当前委托",
+    "orderHistory": "历史委托",
+    "currentPositions": "当前仓位",
+    "positionHistory": "历史仓位",
+    "assets": "资产",
+    "time": "时间",
+    "contract": "合约",
+    "type": "类型",
+    "side": "方向",
+    "price": "价格(USDT)",
+    "amount": "数量",
+    "filled": "已成交",
+    "total": "委托总额",
+    "status": "状态",
+    "actions": "操作",
+    "cancel": "撤单",
+    "buyOpenLong": "买入开多",
+    "sellOpenShort": "卖出开空",
+    "buy": "买入",
+    "sell": "卖出",
+    "volume": "成交量",
+    "turnover": "成交额",
+    "positionSize": "持仓数量",
+    "positionValue": "持仓价值",
+    "entryPrice": "开仓价格",
+    "markPrice": "标记价格",
+    "liqPrice": "强平价格",
+    "marginLeverage": "保证金(杠杆)",
+    "unrealizedPnl": "未实现盈亏(ROE)",
+    "close": "平仓",
+    "noData": "暂无数据",
+    "orderTypes": {
+      "limit": "限价",
+      "market": "市价"
+    },
+    "statuses": {
+      "open": "进行中",
+      "filled": "已成交",
+      "cancelled": "已撤单"
+    }
+  },
+  "rightPanel": {
+    "exchangeBinance": "币安",
+    "turnoverUsd": "成交额($)",
+    "netInflowUsd": "净流入($)",
+    "high": "最高",
+    "low": "最低",
+    "addAlert": "加预警",
+    "addWatchlist": "加自选",
+    "strategy": "策略",
+    "overview": "简况",
+    "price": "价格(USDT)",
+    "amount": "数量(BTC)",
+    "orderValue": "委托额",
+    "latestTrades": "最新成交",
+    "largeTrades": "大额成交",
+    "tradeTime": "成交时间",
+    "decimalPlaces": "{{count}}位小数"
+  },
+  "chart": {
+    "loadingEngine": "加载图表引擎...",
+    "perpetual": "永续",
+    "volume": "成交量(Volume)",
+    "ohlc": {
+      "open": "开",
+      "high": "高",
+      "low": "低",
+      "close": "收"
+    },
+    "timeframes": {
+      "1s": "1秒",
+      "1m": "1分",
+      "5m": "5分",
+      "15m": "15分",
+      "1h": "1小时",
+      "4h": "4小时",
+      "1d": "1日"
+    },
+    "toolbar": {
+      "indicators": "指标",
+      "dataIndicators": "数据指标",
+      "dataSource": "数据源",
+      "aggregationOn": "聚合开启"
+    },
+    "modal": {
+      "featured": "精选指标",
+      "options": "期权指标",
+      "search": "搜索"
+    },
+    "indicators": {
+      "liquidationMap": "清算地图",
+      "longShortRatio": "各交易所多空比",
+      "aggregatedOrderbook": "聚合挂单",
+      "aggregatedOpenInterest": "聚合持仓量",
+      "aggregatedVolume": "聚合成交量",
+      "liquidationData": "市场爆仓数据"
+    }
+  },
+  "longShort": {
+    "title": "交易所 多空比 {{symbol}}",
+    "subtitle": "交易所多空持仓人数及持仓量比",
+    "timeRanges": {
+      "5m": "5分钟",
+      "15m": "15分钟",
+      "30m": "30分钟",
+      "1h": "1小时",
+      "4h": "4小时",
+      "12h": "12小时",
+      "24h": "24小时"
+    },
+    "summary": {
+      "total": "总计",
+      "long": "做多",
+      "short": "做空"
+    },
+    "table": {
+      "exchange": "交易所",
+      "ratio": "持仓占比 (多 vs 空)",
+      "longAmount": "做多金额",
+      "shortAmount": "做空金额"
+    }
+  },
+  "common": {
+    "all": "全部",
+    "applyChanges": "应用更改",
+    "featureInProgress": "功能开发中...",
+    "loading": "加载中...",
+    "loadFailed": "数据加载失败（Mock）",
+    "yesterday": "昨天",
+    "mockHint": "当前处于 Mock 环境，您可以点击下方按钮重试或通过 URL 参数触发正常状态。",
+    "retry": "重新加载",
+    "emptyTitle": "暂无数据",
+    "emptyDescription": "当前条件下未找到相关数据，请尝试调整筛选条件。",
+    "clearFiltersAndRetry": "清除筛选并重试",
+    "error": "错误",
+    "success": "成功",
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "aggregatedOrderbook": {
+    "title": "聚合挂单数据",
+    "subtitle": "全网深度及订单流聚合分析",
+    "tabs": {
+      "orderbook": "聚合挂单",
+      "openInterest": "聚合持仓量",
+      "volume": "聚合成交量"
+    },
+    "market": {
+      "futures": "合约",
+      "spot": "现货"
+    },
+    "stats": {
+      "volume24h": "24小时成交量",
+      "turnover24h": "24小时成交额"
+    },
+    "sections": {
+      "realtimeOrderbook": "{{symbol}} 实时订单({{market}})",
+      "orderDepth": "订单深度",
+      "liquidityHeatmap": "流动性热力图"
+    },
+    "settings": {
+      "exchangeSources": "交易所来源"
+    },
+    "legend": {
+      "bids": "买单累计",
+      "asks": "卖单累计",
+      "unit": "单位"
+    },
+    "table": {
+      "exchange": "交易所",
+      "price": "价格(USDT)",
+      "amount": "数量(BTC)",
+      "total": "总计(BTC)"
+    },
+    "openInterest": {
+      "title": "{{symbol}} 合约总持仓",
+      "searchPlaceholder": "搜索",
+      "table": {
+        "rank": "排名",
+        "exchange": "交易所",
+        "oiBtc": "持仓({{symbol}})",
+        "oiUsd": "持仓",
+        "ratio": "占比",
+        "change1h": "持仓变化(1小时)",
+        "change4h": "持仓变化(4小时)",
+        "change24h": "持仓变化(24小时)",
+        "oiVolRatio": "持仓/24小时成交额"
+      }
+    },
+    "volume": {
+      "title": "{{symbol}} 合约成交额",
+      "contractTurnover": "合约成交额",
+      "total": "总计"
+    },
+    "depth": {
+      "total": "总计"
+    }
+  },
+  "predictionMarket": {
+    "title": "预测市场",
+    "subtitle": "基于链上数据的未来趋势预测",
+    "status": {
+      "live": "进行中",
+      "resolved": "已结算",
+      "closed": "已关闭"
+    },
+    "modal": {
+      "title": "市场详情",
+      "volume": "交易量",
+      "outcomes": "结果",
+      "probability": "概率",
+      "rules": "规则",
+      "createdAt": "创建时间：{{date}}"
+    }
+  },
+  "publicCompanies": {
+    "title": "币股",
+    "subtitle": "持有加密资产的上市公司概览",
+    "searchPlaceholder": "搜索公司名称或股票代码...",
+    "columns": {
+      "asset": "币种",
+      "company": "公司",
+      "marketCap": "市值",
+      "holdingsValue": "持币价值",
+      "holdingsAmount": "持币量",
+      "sharePrice": "股价",
+      "change24h": "24h涨跌",
+      "change1d": "1天增减",
+      "change7d": "7天增减"
+    },
+    "aria": {
+      "viewCompanyInfo": "查看公司信息"
+    },
+    "modal": {
+      "title": "公司信息",
+      "ticker": "股票代码",
+      "exchange": "交易所",
+      "sectionTitle": "公司信息",
+      "fallbackLine1": "{{name}}（{{ticker}}）公司信息暂未补齐，当前为 Mock 占位。",
+      "fallbackLine2": "交易所：{{exchange}}；持有资产：{{asset}}；mNAV：{{mNav}}。"
+    }
+  },
+  "liquidationData": {
+    "title": "爆仓数据",
+    "subtitle": "追踪全网实时爆仓数据",
+    "summary": {
+      "title": "总爆仓",
+      "1h": "1小时爆仓",
+      "4h": "4小时爆仓",
+      "12h": "12小时爆仓",
+      "24h": "24小时爆仓",
+      "long": "多单",
+      "short": "空单"
+    },
+    "infoBar": {
+      "text": "最近24小时, 全球共有 {{count}} 人被爆仓, 爆仓总金额为 {{total}}。最大单笔爆仓单发生在 {{venue}} 价值 {{max}}"
+    },
+    "time": {
+      "1h": "1小时",
+      "4h": "4小时",
+      "12h": "12小时",
+      "24h": "24小时"
+    },
+    "table": {
+      "title": "交易所爆仓",
+      "longShare": "{{value}}%做多",
+      "columns": {
+        "exchange": "交易所",
+        "total": "爆仓金额",
+        "long": "多单爆仓",
+        "short": "空单爆仓",
+        "share": "占比",
+        "longShort": "多空比"
+      }
+    },
+    "modal": {
+      "title": "{{exchange}} 爆仓详情 (Mock)",
+      "primaryAsset": "主要爆仓资产",
+      "multiAsset": "BTC / ETH",
+      "maxSingle": "最大单笔金额",
+      "recent": "近期爆仓流水",
+      "minutesAgo": "{{minutes}}分钟前"
+    }
+  },
+  "liquidationMap": {
+    "title": "{{symbol}}交易所清算地图",
+    "subtitle": "实时全网爆仓热力图数据",
+    "exchangeType": {
+      "all": "全网",
+      "cex": "CEX",
+      "dex": "DEX"
+    },
+    "range": {
+      "1d": "1天",
+      "7d": "7天",
+      "30d": "30天"
+    },
+    "legend": {
+      "bybit": "Bybit",
+      "okx": "OKX",
+      "binance": "Binance",
+      "dex": "DEX",
+      "cumLong": "累计多单清算",
+      "cumShort": "累计空单清算"
+    },
+    "tooltip": {
+      "price": "价格"
+    },
+    "currentPrice": "当前价格"
+  },
+  "whaleTracking": {
+    "side": {
+      "long": "做多",
+      "short": "做空",
+      "longAbbr": "多",
+      "shortAbbr": "空",
+      "buy": "买入",
+      "sell": "卖出"
+    },
+    "margin": {
+      "cross": "全仓",
+      "isolated": "逐仓"
+    },
+    "tags": {
+      "whale": "巨鲸",
+      "hft": "高频",
+      "steady": "稳健",
+      "swing": "波段交易者",
+      "trend": "趋势跟随",
+      "midCapital": "中等资金",
+      "bearBias": "偏空头",
+      "breakeven": "盈亏平衡",
+      "volatility": "波动策略",
+      "shortTerm": "短线"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}}分钟前",
+      "hoursAgo": "{{count}}小时前",
+      "daysAgo": "{{count}}天前",
+      "weeksAgo": "{{count}}周前",
+      "monthsAgo": "{{count}}个月前",
+      "duration": "{{hours}}小时 {{minutes}}分"
+    },
+    "discover": {
+      "title": "发现",
+      "subtitle": "发现最有价值的交易者",
+      "sortBy": "排序方式",
+      "sortFields": {
+        "winRate": "胜率",
+        "totalValue": "账户总价值",
+        "realizedPnl": "已实现盈亏"
+      },
+      "labels": {
+        "totalValue": "账户总价值",
+        "realizedPnl": "已实现盈亏",
+        "realizedPnl1m": "已实现盈亏(1月)",
+        "trades": "交易次数",
+        "positions": "当前持仓",
+        "winRate": "胜率",
+        "winRate1m": "胜率(1月)",
+        "aiTags": "AI标签",
+        "aiTagFallback": "基于多维度链上行为分析得出的特征标签：{{label}}"
+      },
+      "aiTags": {
+        "bullWarGod": "多头战神",
+        "swingKing": "波段之王",
+        "smartTrader": "聪明交易者",
+        "treasuryKeeper": "金库管家",
+        "twitterKol": "推特KOL"
+      },
+      "aiTagDescriptions": {
+        "bullWarGod": "该地址在过去30天内主要持有且盈利的多头头寸",
+        "swingKing": "交易频率适中，主要捕捉短中期价格波动",
+        "smartTrader": "历史成交记录显示其卖出点位极佳",
+        "treasuryKeeper": "持有大量稳定币及蓝筹资产，风险偏好极低",
+        "twitterKol": "链上行为与推特公开言论高度一致，具备市场影响力"
+      }
+    },
+    "realtime": {
+      "title": "实时巨鲸",
+      "subtitle": "自动追踪全网交易所的巨鲸大额成交动态",
+      "paused": "已暂停自动更新",
+      "nextUpdate": "{{count}}秒后更新数据",
+      "toast": {
+        "copied": "已复制地址"
+      },
+      "table": {
+        "address": "交易地址",
+        "asset": "币种",
+        "positionValue": "持仓价值",
+        "entryPrice": "开盘价格",
+        "winRate": "胜率",
+        "time": "成交时间",
+        "actions": "操作"
+      }
+    },
+    "holdings": {
+      "title": "鲸鱼持仓",
+      "subtitle": "追踪大额持仓者的最新动态",
+      "filters": {
+        "profit": "盈利",
+        "loss": "亏损"
+      },
+      "table": {
+        "address": "地址",
+        "asset": "币种",
+        "positionValue": "持仓价值",
+        "unrealizedPnl": "未实现盈亏",
+        "margin": "保证金",
+        "entryPrice": "开盘价",
+        "liqPrice": "清算价",
+        "winRate": "胜率",
+        "createdTime": "创建时间",
+        "remark": "备注",
+        "actions": "操作"
+      }
+    },
+    "modal": {
+      "title": "交易统计",
+      "timeRange": {
+        "1w": "1周",
+        "1m": "1月",
+        "all": "全部"
+      },
+      "winRate": "胜率",
+      "closedPnlBeforeFees": "已平仓盈亏（未扣除费用）",
+      "feesDeducted": "扣除费用",
+      "tradeCount": "交易次数",
+      "profit": "盈利",
+      "loss": "亏损",
+      "realizedPnl": "已实现盈亏",
+      "duration": "持续时间",
+      "netPnl": "净盈亏",
+      "fees": "费用",
+      "size": "规模",
+      "hours": "小时",
+      "minutes": "分",
+      "totalHoldTime": "总持仓时间",
+      "holdRange": "持仓区间",
+      "holdRangeValue": "2分 ~ 76小时 17分",
+      "avgHoldTime": "平均持仓时间",
+      "avgHoldTimeValue": "8小时 10分",
+      "topTrades": "十大最佳交易",
+      "byAsset": "按资产的表现",
+      "byPosition": "按仓位的表现",
+      "tradesCount": "{{count}} 笔交易"
+    },
+    "profile": {
+      "invalidAddressTitle": "无效的钱包地址",
+      "invalidAddressDescription": "请提供正确的 EVM 兼容钱包地址以查看深度档案。",
+      "header": {
+        "copyAddress": "复制地址",
+        "refreshing": "更新中...",
+        "realtimeData": "实时数据"
+      },
+      "summary": {
+        "accountValue": "账户总价值",
+        "perpetual": "永续合约",
+        "spot": "现货",
+        "availableMargin": "可用保证金",
+        "used": "已用",
+        "available": "可用",
+        "withdrawable": "可提取",
+        "totalPositionValue": "总持仓价值",
+        "shortExposure": "空头",
+        "leverageRatio": "杠杆比",
+        "performanceWeek": "交易表现 (1周)",
+        "winRate": "胜率",
+        "maxDrawdown": "最大回撤",
+        "filledOrders": "已成交订单",
+        "closes": "平仓次数"
+      },
+      "positionProfile": {
+        "perpetualTotalValue": "永续合约总价值",
+        "currentPositions": "当前持仓",
+        "avgMarginUsage": "平均保证金使用率",
+        "directionBias": "方向偏差",
+        "neutral": "中性",
+        "longExposure": "多头持仓",
+        "shortExposure": "空头持仓",
+        "distribution": "仓位分布",
+        "longValue": "多头价值",
+        "shortValue": "空头价值",
+        "roi": "投资回报率",
+        "unrealizedPnl": "未实现盈亏"
+      },
+      "pnlTrend": {
+        "header": "{{timeRange}} {{pnlType}}（{{contractType}}）",
+        "timeRange": {
+          "1d": "1天",
+          "1w": "1周",
+          "1m": "1月",
+          "all": "全部"
+        },
+        "contractType": {
+          "all": "永续合约和现货",
+          "perpOnly": "仅永续合约"
+        },
+        "pnlType": {
+          "accountValue": "账户价值",
+          "totalPnl": "总盈亏"
+        }
+      },
+      "tabs": {
+        "spot": "现货持仓 ({{count}})",
+        "perpetual": "永续合约持仓 ({{count}})",
+        "orders": "挂单 ({{count}})",
+        "trades": "最近成交",
+        "history": "已完成交易",
+        "delegation": "历史委托"
+      },
+      "assetFilter": {
+        "placeholder": "筛选..."
+      },
+      "orders": {
+        "orderCount": "{{count}} 笔订单"
+      },
+      "orderType": {
+        "limit": "限价"
+      },
+      "orderStatus": {
+        "open": "开仓",
+        "cancelled": "已撤单",
+        "openOrder": "挂单",
+        "filled": "完全成交"
+      },
+      "tradeAction": {
+        "openLongAdd": "开多 加仓"
+      },
+      "columns": {
+        "time": "时间",
+        "endTime": "结束时间",
+        "asset": "币种",
+        "share": "资产份额",
+        "value": "价值",
+        "amount": "数量",
+        "price": "价格",
+        "positionValue": "持仓价值",
+        "unrealizedPnl": "未实现盈亏",
+        "entryPrice": "入场均价",
+        "markPrice": "标记价",
+        "liqPrice": "清算价",
+        "margin": "保证金",
+        "fundingFee": "资金费用",
+        "tpSl": "止盈/止损",
+        "side": "方向",
+        "trigger": "触发条件",
+        "status": "状态",
+        "orderId": "订单 ID",
+        "action": "行为",
+        "startPosition": "起始仓位",
+        "closedPnl": "已平盈亏",
+        "fee": "费用",
+        "tradeRecord": "交易记录",
+        "duration": "持续时间",
+        "netPnl": "净盈亏",
+        "size": "规模",
+        "exitPrice": "平仓价",
+        "type": "类型",
+        "executionStatus": "执行状态"
+      }
+    }
+  },
+  "symbols": {
+    "BTC": "比特币",
+    "ETH": "以太坊",
+    "SOL": "Solana",
+    "XRP": "瑞波币",
+    "DOGE": "狗狗币",
+    "BNB": "币安币",
+    "HYPE": "Hyperliquid",
+    "LINK": "Chainlink",
+    "AVAX": "Avalanche",
+    "ADA": "Cardano"
+  },
+  "dashboard": {
+    "tabs": {
+      "explore": "探索看板",
+      "my": "我的看板",
+      "saved": "已保存的看板"
+    },
+    "empty": {
+      "my": "你还没有创建任何看板。",
+      "saved": "暂无已保存的看板。"
+    },
+    "actions": {
+      "create": "创建看板",
+      "createFirst": "创建你的第一个看板",
+      "exploreTrending": "探索热门看板",
+      "publish": "发布",
+      "delete": "删除"
+    },
+    "sidebar": {
+      "myDashboards": "我的看板",
+      "savedDashboards": "已保存的看板",
+      "trackedEntities": "追踪实体",
+      "untitled": "未命名"
+    },
+    "explore": {
+      "title": "探索看板",
+      "searchPlaceholder": "搜索看板、交易员或策略...",
+      "featured": "特色看板",
+      "hot": "热门看板",
+      "community": "社区看板",
+      "publishedAgo": "发布于 {{days}} 天前",
+      "saveToMyDashboards": "保存到我的看板",
+      "defaultDescription": "这是一个精选的数据看板，聚合了实时的链上交易指标、资产流动性分析以及巨鲸动向追踪。通过可视化的图表和深度的数据表格，帮助交易者快速捕捉市场信号。"
+    },
+    "saves": "{{count}} 保存",
+    "creator": "创建者 @{{name}}",
+    "widgets": {
+      "liquidationMap": "清算地图",
+      "lsRatio": "各交易所多空比",
+      "aggOrderbook": "聚合挂单",
+      "aggOI": "聚合持仓量",
+      "aggVolume": "聚合成交量",
+      "liquidationData": "爆仓数据",
+      "publicCompanies": "币股",
+      "predictionMarket": "预测市场"
+    },
+    "editor": {
+      "addWidgetTitle": "添加一个组件",
+      "addWidgetFooter": "选择一个组件添加到您的看板中 · 更多功能开发中",
+      "addWidgetHint": "您想看到什么样的信息？",
+      "descriptionPlaceholder": "无说明",
+      "addTag": "添加标签",
+      "widgetReady": "组件详情已就绪"
+    }
+  }
+}

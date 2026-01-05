@@ -2,7 +2,10 @@
  * Loading state components and utilities
  */
 
+'use client'
+
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Spinner component for loading states
@@ -43,13 +46,15 @@ export function Spinner({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 
 /**
  * Full page loading overlay
  */
-export function LoadingOverlay({ message = '加载中...' }: { message?: string }) {
+export function LoadingOverlay({ message }: { message?: string }) {
+  const { t } = useTranslation()
+  const resolvedMessage = message ?? t('common.loading')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="rounded-lg bg-[#0f1219] border border-gray-800 p-8 shadow-2xl">
         <div className="flex flex-col items-center gap-4">
           <Spinner size="lg" className="text-[#396bff]" />
-          <p className="text-sm text-gray-300">{message}</p>
+          <p className="text-sm text-gray-300">{resolvedMessage}</p>
         </div>
       </div>
     </div>
@@ -128,7 +133,9 @@ export function TableRowSkeleton({ columns = 5 }: { columns?: number }) {
 /**
  * Error state component with retry
  */
-export function ErrorState({ message = '数据加载失败（Mock）', onRetry }: { message?: string; onRetry?: () => void }) {
+export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+  const { t } = useTranslation()
+  const resolvedMessage = message ?? t('common.loadFailed')
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center animate-in fade-in duration-300">
       <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
@@ -136,15 +143,15 @@ export function ErrorState({ message = '数据加载失败（Mock）', onRetry }
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
-      <h3 className="text-xl font-bold text-[#e6edf3] mb-2">{message}</h3>
-      <p className="text-[#8b949e] mb-8 max-w-md">当前处于 Mock 环境，您可以点击下方按钮重试或通过 URL 参数触发正常状态。</p>
+      <h3 className="text-xl font-bold text-[#e6edf3] mb-2">{resolvedMessage}</h3>
+      <p className="text-[#8b949e] mb-8 max-w-md">{t('common.mockHint')}</p>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
           className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-md font-bold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all"
         >
-          重新加载
+          {t('common.retry')}
         </button>
       )}
     </div>
@@ -169,6 +176,7 @@ export function LoadingState({
   loadingFallback?: React.ReactNode
   onRetry?: () => void
 }) {
+  const { t } = useTranslation()
   if (isLoading) {
     return <>{loadingFallback || (
       <div className="py-20 flex justify-center">
@@ -184,11 +192,11 @@ export function LoadingState({
   if (isEmpty) {
     return (
       <EmptyState 
-        title="暂无数据" 
-        description="当前条件下未找到相关数据，请尝试调整筛选条件。"
+        title={t('common.emptyTitle')}
+        description={t('common.emptyDescription')}
         action={onRetry && (
           <button onClick={onRetry} className="text-primary hover:underline text-sm font-medium">
-            清除筛选并重试
+            {t('common.clearFiltersAndRetry')}
           </button>
         )}
       />

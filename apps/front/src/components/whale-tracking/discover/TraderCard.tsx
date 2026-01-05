@@ -2,22 +2,28 @@
 
 import { Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
   address: string;
   handle?: string;
   tag?: string;
-  totalValue: string;
-  pnl: string;
-  pnlLabel?: string;
+  totalValueUsd: number;
+  pnlUsd: number;
+  pnlLabelKey?: 'realizedPnl' | 'realizedPnl1m';
   trades?: number;
   positions?: number;
-  winRate: string;
-  winRateLabel?: string;
+  winRatePct: number; // 0-100
+  winRateLabelKey?: 'winRate' | 'winRate1m';
   avatarColor: string;
-  aiTags?: { label: string; color: string; bgColor: string; description?: string }[];
+  aiTags?: {
+    key: 'bullWarGod' | 'swingKing' | 'smartTrader' | 'treasuryKeeper' | 'twitterKol'
+    color: string
+    bgColor: string
+    descriptionKey?: 'bullWarGod' | 'swingKing' | 'smartTrader' | 'treasuryKeeper' | 'twitterKol'
+  }[];
   onShowStats?: (address: string) => void;
 }
 
@@ -26,18 +32,48 @@ export const TraderCard = ({
   address,
   handle,
   tag,
-  totalValue,
-  pnl,
-  pnlLabel = '已实现盈亏',
+  totalValueUsd,
+  pnlUsd,
+  pnlLabelKey = 'realizedPnl',
   trades,
   positions,
-  winRate,
-  winRateLabel = '胜率',
+  winRatePct,
+  winRateLabelKey = 'winRate',
   avatarColor,
   aiTags,
   onShowStats
 }: TraderCardProps) => {
-  const isPnlPositive = pnl.startsWith('+');
+  const { t, i18n } = useTranslation();
+  const isPnlPositive = pnlUsd >= 0;
+
+  const currencyCompact = useMemo(() => {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
+  }, [i18n.language])
+
+  const percentFormatter = useMemo(() => {
+    const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+    return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 })
+  }, [i18n.language])
+
+  const resolvedPnlLabel = t(`whaleTracking.discover.labels.${pnlLabelKey}`)
+  const resolvedWinRateLabel = t(`whaleTracking.discover.labels.${winRateLabelKey}`)
+
+  const resolvedTotalValue = currencyCompact.format(totalValueUsd)
+  const resolvedPnl = pnlUsd >= 0 ? `+${currencyCompact.format(pnlUsd)}` : currencyCompact.format(pnlUsd)
+  const resolvedWinRate = percentFormatter.format(winRatePct / 100)
+
+  const resolveAiTagLabel = (key: NonNullable<TraderCardProps['aiTags']>[number]['key']) =>
+    t(`whaleTracking.discover.aiTags.${key}`)
+
+  const resolveAiTagDescription = (
+    key: NonNullable<TraderCardProps['aiTags']>[number]['key'],
+    descriptionKey?: NonNullable<TraderCardProps['aiTags']>[number]['descriptionKey'],
+  ) => {
+    if (descriptionKey)
+      return t(`whaleTracking.discover.aiTagDescriptions.${descriptionKey}`)
+    return t('whaleTracking.discover.labels.aiTagFallback', { label: resolveAiTagLabel(key) })
+  };
 
   const copyAddress = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,22 +118,22 @@ export const TraderCard = ({
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
-          <span className="text-white font-bold text-h3">{totalValue}</span>
+          <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.totalValue')}</span>
+          <span className="text-white font-bold text-h3">{resolvedTotalValue}</span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[#8b949e] text-caption font-medium">已实现盈亏</span>
+          <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.realizedPnl')}</span>
           <span className={`font-bold text-h3 ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
-            {pnl}
+            {resolvedPnl}
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[#8b949e] text-caption font-medium">交易次数</span>
+          <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.trades')}</span>
           <span className="text-white font-bold text-h3">{trades}</span>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[#8b949e] text-caption font-medium">胜率</span>
-          <span className="text-white font-bold text-h3">{winRate}</span>
+          <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.winRate')}</span>
+          <span className="text-white font-bold text-h3">{resolvedWinRate}</span>
         </div>
       </div>
     </div>
@@ -130,42 +166,42 @@ export const TraderCard = ({
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-[#8b949e] text-caption font-medium">账户总价值</span>
-        <span className="text-white text-h2 font-bold tracking-tight">{totalValue}</span>
+        <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.totalValue')}</span>
+        <span className="text-white text-h2 font-bold tracking-tight">{resolvedTotalValue}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-b border-[#30363d] pb-6">
         <div className="flex flex-col gap-1">
-          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{pnlLabel}</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{resolvedPnlLabel}</span>
           <span className={`font-bold text-body ${isPnlPositive ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
-            {pnl}
+            {resolvedPnl}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">当前持仓</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{t('whaleTracking.discover.labels.positions')}</span>
           <span className="text-white font-bold text-body">{positions}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{winRateLabel}</span>
-          <span className="text-white font-bold text-body">{winRate}</span>
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider">{resolvedWinRateLabel}</span>
+          <span className="text-white font-bold text-body">{resolvedWinRate}</span>
         </div>
       </div>
 
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-tighter">AI标签:</span>
-          {aiTags.map((t, i) => (
+          <span className="text-[#8b949e] text-caption font-bold uppercase tracking-tighter">{t('whaleTracking.discover.labels.aiTags')}:</span>
+          {aiTags.map((tag, i) => (
             <div key={i} className="relative group/tag">
               <span 
                 className="px-2.5 py-1 rounded-md text-caption font-extrabold uppercase tracking-tight flex items-center gap-1 cursor-help"
-                style={{ color: t.color, backgroundColor: t.bgColor }}
+                style={{ color: tag.color, backgroundColor: tag.bgColor }}
               >
-                {t.label}
+                {resolveAiTagLabel(tag.key)}
                 <Info className="w-3 h-3 opacity-50" />
               </span>
               {/* Simple CSS Tooltip */}
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl text-[10px] text-[#e6edf3] whitespace-nowrap opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none">
-                {t.description || `${t.label}：基于多维度链上行为分析得出的特征标签`}
+                {resolveAiTagDescription(tag.key, tag.descriptionKey)}
                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[#30363d]" />
               </div>
             </div>

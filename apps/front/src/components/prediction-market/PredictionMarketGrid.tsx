@@ -3,6 +3,7 @@
 import type { PredictionCardProps, PredictionRulesMeta } from './PredictionCard';
 import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react';
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { useMockData } from '@/hooks/use-mock-data';
@@ -186,6 +187,7 @@ const initialPredictions: PredictionMarketItem[] = [
 ];
 
 export const PredictionMarketGrid = () => {
+  const { t } = useTranslation();
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -219,7 +221,7 @@ export const PredictionMarketGrid = () => {
       <Modal
         isOpen={!!selectedPrediction}
         onClose={() => setSelectedPrediction(null)}
-        title="Market Details"
+        title={t('predictionMarket.modal.title')}
         width="max-w-xl"
         loading={modalLoading}
       >
@@ -231,8 +233,10 @@ export const PredictionMarketGrid = () => {
             <div>
               <h3 className="text-xl font-bold text-white leading-tight">{selectedPrediction?.title}</h3>
               <div className="flex gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">交易量: {selectedPrediction?.volume}</span>
-                <span className="text-xs text-[#f87171] font-bold">● {selectedPrediction?.status || 'LIVE'}</span>
+                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume}</span>
+                <span className="text-xs text-[#f87171] font-bold">
+                  ● {t(`predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`, { defaultValue: selectedPrediction?.status || 'LIVE' })}
+                </span>
               </div>
             </div>
           </div>
@@ -240,7 +244,7 @@ export const PredictionMarketGrid = () => {
           {/* Outcomes (read-only) */}
           {(selectedPrediction?.options?.length || selectedPrediction?.probability) && (
             <div className="space-y-3">
-              <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">Outcomes</p>
+              <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">{t('predictionMarket.modal.outcomes')}</p>
               {selectedPrediction?.options?.length ? (
                 <div className="space-y-3">
                   {selectedPrediction.options.map((opt, idx) => (
@@ -256,7 +260,7 @@ export const PredictionMarketGrid = () => {
               ) : (
                 <div className="py-8 text-center bg-[#0d1117] rounded-xl border border-[#30363d]">
                   <p className="text-3xl font-bold text-white mb-1">{selectedPrediction?.probability}</p>
-                  <p className="text-[#8b949e] text-xs uppercase tracking-widest">probability</p>
+                  <p className="text-[#8b949e] text-xs uppercase tracking-widest">{t('predictionMarket.modal.probability')}</p>
                 </div>
               )}
             </div>
@@ -264,7 +268,7 @@ export const PredictionMarketGrid = () => {
 
           {/* Rules */}
           <div className="space-y-4 pt-2">
-            <h4 className="text-lg font-bold text-white">Rules</h4>
+            <h4 className="text-lg font-bold text-white">{t('predictionMarket.modal.rules')}</h4>
             <div className="text-sm leading-relaxed text-[#e6edf3] px-1">
               {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
                 <React.Fragment key={idx}>
@@ -276,7 +280,9 @@ export const PredictionMarketGrid = () => {
 
             {selectedPrediction?.rules?.createdAt && (
               <div className="pt-6 border-t border-[#30363d] text-xs text-[#8b949e]">
-                <span className="font-bold">Created At: {selectedPrediction.rules.createdAt}</span>
+                <span className="font-bold">
+                  {t('predictionMarket.modal.createdAt', { date: selectedPrediction.rules.createdAt })}
+                </span>
               </div>
             )}
           </div>

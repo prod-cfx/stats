@@ -3,13 +3,14 @@
 import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/toast';
 import { PageTitle } from '@/components/ui/Typography';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhaleTransaction {
   address: string;
-  tag: string;
+  tagKey: 'swing' | 'trend';
   tagColor: string;
   tagBg: string;
   asset: string;
@@ -19,13 +20,13 @@ interface WhaleTransaction {
   positionValueAsset: string;
   entryPrice: string;
   winRate: string;
-  time: string;
+  timestamp: number; // Date.now() when transaction was created
 }
 
 const initialTransactions: WhaleTransaction[] = [
   {
     address: '0x481234567890abcdef1234567890abcdef1234af',
-    tag: '波段交易者',
+    tagKey: 'swing',
     tagColor: '#60a5fa',
     tagBg: '#3b82f633',
     asset: 'BTC',
@@ -35,11 +36,11 @@ const initialTransactions: WhaleTransaction[] = [
     positionValueAsset: '-11.62816 BTC',
     entryPrice: '$87502.6',
     winRate: '68%',
-    time: '刚刚',
+    timestamp: Date.now(),
   },
   {
     address: '0x7e1234567890abcdef1234567890abcdef1234fd',
-    tag: '趋势跟随',
+    tagKey: 'trend',
     tagColor: '#c084fc',
     tagBg: '#a855f733',
     asset: 'BTC',
@@ -49,19 +50,36 @@ const initialTransactions: WhaleTransaction[] = [
     positionValueAsset: '52.06421 BTC',
     entryPrice: '$86148.8',
     winRate: '72%',
-    time: '1 分钟前',
+    timestamp: Date.now() - 60_000, // 1 minute ago
   }
 ];
 
 export const RealtimeWhalesTable = () => {
+  const { t } = useTranslation();
   const [isPaused, setIsPaused] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [transactions, setTransactions] = useState<WhaleTransaction[]>(initialTransactions);
   const [loading, setLoading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
   const { success } = useToast();
+
+  const formatRelativeTime = (timestamp: number) => {
+    const minutesAgo = Math.floor((currentTime - timestamp) / 60_000);
+    if (minutesAgo <= 0) return t('whaleTracking.time.justNow');
+    if (minutesAgo < 60) return t('whaleTracking.time.minutesAgo', { count: minutesAgo });
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    if (hoursAgo < 24) return t('whaleTracking.time.hoursAgo', { count: hoursAgo });
+    const daysAgo = Math.floor(hoursAgo / 24);
+    if (daysAgo < 7) return t('whaleTracking.time.daysAgo', { count: daysAgo });
+    const weeksAgo = Math.floor(daysAgo / 7);
+    if (weeksAgo < 4) return t('whaleTracking.time.weeksAgo', { count: weeksAgo });
+    const monthsAgo = Math.floor(daysAgo / 30);
+    return t('whaleTracking.time.monthsAgo', { count: monthsAgo });
+  };
 
   const fetchNewData = useCallback(async () => {
     setLoading(true);
@@ -71,13 +89,48 @@ export const RealtimeWhalesTable = () => {
     // Simulate prepending a new random transaction
     const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'];
     const randomAsset = assets[Math.floor(Math.random() * assets.length)];
+    const side = Math.random() > 0.5 ? 'Long' : 'Short'
+    const tagKey = Math.random() > 0.5 ? 'swing' : 'trend'
+
+    const tagStyle = tagKey === 'swing'
+      ? { tagColor: '#60a5fa', tagBg: '#3b82f633' }
+      : { tagColor: '#c084fc', tagBg: '#a855f733' }
+
+    const basePriceByAsset: Record<string, number> = {
+      BTC: 87_000,
+      ETH: 3_200,
+      SOL: 120,
+      XRP: 2.3,
+      DOGE: 0.12,
+    }
+
+    const entryPrice = (basePriceByAsset[randomAsset] ?? 100) * (0.95 + Math.random() * 0.1)
+    const notionalUsd = (1_000_000 + Math.random() * 5_000_000)
+    const quantity = notionalUsd / entryPrice
+    const qtyAbs = randomAsset === 'BTC' ? 5 : randomAsset === 'ETH' ? 4 : randomAsset === 'SOL' ? 2 : 0
+    const qtyFixed = Math.max(2, Math.min(6, qtyAbs))
+    const qtyText = quantity.toFixed(qtyFixed)
+    const signedQty = side === 'Short' ? `-${qtyText}` : qtyText
+    const usdMillions = (notionalUsd / 1e6).toFixed(2)
+
+    // Generate full 42-character address (0x + 40 hex chars)
+    const fullAddress = `0x${Array.from({ length: 40 }, () => 
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('')}`
+
     const newTx: WhaleTransaction = {
-      ...initialTransactions[0],
-      address: `0x${Math.random().toString(16).substring(2, 10)}...${Math.random().toString(16).substring(2, 6)}`,
+      address: fullAddress,
+      tagKey,
+      tagColor: tagStyle.tagColor,
+      tagBg: tagStyle.tagBg,
       asset: randomAsset,
-      side: Math.random() > 0.5 ? 'Long' : 'Short',
-      time: '刚刚',
-      positionValueUSD: `$${(Math.random() * 5 + 1).toFixed(2)}M`,
+      side,
+      marginType: Math.random() > 0.5 ? 'Cross' : 'Isolated',
+      positionValueUSD: `$${usdMillions}M`,
+      positionValueAsset: `${signedQty} ${randomAsset}`,
+      entryPrice: `$${entryPrice.toFixed(1)}`,
+      winRate: `${Math.round(50 + Math.random() * 45)}%`,
+      timestamp: Date.now(),
     };
 
     setTransactions(prev => [newTx, ...prev.slice(0, 14)]);
@@ -104,6 +157,17 @@ export const RealtimeWhalesTable = () => {
     };
   }, [isPaused, fetchNewData]);
 
+  // Update currentTime every 10 seconds to refresh relative time display
+  useEffect(() => {
+    timeUpdateRef.current = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 10_000);
+
+    return () => {
+      if (timeUpdateRef.current) clearInterval(timeUpdateRef.current);
+    };
+  }, []);
+
   const handleShowStats = (address: string) => {
     setSelectedAddress(address);
     setIsModalOpen(true);
@@ -111,15 +175,15 @@ export const RealtimeWhalesTable = () => {
 
   const handleCopy = (address: string) => {
     navigator.clipboard.writeText(address);
-    success('已复制地址');
+    success(t('whaleTracking.realtime.toast.copied'));
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div className="flex flex-col gap-1">
-          <PageTitle>实时巨鲸</PageTitle>
-          <p className="text-xs text-[#8b949e]">自动追踪全网交易所的巨鲸大额成交动态</p>
+          <PageTitle>{t('whaleTracking.realtime.title')}</PageTitle>
+          <p className="text-xs text-[#8b949e]">{t('whaleTracking.realtime.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
           <button 
@@ -132,7 +196,7 @@ export const RealtimeWhalesTable = () => {
             }`}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${!isPaused ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-            <span>{isPaused ? '已暂停自动更新' : `${countdown}秒后更新数据`}</span>
+            <span>{isPaused ? t('whaleTracking.realtime.paused') : t('whaleTracking.realtime.nextUpdate', { count: countdown })}</span>
           </button>
         </div>
       </div>
@@ -147,13 +211,13 @@ export const RealtimeWhalesTable = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr className="text-[#8b949e] border-b border-[#30363d] bg-[#0d1117]/50">
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">交易地址</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">币种</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">持仓价值</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">开盘价格</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">胜率</th>
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider">成交时间</th>
-                <th className="px-6 py-4 text-center w-16">操作</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.address')}</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.winRate')}</th>
+                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.time')}</th>
+                <th className="px-6 py-4 text-center w-16">{t('whaleTracking.realtime.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363d]">
@@ -167,7 +231,7 @@ export const RealtimeWhalesTable = () => {
                           className="text-white text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {tx.address}
+                          {`${tx.address.slice(0, 6)}...${tx.address.slice(-4)}`}
                         </Link>
                         <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
                           <Copy className="w-3.5 h-3.5" />
@@ -177,18 +241,18 @@ export const RealtimeWhalesTable = () => {
                         className="w-fit px-2 py-0.5 rounded text-[10px] font-bold uppercase"
                         style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                       >
-                        {tx.tag}
+                        {t(`whaleTracking.tags.${tx.tagKey}`)}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-1.5">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                        {tx.side === 'Long' ? '多' : '空'}
+                        {tx.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="text-white text-body font-bold">{tx.asset}</span>
-                        <span className="text-[#8b949e] text-[10px] uppercase">{tx.marginType === 'Cross' ? '全仓' : '逐仓'}</span>
+                        <span className="text-[#8b949e] text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
                       </div>
                     </div>
                   </td>
@@ -205,7 +269,7 @@ export const RealtimeWhalesTable = () => {
                     {tx.winRate}
                   </td>
                   <td className="px-6 py-5 text-[#8b949e] text-caption text-right font-medium">
-                    {tx.time}
+                    {formatRelativeTime(tx.timestamp)}
                   </td>
                   <td className="px-6 py-5 text-center">
                     <button 

@@ -1,0 +1,691 @@
+{
+  "app": {
+    "title": "Coinflux - Advanced Crypto Data Aggregator",
+    "description": "Professional crypto asset data aggregation and multi-dimensional market analysis terminal"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "markets": "Markets",
+    "analysis": "Analysis",
+    "settings": "Settings",
+    "home": "Market",
+    "data": "Data",
+    "liquidation_map": "Liquidation Map",
+    "long_short_ratio": "Long/Short Ratio",
+    "aggregated_orderbook": "Aggregated Orderbook",
+    "liquidation_data": "Liquidation Data",
+    "prediction_market": "Prediction Market",
+    "public_companies": "Crypto Equities",
+    "whales": "Whales",
+    "discover": "Discover",
+    "realtime_whales": "Realtime Whales",
+    "whale_holdings": "Whale Holdings",
+    "search": "Search",
+    "login": "Login",
+    "register": "Register",
+    "yesterday": "Yesterday"
+  },
+  "trade": {
+    "title": "Trade",
+    "tools": "Tools",
+    "perpetual": "Perpetual",
+    "symbolWithType": "{{symbol}} {{type}}",
+    "index_price": "Index Price",
+    "mark_price": "Mark Price",
+    "funding_rate": "Funding Rate",
+    "24h_low": "24h Low",
+    "24h_high": "24h High",
+    "open_interest": "Open Interest",
+    "24h_volume": "24h Volume"
+  },
+  "tradePanel": {
+    "openPosition": "Open",
+    "closePosition": "Close",
+    "marginCross": "Cross",
+    "orderTypeLimit": "Limit",
+    "orderTypeMarket": "Market",
+    "orderTypeStop": "TP/SL",
+    "priceLabel": "Price (USDT)",
+    "bestPrice": "Best",
+    "amountLabel": "Amount (BTC)",
+    "available": "Available",
+    "maxLong": "Max Long",
+    "maxShort": "Max Short",
+    "openLong": "Open Long",
+    "openShort": "Open Short",
+    "cost": "Cost",
+    "maxBuy": "Max Buy",
+    "minSell": "Min Sell"
+  },
+  "bottomPanel": {
+    "currentOrders": "Open Orders",
+    "orderHistory": "Order History",
+    "currentPositions": "Positions",
+    "positionHistory": "Position History",
+    "assets": "Assets",
+    "time": "Time",
+    "contract": "Contract",
+    "type": "Type",
+    "side": "Side",
+    "price": "Price (USDT)",
+    "amount": "Amount",
+    "filled": "Filled",
+    "total": "Total",
+    "status": "Status",
+    "actions": "Actions",
+    "cancel": "Cancel",
+    "buyOpenLong": "Buy / Open Long",
+    "sellOpenShort": "Sell / Open Short",
+    "buy": "Buy",
+    "sell": "Sell",
+    "volume": "Volume",
+    "turnover": "Turnover",
+    "positionSize": "Position Size",
+    "positionValue": "Position Value",
+    "entryPrice": "Entry Price",
+    "markPrice": "Mark Price",
+    "liqPrice": "Liq. Price",
+    "marginLeverage": "Margin (Lev.)",
+    "unrealizedPnl": "Unrealized PnL (ROE)",
+    "close": "Close",
+    "noData": "No data",
+    "orderTypes": {
+      "limit": "Limit",
+      "market": "Market"
+    },
+    "statuses": {
+      "open": "Open",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    }
+  },
+  "rightPanel": {
+    "exchangeBinance": "Binance",
+    "turnoverUsd": "Turnover ($)",
+    "netInflowUsd": "Net Inflow ($)",
+    "high": "High",
+    "low": "Low",
+    "addAlert": "Alert",
+    "addWatchlist": "Watchlist",
+    "strategy": "Strategy",
+    "overview": "Overview",
+    "price": "Price (USDT)",
+    "amount": "Amount (BTC)",
+    "orderValue": "Value",
+    "latestTrades": "Latest",
+    "largeTrades": "Large",
+    "tradeTime": "Time",
+    "decimalPlaces": "{{count}} decimals"
+  },
+  "chart": {
+    "loadingEngine": "Loading chart engine...",
+    "perpetual": "Perp",
+    "volume": "Volume",
+    "ohlc": {
+      "open": "O",
+      "high": "H",
+      "low": "L",
+      "close": "C"
+    },
+    "timeframes": {
+      "1s": "1s",
+      "1m": "1m",
+      "5m": "5m",
+      "15m": "15m",
+      "1h": "1h",
+      "4h": "4h",
+      "1d": "1D"
+    },
+    "toolbar": {
+      "indicators": "Indicators",
+      "dataIndicators": "Data",
+      "dataSource": "Source",
+      "aggregationOn": "Aggregate"
+    },
+    "modal": {
+      "featured": "Featured",
+      "options": "Options",
+      "search": "Search"
+    },
+    "indicators": {
+      "liquidationMap": "Liquidation Map",
+      "longShortRatio": "Long/Short Ratio",
+      "aggregatedOrderbook": "Aggregated Orderbook",
+      "aggregatedOpenInterest": "Aggregated Open Interest",
+      "aggregatedVolume": "Aggregated Volume",
+      "liquidationData": "Liquidation Data"
+    }
+  },
+  "longShort": {
+    "title": "Exchange Long/Short Ratio {{symbol}}",
+    "subtitle": "Exchange long/short positions and open interest ratio",
+    "timeRanges": {
+      "5m": "5m",
+      "15m": "15m",
+      "30m": "30m",
+      "1h": "1h",
+      "4h": "4h",
+      "12h": "12h",
+      "24h": "24h"
+    },
+    "summary": {
+      "total": "Total",
+      "long": "Long",
+      "short": "Short"
+    },
+    "table": {
+      "exchange": "Exchange",
+      "ratio": "Position Ratio (Long vs Short)",
+      "longAmount": "Long Amount",
+      "shortAmount": "Short Amount"
+    }
+  },
+  "common": {
+    "all": "All",
+    "applyChanges": "Apply changes",
+    "featureInProgress": "Work in progress...",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load",
+    "yesterday": "Yesterday",
+    "mockHint": "You are viewing mock data. You can retry or use URL params to switch states.",
+    "retry": "Retry",
+    "emptyTitle": "No data",
+    "emptyDescription": "No results for the current filters. Try adjusting filters.",
+    "clearFiltersAndRetry": "Clear filters and retry",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "aggregatedOrderbook": {
+    "title": "Aggregated Orderbook",
+    "subtitle": "Market depth and order flow aggregation analysis",
+    "tabs": {
+      "orderbook": "Orderbook",
+      "openInterest": "Open Interest",
+      "volume": "Volume"
+    },
+    "market": {
+      "futures": "Futures",
+      "spot": "Spot"
+    },
+    "stats": {
+      "volume24h": "24h Volume",
+      "turnover24h": "24h Turnover"
+    },
+    "sections": {
+      "realtimeOrderbook": "{{symbol}} Realtime Orders ({{market}})",
+      "orderDepth": "Order Depth",
+      "liquidityHeatmap": "Liquidity Heatmap"
+    },
+    "settings": {
+      "exchangeSources": "Exchange Sources"
+    },
+    "legend": {
+      "bids": "Cumulative Bids",
+      "asks": "Cumulative Asks",
+      "unit": "Unit"
+    },
+    "table": {
+      "exchange": "Exchanges",
+      "price": "Price (USDT)",
+      "amount": "Amount (BTC)",
+      "total": "Total (BTC)"
+    },
+    "openInterest": {
+      "title": "{{symbol}} Futures Open Interest",
+      "searchPlaceholder": "Search",
+      "table": {
+        "rank": "Rank",
+        "exchange": "Exchange",
+        "oiBtc": "OI ({{symbol}})",
+        "oiUsd": "OI (USD)",
+        "ratio": "Share",
+        "change1h": "OI Change (1h)",
+        "change4h": "OI Change (4h)",
+        "change24h": "OI Change (24h)",
+        "oiVolRatio": "OI / 24h Volume"
+      }
+    },
+    "volume": {
+      "title": "{{symbol}} Futures Turnover",
+      "contractTurnover": "Futures turnover",
+      "total": "Total"
+    },
+    "depth": {
+      "total": "Total"
+    }
+  },
+  "predictionMarket": {
+    "title": "Prediction Market",
+    "subtitle": "Future trend forecasts based on on-chain data",
+    "status": {
+      "live": "LIVE",
+      "resolved": "RESOLVED",
+      "closed": "CLOSED"
+    },
+    "modal": {
+      "title": "Market Details",
+      "volume": "Volume",
+      "outcomes": "Outcomes",
+      "probability": "Probability",
+      "rules": "Rules",
+      "createdAt": "Created At: {{date}}"
+    }
+  },
+  "publicCompanies": {
+    "title": "Crypto Equities",
+    "subtitle": "Overview of public companies holding crypto assets",
+    "searchPlaceholder": "Search company name or ticker...",
+    "columns": {
+      "asset": "Asset",
+      "company": "Company",
+      "marketCap": "Market Cap",
+      "holdingsValue": "Holdings Value",
+      "holdingsAmount": "Holdings Amount",
+      "sharePrice": "Share Price",
+      "change24h": "24h Change",
+      "change1d": "1D Change",
+      "change7d": "7D Change"
+    },
+    "aria": {
+      "viewCompanyInfo": "View company info"
+    },
+    "modal": {
+      "title": "Company Info",
+      "ticker": "Ticker",
+      "exchange": "Exchange",
+      "sectionTitle": "Company Details",
+      "fallbackLine1": "{{name}} ({{ticker}}) company info is not available yet (Mock placeholder).",
+      "fallbackLine2": "Exchange: {{exchange}}; Asset: {{asset}}; mNAV: {{mNav}}."
+    }
+  },
+  "liquidationData": {
+    "title": "Liquidation Data",
+    "subtitle": "Track real-time liquidations across the market",
+    "summary": {
+      "title": "Total Liquidations",
+      "1h": "1h Liquidations",
+      "4h": "4h Liquidations",
+      "12h": "12h Liquidations",
+      "24h": "24h Liquidations",
+      "long": "Long",
+      "short": "Short"
+    },
+    "infoBar": {
+      "text": "In the last 24 hours, {{count}} traders were liquidated globally, totaling {{total}}. The largest single liquidation occurred on {{venue}} worth {{max}}."
+    },
+    "time": {
+      "1h": "1h",
+      "4h": "4h",
+      "12h": "12h",
+      "24h": "24h"
+    },
+    "table": {
+      "title": "Exchange Liquidations",
+      "longShare": "{{value}}% Long",
+      "columns": {
+        "exchange": "Exchange",
+        "total": "Total",
+        "long": "Long",
+        "short": "Short",
+        "share": "Share",
+        "longShort": "Long/Short"
+      }
+    },
+    "modal": {
+      "title": "{{exchange}} Liquidation Details (Mock)",
+      "primaryAsset": "Primary asset",
+      "multiAsset": "BTC / ETH",
+      "maxSingle": "Largest single liquidation",
+      "recent": "Recent liquidations",
+      "minutesAgo": "{{minutes}} min ago"
+    }
+  },
+  "liquidationMap": {
+    "title": "{{symbol}} Exchange Liquidation Map",
+    "subtitle": "Real-time market-wide liquidation heatmap",
+    "exchangeType": {
+      "all": "All",
+      "cex": "CEX",
+      "dex": "DEX"
+    },
+    "range": {
+      "1d": "1D",
+      "7d": "7D",
+      "30d": "30D"
+    },
+    "legend": {
+      "bybit": "Bybit",
+      "okx": "OKX",
+      "binance": "Binance",
+      "dex": "DEX",
+      "cumLong": "Cumulative Long Liquidations",
+      "cumShort": "Cumulative Short Liquidations"
+    },
+    "tooltip": {
+      "price": "Price"
+    },
+    "currentPrice": "Current Price"
+  },
+  "whaleTracking": {
+    "side": {
+      "long": "Long",
+      "short": "Short",
+      "longAbbr": "L",
+      "shortAbbr": "S",
+      "buy": "Buy",
+      "sell": "Sell"
+    },
+    "margin": {
+      "cross": "Cross",
+      "isolated": "Isolated"
+    },
+    "tags": {
+      "whale": "Whale",
+      "hft": "High Frequency",
+      "steady": "Conservative",
+      "swing": "Swing Trader",
+      "trend": "Trend Follower",
+      "midCapital": "Mid Capital",
+      "bearBias": "Bearish Bias",
+      "breakeven": "Breakeven",
+      "volatility": "Volatility Strategy",
+      "shortTerm": "Short-term"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} h ago",
+      "daysAgo": "{{count}} d ago",
+      "weeksAgo": "{{count}} w ago",
+      "monthsAgo": "{{count}} mo ago",
+      "duration": "{{hours}}h {{minutes}}m"
+    },
+    "discover": {
+      "title": "Discover",
+      "subtitle": "Discover the most valuable traders",
+      "sortBy": "Sort by",
+      "sortFields": {
+        "winRate": "Win rate",
+        "totalValue": "Total value",
+        "realizedPnl": "Realized PnL"
+      },
+      "labels": {
+        "totalValue": "Total Value",
+        "realizedPnl": "Realized PnL",
+        "realizedPnl1m": "Realized PnL (1M)",
+        "trades": "Trades",
+        "positions": "Positions",
+        "winRate": "Win Rate",
+        "winRate1m": "Win Rate (1M)",
+        "aiTags": "AI tags",
+        "aiTagFallback": "AI tag inferred: {{label}}"
+      },
+      "aiTags": {
+        "bullWarGod": "Bull War God",
+        "swingKing": "Swing King",
+        "smartTrader": "Smart Trader",
+        "treasuryKeeper": "Treasury Keeper",
+        "twitterKol": "Twitter KOL"
+      },
+      "aiTagDescriptions": {
+        "bullWarGod": "Primarily holds and profits from long positions in the past 30 days",
+        "swingKing": "Moderate trading frequency, capturing short-to-mid term price swings",
+        "smartTrader": "Historical trades show excellent sell timing",
+        "treasuryKeeper": "Holds large stablecoin and blue-chip assets with very low risk appetite",
+        "twitterKol": "On-chain behavior aligns with public Twitter statements; has market influence"
+      }
+    },
+    "realtime": {
+      "title": "Realtime Whales",
+      "subtitle": "Auto-track large whale trades across exchanges",
+      "paused": "Auto refresh paused",
+      "nextUpdate": "Refresh in {{count}}s",
+      "toast": {
+        "copied": "Address copied"
+      },
+      "table": {
+        "address": "Address",
+        "asset": "Asset",
+        "positionValue": "Position Value",
+        "entryPrice": "Entry Price",
+        "winRate": "Win Rate",
+        "time": "Time",
+        "actions": "Actions"
+      }
+    },
+    "holdings": {
+      "title": "Whale Holdings",
+      "subtitle": "Track the latest positions from large holders",
+      "filters": {
+        "profit": "Profit",
+        "loss": "Loss"
+      },
+      "table": {
+        "address": "Address",
+        "asset": "Asset",
+        "positionValue": "Position Value",
+        "unrealizedPnl": "Unrealized PnL",
+        "margin": "Margin",
+        "entryPrice": "Entry Price",
+        "liqPrice": "Liq Price",
+        "winRate": "Win Rate",
+        "createdTime": "Created",
+        "remark": "Note",
+        "actions": "Actions"
+      }
+    },
+    "modal": {
+      "title": "Trading Stats",
+      "timeRange": {
+        "1w": "1W",
+        "1m": "1M",
+        "all": "All"
+      },
+      "winRate": "Win Rate",
+      "closedPnlBeforeFees": "Closed PnL (before fees)",
+      "feesDeducted": "Fees deducted",
+      "tradeCount": "Trades",
+      "profit": "Profit",
+      "loss": "Loss",
+      "realizedPnl": "Realized PnL",
+      "duration": "Duration",
+      "netPnl": "Net PnL",
+      "fees": "Fees",
+      "size": "Size",
+      "hours": "h",
+      "minutes": "m",
+      "totalHoldTime": "Total Hold Time",
+      "holdRange": "Hold range",
+      "holdRangeValue": "2m ~ 76h 17m",
+      "avgHoldTime": "Avg hold time",
+      "avgHoldTimeValue": "8h 10m",
+      "topTrades": "Top 10 trades",
+      "byAsset": "By asset",
+      "byPosition": "By position",
+      "tradesCount": "{{count}} trades"
+    },
+    "profile": {
+      "invalidAddressTitle": "Invalid wallet address",
+      "invalidAddressDescription": "Please provide a valid EVM-compatible wallet address to view the profile.",
+      "header": {
+        "copyAddress": "Copy address",
+        "refreshing": "Refreshing...",
+        "realtimeData": "Realtime data"
+      },
+      "summary": {
+        "accountValue": "Account Value",
+        "perpetual": "Perpetual",
+        "spot": "Spot",
+        "availableMargin": "Available Margin",
+        "used": "Used",
+        "available": "Available",
+        "withdrawable": "Withdrawable",
+        "totalPositionValue": "Total Position Value",
+        "shortExposure": "Short",
+        "leverageRatio": "Leverage",
+        "performanceWeek": "Performance (1W)",
+        "winRate": "Win Rate",
+        "maxDrawdown": "Max drawdown",
+        "filledOrders": "Filled orders",
+        "closes": "Closes"
+      },
+      "positionProfile": {
+        "perpetualTotalValue": "Perpetual total value",
+        "currentPositions": "Current positions",
+        "avgMarginUsage": "Avg margin usage",
+        "directionBias": "Direction bias",
+        "neutral": "Neutral",
+        "longExposure": "Long exposure",
+        "shortExposure": "Short exposure",
+        "distribution": "Position distribution",
+        "longValue": "Long value",
+        "shortValue": "Short value",
+        "roi": "ROI",
+        "unrealizedPnl": "Unrealized PnL"
+      },
+      "pnlTrend": {
+        "header": "{{timeRange}} {{pnlType}} ({{contractType}})",
+        "timeRange": {
+          "1d": "1D",
+          "1w": "1W",
+          "1m": "1M",
+          "all": "All"
+        },
+        "contractType": {
+          "all": "Perp + Spot",
+          "perpOnly": "Perp only"
+        },
+        "pnlType": {
+          "accountValue": "Account value",
+          "totalPnl": "Total PnL"
+        }
+      },
+      "tabs": {
+        "spot": "Spot ({{count}})",
+        "perpetual": "Perpetual ({{count}})",
+        "orders": "Open Orders ({{count}})",
+        "trades": "Recent Trades",
+        "history": "Completed Trades",
+        "delegation": "Order History"
+      },
+      "assetFilter": {
+        "placeholder": "Filter..."
+      },
+      "orders": {
+        "orderCount": "{{count}} orders"
+      },
+      "orderType": {
+        "limit": "Limit"
+      },
+      "orderStatus": {
+        "open": "Open",
+        "cancelled": "Cancelled",
+        "openOrder": "Open order",
+        "filled": "Filled"
+      },
+      "tradeAction": {
+        "openLongAdd": "Open long (add)"
+      },
+      "columns": {
+        "time": "Time",
+        "endTime": "End time",
+        "asset": "Asset",
+        "share": "Share",
+        "value": "Value",
+        "amount": "Amount",
+        "price": "Price",
+        "positionValue": "Position Value",
+        "unrealizedPnl": "Unrealized PnL",
+        "entryPrice": "Entry Avg",
+        "markPrice": "Mark Price",
+        "liqPrice": "Liq Price",
+        "margin": "Margin",
+        "fundingFee": "Funding Fee",
+        "tpSl": "TP/SL",
+        "side": "Side",
+        "trigger": "Trigger",
+        "status": "Status",
+        "orderId": "Order ID",
+        "action": "Action",
+        "startPosition": "Start Pos",
+        "closedPnl": "Closed PnL",
+        "fee": "Fee",
+        "tradeRecord": "Record",
+        "duration": "Duration",
+        "netPnl": "Net PnL",
+        "size": "Size",
+        "exitPrice": "Exit Price",
+        "type": "Type",
+        "executionStatus": "Execution"
+      }
+    }
+  },
+  "symbols": {
+    "BTC": "Bitcoin",
+    "ETH": "Ethereum",
+    "SOL": "Solana",
+    "XRP": "XRP",
+    "DOGE": "Dogecoin",
+    "BNB": "BNB",
+    "HYPE": "Hyperliquid",
+    "LINK": "Chainlink",
+    "AVAX": "Avalanche",
+    "ADA": "Cardano"
+  },
+  "dashboard": {
+    "tabs": {
+      "explore": "Explore Dashboards",
+      "my": "My Dashboards",
+      "saved": "Saved Dashboards"
+    },
+    "empty": {
+      "my": "You don't have any dashboards yet.",
+      "saved": "No saved dashboards yet."
+    },
+    "actions": {
+      "create": "Create Dashboard",
+      "createFirst": "Create Your First Dashboard",
+      "exploreTrending": "Explore Trending Dashboards",
+      "publish": "Publish",
+      "delete": "Delete"
+    },
+    "sidebar": {
+      "myDashboards": "My Dashboards",
+      "savedDashboards": "Saved Dashboards",
+      "trackedEntities": "Tracked Entities",
+      "untitled": "Untitled"
+    },
+    "explore": {
+      "title": "Explore Dashboards",
+      "searchPlaceholder": "Search dashboards, traders, or strategies...",
+      "featured": "Featured",
+      "hot": "Hot",
+      "community": "Community",
+      "publishedAgo": "Published {{days}} days ago",
+      "saveToMyDashboards": "Save to My Dashboards",
+      "defaultDescription": "A curated dashboard with real-time on-chain trading metrics, liquidity analysis, and whale tracking—built to help traders spot signals faster."
+    },
+    "saves": "{{count}} saves",
+    "creator": "Creator @{{name}}",
+    "widgets": {
+      "liquidationMap": "Liquidation Map",
+      "lsRatio": "Long/Short Ratio",
+      "aggOrderbook": "Aggregated Orderbook",
+      "aggOI": "Aggregated Open Interest",
+      "aggVolume": "Aggregated Volume",
+      "liquidationData": "Liquidation Data",
+      "publicCompanies": "Crypto Equities",
+      "predictionMarket": "Prediction Market"
+    },
+    "editor": {
+      "addWidgetTitle": "Add a Widget",
+      "addWidgetFooter": "Select a widget to add to your dashboard · More features in development",
+      "addWidgetHint": "What kind of intel do you want to see?",
+      "descriptionPlaceholder": "No description",
+      "addTag": "Add Tag",
+      "widgetReady": "Widget ready"
+    }
+  }
+}

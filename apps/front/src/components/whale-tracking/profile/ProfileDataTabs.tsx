@@ -2,6 +2,7 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'history' | 'delegation';
 
@@ -146,7 +147,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'BTC',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '10x',
     valueUSD: '$ 166,034,001.73',
     valueAsset: '-1,899.07241 BTC',
@@ -161,7 +162,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'ETH',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '15x',
     valueUSD: '$ 54,863,721.24',
     valueAsset: '-18,527.5298 ETH',
@@ -176,7 +177,7 @@ const mockPerpetualPositions: PerpetualPosition[] = [
   {
     asset: 'SOL',
     side: 'Short',
-    marginType: '全仓',
+    marginType: 'cross',
     leverage: '20x',
     valueUSD: '$ 18,772,607.28',
     valueAsset: '-151,209.08 SOL',
@@ -200,8 +201,8 @@ const mockOpenOrders: OpenOrder[] = [
     amount: '52,000 ETH', 
     price: '$ 4,277 - 4,277',
     details: [
-      { time: '2025年12月11日', type: '限价', value: '$ 94,094,000.00', amount: '22,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: '开仓', id: '# 265007812594' },
-      { time: '2025年12月11日', type: '限价', value: '$ 128,310,000.00', amount: '30,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: '开仓', id: '# 265007673433' },
+      { time: '2025年12月11日', type: 'limit', value: '$ 94,094,000.00', amount: '22,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007812594' },
+      { time: '2025年12月11日', type: 'limit', value: '$ 128,310,000.00', amount: '30,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007673433' },
     ]
   },
   { 
@@ -213,18 +214,18 @@ const mockOpenOrders: OpenOrder[] = [
     amount: '37,934,068 XRP', 
     price: '$ 3.178 - 3.178',
     details: [
-      { time: '2025年11月27日', type: '限价', value: '$ 40,000,000.00', amount: '12,586,532 XRP', price: '$ 3.178', trigger: '-', status: '开仓', id: '# 265007812595' },
-      { time: '2025年11月27日', type: '限价', value: '$ 80,554,468.10', amount: '25,347,536 XRP', price: '$ 3.178', trigger: '-', status: '开仓', id: '# 265007812596' },
+      { time: '2025年11月27日', type: 'limit', value: '$ 40,000,000.00', amount: '12,586,532 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812595' },
+      { time: '2025年11月27日', type: 'limit', value: '$ 80,554,468.10', amount: '25,347,536 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812596' },
     ]
   },
 ];
 
 const mockRecentTrades: RecentTrade[] = [
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '123.3 HYPE', startPosition: '230,598.33 HYPE', price: '$ 24.306', pnl: '-', fee: '0.36 USDC', value: '$ 2,997.13' },
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '34.17 HYPE', startPosition: '230,564.16 HYPE', price: '$ 24.306', pnl: '-', fee: '0.10 USDC', value: '$ 830.54' },
-  { time: '2025年12月19日', asset: 'HYPE', action: '开多 加仓', amount: '39,120.76 HYPE', startPosition: '191,443.4 HYPE', price: '$ 24.3000178902', pnl: '-', fee: '380.25 USDC', value: '$ 950,634.42' },
-  { time: '2025年12月18日', asset: 'HYPE', action: '开多 加仓', amount: '361.27 HYPE', startPosition: '191,082.13 HYPE', price: '$ 25.111', pnl: '-', fee: '1.09 USDC', value: '$ 9,071.85' },
-  { time: '2025年12月18日', asset: 'HYPE', action: '开多 加仓', amount: '126.92 HYPE', startPosition: '190,955.21 HYPE', price: '$ 25.111', pnl: '-', fee: '0.38 USDC', value: '$ 3,187.09' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '123.3 HYPE', startPosition: '230,598.33 HYPE', price: '$ 24.306', pnl: '-', fee: '0.36 USDC', value: '$ 2,997.13' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '34.17 HYPE', startPosition: '230,564.16 HYPE', price: '$ 24.306', pnl: '-', fee: '0.10 USDC', value: '$ 830.54' },
+  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '39,120.76 HYPE', startPosition: '191,443.4 HYPE', price: '$ 24.3000178902', pnl: '-', fee: '380.25 USDC', value: '$ 950,634.42' },
+  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '361.27 HYPE', startPosition: '191,082.13 HYPE', price: '$ 25.111', pnl: '-', fee: '1.09 USDC', value: '$ 9,071.85' },
+  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '126.92 HYPE', startPosition: '190,955.21 HYPE', price: '$ 25.111', pnl: '-', fee: '0.38 USDC', value: '$ 3,187.09' },
 ];
 
 const mockCompletedTrades: CompletedTrade[] = [
@@ -238,22 +239,58 @@ const mockCompletedTrades: CompletedTrade[] = [
 ];
 
 const mockHistoryOrders: HistoryOrder[] = [
-  { time: '2025年12月19日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '39,278.23 HYPE', price: '$ 24.306', trigger: '-', status: '已撤单', id: '# 273191937200' },
-  { time: '2025年12月19日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '160,909.26 HYPE', price: '$ 24.306', trigger: '-', status: '挂单', id: '# 273191937200' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '0 HYPE', price: '$ 24.666', trigger: '-', status: '已撤单', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '230,601.34 HYPE', price: '$ 24.666', trigger: '-', status: '挂单', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '45,155.62 HYPE', price: '$ 25.111', trigger: '-', status: '已撤单', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '219,729.19 HYPE', price: '$ 25.111', trigger: '-', status: '挂单', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: '限价', side: 'Buy', amount: '116,124.2 HYPE', price: '$ 25.111', trigger: '-', status: '完全成交', id: '# 273021487169' },
+  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '39,278.23 HYPE', price: '$ 24.306', trigger: '-', status: 'cancelled', id: '# 273191937200' },
+  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '160,909.26 HYPE', price: '$ 24.306', trigger: '-', status: 'openOrder', id: '# 273191937200' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '0 HYPE', price: '$ 24.666', trigger: '-', status: 'cancelled', id: '# 273034661279' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '230,601.34 HYPE', price: '$ 24.666', trigger: '-', status: 'openOrder', id: '# 273034661279' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '45,155.62 HYPE', price: '$ 25.111', trigger: '-', status: 'cancelled', id: '# 273022680305' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '219,729.19 HYPE', price: '$ 25.111', trigger: '-', status: 'openOrder', id: '# 273022680305' },
+  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '116,124.2 HYPE', price: '$ 25.111', trigger: '-', status: 'filled', id: '# 273021487169' },
 ];
 
 export const ProfileDataTabs = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('perpetual');
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [assetFilter, setAssetFilter] = useState('');
   const [isFilterOpen, setIsAssetFilterOpen] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+
+  const normalizeDateLabel = (value: string) => {
+    // 2025年12月19日 -> 2025-12-19 (language-agnostic)
+    return value.replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/g, (_, y, m, d) => {
+      const mm = String(m).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      return `${y}-${mm}-${dd}`;
+    });
+  };
+
+  const formatDurationLabel = (value: string) => {
+    // 925小时 35分 -> 925h 35m (English-friendly), keep as-is if unknown format
+    const h = value.match(/(\d+)\s*小时/);
+    const m = value.match(/(\d+)\s*分/);
+    if (!h && !m) return value;
+    const hh = h ? Number.parseInt(h[1], 10) : 0;
+    const mm = m ? Number.parseInt(m[1], 10) : 0;
+    return t('whaleTracking.time.duration', { hours: hh, minutes: mm });
+  };
+
+  const translateMarginType = (key: string) => {
+    return t(`whaleTracking.margin.${key}`);
+  };
+
+  const translateOrderType = (key: string) => {
+    return t(`whaleTracking.profile.orderType.${key}`);
+  };
+
+  const translateOrderStatus = (key: string) => {
+    return t(`whaleTracking.profile.orderStatus.${key}`);
+  };
+
+  const translateTradeAction = (key: string) => {
+    return t(`whaleTracking.profile.tradeAction.${key}`);
+  };
 
   const toggleOrderExpansion = (orderId: string) => {
     const newSet = new Set(expandedOrders);
@@ -263,12 +300,12 @@ export const ProfileDataTabs = () => {
   };
 
   const tabs = [
-    { id: 'spot', label: `现货持仓 (${mockSpotPositions.length})` },
-    { id: 'perpetual', label: `永续合约持仓 (${mockPerpetualPositions.length})` },
-    { id: 'orders', label: `挂单 (${mockOpenOrders.length})` },
-    { id: 'trades', label: '最近成交' },
-    { id: 'history', label: '已完成交易' },
-    { id: 'delegation', label: '历史委托' },
+    { id: 'spot', label: t('whaleTracking.profile.tabs.spot', { count: mockSpotPositions.length }) },
+    { id: 'perpetual', label: t('whaleTracking.profile.tabs.perpetual', { count: mockPerpetualPositions.length }) },
+    { id: 'orders', label: t('whaleTracking.profile.tabs.orders', { count: mockOpenOrders.length }) },
+    { id: 'trades', label: t('whaleTracking.profile.tabs.trades') },
+    { id: 'history', label: t('whaleTracking.profile.tabs.history') },
+    { id: 'delegation', label: t('whaleTracking.profile.tabs.delegation') },
   ];
 
   const handleSort = (field: string) => {
@@ -370,7 +407,7 @@ export const ProfileDataTabs = () => {
     const isLong = side === 'Long' || side === 'Buy';
     return (
       <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${isLong ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-        {side === 'Long' || side === 'Buy' ? '多' : '空'}
+        {side === 'Long' || side === 'Buy' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
       </span>
     );
   };
@@ -409,7 +446,7 @@ export const ProfileDataTabs = () => {
               {showTimeColumn && (
                 <th className="px-6 py-4 text-left min-w-[120px]">
                   <button type="button" onClick={() => handleSort(activeTab === 'history' ? 'endTime' : 'time')} className="flex items-center gap-1.5 hover:text-white group whitespace-nowrap">
-                    <span>{activeTab === 'history' ? '结束时间' : '时间'}</span>
+                    <span>{activeTab === 'history' ? t('whaleTracking.profile.columns.endTime') : t('whaleTracking.profile.columns.time')}</span>
                     {renderSortIcon(activeTab === 'history' ? 'endTime' : 'time')}
                   </button>
                 </th>
@@ -421,7 +458,7 @@ export const ProfileDataTabs = () => {
                     onClick={(e) => { e.stopPropagation(); setIsAssetFilterOpen(!isFilterOpen); }}
                     className="flex items-center gap-1.5 hover:text-white transition-colors group"
                   >
-                    <span>币种</span>
+                    <span>{t('whaleTracking.profile.columns.asset')}</span>
                     <Filter className={`w-3 h-3 ${assetFilter ? 'text-primary' : 'text-[#8b949e]'}`} />
                   </button>
                   {isFilterOpen && (
@@ -433,7 +470,7 @@ export const ProfileDataTabs = () => {
                           autoFocus
                           value={assetFilter}
                           onChange={(e) => setAssetFilter(e.target.value)}
-                          placeholder="筛选..." 
+                          placeholder={t('whaleTracking.profile.assetFilter.placeholder')} 
                           className="w-full bg-[#0d1117] border border-[#30363d] rounded px-8 py-1.5 text-xs text-white focus:outline-none focus:border-primary"
                         />
                         {assetFilter && (
@@ -461,22 +498,22 @@ export const ProfileDataTabs = () => {
               
               {activeTab === 'spot' ? (
                 <>
-                  <th className="px-6 py-4 text-left">资产份额</th>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.profile.columns.share')}</th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('value')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价值</span>
+                      <span>{t('whaleTracking.profile.columns.value')}</span>
                       {renderSortIcon('value')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('amount')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>金额</span>
+                      <span>{t('whaleTracking.profile.columns.amount')}</span>
                       {renderSortIcon('amount')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('price')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价格</span>
+                      <span>{t('whaleTracking.profile.columns.price')}</span>
                       {renderSortIcon('price')}
                     </button>
                   </th>
@@ -485,162 +522,162 @@ export const ProfileDataTabs = () => {
                 <>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('valueUSD')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>持仓价值</span>
+                      <span>{t('whaleTracking.profile.columns.positionValue')}</span>
                       {renderSortIcon('valueUSD')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('pnlUSD')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>未实现盈亏</span>
+                      <span>{t('whaleTracking.profile.columns.unrealizedPnl')}</span>
                       {renderSortIcon('pnlUSD')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('entryPrice')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>入场均价</span>
+                      <span>{t('whaleTracking.profile.columns.entryPrice')}</span>
                       {renderSortIcon('entryPrice')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('markPrice')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>标记价</span>
+                      <span>{t('whaleTracking.profile.columns.markPrice')}</span>
                       {renderSortIcon('markPrice')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('liqPrice')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>清算价</span>
+                      <span>{t('whaleTracking.profile.columns.liqPrice')}</span>
                       {renderSortIcon('liqPrice')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('margin')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>保证金</span>
+                      <span>{t('whaleTracking.profile.columns.margin')}</span>
                       {renderSortIcon('margin')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('fundingFee')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>资金费用</span>
+                      <span>{t('whaleTracking.profile.columns.fundingFee')}</span>
                       {renderSortIcon('fundingFee')}
                     </button>
                   </th>
-                  <th className="px-6 py-4 text-center whitespace-nowrap">止盈/止损</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">{t('whaleTracking.profile.columns.tpSl')}</th>
                 </>
               ) : activeTab === 'orders' ? (
                 <>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">方向</th>
+                  <th className="px-6 py-4 text-left whitespace-nowrap">{t('whaleTracking.profile.columns.side')}</th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('value')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价值</span>
+                      <span>{t('whaleTracking.profile.columns.value')}</span>
                       {renderSortIcon('value')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('amount')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>数量</span>
+                      <span>{t('whaleTracking.profile.columns.amount')}</span>
                       {renderSortIcon('amount')}
                     </button>
                   </th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">价格</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">触发条件</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">状态</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">订单 ID</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.price')}</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.trigger')}</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.status')}</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.orderId')}</th>
                 </>
               ) : activeTab === 'trades' ? (
                 <>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">行为</th>
+                  <th className="px-6 py-4 text-left whitespace-nowrap">{t('whaleTracking.profile.columns.action')}</th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('amount')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>数量</span>
+                      <span>{t('whaleTracking.profile.columns.amount')}</span>
                       {renderSortIcon('amount')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('startPosition')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>起始仓位</span>
+                      <span>{t('whaleTracking.profile.columns.startPosition')}</span>
                       {renderSortIcon('startPosition')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('value')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价值</span>
+                      <span>{t('whaleTracking.profile.columns.value')}</span>
                       {renderSortIcon('value')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('price')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价格</span>
+                      <span>{t('whaleTracking.profile.columns.price')}</span>
                       {renderSortIcon('price')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('pnl')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>已平盈亏</span>
+                      <span>{t('whaleTracking.profile.columns.closedPnl')}</span>
                       {renderSortIcon('pnl')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('fee')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>费用</span>
+                      <span>{t('whaleTracking.profile.columns.fee')}</span>
                       {renderSortIcon('fee')}
                     </button>
                   </th>
-                  <th className="px-6 py-4 text-center whitespace-nowrap">交易记录</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">{t('whaleTracking.profile.columns.tradeRecord')}</th>
                 </>
               ) : activeTab === 'history' ? (
                 <>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">方向</th>
+                  <th className="px-6 py-4 text-left whitespace-nowrap">{t('whaleTracking.profile.columns.side')}</th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('duration')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>持续时间</span>
+                      <span>{t('whaleTracking.profile.columns.duration')}</span>
                       {renderSortIcon('duration')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('netPnl')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>净盈亏</span>
+                      <span>{t('whaleTracking.profile.columns.netPnl')}</span>
                       {renderSortIcon('netPnl')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('size')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>规模</span>
+                      <span>{t('whaleTracking.profile.columns.size')}</span>
                       {renderSortIcon('size')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('exitPrice')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>平仓价</span>
+                      <span>{t('whaleTracking.profile.columns.exitPrice')}</span>
                       {renderSortIcon('exitPrice')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('fee')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>费用</span>
+                      <span>{t('whaleTracking.profile.columns.fee')}</span>
                       {renderSortIcon('fee')}
                     </button>
                   </th>
                 </>
               ) : activeTab === 'delegation' ? (
                 <>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">类型</th>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">方向</th>
+                  <th className="px-6 py-4 text-left whitespace-nowrap">{t('whaleTracking.profile.columns.type')}</th>
+                  <th className="px-6 py-4 text-left whitespace-nowrap">{t('whaleTracking.profile.columns.side')}</th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('amount')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>数量</span>
+                      <span>{t('whaleTracking.profile.columns.amount')}</span>
                       {renderSortIcon('amount')}
                     </button>
                   </th>
                   <th className="px-6 py-4 text-right">
                     <button type="button" onClick={() => handleSort('price')} className="flex items-center justify-end gap-1.5 ml-auto hover:text-white group whitespace-nowrap">
-                      <span>价格</span>
+                      <span>{t('whaleTracking.profile.columns.price')}</span>
                       {renderSortIcon('price')}
                     </button>
                   </th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">触发条件</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">执行状态</th>
-                  <th className="px-6 py-4 text-right whitespace-nowrap">订单 ID</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.trigger')}</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.executionStatus')}</th>
+                  <th className="px-6 py-4 text-right whitespace-nowrap">{t('whaleTracking.profile.columns.orderId')}</th>
                 </>
               ) : null}
             </tr>
@@ -675,7 +712,9 @@ export const ProfileDataTabs = () => {
                     {renderSideBadge(pos.side)}
                     <div className="flex flex-col">
                       <span className="text-white text-sm font-bold">{pos.asset}</span>
-                      <span className="text-[#8b949e] text-[10px] font-medium uppercase">{pos.marginType} {pos.leverage}</span>
+                      <span className="text-[#8b949e] text-[10px] font-medium uppercase">
+                        {translateMarginType(pos.marginType)} {pos.leverage}
+                      </span>
                     </div>
                   </div>
                 </td>
@@ -704,7 +743,7 @@ export const ProfileDataTabs = () => {
                 <React.Fragment key={orderKey}>
                   <tr className="hover:bg-[#1f2937]/50 transition-colors cursor-pointer" onClick={() => toggleOrderExpansion(orderKey)}>
                     <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
-                      {order.time}
+                      {normalizeDateLabel(order.time)}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-white text-sm font-bold uppercase">{order.asset}</span>
@@ -712,9 +751,9 @@ export const ProfileDataTabs = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${order.side === 'Buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                          {order.side === 'Buy' ? '买入' : '卖出'}
+                          {order.side === 'Buy' ? t('whaleTracking.side.buy') : t('whaleTracking.side.sell')}
                         </span>
-                        <span className="text-[#8b949e] text-xs font-medium">{order.count} 笔订单</span>
+                        <span className="text-[#8b949e] text-xs font-medium">{t('whaleTracking.profile.orders.orderCount', { count: order.count })}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.value}</td>
@@ -731,7 +770,7 @@ export const ProfileDataTabs = () => {
                   {expandedOrders.has(orderKey) && order.details.map((detail, dIdx) => (
                     <tr key={detail.id || dIdx} className="bg-[#0d1117]/30 text-[#8b949e]">
                     <td className="px-6 py-3 pl-12 text-xs">
-                      {detail.time}
+                      {normalizeDateLabel(detail.time)}
                     </td>
                     <td className="px-6 py-3 text-white/70 text-xs font-bold uppercase">
                       {order.asset}
@@ -739,16 +778,16 @@ export const ProfileDataTabs = () => {
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-2">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${order.side === 'Buy' ? 'bg-green-500/10 text-green-400/70' : 'bg-red-500/10 text-red-400/70'}`}>
-                          {order.side === 'Buy' ? '买入' : '卖出'}
+                          {order.side === 'Buy' ? t('whaleTracking.side.buy') : t('whaleTracking.side.sell')}
                         </span>
-                        <span className="text-[10px]">{detail.type}</span>
+                        <span className="text-[10px]">{translateOrderType(detail.type)}</span>
                       </div>
                     </td>
                     <td className="px-6 py-3 text-right text-xs">{detail.value}</td>
                     <td className="px-6 py-3 text-right text-[10px] uppercase">{detail.amount}</td>
                     <td className="px-6 py-3 text-right text-xs">{detail.price}</td>
                     <td className="px-6 py-3 text-right text-xs">{detail.trigger}</td>
-                    <td className="px-6 py-3 text-right text-xs">{detail.status}</td>
+                    <td className="px-6 py-3 text-right text-xs">{translateOrderStatus(detail.status)}</td>
                     <td className="px-6 py-3 text-right text-[10px]">{detail.id}</td>
                   </tr>
                 ))}
@@ -757,14 +796,14 @@ export const ProfileDataTabs = () => {
             }) : activeTab === 'trades' ? filteredRecentTrades.map((trade, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
-                  {trade.time}
+                  {normalizeDateLabel(trade.time)}
                 </td>
                 <td className="px-6 py-4 text-white text-sm font-bold uppercase">
                   {trade.asset}
                 </td>
                 <td className="px-6 py-4">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-green-500/20 text-green-400 uppercase whitespace-nowrap`}>
-                    {trade.action}
+                    {translateTradeAction(trade.action)}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{trade.amount}</td>
@@ -784,7 +823,7 @@ export const ProfileDataTabs = () => {
             )) : activeTab === 'history' ? filteredCompletedTrades.map((trade, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
-                  {trade.endTime}
+                  {normalizeDateLabel(trade.endTime)}
                 </td>
                 <td className="px-6 py-4 text-white text-sm font-bold uppercase">
                   {trade.asset}
@@ -792,7 +831,7 @@ export const ProfileDataTabs = () => {
                 <td className="px-6 py-4">
                   {renderSideBadge(trade.side)}
                 </td>
-                <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{trade.duration}</td>
+                <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{formatDurationLabel(trade.duration)}</td>
                 <td className="px-6 py-4 text-right font-bold text-sm">
                   <span className={trade.netPnl.includes('+') ? 'text-green-400' : 'text-red-400'}>{trade.netPnl}</span>
                 </td>
@@ -803,22 +842,22 @@ export const ProfileDataTabs = () => {
             )) : activeTab === 'delegation' ? filteredHistoryOrders.map((order, idx) => (
               <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors">
                 <td className="px-6 py-4 text-[#8b949e] text-sm font-medium whitespace-nowrap">
-                  {order.time}
+                  {normalizeDateLabel(order.time)}
                 </td>
                 <td className="px-6 py-4 text-white text-sm font-bold uppercase">
                   {order.asset}
                 </td>
-                <td className="px-6 py-4 text-white text-xs font-medium">{order.type}</td>
+                <td className="px-6 py-4 text-white text-xs font-medium">{translateOrderType(order.type)}</td>
                 <td className="px-6 py-4">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-green-500/20 text-green-400 uppercase`}>
-                    {order.side === 'Buy' ? '买入' : '卖出'}
+                    {order.side === 'Buy' ? t('whaleTracking.side.buy') : t('whaleTracking.side.sell')}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{order.amount}</td>
                 <td className="px-6 py-4 text-right text-white text-sm font-medium">{order.price}</td>
                 <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium">{order.trigger}</td>
                 <td className="px-6 py-4 text-right">
-                  {order.status === '完全成交' ? (
+                  {order.status === 'filled' ? (
                     <div className="flex items-center justify-end gap-1.5 text-green-400">
                       <div className="w-4 h-4 rounded-full border border-green-400 flex items-center justify-center">
                         <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
@@ -826,7 +865,7 @@ export const ProfileDataTabs = () => {
                         </svg>
                       </div>
                     </div>
-                  ) : order.status === '已撤单' ? (
+                  ) : order.status === 'cancelled' ? (
                     <div className="flex items-center justify-end gap-1.5 text-[#8b949e]">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
@@ -834,7 +873,7 @@ export const ProfileDataTabs = () => {
                       </svg>
                     </div>
                   ) : (
-                    <span className="text-[#8b949e] text-xs font-medium uppercase">{order.status}</span>
+                    <span className="text-[#8b949e] text-xs font-medium uppercase">{translateOrderStatus(order.status)}</span>
                   )}
                 </td>
                 <td className="px-6 py-4 text-right text-[#8b949e] text-xs font-medium uppercase">{order.id}</td>

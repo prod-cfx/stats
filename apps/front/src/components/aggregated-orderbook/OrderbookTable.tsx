@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 
 interface OrderItem {
@@ -105,6 +106,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   bids, 
   displayMode = 'both'
 }) => {
+  const { t } = useTranslation();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   // Define a precise row height to ensure alignment (font + padding)
@@ -143,10 +145,10 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
       {/* Table Header */}
       <div className="flex items-center px-3 py-2 border-b border-[#30363d] text-[#8b949e] text-[12px] font-semibold flex-none bg-[#0d1117] z-10 h-[36px]">
-        <span className="w-[22%]">交易所</span>
-        <span className="w-[26%] text-right">价格(USDT)</span>
-        <span className="w-[26%] text-right">数量(BTC)</span>
-        <span className="w-[26%] text-right">总计(BTC)</span>
+        <span className="w-[22%]">{t('aggregatedOrderbook.table.exchange')}</span>
+        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.price')}</span>
+        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.amount')}</span>
+        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.total')}</span>
       </div>
 
       {/* Table Body - Fixed height for exactly 26 rows */}
