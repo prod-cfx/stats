@@ -300,29 +300,6 @@
       "fallbackLine2": "交易所：{{exchange}}；持有资产：{{asset}}；mNAV：{{mNav}}。"
     }
   },
-  "whaleTracking": {
-    "discover": {
-      "title": "发现",
-      "subtitle": "发现最有价值的交易者",
-      "sortBy": "排序方式",
-      "sortFields": {
-        "winRate": "胜率",
-        "totalValue": "账户总价值",
-        "realizedPnl": "已实现盈亏"
-      },
-      "labels": {
-        "totalValue": "账户总价值",
-        "realizedPnl": "已实现盈亏",
-        "realizedPnl1m": "已实现盈亏(1月)",
-        "trades": "交易次数",
-        "winRate": "胜率",
-        "winRate1m": "胜率(1月)",
-        "positions": "当前持仓",
-        "aiTags": "AI标签",
-        "aiTagFallback": "{{label}}：基于多维度链上行为分析得出的特征标签"
-      }
-    }
-  },
   "liquidationData": {
     "title": "爆仓数据",
     "subtitle": "追踪全网实时爆仓数据",

@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import React, { useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 interface ModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const Modal = ({
   width = 'max-w-2xl',
   loading = false,
 }: ModalProps) => {
+  const { t } = useTranslation();
   const handleEsc = useCallback(
     (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -77,7 +79,7 @@ export const Modal = ({
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#161b22]/80 backdrop-blur-[2px]">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                <p className="text-sm text-[#8b949e]">加载中...</p>
+                <p className="text-sm text-[#8b949e]">{t('common.loading')}</p>
               </div>
             </div>
           )}

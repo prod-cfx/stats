@@ -300,29 +300,6 @@
       "fallbackLine2": "Exchange: {{exchange}}; Asset: {{asset}}; mNAV: {{mNav}}."
     }
   },
-  "whaleTracking": {
-    "discover": {
-      "title": "Discover",
-      "subtitle": "Discover the most valuable traders",
-      "sortBy": "Sort by",
-      "sortFields": {
-        "winRate": "Win Rate",
-        "totalValue": "Total Value",
-        "realizedPnl": "Realized PnL"
-      },
-      "labels": {
-        "totalValue": "Total Value",
-        "realizedPnl": "Realized PnL",
-        "realizedPnl1m": "Realized PnL (1M)",
-        "trades": "Trades",
-        "winRate": "Win Rate",
-        "winRate1m": "Win Rate (1M)",
-        "positions": "Positions",
-        "aiTags": "AI Tags",
-        "aiTagFallback": "{{label}}: AI tag derived from multi-dimensional on-chain behavior."
-      }
-    }
-  },
   "liquidationData": {
     "title": "Liquidation Data",
     "subtitle": "Track real-time liquidations across the market",
