@@ -1,6 +1,6 @@
 import type { MarketId, VenueOrderBook } from '@ai/shared'
-import { toMarketKey } from '@ai/shared'
 import type { OrderbookPairConfig } from '@prisma/client'
+import { toMarketKey } from '@ai/shared'
 import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
