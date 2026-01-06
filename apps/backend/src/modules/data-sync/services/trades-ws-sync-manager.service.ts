@@ -64,7 +64,29 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       this.timer = null
     }
 
-    await Promise.allSettled(this.adapters.map(a => a.shutdown()))
+    if (!this.adapters.length) return
+
+    const results = await Promise.allSettled(this.adapters.map(a => a.shutdown()))
+
+    const failed: string[] = []
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const adapter = this.adapters[index]
+        const reason =
+          result.reason instanceof Error ? result.reason.message : String(result.reason)
+        failed.push(`${adapter.key}: ${reason}`)
+        this.logger.error(
+          `Trades WS adapter shutdown failed for key=${adapter.key}: ${reason}`,
+        )
+      }
+    })
+
+    if (failed.length) {
+      throw new Error(
+        `Trades WS sync manager shutdown failed for adapters: ${failed.join('; ')}`,
+      )
+    }
   }
 
   private isEnabled(): boolean {

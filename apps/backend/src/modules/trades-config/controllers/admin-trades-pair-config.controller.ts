@@ -1,5 +1,5 @@
 import type { TradesPairConfig } from '@prisma/client'
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
 import {
   ApiBearerAuth,
   ApiBody,
@@ -18,6 +18,7 @@ import {
   RequireAuth,
   UpdateAny,
 } from '@/modules/auth/decorators/access-control.decorator'
+import { AuthRateLimitGuard } from '@/modules/auth/guards/auth-rate-limit.guard'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { CreateTradesPairConfigDto } from '../dto/create-trades-pair-config.dto'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -32,6 +33,7 @@ import { TradesPairConfigService } from '../services/trades-pair-config.service'
 @ApiBearerAuth('bearer')
 @RequireAuth()
 @ApiExtraModels(BaseResponseDto, TradesPairConfigResponseDto)
+@UseGuards(AuthRateLimitGuard)
 export class AdminTradesPairConfigController {
   constructor(
     private readonly service: TradesPairConfigService,
