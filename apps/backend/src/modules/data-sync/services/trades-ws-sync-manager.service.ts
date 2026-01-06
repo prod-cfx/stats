@@ -182,7 +182,10 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
 
   /**
    * 计算配置哈希，用于检测配置变更
-   * 只比较影响订阅的关键字段：exchange, instrumentType, symbol, enabled, priority
+   * 只比较会影响订阅行为的关键字段：
+   * - exchange / instrumentType / symbol：决定使用哪个适配器与频道
+   * - baseAsset / quoteAsset / metadata：影响 instId 解析等订阅细节
+   * - enabled / priority：决定是否订阅及优先级
    */
   private computeConfigHash(configs: TradesConfig[]): string {
     // 按 symbol 排序，确保哈希稳定
@@ -197,6 +200,10 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       exchange: cfg.exchange,
       instrumentType: cfg.instrumentType,
       symbol: cfg.symbol,
+      baseAsset: cfg.baseAsset,
+      quoteAsset: cfg.quoteAsset,
+      // 为避免 metadata 格式差异，这里直接序列化为字符串（null 统一为 null）
+      metadata: cfg.metadata == null ? null : JSON.stringify(cfg.metadata),
       enabled: cfg.enabled,
       priority: cfg.priority,
     }))

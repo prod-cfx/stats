@@ -32,6 +32,11 @@ interface TradeState {
   buffer: OkxTradeData[]
   isReady: boolean
   lastSeenTradeId: string | null
+  /**
+   * 最近一次将缓冲区刷入数据库的时间戳（ms）
+   * 用于时间驱动的 flush，避免低频交易对长期滞留在内存
+   */
+  lastFlushAt: number
 }
 
 @Injectable()
@@ -94,6 +99,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
           buffer: [],
           isReady: true,
           lastSeenTradeId: null,
+          lastFlushAt: Date.now(),
         }
         this.states.set(instId, created)
       } else {
@@ -105,6 +111,9 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   }
 
   async shutdown(): Promise<void> {
+    // 先冲刷所有缓冲中的成交记录，避免进程退出时丢数据
+    await Promise.allSettled([...this.states.values()].map(state => this.flushBuffer(state)))
+
     for (const conn of this.connections) {
       conn.shutdown()
     }
@@ -167,7 +176,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     const state = this.states.get(instId)
     if (!state) return
 
-    // 添加到缓冲区，达到阈值后批量插入
+    // 添加到缓冲区，达到阈值或超时则批量插入
     for (const trade of msg.data) {
       // 避免重复插入
       if (state.lastSeenTradeId === trade.tradeId) {
@@ -177,8 +186,12 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
       state.lastSeenTradeId = trade.tradeId
     }
 
-    // 当缓冲区达到 100 条记录时，批量插入
-    if (state.buffer.length >= 100) {
+    const now = Date.now()
+    const BUFFER_SIZE_THRESHOLD = 100
+    const FLUSH_INTERVAL_MS = 5_000 // 至少每 5 秒刷一次，防止低频成交长期堆积
+
+    // 当缓冲区达到一定条数，或距离上次 flush 已超过阈值时，批量插入
+    if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
       await this.flushBuffer(state)
     }
   }
@@ -193,6 +206,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
     try {
       await this.batchInsertTrades(state, trades)
+      state.lastFlushAt = Date.now()
     } catch (error) {
       this.logger.error(
         `Failed to batch insert ${trades.length} trades for ${state.instId}: ${error instanceof Error ? error.message : String(error)}`,
