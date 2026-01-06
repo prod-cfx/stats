@@ -2,12 +2,32 @@
 
 import type { DataSource, MarketType } from '@/app/page';
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/ui/loading';
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
+
+function hashStringToSeed(input: string) {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 interface RightPanelProps {
   isAggregated: boolean;
@@ -20,10 +40,8 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   const { t, i18n } = useTranslation();
   const [tradeTab, setTradeTab] = useState('latest');
   const [loading, setLoading] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   const sellsRef = useRef<HTMLDivElement>(null);
   const decimalMenuRef = useRef<HTMLDivElement>(null);
-  const initLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -32,33 +50,79 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         clearTimeout(tabLoadingTimeoutRef.current);
         tabLoadingTimeoutRef.current = null;
       }
-      if (initLoadTimeoutRef.current) {
-        clearTimeout(initLoadTimeoutRef.current);
-        initLoadTimeoutRef.current = null;
-      }
     };
   }, []);
   // Precision definition:
   //  2 => 0.01, 1 => 0.1, 0 => 1, -1 => 10, -2 => 100
   const [pricePrecision, setPricePrecision] = useState<number>(2);
   const [isDecimalMenuOpen, setIsDecimalMenuOpen] = useState(false);
-  
-  const [orderbook, setOrderbook] = useState({
-    sells: [] as any[],
-    buys: [] as any[]
-  });
-
-  const [trades, setTrades] = useState([] as any[]);
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
 
   const fractionDigits = pricePrecision >= 0 ? pricePrecision : 0;
   const precisionStep = useMemo(() => {
     return pricePrecision >= 0 ? 10 ** (-pricePrecision) : 10 ** (-pricePrecision);
   }, [pricePrecision]);
 
-  const roundToStep = (v: number) => {
+  const roundToStep = useCallback((v: number) => {
     const step = precisionStep;
     return Math.round(v / step) * step;
-  };
+  }, [precisionStep]);
+
+  const createDeterministicMock = useMemo(() => {
+    const seedKey = `${symbol}:${marketType}:${isAggregated ? 'agg' : selectedExchange}:p${pricePrecision}:${locale}`;
+    const rand = mulberry32(hashStringToSeed(seedKey));
+
+    const basePrice = getMockBasePrice(symbol);
+    const tick = getMockTickSize(basePrice);
+    const priceOffset = isAggregated ? 0 : (selectedExchange === 'binance' ? tick * 10 : -tick * 10);
+    const volumeMultiplier = isAggregated ? 1 : (selectedExchange === 'binance' ? 0.6 : 0.4);
+    const step = Math.max(tick, precisionStep);
+
+    const baseTs = 1_700_000_000_000; // fixed epoch for SSR/CSR deterministic formatting
+
+    const sells = Array.from({ length: 60 }, (_, i) => {
+      const price = roundToStep(basePrice + priceOffset + step * 10 + i * step).toFixed(fractionDigits);
+      const amount = (rand() * 0.1 * volumeMultiplier).toFixed(5);
+      const total = (Number(amount) * Number(price)).toFixed(2);
+      const depth = rand() * 100;
+      return { price, amount, total, depth };
+    }).reverse();
+
+    const buys = Array.from({ length: 60 }, (_, i) => {
+      const price = roundToStep(basePrice + priceOffset - i * step).toFixed(fractionDigits);
+      const amount = (rand() * 0.1 * volumeMultiplier).toFixed(5);
+      const total = (Number(amount) * Number(price)).toFixed(2);
+      const depth = rand() * 100;
+      return { price, amount, total, depth };
+    });
+
+    const trades = Array.from({ length: 60 }, (_, i) => {
+      const price = roundToStep(basePrice + priceOffset + (rand() - 0.5) * tick * 2).toFixed(fractionDigits);
+      const amount = (rand() * 0.05 * volumeMultiplier).toFixed(5);
+      const time = new Date(baseTs - i * 1000).toLocaleTimeString(locale, { hour12: false });
+      const type = rand() > 0.5 ? 'buy' : 'sell';
+      return { id: baseTs - i * 1000, price, amount, time, type };
+    });
+
+    return {
+      initialOrderbook: { sells, buys },
+      initialTrades: trades,
+      meta: { basePrice, tick, priceOffset, volumeMultiplier },
+    };
+  }, [
+    fractionDigits,
+    isAggregated,
+    locale,
+    marketType,
+    precisionStep,
+    pricePrecision,
+    roundToStep,
+    selectedExchange,
+    symbol,
+  ]);
+
+  const [orderbook, setOrderbook] = useState(() => createDeterministicMock.initialOrderbook);
+  const [trades, setTrades] = useState(() => createDeterministicMock.initialTrades);
 
   // Close decimal menu when clicking outside
   useEffect(() => {
@@ -73,60 +137,15 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     }
   }, [isDecimalMenuOpen]);
 
-  // Mock Data generation based on source
-  const generateMockData = () => {
-    const basePrice = getMockBasePrice(symbol);
-    const tick = getMockTickSize(basePrice);
-    const priceOffset = isAggregated ? 0 : (selectedExchange === 'binance' ? tick * 10 : -tick * 10);
-    const volumeMultiplier = isAggregated ? 1 : (selectedExchange === 'binance' ? 0.6 : 0.4);
-    const step = Math.max(tick, precisionStep);
-    
-    const initialOrderbook = {
-      sells: Array.from({ length: 60 }, (_, i) => ({
-        price: roundToStep(basePrice + priceOffset + step * 10 + i * step).toFixed(fractionDigits),
-        amount: (Math.random() * 0.1 * volumeMultiplier).toFixed(5),
-        total: (Math.random() * 10 * volumeMultiplier).toFixed(2),
-        depth: Math.random() * 100
-      })).reverse(),
-      buys: Array.from({ length: 60 }, (_, i) => ({
-        price: roundToStep(basePrice + priceOffset - i * step).toFixed(fractionDigits),
-        amount: (Math.random() * 0.1 * volumeMultiplier).toFixed(5),
-        total: (Math.random() * 10 * volumeMultiplier).toFixed(2),
-        depth: Math.random() * 100
-      }))
-    };
-    
-    const initialTrades = Array.from({ length: 60 }, (_, i) => ({
-      id: i,
-      price: roundToStep(basePrice + priceOffset + step).toFixed(fractionDigits),
-      amount: (Math.random() * 0.05 * volumeMultiplier).toFixed(5),
-      time: new Date(Date.now() - i * 1000).toLocaleTimeString(
-        i18n.language === 'zh' ? 'zh-CN' : 'en-US',
-        { hour12: false }
-      ),
-      type: Math.random() > 0.5 ? 'buy' : 'sell'
-    }));
-
-    return { initialOrderbook, initialTrades };
-  };
-
   useEffect(() => {
-    setIsMounted(true);
-    setLoading(true);
-    
-    // Simulate initial loading: 500ms (reduced for smoother toggle feel)
-    if (initLoadTimeoutRef.current)
-      clearTimeout(initLoadTimeoutRef.current);
-    initLoadTimeoutRef.current = setTimeout(() => {
-      const { initialOrderbook, initialTrades } = generateMockData();
-      setOrderbook(initialOrderbook);
-      setTrades(initialTrades);
-      setLoading(false);
-    }, 500);
+    // When source / symbol / precision changes, sync deterministic initial data immediately (no blank SSR/CSR)
+    setOrderbook(createDeterministicMock.initialOrderbook);
+    setTrades(createDeterministicMock.initialTrades);
+    setLoading(false);
 
     const interval = setInterval(() => {
-      const volumeMultiplier = isAggregated ? 1 : (selectedExchange === 'binance' ? 0.6 : 0.4);
-      
+      const { basePrice, tick, priceOffset, volumeMultiplier } = createDeterministicMock.meta;
+
       setOrderbook(prev => ({
         sells: prev.sells.map(s => ({
           ...s,
@@ -140,15 +159,11 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         }))
       }));
 
-      const basePrice = getMockBasePrice(symbol);
-      const tick = getMockTickSize(basePrice);
-      const priceOffset = isAggregated ? 0 : (selectedExchange === 'binance' ? tick * 10 : -tick * 10);
-
       const newTrade = {
         id: Date.now(),
-        price: (basePrice + priceOffset + (Math.random() - 0.5) * tick * 3).toFixed(basePrice >= 1 ? 2 : 6),
+        price: (basePrice + priceOffset + (Math.random() - 0.5) * tick * 3).toFixed(fractionDigits),
         amount: (Math.random() * 0.05 * volumeMultiplier).toFixed(5),
-        time: new Date().toLocaleTimeString(i18n.language === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }),
+        time: new Date().toLocaleTimeString(locale, { hour12: false }),
         type: Math.random() > 0.5 ? 'buy' : 'sell'
       };
       setTrades(prev => [newTrade, ...prev.slice(0, 59)]);
@@ -156,12 +171,8 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
     return () => {
       clearInterval(interval);
-      if (initLoadTimeoutRef.current) {
-        clearTimeout(initLoadTimeoutRef.current);
-        initLoadTimeoutRef.current = null;
-      }
     };
-  }, [isAggregated, selectedExchange, symbol, pricePrecision, precisionStep]); // Re-run when source/format changes
+  }, [createDeterministicMock, fractionDigits, locale]); // Re-run when source/format changes
 
   useEffect(() => {
     if (!loading && sellsRef.current) {
@@ -169,7 +180,6 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     }
   }, [loading]);
 
-  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
   const compactFormatter = useMemo(() => new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 2 }), [locale])
   const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }), [locale, fractionDigits])
   const formatUsd = (n: number) => `$${priceFormatter.format(n)}`
@@ -200,8 +210,6 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
       : t('rightPanel.integerPlaces', { count: Math.abs(pricePrecision) });
 
   const displaySymbol = marketType === 'spot' && symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}/USDT` : symbol;
-
-  if (!isMounted) return null;
 
   return (
     <div className="w-full bg-[#161b22] border-l border-[#30363d] rounded-xl flex flex-col text-[#c9d1d9] relative">

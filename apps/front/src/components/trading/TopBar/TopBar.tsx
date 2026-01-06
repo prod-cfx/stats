@@ -105,14 +105,39 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   const fundingRatePct = 0.004;
   const low24h = lastPrice * 0.994;
   const high24h = lastPrice * 1.012;
-  const openInterestBtc = selectedBase === 'BTC' ? 24000 : 8000;
-  
-  // Volume changes based on aggregation
-  const volume24hBtc = isAggregated 
-    ? 68200 
-    : selectedExchange === 'binance' 
-      ? 42000 
-      : 26200;
+
+  // Open interest / volume should match the selected base asset (not hardcoded BTC)
+  const openInterestByAsset: Record<string, number> = {
+    BTC: 24_000,
+    ETH: 180_000,
+    SOL: 2_600_000,
+    XRP: 85_000_000,
+    BNB: 120_000,
+    DOGE: 950_000_000,
+    ADA: 220_000_000,
+    AVAX: 1_800_000,
+    LINK: 12_500_000,
+    DOT: 35_000_000,
+  }
+  const volume24hByAsset: Record<string, number> = {
+    BTC: 68_200,
+    ETH: 520_000,
+    SOL: 8_500_000,
+    XRP: 1_250_000_000,
+    BNB: 340_000,
+    DOGE: 5_800_000_000,
+    ADA: 1_900_000_000,
+    AVAX: 6_200_000,
+    LINK: 48_000_000,
+    DOT: 92_000_000,
+  }
+
+  const oiBase = openInterestByAsset[selectedBase] ?? 10_000
+  const volBase = volume24hByAsset[selectedBase] ?? 50_000
+
+  const exchangeMultiplier = isAggregated ? 1 : selectedExchange === 'binance' ? 0.6 : 0.4
+  const openInterest = oiBase * exchangeMultiplier
+  const volume24h = volBase * exchangeMultiplier
 
   // Mock Market Data
   const marketList = useMemo(() => {
@@ -328,11 +353,11 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
           </div>
           <div className="flex flex-col min-w-fit">
             <span className="text-[#8b949e] whitespace-nowrap">{t('trade.open_interest')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(openInterestBtc)} BTC</span>
+            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(openInterest)} {selectedBase}</span>
           </div>
           <div className="flex flex-col min-w-fit">
             <span className="text-[#8b949e] whitespace-nowrap">{t('trade.24h_volume')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(volume24hBtc)} BTC</span>
+            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(volume24h)} {selectedBase}</span>
           </div>
         </div>
       </div>
