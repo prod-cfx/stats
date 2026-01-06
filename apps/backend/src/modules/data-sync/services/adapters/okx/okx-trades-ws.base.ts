@@ -37,6 +37,10 @@ interface TradeState {
    * 用于时间驱动的 flush，避免低频交易对长期滞留在内存
    */
   lastFlushAt: number
+  /**
+   * 当前是否有正在进行的 flush 操作，用于串行化同一 instId 的落库
+   */
+  flushPromise?: Promise<void> | null
 }
 
 @Injectable()
@@ -82,10 +86,18 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
       desiredInstIds.set(instId, cfg)
     }
 
-    // remove stale states
-    for (const instId of [...this.states.keys()]) {
-      if (!desiredInstIds.has(instId)) {
-        this.states.delete(instId)
+    // remove stale states（在删除前先尝试 flush 缓冲，避免配置变更时丢失尚未落库的成交）
+    const staleStates: TradeState[] = []
+    for (const state of this.states.values()) {
+      if (!desiredInstIds.has(state.instId)) {
+        staleStates.push(state)
+      }
+    }
+
+    if (staleStates.length) {
+      await Promise.allSettled(staleStates.map(state => this.flushBuffer(state)))
+      for (const state of staleStates) {
+        this.states.delete(state.instId)
       }
     }
 
@@ -202,18 +214,39 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   private async flushBuffer(state: TradeState): Promise<void> {
     if (state.buffer.length === 0) return
 
-    // 拷贝当前缓冲，避免在写入失败时丢失尚未持久化的成交
-    const trades = [...state.buffer]
+    // 串行化同一 instId 的 flush，避免并发 flush 导致 buffer 被多次 splice 而丢单
+    if (state.flushPromise) {
+      // 已有 flush 在进行中，直接复用该 Promise
+      await state.flushPromise
+      return
+    }
+
+    state.flushPromise = (async () => {
+      // 使用循环确保在一次 flush 周期内尽可能清空当前缓冲
+      // 新成交写入 buffer 后，若仍满足阈值/时间条件，会在下一轮被处理
+      while (state.buffer.length > 0) {
+        // 拷贝当前缓冲快照，避免在写入失败时丢失尚未持久化的成交
+        const trades = [...state.buffer]
+
+        try {
+          await this.batchInsertTrades(state, trades)
+          // 仅在写入成功后再清空缓冲并更新时间
+          state.buffer.splice(0, trades.length)
+          state.lastFlushAt = Date.now()
+        } catch (error) {
+          this.logger.error(
+            `Failed to batch insert ${trades.length} trades for ${state.instId}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          // 写入失败时保留 buffer，等待后续 tick 或消息再次触发 flush
+          break
+        }
+      }
+    })()
 
     try {
-      await this.batchInsertTrades(state, trades)
-      // 仅在写入成功后再清空缓冲并更新时间
-      state.buffer.splice(0, trades.length)
-      state.lastFlushAt = Date.now()
-    } catch (error) {
-      this.logger.error(
-        `Failed to batch insert ${trades.length} trades for ${state.instId}: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      await state.flushPromise
+    } finally {
+      state.flushPromise = null
     }
   }
 
