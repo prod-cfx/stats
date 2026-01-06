@@ -3,6 +3,7 @@ import { Type } from 'class-transformer'
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -27,9 +28,10 @@ export class CreateTradesPairConfigDto {
   })
   pairId!: string
 
-  @ApiProperty({ description: '交易所标识，例如 OKX, BINANCE, BYBIT' })
+  @ApiProperty({ description: '交易所标识，目前仅支持 OKX' })
   @IsString()
   @IsNotEmpty()
+  @IsIn(['OKX'])
   exchange!: string
 
   @ApiProperty({ description: '交易对符号，例如 BTC-USDT, BTC-USDT-SWAP' })

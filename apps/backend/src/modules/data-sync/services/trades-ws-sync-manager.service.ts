@@ -171,12 +171,6 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       if (instrument === 'FUTURE') return 'okx-future-trades'
     }
 
-    if (exchange === 'BINANCE') {
-      if (instrument === 'SPOT') return 'binance-spot-trades'
-      if (instrument === 'PERPETUAL') return 'binance-perp-trades'
-      if (instrument === 'FUTURE') return 'binance-future-trades'
-    }
-
     return null
   }
 

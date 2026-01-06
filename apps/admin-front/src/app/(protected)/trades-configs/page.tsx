@@ -37,10 +37,9 @@ const instrumentTypeOptions = [
   { label: '期货 (FUTURE)', value: 'FUTURE' },
 ]
 
+// 当前仅支持 OKX 的成交订阅；如需支持其他交易所，请先在后端增加对应适配器
 const exchangeOptions = [
   { label: 'OKX', value: 'OKX' },
-  { label: 'Binance', value: 'BINANCE' },
-  { label: 'Bybit', value: 'BYBIT' },
 ]
 
 export default function TradesConfigsPage() {

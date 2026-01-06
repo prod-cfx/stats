@@ -202,10 +202,13 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   private async flushBuffer(state: TradeState): Promise<void> {
     if (state.buffer.length === 0) return
 
-    const trades = state.buffer.splice(0) // 清空缓冲区并获取所有数据
+    // 拷贝当前缓冲，避免在写入失败时丢失尚未持久化的成交
+    const trades = [...state.buffer]
 
     try {
       await this.batchInsertTrades(state, trades)
+      // 仅在写入成功后再清空缓冲并更新时间
+      state.buffer.splice(0, trades.length)
       state.lastFlushAt = Date.now()
     } catch (error) {
       this.logger.error(

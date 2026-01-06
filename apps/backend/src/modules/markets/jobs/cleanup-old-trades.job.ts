@@ -21,10 +21,13 @@ export class CleanupOldTradesJob {
    * 从环境变量 TRADES_RETENTION_DAYS 读取，默认为 7 天
    */
   private getRetentionDays(): number {
-    const configValue = this.configService.get<number>('TRADES_RETENTION_DAYS')
-    if (typeof configValue === 'number' && configValue > 0) {
-      return configValue
+    const raw = this.configService.get<string>('TRADES_RETENTION_DAYS')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed
     }
+
     return 7 // 默认 7 天
   }
 
