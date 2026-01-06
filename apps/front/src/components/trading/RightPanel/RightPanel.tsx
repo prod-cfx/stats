@@ -246,7 +246,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
             <Copy className="w-3 h-3 text-[#8b949e] cursor-pointer" />
           </div>
           <div className="flex items-center gap-1 text-xs text-primary cursor-pointer hover:underline">
-            <span>{isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${selectedExchange.charAt(0).toUpperCase() + selectedExchange.slice(1)}`)}</span>
+            <span>{isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${(selectedExchange || 'binance').charAt(0).toUpperCase() + (selectedExchange || 'binance').slice(1)}`)}</span>
             <ExternalLink className="w-3 h-3" />
           </div>
         </div>
