@@ -74,7 +74,7 @@ export default function LngLayout({
         </noscript>
       </head>
       <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
-        <AppProviders>
+        <AppProviders lng={lng}>
           {children}
         </AppProviders>
       </body>

@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+const DEFAULT_LNG = 'zh';
+const TARGET_PATH = '/dashboard';
+
 export default function DashboardRedirect() {
   const router = useRouter();
 
@@ -15,22 +18,27 @@ export default function DashboardRedirect() {
     const cookieLng = getCookie('i18next');
     const browserLng = navigator.language;
     
-    let lng = 'zh';
+    let lng = DEFAULT_LNG;
     if (cookieLng) {
       lng = cookieLng.toLowerCase().startsWith('zh') ? 'zh' : 'en';
     } else if (browserLng) {
       lng = browserLng.toLowerCase().startsWith('zh') ? 'zh' : 'en';
     }
 
-    // 保留 query params 和 hash
     const search = window.location.search;
     const hash = window.location.hash;
-    router.replace(`/${lng}/dashboard${search}${hash}`);
+    router.replace(`/${lng}${TARGET_PATH}${search}${hash}`);
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
-      <div className="text-[#c9d1d9]">Loading...</div>
-    </div>
+    <>
+      {/* 无 JS 环境下的静态重定向 */}
+      <noscript>
+        <meta httpEquiv="refresh" content={`0; url=/${DEFAULT_LNG}${TARGET_PATH}`} />
+      </noscript>
+      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
+        <div className="text-[#c9d1d9]">Loading...</div>
+      </div>
+    </>
   );
 }

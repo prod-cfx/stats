@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+const DEFAULT_LNG = 'zh';
+const TARGET_PATH = '/aggregated-orderbook';
+
 export default function AggregatedOrderbookRedirect() {
   const router = useRouter();
 
@@ -15,7 +18,7 @@ export default function AggregatedOrderbookRedirect() {
     const cookieLng = getCookie('i18next');
     const browserLng = navigator.language;
     
-    let lng = 'zh';
+    let lng = DEFAULT_LNG;
     if (cookieLng) {
       lng = cookieLng.toLowerCase().startsWith('zh') ? 'zh' : 'en';
     } else if (browserLng) {
@@ -24,12 +27,17 @@ export default function AggregatedOrderbookRedirect() {
 
     const search = window.location.search;
     const hash = window.location.hash;
-    router.replace(`/${lng}/aggregated-orderbook${search}${hash}`);
+    router.replace(`/${lng}${TARGET_PATH}${search}${hash}`);
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
-      <div className="text-[#c9d1d9]">Loading...</div>
-    </div>
+    <>
+      <noscript>
+        <meta httpEquiv="refresh" content={`0; url=/${DEFAULT_LNG}${TARGET_PATH}`} />
+      </noscript>
+      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
+        <div className="text-[#c9d1d9]">Loading...</div>
+      </div>
+    </>
   );
 }
