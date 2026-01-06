@@ -1,7 +1,10 @@
-import type { ConfigService } from '@nestjs/config'
-import type { MarketTradesRepository } from '../repositories/market-trades.repository'
 import { Injectable, Logger } from '@nestjs/common'
+// Nest 注入需要运行时引用 ConfigService / MarketTradesRepository，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { ConfigService } from '@nestjs/config'
 import { Cron } from '@nestjs/schedule'
+// eslint-disable-next-line ts/consistent-type-imports
+import { MarketTradesRepository } from '../repositories/market-trades.repository'
 
 /**
  * 定时清理旧交易记录
