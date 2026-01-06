@@ -1,6 +1,6 @@
 'use client';
 
-import type { DataSource } from '@/app/page';
+import type { DataSource } from '@/types/trading';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMockBasePrice, parseUsdtSymbol } from '@/lib/mock/market';

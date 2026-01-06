@@ -1,6 +1,6 @@
 'use client';
 
-import type { DataSource, MarketType } from '@/app/page';
+import type { DataSource, MarketType } from '@/types/trading';
 import { ChevronDown, Info, Search, Star } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
