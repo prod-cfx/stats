@@ -1,3 +1,5 @@
+'use client';
+
 import { FileSearch } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
