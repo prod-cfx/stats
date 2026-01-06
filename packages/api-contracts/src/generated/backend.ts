@@ -544,6 +544,17 @@ const LongShortRatioPointResponseDto = z
     source: z.string(),
   })
   .passthrough();
+const ExchangeLongShortRatioResponseDto = z
+  .object({
+    rank: z.number(),
+    name: z.string(),
+    logoUrl: z.string().optional(),
+    longPercent: z.number(),
+    shortPercent: z.number(),
+    longAmountUsd: z.number(),
+    shortAmountUsd: z.number(),
+  })
+  .passthrough();
 const MarketTradeResponseDto = z
   .object({
     id: z.number(),
@@ -652,6 +663,7 @@ export const schemas = {
   UpdateTradesPairConfigDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
+  ExchangeLongShortRatioResponseDto,
   MarketTradeResponseDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
@@ -2165,6 +2177,30 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(LongShortRatioPointResponseDto),
+  },
+  {
+    method: "get",
+    path: "/markets/long-short-ratio/exchanges",
+    alias: "MarketsController_getExchangeLongShortRatio",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "timeRange",
+        type: "Query",
+        schema: z.enum(["5m", "15m", "30m", "1h", "4h", "12h", "24h"]),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z
+        .object({ data: z.array(ExchangeLongShortRatioResponseDto) })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "get",

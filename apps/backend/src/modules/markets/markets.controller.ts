@@ -2,18 +2,34 @@
 
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 // eslint-disable-next-line ts/consistent-type-imports
+import { GetExchangeLongShortRatioRequestDto } from './dto/requests/get-exchange-long-short-ratio.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
 import { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
-import { GetLargeTradesRequestDto, GetLatestTradesRequestDto, GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
+import {
+  GetLargeTradesRequestDto,
+  GetLatestTradesRequestDto,
+  GetMarketTradesRequestDto,
+} from './dto/requests/get-market-trades.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { BaseResponseDto } from '@/common/dto/base.dto'
+import {
+  ApiBearerAuth,
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
@@ -22,9 +38,25 @@ import { MarketsService } from './markets.service'
 
 /* eslint-enable perfectionist/sort-imports */
 
+const baseArrayResponseSchema = (itemDto: unknown) => ({
+  allOf: [
+    { $ref: getSchemaPath(BaseResponseDto) },
+    {
+      properties: {
+        data: {
+          type: 'array',
+          items: {
+            $ref: getSchemaPath(itemDto as any),
+          },
+        },
+      },
+    },
+  ],
+})
+
 @ApiTags('markets')
 @ApiBearerAuth('bearer')
-@ApiExtraModels(BasePaginationResponseDto, MarketTradeResponseDto)
+@ApiExtraModels(BaseResponseDto, ExchangeLongShortRatioResponseDto, BasePaginationResponseDto, MarketTradeResponseDto)
 @Controller('markets')
 export class MarketsController {
   constructor(private readonly marketsService: MarketsService) {}
@@ -131,6 +163,24 @@ export class MarketsController {
         longShortAccountRatio,
         source: item.source,
       }
+    })
+  }
+
+  @Get('long-short-ratio/exchanges')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '按交易所维度获取指定标的的多空比快照' })
+  @ApiOkResponse({
+    schema: baseArrayResponseSchema(ExchangeLongShortRatioResponseDto),
+  })
+  async getExchangeLongShortRatio(
+    @Query() query: GetExchangeLongShortRatioRequestDto,
+  ): Promise<ExchangeLongShortRatioResponseDto[]> {
+    const { symbol, timeRange } = query
+
+    return this.marketsService.getExchangeLongShortRatios({
+      symbol,
+      timeRange,
     })
   }
 
