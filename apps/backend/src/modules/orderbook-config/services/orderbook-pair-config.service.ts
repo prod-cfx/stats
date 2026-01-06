@@ -1,10 +1,14 @@
+import type { MarketId, VenueOrderBook } from '@ai/shared'
 import type { OrderbookPairConfig } from '@prisma/client'
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
-import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { ErrorCode, toMarketKey } from '@ai/shared'
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports
+import { RedisService } from '@/common/services/redis.service'
+import { OrderBookLevelDto, VenueOrderBookDto } from '../dto/orderbook-snapshot.response.dto'
 // Nest 注入需要运行时引用 Repository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { OrderbookPairConfigRepository } from '../repositories/orderbook-pair-config.repository'
@@ -13,6 +17,7 @@ import { OrderbookPairConfigRepository } from '../repositories/orderbook-pair-co
 export class OrderbookPairConfigService {
   constructor(
     private readonly repository: OrderbookPairConfigRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async findAll(filter?: QueryOrderbookPairConfigDto): Promise<OrderbookPairConfig[]> {
@@ -106,6 +111,98 @@ export class OrderbookPairConfigService {
 
   async findEnabledConfigs(): Promise<OrderbookPairConfig[]> {
     return this.repository.findEnabledConfigs()
+  }
+
+  /**
+   * 获取指定配置的 Redis 订单薄快照
+   * 控制器应只负责路由与鉴权，Redis/解析/DTO 组装下沉到 Service，便于复用与单测。
+   */
+  async getCurrentOrderbookSnapshot(id: string): Promise<VenueOrderBookDto> {
+    const config = await this.findById(id)
+
+    if (!config.enabled) {
+      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
+    }
+
+    const marketKey = this.buildMarketKeyFromConfig(config)
+    const venueId = this.resolveVenueIdFromConfig(config)
+    const client = this.redisService.getClient()
+    const redisKey = `orderbook:${venueId}:${marketKey}`
+    const raw = await client.get(redisKey)
+
+    if (!raw) {
+      throw new NotFoundException('订单薄数据已过期或不存在')
+    }
+
+    let book: VenueOrderBook
+    try {
+      book = JSON.parse(raw) as VenueOrderBook
+    }
+    catch {
+      throw new NotFoundException('订单薄数据格式不正确')
+    }
+
+    const dto = new VenueOrderBookDto()
+    dto.venueId = book.venueId
+    dto.marketKey = book.marketKey
+    dto.bids = (book.bids ?? []).map(level => {
+      const l = new OrderBookLevelDto()
+      l.price = level.price
+      l.size = level.size
+      return l
+    })
+    dto.asks = (book.asks ?? []).map(level => {
+      const l = new OrderBookLevelDto()
+      l.price = level.price
+      l.size = level.size
+      return l
+    })
+    dto.exchangeTs = book.exchangeTs ?? null
+    dto.receivedTs = book.receivedTs
+    dto.version = book.version
+
+    return dto
+  }
+
+  private buildMarketKeyFromConfig(config: OrderbookPairConfig): string {
+    const market: MarketId = {
+      base: config.baseAsset.toUpperCase(),
+      quote: config.quoteAsset.toUpperCase(),
+      venueType:
+        config.instrumentType === 'SPOT'
+          ? 'spot'
+          : config.instrumentType === 'PERPETUAL'
+            ? 'perp'
+            : 'future',
+    }
+    return toMarketKey(market)
+  }
+
+  private resolveVenueIdFromConfig(config: OrderbookPairConfig): string {
+    const venue = config.venue.toUpperCase()
+    const venueType = config.venueType
+    const instrumentType = config.instrumentType
+
+    if (venueType === 'CEX') {
+      if (venue === 'BINANCE') {
+        if (instrumentType === 'SPOT') return 'binance-spot'
+        if (instrumentType === 'PERPETUAL') return 'binance-perp'
+        if (instrumentType === 'FUTURE') return 'binance-future'
+      }
+      if (venue === 'BYBIT') {
+        if (instrumentType === 'SPOT') return 'bybit-spot'
+        if (instrumentType === 'PERPETUAL') return 'bybit-perp'
+        if (instrumentType === 'FUTURE') return 'bybit-future'
+      }
+      if (venue === 'OKX') {
+        if (instrumentType === 'SPOT') return 'okx-spot'
+        if (instrumentType === 'PERPETUAL') return 'okx-perp'
+        if (instrumentType === 'FUTURE') return 'okx-future'
+      }
+    }
+
+    const normalizedType = instrumentType === 'PERPETUAL' ? 'perp' : instrumentType.toLowerCase()
+    return `${venue.toLowerCase()}-${normalizedType}`
   }
 
   /**

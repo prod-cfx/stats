@@ -1,32 +1,28 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import type { AppLocale } from '@/lib/i18n'
 import React, { useMemo } from 'react'
+import { I18nextProvider } from 'react-i18next'
 import { ToastProvider } from '@/components/ui/toast'
-import i18n from '@/lib/i18n'
+import { createAppI18n } from '@/lib/i18n'
 import { I18nSync } from './I18nSync'
-
-export type AppLocale = 'zh' | 'en'
 
 interface AppProvidersProps {
   children: ReactNode
   lng?: AppLocale
 }
 
-export function AppProviders({ children, lng }: AppProvidersProps) {
-  // 在渲染前同步设置 i18n 语言，确保构建期 HTML 就是目标语言
-  useMemo(() => {
-    if (lng && i18n.language !== lng) {
-      i18n.changeLanguage(lng)
-    }
-  }, [lng])
+export function AppProviders({ children, lng = 'zh' }: AppProvidersProps) {
+  // 使用 createAppI18n 创建 i18n 实例，initImmediate: false 确保 SSR 渲染正确语言
+  const i18n = useMemo(() => createAppI18n(lng), [lng])
 
   return (
-    <ToastProvider>
-      <I18nSync />
-      {children}
-    </ToastProvider>
+    <I18nextProvider i18n={i18n}>
+      <ToastProvider>
+        <I18nSync />
+        {children}
+      </ToastProvider>
+    </I18nextProvider>
   )
 }
-
-
