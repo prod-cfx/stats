@@ -23,7 +23,10 @@ const BASE_PRICE_USDT: Record<MockBaseAsset, number> = {
   DOT: 8.4,
 };
 
-export function parseUsdtSymbol(symbol: string): { base: string; quote: 'USDT' } {
+export function parseUsdtSymbol(symbol: string | undefined | null): { base: string; quote: 'USDT' } {
+  if (!symbol) {
+    return { base: 'BTC', quote: 'USDT' }; // 默认值
+  }
   if (symbol.endsWith('USDT')) {
     return { base: symbol.slice(0, -4), quote: 'USDT' };
   }
@@ -31,7 +34,7 @@ export function parseUsdtSymbol(symbol: string): { base: string; quote: 'USDT' }
   return { base: symbol, quote: 'USDT' };
 }
 
-export function getMockBasePrice(symbol: string): number {
+export function getMockBasePrice(symbol: string | undefined | null): number {
   const { base } = parseUsdtSymbol(symbol);
   return BASE_PRICE_USDT[(base as MockBaseAsset)] ?? 100;
 }
