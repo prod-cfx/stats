@@ -3,6 +3,7 @@
 import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market';
 
 export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: string, interval: string }) => {
   const { t } = useTranslation();
@@ -95,31 +96,48 @@ export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: stri
     const smaData = [];
     
     const now = Math.floor(Date.now() / 1000);
-    const step = 900; // 15m
-    let lastClose = 87500;
+    const stepMap: Record<string, number> = {
+      '1s': 1,
+      '1m': 60,
+      '5m': 300,
+      '15m': 900,
+      '1h': 3600,
+      '4h': 14400,
+      '1d': 86400,
+    };
+    const step = stepMap[interval] ?? 900;
+    const basePrice = getMockBasePrice(symbol);
+    const vol = getMockVolatility(basePrice);
+    let lastClose = basePrice;
 
     for (let i = 0; i < 300; i++) {
       const time = (now - (300 - i) * step);
-      const open = lastClose + (Math.random() - 0.5) * 100;
-      const high = open + Math.random() * 80;
-      const low = open - Math.random() * 80;
+      const open = lastClose + (Math.random() - 0.5) * vol;
+      const high = open + Math.random() * (vol * 0.8);
+      const low = open - Math.random() * (vol * 0.8);
       const close = low + Math.random() * (high - low);
       
       const timeVal = time as any;
       
+      const round = (n: number) => {
+        if (basePrice >= 1000) return Number(n.toFixed(1));
+        if (basePrice >= 1) return Number(n.toFixed(4));
+        return Number(n.toFixed(6));
+      };
+
       const candle = {
         time: timeVal,
-        open: Number(open.toFixed(2)),
-        high: Number(high.toFixed(2)),
-        low: Number(low.toFixed(2)),
-        close: Number(close.toFixed(2)),
+        open: round(open),
+        high: round(high),
+        low: round(low),
+        close: round(close),
       };
       
       candleData.push(candle);
       
       volumeData.push({
         time: timeVal,
-        value: Math.floor(Math.random() * 100000),
+        value: Math.floor(Math.random() * (basePrice >= 1000 ? 20000 : 200000)),
         color: close > open ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)',
       });
 
@@ -178,7 +196,7 @@ export const TradingViewLightweightChart = ({ symbol, interval }: { symbol: stri
       chart.remove();
       chartRef.current = null;
     };
-  }, [isMounted]);
+  }, [isMounted, symbol, interval]);
 
   return (
     <div className="w-full h-full bg-[#0d1117] min-h-[500px] relative overflow-hidden">
