@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   // 入口默认显示；实际数据权限由后端 RBAC 控制（无权限会被接口拦截）
   { key: '/data-pull-tasks', label: '数据拉取任务', path: '/data-pull-tasks' },
   { key: '/orderbook-configs', label: '订单薄配置', path: '/orderbook-configs', permission: 'data.orderbook' },
+  { key: '/trades-configs', label: '交易记录订阅', path: '/trades-configs', permission: 'data.trades' },
   { key: '/exchange-configs', label: '交易所配置', path: '/exchange-configs', permission: 'data.exchanges' },
 ]
 

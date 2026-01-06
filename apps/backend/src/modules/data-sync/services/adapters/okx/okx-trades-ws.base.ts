@@ -1,0 +1,504 @@
+/* eslint-disable perfectionist/sort-imports */
+
+import WebSocket from 'ws'
+import { Inject, Injectable, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
+import { PrismaService } from '@/prisma/prisma.service'
+
+interface OkxTradeData {
+  instId: string
+  tradeId: string
+  px: string
+  sz: string
+  side: 'buy' | 'sell'
+  ts: string
+}
+
+interface OkxTradesMessage {
+  arg?: {
+    channel?: string
+    instId?: string
+  }
+  data?: OkxTradeData[]
+  event?: string
+  code?: string
+  msg?: string
+}
+
+interface TradeState {
+  cfg: TradesConfig
+  instId: string
+  buffer: OkxTradeData[]
+  isReady: boolean
+  lastSeenTradeId: string | null
+}
+
+@Injectable()
+export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
+  abstract readonly key: TradesAdapterKey
+
+  protected abstract readonly exchange: string
+  protected abstract readonly instrumentType: 'SPOT' | 'PERPETUAL' | 'FUTURE'
+  protected abstract getWsBaseUrl(): string
+  protected abstract getWsChannel(): string
+  protected abstract getMaxStreamsPerConnection(): number
+
+  private readonly logger = new Logger(this.constructor.name)
+  private readonly connections: OkxWsConnection[] = []
+  private readonly states = new Map<string, TradeState>() // instId -> state
+
+  constructor(
+    @Inject(ConfigService)
+    protected readonly configService: ConfigService,
+    @Inject(PrismaService)
+    protected readonly prismaService: PrismaService,
+  ) {}
+
+  async ensureConnected(): Promise<void> {
+    await this.ensureConnections(1)
+  }
+
+  async syncTargetConfigs(configs: TradesConfig[]): Promise<void> {
+    const targets = configs
+      .filter(cfg =>
+        cfg.exchange.toUpperCase() === 'OKX' &&
+        cfg.instrumentType === this.instrumentType,
+      )
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+
+    const desiredInstIds = new Map<string, TradesConfig>() // instId -> cfg
+    for (const cfg of targets) {
+      const instId = this.resolveInstId(cfg)
+      if (!instId) {
+        this.logger.warn(`Trades config missing OKX instId mapping, skip: symbol=${cfg.symbol}`)
+        continue
+      }
+      desiredInstIds.set(instId, cfg)
+    }
+
+    // remove stale states
+    for (const instId of [...this.states.keys()]) {
+      if (!desiredInstIds.has(instId)) {
+        this.states.delete(instId)
+      }
+    }
+
+    // create new states
+    for (const [instId, cfg] of desiredInstIds.entries()) {
+      const state = this.states.get(instId)
+      if (!state) {
+        const created: TradeState = {
+          cfg,
+          instId,
+          buffer: [],
+          isReady: true,
+          lastSeenTradeId: null,
+        }
+        this.states.set(instId, created)
+      } else {
+        state.cfg = cfg
+      }
+    }
+
+    await this.reconcileSubscriptions([...desiredInstIds.keys()])
+  }
+
+  async shutdown(): Promise<void> {
+    for (const conn of this.connections) {
+      conn.shutdown()
+    }
+    this.connections.length = 0
+    this.states.clear()
+  }
+
+  protected streamNameForInstId(instId: string): string {
+    return instId
+  }
+
+  private async ensureConnections(count: number): Promise<void> {
+    while (this.connections.length < count) {
+      const idx = this.connections.length
+      const conn = new OkxWsConnection(
+        idx,
+        this.configService,
+        this.logger,
+        () => this.getWsBaseUrl(),
+        (msg) => this.onMessage(msg),
+        () => this.getWsChannel(),
+      )
+      this.connections.push(conn)
+    }
+
+    while (this.connections.length > count) {
+      const conn = this.connections.pop()
+      if (conn) conn.shutdown()
+    }
+
+    await Promise.allSettled(this.connections.map(c => c.ensureConnected()))
+  }
+
+  private async reconcileSubscriptions(instIds: string[]): Promise<void> {
+    const perConn = Math.max(1, Math.floor(this.getMaxStreamsPerConnection()))
+
+    const instSet = new Set(instIds.map(id => id.toUpperCase()))
+    const streams = [...instSet].sort((a, b) => a.localeCompare(b))
+
+    const chunks: string[][] = []
+    for (let i = 0; i < streams.length; i += perConn) {
+      chunks.push(streams.slice(i, i + perConn))
+    }
+
+    await this.ensureConnections(Math.max(1, chunks.length))
+
+    await Promise.allSettled(
+      this.connections.map((conn, idx) => conn.syncDesiredStreams(new Set(chunks[idx] ?? []))),
+    )
+  }
+
+  private async onMessage(msg: OkxTradesMessage): Promise<void> {
+    const arg = msg.arg
+    if (!arg || typeof arg.instId !== 'string') return
+    if (arg.channel !== this.getWsChannel()) return
+
+    if (!Array.isArray(msg.data) || !msg.data.length) return
+
+    const instId = arg.instId.toUpperCase()
+    const state = this.states.get(instId)
+    if (!state) return
+
+    // 添加到缓冲区，达到阈值后批量插入
+    for (const trade of msg.data) {
+      // 避免重复插入
+      if (state.lastSeenTradeId === trade.tradeId) {
+        continue
+      }
+      state.buffer.push(trade)
+      state.lastSeenTradeId = trade.tradeId
+    }
+
+    // 当缓冲区达到 100 条记录时，批量插入
+    if (state.buffer.length >= 100) {
+      await this.flushBuffer(state)
+    }
+  }
+
+  /**
+   * 批量插入缓冲区中的交易记录
+   */
+  private async flushBuffer(state: TradeState): Promise<void> {
+    if (state.buffer.length === 0) return
+
+    const trades = state.buffer.splice(0) // 清空缓冲区并获取所有数据
+
+    try {
+      await this.batchInsertTrades(state, trades)
+    } catch (error) {
+      this.logger.error(
+        `Failed to batch insert ${trades.length} trades for ${state.instId}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
+  /**
+   * 批量插入交易记录
+   * 分批次插入，每批次最多 1000 条，最多 3 个并发批次
+   */
+  private async batchInsertTrades(state: TradeState, trades: OkxTradeData[]): Promise<void> {
+    const BATCH_SIZE = 1000
+    const CONCURRENT_BATCHES = 3
+
+    for (let i = 0; i < trades.length; i += BATCH_SIZE * CONCURRENT_BATCHES) {
+      const promises = []
+
+      for (let j = 0; j < CONCURRENT_BATCHES; j++) {
+        const start = i + j * BATCH_SIZE
+        if (start >= trades.length) break
+
+        const batch = trades.slice(start, Math.min(start + BATCH_SIZE, trades.length))
+        const records = batch.map(trade => ({
+          exchange: this.exchange,
+          instrumentType: this.instrumentType,
+          symbol: trade.instId,
+          baseAsset: state.cfg.baseAsset,
+          quoteAsset: state.cfg.quoteAsset,
+          tradeId: trade.tradeId,
+          price: trade.px,
+          size: trade.sz,
+          side: trade.side,
+          tradeTimestamp: BigInt(trade.ts),
+        }))
+
+        promises.push(
+          this.prismaService.marketTrade.createMany({
+            data: records,
+            skipDuplicates: true, // 跳过重复记录
+          })
+        )
+      }
+
+      await Promise.all(promises)
+    }
+  }
+
+  private resolveInstId(cfg: TradesConfig): string | null {
+    const metadata = this.normalizeMetadata(cfg.metadata)
+    const metaInstId = this.pickMetadataString(metadata, ['okxInstId', 'instId', 'symbol'])
+    if (metaInstId) return metaInstId.toUpperCase()
+
+    const symbol = cfg.symbol.toUpperCase()
+    if (symbol.includes('-')) return symbol
+
+    const base = cfg.baseAsset.toUpperCase()
+    const quote = cfg.quoteAsset.toUpperCase()
+
+    if (this.instrumentType === 'SPOT') {
+      return `${base}-${quote}`
+    }
+
+    if (this.instrumentType === 'PERPETUAL') {
+      return `${base}-${quote}-SWAP`
+    }
+
+    if (this.instrumentType === 'FUTURE') {
+      const metaContract = this.pickMetadataString(metadata, ['okxContract'])
+      if (metaContract) return metaContract.toUpperCase()
+    }
+
+    return null
+  }
+
+  private normalizeMetadata(metadata: TradesConfig['metadata']): Record<string, unknown> | null {
+    if (!metadata || typeof metadata !== 'object') return null
+    if (Array.isArray(metadata)) return null
+    return metadata as Record<string, unknown>
+  }
+
+  private pickMetadataString(
+    metadata: Record<string, unknown> | null,
+    keys: string[],
+  ): string | null {
+    if (!metadata) return null
+    for (const key of keys) {
+      const value = metadata[key]
+      if (typeof value === 'string' && value.trim().length) {
+        return value.trim()
+      }
+    }
+    return null
+  }
+}
+
+class OkxWsConnection {
+  private ws: WebSocket | null = null
+  private open = false
+  private reconnectTimer: NodeJS.Timeout | null = null
+  private heartbeatTimer: NodeJS.Timeout | null = null
+  private lastPongTs = 0
+  private desired = new Set<string>()
+  private active = new Set<string>()
+
+  constructor(
+    private readonly index: number,
+    private readonly configService: ConfigService,
+    private readonly baseLogger: Logger,
+    private readonly getWsBaseUrl: () => string,
+    private readonly onTradesMessage: (msg: OkxTradesMessage) => Promise<void>,
+    private readonly getChannel: () => string,
+  ) {}
+
+  async ensureConnected(): Promise<void> {
+    if (this.open && this.ws) return
+    await this.connect()
+  }
+
+  async syncDesiredStreams(desired: Set<string>): Promise<void> {
+    this.desired = desired
+    if (!this.open || !this.ws) return
+
+    const toSub: string[] = []
+    const toUnsub: string[] = []
+
+    for (const instId of this.desired) {
+      if (!this.active.has(instId)) toSub.push(instId)
+    }
+    for (const instId of this.active) {
+      if (!this.desired.has(instId)) toUnsub.push(instId)
+    }
+
+    if (toUnsub.length) {
+      await this.sendSubscription('unsubscribe', toUnsub)
+      for (const instId of toUnsub) this.active.delete(instId)
+    }
+    if (toSub.length) {
+      await this.sendSubscription('subscribe', toSub)
+      for (const instId of toSub) this.active.add(instId)
+    }
+  }
+
+  shutdown(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.stopHeartbeat()
+    this.open = false
+    this.active.clear()
+    this.desired.clear()
+    if (this.ws) {
+      try {
+        this.ws.close()
+      } catch {}
+      this.ws = null
+    }
+  }
+
+  private async connect(): Promise<void> {
+    if (this.ws && (this.open || this.ws.readyState === WebSocket.CONNECTING)) return
+
+    const wsBaseUrl = this.getWsBaseUrl()
+    const logger = this.baseLogger
+
+    logger.log(`Connecting OKX Trades WS#${this.index}: ${wsBaseUrl}`)
+
+    this.open = false
+    this.active.clear()
+    this.ws = new WebSocket(wsBaseUrl)
+
+    this.ws.on('open', () => {
+      this.open = true
+      this.lastPongTs = Date.now()
+      logger.log(`OKX Trades WS#${this.index} connected`)
+      this.startHeartbeat()
+      void this.resubscribeOnOpen()
+    })
+
+    this.ws.on('message', data => {
+      this.handleRawMessage(data)
+    })
+
+    this.ws.on('close', (code, reason) => {
+      this.open = false
+      this.active.clear()
+      this.stopHeartbeat()
+      logger.warn(`OKX Trades WS#${this.index} closed: code=${code} reason=${reason.toString()}`)
+      this.scheduleReconnect()
+    })
+
+    this.ws.on('error', (err) => {
+      this.open = false
+      this.active.clear()
+      this.stopHeartbeat()
+      logger.error(`OKX Trades WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`)
+      this.scheduleReconnect()
+    })
+  }
+
+  private async resubscribeOnOpen(): Promise<void> {
+    if (!this.open || !this.ws) return
+    this.active.clear()
+    const streams = [...this.desired]
+    if (!streams.length) return
+    await this.sendSubscription('subscribe', streams)
+    for (const instId of streams) this.active.add(instId)
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return
+    const delayMs = this.configService.get<number>('marketData.wsReconnectDelayMs') ?? 5_000
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      void this.connect()
+    }, Math.max(1_000, delayMs))
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    const intervalMs = 15_000
+    const timeoutMs = 45_000
+
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.ws) return
+      const now = Date.now()
+      if (now - this.lastPongTs > timeoutMs) {
+        try {
+          this.baseLogger.warn(`OKX Trades WS#${this.index} heartbeat timeout, terminating`)
+          this.ws.terminate()
+        } catch {}
+        return
+      }
+      try {
+        this.ws.send('ping')
+      } catch {}
+    }, Math.max(5_000, intervalMs))
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+  }
+
+  private async sendSubscription(op: 'subscribe' | 'unsubscribe', instIds: string[]): Promise<void> {
+    if (!this.ws || !this.open || !instIds.length) return
+    const channel = this.getChannel()
+    const chunkSize = 20
+    for (let i = 0; i < instIds.length; i += chunkSize) {
+      const chunk = instIds.slice(i, i + chunkSize)
+      const payload = {
+        op,
+        args: chunk.map(instId => ({ channel, instId })),
+      }
+      await this.send(payload)
+    }
+  }
+
+  private async send(payload: unknown): Promise<void> {
+    if (!this.ws || !this.open) return
+    try {
+      this.ws.send(JSON.stringify(payload))
+    } catch {}
+  }
+
+  private handleRawMessage(data: WebSocket.RawData): void {
+    const text = data.toString()
+    if (text === 'pong') {
+      this.lastPongTs = Date.now()
+      return
+    }
+    if (text === 'ping') {
+      if (this.ws && this.open) {
+        try {
+          this.ws.send('pong')
+        } catch {}
+      }
+      return
+    }
+
+    let msg: OkxTradesMessage
+    try {
+      msg = JSON.parse(text) as OkxTradesMessage
+    } catch {
+      return
+    }
+
+    if (msg.event === 'error') {
+      this.baseLogger.warn(`OKX Trades WS#${this.index} error event: code=${msg.code} msg=${msg.msg}`)
+      return
+    }
+    if (msg.event === 'subscribe' || msg.event === 'unsubscribe' || msg.event === 'pong') {
+      this.lastPongTs = Date.now()
+      return
+    }
+
+    if (msg.arg && msg.data) {
+      void this.onTradesMessage(msg).catch(err => {
+        this.baseLogger.error(
+          `OKX Trades WS#${this.index} onTradesMessage error: ${err instanceof Error ? err.message : String(err)}`,
+        )
+      })
+    }
+  }
+}
+

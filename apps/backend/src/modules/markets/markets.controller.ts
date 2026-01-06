@@ -5,6 +5,8 @@
 import { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetLargeTradesRequestDto, GetLatestTradesRequestDto, GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
@@ -13,6 +15,7 @@ import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.d
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
+import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 
@@ -127,5 +130,92 @@ export class MarketsController {
         source: item.source,
       }
     })
+  }
+
+  @Get('trades/latest')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '获取最新成交记录' })
+  @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
+  async getLatestTrades(@Query() query: GetLatestTradesRequestDto): Promise<MarketTradeResponseDto[]> {
+    const { exchange, instrumentType, symbol, limit = 50 } = query
+
+    const trades = await this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit)
+
+    return trades.map(trade => ({
+      id: trade.id,
+      exchange: trade.exchange,
+      instrumentType: trade.instrumentType,
+      symbol: trade.symbol,
+      baseAsset: trade.baseAsset,
+      quoteAsset: trade.quoteAsset,
+      tradeId: trade.tradeId,
+      price: trade.price.toString(),
+      size: trade.size.toString(),
+      side: trade.side,
+      tradeTimestamp: trade.tradeTimestamp.toString(),
+      createdAt: trade.createdAt.toISOString(),
+    }))
+  }
+
+  @Get('trades/large')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '获取大额成交记录' })
+  @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
+  async getLargeTrades(@Query() query: GetLargeTradesRequestDto): Promise<MarketTradeResponseDto[]> {
+    const { exchange, instrumentType, symbol, minValue = 100000, limit = 50 } = query
+
+    const trades = await this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit)
+
+    return trades.map(trade => ({
+      id: trade.id,
+      exchange: trade.exchange,
+      instrumentType: trade.instrumentType,
+      symbol: trade.symbol,
+      baseAsset: trade.baseAsset,
+      quoteAsset: trade.quoteAsset,
+      tradeId: trade.tradeId,
+      price: trade.price.toString(),
+      size: trade.size.toString(),
+      side: trade.side,
+      tradeTimestamp: trade.tradeTimestamp.toString(),
+      createdAt: trade.createdAt.toISOString(),
+    }))
+  }
+
+  @Get('trades')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '查询交易记录' })
+  @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
+  async getTrades(@Query() query: GetMarketTradesRequestDto): Promise<MarketTradeResponseDto[]> {
+    const trades = await this.marketsService.getTrades({
+      exchange: query.exchange,
+      instrumentType: query.instrumentType,
+      symbol: query.symbol,
+      baseAsset: query.baseAsset,
+      quoteAsset: query.quoteAsset,
+      side: query.side,
+      limit: query.limit ?? 50,
+      offset: query.offset ?? 0,
+      fromTimestamp: query.fromTimestamp ? BigInt(query.fromTimestamp) : undefined,
+      toTimestamp: query.toTimestamp ? BigInt(query.toTimestamp) : undefined,
+    })
+
+    return trades.map(trade => ({
+      id: trade.id,
+      exchange: trade.exchange,
+      instrumentType: trade.instrumentType,
+      symbol: trade.symbol,
+      baseAsset: trade.baseAsset,
+      quoteAsset: trade.quoteAsset,
+      tradeId: trade.tradeId,
+      price: trade.price.toString(),
+      size: trade.size.toString(),
+      side: trade.side,
+      tradeTimestamp: trade.tradeTimestamp.toString(),
+      createdAt: trade.createdAt.toISOString(),
+    }))
   }
 }

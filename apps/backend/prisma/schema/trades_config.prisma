@@ -1,0 +1,47 @@
+/// 交易记录订阅配置模型
+
+model TradesPairConfig {
+  id String @id @default(cuid())
+
+  /// 交易对唯一标识（例如：BTC-USDT.OKX.SPOT）
+  pairId String @unique @map("pair_id")
+
+  /// 交易所标识（例如：OKX, BINANCE, BYBIT）
+  exchange String
+
+  /// 交易对符号（例如：BTC-USDT, BTC-USDT-SWAP）
+  symbol String
+
+  /// 基础资产（例如：BTC）
+  baseAsset String @map("base_asset")
+
+  /// 计价资产（例如：USDT）
+  quoteAsset String @map("quote_asset")
+
+  /// 交易品种类型（SPOT/PERPETUAL/FUTURE）
+  instrumentType InstrumentType @map("instrument_type")
+
+  /// 是否启用订阅
+  enabled Boolean @default(true)
+
+  /// 优先级（数字越小优先级越高）
+  priority Int @default(100)
+
+  /// 扩展配置（JSON格式，用于存储交易所特定参数等）
+  /// 例如：{ "okxInstId": "BTC-USDT-SWAP" }
+  metadata Json?
+
+  /// 备注说明
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, exchange, instrumentType], map: "trades_pair_configs_symbol_exchange_instrument_type_key")
+  @@index([exchange])
+  @@index([instrumentType])
+  @@index([enabled])
+  @@index([priority])
+  @@map("trades_pair_configs")
+}
+
