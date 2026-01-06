@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
-        <AppProviders>
+        <AppProviders initialLocale={locale}>
           {children}
         </AppProviders>
       </body>

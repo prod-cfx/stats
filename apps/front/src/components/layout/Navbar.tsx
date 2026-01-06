@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import '@/lib/i18n'
 
 export const Navbar = () => {
   const pathname = usePathname();

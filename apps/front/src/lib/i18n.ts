@@ -1,55 +1,54 @@
 'use client'
 
-import i18n from 'i18next'
+import i18next from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
 import enCommon from '../../public/locales/en/common.json'
 import zhCommon from '../../public/locales/zh/common.json'
 
-// Prevent multiple initializations
-if (!i18n.isInitialized) {
+export type AppLocale = 'zh' | 'en'
+
+export function createAppI18n(initialLocale: AppLocale) {
+  const instance = i18next.createInstance()
   const isBrowser = typeof window !== 'undefined'
-  i18n
-    // Detect user language ONLY in the browser.
-    // On the server (SSR of client components), using LanguageDetector can pick up Node env locale (often "en")
-    // and cause hydration mismatch (server "en" vs client "zh").
-    .use(isBrowser ? LanguageDetector : { type: '3rdParty', init: () => {} } as any)
-    // pass the i18n instance to react-i18next.
-    .use(initReactI18next)
-    // init i18next
-    // for all options read: https://www.i18next.com/overview/configuration-options
-    .init({
-      // Default to Chinese. Browser will still auto-detect via LanguageDetector.
-      fallbackLng: 'zh',
-      // Force a deterministic language during SSR to avoid hydration mismatch.
-      lng: isBrowser ? undefined : 'zh',
-      debug: process.env.NODE_ENV === 'development',
 
-      supportedLngs: ['zh', 'en'],
-      nonExplicitSupportedLngs: true,
-      
-      interpolation: {
-        escapeValue: false, // not needed for react as it escapes by default
-      },
+  if (isBrowser) {
+    instance.use(LanguageDetector)
+  }
 
-      defaultNS: 'common',
-      ns: ['common'],
-      resources: {
-        en: { common: enCommon },
-        zh: { common: zhCommon },
-      },
+  instance.use(initReactI18next)
 
-      react: {
-        useSuspense: false,
-      },
-    })
+  // NOTE: initImmediate=false makes init synchronous on the server-render pass of Client Components
+  // so SSR HTML is rendered in the correct request locale.
+  // On the browser it still works fine and avoids a flash/mismatch.
+  instance.init({
+    initImmediate: false,
+    lng: initialLocale,
+    fallbackLng: 'zh',
+    supportedLngs: ['zh', 'en'],
+    nonExplicitSupportedLngs: true,
+    defaultNS: 'common',
+    ns: ['common'],
+    interpolation: { escapeValue: false },
+    resources: {
+      en: { common: enCommon as any },
+      zh: { common: zhCommon as any },
+    },
+    detection: {
+      // Prefer server-provided cookie; fall back to browser language.
+      order: ['cookie', 'navigator'],
+      caches: ['cookie'],
+      lookupCookie: 'i18next',
+    },
+    react: { useSuspense: false },
+    debug: process.env.NODE_ENV === 'development',
+  })
+
+  // Ensure newly added translation keys are available even during HMR
+  instance.addResourceBundle('en', 'common', enCommon as any, true, true)
+  instance.addResourceBundle('zh', 'common', zhCommon as any, true, true)
+
+  return instance
 }
-
-// Ensure newly added translation keys are available even during HMR,
-// because the init() block runs only once due to the isInitialized guard.
-i18n.addResourceBundle('en', 'common', enCommon, true, true)
-i18n.addResourceBundle('zh', 'common', zhCommon, true, true)
-
-export default i18n
 
