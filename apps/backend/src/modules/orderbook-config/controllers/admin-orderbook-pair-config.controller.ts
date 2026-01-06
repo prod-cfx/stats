@@ -1,7 +1,4 @@
-import type { MarketId, VenueOrderBook } from '@ai/shared'
-import type { OrderbookPairConfig } from '@prisma/client'
-import { toMarketKey } from '@ai/shared'
-import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
   ApiBody,
@@ -12,8 +9,6 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-// eslint-disable-next-line ts/consistent-type-imports
-import { RedisService } from '@/common/services/redis.service'
 import {
   CreateAny,
   DeleteAny,
@@ -24,7 +19,7 @@ import {
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import { OrderbookPairConfigResponseDto } from '../dto/orderbook-pair-config.response.dto'
-import { OrderBookLevelDto, VenueOrderBookDto } from '../dto/orderbook-snapshot.response.dto'
+import { VenueOrderBookDto } from '../dto/orderbook-snapshot.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
@@ -35,11 +30,10 @@ import { OrderbookPairConfigService } from '../services/orderbook-pair-config.se
 @Controller('admin/orderbook-configs')
 @ApiBearerAuth('bearer')
 @RequireAuth()
-@ApiExtraModels(BaseResponseDto, OrderbookPairConfigResponseDto, VenueOrderBookDto, OrderBookLevelDto)
+@ApiExtraModels(BaseResponseDto, OrderbookPairConfigResponseDto, VenueOrderBookDto)
 export class AdminOrderbookPairConfigController {
   constructor(
     private readonly service: OrderbookPairConfigService,
-    private readonly redisService: RedisService,
   ) {}
 
   @Get()
@@ -109,50 +103,7 @@ export class AdminOrderbookPairConfigController {
     },
   })
   async getCurrentOrderbook(@Param('id') id: string): Promise<BaseResponseDto<VenueOrderBookDto>> {
-    const config = await this.service.findById(id)
-
-    // 如果配置被禁用，则视为“当前不再拉取数据”，直接返回 404
-    if (!config.enabled) {
-      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
-    }
-
-    const marketKey = this.buildMarketKeyFromConfig(config)
-    const venueId = this.resolveVenueIdFromConfig(config)
-    const client = this.redisService.getClient()
-
-    const redisKey = `orderbook:${venueId}:${marketKey}`
-    const raw = await client.get(redisKey)
-    if (!raw) {
-      throw new NotFoundException('订单薄数据已过期或不存在')
-    }
-
-    let book: VenueOrderBook
-    try {
-      book = JSON.parse(raw) as VenueOrderBook
-    }
-    catch {
-      throw new NotFoundException('订单薄数据格式不正确')
-    }
-
-    const dto = new VenueOrderBookDto()
-    dto.venueId = book.venueId
-    dto.marketKey = book.marketKey
-    dto.bids = (book.bids ?? []).map(level => {
-      const l = new OrderBookLevelDto()
-      l.price = level.price
-      l.size = level.size
-      return l
-    })
-    dto.asks = (book.asks ?? []).map(level => {
-      const l = new OrderBookLevelDto()
-      l.price = level.price
-      l.size = level.size
-      return l
-    })
-    dto.exchangeTs = book.exchangeTs ?? null
-    dto.receivedTs = book.receivedTs
-    dto.version = book.version
-
+    const dto = await this.service.getCurrentOrderbookSnapshot(id)
     return new BaseResponseDto<VenueOrderBookDto>(dto)
   }
 
@@ -259,51 +210,5 @@ export class AdminOrderbookPairConfigController {
     }
   }
 
-  private buildMarketKeyFromConfig(config: OrderbookPairConfig): string {
-    const market: MarketId = {
-      base: config.baseAsset.toUpperCase(),
-      quote: config.quoteAsset.toUpperCase(),
-      venueType:
-        config.instrumentType === 'SPOT'
-          ? 'spot'
-          : config.instrumentType === 'PERPETUAL'
-            ? 'perp'
-            : 'future',
-    }
-    return toMarketKey(market)
-  }
-
-  private resolveVenueIdFromConfig(config: OrderbookPairConfig): string {
-    const venue = config.venue.toUpperCase()
-    const venueType = config.venueType
-    const instrumentType = config.instrumentType
-
-    // 目前 WS 适配器与快照任务中使用的 venueId 约定：
-    // - binance-spot / binance-perp / binance-future
-    // - bybit-spot / bybit-perp / bybit-future
-    // - okx-spot / okx-perp / okx-future
-    if (venueType === 'CEX') {
-      if (venue === 'BINANCE') {
-        if (instrumentType === 'SPOT') return 'binance-spot'
-        if (instrumentType === 'PERPETUAL') return 'binance-perp'
-        if (instrumentType === 'FUTURE') return 'binance-future'
-      }
-      if (venue === 'BYBIT') {
-        if (instrumentType === 'SPOT') return 'bybit-spot'
-        if (instrumentType === 'PERPETUAL') return 'bybit-perp'
-        if (instrumentType === 'FUTURE') return 'bybit-future'
-      }
-      if (venue === 'OKX') {
-        if (instrumentType === 'SPOT') return 'okx-spot'
-        if (instrumentType === 'PERPETUAL') return 'okx-perp'
-        if (instrumentType === 'FUTURE') return 'okx-future'
-      }
-    }
-
-    // 兜底：按 "<venue>-<instrumentType>" 规则生成，以避免静默命中错误 venue
-    // 注意：统一使用 perp（而非 perpetual）、future（保持不变）、spot（保持不变）
-    const normalizedType = instrumentType === 'PERPETUAL' ? 'perp' : instrumentType.toLowerCase()
-    return `${venue.toLowerCase()}-${normalizedType}`
-  }
 }
 

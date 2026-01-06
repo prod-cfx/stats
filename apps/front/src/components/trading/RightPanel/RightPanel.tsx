@@ -23,6 +23,21 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   const [isMounted, setIsMounted] = useState(false);
   const sellsRef = useRef<HTMLDivElement>(null);
   const decimalMenuRef = useRef<HTMLDivElement>(null);
+  const initLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tabLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (tabLoadingTimeoutRef.current) {
+        clearTimeout(tabLoadingTimeoutRef.current);
+        tabLoadingTimeoutRef.current = null;
+      }
+      if (initLoadTimeoutRef.current) {
+        clearTimeout(initLoadTimeoutRef.current);
+        initLoadTimeoutRef.current = null;
+      }
+    };
+  }, []);
   // Precision definition:
   //  2 => 0.01, 1 => 0.1, 0 => 1, -1 => 10, -2 => 100
   const [pricePrecision, setPricePrecision] = useState<number>(2);
@@ -100,7 +115,9 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     setLoading(true);
     
     // Simulate initial loading: 500ms (reduced for smoother toggle feel)
-    setTimeout(() => {
+    if (initLoadTimeoutRef.current)
+      clearTimeout(initLoadTimeoutRef.current);
+    initLoadTimeoutRef.current = setTimeout(() => {
       const { initialOrderbook, initialTrades } = generateMockData();
       setOrderbook(initialOrderbook);
       setTrades(initialTrades);
@@ -137,7 +154,13 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
       setTrades(prev => [newTrade, ...prev.slice(0, 59)]);
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (initLoadTimeoutRef.current) {
+        clearTimeout(initLoadTimeoutRef.current);
+        initLoadTimeoutRef.current = null;
+      }
+    };
   }, [isAggregated, selectedExchange, symbol, pricePrecision, precisionStep]); // Re-run when source/format changes
 
   useEffect(() => {
@@ -156,7 +179,9 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     setLoading(true);
     setTradeTab(tab);
     // Tab switching loading: 600-1000ms
-    setTimeout(() => setLoading(false), 800);
+    if (tabLoadingTimeoutRef.current)
+      clearTimeout(tabLoadingTimeoutRef.current);
+    tabLoadingTimeoutRef.current = setTimeout(() => setLoading(false), 800);
   };
 
   // Dynamic Static Info Values
