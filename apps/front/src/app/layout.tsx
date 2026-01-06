@@ -1,45 +1,7 @@
-import type { Metadata } from 'next'
-import { AppProviders } from '@/components/providers/AppProviders'
-import { getRequestLocale } from '@/lib/i18n/server'
-import './globals.css'
+import type { ReactNode } from 'react';
 
-export async function generateMetadata(): Promise<Metadata> {
-  const lng = getRequestLocale()
-  return {
-    title: 'Coinflux - Advanced Crypto Data Aggregator',
-    description: lng === 'zh'
-      ? '专业的加密资产数据聚合与多维行情分析终端'
-      : 'A professional crypto data aggregation and multi-dimensional market analysis terminal.',
-  }
-}
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const lng = getRequestLocale()
-  const htmlLang = lng === 'zh' ? 'zh-CN' : 'en'
-  return (
-    <html lang={htmlLang} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // 拦截并忽略由插件引起的 ethereum 属性重定义错误
-              window.addEventListener('error', (event) => {
-                if (event.message && (
-                  event.message.includes('Cannot redefine property: ethereum') ||
-                  event.message.includes('inpage.js')
-                )) {
-                  event.stopImmediatePropagation();
-                }
-              }, true);
-            `,
-          }}
-        />
-      </head>
-      <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
-        <AppProviders>
-          {children}
-        </AppProviders>
-      </body>
-    </html>
-  )
+// 根 layout 只是一个占位符，实际的 <html> 和 <body> 在 [lng]/layout.tsx 中
+// Next.js 要求必须有一个根 layout.tsx，但实际渲染由嵌套 layout 处理
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return children;
 }

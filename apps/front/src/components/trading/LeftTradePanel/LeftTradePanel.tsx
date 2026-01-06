@@ -1,22 +1,39 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import type { DataSource } from '@/types/trading';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getMockBasePrice, parseUsdtSymbol } from '@/lib/mock/market';
 
-export const LeftTradePanel = () => {
+interface LeftTradePanelProps {
+  symbol: string;
+  isAggregated: boolean;
+  selectedExchange: DataSource;
+}
+
+export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftTradePanelProps) => {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('open'); // 'open' | 'close'
   const [orderType, setOrderType] = useState('limit'); // 'limit' | 'market' | 'stop'
   const [leverage] = useState(50);
-  const [price, setPrice] = useState('87100.8');
+  const [price, setPrice] = useState('0');
   const [amount, setAmount] = useState('0.00');
   const [percent, setPercent] = useState(0);
 
   const percents = [0, 25, 50, 75, 100];
 
+  const basePrice = useMemo(() => getMockBasePrice(symbol), [symbol]);
+  const baseAsset = useMemo(() => parseUsdtSymbol(symbol).base, [symbol]);
+  const priceOffset = isAggregated ? 0 : selectedExchange === 'binance' ? basePrice * 0.0001 : basePrice * -0.0001;
+
+  // Keep the input price in sync with symbol/source changes unless user is actively editing
+  useEffect(() => {
+    setPrice((basePrice + priceOffset).toFixed(basePrice >= 1000 ? 1 : 4));
+  }, [basePrice, priceOffset]);
+
   // Mock raw values (keep numbers so locale switching works)
-  const maxBuyPrice = 87_449.9
-  const minSellPrice = 86_579.2
+  const maxBuyPrice = basePrice * 1.005
+  const minSellPrice = basePrice * 0.995
   const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
   const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
 
@@ -141,11 +158,11 @@ export const LeftTradePanel = () => {
         </div>
         <div className="flex justify-between items-center">
           <span>{t('tradePanel.maxLong')}</span>
-          <span className="text-[#c9d1d9] font-medium">-- BTC</span>
+          <span className="text-[#c9d1d9] font-medium">{`-- ${baseAsset}`}</span>
         </div>
         <div className="flex justify-between items-center">
           <span>{t('tradePanel.maxShort')}</span>
-          <span className="text-[#c9d1d9] font-medium">-- BTC</span>
+          <span className="text-[#c9d1d9] font-medium">{`-- ${baseAsset}`}</span>
         </div>
       </div>
 

@@ -35,12 +35,25 @@ export function LanguageSwitcher() {
   ]
 
   const handleLanguageChange = async (code: string) => {
-    // Persist language for server-rendered routes (RSC) via cookie
+    // Persist language via cookie
     document.cookie = `i18next=${code}; Path=/; Max-Age=31536000; SameSite=Lax`
     await i18n.changeLanguage(code)
     setIsOpen(false)
-    // Re-render Server Components with the new locale cookie to avoid mixed-language UI.
-    router.refresh()
+    
+    // 重定向到对应语言的页面，保留 query params 和 hash
+    const currentPath = window.location.pathname;
+    const currentSearch = window.location.search;
+    const currentHash = window.location.hash;
+    const pathParts = currentPath.split('/').filter(Boolean);
+    
+    // 移除当前语言前缀（如果存在）
+    if (pathParts[0] === 'zh' || pathParts[0] === 'en') {
+      pathParts.shift();
+    }
+    
+    // 添加新语言前缀，保留 query params 和 hash
+    const newPath = `/${code}/${pathParts.join('/')}${currentSearch}${currentHash}`;
+    router.push(newPath);
   }
 
   return (

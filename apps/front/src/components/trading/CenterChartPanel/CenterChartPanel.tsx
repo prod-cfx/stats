@@ -1,15 +1,47 @@
 'use client';
 
+import type { DataSource } from '@/types/trading';
 import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TradingViewChart } from './TradingViewChart';
 
-export const CenterChartPanel = () => {
+interface CenterChartPanelProps {
+  isAggregated: boolean;
+  setIsAggregated: (v: boolean) => void;
+  selectedExchange: DataSource;
+  setSelectedExchange: (v: DataSource) => void;
+  symbol: string;
+}
+
+export const CenterChartPanel = ({ 
+  isAggregated, 
+  setIsAggregated, 
+  selectedExchange, 
+  setSelectedExchange,
+  symbol
+}: CenterChartPanelProps) => {
   const { t } = useTranslation();
   const [interval, setInterval] = useState('15m');
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
+  // Removed local state: isAggregated, selectedExchange
+  const [isExchangeMenuOpen, setIsExchangeMenuOpen] = useState(false);
+  const exchangeMenuRef = useRef<HTMLDivElement>(null);
   const timeframes = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
+
+  // Close exchange menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exchangeMenuRef.current && !exchangeMenuRef.current.contains(event.target as Node)) {
+        setIsExchangeMenuOpen(false);
+      }
+    };
+
+    if (isExchangeMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isExchangeMenuOpen]);
 
   const indicators = [
     { id: 'liq', name: t('chart.indicators.liquidationMap'), star: true },
@@ -33,10 +65,10 @@ export const CenterChartPanel = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden min-h-0 relative">
+    <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden min-h-0 relative w-full">
       {/* Chart Toolbar */}
-      <div className="h-[48px] bg-[#161b22] border-b border-[#30363d] px-2 flex items-center justify-between z-20">
-        <div className="flex items-center gap-1 h-full">
+      <div className="h-[48px] bg-[#161b22] border-b border-[#30363d] px-2 flex items-center justify-between z-20 flex-shrink-0">
+        <div className="flex items-center gap-1 h-full overflow-x-auto no-scrollbar">
           {timeframes.map((tf) => (
             <button
               key={tf}
@@ -65,12 +97,73 @@ export const CenterChartPanel = () => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 pr-2">
-          <div className="flex items-center gap-1 text-[#8b949e] text-xs px-2 py-1 hover:text-[#c9d1d9] cursor-pointer">
-            <span className="text-[#c9d1d9]">{t('chart.toolbar.dataSource')}:</span>
-            <span className="bg-[#1f2937] px-2 py-0.5 rounded flex items-center gap-1">
-              {t('chart.toolbar.aggregationOn')} <ChevronDown className="w-3 h-3" />
-            </span>
+        <div className="flex items-center gap-2 pr-2 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            {/* Toggle Switch */}
+            <button
+              onClick={() => {
+                setIsAggregated(!isAggregated);
+                if (!isAggregated) {
+                  setIsExchangeMenuOpen(false);
+                }
+              }}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                isAggregated ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff]' : 'bg-[#30363d]'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isAggregated ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            
+            {/* Aggregated Label or Exchange Selector */}
+            {isAggregated ? (
+              <span className="text-[#c9d1d9] whitespace-nowrap">{t('chart.toolbar.aggregationOn')}</span>
+            ) : (
+              <div className="relative" ref={exchangeMenuRef}>
+                <button
+                  onClick={() => setIsExchangeMenuOpen(!isExchangeMenuOpen)}
+                  className="bg-[#1f2937] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#374151] transition-colors whitespace-nowrap"
+                >
+                  <span className="text-[#c9d1d9]">{t(`chart.toolbar.${selectedExchange}`)}</span>
+                  <ChevronDown className="w-3 h-3 text-[#8b949e]" />
+                </button>
+                
+                {/* Exchange Dropdown Menu */}
+                {isExchangeMenuOpen && (
+                  <div className="absolute top-full right-0 mt-1 w-[120px] bg-[#161b22] border border-[#30363d] rounded shadow-lg z-50 py-1">
+                    <button
+                      onClick={() => {
+                        setSelectedExchange('binance');
+                        setIsExchangeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[#30363d] ${
+                        selectedExchange === 'binance' ? 'bg-[#1f2937]' : 'text-[#c9d1d9]'
+                      }`}
+                    >
+                      <span className={selectedExchange === 'binance' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
+                        {t('chart.toolbar.binance')}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedExchange('okx');
+                        setIsExchangeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[#30363d] ${
+                        selectedExchange === 'okx' ? 'bg-[#1f2937]' : 'text-[#c9d1d9]'
+                      }`}
+                    >
+                      <span className={selectedExchange === 'okx' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
+                        {t('chart.toolbar.okx')}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="h-4 w-[1px] bg-[#30363d]" />
           <button className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
@@ -86,8 +179,8 @@ export const CenterChartPanel = () => {
       </div>
 
       {/* Main Chart Area */}
-      <div className="flex-1 relative">
-        <TradingViewChart symbol="BTCUSDT" interval={interval} />
+      <div className="flex-1 relative overflow-hidden w-full">
+        <TradingViewChart symbol={symbol} interval={interval} />
       </div>
 
       {/* Indicator Modal */}
