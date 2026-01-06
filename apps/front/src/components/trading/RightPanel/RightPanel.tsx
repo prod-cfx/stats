@@ -17,7 +17,8 @@ function formatHmsUtc(ts: number) {
   return `${hh}:${mm}:${ss}`;
 }
 
-function getBaseAssetFromSymbol(symbol: string) {
+function getBaseAssetFromSymbol(symbol: string | undefined | null) {
+  if (!symbol) return 'BTC'; // 默认值
   // spot display may be "BTC/USDT"; internal may be "BTCUSDT"
   if (symbol.includes('/'))
     return symbol.split('/')[0] || symbol;
@@ -26,10 +27,11 @@ function getBaseAssetFromSymbol(symbol: string) {
   return symbol;
 }
 
-function hashStringToSeed(input: string) {
+function hashStringToSeed(input: string | undefined | null) {
+  const s = input || 'BTCUSDT';
   let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
