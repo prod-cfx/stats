@@ -285,7 +285,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         </div>
 
         <div className="flex flex-col">
-          <div ref={sellsRef} className="h-[200px] overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
+          <div ref={sellsRef} className="h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
             {orderbook.sells.map((s, i) => (
               <OrderbookRow key={`sell-${i}`} price={s.price} amount={s.amount} total={s.total} type="sell" depthPercent={s.depth} />
             ))}
