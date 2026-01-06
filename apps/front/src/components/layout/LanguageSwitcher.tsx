@@ -40,8 +40,10 @@ export function LanguageSwitcher() {
     await i18n.changeLanguage(code)
     setIsOpen(false)
     
-    // 重定向到对应语言的页面
+    // 重定向到对应语言的页面，保留 query params 和 hash
     const currentPath = window.location.pathname;
+    const currentSearch = window.location.search;
+    const currentHash = window.location.hash;
     const pathParts = currentPath.split('/').filter(Boolean);
     
     // 移除当前语言前缀（如果存在）
@@ -49,8 +51,8 @@ export function LanguageSwitcher() {
       pathParts.shift();
     }
     
-    // 添加新语言前缀
-    const newPath = `/${code}/${pathParts.join('/')}`;
+    // 添加新语言前缀，保留 query params 和 hash
+    const newPath = `/${code}/${pathParts.join('/')}${currentSearch}${currentHash}`;
     router.push(newPath);
   }
 
