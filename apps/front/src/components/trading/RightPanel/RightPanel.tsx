@@ -9,6 +9,23 @@ import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
 
+function formatHmsUtc(ts: number) {
+  const d = new Date(ts);
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  const ss = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function getBaseAssetFromSymbol(symbol: string) {
+  // spot display may be "BTC/USDT"; internal may be "BTCUSDT"
+  if (symbol.includes('/'))
+    return symbol.split('/')[0] || symbol;
+  if (symbol.endsWith('USDT'))
+    return symbol.slice(0, -4);
+  return symbol;
+}
+
 function hashStringToSeed(input: string) {
   let h = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -57,6 +74,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   const [pricePrecision, setPricePrecision] = useState<number>(2);
   const [isDecimalMenuOpen, setIsDecimalMenuOpen] = useState(false);
   const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+  const baseAsset = getBaseAssetFromSymbol(symbol).toUpperCase()
 
   const fractionDigits = pricePrecision >= 0 ? pricePrecision : 0;
   const precisionStep = useMemo(() => {
@@ -69,7 +87,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   }, [precisionStep]);
 
   const createDeterministicMock = useMemo(() => {
-    const seedKey = `${symbol}:${marketType}:${isAggregated ? 'agg' : selectedExchange}:p${pricePrecision}:${locale}`;
+    const seedKey = `${symbol}:${marketType}:${isAggregated ? 'agg' : selectedExchange}:p${pricePrecision}`;
     const rand = mulberry32(hashStringToSeed(seedKey));
 
     const basePrice = getMockBasePrice(symbol);
@@ -99,7 +117,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     const trades = Array.from({ length: 60 }, (_, i) => {
       const price = roundToStep(basePrice + priceOffset + (rand() - 0.5) * tick * 2).toFixed(fractionDigits);
       const amount = (rand() * 0.05 * volumeMultiplier).toFixed(5);
-      const time = new Date(baseTs - i * 1000).toLocaleTimeString(locale, { hour12: false });
+      const time = formatHmsUtc(baseTs - i * 1000);
       const type = rand() > 0.5 ? 'buy' : 'sell';
       return { id: baseTs - i * 1000, price, amount, time, type };
     });
@@ -112,7 +130,6 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   }, [
     fractionDigits,
     isAggregated,
-    locale,
     marketType,
     precisionStep,
     pricePrecision,
@@ -163,7 +180,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         id: Date.now(),
         price: (basePrice + priceOffset + (Math.random() - 0.5) * tick * 3).toFixed(fractionDigits),
         amount: (Math.random() * 0.05 * volumeMultiplier).toFixed(5),
-        time: new Date().toLocaleTimeString(locale, { hour12: false }),
+        time: formatHmsUtc(Date.now()),
         type: Math.random() > 0.5 ? 'buy' : 'sell'
       };
       setTrades(prev => [newTrade, ...prev.slice(0, 59)]);
@@ -312,7 +329,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
           <div className="flex items-center px-2 py-1 text-[10px] text-[#8b949e]">
             <span className="w-[35%]">{t('rightPanel.price')}</span>
-            <span className="w-[30%] text-right">{t('rightPanel.amount')}</span>
+                  <span className="w-[30%] text-right">{t('rightPanel.amount', { asset: baseAsset })}</span>
             <span className="w-[35%] text-right pr-1">{t('rightPanel.orderValue')}</span>
           </div>
         </div>
@@ -365,7 +382,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
         <div className="flex items-center px-2 py-1 text-[10px] text-[#8b949e] bg-[#161b22]">
           <span className="w-[35%]">{t('rightPanel.price')}</span>
-          <span className="w-[30%] text-right">{t('rightPanel.amount')}</span>
+                <span className="w-[30%] text-right">{t('rightPanel.amount', { asset: baseAsset })}</span>
           <span className="w-[35%] text-right pr-1">{t('rightPanel.tradeTime')}</span>
         </div>
 

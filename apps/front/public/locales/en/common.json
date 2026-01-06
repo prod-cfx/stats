@@ -149,7 +149,7 @@
     "strategy": "Strategy",
     "overview": "Overview",
     "price": "Price (USDT)",
-    "amount": "Amount (BTC)",
+    "amount": "Amount ({{asset}})",
     "orderValue": "Value",
     "latestTrades": "Latest",
     "largeTrades": "Large",

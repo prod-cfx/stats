@@ -149,7 +149,7 @@
     "strategy": "策略",
     "overview": "简况",
     "price": "价格(USDT)",
-    "amount": "数量(BTC)",
+    "amount": "数量({{asset}})",
     "orderValue": "委托额",
     "latestTrades": "最新成交",
     "largeTrades": "大额成交",
