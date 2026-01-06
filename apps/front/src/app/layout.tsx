@@ -1,11 +1,11 @@
-import type { Metadata } from 'next'
-import { AppProviders } from '@/components/providers/AppProviders'
-import './globals.css'
+import type { Metadata } from 'next';
+import { AppProviders } from '@/components/providers/AppProviders';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Coinflux - Advanced Crypto Data Aggregator',
   description: '专业的加密资产数据聚合与多维行情分析终端 / A professional crypto data aggregation and multi-dimensional market analysis terminal.',
-}
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -14,15 +14,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // 在 hydration 前立即设置语言，减少首屏"闪烁"
+              // 根据 URL 路径设置语言
               (function() {
                 try {
-                  // 读取 i18next cookie
-                  var match = document.cookie.match(/(?:^|;\\s*)i18next=([^;]*)/);
-                  var cookieLng = match ? decodeURIComponent(match[1]) : null;
-                  var lng = cookieLng || navigator.language || 'zh';
-                  var htmlLang = lng.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
-                  document.documentElement.lang = htmlLang;
+                  var pathLng = window.location.pathname.split('/')[1];
+                  if (pathLng === 'en' || pathLng === 'zh') {
+                    var htmlLang = pathLng === 'zh' ? 'zh-CN' : 'en';
+                    document.documentElement.lang = htmlLang;
+                  }
                 } catch(e) {}
               })();
               
@@ -50,5 +49,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </AppProviders>
       </body>
     </html>
-  )
+  );
 }

@@ -3,45 +3,54 @@
 import { ChevronDown, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import '@/lib/i18n'
 
 export const Navbar = () => {
   const pathname = usePathname();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  
+  // 从 pathname 提取当前语言
+  const currentLng = useMemo(() => {
+    const pathLng = pathname?.split('/')[1];
+    return (pathLng === 'zh' || pathLng === 'en') ? pathLng : 'zh';
+  }, [pathname]);
+  
+  // 辅助函数：为路径添加语言前缀
+  const withLng = (path: string) => `/${currentLng}${path}`;
 
   const navLinks = [
-    { name: t('nav.home'), href: '/' },
+    { name: t('nav.home'), href: withLng('/') },
     { 
       name: t('nav.data'), 
-      href: '/liquidation-map',
+      href: withLng('/liquidation-map'),
       children: [
-        { name: t('nav.liquidation_map'), href: '/liquidation-map' },
-        { name: t('nav.long_short_ratio'), href: '/long-short-ratio' },
-        { name: t('nav.aggregated_orderbook'), href: '/aggregated-orderbook' },
-        { name: t('nav.liquidation_data'), href: '/liquidation-data' },
-        { name: t('nav.prediction_market'), href: '/prediction-market' },
-        { name: t('nav.public_companies'), href: '/public-companies' },
+        { name: t('nav.liquidation_map'), href: withLng('/liquidation-map') },
+        { name: t('nav.long_short_ratio'), href: withLng('/long-short-ratio') },
+        { name: t('nav.aggregated_orderbook'), href: withLng('/aggregated-orderbook') },
+        { name: t('nav.liquidation_data'), href: withLng('/liquidation-data') },
+        { name: t('nav.prediction_market'), href: withLng('/prediction-market') },
+        { name: t('nav.public_companies'), href: withLng('/public-companies') },
       ]
     },
     { 
       name: t('nav.whales'), 
-      href: '/whale-tracking/discover',
+      href: withLng('/whale-tracking/discover'),
       children: [
-        { name: t('nav.discover'), href: '/whale-tracking/discover' },
-        { name: t('nav.realtime_whales'), href: '/whale-tracking/realtime' },
-        { name: t('nav.whale_holdings'), href: '/whale-tracking/holdings' },
+        { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
+        { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
+        { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
       ]
     },
-    { name: t('nav.dashboard'), href: '/dashboard' },
+    { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ];
 
   return (
     <nav className="h-20 bg-[#0d1117] border-b border-[#30363d] px-8 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center gap-12">
-        <Link href="/" className="flex items-center gap-3 no-underline">
+        <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
           <div className="flex flex-col">
             <span className="text-white font-bold text-xl leading-tight">Coinflux</span>
