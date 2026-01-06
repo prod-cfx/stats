@@ -74,6 +74,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         cfg.exchange.toUpperCase() === 'OKX' &&
         cfg.instrumentType === this.instrumentType,
       )
+      // 优先级越小越靠前，避免重复 instId 时高优先级配置被后者覆盖
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
 
     const desiredInstIds = new Map<string, TradesConfig>() // instId -> cfg
@@ -83,6 +84,20 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         this.logger.warn(`Trades config missing OKX instId mapping, skip: symbol=${cfg.symbol}`)
         continue
       }
+
+      const existing = desiredInstIds.get(instId)
+      if (existing) {
+        // 避免同一个 instId 被多个配置静默覆盖，保留优先级更高（排在前面）的配置，其余显式告警并跳过
+        this.logger.error(
+          `Duplicate OKX instId mapping detected for instId=${instId}, keep first config ` +
+          `(exchange=${existing.exchange}, instrumentType=${existing.instrumentType}, symbol=${existing.symbol}, ` +
+          `baseAsset=${existing.baseAsset}, quoteAsset=${existing.quoteAsset}) and skip ` +
+          `(exchange=${cfg.exchange}, instrumentType=${cfg.instrumentType}, symbol=${cfg.symbol}, ` +
+          `baseAsset=${cfg.baseAsset}, quoteAsset=${cfg.quoteAsset})`,
+        )
+        continue
+      }
+
       desiredInstIds.set(instId, cfg)
     }
 
