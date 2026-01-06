@@ -10,7 +10,7 @@ import '@/lib/i18n'
 
 export const Navbar = () => {
   const pathname = usePathname();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {

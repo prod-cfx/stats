@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 // 根路径重定向到默认语言
 export default function RootPage() {
@@ -10,7 +10,7 @@ export default function RootPage() {
   useEffect(() => {
     // 读取 cookie 或浏览器语言
     const getCookie = (name: string) => {
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
       return match ? decodeURIComponent(match[2]) : null;
     };
 

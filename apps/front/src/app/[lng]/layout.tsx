@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { AppProviders } from '@/components/providers/AppProviders';
+import '../globals.css';
 
 export type AppLocale = 'zh' | 'en';
 
@@ -15,11 +17,23 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: { params: { lng: string } }): Promise<Metadata> {
   const lng = params.lng as AppLocale;
   
+  const title = 'Coinflux - Advanced Crypto Data Aggregator';
+  const description = lng === 'zh'
+    ? '专业的加密资产数据聚合与多维行情分析终端'
+    : 'A professional crypto data aggregation and multi-dimensional market analysis terminal.';
+  
   return {
-    title: 'Coinflux - Advanced Crypto Data Aggregator',
-    description: lng === 'zh'
-      ? '专业的加密资产数据聚合与多维行情分析终端'
-      : 'A professional crypto data aggregation and multi-dimensional market analysis terminal.',
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      locale: lng === 'zh' ? 'zh_CN' : 'en_US',
+    },
+    twitter: {
+      title,
+      description,
+    },
   };
 }
 
@@ -33,7 +47,37 @@ export default function LngLayout({
   const lng = params.lng as AppLocale;
   const htmlLang = lng === 'zh' ? 'zh-CN' : 'en';
   
-  // 注意：这个 layout 不需要 <html> 和 <body>，因为它们已经在根 layout.tsx 中
-  // 这里只是一个嵌套 layout，确保语言参数透传给子页面
-  return <>{children}</>;
+  return (
+    <html lang={htmlLang} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // 拦截并忽略由插件引起的 ethereum 属性重定义错误
+              window.addEventListener('error', (event) => {
+                if (event.message && (
+                  event.message.includes('Cannot redefine property: ethereum') ||
+                  event.message.includes('inpage.js')
+                )) {
+                  event.stopImmediatePropagation();
+                }
+              }, true);
+            `,
+          }}
+        />
+        <noscript>
+          <div style={{padding: '20px', textAlign: 'center', backgroundColor: '#161b22', color: '#c9d1d9'}}>
+            {lng === 'zh' 
+              ? '本应用需要启用 JavaScript 才能正常使用'
+              : 'This application requires JavaScript to be enabled'}
+          </div>
+        </noscript>
+      </head>
+      <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
+        <AppProviders>
+          {children}
+        </AppProviders>
+      </body>
+    </html>
+  );
 }

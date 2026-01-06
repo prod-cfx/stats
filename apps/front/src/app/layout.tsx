@@ -1,53 +1,7 @@
-import type { Metadata } from 'next';
-import { AppProviders } from '@/components/providers/AppProviders';
-import './globals.css';
+import type { ReactNode } from 'react';
 
-export const metadata: Metadata = {
-  title: 'Coinflux - Advanced Crypto Data Aggregator',
-  description: '专业的加密资产数据聚合与多维行情分析终端 / A professional crypto data aggregation and multi-dimensional market analysis terminal.',
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // 根据 URL 路径设置语言
-              (function() {
-                try {
-                  var pathLng = window.location.pathname.split('/')[1];
-                  if (pathLng === 'en' || pathLng === 'zh') {
-                    var htmlLang = pathLng === 'zh' ? 'zh-CN' : 'en';
-                    document.documentElement.lang = htmlLang;
-                  }
-                } catch(e) {}
-              })();
-              
-              // 拦截并忽略由插件引起的 ethereum 属性重定义错误
-              window.addEventListener('error', (event) => {
-                if (event.message && (
-                  event.message.includes('Cannot redefine property: ethereum') ||
-                  event.message.includes('inpage.js')
-                )) {
-                  event.stopImmediatePropagation();
-                }
-              }, true);
-            `,
-          }}
-        />
-        <noscript>
-          <div style={{padding: '20px', textAlign: 'center', backgroundColor: '#161b22', color: '#c9d1d9'}}>
-            本应用需要启用 JavaScript 才能正常使用 / This application requires JavaScript to be enabled.
-          </div>
-        </noscript>
-      </head>
-      <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
-        <AppProviders>
-          {children}
-        </AppProviders>
-      </body>
-    </html>
-  );
+// 根 layout 只是一个占位符，实际的 <html> 和 <body> 在 [lng]/layout.tsx 中
+// Next.js 要求必须有一个根 layout.tsx，但实际渲染由嵌套 layout 处理
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return children;
 }
