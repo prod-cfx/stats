@@ -1,10 +1,12 @@
-import React, { Suspense } from 'react';
-import { Navbar } from '@/components/layout/Navbar';
-import { getServerTranslator } from '@/lib/i18n/server'
-import { LongShortRatioClient } from './LongShortRatioClient'
+'use client';
 
-export default async function LongShortRatioPage() {
-  const { t } = await getServerTranslator()
+import React, { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Navbar } from '@/components/layout/Navbar';
+import { LongShortRatioClient } from './LongShortRatioClient';
+
+export default function LongShortRatioPage() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
