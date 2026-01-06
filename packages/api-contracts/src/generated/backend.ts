@@ -449,6 +449,48 @@ const VenueOrderBookDto = z
     version: z.number(),
   })
   .passthrough();
+const TradesPairConfigResponseDto = z
+  .object({
+    id: z.string(),
+    pairId: z.string(),
+    exchange: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean(),
+    priority: z.number(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    description: z.string().nullish(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough();
+const CreateTradesPairConfigDto = z
+  .object({
+    pairId: z
+      .string()
+      .regex(/^[A-Z0-9\-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+    exchange: z.string(),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    enabled: z.boolean().optional().default(true),
+    priority: z.number().gte(1).lte(1000).optional().default(100),
+    metadata: z.object({}).partial().passthrough().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+const UpdateTradesPairConfigDto = z
+  .object({
+    enabled: z.boolean(),
+    priority: z.number().gte(1).lte(1000),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    description: z.string().nullable(),
+  })
+  .partial()
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -500,6 +542,22 @@ const LongShortRatioPointResponseDto = z
     shortVolume: z.string().nullish(),
     longShortAccountRatio: z.string().nullish(),
     source: z.string(),
+  })
+  .passthrough();
+const MarketTradeResponseDto = z
+  .object({
+    id: z.number(),
+    exchange: z.string(),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    tradeId: z.string(),
+    price: z.string(),
+    size: z.string(),
+    side: z.enum(["buy", "sell"]),
+    tradeTimestamp: z.string(),
+    createdAt: z.string(),
   })
   .passthrough();
 const ExchangeConfigResponseDto = z
@@ -589,8 +647,12 @@ export const schemas = {
   UpdateOrderbookPairConfigDto,
   OrderBookLevelDto,
   VenueOrderBookDto,
+  TradesPairConfigResponseDto,
+  CreateTradesPairConfigDto,
+  UpdateTradesPairConfigDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
+  MarketTradeResponseDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
@@ -1521,6 +1583,106 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/admin/trades-configs",
+    alias: "AdminTradesPairConfigController_getAllConfigs",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "enabledOnly",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: z
+      .object({
+        data: z.array(TradesPairConfigResponseDto),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "post",
+    path: "/admin/trades-configs",
+    alias: "AdminTradesPairConfigController_createConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: CreateTradesPairConfigDto,
+      },
+    ],
+    response: z
+      .object({ data: TradesPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/admin/trades-configs/:id",
+    alias: "AdminTradesPairConfigController_getConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: TradesPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "put",
+    path: "/admin/trades-configs/:id",
+    alias: "AdminTradesPairConfigController_updateConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "body",
+        type: "Body",
+        schema: UpdateTradesPairConfigDto,
+      },
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: TradesPairConfigResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
+  },
+  {
+    method: "delete",
+    path: "/admin/trades-configs/:id",
+    alias: "AdminTradesPairConfigController_deleteConfig",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: "get",
     path: "/admin/user",
     alias: "AdminUserController_list[0]",
     requestFormat: "json",
@@ -2027,6 +2189,133 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(TradingPairConfigResponseDto),
+  },
+  {
+    method: "get",
+    path: "/markets/trades",
+    alias: "MarketsController_getTrades",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().gte(1),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(100),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]).optional(),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "baseAsset",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "quoteAsset",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "side",
+        type: "Query",
+        schema: z.enum(["buy", "sell"]).optional(),
+      },
+      {
+        name: "fromTimestamp",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "toTimestamp",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(MarketTradeResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "get",
+    path: "/markets/trades/large",
+    alias: "MarketsController_getLargeTrades",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
+        name: "minValue",
+        type: "Query",
+        schema: z.number().gte(0).optional().default(100000),
+      },
+    ],
+    response: z.array(MarketTradeResponseDto),
+  },
+  {
+    method: "get",
+    path: "/markets/trades/latest",
+    alias: "MarketsController_getLatestTrades",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+    ],
+    response: z.array(MarketTradeResponseDto),
   },
   {
     method: "post",

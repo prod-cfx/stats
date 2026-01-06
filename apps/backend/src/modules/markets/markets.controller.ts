@@ -8,11 +8,12 @@ import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.requ
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetLargeTradesRequestDto, GetLatestTradesRequestDto, GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
@@ -23,6 +24,7 @@ import { MarketsService } from './markets.service'
 
 @ApiTags('markets')
 @ApiBearerAuth('bearer')
+@ApiExtraModels(BasePaginationResponseDto, MarketTradeResponseDto)
 @Controller('markets')
 export class MarketsController {
   constructor(private readonly marketsService: MarketsService) {}
@@ -187,23 +189,29 @@ export class MarketsController {
   @Get('trades')
   @RequireAuth()
   @ReadAny(AppResource.MARKET_SYMBOL)
-  @ApiOperation({ summary: '查询交易记录' })
-  @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
-  async getTrades(@Query() query: GetMarketTradesRequestDto): Promise<MarketTradeResponseDto[]> {
-    const trades = await this.marketsService.getTrades({
-      exchange: query.exchange,
-      instrumentType: query.instrumentType,
-      symbol: query.symbol,
-      baseAsset: query.baseAsset,
-      quoteAsset: query.quoteAsset,
-      side: query.side,
-      limit: query.limit ?? 50,
-      offset: query.offset ?? 0,
-      fromTimestamp: query.fromTimestamp ? BigInt(query.fromTimestamp) : undefined,
-      toTimestamp: query.toTimestamp ? BigInt(query.toTimestamp) : undefined,
-    })
+  @ApiOperation({ summary: '查询交易记录（分页）' })
+  @ApiOkResponse({
+    description: '查询成功',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(MarketTradeResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  async getTrades(
+    @Query() query: GetMarketTradesRequestDto,
+  ): Promise<BasePaginationResponseDto<MarketTradeResponseDto>> {
+    const pageResult = await this.marketsService.getTrades(query)
 
-    return trades.map(trade => ({
+    const items: MarketTradeResponseDto[] = pageResult.items.map(trade => ({
       id: trade.id,
       exchange: trade.exchange,
       instrumentType: trade.instrumentType,
@@ -217,5 +225,7 @@ export class MarketsController {
       tradeTimestamp: trade.tradeTimestamp.toString(),
       createdAt: trade.createdAt.toISOString(),
     }))
+
+    return new BasePaginationResponseDto(pageResult.total, pageResult.page, pageResult.limit, items)
   }
 }

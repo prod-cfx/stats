@@ -40,7 +40,7 @@ interface TradeState {
   /**
    * 当前是否有正在进行的 flush 操作，用于串行化同一 instId 的落库
    */
-  flushPromise?: Promise<void> | null
+  flushPromise?: Promise<boolean> | null
 }
 
 @Injectable()

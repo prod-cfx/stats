@@ -9,6 +9,9 @@ import { MarketTradesRepository } from './repositories/market-trades.repository'
 import type { ExchangeId, MarketInstrumentType, MarketTimeframe, TradingPairConfig, TradingVenueType } from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
 import type { MarketTrade } from '@prisma/client'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
 
 export interface MarketsFilter {
   venueType?: TradingVenueType
@@ -104,31 +107,37 @@ export class MarketsService {
   }
 
   /**
-   * 查询交易记录
+   * 查询交易记录（分页）
    */
-  async getTrades(options: {
-    exchange?: string
-    instrumentType?: string
-    symbol?: string
-    baseAsset?: string
-    quoteAsset?: string
-    side?: string
-    limit?: number
-    offset?: number
-    fromTimestamp?: bigint
-    toTimestamp?: bigint
-  }): Promise<MarketTrade[]> {
+  async getTrades(query: GetMarketTradesRequestDto): Promise<BasePaginationResponseDto<MarketTrade>> {
     const normalize = (value?: string) =>
       typeof value === 'string' ? value.trim().toUpperCase() : undefined
 
-    return this.marketTradesRepository.findTrades({
-      ...options,
-      exchange: normalize(options.exchange),
-      instrumentType: normalize(options.instrumentType),
-      symbol: normalize(options.symbol),
-      baseAsset: normalize(options.baseAsset),
-      quoteAsset: normalize(options.quoteAsset),
-    })
+    const filters = {
+      exchange: normalize(query.exchange),
+      instrumentType: normalize(query.instrumentType),
+      symbol: normalize(query.symbol),
+      baseAsset: normalize(query.baseAsset),
+      quoteAsset: normalize(query.quoteAsset),
+      side: query.side,
+      fromTimestamp: query.fromTimestamp ? BigInt(query.fromTimestamp) : undefined,
+      toTimestamp: query.toTimestamp ? BigInt(query.toTimestamp) : undefined,
+    }
+
+    const page = query.page ?? 1
+    const limit = query.limit ?? 50
+    const offset = (page - 1) * limit
+
+    const [items, total] = await Promise.all([
+      this.marketTradesRepository.findTrades({
+        ...filters,
+        limit,
+        offset,
+      }),
+      this.marketTradesRepository.countTrades(filters),
+    ])
+
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 }
 

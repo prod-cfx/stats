@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
-export class GetMarketTradesRequestDto {
+export class GetMarketTradesRequestDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '交易所代码',
     example: 'OKX',
@@ -58,34 +59,6 @@ export class GetMarketTradesRequestDto {
   @IsOptional()
   @IsEnum(['buy', 'sell'])
   side?: 'buy' | 'sell'
-
-  @ApiProperty({
-    description: '返回记录数量',
-    example: 50,
-    default: 50,
-    minimum: 1,
-    maximum: 500,
-    required: false,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(500)
-  limit?: number
-
-  @ApiProperty({
-    description: '跳过记录数量',
-    example: 0,
-    default: 0,
-    minimum: 0,
-    required: false,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  offset?: number
 
   @ApiProperty({
     description: '开始时间戳（毫秒）',
