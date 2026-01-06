@@ -1,6 +1,6 @@
 'use client';
 
-import type { DataSource } from '@/app/page';
+import type { DataSource } from '@/types/trading';
 import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

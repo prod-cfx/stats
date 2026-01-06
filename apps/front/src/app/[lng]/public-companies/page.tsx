@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,7 @@ import { PublicCompaniesTable } from '@/components/public-companies/PublicCompan
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 
 export default function PublicCompaniesPage() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />

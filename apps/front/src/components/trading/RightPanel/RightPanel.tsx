@@ -1,6 +1,6 @@
 'use client';
 
-import type { DataSource, MarketType } from '@/app/page';
+import type { DataSource, MarketType } from '@/types/trading';
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,8 @@ function formatHmsUtc(ts: number) {
   return `${hh}:${mm}:${ss}`;
 }
 
-function getBaseAssetFromSymbol(symbol: string) {
+function getBaseAssetFromSymbol(symbol: string | undefined | null) {
+  if (!symbol) return 'BTC'; // 默认值
   // spot display may be "BTC/USDT"; internal may be "BTCUSDT"
   if (symbol.includes('/'))
     return symbol.split('/')[0] || symbol;
@@ -26,10 +27,11 @@ function getBaseAssetFromSymbol(symbol: string) {
   return symbol;
 }
 
-function hashStringToSeed(input: string) {
+function hashStringToSeed(input: string | undefined | null) {
+  const s = input || 'BTCUSDT';
   let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
@@ -244,7 +246,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
             <Copy className="w-3 h-3 text-[#8b949e] cursor-pointer" />
           </div>
           <div className="flex items-center gap-1 text-xs text-primary cursor-pointer hover:underline">
-            <span>{isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${selectedExchange.charAt(0).toUpperCase() + selectedExchange.slice(1)}`)}</span>
+            <span>{isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${(selectedExchange || 'binance').charAt(0).toUpperCase() + (selectedExchange || 'binance').slice(1)}`)}</span>
             <ExternalLink className="w-3 h-3" />
           </div>
         </div>

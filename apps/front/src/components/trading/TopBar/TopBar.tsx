@@ -1,6 +1,6 @@
 'use client';
 
-import type { DataSource, MarketType } from '@/app/page';
+import type { DataSource, MarketType } from '@/types/trading';
 import { ChevronDown, Info, Search, Star } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -60,6 +60,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
 
   const selectedBase = useMemo(() => {
     // BTCUSDT -> BTC, ETHUSDT -> ETH
+    if (!selectedSymbol) return 'BTC' // 默认值
     if (selectedSymbol.endsWith('USDT')) return selectedSymbol.slice(0, -4)
     return selectedSymbol
   }, [selectedSymbol])
@@ -196,6 +197,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   }, [marketList, searchQuery]);
 
   const selectedDisplaySymbol = useMemo(() => {
+    if (!selectedSymbol) return 'BTCUSDT' // 默认值
     if (marketType === 'spot' && selectedSymbol.endsWith('USDT')) {
       return `${selectedSymbol.slice(0, -4)}/USDT`;
     }
