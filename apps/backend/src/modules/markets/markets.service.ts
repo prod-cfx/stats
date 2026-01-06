@@ -76,7 +76,12 @@ export class MarketsService {
     symbol: string,
     limit = 50,
   ): Promise<MarketTrade[]> {
-    return this.marketTradesRepository.findLatestTrades(exchange, instrumentType, symbol, limit)
+    return this.marketTradesRepository.findLatestTrades(
+      exchange.toUpperCase(),
+      instrumentType.toUpperCase(),
+      symbol.toUpperCase(),
+      limit,
+    )
   }
 
   /**
@@ -89,7 +94,13 @@ export class MarketsService {
     minValue = 100000,
     limit = 50,
   ): Promise<MarketTrade[]> {
-    return this.marketTradesRepository.findLargeTrades(exchange, instrumentType, symbol, minValue, limit)
+    return this.marketTradesRepository.findLargeTrades(
+      exchange.toUpperCase(),
+      instrumentType.toUpperCase(),
+      symbol.toUpperCase(),
+      minValue,
+      limit,
+    )
   }
 
   /**
@@ -107,7 +118,17 @@ export class MarketsService {
     fromTimestamp?: bigint
     toTimestamp?: bigint
   }): Promise<MarketTrade[]> {
-    return this.marketTradesRepository.findTrades(options)
+    const normalize = (value?: string) =>
+      typeof value === 'string' ? value.trim().toUpperCase() : undefined
+
+    return this.marketTradesRepository.findTrades({
+      ...options,
+      exchange: normalize(options.exchange),
+      instrumentType: normalize(options.instrumentType),
+      symbol: normalize(options.symbol),
+      baseAsset: normalize(options.baseAsset),
+      quoteAsset: normalize(options.quoteAsset),
+    })
   }
 }
 

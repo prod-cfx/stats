@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
+import { Transform, Type } from 'class-transformer'
 import {
   IsBoolean,
   IsEnum,
@@ -29,27 +29,32 @@ export class CreateTradesPairConfigDto {
   pairId!: string
 
   @ApiProperty({ description: '交易所标识，目前仅支持 OKX' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @IsNotEmpty()
   @IsIn(['OKX'])
   exchange!: string
 
   @ApiProperty({ description: '交易对符号，例如 BTC-USDT, BTC-USDT-SWAP' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @IsNotEmpty()
   symbol!: string
 
   @ApiProperty({ description: '基础资产，例如 BTC' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @IsNotEmpty()
   baseAsset!: string
 
   @ApiProperty({ description: '计价资产，例如 USDT' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @IsNotEmpty()
   quoteAsset!: string
 
   @ApiProperty({ description: '交易品种类型', enum: ['SPOT', 'PERPETUAL', 'FUTURE'] })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsEnum(['SPOT', 'PERPETUAL', 'FUTURE'])
   instrumentType!: 'SPOT' | 'PERPETUAL' | 'FUTURE'
 

@@ -54,15 +54,17 @@ export class TradesPairConfigRepository {
 
   async create(dto: CreateTradesPairConfigDto): Promise<TradesPairConfig> {
     const client = this.getClient()
-    
+
+    const normalize = (value: string) => value.trim().toUpperCase()
+
     return client.tradesPairConfig.create({
       data: {
         pairId: dto.pairId,
-        exchange: dto.exchange,
-        symbol: dto.symbol,
-        baseAsset: dto.baseAsset,
-        quoteAsset: dto.quoteAsset,
-        instrumentType: dto.instrumentType,
+        exchange: normalize(dto.exchange),
+        symbol: normalize(dto.symbol),
+        baseAsset: normalize(dto.baseAsset),
+        quoteAsset: normalize(dto.quoteAsset),
+        instrumentType: normalize(dto.instrumentType),
         enabled: dto.enabled ?? true,
         priority: dto.priority ?? 100,
         metadata: dto.metadata ?? null,

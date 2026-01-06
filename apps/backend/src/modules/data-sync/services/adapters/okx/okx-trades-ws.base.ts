@@ -95,10 +95,20 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     }
 
     if (staleStates.length) {
-      await Promise.allSettled(staleStates.map(state => this.flushBuffer(state)))
-      for (const state of staleStates) {
-        this.states.delete(state.instId)
-      }
+      const results = await Promise.allSettled(staleStates.map(state => this.flushBuffer(state)))
+
+      results.forEach((result, index) => {
+        const state = staleStates[index]
+        if (result.status === 'fulfilled' && result.value === true) {
+          // flush 成功，安全移除该 state
+          this.states.delete(state.instId)
+        } else {
+          // flush 失败：保留 state 以便后续有机会重试，避免静默丢单
+          this.logger.warn(
+            `Skip removing stale trades state for instId=${state.instId} due to flush failure`,
+          )
+        }
+      })
     }
 
     // create new states
@@ -210,18 +220,20 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
   /**
    * 批量插入缓冲区中的交易记录
+   * 返回值表示本轮 flush 是否完全成功（true）或遇到错误（false）
    */
-  private async flushBuffer(state: TradeState): Promise<void> {
-    if (state.buffer.length === 0) return
+  private async flushBuffer(state: TradeState): Promise<boolean> {
+    if (state.buffer.length === 0) return true
 
     // 串行化同一 instId 的 flush，避免并发 flush 导致 buffer 被多次 splice 而丢单
     if (state.flushPromise) {
       // 已有 flush 在进行中，直接复用该 Promise
-      await state.flushPromise
-      return
+      return state.flushPromise
     }
 
     state.flushPromise = (async () => {
+      let hadError = false
+
       // 使用循环确保在一次 flush 周期内尽可能清空当前缓冲
       // 新成交写入 buffer 后，若仍满足阈值/时间条件，会在下一轮被处理
       while (state.buffer.length > 0) {
@@ -234,6 +246,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
           state.buffer.splice(0, trades.length)
           state.lastFlushAt = Date.now()
         } catch (error) {
+          hadError = true
           this.logger.error(
             `Failed to batch insert ${trades.length} trades for ${state.instId}: ${error instanceof Error ? error.message : String(error)}`,
           )
@@ -241,10 +254,17 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
           break
         }
       }
+
+      if (hadError) {
+        // 显式通过 rejected promise 反馈失败，供上层决定是否删除 state
+        throw new Error(`Flush buffer failed for instId=${state.instId}`)
+      }
+
+      return true
     })()
 
     try {
-      await state.flushPromise
+      return await state.flushPromise
     } finally {
       state.flushPromise = null
     }
