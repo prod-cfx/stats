@@ -64,6 +64,7 @@ export default function MarketPage() {
                     selectedExchange={selectedExchange}
                     setSelectedExchange={setSelectedExchange}
                     symbol={selectedSymbol}
+                    marketType={marketType}
                   />
                 </div>
 

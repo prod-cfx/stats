@@ -5,25 +5,41 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 export const Navbar = () => {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const { items: catalogItems } = useMarketDataCatalog()
+
+  const dataNavOrder = [
+    'nav-liquidation-map',
+    'nav-long-short-ratio',
+    'nav-aggregated-orderbook',
+    'nav-liquidation-data',
+    'nav-prediction-market',
+    'nav-public-companies',
+  ]
+  const dataChildren = catalogItems
+    .filter((x) => x.kind === 'nav' && x.href)
+    .slice()
+    .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
+    .map((x) => ({ name: t(x.labelKey), href: x.href! }))
 
   const navLinks = [
     { name: t('nav.home'), href: '/' },
     { 
       name: t('nav.data'), 
       href: '/liquidation-map',
-      children: [
+      children: dataChildren.length ? dataChildren : [
         { name: t('nav.liquidation_map'), href: '/liquidation-map' },
         { name: t('nav.long_short_ratio'), href: '/long-short-ratio' },
         { name: t('nav.aggregated_orderbook'), href: '/aggregated-orderbook' },
         { name: t('nav.liquidation_data'), href: '/liquidation-data' },
         { name: t('nav.prediction_market'), href: '/prediction-market' },
         { name: t('nav.public_companies'), href: '/public-companies' },
-      ]
+      ],
     },
     { 
       name: t('nav.whales'), 

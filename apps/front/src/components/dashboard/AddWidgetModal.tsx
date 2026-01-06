@@ -1,9 +1,10 @@
 'use client';
 
-import { Activity, BarChart2, Database, Layers, Map, PieChart, Plus, TrendingUp } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { Activity, BarChart2, Database, Info, Layers, Map, PieChart, Plus, TrendingUp } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -11,41 +12,35 @@ interface AddWidgetModalProps {
   onSelect: (widgetId: string) => void;
 }
 
-const widgetItems = [
-  { id: 'liquidation-map', labelKey: 'dashboard.widgets.liquidationMap', icon: Map, color: '#3b82f6' },
-  { id: 'ls-ratio', labelKey: 'dashboard.widgets.lsRatio', icon: BarChart2, color: '#10b981' },
-  { id: 'agg-orderbook', labelKey: 'dashboard.widgets.aggOrderbook', icon: Layers, color: '#f59e0b' },
-  { id: 'agg-oi', labelKey: 'dashboard.widgets.aggOI', icon: Activity, color: '#8b5cf6' },
-  { id: 'agg-volume', labelKey: 'dashboard.widgets.aggVolume', icon: Database, color: '#ec4899' },
-  { id: 'liquidation-data', labelKey: 'dashboard.widgets.liquidationData', icon: TrendingUp, color: '#ef4444' },
-  { id: 'public-companies', labelKey: 'dashboard.widgets.publicCompanies', icon: PieChart, color: '#06b6d4' },
-  { id: 'prediction-market', labelKey: 'dashboard.widgets.predictionMarket', icon: Info, color: '#6366f1' },
-];
-
-function Info(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 16v-4" />
-      <path d="M12 8h.01" />
-    </svg>
-  );
+const iconMap: Record<string, React.ComponentType<any>> = {
+  Map,
+  BarChart2,
+  Layers,
+  Activity,
+  Database,
+  TrendingUp,
+  PieChart,
+  Info,
 }
 
 export const AddWidgetModal = ({ isOpen, onClose, onSelect }: AddWidgetModalProps) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const { items: catalogItems } = useMarketDataCatalog()
+
+  const widgetItems = useMemo(() => {
+    return catalogItems
+      .filter((x) => x.kind === 'dashboardWidget')
+      .map((x) => {
+        const Icon = (x.ui?.icon && iconMap[x.ui.icon]) ? iconMap[x.ui.icon] : Info
+        return {
+          id: x.id,
+          labelKey: x.labelKey,
+          icon: Icon,
+          color: x.ui?.color || '#6366f1',
+        }
+      })
+  }, [catalogItems])
 
   useEffect(() => {
     if (isOpen) {
