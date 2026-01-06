@@ -1,0 +1,88 @@
+import type { INestApplication } from '@nestjs/common'
+import type { TestingModule } from '@nestjs/testing'
+
+import type { ExchangeLongShortTimeRange } from '../src/modules/markets/dto/requests/get-exchange-long-short-ratio.request.dto'
+import type { ExchangeLongShortRatioResponseDto } from '../src/modules/markets/dto/responses/exchange-long-short-ratio.response.dto'
+import { resolve } from 'node:path'
+import { Test } from '@nestjs/testing'
+
+import { AppModule } from '../src/modules/app.module'
+import { MarketsService } from '../src/modules/markets/markets.service'
+
+describe('MarketsService - exchange long/short ratio snapshot (E2E)', () => {
+  let app: INestApplication
+  let marketsService: MarketsService
+
+  const originalCwd = process.cwd()
+
+  beforeAll(async () => {
+    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
+    if (!process.env.APP_ENV) {
+      process.env.APP_ENV = 'e2e'
+    }
+
+    process.chdir(resolve(__dirname, '../../..'))
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile()
+
+    app = moduleFixture.createNestApplication()
+    await app.init()
+
+    marketsService = app.get(MarketsService)
+  })
+
+  afterAll(async () => {
+    process.chdir(originalCwd)
+    if (app) {
+      await app.close()
+    }
+  })
+
+  it('should return deterministic and well-formed exchange long/short ratio snapshot', async () => {
+    const symbol = 'BTC'
+    const timeRange: ExchangeLongShortTimeRange = '4h'
+
+    const first = (await marketsService.getExchangeLongShortRatios({
+      symbol,
+      timeRange,
+    })) as ExchangeLongShortRatioResponseDto[]
+
+    const second = (await marketsService.getExchangeLongShortRatios({
+      symbol,
+      timeRange,
+    })) as ExchangeLongShortRatioResponseDto[]
+
+    expect(first.length).toBeGreaterThanOrEqual(5)
+
+    // 应包含特定的核心交易所与 DEX 汇总
+    const names = first.map(item => item.name)
+    expect(names).toContain('Binance')
+    expect(names).toContain('DEX')
+
+    // rank 应从 1 开始递增
+    const ranks = first.map(item => item.rank)
+    expect(Math.min(...ranks)).toBe(1)
+
+    // 按总持仓金额从高到低排序
+    const totals = first.map(item => item.longAmountUsd + item.shortAmountUsd)
+    for (let i = 1; i < totals.length; i += 1) {
+      expect(totals[i]).toBeLessThanOrEqual(totals[i - 1])
+    }
+
+    // 每个条目的多空占比和金额应在合理范围内
+    for (const item of first) {
+      expect(item.longAmountUsd).toBeGreaterThan(0)
+      expect(item.shortAmountUsd).toBeGreaterThan(0)
+
+      const sumPercent = item.longPercent + item.shortPercent
+      expect(sumPercent).toBeGreaterThanOrEqual(99.9)
+      expect(sumPercent).toBeLessThanOrEqual(100.1)
+    }
+
+    // 相同参数下结果应保持确定性
+    expect(second).toEqual(first)
+  })
+})
+

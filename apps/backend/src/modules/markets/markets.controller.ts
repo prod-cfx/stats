@@ -2,6 +2,8 @@
 
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 // eslint-disable-next-line ts/consistent-type-imports
+import { GetExchangeLongShortRatioRequestDto } from './dto/requests/get-exchange-long-short-ratio.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
 import { GetLongShortRatioRequestDto } from './dto/requests/get-long-short-ratio.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetTradingPairsRequestDto } from './dto/requests/get-trading-pairs.request.dto'
@@ -11,6 +13,7 @@ import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
+import { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -126,6 +129,22 @@ export class MarketsController {
         longShortAccountRatio,
         source: item.source,
       }
+    })
+  }
+
+  @Get('long-short-ratio/exchanges')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '按交易所维度获取指定标的的多空比快照' })
+  @ApiOkResponse({ type: ExchangeLongShortRatioResponseDto, isArray: true })
+  async getExchangeLongShortRatio(
+    @Query() query: GetExchangeLongShortRatioRequestDto,
+  ): Promise<ExchangeLongShortRatioResponseDto[]> {
+    const { symbol, timeRange } = query
+
+    return this.marketsService.getExchangeLongShortRatios({
+      symbol,
+      timeRange,
     })
   }
 }
