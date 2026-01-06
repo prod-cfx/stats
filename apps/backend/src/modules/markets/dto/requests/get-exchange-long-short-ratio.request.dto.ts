@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsIn, IsString } from 'class-validator'
+import { Transform, Type } from 'class-transformer'
+import { IsIn, IsNotEmpty, IsString, Matches } from 'class-validator'
 
 export const EXCHANGE_LONG_SHORT_TIME_RANGES = [
   '5m',
@@ -16,10 +16,17 @@ export type ExchangeLongShortTimeRange = (typeof EXCHANGE_LONG_SHORT_TIME_RANGES
 
 export class GetExchangeLongShortRatioRequestDto {
   @ApiProperty({
-    description: '基础资产符号，例如 BTC / ETH',
+    description: '基础资产符号，例如 BTC / ETH（会自动转为大写并去除空格）',
     example: 'BTC',
   })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @IsString({ message: 'symbol 必须是字符串' })
+  @IsNotEmpty({ message: 'symbol 不能为空' })
+  @Matches(/^[A-Z0-9]{2,10}$/, {
+    message: 'symbol 必须是 2-10 位大写字母或数字',
+  })
   symbol!: string
 
   @ApiProperty({

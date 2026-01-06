@@ -1,17 +1,19 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-
 import type { ExchangeLongShortTimeRange } from '../src/modules/markets/dto/requests/get-exchange-long-short-ratio.request.dto'
 import type { ExchangeLongShortRatioResponseDto } from '../src/modules/markets/dto/responses/exchange-long-short-ratio.response.dto'
+
 import { resolve } from 'node:path'
+import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import request from 'supertest'
 
 import { AppModule } from '../src/modules/app.module'
-import { MarketsService } from '../src/modules/markets/markets.service'
+import { ACGuard } from '../src/modules/auth/guards/ac.guard'
+import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
 
-describe('MarketsService - exchange long/short ratio snapshot (E2E)', () => {
+describe('Markets HTTP - exchange long/short ratio snapshot (E2E)', () => {
   let app: INestApplication
-  let marketsService: MarketsService
 
   const originalCwd = process.cwd()
 
@@ -25,12 +27,37 @@ describe('MarketsService - exchange long/short ratio snapshot (E2E)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile()
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ACGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
 
     app = moduleFixture.createNestApplication()
-    await app.init()
 
-    marketsService = app.get(MarketsService)
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: false,
+        transformOptions: {
+          enableImplicitConversion: true,
+        },
+        exceptionFactory: errors => {
+          const errorMessages = errors.map(err => ({
+            property: err.property,
+            constraints: err.constraints,
+            value: err.value,
+          }))
+          return new BadRequestException(errorMessages)
+        },
+      }),
+    )
+
+    app.setGlobalPrefix('api/v1')
+
+    await app.init()
   })
 
   afterAll(async () => {
@@ -40,19 +67,29 @@ describe('MarketsService - exchange long/short ratio snapshot (E2E)', () => {
     }
   })
 
-  it('should return deterministic and well-formed exchange long/short ratio snapshot', async () => {
+  it('should return deterministic and well-formed exchange long/short ratio snapshot via HTTP', async () => {
     const symbol = 'BTC'
     const timeRange: ExchangeLongShortTimeRange = '4h'
 
-    const first = (await marketsService.getExchangeLongShortRatios({
-      symbol,
-      timeRange,
-    })) as ExchangeLongShortRatioResponseDto[]
+    const server = app.getHttpServer()
 
-    const second = (await marketsService.getExchangeLongShortRatios({
-      symbol,
-      timeRange,
-    })) as ExchangeLongShortRatioResponseDto[]
+    const firstRes = await request(server)
+      .get('/api/v1/markets/long-short-ratio/exchanges')
+      .query({ symbol, timeRange })
+      .set('Authorization', 'Bearer test-token')
+      .expect(200)
+
+    const secondRes = await request(server)
+      .get('/api/v1/markets/long-short-ratio/exchanges')
+      .query({ symbol, timeRange })
+      .set('Authorization', 'Bearer test-token')
+      .expect(200)
+
+    const firstBody = firstRes.body as { data: ExchangeLongShortRatioResponseDto[] }
+    const secondBody = secondRes.body as { data: ExchangeLongShortRatioResponseDto[] }
+
+    const first = firstBody.data
+    const second = secondBody.data
 
     expect(first.length).toBeGreaterThanOrEqual(5)
 
@@ -83,6 +120,18 @@ describe('MarketsService - exchange long/short ratio snapshot (E2E)', () => {
 
     // 相同参数下结果应保持确定性
     expect(second).toEqual(first)
+  })
+
+  it('should reject invalid symbol with validation error', async () => {
+    const server = app.getHttpServer()
+
+    const res = await request(server)
+      .get('/api/v1/markets/long-short-ratio/exchanges')
+      .query({ symbol: '  btc? ', timeRange: '4h' })
+      .set('Authorization', 'Bearer test-token')
+      .expect(400)
+
+    expect(res.body).toBeTruthy()
   })
 })
 
