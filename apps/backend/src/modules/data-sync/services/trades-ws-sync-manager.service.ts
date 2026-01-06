@@ -73,8 +73,9 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
   }
 
   private getSyncIntervalMs(): number {
-    const raw = this.configService.get<number>('TRADES_WS_SYNC_INTERVAL_MS')
-    const ms = typeof raw === 'number' && Number.isFinite(raw) ? raw : 10_000
+    const raw = this.configService.get<string>('TRADES_WS_SYNC_INTERVAL_MS')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+    const ms = Number.isFinite(parsed) && parsed > 0 ? parsed : 10_000
     return Math.max(1_000, Math.floor(ms))
   }
 
@@ -84,18 +85,18 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
 
     try {
       const configs = await this.getTradesConfigs()
-      
+
       // 计算配置哈希，检测变更
       const newHash = this.computeConfigHash(configs)
       if (newHash === this.configsHash) {
         // 配置未变化，跳过本次同步
         return
       }
-      
+
       this.logger.log(`Config changed, syncing subscriptions (hash: ${newHash.slice(0, 8)}...)`)
-      this.configsHash = newHash
-      
+
       const grouped = this.groupByAdapterKey(configs)
+      let allSucceeded = true
 
       for (const adapter of this.adapters) {
         const target = grouped.get(adapter.key) ?? []
@@ -113,10 +114,20 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
             this.activeAdapters.set(adapter.key, false)
           }
         } catch (error) {
+          allSucceeded = false
           this.logger.error(
             `Trades WS adapter=${adapter.key} sync failed: ${error instanceof Error ? error.message : String(error)}`,
           )
         }
+      }
+
+      // 只有在所有适配器同步成功时才更新哈希；否则保留旧哈希以便下次继续重试
+      if (allSucceeded) {
+        this.configsHash = newHash
+      } else {
+        this.logger.warn(
+          `Trades WS sync not fully successful, will retry on next tick (hash unchanged: ${this.configsHash?.slice(0, 8) ?? 'none'})`,
+        )
       }
     } finally {
       this.isRunning = false
