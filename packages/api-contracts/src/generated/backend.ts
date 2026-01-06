@@ -2033,7 +2033,12 @@ const endpoints = makeApi([
         schema: z.enum(["5m", "15m", "30m", "1h", "4h", "12h", "24h"]),
       },
     ],
-    response: z.array(ExchangeLongShortRatioResponseDto),
+    response: BaseResponseDto.and(
+      z
+        .object({ data: z.array(ExchangeLongShortRatioResponseDto) })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "get",
