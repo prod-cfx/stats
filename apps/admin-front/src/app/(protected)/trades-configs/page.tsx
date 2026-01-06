@@ -66,6 +66,53 @@ export default function TradesConfigsPage() {
     void loadConfigs()
   }, [loadConfigs])
 
+  const resolveOkxInstIdForConfig = (config: TradesPairConfigResponse): string => {
+    const metadata =
+      config.metadata && typeof config.metadata === 'object' && !Array.isArray(config.metadata)
+        ? (config.metadata as Record<string, unknown>)
+        : null
+
+    const pickMetadataString = (keys: string[]): string | null => {
+      if (!metadata) return null
+      for (const key of keys) {
+        const value = metadata[key]
+        if (typeof value === 'string' && value.trim().length) {
+          return value.trim().toUpperCase()
+        }
+      }
+      return null
+    }
+
+    // 1) metadata 中显式配置的 OKX instId / symbol 优先
+    const metaInstId = pickMetadataString(['okxInstId', 'instId', 'symbol'])
+    if (metaInstId) return metaInstId
+
+    // 2) 若 symbol 已经是 OKX 风格（带 -），直接大写使用
+    if (config.symbol && config.symbol.includes('-')) {
+      return config.symbol.trim().toUpperCase()
+    }
+
+    const base = config.baseAsset.trim().toUpperCase()
+    const quote = config.quoteAsset.trim().toUpperCase()
+
+    // 3) 按 instrumentType 推导 instId，与后端 OkxTradesWsAdapterBase.resolveInstId 保持一致
+    if (config.instrumentType === 'SPOT') {
+      return `${base}-${quote}`
+    }
+
+    if (config.instrumentType === 'PERPETUAL') {
+      return `${base}-${quote}-SWAP`
+    }
+
+    if (config.instrumentType === 'FUTURE') {
+      const metaContract = pickMetadataString(['okxContract'])
+      if (metaContract) return metaContract
+    }
+
+    // 兜底：返回大写 symbol，尽量与后端查询逻辑兼容
+    return config.symbol.trim().toUpperCase()
+  }
+
   const handleCreateConfig = async (values: CreateTradesPairConfigPayload) => {
     try {
       // 使用工具函数解析 metadata
@@ -163,10 +210,11 @@ export default function TradesConfigsPage() {
     dispatch({ type: 'OPEN_DATA_VIEW_MODAL', payload: config })
     
     try {
+      const instId = resolveOkxInstIdForConfig(config)
       const data = await getLatestTrades({
         exchange: config.exchange,
         instrumentType: config.instrumentType,
-        symbol: config.symbol,
+        symbol: instId,
         limit: 50,
       })
       dispatch({ type: 'SET_TRADES_DATA', payload: data })

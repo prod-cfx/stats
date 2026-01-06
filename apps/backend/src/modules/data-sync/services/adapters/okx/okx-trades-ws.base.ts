@@ -134,13 +134,40 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
   async shutdown(): Promise<void> {
     // 先冲刷所有缓冲中的成交记录，避免进程退出时丢数据
-    await Promise.allSettled([...this.states.values()].map(state => this.flushBuffer(state)))
+    const states = [...this.states.values()]
+    const results = await Promise.allSettled(states.map(state => this.flushBuffer(state)))
+
+    let hadError = false
+
+    results.forEach((result, index) => {
+      const state = states[index]
+      if (result.status === 'fulfilled' && result.value === true) {
+        // flush 成功，可以安全移除该 state
+        this.states.delete(state.instId)
+      } else {
+        hadError = true
+        this.logger.error(
+          `Failed to flush trades buffer for instId=${state.instId} during shutdown: ${
+            result.status === 'rejected'
+              ? result.reason instanceof Error
+                ? result.reason.message
+                : String(result.reason)
+              : 'flushBuffer did not complete successfully'
+          }`,
+        )
+        // 注意：此处不删除 state，保留缓冲以便上层根据异常决定后续处理策略
+      }
+    })
 
     for (const conn of this.connections) {
       conn.shutdown()
     }
     this.connections.length = 0
-    this.states.clear()
+
+    if (hadError) {
+      // 通过抛错让调用方感知 shutdown 期间存在未能落库的成交，避免静默丢单
+      throw new Error('One or more trades buffers failed to flush during shutdown')
+    }
   }
 
   protected streamNameForInstId(instId: string): string {
