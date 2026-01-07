@@ -308,7 +308,7 @@ export async function fetchCryptoStockQuotesLatest(params?: {
     const response = await safeApiCall(
       () =>
         client.CryptoStockQuotesController_getLatest({
-          headers: requireAuthHeaders(),
+          headers: optionalAuthHeaders(),
           queries: {
             ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
             ...(params?.source ? { source: params.source } : {}),
@@ -320,7 +320,7 @@ export async function fetchCryptoStockQuotesLatest(params?: {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
+            ...optionalAuthHeaders(),
           },
         },
         validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),

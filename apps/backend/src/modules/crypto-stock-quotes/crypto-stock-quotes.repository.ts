@@ -206,10 +206,7 @@ export class CryptoStockQuotesRepository {
 
     const where: Prisma.CryptoStockQuoteWhereInput = {
       symbol: { in: symbols },
-    }
-
-    if (source) {
-      where.source = source
+      source: source ?? 'BBX',
     }
 
     return client.cryptoStockQuote.findMany({
@@ -229,10 +226,8 @@ export class CryptoStockQuotesRepository {
   async findLatestQuotesForAllSymbols(source?: string): Promise<CryptoStockQuote[]> {
     const client = this.getClient()
 
-    const where: Prisma.CryptoStockQuoteWhereInput = {}
-
-    if (source) {
-      where.source = source
+    const where: Prisma.CryptoStockQuoteWhereInput = {
+      source: source ?? 'BBX',
     }
 
     return client.cryptoStockQuote.findMany({
