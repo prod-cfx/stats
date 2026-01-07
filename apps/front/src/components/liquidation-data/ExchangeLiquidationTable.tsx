@@ -85,13 +85,7 @@ export const ExchangeLiquidationTable = () => {
       const symbol = selectedCoin === 'ALL' ? 'BTC' : selectedCoin
       const timeframe = timeFilter
 
-      let response: ExchangeLiquidationResponse
-      try {
-        response = await fetchExchangeLiquidation(symbol, timeframe)
-      } catch {
-        // 如果后端暂时没有数据，回退为空数组，由 LoadingState 处理错误展示
-        return null
-      }
+      const response: ExchangeLiquidationResponse = await fetchExchangeLiquidation(symbol, timeframe)
 
       const totalRow = response.rows.find(row => row.isTotal)
       const exchangeRows = response.rows.filter(row => !row.isTotal)

@@ -50,17 +50,48 @@ export const LiquidationSummary = () => {
   }, [i18n.language]);
 
   // 默认使用 BTC 作为汇总 symbol，后续如需支持切换可以从上层透传
-  const { data } = useMockData<AggregatedLiquidationSummary | null>(
+  const { data, loading, error, reload } = useMockData<AggregatedLiquidationSummary | null>(
     async () => fetchAggregatedLiquidationSummary('BTC'),
     [],
   );
 
-  const items = data?.items ?? [
-    { timeframe: '1h', totalUsd: 2.82710e7, longUsd: 2.75548e7, shortUsd: 7.162e5 },
-    { timeframe: '4h', totalUsd: 3.65974e7, longUsd: 3.07189e7, shortUsd: 5.8785e6 },
-    { timeframe: '12h', totalUsd: 1.35e8, longUsd: 1.17e8, shortUsd: 1.80936e7 },
-    { timeframe: '24h', totalUsd: 2.22e8, longUsd: 1.44e8, shortUsd: 7.84277e7 },
-  ];
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <SectionTitle>{t('liquidationData.summary.title')}</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 animate-pulse h-[120px]"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4">
+        <SectionTitle>{t('liquidationData.summary.title')}</SectionTitle>
+        <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 flex items-center justify-between">
+          <p className="text-[#f97373] text-sm">
+            {t('common.error') || '爆仓汇总数据加载失败，请稍后重试。'}
+          </p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-md border border-[#30363d] text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
+            onClick={() => reload()}
+          >
+            {t('common.retry') || '重试'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const items = data?.items ?? [];
 
   const summaryData = items.map(item => {
     let titleKey: string;
