@@ -7,7 +7,6 @@ import { LoadingState } from '@/components/ui/loading';
 import { useAsync } from '@/hooks/use-async';
 import { fetchWhaleTrackingDiscover, type WhaleDiscoverResponse } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
-import type { TraderCardProps } from './TraderCard';
 import { TraderCard } from './TraderCard';
 
 export const DiscoverGrid = () => {
