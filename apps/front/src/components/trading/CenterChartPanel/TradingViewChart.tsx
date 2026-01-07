@@ -21,9 +21,22 @@ const LightweightChart = dynamic(
   }
 );
 
+export type DataSource = 'binance' | 'okx';
+export type MarketType = 'futures' | 'spot';
+
 interface TradingViewChartProps {
   symbol: string;
   interval: string;
+  isAggregated: boolean;
+  selectedExchange: DataSource;
+  marketType: MarketType;
+  activeIndicators?: Array<{
+    id: string
+    label: string
+    kind: 'chartSeries' | 'chartOverlay'
+    href?: string
+  }>
+  onRemoveIndicator?: (id: string) => void
 }
 
 /**

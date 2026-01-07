@@ -47,6 +47,7 @@ export default function TradingPage() {
                 selectedExchange={selectedExchange}
                 setSelectedExchange={setSelectedExchange}
                 symbol={selectedSymbol}
+                marketType={marketType}
               />
             </div>
 
