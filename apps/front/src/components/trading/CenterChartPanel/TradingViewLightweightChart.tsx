@@ -17,25 +17,35 @@ const IndicatorPanelHeader = ({
   title,
   value,
   valueColor,
+  valueParts,
   onClose,
 }: {
   title: string
   value?: string
   valueColor?: string
+  valueParts?: Array<{ text: string; color?: string }>
   onClose?: () => void
 }) => (
   <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 right-1 z-10 pointer-events-none bg-[#161b22] rounded-sm">
     <span className="text-[10px] text-[#8b949e] font-roboto font-normal leading-4 tracking-tight truncate">
       {title}
     </span>
-    {value && (
+    {Array.isArray(valueParts) && valueParts.length > 0 ? (
+      <span className="text-[10px] font-roboto font-normal leading-4 tracking-tight whitespace-pre">
+        {valueParts.map((p, idx) => (
+          <span key={idx} style={{ color: p.color || '#c9d1d9' }}>
+            {p.text}
+          </span>
+        ))}
+      </span>
+    ) : value ? (
       <span
         className="text-[10px] font-roboto font-normal leading-4 tracking-tight"
         style={{ color: valueColor || '#c9d1d9' }}
       >
         {value}
       </span>
-    )}
+    ) : null}
     <div className="ml-auto flex items-center">
       {onClose && (
         <button
@@ -88,6 +98,7 @@ const IndicatorChartPanel = ({
   const dataByTimeRef = useRef<Map<string, any>>(new Map())
   const [currentValue, setCurrentValue] = useState<string>('')
   const [currentValueColor, setCurrentValueColor] = useState<string>('')
+  const [liqHeader, setLiqHeader] = useState<null | { longUsd: number; shortUsd: number; totalUsd: number }>(null)
   
   // Init chart
   useEffect(() => {
@@ -166,6 +177,24 @@ const IndicatorChartPanel = ({
         lastValueVisible: false,
         crosshairMarkerVisible: false,
       })
+    } else if (type === 'liquidation') {
+      // Dual histogram around 0:
+      // - short liquidation: +value above 0 (green)
+      // - long liquidation:  -value below 0 (red)
+      const shortSeries = chart.addSeries(HistogramSeries, {
+        color: '#22c55e',
+        priceFormat: { type: 'volume' },
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      const longSeries = chart.addSeries(HistogramSeries, {
+        color: '#ef4444',
+        priceFormat: { type: 'volume' },
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+      series = shortSeries
+      altSeriesRef.current = longSeries
     } else {
       series = chart.addSeries(HistogramSeries, {
         color,
@@ -199,6 +228,15 @@ const IndicatorChartPanel = ({
       }
       series.setData(bullData as any)
       altSeriesRef.current.setData(bearData as any)
+    } else if (type === 'liquidation' && altSeriesRef.current) {
+      const shortData = data
+        .filter((d) => d && typeof d.shortLiquidationUsd === 'number')
+        .map((d) => ({ time: d.time, value: d.shortLiquidationUsd, color: '#22c55e' }))
+      const longData = data
+        .filter((d) => d && typeof d.longLiquidationUsd === 'number')
+        .map((d) => ({ time: d.time, value: -d.longLiquidationUsd, color: '#ef4444' }))
+      series.setData(shortData as any)
+      altSeriesRef.current.setData(longData as any)
     } else {
       series.setData(data)
     }
@@ -209,10 +247,20 @@ const IndicatorChartPanel = ({
     // Set initial value (last point)
     if (data.length > 0) {
       const last = data[data.length - 1]
-      const val = type === 'liquidation' ? (last.long || last.value) : last.value
-      setCurrentValue(formatter ? formatter(val) : String(val))
-      // Prefer explicit data color (for segmented coloring), fallback to series color
-      setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+      if (type === 'liquidation') {
+        const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
+        const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
+        const totalUsd = longUsd + shortUsd
+        setLiqHeader({ longUsd, shortUsd, totalUsd })
+        setCurrentValue('')
+        setCurrentValueColor('#c9d1d9')
+      } else {
+        setLiqHeader(null)
+        const val = last.value
+        setCurrentValue(formatter ? formatter(val) : String(val))
+        // Prefer explicit data color (for segmented coloring), fallback to series color
+        setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+      }
     }
 
     // Subscribe to crosshair to update legend value
@@ -220,17 +268,37 @@ const IndicatorChartPanel = ({
       if (param.time) {
         const d = dataByTimeRef.current.get(String(param.time))
         if (d) {
-          const val = type === 'liquidation' ? (d.long || d.value) : d.value
-          setCurrentValue(formatter ? formatter(val) : String(val))
-          setCurrentValueColor(typeof d?.color === 'string' ? d.color : color)
+          if (type === 'liquidation') {
+            const longUsd = typeof d?.longLiquidationUsd === 'number' ? d.longLiquidationUsd : 0
+            const shortUsd = typeof d?.shortLiquidationUsd === 'number' ? d.shortLiquidationUsd : 0
+            const totalUsd = longUsd + shortUsd
+            setLiqHeader({ longUsd, shortUsd, totalUsd })
+            setCurrentValue('')
+            setCurrentValueColor('#c9d1d9')
+          } else {
+            setLiqHeader(null)
+            const val = d.value
+            setCurrentValue(formatter ? formatter(val) : String(val))
+            setCurrentValueColor(typeof d?.color === 'string' ? d.color : color)
+          }
         }
       } else {
         // Reset to last value
         if (data.length > 0) {
           const last = data[data.length - 1]
-          const val = type === 'liquidation' ? (last.long || last.value) : last.value
-          setCurrentValue(formatter ? formatter(val) : String(val))
-          setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+          if (type === 'liquidation') {
+            const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
+            const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
+            const totalUsd = longUsd + shortUsd
+            setLiqHeader({ longUsd, shortUsd, totalUsd })
+            setCurrentValue('')
+            setCurrentValueColor('#c9d1d9')
+          } else {
+            setLiqHeader(null)
+            const val = last.value
+            setCurrentValue(formatter ? formatter(val) : String(val))
+            setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+          }
         }
       }
     })
@@ -294,14 +362,33 @@ const IndicatorChartPanel = ({
         }
         seriesRef.current.setData(bullData as any)
         altSeriesRef.current!.setData(bearData as any)
+      } else if (type === 'liquidation' && altSeriesRef.current) {
+        const shortData = data
+          .filter((d) => d && typeof d.shortLiquidationUsd === 'number')
+          .map((d) => ({ time: d.time, value: d.shortLiquidationUsd, color: '#22c55e' }))
+        const longData = data
+          .filter((d) => d && typeof d.longLiquidationUsd === 'number')
+          .map((d) => ({ time: d.time, value: -d.longLiquidationUsd, color: '#ef4444' }))
+        seriesRef.current.setData(shortData as any)
+        altSeriesRef.current.setData(longData as any)
       } else {
         seriesRef.current.setData(data)
       }
        // Update header value
        const last = data[data.length - 1]
-       const val = type === 'liquidation' ? (last.long || last.value) : last.value
-       setCurrentValue(formatter ? formatter(val) : String(val))
-       setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+       if (type === 'liquidation') {
+         const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
+         const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
+         const totalUsd = longUsd + shortUsd
+         setLiqHeader({ longUsd, shortUsd, totalUsd })
+         setCurrentValue('')
+         setCurrentValueColor('#c9d1d9')
+       } else {
+         setLiqHeader(null)
+         const val = last.value
+         setCurrentValue(formatter ? formatter(val) : String(val))
+         setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+       }
        
        if (chartRef.current) {
            chartRef.current.timeScale().fitContent()
@@ -314,7 +401,21 @@ const IndicatorChartPanel = ({
        {/* Separator_Top strictly matching Figma structure */}
        <div className="h-[1px] w-full bg-[#30363d]" />
        <div className="relative w-full bg-[#161b22]" style={{ height }}>
-          <IndicatorPanelHeader title={title} value={currentValue} valueColor={currentValueColor} onClose={onClose} />
+          <IndicatorPanelHeader
+            title={title}
+            value={currentValue}
+            valueColor={currentValueColor}
+            valueParts={
+              type === 'liquidation' && liqHeader
+                ? [
+                    { text: `L ${formatUsdCompact(liqHeader.longUsd)}  `, color: '#ef4444' },
+                    { text: `S ${formatUsdCompact(liqHeader.shortUsd)}  `, color: '#22c55e' },
+                    { text: `T ${formatUsdCompact(liqHeader.totalUsd)}`, color: '#c9d1d9' },
+                  ]
+                : undefined
+            }
+            onClose={onClose}
+          />
           <div ref={containerRef} className="w-full h-full" />
        </div>
     </div>
@@ -383,6 +484,13 @@ function formatCompactNumber(n: number): string {
   if (abs >= 1_000) return `${(v / 1_000).toFixed(2)}K`
   return `${Math.round(v)}`
 }
+
+function formatUsdCompact(n: number): string {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 0
+  return `$${formatCompactNumber(v)}`
+}
+
+// (removed) formatTimeLabel: not needed since liquidation header no longer shows time
 
 interface ActiveIndicator {
   id: string
@@ -962,7 +1070,12 @@ export const TradingViewLightweightChart = ({
     const lsData = []
     const oiData = []
     const volData = []
-    const liqDataMock = []
+    const liqDataMock: Array<{
+      time: unknown
+      longLiquidationUsd: number
+      shortLiquidationUsd: number
+      totalUsd: number
+    }> = []
     
     // Seeded random for deterministic data
     const seed = symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) + (interval === '15m' ? 1 : 2)
@@ -1001,13 +1114,14 @@ export const TradingViewLightweightChart = ({
        // Volume: Random positive
        volData.push({ time: t, value: Math.floor(rng() * 2000), color: '#4ade80' })
 
-       // Liquidation: Random positive/negative
-       const liqVal = (rng() - 0.5) * 0.2
-       liqDataMock.push({ 
-          time: t, 
-          value: liqVal, 
-          long: liqVal > 0 ? liqVal : 0, 
-          color: liqVal > 0 ? '#22c55e' : '#ef4444'
+       // Liquidation: long/short liquidation USD (both positive); render as +/- around 0
+       const shortUsd = Math.max(0, (rng() ** 2) * 8_000_000) // skewed distribution
+       const longUsd = Math.max(0, (rng() ** 2) * 8_000_000)
+       liqDataMock.push({
+         time: t,
+         longLiquidationUsd: Math.round(longUsd),
+         shortLiquidationUsd: Math.round(shortUsd),
+         totalUsd: Math.round(longUsd + shortUsd),
        })
     }
     
