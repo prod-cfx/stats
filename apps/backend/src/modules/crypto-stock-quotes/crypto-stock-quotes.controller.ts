@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
+  ApiExtraModels,
   ApiOperation,
   ApiQuery,
   ApiResponse,
@@ -43,6 +44,7 @@ const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
 
 @ApiTags('crypto-stock-quotes')
 @ApiBearerAuth()
+@ApiExtraModels(BaseResponseDto, CryptoStockQuoteResponseDto)
 @Controller('crypto-stock-quotes')
 export class CryptoStockQuotesController {
   constructor(private readonly service: CryptoStockQuotesService) {}
@@ -82,5 +84,10 @@ export class CryptoStockQuotesController {
     return new BaseResponseDto(data)
   }
 }
+
+
+
+
+
 
 

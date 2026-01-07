@@ -298,75 +298,36 @@ export interface PaginatedResponse<T> {
 
 // === 公共市场数据：加密股票报价（币股页面） ===
 
-export interface CryptoStockQuoteLatest {
-  id: number
-  symbol: string
-  name?: string | null
-  exchange?: string | null
-  price: string
-  openPrice?: string | null
-  highPrice?: string | null
-  lowPrice?: string | null
-  closePrice?: string | null
-  volume?: string | null
-  turnover?: string | null
-  priceChange?: string | null
-  priceChangePercent?: string | null
-  marketCap?: string | null
-  peRatio?: string | null
-  high52Week?: string | null
-  low52Week?: string | null
-  assetSymbol?: string | null
-  assetLogoUrl?: string | null
-  companyLogoUrl?: string | null
-  holdingsValue?: string | null
-  holdingsAmount?: string | null
-  mNav?: string | null
-  infoParagraphs?: string[]
-  source: string
-  quoteTimestamp: string
-  createdAt: string
-  updatedAt: string
-}
+export type CryptoStockQuoteLatest = Infer<typeof schemas.CryptoStockQuoteResponseDto>
 
 export async function fetchCryptoStockQuotesLatest(params?: {
   symbols?: string[]
   source?: string
 }): Promise<CryptoStockQuoteLatest[]> {
   return apiCall(async () => {
-    const searchParams = new URLSearchParams()
-    if (params?.symbols?.length) {
-      searchParams.set('symbols', params.symbols.join(','))
-    }
-    if (params?.source) {
-      searchParams.set('source', params.source)
-    }
-
-    const query = searchParams.toString()
-    const url =
-      query.length > 0
-        ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
-        : `${API_BASE_URL}/crypto-stock-quotes/latest`
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
+    const response = await safeApiCall(
+      () =>
+        client.CryptoStockQuotesController_getLatest({
+          headers: requireAuthHeaders(),
+          queries: {
+            ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
+            ...(params?.source ? { source: params.source } : {}),
+          },
+        }),
+      {
+        url: `${API_BASE_URL}/crypto-stock-quotes/latest`,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...requireAuthHeaders(),
+          },
+        },
+        validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
       },
-    })
+    )
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText)
-      throw new ApiError(
-        errorText || 'Failed to fetch crypto stock quotes',
-        'API_ERROR',
-        response.status,
-      )
-    }
-
-    const json = await response.json()
-    return unwrapResponse<CryptoStockQuoteLatest[]>(json)
+    return response
   }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
 }
 
