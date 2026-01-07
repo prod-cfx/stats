@@ -334,3 +334,56 @@ model CryptoStockQuote {
   @@index([source, quoteTimestamp], map: "idx_crypto_stock_quote_source_time")
   @@map("crypto_stock_quotes")
 }
+
+/// 交易记录数据模型 - 记录交易所的最近成交数据
+///
+/// 设计说明：
+/// - 存储各交易所的实时成交记录（trades）
+/// - 支持现货、永续合约、期货等不同合约类型
+/// - 用于展示最新成交和大额成交
+model MarketTrade {
+  id Int @id @default(autoincrement())
+
+  /// 交易所代码，如 OKX, BINANCE
+  exchange String
+
+  /// 合约类型：SPOT, PERPETUAL, FUTURE
+  instrumentType String @map("instrument_type")
+
+  /// 交易对符号，如 BTC-USDT, ETH-USDT-SWAP
+  symbol String
+
+  /// 基础资产，如 BTC, ETH
+  baseAsset String @map("base_asset")
+
+  /// 计价资产，如 USDT, USD
+  quoteAsset String @map("quote_asset")
+
+  /// 交易ID（交易所提供的唯一标识）
+  tradeId String @map("trade_id")
+
+  /// 交易价格
+  price Decimal @db.Decimal(30, 10)
+
+  /// 交易数量
+  size Decimal @db.Decimal(30, 10)
+
+  /// 交易方向：buy 或 sell（主动买入或主动卖出）
+  side String
+
+  /// 交易时间戳（毫秒）
+  tradeTimestamp BigInt @map("trade_timestamp")
+
+  /// 数据创建时间
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// 数据更新时间
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // 索引
+  @@unique([exchange, instrumentType, symbol, tradeId], name: "market_trade_exchange_instrument_symbol_tradeid_key")
+  @@index([exchange, instrumentType, symbol, tradeTimestamp], name: "idx_trade_exchange_instrument_symbol_time")
+  @@index([tradeTimestamp], name: "idx_trade_timestamp")
+  @@index([baseAsset, quoteAsset, tradeTimestamp], name: "idx_trade_assets_time")
+  @@map("market_trades")
+}
