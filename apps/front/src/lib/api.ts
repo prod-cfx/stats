@@ -304,45 +304,54 @@ export async function fetchCryptoStockQuotesLatest(params?: {
   symbols?: string[]
   source?: string
 }): Promise<CryptoStockQuoteLatest[]> {
-  return apiCall(async () => {
-    const searchParams = new URLSearchParams()
-    if (params?.symbols?.length) {
-      for (const symbol of params.symbols) {
-        searchParams.append('symbols', symbol)
+  try {
+    return await apiCall(async () => {
+      const searchParams = new URLSearchParams()
+      if (params?.symbols?.length) {
+        for (const symbol of params.symbols) {
+          searchParams.append('symbols', symbol)
+        }
       }
-    }
-    if (params?.source) {
-      searchParams.set('source', params.source)
-    }
-    const query = searchParams.toString()
+      if (params?.source) {
+        searchParams.set('source', params.source)
+      }
+      const query = searchParams.toString()
 
-    const response = await safeApiCall(
-      () =>
-        client.CryptoStockQuotesController_getLatest({
-          headers: requireAuthHeaders(),
-          queries: {
-            ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
-            ...(params?.source ? { source: params.source } : {}),
+      const response = await safeApiCall(
+        () =>
+          client.CryptoStockQuotesController_getLatest({
+            headers: requireAuthHeaders(),
+            queries: {
+              ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
+              ...(params?.source ? { source: params.source } : {}),
+            },
+          }),
+        {
+          url:
+            query.length > 0
+              ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
+              : `${API_BASE_URL}/crypto-stock-quotes/latest`,
+          options: {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...requireAuthHeaders(),
+            },
           },
-        }),
-      {
-        url:
-          query.length > 0
-            ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
-            : `${API_BASE_URL}/crypto-stock-quotes/latest`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
+          validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
         },
-        validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
-      },
-    )
+      )
 
-    return unwrapResponse<CryptoStockQuoteLatest[]>(response)
-  }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
+      return unwrapResponse<CryptoStockQuoteLatest[]>(response)
+    }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
+  } catch (error) {
+    // 对于携带过期 / 无效 token 的情况，将 ApiError(401/403) 显式转为 AuthenticationError，
+    // 方便公共页面用统一逻辑回退到静态示例数据。
+    if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
+      throw new AuthenticationError('TOKEN_EXPIRED')
+    }
+    throw error
+  }
 }
 
 export interface PositionsQueryParams {
