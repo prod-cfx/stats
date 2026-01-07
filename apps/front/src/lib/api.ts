@@ -648,41 +648,39 @@ export async function fetchRealtimeWhaleAlerts(
   params: FetchRealtimeWhaleAlertsParams = {},
 ): Promise<RealtimeWhaleAlertItem[]> {
   return apiCall(async () => {
-    const searchParams = new URLSearchParams()
+    const queries: Record<string, unknown> = {}
 
     if (params.symbol) {
-      searchParams.set('symbol', params.symbol)
+      queries.symbol = params.symbol
     }
     if (typeof params.minPositionValueUsd === 'number') {
-      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
+      queries.min_position_value_usd = params.minPositionValueUsd
     }
     if (typeof params.limit === 'number') {
-      searchParams.set('limit', String(params.limit))
+      queries.limit = params.limit
     }
     if (params.since) {
-      searchParams.set('since', params.since)
+      queries.since = params.since
     }
 
-    const queryString = searchParams.toString()
-    const url =
-      queryString.length > 0
-        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
-        : `${API_BASE_URL}/whale-alerts/realtime`
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
+    return safeApiCall(
+      () =>
+        client.WhaleAlertController_getRealtime({
+          headers: requireAuthHeaders(),
+          queries,
+        }),
+      {
+        url: `${API_BASE_URL}/whale-alerts/realtime`,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...requireAuthHeaders(),
+          },
+        },
+        validateResponse: (data) => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
       },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch realtime whale alerts: ${response.status} ${response.statusText}`)
-    }
-
-    const json = await response.json()
-    return unwrapResponse<RealtimeWhaleAlertItem[]>(json)
+    )
   }, 'FETCH_REALTIME_WHALE_ALERTS')
 }
 
