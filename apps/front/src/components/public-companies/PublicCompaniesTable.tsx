@@ -9,6 +9,7 @@ import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { useAsync } from '@/hooks/use-async';
 import { fetchCryptoStockQuotesLatest } from '@/lib/api';
+import { AuthenticationError } from '@/lib/errors';
 import { formatNumber } from '@/lib/formatters';
 
 interface CompanyData {
@@ -49,15 +50,26 @@ export const PublicCompaniesTable = () => {
   const [sortField, setSortField] = useState<SortField>('marketCap');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const [isAuthError, setIsAuthError] = useState(false);
 
   const {
     data: quotes,
     loading,
     error,
     execute: reload,
-  } = useAsync<CryptoStockQuoteLatest[]>(async () => {
-    return fetchCryptoStockQuotesLatest();
-  });
+  } = useAsync<CryptoStockQuoteLatest[]>(
+    async () => fetchCryptoStockQuotesLatest(),
+    {
+      onSuccess: () => {
+        setIsAuthError(false);
+      },
+      onError: err => {
+        if (err instanceof AuthenticationError) {
+          setIsAuthError(true);
+        }
+      },
+    },
+  );
 
   // Debounce search
   useEffect(() => {
@@ -307,8 +319,26 @@ export const PublicCompaniesTable = () => {
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
-        <LoadingState isLoading={loading} error={!!error} onRetry={reload} isEmpty={!loading && sortedData.length === 0}>
-          <div className="overflow-x-auto animate-in fade-in duration-500">
+        {isAuthError ? (
+          <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center space-y-4">
+            <h3 className="text-xl font-bold text-white">
+              {t('publicCompanies.authRequiredTitle', '请登录后查看完整币股榜单')}
+            </h3>
+            <p className="text-sm text-[#8b949e] max-w-md">
+              {t(
+                'publicCompanies.authRequiredDescription',
+                '当前数据源仅对登录用户开放，请通过右上角入口登录或注册后返回此页面。',
+              )}
+            </p>
+          </div>
+        ) : (
+          <LoadingState
+            isLoading={loading}
+            error={!!error}
+            onRetry={reload}
+            isEmpty={!loading && sortedData.length === 0}
+          >
+            <div className="overflow-x-auto animate-in fade-in duration-500">
             <table className="w-full border-collapse min-w-[1200px]">
               <thead>
                 <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
@@ -444,7 +474,8 @@ export const PublicCompaniesTable = () => {
               </tbody>
             </table>
           </div>
-        </LoadingState>
+          </LoadingState>
+        )}
       </div>
 
       {/* Company Detail Modal */}
