@@ -1,11 +1,15 @@
 'use client';
 
+import type { CryptoStockQuoteLatest } from '@/lib/api';
+
 import { ArrowUpDown, ChevronDown, ChevronUp, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
-import { useMockData } from '@/hooks/use-mock-data';
+import { useAsync } from '@/hooks/use-async';
+import { fetchCryptoStockQuotesLatest } from '@/lib/api';
+import { formatNumber } from '@/lib/formatters';
 
 interface CompanyData {
   asset: string;
@@ -24,79 +28,6 @@ interface CompanyData {
   change7d: string;
   infoParagraphs?: string[];
 }
-
-const initialCompanyData: CompanyData[] = [
-  {
-    asset: 'PYUSD',
-    assetLogo: 'https://cryptologos.cc/logos/paypal-usd-pyusd-logo.png?v=040',
-    name: 'PayPal Holdings, Inc.',
-    ticker: 'PYPL',
-    exchange: '美股-NASDAQ',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
-    mNav: '-',
-    marketCap: '$58.56B',
-    holdingsValue: '-',
-    holdingsAmount: '-',
-    sharePrice: '$61.30',
-    change24h: '+0.96%',
-    change1d: '+1.25%',
-    change7d: '-0.50%',
-  },
-  {
-    asset: 'BTC',
-    assetLogo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
-    name: 'MicroStrategy Incorporated',
-    ticker: 'MSTR',
-    exchange: '美股-NASDAQ',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/MicroStrategy_logo.svg/1200px-MicroStrategy_logo.svg.png',
-    mNav: '0.83',
-    marketCap: '$47.4B',
-    holdingsValue: '$58.14B',
-    holdingsAmount: '671.27K BTC',
-    sharePrice: '$167.50',
-    change24h: '+0.00%',
-    change1d: '+0.10%',
-    change7d: '+2.30%',
-    infoParagraphs: [
-      '微策略是一家美国的软件公司，提供商业智能、移动软件和云端服务。',
-      '该公司于1989年由迈克尔·塞勒（Michael J. Saylor）、桑朱·班萨尔（Sanju Bansal）和托马斯·斯宾纳（Thomas Spahr）创立，专门开发用于分析内部与外部数据的软件，协助进行商业决策以及开发移动应用程序。',
-      '公司总部位于弗吉尼亚州泰森斯（Tysons），属于华盛顿都会区的一部分。塞勒为执行主席，自1989年至2022年担任CEO。',
-      '该公司因为持有巨量比特币而被认为是与比特币挂钩的“概念股”。',
-    ],
-  },
-  {
-    asset: 'USDC',
-    assetLogo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
-    name: 'Circle Internet Group',
-    ticker: 'CRCL',
-    exchange: '美股-NYSE',
-    logo: 'https://www.circle.com/hubfs/logos/Circle_Logo_Green.svg',
-    mNav: '0.27',
-    marketCap: '$17.2B',
-    holdingsValue: '$64.46B',
-    holdingsAmount: '64.50B USDC',
-    sharePrice: '$82.85',
-    change24h: '+9.87%',
-    change1d: '+10.5%',
-    change7d: '+15.2%',
-  },
-  {
-    asset: 'ETH',
-    assetLogo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
-    name: 'BitMine Immersion',
-    ticker: 'BMNR',
-    exchange: '美股-NYSE',
-    logo: 'https://bitmine.tech/wp-content/uploads/2021/06/BitMine-Logo-1.png',
-    mNav: '0.73',
-    marketCap: '$8.94B',
-    holdingsValue: '$11.62B',
-    holdingsAmount: '3.97M ETH',
-    sharePrice: '$31.39',
-    change24h: '+1.42%',
-    change1d: '-0.88%',
-    change7d: '+4.15%',
-  }
-];
 
 type SortField = keyof Pick<
   CompanyData,
@@ -119,6 +50,15 @@ export const PublicCompaniesTable = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
 
+  const {
+    data: quotes,
+    loading,
+    error,
+    execute: reload,
+  } = useAsync<CryptoStockQuoteLatest[]>(async () => {
+    return fetchCryptoStockQuotesLatest();
+  });
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -127,19 +67,71 @@ export const PublicCompaniesTable = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const { data: companies, loading, error, reload } = useMockData(
-    async () => {
-      return initialCompanyData.filter(c => 
-        c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
-        c.ticker.toLowerCase().includes(debouncedSearch.toLowerCase())
-      );
-    },
-    [debouncedSearch]
-  );
+  const companiesFromApi: CompanyData[] = useMemo(() => {
+    if (!quotes) return [];
+
+    return quotes.map(q => {
+      // 全量依赖后端返回的扩展字段；缺失时在 UI 使用中性占位符，避免在界面展示 TODO
+      const asset = q.assetSymbol ?? q.symbol;
+      const assetLogo = q.assetLogoUrl ?? '/images/icon-default.svg';
+      const logo = q.companyLogoUrl ?? q.assetLogoUrl ?? '/images/icon-default.svg';
+      const name = q.name ?? q.symbol;
+      const exchange = (() => {
+        if (!q.exchange) return '-';
+        // 中文环境：前缀“美股-”，英文环境直接展示原始交易所代码
+        return i18n.language === 'en' ? q.exchange : `美股-${q.exchange}`;
+      })();
+
+      const priceNumber = Number.parseFloat(q.price);
+      const sharePrice =
+        Number.isFinite(priceNumber) && priceNumber > 0
+          ? `$${formatNumber(priceNumber, 2)}`
+          : '-';
+
+      const marketCap =
+        q.marketCap != null
+          ? `$${formatNumber(q.marketCap, 0)}`
+          : '-';
+
+      const pctRaw = q.priceChangePercent != null ? Number.parseFloat(q.priceChangePercent) : Number.NaN;
+      const pctString = Number.isFinite(pctRaw)
+        ? `${pctRaw >= 0 ? '+' : ''}${pctRaw.toFixed(2)}%`
+        : '-';
+
+      return {
+        asset,
+        assetLogo,
+        name,
+        ticker: q.symbol,
+        exchange,
+        logo,
+        mNav: q.mNav ?? '-',
+        marketCap,
+        holdingsValue: q.holdingsValue ?? '-',
+        holdingsAmount: q.holdingsAmount ?? '-',
+        sharePrice,
+        change24h: pctString,
+        change1d: pctString,
+        // 暂无真实 7 日涨跌幅数据，这里保留为占位符，后端补充后再改为真实字段映射
+        change7d: '-',
+        infoParagraphs: q.infoParagraphs,
+      };
+    });
+  }, [i18n.language, quotes]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companiesFromApi.length) return [];
+    const keyword = debouncedSearch.trim().toLowerCase();
+    if (!keyword) return companiesFromApi;
+    return companiesFromApi.filter(c =>
+      c.name.toLowerCase().includes(keyword) ||
+      c.ticker.toLowerCase().includes(keyword),
+    );
+  }, [companiesFromApi, debouncedSearch]);
 
   const sortedData = useMemo(() => {
-    if (!companies) return [];
-    if (!sortField || !sortDirection) return companies;
+    if (!filteredCompanies.length) return [];
+    if (!sortField || !sortDirection) return filteredCompanies;
 
     const parseCompactNumber = (raw: string): number | null => {
       const val = raw.trim();
@@ -225,7 +217,7 @@ export const PublicCompaniesTable = () => {
       return parseCompactNumber(raw);
     };
 
-    return [...companies].sort((a, b) => {
+    return [...filteredCompanies].sort((a, b) => {
       const aVal = sortValueOf(a, sortField);
       const bVal = sortValueOf(b, sortField);
       // Always push missing/invalid values to the bottom, regardless of sort direction.
@@ -237,7 +229,7 @@ export const PublicCompaniesTable = () => {
 
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [companies, sortField, sortDirection]);
+  }, [filteredCompanies, sortField, sortDirection]);
 
   const renderValueWithColor = (val: string) => {
     const isPositive = val.startsWith('+');
@@ -315,7 +307,7 @@ export const PublicCompaniesTable = () => {
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
-        <LoadingState isLoading={loading} error={error} onRetry={reload} isEmpty={!loading && sortedData.length === 0}>
+        <LoadingState isLoading={loading} error={!!error} onRetry={reload} isEmpty={!loading && sortedData.length === 0}>
           <div className="overflow-x-auto animate-in fade-in duration-500">
             <table className="w-full border-collapse min-w-[1200px]">
               <thead>

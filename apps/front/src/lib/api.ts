@@ -296,6 +296,80 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+// === 公共市场数据：加密股票报价（币股页面） ===
+
+export interface CryptoStockQuoteLatest {
+  id: number
+  symbol: string
+  name?: string | null
+  exchange?: string | null
+  price: string
+  openPrice?: string | null
+  highPrice?: string | null
+  lowPrice?: string | null
+  closePrice?: string | null
+  volume?: string | null
+  turnover?: string | null
+  priceChange?: string | null
+  priceChangePercent?: string | null
+  marketCap?: string | null
+  peRatio?: string | null
+  high52Week?: string | null
+  low52Week?: string | null
+  assetSymbol?: string | null
+  assetLogoUrl?: string | null
+  companyLogoUrl?: string | null
+  holdingsValue?: string | null
+  holdingsAmount?: string | null
+  mNav?: string | null
+  infoParagraphs?: string[]
+  source: string
+  quoteTimestamp: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchCryptoStockQuotesLatest(params?: {
+  symbols?: string[]
+  source?: string
+}): Promise<CryptoStockQuoteLatest[]> {
+  return apiCall(async () => {
+    const searchParams = new URLSearchParams()
+    if (params?.symbols?.length) {
+      searchParams.set('symbols', params.symbols.join(','))
+    }
+    if (params?.source) {
+      searchParams.set('source', params.source)
+    }
+
+    const query = searchParams.toString()
+    const url =
+      query.length > 0
+        ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
+        : `${API_BASE_URL}/crypto-stock-quotes/latest`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText)
+      throw new ApiError(
+        errorText || 'Failed to fetch crypto stock quotes',
+        'API_ERROR',
+        response.status,
+      )
+    }
+
+    const json = await response.json()
+    return unwrapResponse<CryptoStockQuoteLatest[]>(json)
+  }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
+}
+
 export interface PositionsQueryParams {
   page?: number
   limit?: number

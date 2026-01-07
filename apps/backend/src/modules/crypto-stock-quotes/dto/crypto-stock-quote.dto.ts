@@ -57,6 +57,48 @@ export class CryptoStockQuoteResponseDto {
   @ApiPropertyOptional({ description: '52周最低价' })
   low52Week?: string | null
 
+  @ApiPropertyOptional({
+    description: '底层加密资产符号（例如 BTC、ETH、USDC），用于币股联动视图',
+    example: 'BTC',
+  })
+  assetSymbol?: string | null
+
+  @ApiPropertyOptional({
+    description: '底层加密资产 Logo URL',
+    example: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
+  })
+  assetLogoUrl?: string | null
+
+  @ApiPropertyOptional({
+    description: '公司 Logo URL',
+    example: 'https://upload.wikimedia.org/wikipedia/commons/d/d7/MicroStrategy_logo.svg',
+  })
+  companyLogoUrl?: string | null
+
+  @ApiPropertyOptional({
+    description: '持有的加密资产名义价值（可带货币符号，前端可根据需要自行解析）',
+    example: '$58.14B',
+  })
+  holdingsValue?: string | null
+
+  @ApiPropertyOptional({
+    description: '持有的加密资产数量描述（可包含单位和简写，例如 "671.27K BTC"）',
+    example: '671.27K BTC',
+  })
+  holdingsAmount?: string | null
+
+  @ApiPropertyOptional({
+    description: 'mNAV（市值/净资产比），字符串形式，前端可按需解析为数值',
+    example: '0.83',
+  })
+  mNav?: string | null
+
+  @ApiPropertyOptional({
+    description: '公司介绍文案段落列表（用于前端弹窗展示）',
+    type: [String],
+  })
+  infoParagraphs?: string[]
+
   @ApiProperty({ description: '数据源', example: 'BBX' })
   source!: string
 

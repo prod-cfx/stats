@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { CryptoStockQuotesController } from './crypto-stock-quotes.controller'
 import { CryptoStockQuotesRepository } from './crypto-stock-quotes.repository'
+import { CryptoStockQuotesService } from './crypto-stock-quotes.service'
 
 /**
  * 加密股票报价模块
@@ -11,8 +13,9 @@ import { CryptoStockQuotesRepository } from './crypto-stock-quotes.repository'
  */
 @Module({
   imports: [PrismaModule],
-  providers: [CryptoStockQuotesRepository],
-  exports: [CryptoStockQuotesRepository],
+  providers: [CryptoStockQuotesRepository, CryptoStockQuotesService],
+  controllers: [CryptoStockQuotesController],
+  exports: [CryptoStockQuotesRepository, CryptoStockQuotesService],
 })
 export class CryptoStockQuotesModule {}
 
