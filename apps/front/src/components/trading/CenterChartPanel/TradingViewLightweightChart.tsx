@@ -93,6 +93,7 @@ export const TradingViewLightweightChart = ({
   const chartHostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartRef = useRef<any>(null);
+  const activeIndicatorsRef = useRef<ActiveIndicator[]>([])
   const [isMounted, setIsMounted] = useState(false);
   const [ohlc, setOhlc] = useState<any>(null);
   const [lastCandleClose, setLastCandleClose] = useState<number | null>(null)
@@ -127,8 +128,22 @@ export const TradingViewLightweightChart = ({
   }, []);
 
   useEffect(() => {
+    activeIndicatorsRef.current = activeIndicators
+  }, [activeIndicators])
+
+  useEffect(() => {
     lastCandleCloseRef.current = lastCandleClose
   }, [lastCandleClose])
+
+  // IMPORTANT: Don't recreate the whole chart when ONLY overlay indicators (like liquidation-map) toggle.
+  // Otherwise we'd regenerate mock candles (Math.random) and the K-line "shape" would visually change.
+  const chartSeriesKey = useMemo(() => {
+    return activeIndicators
+      .filter((x) => x.kind === 'chartSeries')
+      .map((x) => x.id)
+      .sort()
+      .join('|')
+  }, [activeIndicators])
 
   useEffect(() => {
     if (!isMounted || !chartHostRef.current) return;
@@ -400,7 +415,7 @@ export const TradingViewLightweightChart = ({
     setOhlc(lastCandle);
     setLastCandleClose(typeof lastCandle?.close === 'number' ? lastCandle.close : null)
 
-    const showLiqOverlayNow = activeIndicators.some((x) => x.id === 'liquidation-map')
+    const isLiqOverlayActive = () => activeIndicatorsRef.current.some((x) => x.id === 'liquidation-map')
     // 订阅十字线移动事件 (also drives hover tooltip)
     chart.subscribeCrosshairMove((param: any) => {
       if (param.time) {
@@ -413,7 +428,7 @@ export const TradingViewLightweightChart = ({
       }
 
       // Hover tooltip for liquidation overlay (does NOT block Lightweight interactions)
-      if (!showLiqOverlayNow) return
+      if (!isLiqOverlayActive()) return
       if (liqLockedRef.current) {
         // Locked: keep updating position to follow pan/zoom
         const lockedPrice = liqLockedPriceRef.current
@@ -493,6 +508,17 @@ export const TradingViewLightweightChart = ({
     // Click-to-inspect (toggle lock): pick by clicked y coordinate, but only when clicking inside overlay band.
     chart.subscribeClick((param: any) => {
       try {
+        // If overlay is not active, ignore clicks (and clear any stale lock).
+        if (!isLiqOverlayActive()) {
+          if (liqLockedRef.current) {
+            liqLockedRef.current = false
+            liqLockedPriceRef.current = null
+            setLiqSelected(null)
+            refreshOverlay()
+          }
+          return
+        }
+
         const pt = param?.point
         if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
         const containerW = container.clientWidth
@@ -620,7 +646,7 @@ export const TradingViewLightweightChart = ({
       chart.remove();
       chartRef.current = null;
     };
-  }, [isMounted, symbol, interval, activeIndicators]);
+  }, [isMounted, symbol, interval, chartSeriesKey]);
 
   const baseAsset = symbol.replace(/USDT|USD|PERP|SWAP|[-_]/gi, '').slice(0, 5) || 'BTC'
   
