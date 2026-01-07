@@ -337,7 +337,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         </div>
 
         <div className="flex flex-col">
-          <div ref={sellsRef} className="h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
+          <div ref={sellsRef} className="h-[200px] overflow-y-auto cf-scrollbar pr-1">
             {orderbook.sells.map((s, i) => (
               <OrderbookRow key={`sell-${i}`} price={s.price} amount={s.amount} total={s.total} type="sell" depthPercent={s.depth} />
             ))}
@@ -354,7 +354,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
             </div>
           </div>
 
-          <div className="h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
+          <div className="h-[200px] overflow-y-auto cf-scrollbar pr-1">
             {orderbook.buys.map((b, i) => (
               <OrderbookRow key={`buy-${i}`} price={b.price} amount={b.amount} total={b.total} type="buy" depthPercent={b.depth} />
             ))}
@@ -388,7 +388,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           <span className="w-[35%] text-right pr-1">{t('rightPanel.tradeTime')}</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#161b22]">
+        <div className="flex-1 overflow-y-auto bg-[#161b22] cf-scrollbar pr-1">
           {trades.map((t) => (
             <TradeRow key={t.id} price={t.price} amount={t.amount} time={t.time} type={t.type as 'buy' | 'sell'} />
           ))}

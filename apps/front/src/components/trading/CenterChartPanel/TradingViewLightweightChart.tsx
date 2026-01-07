@@ -18,15 +18,13 @@ const IndicatorPanelHeader = ({
   value,
   valueColor,
   valueParts,
-  onClose,
 }: {
   title: string
   value?: string
   valueColor?: string
   valueParts?: Array<{ text: string; color?: string }>
-  onClose?: () => void
 }) => (
-  <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 right-1 z-10 pointer-events-none bg-[#161b22] rounded-sm">
+  <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 z-10 pointer-events-none bg-[#161b22] rounded-sm">
     <span className="text-[10px] text-[#8b949e] font-roboto font-normal leading-4 tracking-tight truncate">
       {title}
     </span>
@@ -46,19 +44,6 @@ const IndicatorPanelHeader = ({
         {value}
       </span>
     ) : null}
-    <div className="ml-auto flex items-center">
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          className="pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]"
-          aria-label="close"
-          title="关闭"
-        >
-          ×
-        </button>
-      )}
-    </div>
   </div>
 )
 
@@ -75,6 +60,7 @@ interface IndicatorChartProps {
   onClose?: () => void
   showTvLogo?: boolean
   formatter?: (val: number) => string
+  priceFormatter?: (val: number) => string
 }
 
 const IndicatorChartPanel = ({
@@ -89,7 +75,8 @@ const IndicatorChartPanel = ({
   unregisterChart,
   onClose,
   showTvLogo = false,
-  formatter
+  formatter,
+  priceFormatter,
 }: IndicatorChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -99,6 +86,15 @@ const IndicatorChartPanel = ({
   const [currentValue, setCurrentValue] = useState<string>('')
   const [currentValueColor, setCurrentValueColor] = useState<string>('')
   const [liqHeader, setLiqHeader] = useState<null | { longUsd: number; shortUsd: number; totalUsd: number }>(null)
+  const [axisLabels, setAxisLabels] = useState<{ top: string; mid: string; bottom: string }>({ top: '', mid: '', bottom: '' })
+
+  const localFormatAxis = (v: number) => {
+    if (priceFormatter)
+      return priceFormatter(v)
+    if (type === 'line')
+      return Number(v).toFixed(2)
+    return formatCompactNumber(v)
+  }
   
   // Init chart
   useEffect(() => {
@@ -109,6 +105,7 @@ const IndicatorChartPanel = ({
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height,
+      ...(priceFormatter ? { localization: { priceFormatter } } : {}),
       layout: {
         background: { type: ColorType.Solid, color: '#161b22' },
         textColor: '#8b949e',
@@ -121,7 +118,11 @@ const IndicatorChartPanel = ({
       rightPriceScale: {
         borderColor: '#30363d',
         visible: true,
+        // Hide built-in ticks; we overlay our own fixed 3 labels
+        ticksVisible: false,
+        borderVisible: true,
         entireTextOnly: true,
+        minimumWidth: 72, // keep aligned with main K-line price scale width
         scaleMargins: { top: 0.25, bottom: 0.1 },
       },
       timeScale: {
@@ -131,6 +132,7 @@ const IndicatorChartPanel = ({
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: { visible: true, labelVisible: false, color: '#30363d', style: 2 },
+        // Keep price label on the right (click/hover shows amount)
         horzLine: { visible: false, labelVisible: true },
       },
       handleScale: { mouseWheel: false, pinch: false, axisPressedMouseMove: false }, // Disable own scaling
@@ -164,6 +166,9 @@ const IndicatorChartPanel = ({
           crosshairMarkerVisible: false,
           priceLineVisible: false,
           lastValueVisible: false,
+          ...(priceFormatter
+            ? { priceFormat: { type: 'custom', minMove: 0.0001, formatter: priceFormatter } }
+            : {}),
         })
       }
     } else if (type === 'area') {
@@ -176,6 +181,9 @@ const IndicatorChartPanel = ({
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
+        ...(priceFormatter
+          ? { priceFormat: { type: 'custom', minMove: 1, formatter: priceFormatter } }
+          : {}),
       })
     } else if (type === 'liquidation') {
       // Dual histogram around 0:
@@ -183,13 +191,17 @@ const IndicatorChartPanel = ({
       // - long liquidation:  -value below 0 (red)
       const shortSeries = chart.addSeries(HistogramSeries, {
         color: '#22c55e',
-        priceFormat: { type: 'volume' },
+        ...(priceFormatter
+          ? { priceFormat: { type: 'custom', minMove: 1, formatter: priceFormatter } }
+          : { priceFormat: { type: 'volume' } }),
         priceLineVisible: false,
         lastValueVisible: false,
       })
       const longSeries = chart.addSeries(HistogramSeries, {
         color: '#ef4444',
-        priceFormat: { type: 'volume' },
+        ...(priceFormatter
+          ? { priceFormat: { type: 'custom', minMove: 1, formatter: priceFormatter } }
+          : { priceFormat: { type: 'volume' } }),
         priceLineVisible: false,
         lastValueVisible: false,
       })
@@ -198,7 +210,9 @@ const IndicatorChartPanel = ({
     } else {
       series = chart.addSeries(HistogramSeries, {
         color,
-        priceFormat: { type: 'volume' },
+        ...(priceFormatter
+          ? { priceFormat: { type: 'custom', minMove: 1, formatter: priceFormatter } }
+          : { priceFormat: { type: 'volume' } }),
         priceLineVisible: false,
         lastValueVisible: false,
       })
@@ -396,11 +410,69 @@ const IndicatorChartPanel = ({
     }
   }, [data])
 
+  // Fixed 3-axis labels (top/mid/bottom) based on current data range
+  useEffect(() => {
+    if (!data || data.length === 0) {
+      setAxisLabels({ top: '', mid: '', bottom: '' })
+      return
+    }
+
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    if (type === 'liquidation') {
+      for (const d of data) {
+        const longUsd = typeof d?.longLiquidationUsd === 'number' ? d.longLiquidationUsd : 0
+        const shortUsd = typeof d?.shortLiquidationUsd === 'number' ? d.shortLiquidationUsd : 0
+        min = Math.min(min, -longUsd)
+        max = Math.max(max, shortUsd)
+      }
+    } else {
+      for (const d of data) {
+        if (d && typeof d.value === 'number') {
+          min = Math.min(min, d.value)
+          max = Math.max(max, d.value)
+        }
+      }
+    }
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      setAxisLabels({ top: '', mid: '', bottom: '' })
+      return
+    }
+
+    if (min === max) {
+      const pad = Math.abs(min) * 0.1 || 1
+      min -= pad
+      max += pad
+    }
+
+    const mid = min < 0 && max > 0 ? 0 : (min + max) / 2
+
+    setAxisLabels({
+      top: localFormatAxis(max),
+      mid: localFormatAxis(mid),
+      bottom: localFormatAxis(min),
+    })
+  }, [data, type])
+
   return (
     <div className={`flex flex-col w-full flex-shrink-0 ${showTvLogo ? '' : 'cf-hide-tv-logo'}`}>
        {/* Separator_Top strictly matching Figma structure */}
        <div className="h-[1px] w-full bg-[#30363d]" />
        <div className="relative w-full bg-[#161b22]" style={{ height }}>
+          {/* Close button: move into plot area (left of price scale) to avoid covering Y-axis labels */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-[5px] right-[80px] z-20 pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]"
+              aria-label="close"
+              title="关闭"
+            >
+              ×
+            </button>
+          )}
           <IndicatorPanelHeader
             title={title}
             value={currentValue}
@@ -414,9 +486,21 @@ const IndicatorChartPanel = ({
                   ]
                 : undefined
             }
-            onClose={onClose}
           />
+          {/* Chart host (includes internal price scale area); we overlay fixed 3 labels + dashed guides */}
           <div ref={containerRef} className="w-full h-full" />
+
+          {/* Dashed guide lines for the 3 fixed ticks (do not extend into price scale area) */}
+          <div className="pointer-events-none absolute left-0 right-[72px] top-[10px] border-t border-dashed border-[#30363d]/70" />
+          <div className="pointer-events-none absolute left-0 right-[72px] top-1/2 -translate-y-1/2 border-t border-dashed border-[#30363d]/70" />
+          <div className="pointer-events-none absolute left-0 right-[72px] bottom-[10px] border-t border-dashed border-[#30363d]/70" />
+
+          {/* Custom fixed 3-tick labels (left-aligned) over the hidden built-in ticks */}
+          <div className="pointer-events-none absolute top-0 right-0 bottom-0 w-[72px] border-l border-[#30363d]">
+            <div className="absolute top-1 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.top}</div>
+            <div className="absolute top-1/2 -translate-y-1/2 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.mid}</div>
+            <div className="absolute bottom-1 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.bottom}</div>
+          </div>
        </div>
     </div>
   )
@@ -478,11 +562,13 @@ function formatUsdCompactFromMillions(valueM: number): string {
 
 function formatCompactNumber(n: number): string {
   const v = typeof n === 'number' && Number.isFinite(n) ? n : 0
-  const abs = Math.abs(v)
-  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`
-  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `${(v / 1_000).toFixed(2)}K`
-  return `${Math.round(v)}`
+  // Use stable compact notation (K/M/B) for axis ticks.
+  // Keep US locale to guarantee K/M/B suffixes.
+  const fmt = new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 2,
+  })
+  return fmt.format(v).toUpperCase()
 }
 
 function formatUsdCompact(n: number): string {
@@ -1390,6 +1476,7 @@ export const TradingViewLightweightChart = ({
            onClose={() => onRemoveIndicator?.('long-short-ratio')}
            showTvLogo={false}
            formatter={(v) => v.toFixed(4)}
+           priceFormatter={(v) => Number(v).toFixed(2)}
         />
       )}
       {isPanelOn('aggregated-open-interest') && (
@@ -1406,6 +1493,7 @@ export const TradingViewLightweightChart = ({
            onClose={() => onRemoveIndicator?.('aggregated-open-interest')}
            showTvLogo={false}
            formatter={(v) => formatCompactNumber(v)} // OI is position size (not price)
+           priceFormatter={(v) => formatCompactNumber(v)}
         />
       )}
       {isPanelOn('aggregated-volume') && (
@@ -1422,6 +1510,7 @@ export const TradingViewLightweightChart = ({
            onClose={() => onRemoveIndicator?.('aggregated-volume')}
            showTvLogo={false}
            formatter={(v) => `${(v/1000).toFixed(3)}K`}
+           priceFormatter={(v) => formatCompactNumber(v)}
         />
       )}
       {isPanelOn('liquidation-data') && (
@@ -1438,6 +1527,7 @@ export const TradingViewLightweightChart = ({
            onClose={() => onRemoveIndicator?.('liquidation-data')}
            showTvLogo={true}
            formatter={(v) => v.toFixed(4)}
+           priceFormatter={(v) => (v < 0 ? `-${formatUsdCompact(Math.abs(v))}` : formatUsdCompact(v))}
         />
       )}
       

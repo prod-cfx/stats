@@ -51,7 +51,7 @@ export default function MarketPage() {
             </div>
 
             {/* Right Panel - Independent Scroll */}
-            <div className="flex-none w-[20%] max-w-[340px] min-w-[240px] border-l border-[#30363d] h-full overflow-y-auto no-scrollbar">
+              <div className="flex-none w-[20%] max-w-[340px] min-w-[240px] border-l border-[#30363d] h-full overflow-y-auto cf-scrollbar pr-1">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}

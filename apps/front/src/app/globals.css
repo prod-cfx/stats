@@ -88,6 +88,28 @@
   display: none !important;
 }
 
+/* Subtle dark scrollbar (used in Orderbook/Trades panes) */
+.cf-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(139, 148, 158, 0.35) transparent;
+}
+.cf-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.cf-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cf-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 148, 158, 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent; /* creates inset look */
+  background-clip: content-box;
+}
+.cf-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 148, 158, 0.38);
+}
+
 body {
   margin: 0;
   padding: 0;
