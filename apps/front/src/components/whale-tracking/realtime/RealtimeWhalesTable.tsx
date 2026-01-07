@@ -37,6 +37,7 @@ export const RealtimeWhalesTable = () => {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRequestIdRef = useRef(0);
   const { success, error } = useToast();
 
   const formatRelativeTime = (timestamp: number) => {
@@ -54,6 +55,9 @@ export const RealtimeWhalesTable = () => {
   };
 
   const fetchNewData = useCallback(async () => {
+    // 使用递增的请求 ID，避免并发请求导致旧数据覆盖新数据
+    const requestId = ++lastRequestIdRef.current;
+
     try {
       setLoading(true);
       const alerts = await fetchRealtimeWhaleAlerts({
@@ -112,13 +116,18 @@ export const RealtimeWhalesTable = () => {
         };
       });
 
-      setTransactions(mapped);
+      // 只在当前请求仍是最新时更新列表，避免并发请求造成“时间倒退”
+      if (requestId === lastRequestIdRef.current) {
+        setTransactions(mapped);
+      }
     } catch (e) {
       // 加载失败时保留当前列表，并给出提示
       console.error('Failed to fetch realtime whale alerts', e);
       error(t('whaleTracking.realtime.toast.loadFailed'));
     } finally {
-      setLoading(false);
+      if (requestId === lastRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [error, t]);
 
