@@ -74,6 +74,37 @@ interface ActiveIndicator {
 export type DataSource = 'binance' | 'okx';
 export type MarketType = 'futures' | 'spot';
 
+interface PriceLineApi {
+  applyOptions: (options: { price?: number; axisLabelVisible?: boolean }) => void
+}
+
+interface CandlestickSeriesApi {
+  setData: (data: unknown[]) => void
+  update: (bar: unknown) => void
+  priceToCoordinate?: (price: number) => number | null
+  coordinateToPrice?: (y: number) => number | null
+  createPriceLine: (options: {
+    price: number
+    color: string
+    lineWidth: number
+    lineStyle: number
+    axisLabelVisible: boolean
+    title: string
+  }) => PriceLineApi
+}
+
+interface SeriesApi {
+  setData: (data: unknown[]) => void
+}
+
+interface CandleBar {
+  time: unknown
+  open: number
+  high: number
+  low: number
+  close: number
+}
+
 export const TradingViewLightweightChart = ({
   symbol,
   interval,
@@ -96,10 +127,13 @@ export const TradingViewLightweightChart = ({
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartRef = useRef<any>(null);
   const chartAdapterRef = useRef<ChartAdapter | null>(null)
-  const candleSeriesRef = useRef<null | { createPriceLine: (options: Record<string, unknown>) => { applyOptions: (options: Record<string, unknown>) => void } }>(null)
-  const currentPriceLineRef = useRef<null | { applyOptions: (options: { price: number; axisLabelVisible?: boolean }) => void }>(null)
+  const candlestickSeriesRef = useRef<CandlestickSeriesApi | null>(null)
+  const lockedPriceLineRef = useRef<PriceLineApi | null>(null)
+  const indicatorSeriesRef = useRef<Record<string, SeriesApi>>({})
   const activeIndicatorsRef = useRef<ActiveIndicator[]>([])
   const displayPriceRef = useRef<number>(0)
+  const candleDataRef = useRef<CandleBar[]>([])
+  const lastCandleRef = useRef<CandleBar | null>(null)
   const [isMounted, setIsMounted] = useState(false);
   const [ohlc, setOhlc] = useState<any>(null);
   const [lastCandleClose, setLastCandleClose] = useState<number | null>(null)
@@ -141,15 +175,23 @@ export const TradingViewLightweightChart = ({
     lastCandleCloseRef.current = lastCandleClose
   }, [lastCandleClose])
 
-  // IMPORTANT: Don't recreate the whole chart when ONLY overlay indicators (like liquidation-map) toggle.
-  // Otherwise we'd regenerate mock candles (Math.random) and the K-line "shape" would visually change.
-  const chartSeriesKey = useMemo(() => {
-    return activeIndicators
-      .filter((x) => x.kind === 'chartSeries')
-      .map((x) => x.id)
-      .sort()
-      .join('|')
-  }, [activeIndicators])
+  // ==== 唯一当前价数据源（必须）：与顶部显示价格同源 ====
+  // 顶部 87010 来源目前是 displayPrice（逻辑与 TopBar.tsx 保持一致）。
+  const basePriceForHeader = getMockBasePrice(symbol)
+  const headerPrice = useMemo(() => {
+    let price = basePriceForHeader
+    if (!isAggregated) {
+      if (selectedExchange === 'binance') price *= 1.0001
+      else price *= 0.9999
+    }
+    if (marketType === 'spot') price *= 1.0005
+    return price
+  }, [basePriceForHeader, isAggregated, selectedExchange, marketType])
+  const lockedPrice = headerPrice
+
+  useEffect(() => {
+    displayPriceRef.current = lockedPrice
+  }, [lockedPrice])
 
   useEffect(() => {
     if (!isMounted || !chartHostRef.current) return;
@@ -159,7 +201,7 @@ export const TradingViewLightweightChart = ({
     // 彻底清空容器
     container.innerHTML = '';
 
-    // 创建图表实例 (v5 API)
+    // 创建图表实例 (v5 API) —— 只初始化一次（避免切周期时重建导致 priceLine 重建）
     const chart = createChart(container, {
       width: container.clientWidth,
       height: container.clientHeight || 500,
@@ -176,9 +218,13 @@ export const TradingViewLightweightChart = ({
         mode: CrosshairMode.Normal,
         vertLine: {
           labelBackgroundColor: '#1f2937',
+          // 禁止十字线在右侧生成第二个价格标签
+          labelVisible: false,
         },
         horzLine: {
           labelBackgroundColor: '#1f2937',
+          // 禁止十字线在右侧生成第二个价格标签
+          labelVisible: false,
         },
       },
       timeScale: {
@@ -202,59 +248,59 @@ export const TradingViewLightweightChart = ({
       wickDownColor: '#da3633',
       // Avoid a second "last value" price line; we own the single current price line via createPriceLine().
       priceLineVisible: false,
+      // 禁止显示随周期变化的“最新价标签”（会变成错误的第二标签）
+      lastValueVisible: false,
     });
-    candleSeriesRef.current = candlestickSeries as unknown as {
-      createPriceLine: (options: Record<string, unknown>) => { applyOptions: (options: Record<string, unknown>) => void }
+    candlestickSeriesRef.current = candlestickSeries as unknown as CandlestickSeriesApi
+
+    // ==== 唯一当前价线/标签：只创建一次并缓存 ====
+    // 价格永远锁定为 headerPrice（顶部显示同源），不允许使用 lastCandle.close / crosshair price。
+    if (!lockedPriceLineRef.current && typeof lockedPrice === 'number' && Number.isFinite(lockedPrice)) {
+      lockedPriceLineRef.current = (candlestickSeries as unknown as CandlestickSeriesApi).createPriceLine({
+        price: lockedPrice,
+        color: 'rgba(255,80,80,0.95)',
+        lineWidth: 1,
+        lineStyle: 2, // dashed
+        axisLabelVisible: true,
+        title: '',
+      })
+      console.log('[LOCKED PRICE LINE CREATED]', lockedPrice)
     }
 
-    // 生成模拟数据
-    const candleData = [];
-    const indicatorSeriesData: Record<string, any[]> = {};
-    
-    const now = Math.floor(Date.now() / 1000);
-    const stepMap: Record<string, number> = {
-      '1s': 1,
-      '1m': 60,
-      '5m': 300,
-      '15m': 900,
-      '1h': 3600,
-      '4h': 14400,
-      '1d': 86400,
-    };
-    const step = stepMap[interval] ?? 900;
-    const basePrice = getMockBasePrice(symbol);
-    const vol = getMockVolatility(basePrice);
-    let lastClose = basePrice;
-
-    for (let i = 0; i < 300; i++) {
-      const time = (now - (300 - i) * step);
-      const open = lastClose + (Math.random() - 0.5) * vol;
-      const high = open + Math.random() * (vol * 0.8);
-      const low = open - Math.random() * (vol * 0.8);
-      const close = low + Math.random() * (high - low);
-      
-      const timeVal = time as any;
-      
-      const round = (n: number) => {
-        if (basePrice >= 1000) return Number(n.toFixed(1));
-        if (basePrice >= 1) return Number(n.toFixed(4));
-        return Number(n.toFixed(6));
-      };
-
-      const candle = {
-        time: timeVal,
-        open: round(open),
-        high: round(high),
-        low: round(low),
-        close: round(close),
-      };
-      
-      candleData.push(candle);
-
-      lastClose = close;
+    // 初始化四个可选 chartSeries（仅创建一次；显示与否由 setData([]) 控制）
+    // NOTE: 这样不会因为切换指标/周期而重建 chart，从而保证 priceLine 永远只有一条且不重建。
+    indicatorSeriesRef.current = {
+      'long-short-ratio': chart.addSeries(LineSeries, {
+        color: '#10b981',
+        lineWidth: 2,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+        priceScaleId: 'ls',
+      }) as unknown as SeriesApi,
+      'aggregated-open-interest': chart.addSeries(LineSeries, {
+        color: '#8b5cf6',
+        lineWidth: 2,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+        priceScaleId: 'oi',
+      }) as unknown as SeriesApi,
+      'aggregated-volume': chart.addSeries(HistogramSeries, {
+        color: '#ec4899',
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'vol',
+      }) as unknown as SeriesApi,
+      'liquidation-data': chart.addSeries(HistogramSeries, {
+        color: '#ef4444',
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'liq',
+      }) as unknown as SeriesApi,
     }
 
-    candlestickSeries.setData(candleData);
+    // Apply scale margins (best-effort)
+    try { ;(chart as any).priceScale('ls')?.applyOptions?.({ scaleMargins: { top: 0.15, bottom: 0.55 } }) } catch {}
+    try { ;(chart as any).priceScale('oi')?.applyOptions?.({ scaleMargins: { top: 0.35, bottom: 0.35 } }) } catch {}
+    try { ;(chart as any).priceScale('vol')?.applyOptions?.({ scaleMargins: { top: 0.8, bottom: 0 } }) } catch {}
+    try { ;(chart as any).priceScale('liq')?.applyOptions?.({ scaleMargins: { top: 0.8, bottom: 0 } }) } catch {}
 
     // Build chart adapter for liquidation overlay (centralize all Lightweight calls).
     chartAdapterRef.current = createLightweightChartAdapter({
@@ -264,108 +310,10 @@ export const TradingViewLightweightChart = ({
       getCurrentPrice: () => displayPriceRef.current,
     })
 
-    // ==== Dynamic Indicators (series) ====
-    // NOTE: Only chartSeries indicators should affect the base K-line chart. Overlay toggles must not rebuild candles.
-    const seriesIdSet = new Set(chartSeriesKey ? chartSeriesKey.split('|') : [])
-    const has = (id: string) => seriesIdSet.has(id)
-    const seriesToCreate: Array<{ id: string; type: 'line' | 'hist'; color: string; priceScaleId: string; margins?: { top: number; bottom: number } }> = []
-
-    if (has('long-short-ratio')) {
-      seriesToCreate.push({ id: 'long-short-ratio', type: 'line', color: '#10b981', priceScaleId: 'ls', margins: { top: 0.15, bottom: 0.55 } })
-    }
-    if (has('aggregated-open-interest')) {
-      seriesToCreate.push({ id: 'aggregated-open-interest', type: 'line', color: '#8b5cf6', priceScaleId: 'oi', margins: { top: 0.35, bottom: 0.35 } })
-    }
-    if (has('aggregated-volume')) {
-      seriesToCreate.push({ id: 'aggregated-volume', type: 'hist', color: '#ec4899', priceScaleId: 'vol', margins: { top: 0.8, bottom: 0 } })
-    }
-    if (has('liquidation-data')) {
-      seriesToCreate.push({ id: 'liquidation-data', type: 'hist', color: '#ef4444', priceScaleId: 'liq', margins: { top: 0.8, bottom: 0 } })
-    }
-
-    // Pre-generate series data aligned to candle times
-    for (const s of seriesToCreate) {
-      indicatorSeriesData[s.id] = []
-    }
-    // Simple deterministic-ish generator based on basePrice
-    let ls = 0.52
-    let oi = basePrice * 120
-    for (let i = 0; i < candleData.length; i++) {
-      const timeVal = candleData[i].time
-      if (indicatorSeriesData['long-short-ratio']) {
-        ls += (Math.random() - 0.5) * 0.015
-        ls = Math.max(0.2, Math.min(0.8, ls))
-        indicatorSeriesData['long-short-ratio'].push({ time: timeVal, value: Number(ls.toFixed(4)) })
-      }
-      if (indicatorSeriesData['aggregated-open-interest']) {
-        oi += (Math.random() - 0.45) * (basePrice * 2)
-        oi = Math.max(basePrice * 60, oi)
-        indicatorSeriesData['aggregated-open-interest'].push({ time: timeVal, value: Math.floor(oi) })
-      }
-      if (indicatorSeriesData['aggregated-volume']) {
-        indicatorSeriesData['aggregated-volume'].push({
-          time: timeVal,
-          value: Math.floor(Math.random() * (basePrice >= 1000 ? 20000 : 200000)),
-          color: 'rgba(236, 72, 153, 0.45)',
-        })
-      }
-      if (indicatorSeriesData['liquidation-data']) {
-        // A spiky series
-        const spike = Math.random() < 0.08 ? 1 + Math.random() * 6 : Math.random()
-        indicatorSeriesData['liquidation-data'].push({
-          time: timeVal,
-          value: Math.floor(spike * (basePrice >= 1000 ? 1200 : 18000)),
-          color: 'rgba(239, 68, 68, 0.45)',
-        })
-      }
-    }
-
-    const createdSeries: any[] = []
-    for (const s of seriesToCreate) {
-      if (s.type === 'line') {
-        const line = chart.addSeries(LineSeries, {
-          color: s.color,
-          lineWidth: 2,
-          priceLineVisible: false,
-          crosshairMarkerVisible: false,
-          priceScaleId: s.priceScaleId,
-        })
-        if (s.margins) {
-          try {
-            ;(chart as any).priceScale(s.priceScaleId)?.applyOptions?.({ scaleMargins: s.margins })
-          } catch {
-            // ignore
-          }
-        }
-        line.setData(indicatorSeriesData[s.id] || [])
-        createdSeries.push(line)
-      } else {
-        const hist = chart.addSeries(HistogramSeries, {
-          color: s.color,
-          priceFormat: { type: 'volume' },
-          priceScaleId: s.priceScaleId,
-        })
-        if (s.margins) {
-          try {
-            ;(chart as any).priceScale(s.priceScaleId)?.applyOptions?.({ scaleMargins: s.margins })
-          } catch {
-            // ignore
-          }
-        }
-        hist.setData(indicatorSeriesData[s.id] || [])
-        createdSeries.push(hist)
-      }
-    }
-    
-    chart.timeScale().fitContent();
+    chartRef.current = chart;
     chartRef.current = chart;
 
     // NOTE: Price<->pixel mapping is provided by chartAdapterRef (no direct Lightweight calls here).
-
-    // 初始设置 OHLC 为最后一个点
-    const lastCandle = candleData[candleData.length - 1];
-    setOhlc(lastCandle);
-    setLastCandleClose(typeof lastCandle?.close === 'number' ? lastCandle.close : null)
 
     const isLiqOverlayActive = () => activeIndicatorsRef.current.some((x) => x.id === 'liquidation-map')
     const chartAdapter = chartAdapterRef.current
@@ -377,7 +325,7 @@ export const TradingViewLightweightChart = ({
           setOhlc(data);
         }
       } else {
-        setOhlc(lastCandle);
+        if (lastCandleRef.current) setOhlc(lastCandleRef.current)
       }
 
       // Hover tooltip for liquidation overlay (does NOT block Lightweight interactions)
@@ -417,7 +365,7 @@ export const TradingViewLightweightChart = ({
       if (typeof p !== 'number' || !Number.isFinite(p)) return
 
       // Snap to the same step used by overlay densify, so highlight aligns with bars
-      const step = pickOverlayPriceStep(typeof lastCandleCloseRef.current === 'number' ? lastCandleCloseRef.current : basePrice)
+      const step = pickOverlayPriceStep(typeof lastCandleCloseRef.current === 'number' ? lastCandleCloseRef.current : basePriceForHeader)
       const price = Math.round(p / step) * step
 
       // Interpolate on raw series (same fields as "数据->清算地图")
@@ -558,105 +506,167 @@ export const TradingViewLightweightChart = ({
     // Initial sync (chartRef is now ready)
     refreshOverlay()
 
-    // Mock live updates (optional): keep currentPrice in sync with the latest candle close.
-    // Default OFF to avoid surprising behavior; enable via NEXT_PUBLIC_MOCK_LIVE=1.
-    const isDev = process.env.NODE_ENV !== 'production'
-    const enableMockLive = process.env.NEXT_PUBLIC_MOCK_LIVE === '1'
-    let liveTimer: any = null
-    if (isDev && enableMockLive) {
-      liveTimer = setInterval(() => {
-        try {
-          const last = candleData[candleData.length - 1]
-          const nextTime = (Number(last?.time) || now) + step
-          const open = lastClose + (Math.random() - 0.5) * vol
-          const high = open + Math.random() * (vol * 0.8)
-          const low = open - Math.random() * (vol * 0.8)
-          const close = low + Math.random() * (high - low)
-          const round = (n: number) => {
-            if (basePrice >= 1000) return Number(n.toFixed(1))
-            if (basePrice >= 1) return Number(n.toFixed(4))
-            return Number(n.toFixed(6))
-          }
-          const candle = { time: nextTime as any, open: round(open), high: round(high), low: round(low), close: round(close) }
-          candleData.push(candle)
-          // Keep array bounded
-          if (candleData.length > 320) candleData.shift()
-          candlestickSeries.update(candle)
-          lastClose = close
-          setLastCandleClose(typeof candle.close === 'number' ? candle.close : null)
-          refreshOverlay()
-        } catch {
-          // ignore
-        }
-      }, 2500)
-    }
-
     return () => {
       resizeObserver.disconnect();
       unsubChartChange()
       unsubCrosshair()
       unsubClick()
-      if (liveTimer) clearInterval(liveTimer)
       chart.remove();
       chartRef.current = null;
       chartAdapterRef.current = null
-      candleSeriesRef.current = null
-      currentPriceLineRef.current = null
+      candlestickSeriesRef.current = null
+      lockedPriceLineRef.current = null
+      indicatorSeriesRef.current = {}
     };
-  }, [isMounted, symbol, interval, chartSeriesKey]);
+  }, [isMounted, symbol]);
 
   const baseAsset = symbol.replace(/USDT|USD|PERP|SWAP|[-_]/gi, '').slice(0, 5) || 'BTC'
-  
-  // CRITICAL: Compute displayPrice using the EXACT same logic as TopBar.tsx to ensure overlay price line matches the top bar price.
-  // This is the "source of truth" for the current market price displayed to the user.
-  const basePrice = getMockBasePrice(symbol)
-  const displayPrice = useMemo(() => {
-    let price = basePrice
-    // Apply exchange multiplier (same as TopBar)
-    if (!isAggregated) {
-      if (selectedExchange === 'binance') {
-        price *= 1.0001
+
+  // 顶部价格更新时，只允许 applyOptions 更新 price（禁止创建第二条线）
+  useEffect(() => {
+    if (typeof lockedPrice !== 'number' || !Number.isFinite(lockedPrice)) return
+    if (!lockedPriceLineRef.current) return
+    lockedPriceLineRef.current.applyOptions({ price: lockedPrice, axisLabelVisible: true })
+    console.log('[LOCKED PRICE LINE UPDATED]', lockedPrice)
+  }, [lockedPrice])
+
+  // 切换周期/切换指标时：只更新 K 线数据与指标数据，不重建 chart（从而保证 priceLine 不会被重建）
+  useEffect(() => {
+    if (!isMounted) return
+    const candleSeries = candlestickSeriesRef.current
+    const chartApi: any = chartRef.current
+    if (!candleSeries || !chartApi) return
+
+    const now = Math.floor(Date.now() / 1000)
+    const stepMap: Record<string, number> = {
+      '1s': 1,
+      '1m': 60,
+      '5m': 300,
+      '15m': 900,
+      '1h': 3600,
+      '4h': 14400,
+      '1d': 86400,
+    }
+    const step = stepMap[interval] ?? 900
+    const basePrice = getMockBasePrice(symbol)
+    const vol = getMockVolatility(basePrice)
+
+    const round = (n: number) => {
+      if (basePrice >= 1000) return Number(n.toFixed(1))
+      if (basePrice >= 1) return Number(n.toFixed(4))
+      return Number(n.toFixed(6))
+    }
+
+    const candleData: CandleBar[] = []
+    let lastClose = basePrice
+    for (let i = 0; i < 300; i++) {
+      const time = now - (300 - i) * step
+      const open = lastClose + (Math.random() - 0.5) * vol
+      const high = open + Math.random() * (vol * 0.8)
+      const low = open - Math.random() * (vol * 0.8)
+      const close = low + Math.random() * (high - low)
+      const candle: CandleBar = {
+        time: time as unknown,
+        open: round(open),
+        high: round(high),
+        low: round(low),
+        close: round(close),
+      }
+      candleData.push(candle)
+      lastClose = close
+    }
+
+    candleDataRef.current = candleData
+    lastCandleRef.current = candleData[candleData.length - 1] ?? null
+    candleSeries.setData(candleData as unknown[])
+
+    if (lastCandleRef.current) {
+      setOhlc(lastCandleRef.current)
+      setLastCandleClose(typeof lastCandleRef.current.close === 'number' ? lastCandleRef.current.close : null)
+    }
+
+    // 更新 chartSeries 指标（仅 setData，不新增/删除 series）
+    const isOn = (id: string) => activeIndicators.some((x) => x.id === id)
+    const timeVals = candleData.map((c) => c.time)
+
+    // long-short-ratio
+    if (indicatorSeriesRef.current['long-short-ratio']) {
+      if (isOn('long-short-ratio')) {
+        const data: Array<{ time: unknown; value: number }> = []
+        let ls = 0.52
+        for (let i = 0; i < timeVals.length; i++) {
+          ls += (Math.random() - 0.5) * 0.015
+          ls = Math.max(0.2, Math.min(0.8, ls))
+          data.push({ time: timeVals[i], value: Number(ls.toFixed(4)) })
+        }
+        indicatorSeriesRef.current['long-short-ratio'].setData(data as unknown[])
       } else {
-        price *= 0.9999
+        indicatorSeriesRef.current['long-short-ratio'].setData([])
       }
     }
-    // Apply market type multiplier (same as TopBar)
-    if (marketType === 'spot') {
-      price *= 1.0005
-    }
-    return price
-  }, [basePrice, isAggregated, selectedExchange, marketType])
 
-  useEffect(() => {
-    displayPriceRef.current = displayPrice
-  }, [displayPrice])
-
-  // Single source of truth for "current price line": use Lightweight createPriceLine (with right-axis label).
-  useEffect(() => {
-    const currentPrice = displayPrice
-    const series = candleSeriesRef.current
-    if (!series) return
-    if (typeof currentPrice !== 'number' || !Number.isFinite(currentPrice) || currentPrice <= 0) return
-
-    if (!currentPriceLineRef.current) {
-      currentPriceLineRef.current = series.createPriceLine({
-        price: currentPrice,
-        color: 'rgba(255,80,80,0.9)',
-        lineWidth: 1,
-        lineStyle: 2, // dashed
-        axisLabelVisible: true,
-        title: '',
-      })
-      return
+    // aggregated-open-interest
+    if (indicatorSeriesRef.current['aggregated-open-interest']) {
+      if (isOn('aggregated-open-interest')) {
+        const data: Array<{ time: unknown; value: number }> = []
+        let oi = basePrice * 120
+        for (let i = 0; i < timeVals.length; i++) {
+          oi += (Math.random() - 0.45) * (basePrice * 2)
+          oi = Math.max(basePrice * 60, oi)
+          data.push({ time: timeVals[i], value: Math.floor(oi) })
+        }
+        indicatorSeriesRef.current['aggregated-open-interest'].setData(data as unknown[])
+      } else {
+        indicatorSeriesRef.current['aggregated-open-interest'].setData([])
+      }
     }
 
-    currentPriceLineRef.current.applyOptions({ price: currentPrice, axisLabelVisible: true })
-  }, [displayPrice])
+    // aggregated-volume
+    if (indicatorSeriesRef.current['aggregated-volume']) {
+      if (isOn('aggregated-volume')) {
+        const data: Array<{ time: unknown; value: number; color: string }> = []
+        for (let i = 0; i < timeVals.length; i++) {
+          data.push({
+            time: timeVals[i],
+            value: Math.floor(Math.random() * (basePrice >= 1000 ? 20000 : 200000)),
+            color: 'rgba(236, 72, 153, 0.45)',
+          })
+        }
+        indicatorSeriesRef.current['aggregated-volume'].setData(data as unknown[])
+      } else {
+        indicatorSeriesRef.current['aggregated-volume'].setData([])
+      }
+    }
+
+    // liquidation-data
+    if (indicatorSeriesRef.current['liquidation-data']) {
+      if (isOn('liquidation-data')) {
+        const data: Array<{ time: unknown; value: number; color: string }> = []
+        for (let i = 0; i < timeVals.length; i++) {
+          const spike = Math.random() < 0.08 ? 1 + Math.random() * 6 : Math.random()
+          data.push({
+            time: timeVals[i],
+            value: Math.floor(spike * (basePrice >= 1000 ? 1200 : 18000)),
+            color: 'rgba(239, 68, 68, 0.45)',
+          })
+        }
+        indicatorSeriesRef.current['liquidation-data'].setData(data as unknown[])
+      } else {
+        indicatorSeriesRef.current['liquidation-data'].setData([])
+      }
+    }
+
+    // 防回归：切换周期也执行一次 applyOptions（不创建新线）
+    if (lockedPriceLineRef.current && typeof lockedPrice === 'number' && Number.isFinite(lockedPrice)) {
+      lockedPriceLineRef.current.applyOptions({ price: lockedPrice, axisLabelVisible: true })
+      console.log('[LOCKED PRICE LINE UPDATED]', lockedPrice)
+    }
+  }, [isMounted, symbol, interval, activeIndicators, lockedPrice])
 
   // Denser mock for overlay (more price buckets -> more bars), without affecting the full page.
   const liqData = useMemo(
-    () => generateLiquidationMapMockData(baseAsset, '1d', 'All', displayPrice, 320),
-    [baseAsset, displayPrice],
+    () => generateLiquidationMapMockData(baseAsset, '1d', 'All', lockedPrice, 320),
+    [baseAsset, lockedPrice],
   )
   useEffect(() => {
     liqDataRef.current = liqData
@@ -676,7 +686,7 @@ export const TradingViewLightweightChart = ({
       liqSeriesRef.current = null
     }
   }, [liqData])
-  const liqCurrentPrice = displayPrice
+  const liqCurrentPrice = lockedPrice
   const showLiqOverlay = activeIndicators.some((x) => x.id === 'liquidation-map')
 
   return (
@@ -881,3 +891,4 @@ export const TradingViewLightweightChart = ({
     </div>
   );
 };
+
