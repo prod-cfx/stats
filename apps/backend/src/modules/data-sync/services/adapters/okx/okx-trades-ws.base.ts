@@ -112,18 +112,26 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     if (staleStates.length) {
       const results = await Promise.allSettled(staleStates.map(state => this.flushBuffer(state)))
 
+      let hadFlushError = false
+
       results.forEach((result, index) => {
         const state = staleStates[index]
         if (result.status === 'fulfilled' && result.value === true) {
           // flush 成功，安全移除该 state
           this.states.delete(state.instId)
         } else {
+          hadFlushError = true
           // flush 失败：保留 state 以便后续有机会重试，避免静默丢单
           this.logger.warn(
             `Skip removing stale trades state for instId=${state.instId} due to flush failure`,
           )
         }
       })
+
+      if (hadFlushError) {
+        // 让上层管理器感知 flush 失败，从而阻止 configsHash 更新并在下次 tick 继续重试
+        throw new Error('Failed to flush one or more stale trades states when syncing configs')
+      }
     }
 
     // create new states
