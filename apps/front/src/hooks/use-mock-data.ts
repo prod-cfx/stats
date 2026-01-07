@@ -1,6 +1,6 @@
 import type { MockOptions } from '@/types/view-state';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useViewState } from './use-view-state';
 
 export function useMockData<T>(
@@ -10,12 +10,14 @@ export function useMockData<T>(
 ) {
   const { data, loading, error, setData, setLoading, setError } = useViewState<T>();
   const searchParams = useSearchParams();
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async (isTransition = false) => {
     // Determine delay based on rules: 
     // Initial: 1200-2000ms, Transition: 600-1000ms
     const delay = options.delay ?? (isTransition ? 800 : 1500);
     
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(false);
 
@@ -32,15 +34,23 @@ export function useMockData<T>(
       }
 
       if (forceEmpty) {
-        setData(null);
+        if (requestId === requestIdRef.current) {
+          setData(null);
+        }
       } else {
         const result = await fetcher();
-        setData(result);
+        if (requestId === requestIdRef.current) {
+          setData(result);
+        }
       }
     } catch {
-      setError(true);
+      if (requestId === requestIdRef.current) {
+        setError(true);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [fetcher, options.delay, options.shouldError, options.isEmpty, searchParams, setData, setError, setLoading, ...dependencies]);
 

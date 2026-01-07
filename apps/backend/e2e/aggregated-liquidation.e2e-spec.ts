@@ -36,10 +36,11 @@ describe('Aggregated liquidation service (E2E)', () => {
 
     const client = prisma.getClient()
 
-    // 清理 BTC 相关的聚合爆仓历史，避免受历史数据影响
+    // 仅清理本测试写入的 BTC 聚合爆仓历史，避免影响真实业务数据
     await client.aggregatedLiquidationHistory.deleteMany({
       where: {
         symbol: 'BTC',
+        source: 'TEST',
       },
     })
 
