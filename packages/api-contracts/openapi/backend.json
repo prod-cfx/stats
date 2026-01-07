@@ -3357,6 +3357,247 @@
         ]
       }
     },
+    "/admin/trades-configs": {
+      "get": {
+        "operationId": "AdminTradesPairConfigController_getAllConfigs",
+        "parameters": [
+          {
+            "name": "exchange",
+            "required": false,
+            "in": "query",
+            "description": "交易所标识筛选",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instrumentType",
+            "required": false,
+            "in": "query",
+            "description": "交易品种类型筛选",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SPOT",
+                "PERPETUAL",
+                "FUTURE"
+              ]
+            }
+          },
+          {
+            "name": "enabledOnly",
+            "required": false,
+            "in": "query",
+            "description": "是否仅返回已启用的配置",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取配置列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TradesPairConfigResponseDto"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取所有交易记录订阅配置",
+        "tags": [
+          "admin-trades-config"
+        ]
+      },
+      "post": {
+        "operationId": "AdminTradesPairConfigController_createConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTradesPairConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功创建配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TradesPairConfigResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "创建交易记录订阅配置",
+        "tags": [
+          "admin-trades-config"
+        ]
+      }
+    },
+    "/admin/trades-configs/{id}": {
+      "get": {
+        "operationId": "AdminTradesPairConfigController_getConfig",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TradesPairConfigResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取单个交易记录订阅配置",
+        "tags": [
+          "admin-trades-config"
+        ]
+      },
+      "put": {
+        "operationId": "AdminTradesPairConfigController_updateConfig",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTradesPairConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功更新配置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/TradesPairConfigResponseDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Success"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "更新交易记录订阅配置",
+        "tags": [
+          "admin-trades-config"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminTradesPairConfigController_deleteConfig",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "成功删除配置"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "删除交易记录订阅配置",
+        "tags": [
+          "admin-trades-config"
+        ]
+      }
+    },
     "/markets/pairs": {
       "get": {
         "operationId": "MarketsController_getTradingPairs",
@@ -3522,6 +3763,401 @@
           }
         ],
         "summary": "获取交易对的多空比时间序列",
+        "tags": [
+          "markets"
+        ]
+      }
+    },
+    "/markets/long-short-ratio/exchanges": {
+      "get": {
+        "operationId": "MarketsController_getExchangeLongShortRatio",
+        "parameters": [
+          {
+            "name": "symbol",
+            "required": true,
+            "in": "query",
+            "description": "基础资产符号，例如 BTC / ETH（会自动转为大写并去除空格）",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeRange",
+            "required": true,
+            "in": "query",
+            "description": "统计时间范围，可选值：5m / 15m / 30m / 1h / 4h / 12h / 24h",
+            "schema": {
+              "example": "4h",
+              "type": "string",
+              "enum": [
+                "5m",
+                "15m",
+                "30m",
+                "1h",
+                "4h",
+                "12h",
+                "24h"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ExchangeLongShortRatioResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "按交易所维度获取指定标的的多空比快照",
+        "tags": [
+          "markets"
+        ]
+      }
+    },
+    "/markets/trades/latest": {
+      "get": {
+        "operationId": "MarketsController_getLatestTrades",
+        "parameters": [
+          {
+            "name": "exchange",
+            "required": true,
+            "in": "query",
+            "description": "交易所代码",
+            "schema": {
+              "example": "OKX",
+              "type": "string"
+            }
+          },
+          {
+            "name": "instrumentType",
+            "required": true,
+            "in": "query",
+            "description": "合约类型",
+            "schema": {
+              "example": "SPOT",
+              "type": "string",
+              "enum": [
+                "SPOT",
+                "PERPETUAL",
+                "FUTURE"
+              ]
+            }
+          },
+          {
+            "name": "symbol",
+            "required": true,
+            "in": "query",
+            "description": "交易对符号",
+            "schema": {
+              "example": "BTC-USDT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "返回记录数量",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MarketTradeResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取最新成交记录",
+        "tags": [
+          "markets"
+        ]
+      }
+    },
+    "/markets/trades/large": {
+      "get": {
+        "operationId": "MarketsController_getLargeTrades",
+        "parameters": [
+          {
+            "name": "exchange",
+            "required": true,
+            "in": "query",
+            "description": "交易所代码",
+            "schema": {
+              "example": "OKX",
+              "type": "string"
+            }
+          },
+          {
+            "name": "instrumentType",
+            "required": true,
+            "in": "query",
+            "description": "合约类型",
+            "schema": {
+              "example": "SPOT",
+              "type": "string",
+              "enum": [
+                "SPOT",
+                "PERPETUAL",
+                "FUTURE"
+              ]
+            }
+          },
+          {
+            "name": "symbol",
+            "required": true,
+            "in": "query",
+            "description": "交易对符号",
+            "schema": {
+              "example": "BTC-USDT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "返回记录数量",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minValue",
+            "required": false,
+            "in": "query",
+            "description": "最小成交金额（USDT）",
+            "schema": {
+              "minimum": 0,
+              "default": 100000,
+              "example": 100000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MarketTradeResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取大额成交记录",
+        "tags": [
+          "markets"
+        ]
+      }
+    },
+    "/markets/trades": {
+      "get": {
+        "operationId": "MarketsController_getTrades",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "description": "每页数量（最大 100）",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "exchange",
+            "required": false,
+            "in": "query",
+            "description": "交易所代码",
+            "schema": {
+              "example": "OKX",
+              "type": "string"
+            }
+          },
+          {
+            "name": "instrumentType",
+            "required": false,
+            "in": "query",
+            "description": "合约类型",
+            "schema": {
+              "example": "SPOT",
+              "type": "string",
+              "enum": [
+                "SPOT",
+                "PERPETUAL",
+                "FUTURE"
+              ]
+            }
+          },
+          {
+            "name": "symbol",
+            "required": false,
+            "in": "query",
+            "description": "交易对符号",
+            "schema": {
+              "example": "BTC-USDT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "baseAsset",
+            "required": false,
+            "in": "query",
+            "description": "基础资产",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          },
+          {
+            "name": "quoteAsset",
+            "required": false,
+            "in": "query",
+            "description": "计价资产",
+            "schema": {
+              "example": "USDT",
+              "type": "string"
+            }
+          },
+          {
+            "name": "side",
+            "required": false,
+            "in": "query",
+            "description": "交易方向",
+            "schema": {
+              "example": "buy",
+              "type": "string",
+              "enum": [
+                "buy",
+                "sell"
+              ]
+            }
+          },
+          {
+            "name": "fromTimestamp",
+            "required": false,
+            "in": "query",
+            "description": "开始时间戳（毫秒）",
+            "schema": {
+              "example": 1704067200000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "toTimestamp",
+            "required": false,
+            "in": "query",
+            "description": "结束时间戳（毫秒）",
+            "schema": {
+              "example": 1704153600000,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/MarketTradeResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "查询交易记录（分页）",
         "tags": [
           "markets"
         ]
@@ -5716,6 +6352,483 @@
             "nullable": true
           }
         }
+      },
+      "CryptoStockQuoteResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "记录 ID"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "股票代码",
+            "example": "MSTR"
+          },
+          "name": {
+            "type": "string",
+            "description": "股票名称",
+            "example": "MicroStrategy Inc.",
+            "nullable": true
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所代码",
+            "example": "NASDAQ",
+            "nullable": true
+          },
+          "price": {
+            "type": "string",
+            "description": "当前价格"
+          },
+          "openPrice": {
+            "type": "string",
+            "description": "开盘价",
+            "nullable": true
+          },
+          "highPrice": {
+            "type": "string",
+            "description": "最高价",
+            "nullable": true
+          },
+          "lowPrice": {
+            "type": "string",
+            "description": "最低价",
+            "nullable": true
+          },
+          "closePrice": {
+            "type": "string",
+            "description": "收盘价（前一交易日）",
+            "nullable": true
+          },
+          "volume": {
+            "type": "string",
+            "description": "成交量",
+            "nullable": true
+          },
+          "turnover": {
+            "type": "string",
+            "description": "成交额",
+            "nullable": true
+          },
+          "priceChange": {
+            "type": "string",
+            "description": "涨跌额",
+            "nullable": true
+          },
+          "priceChangePercent": {
+            "type": "string",
+            "description": "涨跌幅（百分比）",
+            "nullable": true
+          },
+          "marketCap": {
+            "type": "string",
+            "description": "市值",
+            "nullable": true
+          },
+          "peRatio": {
+            "type": "string",
+            "description": "市盈率",
+            "nullable": true
+          },
+          "high52Week": {
+            "type": "string",
+            "description": "52周最高价",
+            "nullable": true
+          },
+          "low52Week": {
+            "type": "string",
+            "description": "52周最低价",
+            "nullable": true
+          },
+          "assetSymbol": {
+            "type": "string",
+            "description": "底层加密资产符号（例如 BTC、ETH、USDC），用于币股联动视图",
+            "example": "BTC",
+            "nullable": true
+          },
+          "assetLogoUrl": {
+            "type": "string",
+            "description": "底层加密资产 Logo URL",
+            "example": "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
+            "nullable": true
+          },
+          "companyLogoUrl": {
+            "type": "string",
+            "description": "公司 Logo URL",
+            "example": "https://upload.wikimedia.org/wikipedia/commons/d/d7/MicroStrategy_logo.svg",
+            "nullable": true
+          },
+          "holdingsValue": {
+            "type": "string",
+            "description": "持有的加密资产名义价值（可带货币符号，前端可根据需要自行解析）",
+            "example": "$58.14B",
+            "nullable": true
+          },
+          "holdingsAmount": {
+            "type": "string",
+            "description": "持有的加密资产数量描述（可包含单位和简写，例如 \"671.27K BTC\"）",
+            "example": "671.27K BTC",
+            "nullable": true
+          },
+          "mNav": {
+            "type": "string",
+            "description": "mNAV（市值/净资产比），字符串形式，前端可按需解析为数值",
+            "example": "0.83",
+            "nullable": true
+          },
+          "infoParagraphs": {
+            "description": "公司介绍文案段落列表（用于前端弹窗展示）",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "description": "数据源",
+            "example": "BBX"
+          },
+          "quoteTimestamp": {
+            "format": "date-time",
+            "type": "string",
+            "description": "报价时间戳"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "price",
+          "source",
+          "quoteTimestamp",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "TradesPairConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "配置ID"
+          },
+          "pairId": {
+            "type": "string",
+            "description": "交易对唯一标识"
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所标识"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "交易对符号"
+          },
+          "baseAsset": {
+            "type": "string",
+            "description": "基础资产"
+          },
+          "quoteAsset": {
+            "type": "string",
+            "description": "计价资产"
+          },
+          "instrumentType": {
+            "type": "string",
+            "description": "交易品种类型",
+            "enum": [
+              "SPOT",
+              "PERPETUAL",
+              "FUTURE"
+            ]
+          },
+          "canonicalInstId": {
+            "type": "string",
+            "description": "标准化 OKX instId（用于订阅/查询一致性）",
+            "nullable": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用订阅"
+          },
+          "priority": {
+            "type": "number",
+            "description": "优先级"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "扩展配置",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "备注说明",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间"
+          }
+        },
+        "required": [
+          "id",
+          "pairId",
+          "exchange",
+          "symbol",
+          "baseAsset",
+          "quoteAsset",
+          "instrumentType",
+          "enabled",
+          "priority",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateTradesPairConfigDto": {
+        "type": "object",
+        "properties": {
+          "pairId": {
+            "type": "string",
+            "description": "交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT",
+            "pattern": "^[A-Z0-9\\-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$",
+            "example": "BTC-USDT.OKX.SPOT"
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所标识，目前仅支持 OKX"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "交易对符号，例如 BTC-USDT, BTC-USDT-SWAP"
+          },
+          "baseAsset": {
+            "type": "string",
+            "description": "基础资产，例如 BTC"
+          },
+          "quoteAsset": {
+            "type": "string",
+            "description": "计价资产，例如 USDT"
+          },
+          "instrumentType": {
+            "type": "string",
+            "description": "交易品种类型",
+            "enum": [
+              "SPOT",
+              "PERPETUAL",
+              "FUTURE"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用订阅",
+            "default": true
+          },
+          "priority": {
+            "type": "number",
+            "description": "优先级（数字越小优先级越高）",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          },
+          "metadata": {
+            "type": "object",
+            "description": "扩展配置（JSON格式），例如存储交易所特定参数。最大深度5层，最大10KB",
+            "example": {
+              "okxInstId": "BTC-USDT-SWAP",
+              "minTradeValue": 10000
+            }
+          },
+          "description": {
+            "type": "string",
+            "description": "备注说明"
+          }
+        },
+        "required": [
+          "pairId",
+          "exchange",
+          "symbol",
+          "baseAsset",
+          "quoteAsset",
+          "instrumentType"
+        ]
+      },
+      "UpdateTradesPairConfigDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用订阅"
+          },
+          "priority": {
+            "type": "number",
+            "description": "优先级（数字越小优先级越高）",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "metadata": {
+            "type": "object",
+            "description": "扩展配置（JSON格式）。最大深度5层，最大10KB",
+            "example": {
+              "okxInstId": "BTC-USDT-SWAP",
+              "minTradeValue": 10000
+            },
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "备注说明",
+            "nullable": true
+          }
+        }
+      },
+      "ExchangeLongShortRatioResponseDto": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "number",
+            "description": "交易所排名（按总持仓金额从高到低排序，从 1 开始）",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "交易所名称，例如 Binance / OKX / Bybit / DEX",
+            "example": "Binance"
+          },
+          "logoUrl": {
+            "type": "string",
+            "description": "交易所 Logo URL，可选",
+            "example": "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png"
+          },
+          "longPercent": {
+            "type": "number",
+            "description": "做多账户或持仓占比（百分比，0-100）",
+            "example": 52.44
+          },
+          "shortPercent": {
+            "type": "number",
+            "description": "做空账户或持仓占比（百分比，0-100）",
+            "example": 47.56
+          },
+          "longAmountUsd": {
+            "type": "number",
+            "description": "做多名义持仓金额（USD）",
+            "example": 1170000000
+          },
+          "shortAmountUsd": {
+            "type": "number",
+            "description": "做空名义持仓金额（USD）",
+            "example": 1061000000
+          }
+        },
+        "required": [
+          "rank",
+          "name",
+          "longPercent",
+          "shortPercent",
+          "longAmountUsd",
+          "shortAmountUsd"
+        ]
+      },
+      "MarketTradeResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "交易记录ID",
+            "example": 1
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所代码",
+            "example": "OKX"
+          },
+          "instrumentType": {
+            "type": "string",
+            "description": "合约类型",
+            "example": "SPOT",
+            "enum": [
+              "SPOT",
+              "PERPETUAL",
+              "FUTURE"
+            ]
+          },
+          "symbol": {
+            "type": "string",
+            "description": "交易对符号",
+            "example": "BTC-USDT"
+          },
+          "baseAsset": {
+            "type": "string",
+            "description": "基础资产",
+            "example": "BTC"
+          },
+          "quoteAsset": {
+            "type": "string",
+            "description": "计价资产",
+            "example": "USDT"
+          },
+          "tradeId": {
+            "type": "string",
+            "description": "交易ID（交易所提供）",
+            "example": "123456789"
+          },
+          "price": {
+            "type": "string",
+            "description": "交易价格",
+            "example": "45000.50"
+          },
+          "size": {
+            "type": "string",
+            "description": "交易数量",
+            "example": "0.5"
+          },
+          "side": {
+            "type": "string",
+            "description": "交易方向",
+            "example": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ]
+          },
+          "tradeTimestamp": {
+            "type": "string",
+            "description": "交易时间戳（毫秒）",
+            "example": "1704067200000"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间",
+            "example": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "exchange",
+          "instrumentType",
+          "symbol",
+          "baseAsset",
+          "quoteAsset",
+          "tradeId",
+          "price",
+          "size",
+          "side",
+          "tradeTimestamp",
+          "createdAt"
+        ]
       },
       "TradingPairConfigResponseDto": {
         "type": "object",
