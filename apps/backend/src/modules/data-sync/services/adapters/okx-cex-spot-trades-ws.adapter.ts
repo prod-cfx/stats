@@ -34,3 +34,4 @@ export class OkxCexSpotTradesWsAdapter extends OkxTradesWsAdapterBase {
   }
 }
 
+

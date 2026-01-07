@@ -56,6 +56,53 @@ export class TradesPairConfigService {
       })
     }
 
+    // 解析 canonical OKX instId（需与 OkxTradesWsAdapterBase.resolveInstId 保持语义一致）
+    const canonicalInstId = this.resolveOkxInstId({
+      exchange: dto.exchange,
+      instrumentType: dto.instrumentType,
+      symbol: dto.symbol,
+      baseAsset: dto.baseAsset,
+      quoteAsset: dto.quoteAsset,
+      metadata: dto.metadata,
+    })
+
+    if (!canonicalInstId) {
+      throw new DomainException(
+        '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
+        {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+        },
+      )
+    }
+
+    // 检查是否存在使用相同 canonical instId 的其他配置，避免 silent duplicate
+    const sameExchangeConfigs = await this.repository.findAll({
+      exchange: dto.exchange,
+      instrumentType: dto.instrumentType,
+    })
+
+    for (const cfg of sameExchangeConfigs) {
+      const cfgInstId = this.resolveOkxInstId({
+        exchange: cfg.exchange,
+        instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
+        symbol: cfg.symbol,
+        baseAsset: cfg.baseAsset,
+        quoteAsset: cfg.quoteAsset,
+        metadata: cfg.metadata ?? undefined,
+      })
+
+      if (cfgInstId && cfgInstId === canonicalInstId) {
+        throw new DomainException(
+          `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+          {
+            code: ErrorCode.CONFLICT,
+            status: HttpStatus.CONFLICT,
+          },
+        )
+      }
+    }
+
     try {
       return await this.repository.create(dto)
     }
@@ -83,7 +130,59 @@ export class TradesPairConfigService {
 
   async update(id: string, dto: UpdateTradesPairConfigDto): Promise<TradesPairConfig> {
     // 确保配置存在
-    await this.findById(id)
+    const existing = await this.findById(id)
+
+    // 合并后的“预期配置”，用于校验 metadata 变更是否导致 instId 解析失败或冲突
+    const merged = {
+      exchange: existing.exchange,
+      instrumentType: existing.instrumentType as CreateTradesPairConfigDto['instrumentType'],
+      symbol: existing.symbol,
+      baseAsset: existing.baseAsset,
+      quoteAsset: existing.quoteAsset,
+      metadata: dto.metadata !== undefined ? dto.metadata : existing.metadata,
+    }
+
+    const canonicalInstId = this.resolveOkxInstId(merged)
+
+    if (!canonicalInstId) {
+      throw new DomainException(
+        '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
+        {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+        },
+      )
+    }
+
+    // 检查是否与其他配置产生 instId 冲突
+    const sameExchangeConfigs = await this.repository.findAll({
+      exchange: existing.exchange,
+      instrumentType: existing.instrumentType,
+    })
+
+    for (const cfg of sameExchangeConfigs) {
+      if (cfg.id === id) continue
+
+      const cfgInstId = this.resolveOkxInstId({
+        exchange: cfg.exchange,
+        instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
+        symbol: cfg.symbol,
+        baseAsset: cfg.baseAsset,
+        quoteAsset: cfg.quoteAsset,
+        metadata: cfg.metadata ?? undefined,
+      })
+
+      if (cfgInstId && cfgInstId === canonicalInstId) {
+        throw new DomainException(
+          `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+          {
+            code: ErrorCode.CONFLICT,
+            status: HttpStatus.CONFLICT,
+          },
+        )
+      }
+    }
+
     return this.repository.update(id, dto)
   }
 
@@ -93,4 +192,60 @@ export class TradesPairConfigService {
     
     await this.repository.delete(id)
   }
+
+  /**
+   * 根据 Trades 配置解析标准化的 OKX instId
+   * 需与 OkxTradesWsAdapterBase.resolveInstId 保持语义一致
+   */
+  private resolveOkxInstId(input: {
+    exchange: string
+    instrumentType: CreateTradesPairConfigDto['instrumentType']
+    symbol: string
+    baseAsset: string
+    quoteAsset: string
+    metadata?: unknown
+  }): string | null {
+    if (input.exchange.toUpperCase() !== 'OKX') return null
+
+    const metadata =
+      input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+        ? (input.metadata as Record<string, unknown>)
+        : null
+
+    const pickMetadataString = (keys: string[]): string | null => {
+      if (!metadata) return null
+      for (const key of keys) {
+        const value = metadata[key]
+        if (typeof value === 'string' && value.trim().length) {
+          return value.trim().toUpperCase()
+        }
+      }
+      return null
+    }
+
+    const metaInstId = pickMetadataString(['okxInstId', 'instId', 'symbol'])
+    if (metaInstId) return metaInstId
+
+    const symbol = input.symbol.toUpperCase()
+    if (symbol.includes('-')) return symbol
+
+    const base = input.baseAsset.toUpperCase()
+    const quote = input.quoteAsset.toUpperCase()
+
+    if (input.instrumentType === 'SPOT') {
+      return `${base}-${quote}`
+    }
+
+    if (input.instrumentType === 'PERPETUAL') {
+      return `${base}-${quote}-SWAP`
+    }
+
+    if (input.instrumentType === 'FUTURE') {
+      const metaContract = pickMetadataString(['okxContract'])
+      if (metaContract) return metaContract
+    }
+
+    return null
+  }
 }
+

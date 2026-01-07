@@ -241,3 +241,4 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
   }
 }
 
+

@@ -138,3 +138,4 @@ export class GetLargeTradesRequestDto extends GetLatestTradesRequestDto {
   minValue?: number
 }
 
+

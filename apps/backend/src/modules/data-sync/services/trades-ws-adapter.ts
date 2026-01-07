@@ -41,3 +41,4 @@ export interface TradesWsAdapter {
   shutdown: () => Promise<void>
 }
 
+

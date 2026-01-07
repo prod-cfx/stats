@@ -41,3 +41,4 @@ export class TradesPairConfigResponseDto {
   updatedAt!: string
 }
 
+

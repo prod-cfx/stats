@@ -45,3 +45,4 @@ model TradesPairConfig {
   @@map("trades_pair_configs")
 }
 
+

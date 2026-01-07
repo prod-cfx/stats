@@ -92,3 +92,4 @@ export class CreateTradesPairConfigDto {
   description?: string
 }
 
+

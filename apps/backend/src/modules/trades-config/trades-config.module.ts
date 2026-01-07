@@ -13,3 +13,4 @@ import { TradesPairConfigService } from './services/trades-pair-config.service'
 })
 export class TradesConfigModule {}
 
+

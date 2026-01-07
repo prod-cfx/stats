@@ -49,3 +49,4 @@ export class UpdateTradesPairConfigDto {
   description?: string | null
 }
 
+

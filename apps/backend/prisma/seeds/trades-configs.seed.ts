@@ -119,3 +119,4 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
   console.log(`✅ Trades configs seeded: ${createdCount} created, ${skippedCount} skipped`)
 }
 
+
