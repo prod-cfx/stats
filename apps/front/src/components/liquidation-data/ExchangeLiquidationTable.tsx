@@ -26,7 +26,7 @@ interface ExchangeData {
   isTotal?: boolean;
 }
 
-type CoinFilter = 'ALL' | CoinSymbol
+type CoinFilter = CoinSymbol
 type TimeFilter = '1h' | '4h' | '12h' | '24h'
 
 const EXCHANGES = [
@@ -63,11 +63,11 @@ interface ExchangeRowRaw {
 
 export const ExchangeLiquidationTable = () => {
   const { t, i18n } = useTranslation();
-  const [coinFilter, setCoinFilter] = useState<CoinFilter>('ALL');
+  const [coinFilter, setCoinFilter] = useState<CoinFilter>('BTC');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('4h');
   const [selectedExchange, setSelectedExchange] = useState<ExchangeRowRaw | null>(null);
 
-  const selectedCoin = (coinFilter === 'ALL' ? 'ALL' : (coinFilter as CoinSymbol));
+  const selectedCoin = coinFilter;
 
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -82,7 +82,7 @@ export const ExchangeLiquidationTable = () => {
   const { data: tableDataRaw, loading, error, reload } = useMockData<ExchangeRowRaw[] | null>(
     async () => {
       // 当前后端接口按单一 symbol 聚合，这里先将 ALL 也映射为 BTC
-      const symbol = selectedCoin === 'ALL' ? 'BTC' : selectedCoin
+      const symbol = selectedCoin
       const timeframe = timeFilter
 
       const response: ExchangeLiquidationResponse = await fetchExchangeLiquidation(symbol, timeframe)
@@ -116,7 +116,7 @@ export const ExchangeLiquidationTable = () => {
         return {
           exchange: row.exchange === 'TOTAL' ? 'TOTAL' : row.exchange,
           logo: isTotal ? '' : (exMeta?.logo ?? ''),
-          coin: selectedCoin === 'ALL' ? 'ALL' : (row.symbol as CoinSymbol),
+          coin: row.symbol as CoinSymbol,
           amountUsd,
           longUsd,
           shortUsd,
@@ -179,7 +179,6 @@ export const ExchangeLiquidationTable = () => {
           <FilterButton 
             value={coinFilter} 
             options={[
-              { value: 'ALL', label: t('common.all') },
               { value: 'BTC', label: 'BTC' },
               { value: 'ETH', label: 'ETH' },
               { value: 'SOL', label: 'SOL' },
