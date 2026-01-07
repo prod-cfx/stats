@@ -264,13 +264,17 @@ export const TradingViewLightweightChart = ({
         chartApi.priceScale = (id: string) => {
           try {
             const scale = original(id)
-            if (
-              scale &&
-              typeof scale.priceToCoordinate === 'function' &&
-              typeof scale.coordinateToPrice === 'function'
-            )
+            // IMPORTANT: never spread the scale object (methods live on the prototype and would be lost).
+            if (scale && typeof scale === 'object') {
+              if (typeof (scale as any).priceToCoordinate !== 'function') {
+                ;(scale as any).priceToCoordinate = fallbackScale().priceToCoordinate
+              }
+              if (typeof (scale as any).coordinateToPrice !== 'function') {
+                ;(scale as any).coordinateToPrice = fallbackScale().coordinateToPrice
+              }
               return scale
-            return { ...(scale || {}), ...fallbackScale() }
+            }
+            return fallbackScale()
           } catch {
             return fallbackScale()
           }
@@ -349,7 +353,11 @@ export const TradingViewLightweightChart = ({
           priceScaleId: s.priceScaleId,
         })
         if (s.margins) {
-          line.priceScale().applyOptions({ scaleMargins: s.margins })
+          try {
+            ;(chart as any).priceScale(s.priceScaleId)?.applyOptions?.({ scaleMargins: s.margins })
+          } catch {
+            // ignore
+          }
         }
         line.setData(indicatorSeriesData[s.id] || [])
         createdSeries.push(line)
@@ -360,7 +368,11 @@ export const TradingViewLightweightChart = ({
           priceScaleId: s.priceScaleId,
         })
         if (s.margins) {
-          hist.priceScale().applyOptions({ scaleMargins: s.margins })
+          try {
+            ;(chart as any).priceScale(s.priceScaleId)?.applyOptions?.({ scaleMargins: s.margins })
+          } catch {
+            // ignore
+          }
         }
         hist.setData(indicatorSeriesData[s.id] || [])
         createdSeries.push(hist)

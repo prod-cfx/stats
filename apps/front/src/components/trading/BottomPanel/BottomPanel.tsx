@@ -512,7 +512,10 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   };
 
   return (
-    <div className="w-full bg-[#161b22] border-t border-[#30363d] flex flex-col text-[#c9d1d9] min-h-full">
+    <div
+      suppressHydrationWarning
+      className="w-full bg-[#161b22] border-t border-[#30363d] flex flex-col text-[#c9d1d9] min-h-full"
+    >
       {/* Tabs */}
       <div className="flex border-b border-[#30363d] bg-[#0d1117] sticky top-0 z-10">
         {tabs.map((tab) => (
