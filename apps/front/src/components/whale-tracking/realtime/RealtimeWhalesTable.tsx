@@ -222,8 +222,12 @@ export const RealtimeWhalesTable = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363d]">
-              {transactions.map((tx, idx) => (
-                <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300" onClick={() => handleShowStats(tx.address)}>
+              {transactions.map((tx) => (
+                <tr
+                  key={`${tx.address}-${tx.timestamp}`}
+                  className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
+                  onClick={() => handleShowStats(tx.address)}
+                >
                   <td className="px-6 py-5">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
