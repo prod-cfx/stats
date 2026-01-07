@@ -3,7 +3,7 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
-import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
+import { AreaSeries, CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
@@ -29,7 +29,10 @@ const IndicatorPanelHeader = ({
       {title}
     </span>
     {value && (
-      <span className={`text-[10px] font-roboto font-normal leading-4 tracking-tight ${valueColor || 'text-[#c9d1d9]'}`}>
+      <span
+        className="text-[10px] font-roboto font-normal leading-4 tracking-tight"
+        style={{ color: valueColor || '#c9d1d9' }}
+      >
         {value}
       </span>
     )}
@@ -55,7 +58,7 @@ interface IndicatorChartProps {
   color: string
   height?: number
   data: any[]
-  type: 'line' | 'bar' | 'liquidation'
+  type: 'line' | 'area' | 'bar' | 'liquidation'
   mainChart: IChartApi | null
   registerChart: (id: string, chart: IChartApi) => void
   unregisterChart?: (id: string) => void
@@ -81,11 +84,16 @@ const IndicatorChartPanel = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<any> | null>(null)
+  const altSeriesRef = useRef<ISeriesApi<any> | null>(null)
+  const dataByTimeRef = useRef<Map<string, any>>(new Map())
   const [currentValue, setCurrentValue] = useState<string>('')
+  const [currentValueColor, setCurrentValueColor] = useState<string>('')
   
   // Init chart
   useEffect(() => {
     if (!containerRef.current) return
+
+    const hasPerPointColor = type === 'line' && data.some((d) => d && typeof d.color === 'string')
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -120,12 +128,43 @@ const IndicatorChartPanel = ({
 
     let series: ISeriesApi<any>
     if (type === 'line') {
-      series = chart.addSeries(LineSeries, {
-        color,
+      // For segmented red/green lines (e.g. LS ratio), render two line series with whitespace gaps.
+      if (hasPerPointColor) {
+        const bull = chart.addSeries(LineSeries, {
+          color: '#22c55e',
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        const bear = chart.addSeries(LineSeries, {
+          color: '#ef4444',
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        series = bull
+        altSeriesRef.current = bear
+      } else {
+        series = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+      }
+    } else if (type === 'area') {
+      // Filled area to bottom (Coinglass-like OI panel)
+      series = chart.addSeries(AreaSeries, {
+        lineColor: color,
         lineWidth: 2,
-        crosshairMarkerVisible: false,
+        topColor: `${color}55`, // ~33% opacity
+        bottomColor: `${color}00`, // fade to transparent at bottom
         priceLineVisible: false,
         lastValueVisible: false,
+        crosshairMarkerVisible: false,
       })
     } else {
       series = chart.addSeries(HistogramSeries, {
@@ -136,7 +175,33 @@ const IndicatorChartPanel = ({
       })
     }
     
-    series.setData(data)
+    // Store data for legend lookup (crosshair move)
+    dataByTimeRef.current = new Map(data.map((d) => [String(d?.time), d]))
+
+    // Set series data (support segmented line via whitespace gaps)
+    if (type === 'line' && hasPerPointColor && altSeriesRef.current) {
+      // Build segmented lines by inserting a single whitespace point ONLY on trend switch.
+      // This avoids the "flat horizontal line" artifact caused by dense whitespace points.
+      const bullData: any[] = []
+      const bearData: any[] = []
+      let prevBull: boolean | null = null
+      for (const d of data) {
+        if (!d || typeof d.value !== 'number') continue
+        const isBull = d.value >= 1
+        if (isBull) {
+          bullData.push({ time: d.time, value: d.value })
+          if (prevBull === false) bearData.push({ time: d.time }) // break bear
+        } else {
+          bearData.push({ time: d.time, value: d.value })
+          if (prevBull === true) bullData.push({ time: d.time }) // break bull
+        }
+        prevBull = isBull
+      }
+      series.setData(bullData as any)
+      altSeriesRef.current.setData(bearData as any)
+    } else {
+      series.setData(data)
+    }
     chartRef.current = chart
     seriesRef.current = series
     registerChart(id, chart)
@@ -146,23 +211,27 @@ const IndicatorChartPanel = ({
       const last = data[data.length - 1]
       const val = type === 'liquidation' ? (last.long || last.value) : last.value
       setCurrentValue(formatter ? formatter(val) : String(val))
+      // Prefer explicit data color (for segmented coloring), fallback to series color
+      setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
     }
 
     // Subscribe to crosshair to update legend value
     chart.subscribeCrosshairMove((param) => {
       if (param.time) {
-        const item = param.seriesData.get(series) as any
-        if (item) {
-          const val = type === 'liquidation' ? (item.long || item.value) : item.value
-           setCurrentValue(formatter ? formatter(val) : String(val))
+        const d = dataByTimeRef.current.get(String(param.time))
+        if (d) {
+          const val = type === 'liquidation' ? (d.long || d.value) : d.value
+          setCurrentValue(formatter ? formatter(val) : String(val))
+          setCurrentValueColor(typeof d?.color === 'string' ? d.color : color)
         }
       } else {
-         // Reset to last value
-         if (data.length > 0) {
-            const last = data[data.length - 1]
-            const val = type === 'liquidation' ? (last.long || last.value) : last.value
-            setCurrentValue(formatter ? formatter(val) : String(val))
-         }
+        // Reset to last value
+        if (data.length > 0) {
+          const last = data[data.length - 1]
+          const val = type === 'liquidation' ? (last.long || last.value) : last.value
+          setCurrentValue(formatter ? formatter(val) : String(val))
+          setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
+        }
       }
     })
 
@@ -195,6 +264,7 @@ const IndicatorChartPanel = ({
       } catch {
         // ignore
       }
+      altSeriesRef.current = null
       chart.remove()
     }
   }, []) // Init once
@@ -202,11 +272,36 @@ const IndicatorChartPanel = ({
   // Update data when props change
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
-      seriesRef.current.setData(data)
+      // refresh lookup
+      dataByTimeRef.current = new Map(data.map((d) => [String(d?.time), d]))
+
+      const hasPerPointColor = type === 'line' && data.some((d) => d && typeof d.color === 'string') && altSeriesRef.current
+      if (hasPerPointColor) {
+        const bullData: any[] = []
+        const bearData: any[] = []
+        let prevBull: boolean | null = null
+        for (const d of data) {
+          if (!d || typeof d.value !== 'number') continue
+          const isBull = d.value >= 1
+          if (isBull) {
+            bullData.push({ time: d.time, value: d.value })
+            if (prevBull === false) bearData.push({ time: d.time })
+          } else {
+            bearData.push({ time: d.time, value: d.value })
+            if (prevBull === true) bullData.push({ time: d.time })
+          }
+          prevBull = isBull
+        }
+        seriesRef.current.setData(bullData as any)
+        altSeriesRef.current!.setData(bearData as any)
+      } else {
+        seriesRef.current.setData(data)
+      }
        // Update header value
        const last = data[data.length - 1]
        const val = type === 'liquidation' ? (last.long || last.value) : last.value
        setCurrentValue(formatter ? formatter(val) : String(val))
+       setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
        
        if (chartRef.current) {
            chartRef.current.timeScale().fitContent()
@@ -219,7 +314,7 @@ const IndicatorChartPanel = ({
        {/* Separator_Top strictly matching Figma structure */}
        <div className="h-[1px] w-full bg-[#30363d]" />
        <div className="relative w-full bg-[#161b22]" style={{ height }}>
-          <IndicatorPanelHeader title={title} value={currentValue} valueColor={`text-[${color}]`} onClose={onClose} />
+          <IndicatorPanelHeader title={title} value={currentValue} valueColor={currentValueColor} onClose={onClose} />
           <div ref={containerRef} className="w-full h-full" />
        </div>
     </div>
@@ -278,6 +373,15 @@ function formatUsdCompactFromMillions(valueM: number): string {
   // - Large values: show as B with 2 decimals
   if (v >= 1000) return `$${(v / 1000).toFixed(2)}B`
   return `$${Math.round(v)}M`
+}
+
+function formatCompactNumber(n: number): string {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 0
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(2)}B`
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(2)}K`
+  return `${Math.round(v)}`
 }
 
 interface ActiveIndicator {
@@ -869,14 +973,26 @@ export const TradingViewLightweightChart = ({
         return s / 233280;
     };
 
-    let curLs = 1.5
+    // Long/Short ratio centered around 1.0 (>=1 bullish, <1 bearish)
+    // Make it look like the reference: jagged/high-frequency with frequent 1.0 crossovers.
+    let ls = 1 + (rng() - 0.5) * 0.1
     let curOi = 650000
     
     for (let i = 0; i < times.length; i++) {
        const t = times[i]
-       // Long/Short: Walk
-       curLs += (rng() - 0.5) * 0.1
-       lsData.push({ time: t, value: Number(curLs.toFixed(4)) })
+       // Long/Short: mean reversion around 1.0 + strong noise + occasional spikes
+       const shock = (rng() - 0.5) * 0.28
+       const meanRevert = (1 - ls) * 0.18
+       const hf = (i % 2 === 0 ? 1 : -1) * (0.06 + rng() * 0.04) // high-frequency zigzag
+       const spike = rng() < 0.06 ? (rng() - 0.5) * 0.5 : 0
+       ls = ls + meanRevert + shock + hf + spike
+       const lsVal = Number(Math.max(0.4, Math.min(1.6, ls)).toFixed(4))
+       lsData.push({
+         time: t,
+         value: lsVal,
+         // lightweight-charts supports per-point color on LineSeries (segment uses point color)
+         color: lsVal >= 1 ? '#22c55e' : '#ef4444',
+       })
 
        // OI: Walk
        curOi += (rng() - 0.5) * 5000
@@ -1165,17 +1281,17 @@ export const TradingViewLightweightChart = ({
       {isPanelOn('aggregated-open-interest') && (
         <IndicatorChartPanel 
            id="oi"
-           title="聚合持仓（K线）"
+           title="聚合持仓"
            color="#22d3ee"
            height={70}
-           type="line"
+           type="area"
            data={indicatorData.oi}
            mainChart={chartRef.current}
            registerChart={registerChart}
            unregisterChart={unregisterChart}
            onClose={() => onRemoveIndicator?.('aggregated-open-interest')}
            showTvLogo={false}
-           formatter={(v) => formatUsdCompactFromMillions(v / 1000000)} // Mock values are raw count
+           formatter={(v) => formatCompactNumber(v)} // OI is position size (not price)
         />
       )}
       {isPanelOn('aggregated-volume') && (
