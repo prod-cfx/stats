@@ -22,12 +22,15 @@ export class PolymarketController {
   @ApiOperation({ summary: '获取 Polymarket 预测市场列表' })
   @ApiOkResponse({ type: PredictionMarketCardDto, isArray: true })
   listMarkets(@Query() query: GetPolymarketMarketsRequestDto): Promise<PredictionMarketCardDto[]> {
-    const { category, onlyActive, offset, limit } = query
+    const page = query.page ?? 1
+    const limit = query.limit ?? 50
+    const offset = (page - 1) * limit
+
     return this.polymarketService.listPredictionMarkets({
-      category,
-      onlyActive: onlyActive ?? true,
-      offset: offset ?? 0,
-      limit: limit ?? 50,
+      category: query.category,
+      onlyActive: query.onlyActive ?? true,
+      offset,
+      limit,
     })
   }
 }

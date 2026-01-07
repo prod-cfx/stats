@@ -109,7 +109,7 @@ export const PredictionMarketGrid = () => {
               {selectedPrediction?.icon}
             </div>
             <div>
-              <h3 className="text-xl font-bold text白 leading-tight">{selectedPrediction?.title}</h3>
+              <h3 className="text-xl font-bold text-white leading-tight">{selectedPrediction?.title}</h3>
               <div className="flex gap-3 mt-2">
                 <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume}</span>
                 <span className="text-xs text-[#f87171] font-bold">
