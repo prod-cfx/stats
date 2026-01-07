@@ -22,7 +22,10 @@ import {
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // DTO 必须用值导入以保留运行时元数据
 // eslint-disable-next-line ts/consistent-type-imports
-import { CryptoStockQuoteResponseDto } from './dto/crypto-stock-quote.dto'
+import {
+  CryptoStockQuoteResponseDto,
+  GetLatestCryptoStockQuotesQueryDto,
+} from './dto/crypto-stock-quote.dto'
 // Nest 注入需要运行时引用 Service
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesService } from './crypto-stock-quotes.service'
@@ -74,17 +77,8 @@ export class CryptoStockQuotesController {
       },
     }),
   })
-  async getLatest(
-    @Query('symbols') symbols?: string,
-    @Query('source') source?: string,
-  ) {
-    const symbolList =
-      symbols
-        ?.split(',')
-        .map(s => s.trim())
-        .filter(Boolean) ?? null
-
-    const data = await this.service.getLatestQuotes(symbolList, source)
+  async getLatest(@Query() query: GetLatestCryptoStockQuotesQueryDto) {
+    const data = await this.service.getLatestQuotes(query.symbols ?? null, query.source)
     return new BaseResponseDto(data)
   }
 }

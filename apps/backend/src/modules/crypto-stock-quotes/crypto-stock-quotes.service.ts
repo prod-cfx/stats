@@ -21,34 +21,12 @@ export class CryptoStockQuotesService {
     source?: string,
   ): Promise<CryptoStockQuoteResponseDto[]> {
     if (symbols && symbols.length > 0) {
-      const results: CryptoStockQuoteResponseDto[] = []
-
-      for (const symbol of symbols) {
-        const entity = await this.repo.findLatestQuote(symbol, source)
-        if (entity) {
-          results.push(this.toResponseDto(entity))
-        }
-      }
-
-      return results
+      const entities = await this.repo.findLatestQuotesForSymbols(symbols, source)
+      return entities.map(entity => this.toResponseDto(entity))
     }
 
-    // 未指定 symbols 时，简化为：查询最近 N 条记录，并按 symbol 聚合出每个 symbol 的最新一条
-    const recent = await this.repo.findQuotes({
-      source,
-      // 兜底限制，防止一次性扫太多数据；如需更精细控制可后续扩展查询条件
-      limit: 200,
-    })
-
-    const latestBySymbol = new Map<string, CryptoStockQuote>()
-    for (const quote of recent) {
-      const existing = latestBySymbol.get(quote.symbol)
-      if (!existing || quote.quoteTimestamp > existing.quoteTimestamp) {
-        latestBySymbol.set(quote.symbol, quote)
-      }
-    }
-
-    return Array.from(latestBySymbol.values()).map(q => this.toResponseDto(q))
+    const entities = await this.repo.findLatestQuotesForAllSymbols(source)
+    return entities.map(entity => this.toResponseDto(entity))
   }
 
   /**

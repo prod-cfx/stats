@@ -1,6 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
-import { IsDate, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { Transform, Type } from 'class-transformer'
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDate,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator'
 
 /**
  * 加密股票报价响应 DTO
@@ -156,5 +166,44 @@ export class QueryCryptoStockQuotesDto {
   @Min(1, { message: '返回数量必须大于或等于 1' })
   @Max(500, { message: '返回数量不能超过 500' })
   limit?: number
+}
+
+/**
+ * 查询最新加密股票报价请求 DTO（用于 /crypto-stock-quotes/latest）
+ */
+export class GetLatestCryptoStockQuotesQueryDto {
+  @ApiPropertyOptional({
+    description: '股票代码列表，支持 CSV 或重复 query 参数形式',
+    example: 'MSTR,COIN,MARA',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value
+        .map(v => String(v).trim())
+        .filter(v => v.length > 0)
+    }
+    if (typeof value === 'string') {
+      if (!value.trim()) return undefined
+      return value
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+    }
+    return undefined
+  })
+  @IsArray()
+  @ArrayMaxSize(100, { message: 'symbols 数量不能超过 100 个' })
+  @IsString({ each: true })
+  symbols?: string[]
+
+  @ApiPropertyOptional({
+    description: '数据源标识，例如：BBX',
+    example: 'BBX',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['BBX'], { message: 'source 仅支持: BBX' })
+  source?: string
 }
 
