@@ -96,6 +96,8 @@ export const TradingViewLightweightChart = ({
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartRef = useRef<any>(null);
   const chartAdapterRef = useRef<ChartAdapter | null>(null)
+  const candleSeriesRef = useRef<null | { createPriceLine: (options: Record<string, unknown>) => { applyOptions: (options: Record<string, unknown>) => void } }>(null)
+  const currentPriceLineRef = useRef<null | { applyOptions: (options: { price: number; axisLabelVisible?: boolean }) => void }>(null)
   const activeIndicatorsRef = useRef<ActiveIndicator[]>([])
   const displayPriceRef = useRef<number>(0)
   const [isMounted, setIsMounted] = useState(false);
@@ -198,7 +200,12 @@ export const TradingViewLightweightChart = ({
       borderVisible: false,
       wickUpColor: '#2ea043',
       wickDownColor: '#da3633',
+      // Avoid a second "last value" price line; we own the single current price line via createPriceLine().
+      priceLineVisible: false,
     });
+    candleSeriesRef.current = candlestickSeries as unknown as {
+      createPriceLine: (options: Record<string, unknown>) => { applyOptions: (options: Record<string, unknown>) => void }
+    }
 
     // 生成模拟数据
     const candleData = [];
@@ -593,6 +600,8 @@ export const TradingViewLightweightChart = ({
       chart.remove();
       chartRef.current = null;
       chartAdapterRef.current = null
+      candleSeriesRef.current = null
+      currentPriceLineRef.current = null
     };
   }, [isMounted, symbol, interval, chartSeriesKey]);
 
@@ -620,6 +629,28 @@ export const TradingViewLightweightChart = ({
 
   useEffect(() => {
     displayPriceRef.current = displayPrice
+  }, [displayPrice])
+
+  // Single source of truth for "current price line": use Lightweight createPriceLine (with right-axis label).
+  useEffect(() => {
+    const currentPrice = displayPrice
+    const series = candleSeriesRef.current
+    if (!series) return
+    if (typeof currentPrice !== 'number' || !Number.isFinite(currentPrice) || currentPrice <= 0) return
+
+    if (!currentPriceLineRef.current) {
+      currentPriceLineRef.current = series.createPriceLine({
+        price: currentPrice,
+        color: 'rgba(255,80,80,0.9)',
+        lineWidth: 1,
+        lineStyle: 2, // dashed
+        axisLabelVisible: true,
+        title: '',
+      })
+      return
+    }
+
+    currentPriceLineRef.current.applyOptions({ price: currentPrice, axisLabelVisible: true })
   }, [displayPrice])
 
   // Denser mock for overlay (more price buckets -> more bars), without affecting the full page.

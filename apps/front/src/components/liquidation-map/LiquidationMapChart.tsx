@@ -722,39 +722,9 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       })
     }
 
-    // ---- D) current price dashed line (horizontal) + label ----
-    const yCurrent = getPriceToY(currentPrice)
-    if (typeof yCurrent === 'number' && Number.isFinite(yCurrent)) {
-      // Dashed line
-      elements.push({
-        type: 'line',
-        silent: true,
-        shape: { x1: 0, y1: yCurrent, x2: W, y2: yCurrent },
-        style: {
-          stroke: 'rgba(255, 77, 77, 0.85)',
-          lineWidth: 1,
-          lineDash: [6, 6],
-        },
-      })
-      // Price label (red background, white text, similar to right price scale style)
-      elements.push({
-        type: 'text',
-        silent: true,
-        style: {
-          text: `${currentPrice.toFixed(currentPrice >= 100 ? 0 : 2)}`,
-          fill: '#ffffff',
-          fontSize: 11,
-          fontWeight: 700,
-          backgroundColor: '#ef4444',
-          borderRadius: 3,
-          padding: [3, 6],
-        },
-        x: W - 6,
-        y: yCurrent,
-        align: 'right',
-        verticalAlign: 'middle',
-      })
-    }
+    // ---- D) current price line ----
+    // NOTE: Current price line/label is owned by the host chart (Lightweight priceLine) to avoid duplicates
+    // and to ensure the right price scale label is always shown.
 
     // If nothing is in view (e.g. all coordinates out of range), still show the ready hint.
     if (elements.length === 0) {
