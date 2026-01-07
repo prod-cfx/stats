@@ -327,7 +327,7 @@ export async function fetchCryptoStockQuotesLatest(params?: {
       },
     )
 
-    return response
+    return unwrapResponse<CryptoStockQuoteLatest[]>(response)
   }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
 }
 
