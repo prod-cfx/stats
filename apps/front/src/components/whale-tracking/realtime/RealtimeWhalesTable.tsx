@@ -15,6 +15,7 @@ interface WhaleTransaction {
   tagColor: string;
   tagBg: string;
   asset: string;
+  positionAction: number;
   side: 'Long' | 'Short';
   marginType: 'Cross' | 'Isolated';
   positionValueUSD: string;
@@ -104,6 +105,7 @@ export const RealtimeWhalesTable = () => {
           tagColor: tagStyle.tagColor,
           tagBg: tagStyle.tagBg,
           asset: alert.symbol,
+          positionAction: alert.position_action,
           side,
           // Hyperliquid / Coinglass 不暴露保证金类型，这里统一展示为 Cross
           marginType: 'Cross',
@@ -224,7 +226,7 @@ export const RealtimeWhalesTable = () => {
             <tbody className="divide-y divide-[#30363d]">
               {transactions.map((tx) => (
                 <tr
-                  key={`${tx.address}-${tx.timestamp}`}
+                  key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
                   className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
                   onClick={() => handleShowStats(tx.address)}
                 >
