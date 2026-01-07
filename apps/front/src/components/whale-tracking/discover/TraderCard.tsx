@@ -8,8 +8,8 @@ import { useTranslation } from 'react-i18next';
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
   address: string;
-  handle?: string;
-  tag?: string;
+  handle?: string | null;
+  tag?: string | null;
   totalValueUsd: number;
   pnlUsd: number;
   pnlLabelKey?: 'realizedPnl' | 'realizedPnl1m';

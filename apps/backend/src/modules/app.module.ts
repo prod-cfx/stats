@@ -28,6 +28,7 @@ import { OpenInterestModule } from './open-interest/open-interest.module'
 import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
 import { SettingsModule } from './settings/settings.module'
 import { UserModule } from './user/user.module'
+import { WhaleTrackingModule } from './whale-tracking/whale-tracking.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
 const currentEnv = defaultEnvAccessor.appEnv()
@@ -89,6 +90,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     OrderbookConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
+    WhaleTrackingModule,
   ],
   providers: [
     {
