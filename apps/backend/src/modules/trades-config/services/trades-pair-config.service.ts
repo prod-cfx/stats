@@ -223,14 +223,19 @@ export class TradesPairConfigService {
       return null
     }
 
-    const metaInstId = pickMetadataString(['okxInstId', 'instId', 'symbol'])
-    if (metaInstId) return metaInstId
+    const base = input.baseAsset.trim().toUpperCase()
+    const quote = input.quoteAsset.trim().toUpperCase()
 
-    const symbol = input.symbol.toUpperCase()
-    if (symbol.includes('-')) return symbol
-
-    const base = input.baseAsset.toUpperCase()
-    const quote = input.quoteAsset.toUpperCase()
+    const metaInstId = pickMetadataString(['okxInstId', 'instId'])
+    if (metaInstId) {
+      if (input.instrumentType === 'SPOT') {
+        return metaInstId.endsWith('-SWAP') ? null : metaInstId
+      }
+      if (input.instrumentType === 'PERPETUAL') {
+        return metaInstId.endsWith('-SWAP') ? metaInstId : `${base}-${quote}-SWAP`
+      }
+      return metaInstId
+    }
 
     if (input.instrumentType === 'SPOT') {
       return `${base}-${quote}`
@@ -248,3 +253,9 @@ export class TradesPairConfigService {
     return null
   }
 }
+
+
+
+
+
+
