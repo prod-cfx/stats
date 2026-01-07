@@ -22,7 +22,7 @@ export class CryptoStockQuoteResponseDto {
   @ApiProperty({ description: '股票代码', example: 'MSTR' })
   symbol!: string
 
-  @ApiPropertyOptional({ description: '股票名称', example: 'MicroStrategy Inc.' })
+  @ApiPropertyOptional({ description: '股票名称', example: 'MicroStrategy Inc.', nullable: true })
   name?: string | null
 
   @ApiPropertyOptional({ description: '交易所代码', example: 'NASDAQ', nullable: true })

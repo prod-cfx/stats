@@ -309,7 +309,10 @@ export async function fetchRegisteredJobKeys(): Promise<string[]> {
       headers: requireAuthHeaders(),
     })
     if (!response.ok) {
-      throw new Error('获取已注册 key 列表失败')
+      throw Object.assign(new Error('获取已注册 key 列表失败'), {
+        status: response.status,
+        response,
+      })
     }
     const data = await response.json()
     return data?.keys ?? data?.data?.keys ?? []

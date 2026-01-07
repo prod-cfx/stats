@@ -453,7 +453,7 @@ const CryptoStockQuoteResponseDto = z
   .object({
     id: z.number(),
     symbol: z.string(),
-    name: z.string().optional(),
+    name: z.string().nullish(),
     exchange: z.string().nullish(),
     price: z.string(),
     openPrice: z.string().nullish(),
