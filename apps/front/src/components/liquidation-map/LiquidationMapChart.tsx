@@ -637,13 +637,37 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       if (typeof y !== 'number' || !Number.isFinite(y)) continue
       if (y < -20 || y > H + 20) continue
 
+      // Red cumulative-long curve (ONLY below currentPrice):
+      // - Anchor at currentPrice: x = priceAxisX, y = priceToCoordinate(currentPrice)
+      // - Accumulates only for price buckets < currentPrice
+      // - Maps magnitude to distance from the price axis (expand left)
       if (r.price <= currentPrice) {
-        const xL = pad + (r.cumLong / maxCum) * span
-        longPts.push([clamp(xL, pad, W - pad), y])
+        // handled below (after loop) to enforce "first point = currentPrice"
       }
       if (r.price >= currentPrice) {
         const xS = W - pad - (r.cumShort / maxCum) * span
         shortPts.push([clamp(xS, pad, W - pad), y])
+      }
+    }
+
+    // ---- Red curve: enforce anchor + correct x mapping (do not change styles) ----
+    // priceAxisX is the overlay's price axis position (right edge inside padding).
+    const priceAxisX = W - pad
+    const curveMaxWidth = span
+    const maxCumLongOnly = Math.max(maxCumLong, 1)
+    const yAtCurrent = getPriceToY(currentPrice)
+    if (typeof yAtCurrent === 'number' && Number.isFinite(yAtCurrent)) {
+      // 1) First point must be exactly at currentPrice.
+      longPts.push([priceAxisX, yAtCurrent])
+      // 2) Then walk buckets downward only (price < currentPrice), in price order.
+      for (let i = densified.length - 1; i >= 0; i--) {
+        const r = densified[i]
+        if (r.price >= currentPrice) continue
+        const y = getPriceToY(r.price)
+        if (typeof y !== 'number' || !Number.isFinite(y)) continue
+        if (y < -20 || y > H + 20) continue
+        const xL = priceAxisX - (r.cumLong / maxCumLongOnly) * curveMaxWidth
+        longPts.push([clamp(xL, pad, priceAxisX), y])
       }
     }
 
@@ -653,7 +677,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
     if (longPts.length >= 2) {
       const y0p = longPts[0][1]
       const yNp = longPts[longPts.length - 1][1]
-      const fillPts: Point2D[] = [[pad, y0p], ...longPts, [pad, yNp]]
+      const fillPts: Point2D[] = [[priceAxisX, y0p], ...longPts, [priceAxisX, yNp]]
 
       elements.push({
         type: 'polygon',
