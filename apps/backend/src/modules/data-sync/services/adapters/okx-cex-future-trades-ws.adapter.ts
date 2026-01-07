@@ -20,7 +20,9 @@ export class OkxCexFutureTradesWsAdapter extends OkxTradesWsAdapterBase {
   }
 
   protected getWsBaseUrl(): string {
-    return this.configService.get<string>('TRADES_OKX_WS_BASE_URL') ?? 'wss://ws.okx.com:8443/ws/v5/public'
+    const raw = this.configService.get<string>('TRADES_OKX_WS_BASE_URL')
+    const value = typeof raw === 'string' ? raw.trim() : ''
+    return value.length ? value : 'wss://ws.okx.com:8443/ws/v5/public'
   }
 
   protected getWsChannel(): string {
@@ -33,5 +35,10 @@ export class OkxCexFutureTradesWsAdapter extends OkxTradesWsAdapterBase {
     return Number.isFinite(parsed) ? parsed : 100
   }
 }
+
+
+
+
+
 
 

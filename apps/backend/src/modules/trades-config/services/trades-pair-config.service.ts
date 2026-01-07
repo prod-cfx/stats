@@ -152,6 +152,8 @@ export class TradesPairConfigService {
       metadata: dto.metadata !== undefined ? dto.metadata : existing.metadata,
     }
 
+    this.assertOkxPairFieldsConsistent(merged)
+
     const canonicalInstId = this.resolveOkxInstId(merged)
 
     if (!canonicalInstId) {
@@ -284,6 +286,36 @@ export class TradesPairConfigService {
       })
     }
 
+    const metadata =
+      input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+        ? (input.metadata as Record<string, unknown>)
+        : null
+
+    const metaInstId =
+      metadata && typeof metadata.okxInstId === 'string' && metadata.okxInstId.trim().length
+        ? metadata.okxInstId.trim().toUpperCase()
+        : metadata && typeof metadata.instId === 'string' && metadata.instId.trim().length
+          ? metadata.instId.trim().toUpperCase()
+          : null
+
+    if (metaInstId && metaInstId.includes('-')) {
+      const parts = metaInstId.split('-').filter(Boolean)
+      if (parts.length < 2) {
+        throwBadRequest(`metadata.instId/okxInstId 格式错误：${metaInstId}`)
+      }
+      if (parts[0] !== base || parts[1] !== quote) {
+        throwBadRequest(
+          `metadata.instId/okxInstId 与 baseAsset/quoteAsset 不一致：instId=${metaInstId} baseAsset=${base} quoteAsset=${quote}`,
+        )
+      }
+      if (input.instrumentType === 'SPOT' && metaInstId.endsWith('-SWAP')) {
+        throwBadRequest(`SPOT 不允许 metadata.instId/okxInstId 以 -SWAP 结尾：${metaInstId}`)
+      }
+      if (input.instrumentType === 'PERPETUAL' && !metaInstId.endsWith('-SWAP')) {
+        throwBadRequest(`PERPETUAL 要求 metadata.instId/okxInstId 以 -SWAP 结尾：${metaInstId}`)
+      }
+    }
+
     // 对 OKX 风格的 symbol（包含 '-'）可以可靠解析 base/quote
     if (symbol.includes('-')) {
       const parts = symbol.split('-').filter(Boolean)
@@ -324,11 +356,6 @@ export class TradesPairConfigService {
 
     // FUTURE 合约以 metadata.okxContract 为准，补充一次 base/quote 校验，避免合约字段错配
     if (input.instrumentType === 'FUTURE') {
-      const metadata =
-        input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
-          ? (input.metadata as Record<string, unknown>)
-          : null
-
       const okxContract =
         metadata && typeof metadata.okxContract === 'string' && metadata.okxContract.trim().length
           ? metadata.okxContract.trim().toUpperCase()
