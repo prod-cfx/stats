@@ -545,6 +545,25 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough();
+const PredictionMarketOutcomeDto = z
+  .object({ label: z.string(), probability: z.string() })
+  .passthrough();
+const PredictionMarketRulesDto = z
+  .object({ paragraphs: z.array(z.string()), createdAt: z.string().optional() })
+  .passthrough();
+const PredictionMarketCardDto = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    options: z.array(PredictionMarketOutcomeDto).optional(),
+    probability: z.string().optional(),
+    status: z.string().optional(),
+    volume24h: z.string().optional(),
+    volumeTotal: z.string().optional(),
+    openInterest: z.string().optional(),
+    rules: PredictionMarketRulesDto.optional(),
+  })
+  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -594,6 +613,9 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
+  PredictionMarketOutcomeDto,
+  PredictionMarketRulesDto,
+  PredictionMarketCardDto,
 };
 
 const endpoints = makeApi([
@@ -2193,6 +2215,35 @@ const endpoints = makeApi([
         schema: z.void(),
       },
     ],
+  },
+  {
+    method: "get",
+    path: "/polymarket/markets",
+    alias: "PolymarketController_listMarkets",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().gte(1),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(100),
+      },
+      {
+        name: "category",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "onlyActive",
+        type: "Query",
+        schema: z.boolean().optional().default(true),
+      },
+    ],
+    response: z.array(PredictionMarketCardDto),
   },
   {
     method: "get",

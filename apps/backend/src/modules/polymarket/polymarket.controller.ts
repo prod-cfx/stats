@@ -18,7 +18,7 @@ export class PolymarketController {
 
   @Get('markets')
   @RequireAuth()
-  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ReadAny(AppResource.PREDICTION_MARKET)
   @ApiOperation({ summary: '获取 Polymarket 预测市场列表' })
   @ApiOkResponse({ type: PredictionMarketCardDto, isArray: true })
   listMarkets(@Query() query: GetPolymarketMarketsRequestDto): Promise<PredictionMarketCardDto[]> {
@@ -34,4 +34,9 @@ export class PolymarketController {
     })
   }
 }
+
+
+
+
+
 
