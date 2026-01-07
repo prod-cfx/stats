@@ -52,7 +52,7 @@ export class TradesPairConfigRepository {
     })
   }
 
-  async create(dto: CreateTradesPairConfigDto): Promise<TradesPairConfig> {
+  async create(dto: CreateTradesPairConfigDto, canonicalInstId: string | null): Promise<TradesPairConfig> {
     const client = this.getClient()
 
     const normalize = (value: string) => value.trim().toUpperCase()
@@ -65,6 +65,7 @@ export class TradesPairConfigRepository {
         baseAsset: normalize(dto.baseAsset),
         quoteAsset: normalize(dto.quoteAsset),
         instrumentType: normalize(dto.instrumentType),
+        canonicalInstId,
         enabled: dto.enabled ?? true,
         priority: dto.priority ?? 100,
         metadata: dto.metadata ?? null,
@@ -73,7 +74,11 @@ export class TradesPairConfigRepository {
     })
   }
 
-  async update(id: string, dto: UpdateTradesPairConfigDto): Promise<TradesPairConfig> {
+  async update(
+    id: string,
+    dto: UpdateTradesPairConfigDto,
+    options?: { canonicalInstId?: string | null },
+  ): Promise<TradesPairConfig> {
     const client = this.getClient()
     const data: any = {}
 
@@ -81,6 +86,7 @@ export class TradesPairConfigRepository {
     if (dto.priority !== undefined) data.priority = dto.priority
     if (dto.metadata !== undefined) data.metadata = dto.metadata
     if (dto.description !== undefined) data.description = dto.description
+    if (options && 'canonicalInstId' in options) data.canonicalInstId = options.canonicalInstId
 
     return client.tradesPairConfig.update({
       where: { id },
@@ -103,5 +109,10 @@ export class TradesPairConfigRepository {
     })
   }
 }
+
+
+
+
+
 
 

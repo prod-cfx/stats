@@ -104,7 +104,7 @@ export class TradesPairConfigService {
     }
 
     try {
-      return await this.repository.create(dto)
+      return await this.repository.create(dto, canonicalInstId)
     }
     catch (error: any) {
       // 捕获 Prisma 唯一约束冲突（并发情况下可能通过前置检查）
@@ -183,7 +183,7 @@ export class TradesPairConfigService {
       }
     }
 
-    return this.repository.update(id, dto)
+    return this.repository.update(id, dto, { canonicalInstId })
   }
 
   async delete(id: string): Promise<void> {
@@ -248,4 +248,3 @@ export class TradesPairConfigService {
     return null
   }
 }
-

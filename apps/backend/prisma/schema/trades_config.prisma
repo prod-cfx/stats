@@ -48,5 +48,3 @@ model TradesPairConfig {
   @@index([priority])
   @@map("trades_pair_configs")
 }
-
-
