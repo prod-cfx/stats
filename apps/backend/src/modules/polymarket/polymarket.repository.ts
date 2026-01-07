@@ -1,4 +1,8 @@
-import type { PolymarketMarket as PolymarketMarketModel, Prisma } from '@prisma/client'
+import type {
+  PolymarketMarket as PolymarketMarketModel,
+  PolymarketOutcome as PolymarketOutcomeModel,
+  Prisma,
+} from '@prisma/client'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -64,6 +68,10 @@ export interface OutcomeTokenRecord {
   marketExternalId: string
   outcomeDbId: number
   outcomeTokenId: string
+}
+
+export interface PolymarketMarketWithOutcomes extends PolymarketMarketModel {
+  outcomes: PolymarketOutcomeModel[]
 }
 
 @Injectable()
@@ -278,6 +286,34 @@ export class PolymarketRepository {
       data: {
         isActive: updates.isActive ?? undefined,
         lastUpdatedAt: updates.lastUpdatedAt ?? undefined,
+      },
+    })
+  }
+
+  async listMarketsWithOutcomes(params: {
+    category?: string | null
+    onlyActive?: boolean
+    offset?: number
+    limit?: number
+  }): Promise<PolymarketMarketWithOutcomes[]> {
+    const client = this.getClient()
+    const limit = Math.max(1, Math.min(params.limit ?? 50, 200))
+    const offset = Math.max(0, params.offset ?? 0)
+
+    const normalizedCategory = params.category?.trim().toLowerCase()
+
+    return client.polymarketMarket.findMany({
+      where: {
+        ...(params.onlyActive !== false ? { isActive: true } : {}),
+        ...(normalizedCategory ? { category: normalizedCategory } : {}),
+      },
+      include: {
+        outcomes: true,
+      },
+      skip: offset,
+      take: limit,
+      orderBy: {
+        lastUpdatedAt: 'desc',
       },
     })
   }

@@ -22,6 +22,7 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 
 export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAccountDto>
 export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
+export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
 
 interface BaseResponse<T> {
   data?: T
@@ -622,3 +623,31 @@ export async function cancelLlmSubscription(subscriptionId: string) {
   invalidateCache('llm-subscription-list:')
   invalidateCache('llm-strategy-instance:')
 }
+
+// ===== 预测市场（Polymarket）相关 API =====
+
+export interface FetchPredictionMarketsParams {
+  category?: string
+  onlyActive?: boolean
+  offset?: number
+  limit?: number
+}
+
+export async function fetchPredictionMarkets(
+  params: FetchPredictionMarketsParams = {},
+): Promise<PredictionMarketCardResponse[]> {
+  return apiCall(async () => {
+    const response = await client.PolymarketController_listMarkets({
+      headers: requireAuthHeaders(),
+      queries: {
+        ...(params.category && { category: params.category }),
+        ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
+        ...(params.offset !== undefined && { offset: params.offset }),
+        ...(params.limit !== undefined && { limit: params.limit }),
+      },
+    })
+
+    return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
+  }, 'FETCH_PREDICTION_MARKETS')
+}
+
