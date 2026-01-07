@@ -157,6 +157,67 @@ async function apiCall<T>(
   }
 }
 
+// ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
+
+export interface WhaleHoldingApiItem {
+  userAddress: string
+  symbol: string
+  side: 'LONG' | 'SHORT'
+  positionSize: number
+  positionValueUsd: number
+  entryPrice: number
+  liquidationPrice: number
+  createTime: string
+}
+
+export interface FetchWhaleHoldingsQuery {
+  symbol?: string
+  minPositionValueUsd?: number
+  timeRangeHours?: number
+  limit?: number
+}
+
+export async function fetchWhaleHoldings(
+  query: FetchWhaleHoldingsQuery = {},
+): Promise<WhaleHoldingApiItem[]> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+
+    if (query.symbol) params.set('symbol', query.symbol)
+    if (typeof query.minPositionValueUsd === 'number') {
+      params.set('minPositionValueUsd', String(query.minPositionValueUsd))
+    }
+    if (typeof query.timeRangeHours === 'number') {
+      params.set('timeRangeHours', String(query.timeRangeHours))
+    }
+    if (typeof query.limit === 'number') {
+      params.set('limit', String(query.limit))
+    }
+
+    const url = `${API_BASE_URL}/whale-holdings${params.toString() ? `?${params.toString()}` : ''}`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+      },
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => response.statusText)
+      throw new ApiError(
+        `Failed to fetch whale holdings: ${response.status} ${text}`,
+        'FETCH_WHALE_HOLDINGS_FAILED',
+        response.status,
+      )
+    }
+
+    const raw = (await response.json()) as WhaleHoldingApiItem[] | BaseResponse<WhaleHoldingApiItem[]>
+    return unwrapResponse(raw)
+  }, 'FETCH_WHALE_HOLDINGS')
+}
+
 export async function login(payload: LoginPayload) {
   return apiCall(async () => {
     const response = await client.AuthController_login(payload)
