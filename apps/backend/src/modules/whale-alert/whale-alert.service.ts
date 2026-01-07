@@ -1,10 +1,10 @@
-import type { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import type { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
+import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
-import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 
 @Injectable()
 export class WhaleAlertService {
@@ -35,15 +35,17 @@ export class WhaleAlertService {
       }
     }
 
-    const since =
+    const sinceRaw =
       query.since != null
         ? new Date(query.since)
         : new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    if (!Number.isNaN(since.getTime())) {
+    let sinceForQuery: Date | null = null
+    if (!Number.isNaN(sinceRaw.getTime())) {
+      sinceForQuery = sinceRaw
       // 这里无需保留已有的 createTime 条件，统一使用 gte 作为时间下界
       where.createTime = {
-        gte: since,
+        gte: sinceRaw,
       }
     }
 
@@ -53,7 +55,7 @@ export class WhaleAlertService {
       `Fetching realtime whale alerts with criteria: ${JSON.stringify({
         symbol: query.symbol,
         minValueUsd,
-        since: since.toISOString(),
+        since: sinceForQuery ? sinceForQuery.toISOString() : null,
         limit,
       })}`,
     )
