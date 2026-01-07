@@ -21,6 +21,9 @@ model TradesPairConfig {
   /// 交易品种类型（SPOT/PERPETUAL/FUTURE）
   instrumentType InstrumentType @map("instrument_type")
 
+  /// 标准化后的交易所 instId（例如：BTC-USDT, BTC-USDT-SWAP），用于唯一约束和去重
+  canonicalInstId String? @map("canonical_inst_id")
+
   /// 是否启用订阅
   enabled Boolean @default(true)
 
@@ -38,6 +41,7 @@ model TradesPairConfig {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([symbol, exchange, instrumentType], map: "trades_pair_configs_symbol_exchange_instrument_type_key")
+  @@unique([exchange, instrumentType, canonicalInstId], map: "trades_pair_configs_canonical_inst_id_key")
   @@index([exchange])
   @@index([instrumentType])
   @@index([enabled])
