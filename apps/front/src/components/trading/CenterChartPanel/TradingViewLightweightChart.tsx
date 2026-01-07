@@ -1,5 +1,6 @@
 'use client';
 
+import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
 import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
@@ -9,6 +10,221 @@ import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMap
 import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
 import { generateLiquidationMapMockData } from '@/lib/liquidation-map/mock-liquidation-map'
 import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market'
+
+// ---- Helper Components ----
+
+const IndicatorPanelHeader = ({
+  title,
+  value,
+  valueColor,
+  onClose,
+}: {
+  title: string
+  value?: string
+  valueColor?: string
+  onClose?: () => void
+}) => (
+  <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 right-1 z-10 pointer-events-none bg-[#161b22] rounded-sm">
+    <span className="text-[10px] text-[#8b949e] font-roboto font-normal leading-4 tracking-tight truncate">
+      {title}
+    </span>
+    {value && (
+      <span className={`text-[10px] font-roboto font-normal leading-4 tracking-tight ${valueColor || 'text-[#c9d1d9]'}`}>
+        {value}
+      </span>
+    )}
+    <div className="ml-auto flex items-center">
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]"
+          aria-label="close"
+          title="关闭"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  </div>
+)
+
+interface IndicatorChartProps {
+  id: string
+  title: string
+  color: string
+  height?: number
+  data: any[]
+  type: 'line' | 'bar' | 'liquidation'
+  mainChart: IChartApi | null
+  registerChart: (id: string, chart: IChartApi) => void
+  unregisterChart?: (id: string) => void
+  onClose?: () => void
+  showTvLogo?: boolean
+  formatter?: (val: number) => string
+}
+
+const IndicatorChartPanel = ({
+  id,
+  title,
+  color,
+  height = 70,
+  data,
+  type,
+  mainChart: _mainChart,
+  registerChart,
+  unregisterChart,
+  onClose,
+  showTvLogo = false,
+  formatter
+}: IndicatorChartProps) => {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ISeriesApi<any> | null>(null)
+  const [currentValue, setCurrentValue] = useState<string>('')
+  
+  // Init chart
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: '#161b22' },
+        textColor: '#8b949e',
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: '#30363d', style: 2 },
+      },
+      rightPriceScale: {
+        borderColor: '#30363d',
+        visible: true,
+        entireTextOnly: true,
+        scaleMargins: { top: 0.25, bottom: 0.1 },
+      },
+      timeScale: {
+        visible: false, // Hide time scale, sync with main
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { visible: true, labelVisible: false, color: '#30363d', style: 2 },
+        horzLine: { visible: false, labelVisible: true },
+      },
+      handleScale: { mouseWheel: false, pinch: false, axisPressedMouseMove: false }, // Disable own scaling
+      handleScroll: { mouseWheel: false, pressedMouseMove: false }, // Disable own scrolling
+    })
+
+    let series: ISeriesApi<any>
+    if (type === 'line') {
+      series = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 2,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+    } else {
+      series = chart.addSeries(HistogramSeries, {
+        color,
+        priceFormat: { type: 'volume' },
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+    }
+    
+    series.setData(data)
+    chartRef.current = chart
+    seriesRef.current = series
+    registerChart(id, chart)
+
+    // Set initial value (last point)
+    if (data.length > 0) {
+      const last = data[data.length - 1]
+      const val = type === 'liquidation' ? (last.long || last.value) : last.value
+      setCurrentValue(formatter ? formatter(val) : String(val))
+    }
+
+    // Subscribe to crosshair to update legend value
+    chart.subscribeCrosshairMove((param) => {
+      if (param.time) {
+        const item = param.seriesData.get(series) as any
+        if (item) {
+          const val = type === 'liquidation' ? (item.long || item.value) : item.value
+           setCurrentValue(formatter ? formatter(val) : String(val))
+        }
+      } else {
+         // Reset to last value
+         if (data.length > 0) {
+            const last = data[data.length - 1]
+            const val = type === 'liquidation' ? (last.long || last.value) : last.value
+            setCurrentValue(formatter ? formatter(val) : String(val))
+         }
+      }
+    })
+
+    const handleResize = () => {
+       if (containerRef.current && chart) {
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          if (w > 0 && h > 0) {
+             chart.applyOptions({ width: w, height: h })
+             // Force a repaint logic check
+             chart.timeScale().fitContent()
+          }
+       }
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+        window.requestAnimationFrame(handleResize)
+    })
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+    
+    window.requestAnimationFrame(handleResize)
+
+    return () => {
+      resizeObserver.disconnect()
+      try {
+        unregisterChart?.(id)
+      } catch {
+        // ignore
+      }
+      chart.remove()
+    }
+  }, []) // Init once
+
+  // Update data when props change
+  useEffect(() => {
+    if (seriesRef.current && data.length > 0) {
+      seriesRef.current.setData(data)
+       // Update header value
+       const last = data[data.length - 1]
+       const val = type === 'liquidation' ? (last.long || last.value) : last.value
+       setCurrentValue(formatter ? formatter(val) : String(val))
+       
+       if (chartRef.current) {
+           chartRef.current.timeScale().fitContent()
+       }
+    }
+  }, [data])
+
+  return (
+    <div className={`flex flex-col w-full flex-shrink-0 ${showTvLogo ? '' : 'cf-hide-tv-logo'}`}>
+       {/* Separator_Top strictly matching Figma structure */}
+       <div className="h-[1px] w-full bg-[#30363d]" />
+       <div className="relative w-full bg-[#161b22]" style={{ height }}>
+          <IndicatorPanelHeader title={title} value={currentValue} valueColor={`text-[${color}]`} onClose={onClose} />
+          <div ref={containerRef} className="w-full h-full" />
+       </div>
+    </div>
+  )
+}
 
 function parsePriceLabel(label: string): number | null {
   const n = Number.parseFloat(String(label).replace(/,/g, ''))
@@ -162,6 +378,32 @@ export const TradingViewLightweightChart = ({
     cumLong: number[]
     cumShort: number[]
   }>(null)
+
+  // New Refs and State for Sub-Charts Sync
+  const subChartsRef = useRef<Record<string, IChartApi>>({})
+  const [indicatorData, setIndicatorData] = useState<{
+      ls: any[],
+      oi: any[],
+      vol: any[],
+      liq: any[]
+  }>({ ls: [], oi: [], vol: [], liq: [] })
+
+  const registerChart = (id: string, chart: IChartApi) => {
+    subChartsRef.current[id] = chart
+    
+    // One-way sync: Main Chart -> Sub Chart
+    if (chartRef.current) {
+        // Initial sync
+        const range = chartRef.current.timeScale().getVisibleLogicalRange()
+        if (range) {
+           chart.timeScale().setVisibleLogicalRange(range)
+        }
+    }
+  }
+
+  const unregisterChart = (id: string) => {
+    delete subChartsRef.current[id]
+  }
 
   useEffect(() => {
     setIsMounted(true);
@@ -502,12 +744,38 @@ export const TradingViewLightweightChart = ({
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
 
+    // Sync main chart visible range -> all indicator sub-charts (subscribe once per chart instance)
+    const timeScale = chart.timeScale()
+    const syncVisibleRange = (range: any) => {
+      if (!range) return
+      Object.values(subChartsRef.current).forEach((sub) => {
+        try {
+          sub.timeScale().setVisibleLogicalRange(range)
+        } catch {
+          // ignore
+        }
+      })
+    }
+    timeScale.subscribeVisibleLogicalRangeChange(syncVisibleRange)
+    // Initial sync (best effort)
+    try {
+      const range = timeScale.getVisibleLogicalRange()
+      if (range) syncVisibleRange(range)
+    } catch {
+      // ignore
+    }
+
     const unsubChartChange = chartAdapter?.subscribeChartChange(refreshOverlay) ?? (() => {})
     // Initial sync (chartRef is now ready)
     refreshOverlay()
 
     return () => {
       resizeObserver.disconnect();
+      try {
+        timeScale.unsubscribeVisibleLogicalRangeChange(syncVisibleRange)
+      } catch {
+        // ignore
+      }
       unsubChartChange()
       unsubCrosshair()
       unsubClick()
@@ -585,81 +853,65 @@ export const TradingViewLightweightChart = ({
       setLastCandleClose(typeof lastCandleRef.current.close === 'number' ? lastCandleRef.current.close : null)
     }
 
-    // 更新 chartSeries 指标（仅 setData，不新增/删除 series）
-    const isOn = (id: string) => activeIndicators.some((x) => x.id === id)
-    const timeVals = candleData.map((c) => c.time)
+    // Generate Mock Data for Indicator Panels (Phase 2)
+    const times = candleData.map(c => c.time)
+    const lsData = []
+    const oiData = []
+    const volData = []
+    const liqDataMock = []
+    
+    // Seeded random for deterministic data
+    const seed = symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) + (interval === '15m' ? 1 : 2)
+    // Simple deterministic RNG
+    let s = seed;
+    const rng = () => {
+        s = (s * 9301 + 49297) % 233280;
+        return s / 233280;
+    };
 
-    // long-short-ratio
-    if (indicatorSeriesRef.current['long-short-ratio']) {
-      if (isOn('long-short-ratio')) {
-        const data: Array<{ time: unknown; value: number }> = []
-        let ls = 0.52
-        for (let i = 0; i < timeVals.length; i++) {
-          ls += (Math.random() - 0.5) * 0.015
-          ls = Math.max(0.2, Math.min(0.8, ls))
-          data.push({ time: timeVals[i], value: Number(ls.toFixed(4)) })
-        }
-        indicatorSeriesRef.current['long-short-ratio'].setData(data as unknown[])
-      } else {
-        indicatorSeriesRef.current['long-short-ratio'].setData([])
-      }
+    let curLs = 1.5
+    let curOi = 650000
+    
+    for (let i = 0; i < times.length; i++) {
+       const t = times[i]
+       // Long/Short: Walk
+       curLs += (rng() - 0.5) * 0.1
+       lsData.push({ time: t, value: Number(curLs.toFixed(4)) })
+
+       // OI: Walk
+       curOi += (rng() - 0.5) * 5000
+       oiData.push({ time: t, value: Math.floor(curOi) })
+
+       // Volume: Random positive
+       volData.push({ time: t, value: Math.floor(rng() * 2000), color: '#4ade80' })
+
+       // Liquidation: Random positive/negative
+       const liqVal = (rng() - 0.5) * 0.2
+       liqDataMock.push({ 
+          time: t, 
+          value: liqVal, 
+          long: liqVal > 0 ? liqVal : 0, 
+          color: liqVal > 0 ? '#22c55e' : '#ef4444'
+       })
     }
+    
+    setIndicatorData({
+        ls: lsData,
+        oi: oiData,
+        vol: volData,
+        liq: liqDataMock
+    })
 
-    // aggregated-open-interest
-    if (indicatorSeriesRef.current['aggregated-open-interest']) {
-      if (isOn('aggregated-open-interest')) {
-        const data: Array<{ time: unknown; value: number }> = []
-        let oi = basePrice * 120
-        for (let i = 0; i < timeVals.length; i++) {
-          oi += (Math.random() - 0.45) * (basePrice * 2)
-          oi = Math.max(basePrice * 60, oi)
-          data.push({ time: timeVals[i], value: Math.floor(oi) })
-        }
-        indicatorSeriesRef.current['aggregated-open-interest'].setData(data as unknown[])
-      } else {
-        indicatorSeriesRef.current['aggregated-open-interest'].setData([])
+    // After data update, best-effort push current visible range to sub-charts
+    try {
+      const range = chartApi.timeScale().getVisibleLogicalRange()
+      if (range) {
+        Object.values(subChartsRef.current).forEach((sub) => {
+          sub.timeScale().setVisibleLogicalRange(range)
+        })
       }
-    }
-
-    // aggregated-volume
-    if (indicatorSeriesRef.current['aggregated-volume']) {
-      if (isOn('aggregated-volume')) {
-        const data: Array<{ time: unknown; value: number; color: string }> = []
-        for (let i = 0; i < timeVals.length; i++) {
-          data.push({
-            time: timeVals[i],
-            value: Math.floor(Math.random() * (basePrice >= 1000 ? 20000 : 200000)),
-            color: 'rgba(236, 72, 153, 0.45)',
-          })
-        }
-        indicatorSeriesRef.current['aggregated-volume'].setData(data as unknown[])
-      } else {
-        indicatorSeriesRef.current['aggregated-volume'].setData([])
-      }
-    }
-
-    // liquidation-data
-    if (indicatorSeriesRef.current['liquidation-data']) {
-      if (isOn('liquidation-data')) {
-        const data: Array<{ time: unknown; value: number; color: string }> = []
-        for (let i = 0; i < timeVals.length; i++) {
-          const spike = Math.random() < 0.08 ? 1 + Math.random() * 6 : Math.random()
-          data.push({
-            time: timeVals[i],
-            value: Math.floor(spike * (basePrice >= 1000 ? 1200 : 18000)),
-            color: 'rgba(239, 68, 68, 0.45)',
-          })
-        }
-        indicatorSeriesRef.current['liquidation-data'].setData(data as unknown[])
-      } else {
-        indicatorSeriesRef.current['liquidation-data'].setData([])
-      }
-    }
-
-    // 防回归：切换周期也执行一次 applyOptions（不创建新线）
-    if (lockedPriceLineRef.current && typeof lockedPrice === 'number' && Number.isFinite(lockedPrice)) {
-      lockedPriceLineRef.current.applyOptions({ price: lockedPrice, axisLabelVisible: true })
-      console.log('[LOCKED PRICE LINE UPDATED]', lockedPrice)
+    } catch {
+      // ignore
     }
   }, [isMounted, symbol, interval, activeIndicators, lockedPrice])
 
@@ -688,206 +940,277 @@ export const TradingViewLightweightChart = ({
   }, [liqData])
   const liqCurrentPrice = lockedPrice
   const showLiqOverlay = activeIndicators.some((x) => x.id === 'liquidation-map')
+  const isPanelOn = (id: string) => activeIndicators.some((x) => x.id === id)
 
   return (
-    <div className="w-full h-full bg-[#0d1117] min-h-[500px] relative overflow-hidden">
-      {/* Active indicators chips (click to remove) */}
-      {activeIndicators.length > 0 && (
-        <div className="absolute top-3 right-3 z-20 flex flex-wrap gap-2 max-w-[60%] justify-end">
-          {activeIndicators.map((ind) => (
-            <button
-              key={ind.id}
-              type="button"
-              onClick={() => onRemoveIndicator?.(ind.id)}
-              className="pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#161b22]/90 border border-[#30363d] text-xs text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
-              title={t('chart.indicator.remove', { name: ind.label })}
-            >
-              <span className="truncate max-w-[180px]">{ind.label}</span>
-              <span className="text-[#8b949e] hover:text-white">×</span>
+    <div className="w-full h-full bg-[#0d1117] min-h-[500px] overflow-hidden flex flex-col">
+      {/* Main chart area (takes remaining height), panels are below */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Active indicators chips (click to remove) */}
+        {activeIndicators.length > 0 && (
+          <div className="absolute top-3 right-3 z-20 flex flex-wrap gap-2 max-w-[60%] justify-end">
+            {activeIndicators.map((ind) => (
+              <button
+                key={ind.id}
+                type="button"
+                onClick={() => onRemoveIndicator?.(ind.id)}
+                className="pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#161b22]/90 border border-[#30363d] text-xs text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
+                title={t('chart.indicator.remove', { name: ind.label })}
+              >
+                <span className="truncate max-w-[180px]">{ind.label}</span>
+                <span className="text-[#8b949e] hover:text-white">×</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Overlay widgets (non-series indicators)
+            NOTE: Liquidation Map is rendered as a true chart overlay (ECharts panel on the right),
+            so we intentionally do NOT show the placeholder card for it. */}
+        <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-2 items-end pointer-events-none">
+          {activeIndicators
+            .filter((x) => x.kind === 'chartOverlay' && x.id !== 'liquidation-map')
+            .map((x) => (
+              <div key={x.id} className="pointer-events-auto w-[320px] bg-[#161b22]/95 border border-[#30363d] rounded-xl p-3 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-bold text-white truncate">{x.label}</div>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveIndicator?.(x.id)}
+                    className="text-[#8b949e] hover:text-white transition-colors"
+                    aria-label={t('chart.indicator.removeAria', { name: x.label })}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="mt-2 text-xs text-[#8b949e] leading-relaxed">
+                  {t('chart.indicator.overlayPlaceholder')}
+                </div>
+                {x.href && (
+                  <a href={x.href} className="mt-2 inline-block text-xs text-primary hover:underline">
+                    {t('chart.indicator.openFull')}
+                  </a>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {/* Chart Legend / Info Overlay */}
+        {ohlc && (
+          <div className="absolute top-3 left-3 z-10 pointer-events-none flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-[13px] font-medium">
+              <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-[8px] text-white">₿</div>
+              <span className="text-[#c9d1d9]">{symbol} {t('chart.perpetual')} · {interval} · OKX</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex gap-1">
+                <span className="text-[#8b949e]">{t('chart.ohlc.open')}=</span>
+                <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.open.toFixed(2)}</span>
+              </div>
+              <div className="flex gap-1">
+                <span className="text-[#8b949e]">{t('chart.ohlc.high')}=</span>
+                <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.high.toFixed(2)}</span>
+              </div>
+              <div className="flex gap-1">
+                <span className="text-[#8b949e]">{t('chart.ohlc.low')}=</span>
+                <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.low.toFixed(2)}</span>
+              </div>
+              <div className="flex gap-1">
+                <span className="text-[#8b949e]">{t('chart.ohlc.close')}=</span>
+                <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.close.toFixed(2)}</span>
+              </div>
+              <div className="flex gap-1">
+                <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>
+                  {(ohlc.close - ohlc.open).toFixed(2)} ({( ((ohlc.close - ohlc.open) / ohlc.open) * 100).toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs mt-1">
+              <div className="flex gap-1">
+                <span className="text-[#8b949e]">{t('chart.volume')}</span>
+                <span className="text-[#26a69a]">201.94</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Toolbar (Optional - like the one on the left in image) */}
+        <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
+          {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
+            <button key={i} className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors">
+              {tool}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Overlay widgets (non-series indicators)
-          NOTE: Liquidation Map is rendered as a true chart overlay (ECharts panel on the right),
-          so we intentionally do NOT show the placeholder card for it. */}
-      <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-2 items-end pointer-events-none">
-        {activeIndicators
-          .filter((x) => x.kind === 'chartOverlay' && x.id !== 'liquidation-map')
-          .map((x) => (
-            <div key={x.id} className="pointer-events-auto w-[320px] bg-[#161b22]/95 border border-[#30363d] rounded-xl p-3 shadow-xl">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-bold text-white truncate">{x.label}</div>
-                <button
-                  type="button"
-                  onClick={() => onRemoveIndicator?.(x.id)}
-                  className="text-[#8b949e] hover:text-white transition-colors"
-                  aria-label={t('chart.indicator.removeAria', { name: x.label })}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="mt-2 text-xs text-[#8b949e] leading-relaxed">
-                {t('chart.indicator.overlayPlaceholder')}
-              </div>
-              {x.href && (
-                <a href={x.href} className="mt-2 inline-block text-xs text-primary hover:underline">
-                  {t('chart.indicator.openFull')}
-                </a>
-              )}
-            </div>
-          ))}
-      </div>
+        {/* Chart host (Lightweight renders into this div; it may be cleared/recreated) */}
+        <div ref={chartHostRef} className="w-full h-full" />
 
-      {/* Chart Legend / Info Overlay */}
-      {ohlc && (
-        <div className="absolute top-3 left-3 z-10 pointer-events-none flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-[13px] font-medium">
-            <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-[8px] text-white">₿</div>
-            <span className="text-[#c9d1d9]">{symbol} {t('chart.perpetual')} · {interval} · OKX</span>
-          </div>
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex gap-1">
-              <span className="text-[#8b949e]">{t('chart.ohlc.open')}=</span>
-              <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.open.toFixed(2)}</span>
-            </div>
-            <div className="flex gap-1">
-              <span className="text-[#8b949e]">{t('chart.ohlc.high')}=</span>
-              <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.high.toFixed(2)}</span>
-            </div>
-            <div className="flex gap-1">
-              <span className="text-[#8b949e]">{t('chart.ohlc.low')}=</span>
-              <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.low.toFixed(2)}</span>
-            </div>
-            <div className="flex gap-1">
-              <span className="text-[#8b949e]">{t('chart.ohlc.close')}=</span>
-              <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.close.toFixed(2)}</span>
-            </div>
-            <div className="flex gap-1">
-              <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>
-                {(ohlc.close - ohlc.open).toFixed(2)} ({( ((ohlc.close - ohlc.open) / ohlc.open) * 100).toFixed(2)}%)
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-xs mt-1">
-            <div className="flex gap-1">
-              <span className="text-[#8b949e]">{t('chart.volume')}</span>
-              <span className="text-[#26a69a]">201.94</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Toolbar (Optional - like the one on the left in image) */}
-      <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
-        {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
-          <button key={i} className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors">
-            {tool}
-          </button>
-        ))}
-      </div>
-
-      {/* Chart host (Lightweight renders into this div; it may be cleared/recreated) */}
-      <div ref={chartHostRef} className="w-full h-full" />
-
-      {/* Liquidation overlay (ECharts, Coinglass-style) */}
-      {showLiqOverlay && (
-        <div
-          id="liqOverlayPanel"
-          className="pointer-events-none absolute top-0 bottom-[24px] z-[6]"
-          style={{
-            right: 72,
-            width: 260,
-            opacity: 0.85,
-          }}
-        >
-          <LiquidationMapChart
-            ref={overlayRef as any}
-            mode="overlay"
-            data={liqData}
-            currentPrice={liqCurrentPrice}
-            overlayWidth={260}
-            overlayOpacity={0.85}
-            selectedPrice={liqSelected?.price ?? null}
-            getPriceToY={(p) => {
-              try {
-                return chartAdapterRef.current?.getPriceToY(p) ?? null
-              } catch {
-                return null
-              }
+        {/* Liquidation overlay (ECharts, Coinglass-style) */}
+        {showLiqOverlay && (
+          <div
+            id="liqOverlayPanel"
+            className="pointer-events-none absolute top-0 bottom-[24px] z-[6]"
+            style={{
+              right: 72,
+              width: 260,
+              opacity: 0.85,
             }}
-          />
-        </div>
-      )}
+          >
+            <LiquidationMapChart
+              ref={overlayRef as any}
+              mode="overlay"
+              data={liqData}
+              currentPrice={liqCurrentPrice}
+              overlayWidth={260}
+              overlayOpacity={0.85}
+              selectedPrice={liqSelected?.price ?? null}
+              getPriceToY={(p) => {
+                try {
+                  return chartAdapterRef.current?.getPriceToY(p) ?? null
+                } catch {
+                  return null
+                }
+              }}
+            />
+          </div>
+        )}
 
-      {/* Click-to-inspect tooltip (does not capture pointer events) */}
-      {showLiqOverlay && liqSelected && (
-        <div
-          className="pointer-events-none absolute z-[7] w-[260px]"
-          style={{
-            // Pin tooltip inside the overlay band (right of main plot, left of price scale)
-            right: 72 + 8,
-            top: clamp(liqSelected.y - 64, 8, (chartHostRef.current?.clientHeight ?? 520) - 170),
-          }}
-        >
-          <div className="bg-[#0d1117]/85 border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] backdrop-blur">
-            <div className="flex items-center justify-between">
-              <div className="font-bold">价格: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 0 : 2)}</div>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#36b8c9' }} />
-                  <span>Bybit</span>
-                </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.bybit)}</span>
+        {/* Click-to-inspect tooltip (does not capture pointer events) */}
+        {showLiqOverlay && liqSelected && (
+          <div
+            className="pointer-events-none absolute z-[7] w-[260px]"
+            style={{
+              // Pin tooltip inside the overlay band (right of main plot, left of price scale)
+              right: 72 + 8,
+              top: clamp(liqSelected.y - 64, 8, (chartHostRef.current?.clientHeight ?? 520) - 170),
+            }}
+          >
+            <div className="bg-[#0d1117]/85 border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] backdrop-blur">
+              <div className="flex items-center justify-between">
+                <div className="font-bold">价格: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 0 : 2)}</div>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f7d05e' }} />
-                  <span>OKX</span>
-                </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.okx)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f08024' }} />
-                  <span>Binance</span>
-                </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.binance)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#bf5af2' }} />
-                  <span>DEX</span>
-                </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.dex)}</span>
-              </div>
-            </div>
-            {/* Match full-page tooltip: show only the relevant cumulative side */}
-            <div className="mt-2 space-y-1 text-[#8b949e]">
-              {liqSelected.price <= liqCurrentPrice ? (
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ff4d4d' }} />
-                    <span>累计多单清算</span>
-                  </span>
-                  <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#36b8c9' }} />
+                    <span>Bybit</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.bybit)}</span>
                 </div>
-              ) : (
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#00c076' }} />
-                    <span>累计空单清算</span>
-                  </span>
-                  <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f7d05e' }} />
+                    <span>OKX</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.okx)}</span>
                 </div>
-              )}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f08024' }} />
+                    <span>Binance</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.binance)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#bf5af2' }} />
+                    <span>DEX</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.dex)}</span>
+                </div>
+              </div>
+              {/* Match full-page tooltip: show only the relevant cumulative side */}
+              <div className="mt-2 space-y-1 text-[#8b949e]">
+                {liqSelected.price <= liqCurrentPrice ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ff4d4d' }} />
+                      <span>累计多单清算</span>
+                    </span>
+                    <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#00c076' }} />
+                      <span>累计空单清算</span>
+                    </span>
+                    <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* 2. Phase 2: Four Indicator Panels (Real Instances) */}
+      {isPanelOn('long-short-ratio') && (
+        <IndicatorChartPanel 
+           id="ls"
+           title="聚合多空比"
+           color="#22c55e"
+           height={70}
+           type="line"
+           data={indicatorData.ls}
+           mainChart={chartRef.current}
+           registerChart={registerChart}
+           unregisterChart={unregisterChart}
+           onClose={() => onRemoveIndicator?.('long-short-ratio')}
+           showTvLogo={false}
+           formatter={(v) => v.toFixed(4)}
+        />
       )}
+      {isPanelOn('aggregated-open-interest') && (
+        <IndicatorChartPanel 
+           id="oi"
+           title="聚合持仓（K线）"
+           color="#22d3ee"
+           height={70}
+           type="line"
+           data={indicatorData.oi}
+           mainChart={chartRef.current}
+           registerChart={registerChart}
+           unregisterChart={unregisterChart}
+           onClose={() => onRemoveIndicator?.('aggregated-open-interest')}
+           showTvLogo={false}
+           formatter={(v) => formatUsdCompactFromMillions(v / 1000000)} // Mock values are raw count
+        />
+      )}
+      {isPanelOn('aggregated-volume') && (
+        <IndicatorChartPanel 
+           id="vol"
+           title="聚合成交量"
+           color="#4ade80"
+           height={70}
+           type="bar"
+           data={indicatorData.vol}
+           mainChart={chartRef.current}
+           registerChart={registerChart}
+           unregisterChart={unregisterChart}
+           onClose={() => onRemoveIndicator?.('aggregated-volume')}
+           showTvLogo={false}
+           formatter={(v) => `${(v/1000).toFixed(3)}K`}
+        />
+      )}
+      {isPanelOn('liquidation-data') && (
+        <IndicatorChartPanel 
+           id="liq"
+           title="聚合爆仓"
+           color="#ef4444"
+           height={69}
+           type="liquidation"
+           data={indicatorData.liq}
+           mainChart={chartRef.current}
+           registerChart={registerChart}
+           unregisterChart={unregisterChart}
+           onClose={() => onRemoveIndicator?.('liquidation-data')}
+           showTvLogo={true}
+           formatter={(v) => v.toFixed(4)}
+        />
+      )}
+      
     </div>
   );
 };
