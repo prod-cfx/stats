@@ -629,21 +629,24 @@ export async function cancelLlmSubscription(subscriptionId: string) {
 export interface FetchPredictionMarketsParams {
   category?: string
   onlyActive?: boolean
-  offset?: number
   limit?: number
+  page?: number
 }
 
 export async function fetchPredictionMarkets(
   params: FetchPredictionMarketsParams = {},
 ): Promise<PredictionMarketCardResponse[]> {
   return apiCall(async () => {
+    const page = params.page ?? 1
+    const limit = params.limit ?? 48
+
     const response = await client.PolymarketController_listMarkets({
       headers: requireAuthHeaders(),
       queries: {
         ...(params.category && { category: params.category }),
         ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
-        ...(params.offset !== undefined && { offset: params.offset }),
-        ...(params.limit !== undefined && { limit: params.limit }),
+        page,
+        limit,
       },
     })
 
