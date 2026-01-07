@@ -414,10 +414,13 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     if (metaInstId) {
       const upper = metaInstId.trim().toUpperCase()
       if (!upper.includes('-')) return null
+      const parts = upper.split('-').filter(Boolean)
       if (this.instrumentType === 'SPOT') {
+        if (parts.length !== 2) return null
         return upper.endsWith('-SWAP') ? null : upper
       }
       if (this.instrumentType === 'PERPETUAL') {
+        if (parts.length > 2 && !(parts.length === 3 && parts[2] === 'SWAP')) return null
         return upper.endsWith('-SWAP') ? upper : `${base}-${quote}-SWAP`
       }
       return upper

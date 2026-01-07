@@ -242,10 +242,14 @@ export class TradesPairConfigService {
     if (metaInstId) {
       // okxInstId/instId 必须符合 OKX 的 instId 格式（包含 '-'），否则会导致订阅到不存在的频道
       if (!metaInstId.includes('-')) return null
+      const parts = metaInstId.split('-').filter(Boolean)
       if (input.instrumentType === 'SPOT') {
+        if (parts.length !== 2) return null
         return metaInstId.endsWith('-SWAP') ? null : metaInstId
       }
       if (input.instrumentType === 'PERPETUAL') {
+        // 允许 metadata 只给 BASE-QUOTE，则补齐 -SWAP；但不允许 futures contract 混入（多段）
+        if (parts.length > 2 && !(parts.length === 3 && parts[2] === 'SWAP')) return null
         return metaInstId.endsWith('-SWAP') ? metaInstId : `${base}-${quote}-SWAP`
       }
       return metaInstId
@@ -316,11 +320,19 @@ export class TradesPairConfigService {
           `metadata.instId/okxInstId 与 baseAsset/quoteAsset 不一致：instId=${metaInstId} baseAsset=${base} quoteAsset=${quote}`,
         )
       }
-      if (input.instrumentType === 'SPOT' && metaInstId.endsWith('-SWAP')) {
-        throwBadRequest(`SPOT 不允许 metadata.instId/okxInstId 以 -SWAP 结尾：${metaInstId}`)
+      if (input.instrumentType === 'SPOT') {
+        if (metaInstId.endsWith('-SWAP')) {
+          throwBadRequest(`SPOT 不允许 metadata.instId/okxInstId 以 -SWAP 结尾：${metaInstId}`)
+        }
+        if (parts.length !== 2) {
+          throwBadRequest(`SPOT metadata.instId/okxInstId 必须为 ${base}-${quote}（两段），实际：${metaInstId}`)
+        }
       }
-      if (input.instrumentType === 'PERPETUAL' && !metaInstId.endsWith('-SWAP')) {
-        throwBadRequest(`PERPETUAL 要求 metadata.instId/okxInstId 以 -SWAP 结尾：${metaInstId}`)
+      if (input.instrumentType === 'PERPETUAL') {
+        // 永续必须是 BASE-QUOTE-SWAP（三段）；若只给 BASE-QUOTE，则由服务端补齐 -SWAP（校验放行）
+        if (parts.length >= 3 && !(parts.length === 3 && parts[2] === 'SWAP')) {
+          throwBadRequest(`PERPETUAL metadata.instId/okxInstId 必须为 ${base}-${quote}-SWAP（三段），实际：${metaInstId}`)
+        }
       }
     }
 

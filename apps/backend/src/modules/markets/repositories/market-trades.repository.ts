@@ -65,9 +65,11 @@ export class MarketTradesRepository {
 
     return this.prisma.marketTrade.findMany({
       where,
-      orderBy: {
-        tradeTimestamp: options.orderBy ?? 'desc',
-      },
+      // 增加确定性的二级排序，避免同毫秒成交导致分页 skip/take 不稳定
+      orderBy: [
+        { tradeTimestamp: options.orderBy ?? 'desc' },
+        { id: options.orderBy ?? 'desc' },
+      ],
       take: options.limit ?? 100,
       skip: options.offset ?? 0,
     })
