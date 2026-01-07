@@ -25,81 +25,87 @@ export class CryptoStockQuoteResponseDto {
   @ApiPropertyOptional({ description: '股票名称', example: 'MicroStrategy Inc.' })
   name?: string | null
 
-  @ApiPropertyOptional({ description: '交易所代码', example: 'NASDAQ' })
+  @ApiPropertyOptional({ description: '交易所代码', example: 'NASDAQ', nullable: true })
   exchange?: string | null
 
   @ApiProperty({ description: '当前价格' })
   price!: string
 
-  @ApiPropertyOptional({ description: '开盘价' })
+  @ApiPropertyOptional({ description: '开盘价', nullable: true })
   openPrice?: string | null
 
-  @ApiPropertyOptional({ description: '最高价' })
+  @ApiPropertyOptional({ description: '最高价', nullable: true })
   highPrice?: string | null
 
-  @ApiPropertyOptional({ description: '最低价' })
+  @ApiPropertyOptional({ description: '最低价', nullable: true })
   lowPrice?: string | null
 
-  @ApiPropertyOptional({ description: '收盘价（前一交易日）' })
+  @ApiPropertyOptional({ description: '收盘价（前一交易日）', nullable: true })
   closePrice?: string | null
 
-  @ApiPropertyOptional({ description: '成交量' })
+  @ApiPropertyOptional({ description: '成交量', nullable: true })
   volume?: string | null
 
-  @ApiPropertyOptional({ description: '成交额' })
+  @ApiPropertyOptional({ description: '成交额', nullable: true })
   turnover?: string | null
 
-  @ApiPropertyOptional({ description: '涨跌额' })
+  @ApiPropertyOptional({ description: '涨跌额', nullable: true })
   priceChange?: string | null
 
-  @ApiPropertyOptional({ description: '涨跌幅（百分比）' })
+  @ApiPropertyOptional({ description: '涨跌幅（百分比）', nullable: true })
   priceChangePercent?: string | null
 
-  @ApiPropertyOptional({ description: '市值' })
+  @ApiPropertyOptional({ description: '市值', nullable: true })
   marketCap?: string | null
 
-  @ApiPropertyOptional({ description: '市盈率' })
+  @ApiPropertyOptional({ description: '市盈率', nullable: true })
   peRatio?: string | null
 
-  @ApiPropertyOptional({ description: '52周最高价' })
+  @ApiPropertyOptional({ description: '52周最高价', nullable: true })
   high52Week?: string | null
 
-  @ApiPropertyOptional({ description: '52周最低价' })
+  @ApiPropertyOptional({ description: '52周最低价', nullable: true })
   low52Week?: string | null
 
   @ApiPropertyOptional({
     description: '底层加密资产符号（例如 BTC、ETH、USDC），用于币股联动视图',
     example: 'BTC',
+    nullable: true,
   })
   assetSymbol?: string | null
 
   @ApiPropertyOptional({
     description: '底层加密资产 Logo URL',
     example: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
+    nullable: true,
   })
   assetLogoUrl?: string | null
 
   @ApiPropertyOptional({
     description: '公司 Logo URL',
     example: 'https://upload.wikimedia.org/wikipedia/commons/d/d7/MicroStrategy_logo.svg',
+    nullable: true,
   })
   companyLogoUrl?: string | null
 
   @ApiPropertyOptional({
     description: '持有的加密资产名义价值（可带货币符号，前端可根据需要自行解析）',
     example: '$58.14B',
+    nullable: true,
   })
   holdingsValue?: string | null
 
   @ApiPropertyOptional({
     description: '持有的加密资产数量描述（可包含单位和简写，例如 "671.27K BTC"）',
     example: '671.27K BTC',
+    nullable: true,
   })
   holdingsAmount?: string | null
 
   @ApiPropertyOptional({
     description: 'mNAV（市值/净资产比），字符串形式，前端可按需解析为数值',
     example: '0.83',
+    nullable: true,
   })
   mNav?: string | null
 
