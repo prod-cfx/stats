@@ -29,6 +29,8 @@ RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
+  // 普通用户需要访问市场数据（例如鲸鱼持仓、长短比等）以驱动前端可视化
+  .readAny(AppResource.MARKET_SYMBOL)
 
 RBAC_PERMISSIONS.grant(AppRole.MODERATOR).extend(AppRole.USER)
 

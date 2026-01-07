@@ -1,6 +1,5 @@
 'use client';
 
-import type { WhaleHoldingApiItem } from '@/lib/api';
 import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -10,6 +9,7 @@ import { LoadingState } from '@/components/ui/loading';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { useAsync } from '@/hooks/use-async';
 import { fetchWhaleHoldings } from '@/lib/api';
+import type { WhaleHoldingApiItem } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhalePosition {
