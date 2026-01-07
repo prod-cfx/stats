@@ -7,6 +7,7 @@ import {
   Query,
 } from '@nestjs/common'
 import {
+  ApiBearerAuth,
   ApiExtraModels,
   ApiOperation,
   ApiQuery,
@@ -15,6 +16,11 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
+import {
+  ReadAny,
+  RequireAuth,
+} from '@/modules/auth/decorators/access-control.decorator'
+import { AppResource } from '@/modules/auth/rbac/permissions'
 // DTO 必须用值导入以保留运行时元数据
 // eslint-disable-next-line ts/consistent-type-imports
 import {
@@ -37,12 +43,15 @@ const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
 })
 
 @ApiTags('crypto-stock-quotes')
+@ApiBearerAuth('bearer')
 @ApiExtraModels(BaseResponseDto, CryptoStockQuoteResponseDto)
 @Controller('crypto-stock-quotes')
 export class CryptoStockQuotesController {
   constructor(private readonly service: CryptoStockQuotesService) {}
 
   @Get('latest')
+  @RequireAuth()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({
     summary: '获取加密相关股票的最新报价列表',
     description:

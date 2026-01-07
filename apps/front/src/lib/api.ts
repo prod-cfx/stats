@@ -305,22 +305,36 @@ export async function fetchCryptoStockQuotesLatest(params?: {
   source?: string
 }): Promise<CryptoStockQuoteLatest[]> {
   return apiCall(async () => {
+    const searchParams = new URLSearchParams()
+    if (params?.symbols?.length) {
+      for (const symbol of params.symbols) {
+        searchParams.append('symbols', symbol)
+      }
+    }
+    if (params?.source) {
+      searchParams.set('source', params.source)
+    }
+    const query = searchParams.toString()
+
     const response = await safeApiCall(
       () =>
         client.CryptoStockQuotesController_getLatest({
-          headers: optionalAuthHeaders(),
+          headers: requireAuthHeaders(),
           queries: {
             ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
             ...(params?.source ? { source: params.source } : {}),
           },
         }),
       {
-        url: `${API_BASE_URL}/crypto-stock-quotes/latest`,
+        url:
+          query.length > 0
+            ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
+            : `${API_BASE_URL}/crypto-stock-quotes/latest`,
         options: {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...optionalAuthHeaders(),
+            ...requireAuthHeaders(),
           },
         },
         validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
