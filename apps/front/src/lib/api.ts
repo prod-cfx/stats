@@ -51,6 +51,35 @@ function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapApiResponse(response)
 }
 
+// ===== Whale tracking discover API =====
+
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const result = await safeApiCall(
+      () =>
+        client.WhaleTrackingController_getDiscover({
+          headers: requireAuthHeaders(),
+        }),
+      {
+        url: `${API_BASE_URL}/whale-tracking/discover`,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...requireAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<WhaleDiscoverResponse>(data as WhaleDiscoverResponse | BaseResponse<WhaleDiscoverResponse>),
+      },
+    )
+
+    return result as WhaleDiscoverResponse
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
+}
+
 /**
  * Validate JWT token format (basic structure check)
  */

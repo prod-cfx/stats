@@ -5,16 +5,10 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { useMockData } from '@/hooks/use-mock-data';
-import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client';
-import { getToken } from '@/lib/auth-storage';
+import { fetchWhaleTrackingDiscover, type WhaleDiscoverResponse } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 import type { TraderCardProps } from './TraderCard';
 import { TraderCard } from './TraderCard';
-
-interface WhaleDiscoverResponse {
-  recommended: Omit<TraderCardProps, 'onShowStats'>[];
-  details: Omit<TraderCardProps, 'onShowStats'>[];
-}
 
 export const DiscoverGrid = () => {
   const { t } = useTranslation();
@@ -29,21 +23,7 @@ export const DiscoverGrid = () => {
   };
 
   const tradersFetcher = async (): Promise<WhaleDiscoverResponse> => {
-    const token = getToken();
-    const response = await fetch(`${API_BASE_URL}/whale-tracking/discover`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to load whale discover data: ${response.statusText}`);
-    }
-
-    const json = await response.json();
-    return unwrapApiResponse<WhaleDiscoverResponse>(json);
+    return fetchWhaleTrackingDiscover();
   };
 
   const { data, loading, error, reload } = useMockData(tradersFetcher, [], { delay: 300 });
