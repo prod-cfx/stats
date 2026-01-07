@@ -363,14 +363,20 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
   private resolveInstId(cfg: TradesConfig): string | null {
     const metadata = this.normalizeMetadata(cfg.metadata)
-    const metaInstId = this.pickMetadataString(metadata, ['okxInstId', 'instId', 'symbol'])
-    if (metaInstId) return metaInstId.toUpperCase()
+    const base = cfg.baseAsset.trim().toUpperCase()
+    const quote = cfg.quoteAsset.trim().toUpperCase()
 
-    const symbol = cfg.symbol.toUpperCase()
-    if (symbol.includes('-')) return symbol
-
-    const base = cfg.baseAsset.toUpperCase()
-    const quote = cfg.quoteAsset.toUpperCase()
+    const metaInstId = this.pickMetadataString(metadata, ['okxInstId', 'instId'])
+    if (metaInstId) {
+      const upper = metaInstId.trim().toUpperCase()
+      if (this.instrumentType === 'SPOT') {
+        return upper.endsWith('-SWAP') ? null : upper
+      }
+      if (this.instrumentType === 'PERPETUAL') {
+        return upper.endsWith('-SWAP') ? upper : `${base}-${quote}-SWAP`
+      }
+      return upper
+    }
 
     if (this.instrumentType === 'SPOT') {
       return `${base}-${quote}`
@@ -621,5 +627,10 @@ class OkxWsConnection {
     }
   }
 }
+
+
+
+
+
 
 

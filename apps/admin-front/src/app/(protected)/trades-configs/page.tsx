@@ -67,6 +67,10 @@ export default function TradesConfigsPage() {
   }, [loadConfigs])
 
   const resolveOkxInstIdForConfig = (config: TradesPairConfigResponse): string => {
+    if (config.exchange?.trim().toUpperCase() !== 'OKX') {
+      return config.symbol.trim().toUpperCase()
+    }
+
     const metadata =
       config.metadata && typeof config.metadata === 'object' && !Array.isArray(config.metadata)
         ? (config.metadata as Record<string, unknown>)
@@ -83,19 +87,22 @@ export default function TradesConfigsPage() {
       return null
     }
 
-    // 1) metadata 中显式配置的 OKX instId / symbol 优先
-    const metaInstId = pickMetadataString(['okxInstId', 'instId', 'symbol'])
-    if (metaInstId) return metaInstId
-
-    // 2) 若 symbol 已经是 OKX 风格（带 -），直接大写使用
-    if (config.symbol && config.symbol.includes('-')) {
-      return config.symbol.trim().toUpperCase()
-    }
-
     const base = config.baseAsset.trim().toUpperCase()
     const quote = config.quoteAsset.trim().toUpperCase()
 
-    // 3) 按 instrumentType 推导 instId，与后端 OkxTradesWsAdapterBase.resolveInstId 保持一致
+    // 1) metadata 中显式配置的 OKX instId 优先（永续强制 -SWAP 规范化）
+    const metaInstId = pickMetadataString(['okxInstId', 'instId'])
+    if (metaInstId) {
+      if (config.instrumentType === 'SPOT') {
+        return metaInstId.endsWith('-SWAP') ? `${base}-${quote}` : metaInstId
+      }
+      if (config.instrumentType === 'PERPETUAL') {
+        return metaInstId.endsWith('-SWAP') ? metaInstId : `${base}-${quote}-SWAP`
+      }
+      return metaInstId
+    }
+
+    // 2) 按 instrumentType 推导 instId，与后端 TradesPairConfigService/OkxTradesWsAdapterBase 保持一致
     if (config.instrumentType === 'SPOT') {
       return `${base}-${quote}`
     }
@@ -613,5 +620,10 @@ export default function TradesConfigsPage() {
     </div>
   )
 }
+
+
+
+
+
 
 
