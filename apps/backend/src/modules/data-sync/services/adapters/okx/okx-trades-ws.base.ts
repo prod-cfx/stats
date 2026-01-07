@@ -56,6 +56,8 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   private readonly logger = new Logger(this.constructor.name)
   private readonly connections: OkxWsConnection[] = []
   private readonly states = new Map<string, TradeState>() // instId -> state
+  private flushTicker: NodeJS.Timeout | null = null
+  private flushTickRunning = false
 
   constructor(
     @Inject(ConfigService)
@@ -66,6 +68,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
   async ensureConnected(): Promise<void> {
     await this.ensureConnections(1)
+    this.ensureFlushTicker()
   }
 
   async syncTargetConfigs(configs: TradesConfig[]): Promise<void> {
@@ -156,6 +159,11 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   }
 
   async shutdown(): Promise<void> {
+    if (this.flushTicker) {
+      clearInterval(this.flushTicker)
+      this.flushTicker = null
+    }
+
     // 先冲刷所有缓冲中的成交记录，避免进程退出时丢数据
     const states = [...this.states.values()]
     const results = await Promise.allSettled(states.map(state => this.flushBuffer(state)))
@@ -266,6 +274,42 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
       await this.flushBuffer(state)
     }
+  }
+
+  private ensureFlushTicker(): void {
+    if (this.flushTicker) return
+
+    const FLUSH_INTERVAL_MS = 5_000
+    const BUFFER_SIZE_THRESHOLD = 100
+
+    this.flushTicker = setInterval(() => {
+      if (this.flushTickRunning) return
+      this.flushTickRunning = true
+
+      const now = Date.now()
+      const targets: TradeState[] = []
+
+      for (const state of this.states.values()) {
+        if (state.buffer.length === 0) continue
+        if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
+          targets.push(state)
+        }
+      }
+
+      void (async () => {
+        if (!targets.length) return
+        const results = await Promise.allSettled(targets.map(state => this.flushBuffer(state)))
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            const state = targets[index]
+            const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+            this.logger.warn(`Flush ticker failed for instId=${state.instId}: ${reason}`)
+          }
+        })
+      })().finally(() => {
+        this.flushTickRunning = false
+      })
+    }, FLUSH_INTERVAL_MS)
   }
 
   /**
