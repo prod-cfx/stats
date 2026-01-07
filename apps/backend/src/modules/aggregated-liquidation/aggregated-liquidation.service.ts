@@ -82,7 +82,18 @@ export class AggregatedLiquidationService {
       },
     })
 
-    const perExchange: ExchangeLiquidationRowDto[] = rows.map(row => {
+    const detailRows = rows.filter(
+      row => row.exchangeCode !== AggregatedLiquidationService.AGGREGATED_EXCHANGE_CODE,
+    )
+    const aggregatedRows = rows.filter(
+      row => row.exchangeCode === AggregatedLiquidationService.AGGREGATED_EXCHANGE_CODE,
+    )
+
+    // 如果同时存在聚合行和交易所明细行，只使用交易所明细行计算；
+    // 若只有聚合行，则退化为以聚合行为明细行返回。
+    const baseRows = detailRows.length > 0 ? detailRows : aggregatedRows
+
+    const perExchange: ExchangeLiquidationRowDto[] = baseRows.map(row => {
       const longUsd = Number(row.longLiquidationUsd)
       const shortUsd = Number(row.shortLiquidationUsd)
       const amountUsd = longUsd + shortUsd

@@ -45,7 +45,7 @@ describe('Aggregated liquidation service (E2E)', () => {
 
     // 插入测试数据：
     // - interval = 1h: 仅 AGGREGATED 行，用于验证 summary 中聚合分支
-    // - interval = 4h: 多交易所行，用于验证 summary 中汇总分支 & exchange breakdown
+    // - interval = 4h: 同时包含 AGGREGATED 行和多交易所行，用于验证 summary 汇总分支 & exchange breakdown 过滤聚合行
     const baseTime = new Date('2025-01-01T00:00:00Z')
     const t1hLatest = new Date(baseTime.getTime() + 60 * 60 * 1000)
     const t4hLatest = new Date(baseTime.getTime() + 4 * 60 * 60 * 1000)
@@ -62,7 +62,17 @@ describe('Aggregated liquidation service (E2E)', () => {
           shortLiquidationUsd: '50',
           source: 'TEST',
         },
-        // 4h 多交易所行（不包含 AGGREGATED），用于验证求和逻辑
+        // 4h 聚合行（应在 breakdown 中被过滤，仅用于 summary）
+        {
+          symbol: 'BTC',
+          exchangeCode: 'AGGREGATED',
+          interval: '4h',
+          timestamp: t4hLatest,
+          longLiquidationUsd: '9999',
+          shortLiquidationUsd: '8888',
+          source: 'TEST',
+        },
+        // 4h 多交易所行（BINANCE + OKX），用于验证求和逻辑
         {
           symbol: 'BTC',
           exchangeCode: 'BINANCE',
@@ -137,9 +147,11 @@ describe('Aggregated liquidation service (E2E)', () => {
     expect(totalRow.amountUsd).toBe(expectedTotal)
     expect(totalRow.longShare).toBeCloseTo(expectedLong / expectedTotal, 6)
 
+    const aggregated = breakdown.rows.find(row => row.exchange === 'AGGREGATED')
     const binance = breakdown.rows.find(row => row.exchange === 'BINANCE')
     const okx = breakdown.rows.find(row => row.exchange === 'OKX')
 
+    expect(aggregated).toBeUndefined()
     expect(binance).toBeDefined()
     expect(okx).toBeDefined()
 
