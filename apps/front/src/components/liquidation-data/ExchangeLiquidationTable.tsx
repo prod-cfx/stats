@@ -1,5 +1,6 @@
 'use client';
 
+import type { ExchangeLiquidationResponse } from '@/lib/api';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
@@ -8,6 +9,7 @@ import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
+import { fetchExchangeLiquidation } from '@/lib/api';
 
 type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE';
 
@@ -46,35 +48,6 @@ const EXCHANGES = [
   },
 ];
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-
-function hashToUnit(str: string): number {
-  // deterministic 0..1 based on string hash
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 2 ** 32;
-}
-
-function timeToHours(timeFilter: TimeFilter): number {
-  switch (timeFilter) {
-    case '1h':
-      return 1;
-    case '4h':
-      return 4;
-    case '12h':
-      return 12;
-    case '24h':
-      return 24;
-    default:
-      return 4;
-  }
-}
-
 interface ExchangeRowRaw {
   exchange: string
   logo: string
@@ -95,7 +68,6 @@ export const ExchangeLiquidationTable = () => {
   const [selectedExchange, setSelectedExchange] = useState<ExchangeRowRaw | null>(null);
 
   const selectedCoin = (coinFilter === 'ALL' ? 'ALL' : (coinFilter as CoinSymbol));
-  const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
 
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -107,115 +79,63 @@ export const ExchangeLiquidationTable = () => {
     })
   }, [i18n.language])
 
-  const { data: tableDataRaw, loading, error, reload } = useMockData(
+  const { data: tableDataRaw, loading, error, reload } = useMockData<ExchangeRowRaw[] | null>(
     async () => {
-      // Mock dataset: each row has coin metadata and varies by coin + time.
-      const coins: CoinSymbol[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+      // 当前后端接口按单一 symbol 聚合，这里先将 ALL 也映射为 BTC
+      const symbol = selectedCoin === 'ALL' ? 'BTC' : selectedCoin
+      const timeframe = timeFilter
 
-      const timeScale = clamp(hours / 4, 0.5, 6); // baseline 4h
-
-      // Build per-exchange-per-coin records
-      const perCoinRows: Array<{
-        exchange: string
-        logo: string
-        coin: CoinSymbol
-        amountUsd: number
-        longUsd: number
-        shortUsd: number
-        longShare: number
-      }> = [];
-      for (const ex of EXCHANGES) {
-        for (const coin of coins) {
-          // Base in USD (millions), scaled by time filter.
-          const baseMillions = 2 + 12 * hashToUnit(`${ex.exchange}:${coin}`); // 2..14 (M)
-          const volatility = 0.85 + 0.35 * hashToUnit(`${ex.exchange}:${coin}:${hours}`); // 0.85..1.2
-          const amountUsd = baseMillions * 1e6 * timeScale * volatility;
-
-          const longShare = clamp(0.35 + 0.55 * hashToUnit(`${ex.exchange}:${coin}:long:${hours}`), 0.05, 0.95);
-          const longUsd = amountUsd * longShare;
-          const shortUsd = amountUsd - longUsd;
-
-          perCoinRows.push({
-            exchange: ex.exchange,
-            logo: ex.logo,
-            coin,
-            amountUsd,
-            longUsd,
-            shortUsd,
-            longShare,
-          });
-        }
+      let response: ExchangeLiquidationResponse
+      try {
+        response = await fetchExchangeLiquidation(symbol, timeframe)
+      } catch {
+        // 如果后端暂时没有数据，回退为空数组，由 LoadingState 处理错误展示
+        return null
       }
 
-      // Filter by coin, or aggregate "ALL" across coins.
-      const internalRows: Array<Omit<ExchangeRowRaw, 'ratio'>> = selectedCoin === 'ALL'
-        ? EXCHANGES.map(ex => {
-          const rows = perCoinRows.filter(r => r.exchange === ex.exchange)
-          const amountUsd = rows.reduce((acc, r) => acc + r.amountUsd, 0)
-          const longUsd = rows.reduce((acc, r) => acc + r.longUsd, 0)
-          const shortUsd = rows.reduce((acc, r) => acc + r.shortUsd, 0)
-          const longShare = amountUsd === 0 ? 0 : longUsd / amountUsd
-          return {
-            exchange: ex.exchange,
-            logo: ex.logo,
-            coin: 'ALL' as const,
-            amountUsd,
-            longUsd,
-            shortUsd,
-            longShare,
-            isLongDominant: longUsd > shortUsd,
-          }
-        })
-        : perCoinRows
-          .filter(r => r.coin === selectedCoin)
-          .map(r => ({
-            exchange: r.exchange,
-            logo: r.logo,
-            coin: r.coin,
-            amountUsd: r.amountUsd,
-            longUsd: r.longUsd,
-            shortUsd: r.shortUsd,
-            longShare: r.longShare,
-            isLongDominant: r.longUsd > r.shortUsd,
-          }))
+      const totalRow = response.rows.find(row => row.isTotal)
+      const exchangeRows = response.rows.filter(row => !row.isTotal)
 
-      internalRows.sort((a, b) => b.amountUsd - a.amountUsd)
+      const totalAmountUsd =
+        totalRow?.amountUsd ??
+        exchangeRows.reduce((sum, row) => sum + row.amountUsd, 0)
 
-      const totalAmountUsd = internalRows.reduce((acc, r) => acc + r.amountUsd, 0)
-      const totalLongUsd = internalRows.reduce((acc, r) => acc + r.longUsd, 0)
-      const totalShortUsd = internalRows.reduce((acc, r) => acc + r.shortUsd, 0)
+      const mappedRows: ExchangeRowRaw[] = response.rows.map(row => {
+        const isTotal = !!row.isTotal
+        const longUsd = row.longUsd
+        const shortUsd = row.shortUsd
+        const amountUsd = row.amountUsd
+        const longShare = typeof row.longShare === 'number'
+          ? row.longShare
+          : amountUsd > 0
+            ? longUsd / amountUsd
+            : 0
 
-      const rows: ExchangeRowRaw[] = internalRows.map(r => {
-        const ratio = totalAmountUsd === 0 ? 0 : (r.amountUsd / totalAmountUsd) * 100
+        const exMeta = EXCHANGES.find(ex => ex.exchange.toLowerCase() === row.exchange.toLowerCase())
+
+        const ratio = isTotal
+          ? 100
+          : totalAmountUsd > 0
+            ? (amountUsd / totalAmountUsd) * 100
+            : 0
+
         return {
-          exchange: r.exchange,
-          logo: r.logo,
-          coin: r.coin,
-          amountUsd: r.amountUsd,
-          longUsd: r.longUsd,
-          shortUsd: r.shortUsd,
-          longShare: r.longShare,
+          exchange: row.exchange === 'TOTAL' ? 'TOTAL' : row.exchange,
+          logo: isTotal ? '' : (exMeta?.logo ?? ''),
+          coin: selectedCoin === 'ALL' ? 'ALL' : (row.symbol as CoinSymbol),
+          amountUsd,
+          longUsd,
+          shortUsd,
+          longShare,
           ratio,
-          isLongDominant: r.isLongDominant,
+          isLongDominant: longUsd > shortUsd,
+          isTotal,
         }
       })
 
-      const total: ExchangeRowRaw = {
-        exchange: 'TOTAL',
-        logo: '',
-        coin: selectedCoin === 'ALL' ? 'ALL' : selectedCoin,
-        amountUsd: totalAmountUsd,
-        longUsd: totalLongUsd,
-        shortUsd: totalShortUsd,
-        longShare: totalAmountUsd === 0 ? 0 : totalLongUsd / totalAmountUsd,
-        ratio: 100,
-        isLongDominant: totalLongUsd > totalShortUsd,
-        isTotal: true,
-      }
-
-      return [total, ...rows]
+      return mappedRows
     },
-    [coinFilter, timeFilter, hours]
+    [coinFilter, timeFilter]
   );
 
   const tableData: ExchangeData[] = useMemo(() => {

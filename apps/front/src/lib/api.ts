@@ -296,6 +296,87 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+// ===== 聚合爆仓数据（Liquidation Data）API =====
+
+export interface LiquidationSummaryItem {
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  totalUsd: number
+  longUsd: number
+  shortUsd: number
+}
+
+export interface AggregatedLiquidationSummary {
+  symbol: string
+  items: LiquidationSummaryItem[]
+}
+
+export interface ExchangeLiquidationRow {
+  exchange: string
+  symbol: string
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  amountUsd: number
+  longUsd: number
+  shortUsd: number
+  longShare?: number
+  isTotal?: boolean
+}
+
+export interface ExchangeLiquidationResponse {
+  symbol: string
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  rows: ExchangeLiquidationRow[]
+}
+
+export async function fetchAggregatedLiquidationSummary(
+  symbol: string,
+): Promise<AggregatedLiquidationSummary> {
+  return apiCall(async () => {
+    const url = new URL(`${API_BASE_URL}/aggregated-liquidation/summary`)
+    url.searchParams.set('symbol', symbol)
+
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+      },
+    })
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch liquidation summary: ${res.status} ${res.statusText}`)
+    }
+
+    const json = await res.json()
+    return unwrapApiResponse<AggregatedLiquidationSummary>(json)
+  }, 'FETCH_LIQUIDATION_SUMMARY')
+}
+
+export async function fetchExchangeLiquidation(
+  symbol: string,
+  timeframe: '1h' | '4h' | '12h' | '24h',
+): Promise<ExchangeLiquidationResponse> {
+  return apiCall(async () => {
+    const url = new URL(`${API_BASE_URL}/aggregated-liquidation/exchanges`)
+    url.searchParams.set('symbol', symbol)
+    url.searchParams.set('timeframe', timeframe)
+
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+      },
+    })
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch exchange liquidation: ${res.status} ${res.statusText}`)
+    }
+
+    const json = await res.json()
+    return unwrapApiResponse<ExchangeLiquidationResponse>(json)
+  }, 'FETCH_LIQUIDATION_EXCHANGES')
+}
+
 export interface PositionsQueryParams {
   page?: number
   limit?: number

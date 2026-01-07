@@ -502,6 +502,36 @@ const LongShortRatioPointResponseDto = z
     source: z.string(),
   })
   .passthrough();
+const LiquidationSummaryItemDto = z
+  .object({
+    timeframe: z.enum(["1h", "4h", "12h", "24h"]),
+    totalUsd: z.number(),
+    longUsd: z.number(),
+    shortUsd: z.number(),
+  })
+  .passthrough();
+const AggregatedLiquidationSummaryDto = z
+  .object({ symbol: z.string(), items: z.array(LiquidationSummaryItemDto) })
+  .passthrough();
+const ExchangeLiquidationRowDto = z
+  .object({
+    exchange: z.string(),
+    symbol: z.string(),
+    timeframe: z.enum(["1h", "4h", "12h", "24h"]),
+    amountUsd: z.number(),
+    longUsd: z.number(),
+    shortUsd: z.number(),
+    longShare: z.number().optional(),
+    isTotal: z.boolean().optional(),
+  })
+  .passthrough();
+const ExchangeLiquidationResponseDto = z
+  .object({
+    symbol: z.string(),
+    timeframe: z.enum(["1h", "4h", "12h", "24h"]),
+    rows: z.array(ExchangeLiquidationRowDto),
+  })
+  .passthrough();
 const ExchangeConfigResponseDto = z
   .object({
     id: z.string(),
@@ -591,6 +621,10 @@ export const schemas = {
   VenueOrderBookDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
+  LiquidationSummaryItemDto,
+  AggregatedLiquidationSummaryDto,
+  ExchangeLiquidationRowDto,
+  ExchangeLiquidationResponseDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
@@ -1800,6 +1834,43 @@ const endpoints = makeApi([
       })
       .partial()
       .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/aggregated-liquidation/exchanges",
+    alias: "AggregatedLiquidationController_getExchanges",
+    description: `基于 AggregatedLiquidationHistory 表，对指定币种 + 时间区间，在最新时间点上按交易所拆分 long/short，并返回 TOTAL 汇总行和各交易所行，用于前端交易所表格。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.unknown(),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z.object({ data: ExchangeLiquidationResponseDto }).partial().passthrough()
+    ),
+  },
+  {
+    method: "get",
+    path: "/aggregated-liquidation/summary",
+    alias: "AggregatedLiquidationController_getSummary",
+    description: `基于 AggregatedLiquidationHistory 表，对指定币种在 1h/4h/12h/24h 粒度下的最新爆仓数据进行聚合，用于前端顶部 summary 卡片。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z
+        .object({ data: AggregatedLiquidationSummaryDto })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "post",
