@@ -22,6 +22,10 @@ export class WhaleHoldingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private getClient() {
+    return this.prisma.getClient()
+  }
+
   /**
    * 基于 Hyperliquid Whale Alert 数据，近实时估算“当前鲸鱼持仓”列表：
    * - 以 (user_address, symbol) 为维度，取最新一条记录
@@ -42,12 +46,14 @@ export class WhaleHoldingsService {
       }, minValueUsd=${minPositionValueUsd}, from=${from.toISOString()}, limit=${limit}`,
     )
 
+    const client = this.getClient()
+
     // 使用 DISTINCT ON (PostgreSQL) 为每个 (user_address, symbol) 选出最新一条记录
     const symbolCondition = query.symbol
       ? Prisma.sql`AND symbol = ${query.symbol}`
       : Prisma.sql``
 
-    const rows = await this.prisma.$queryRaw(Prisma.sql`
+    const rows = (await client.$queryRaw(Prisma.sql`
       WITH latest_positions AS (
         SELECT DISTINCT ON (user_address, symbol)
           user_address,
@@ -69,7 +75,7 @@ export class WhaleHoldingsService {
         AND position_value_usd >= ${minPositionValueUsd}
       ORDER BY position_value_usd DESC
       LIMIT ${limit};
-    `) as RawWhaleHoldingRow[]
+    `)) as RawWhaleHoldingRow[]
 
     return rows.map(row => {
       const positionSize = Number(row.position_size)
