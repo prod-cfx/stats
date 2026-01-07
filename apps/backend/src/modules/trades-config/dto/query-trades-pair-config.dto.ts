@@ -5,6 +5,7 @@ import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
 export class QueryTradesPairConfigDto {
   @ApiPropertyOptional({ description: '交易所标识筛选' })
   @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsOptional()
   exchange?: string
 
@@ -19,5 +20,10 @@ export class QueryTradesPairConfigDto {
   @IsOptional()
   enabledOnly?: boolean
 }
+
+
+
+
+
 
 

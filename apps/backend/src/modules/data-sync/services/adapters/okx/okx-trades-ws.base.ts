@@ -413,6 +413,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     const metaInstId = this.pickMetadataString(metadata, ['okxInstId', 'instId'])
     if (metaInstId) {
       const upper = metaInstId.trim().toUpperCase()
+      if (!upper.includes('-')) return null
       if (this.instrumentType === 'SPOT') {
         return upper.endsWith('-SWAP') ? null : upper
       }

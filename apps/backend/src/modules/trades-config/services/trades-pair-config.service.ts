@@ -240,6 +240,8 @@ export class TradesPairConfigService {
 
     const metaInstId = pickMetadataString(['okxInstId', 'instId'])
     if (metaInstId) {
+      // okxInstId/instId 必须符合 OKX 的 instId 格式（包含 '-'），否则会导致订阅到不存在的频道
+      if (!metaInstId.includes('-')) return null
       if (input.instrumentType === 'SPOT') {
         return metaInstId.endsWith('-SWAP') ? null : metaInstId
       }
@@ -297,6 +299,12 @@ export class TradesPairConfigService {
         : metadata && typeof metadata.instId === 'string' && metadata.instId.trim().length
           ? metadata.instId.trim().toUpperCase()
           : null
+
+    if (metaInstId && !metaInstId.includes('-')) {
+      throwBadRequest(
+        `metadata.instId/okxInstId 必须使用 OKX instId 格式（包含 '-'，例如 ${base}-${quote} 或 ${base}-${quote}-SWAP），实际：${metaInstId}`,
+      )
+    }
 
     if (metaInstId && metaInstId.includes('-')) {
       const parts = metaInstId.split('-').filter(Boolean)
