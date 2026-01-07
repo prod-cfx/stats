@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsDateString, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
+
+export enum WhaleAlertSide {
+  Long = 'Long',
+  Short = 'Short',
+}
 
 export class RealtimeWhaleAlertDto {
   @ApiProperty({ description: '鲸鱼地址（Hyperliquid 用户地址）', example: '0x481234567890abcdef1234567890abcdef1234af' })
@@ -58,9 +63,11 @@ export class RealtimeWhaleAlertDto {
     description:
       '持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）',
     example: 'Long',
+    enum: WhaleAlertSide,
+    enumName: 'WhaleAlertSide',
   })
-  @IsString()
-  side: 'Long' | 'Short'
+  @IsEnum(WhaleAlertSide)
+  side: WhaleAlertSide
 }
 
 export class QueryRealtimeWhaleAlertDto {
@@ -99,5 +106,10 @@ export class QueryRealtimeWhaleAlertDto {
   @IsOptional()
   since?: string
 }
+
+
+
+
+
 
 

@@ -121,9 +121,11 @@ export const RealtimeWhalesTable = () => {
         setTransactions(mapped);
       }
     } catch (e) {
-      // 加载失败时保留当前列表，并给出提示
+      // 加载失败时保留当前列表，并给出提示，仅对最新请求弹 toast，避免并发时旧请求误报
       console.error('Failed to fetch realtime whale alerts', e);
-      error(t('whaleTracking.realtime.toast.loadFailed'));
+      if (requestId === lastRequestIdRef.current) {
+        error(t('whaleTracking.realtime.toast.loadFailed'));
+      }
     } finally {
       if (requestId === lastRequestIdRef.current) {
         setLoading(false);

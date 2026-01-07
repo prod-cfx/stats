@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 
 @Injectable()
 export class WhaleAlertService {
@@ -71,7 +72,7 @@ export class WhaleAlertService {
       const liqPrice = Number(row.liquidationPrice)
       const positionValueUsd = Number(row.positionValueUsd)
 
-      const side: 'Long' | 'Short' = positionSize >= 0 ? 'Long' : 'Short'
+      const side: WhaleAlertSide = positionSize >= 0 ? WhaleAlertSide.Long : WhaleAlertSide.Short
 
       const dto: RealtimeWhaleAlertDto = {
         user_address: row.userAddress,
@@ -92,5 +93,10 @@ export class WhaleAlertService {
     })
   }
 }
+
+
+
+
+
 
 

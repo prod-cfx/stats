@@ -545,6 +545,7 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough();
+const WhaleAlertSide = z.enum(["Long", "Short"]);
 const RealtimeWhaleAlertDto = z
   .object({
     user_address: z.string(),
@@ -555,7 +556,7 @@ const RealtimeWhaleAlertDto = z
     position_value_usd: z.number(),
     position_action: z.number(),
     create_time: z.string(),
-    side: z.string(),
+    side: WhaleAlertSide,
   })
   .passthrough();
 
@@ -607,6 +608,7 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
+  WhaleAlertSide,
   RealtimeWhaleAlertDto,
 };
 
