@@ -2138,21 +2138,26 @@
         "operationId": "AdminDataPullTaskController_list",
         "parameters": [
           {
-            "name": "enabled",
+            "name": "page",
             "required": false,
             "in": "query",
-            "description": "是否启用",
+            "description": "页码（从 1 开始）",
             "schema": {
-              "type": "boolean"
+              "minimum": 1,
+              "example": 1,
+              "type": "number"
             }
           },
           {
-            "name": "name",
+            "name": "limit",
             "required": false,
             "in": "query",
-            "description": "按名称模糊搜索",
+            "description": "每页数量",
             "schema": {
-              "type": "string"
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20,
+              "type": "number"
             }
           },
           {
@@ -2165,23 +2170,21 @@
             }
           },
           {
-            "name": "limit",
+            "name": "name",
             "required": false,
             "in": "query",
-            "description": "每页数量",
+            "description": "按名称模糊搜索",
             "schema": {
-              "example": 20,
-              "type": "number"
+              "type": "string"
             }
           },
           {
-            "name": "page",
+            "name": "enabled",
             "required": false,
             "in": "query",
-            "description": "页码（从 1 开始）",
+            "description": "是否启用",
             "schema": {
-              "example": 1,
-              "type": "number"
+              "type": "boolean"
             }
           }
         ],
@@ -2252,6 +2255,176 @@
           }
         ],
         "summary": "创建数据拉取任务",
+        "tags": [
+          "admin-data-pull-tasks"
+        ]
+      }
+    },
+    "/admin/data-pull-tasks/registered-keys": {
+      "get": {
+        "operationId": "AdminDataPullTaskController_getRegisteredKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "example-kline-1m",
+                        "example-news-latest",
+                        "coinglass-heatmap"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取所有已注册的 Job key 列表",
+        "tags": [
+          "admin-data-pull-tasks"
+        ]
+      }
+    },
+    "/admin/data-pull-tasks/registered-jobs": {
+      "get": {
+        "operationId": "AdminDataPullTaskController_getRegisteredJobs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "example": "coinglass-aggregated-liquidation"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Coinglass 聚合清算数据"
+                          },
+                          "metaSchema": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "description": {
+                                "type": "string"
+                              },
+                              "fields": {
+                                "type": "array"
+                              },
+                              "example": {
+                                "type": "object"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）",
+        "tags": [
+          "admin-data-pull-tasks"
+        ]
+      }
+    },
+    "/admin/data-pull-tasks/{id}/executions": {
+      "get": {
+        "operationId": "AdminDataPullTaskController_listExecutions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "每页数量",
+            "schema": {
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "页码（从 1 开始）",
+            "schema": {
+              "example": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "获取执行历史成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BasePaginationResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/AdminDataPullExecutionResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "分页获取指定任务的执行历史",
         "tags": [
           "admin-data-pull-tasks"
         ]
@@ -3119,6 +3292,71 @@
         ]
       }
     },
+    "/crypto-stock-quotes/latest": {
+      "get": {
+        "description": "返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的",
+        "operationId": "CryptoStockQuotesController_getLatest",
+        "parameters": [
+          {
+            "name": "symbols",
+            "required": false,
+            "in": "query",
+            "description": "股票代码列表，使用英文逗号分隔，例如：MSTR,COIN,MARA",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "数据源标识，例如：BBX；为空时使用默认数据源",
+            "schema": {
+              "example": "BBX",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/BaseResponseDto"
+                    },
+                    {
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/CryptoStockQuoteResponseDto"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取加密相关股票的最新报价列表",
+        "tags": [
+          "crypto-stock-quotes"
+        ]
+      }
+    },
     "/markets/pairs": {
       "get": {
         "operationId": "MarketsController_getTradingPairs",
@@ -3215,11 +3453,17 @@
               "type": "string",
               "enum": [
                 "1m",
+                "3m",
                 "5m",
                 "15m",
+                "30m",
                 "1h",
                 "4h",
-                "1d"
+                "6h",
+                "8h",
+                "12h",
+                "1d",
+                "1w"
               ]
             }
           },
@@ -4691,6 +4935,47 @@
           "updatedAt"
         ]
       },
+      "AdminDataPullExecutionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "taskId": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "fetchedCount": {
+            "type": "number"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "type": "object",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "status",
+          "fetchedCount",
+          "startedAt"
+        ]
+      },
       "CreateAdminDataPullTaskDto": {
         "type": "object",
         "properties": {
@@ -5234,6 +5519,72 @@
           "updatedAt"
         ]
       },
+      "OrderBookLevelDto": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "number",
+            "description": "价格（统一为 base-quote 价格，例如 BTC/USDT）"
+          },
+          "size": {
+            "type": "number",
+            "description": "数量（base 数量，例如 0.1 BTC）"
+          }
+        },
+        "required": [
+          "price",
+          "size"
+        ]
+      },
+      "VenueOrderBookDto": {
+        "type": "object",
+        "properties": {
+          "venueId": {
+            "type": "string",
+            "description": "流动性来源唯一标识，例如 binance-spot、okx-spot 等"
+          },
+          "marketKey": {
+            "type": "string",
+            "description": "内部统一市场标识，格式如 BTC-USDT:spot / BTC-USDT:perp",
+            "example": "BTC-USDT:spot"
+          },
+          "bids": {
+            "description": "买盘深度（按价格从高到低排序）",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderBookLevelDto"
+            }
+          },
+          "asks": {
+            "description": "卖盘深度（按价格从低到高排序）",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderBookLevelDto"
+            }
+          },
+          "exchangeTs": {
+            "type": "number",
+            "description": "交易所侧事件时间戳（毫秒），如有",
+            "nullable": true
+          },
+          "receivedTs": {
+            "type": "number",
+            "description": "本地接收时间戳（毫秒）"
+          },
+          "version": {
+            "type": "number",
+            "description": "本地版本号 / 序列号，用于去重与连续性检查"
+          }
+        },
+        "required": [
+          "venueId",
+          "marketKey",
+          "bids",
+          "asks",
+          "receivedTs",
+          "version"
+        ]
+      },
       "CreateOrderbookPairConfigDto": {
         "type": "object",
         "properties": {
@@ -5365,72 +5716,6 @@
             "nullable": true
           }
         }
-      },
-      "OrderBookLevelDto": {
-        "type": "object",
-        "properties": {
-          "price": {
-            "type": "number",
-            "description": "价格（统一为 base-quote 价格，例如 BTC/USDT）"
-          },
-          "size": {
-            "type": "number",
-            "description": "数量（base 数量，例如 0.1 BTC）"
-          }
-        },
-        "required": [
-          "price",
-          "size"
-        ]
-      },
-      "VenueOrderBookDto": {
-        "type": "object",
-        "properties": {
-          "venueId": {
-            "type": "string",
-            "description": "流动性来源唯一标识，例如 binance-spot、okx-spot 等"
-          },
-          "marketKey": {
-            "type": "string",
-            "description": "内部统一市场标识，格式如 BTC-USDT:spot / BTC-USDT:perp",
-            "example": "BTC-USDT:spot"
-          },
-          "bids": {
-            "type": "array",
-            "description": "买盘深度（按价格从高到低排序）",
-            "items": {
-              "$ref": "#/components/schemas/OrderBookLevelDto"
-            }
-          },
-          "asks": {
-            "type": "array",
-            "description": "卖盘深度（按价格从低到高排序）",
-            "items": {
-              "$ref": "#/components/schemas/OrderBookLevelDto"
-            }
-          },
-          "exchangeTs": {
-            "type": "number",
-            "description": "交易所侧事件时间戳（毫秒），如有",
-            "nullable": true
-          },
-          "receivedTs": {
-            "type": "number",
-            "description": "本地接收时间戳（毫秒）"
-          },
-          "version": {
-            "type": "number",
-            "description": "本地版本号 / 序列号，用于去重与连续性检查"
-          }
-        },
-        "required": [
-          "venueId",
-          "marketKey",
-          "bids",
-          "asks",
-          "receivedTs",
-          "version"
-        ]
       },
       "TradingPairConfigResponseDto": {
         "type": "object",
@@ -5565,11 +5850,17 @@
             "example": "4h",
             "enum": [
               "1m",
+              "3m",
               "5m",
               "15m",
+              "30m",
               "1h",
               "4h",
-              "1d"
+              "6h",
+              "8h",
+              "12h",
+              "1d",
+              "1w"
             ]
           },
           "timestamp": {
