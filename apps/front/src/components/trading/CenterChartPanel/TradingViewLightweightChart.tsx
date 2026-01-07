@@ -1,12 +1,14 @@
 'use client';
 
-import type {LiquidationMapChartHandle} from '@/components/liquidation-map/LiquidationMapChart';
-import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { LiquidationMapChart  } from '@/components/liquidation-map/LiquidationMapChart'
+import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
+import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
+import { CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
+import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
 import { generateLiquidationMapMockData } from '@/lib/liquidation-map/mock-liquidation-map'
-import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market';
+import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market'
 
 function parsePriceLabel(label: string): number | null {
   const n = Number.parseFloat(String(label).replace(/,/g, ''))
@@ -93,7 +95,9 @@ export const TradingViewLightweightChart = ({
   const chartHostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartRef = useRef<any>(null);
+  const chartAdapterRef = useRef<ChartAdapter | null>(null)
   const activeIndicatorsRef = useRef<ActiveIndicator[]>([])
+  const displayPriceRef = useRef<number>(0)
   const [isMounted, setIsMounted] = useState(false);
   const [ohlc, setOhlc] = useState<any>(null);
   const [lastCandleClose, setLastCandleClose] = useState<number | null>(null)
@@ -245,66 +249,18 @@ export const TradingViewLightweightChart = ({
 
     candlestickSeries.setData(candleData);
 
-    // Ensure the required coordinate API exists:
-    // chart.priceScale('right').priceToCoordinate(price)
-    // If the runtime chart API doesn't expose it, we provide a small adapter using the main series
-    // (still accessed through the required call-site).
-    const ensurePriceScaleCoordinateApi = (chartApi: any, seriesApi: any) => {
-      const fallbackScale = () => ({
-        priceToCoordinate: (price: number) => {
-          const y = seriesApi?.priceToCoordinate?.(price)
-          return typeof y === 'number' && Number.isFinite(y) ? y : null
-        },
-        coordinateToPrice: (y: number) => {
-          const p = seriesApi?.coordinateToPrice?.(y)
-          return typeof p === 'number' && Number.isFinite(p) ? p : null
-        },
-      })
-
-      try {
-        if (typeof chartApi?.priceScale !== 'function') {
-          chartApi.priceScale = () => fallbackScale()
-          return
-        }
-
-        // Try native scale first
-        try {
-          const native = chartApi.priceScale('right')
-          if (native && typeof native.priceToCoordinate === 'function') return
-        } catch {
-          // ignore
-        }
-
-        const original = chartApi.priceScale.bind(chartApi)
-        chartApi.priceScale = (id: string) => {
-          try {
-            const scale = original(id)
-            // IMPORTANT: never spread the scale object (methods live on the prototype and would be lost).
-            if (scale && typeof scale === 'object') {
-              if (typeof (scale as any).priceToCoordinate !== 'function') {
-                ;(scale as any).priceToCoordinate = fallbackScale().priceToCoordinate
-              }
-              if (typeof (scale as any).coordinateToPrice !== 'function') {
-                ;(scale as any).coordinateToPrice = fallbackScale().coordinateToPrice
-              }
-              return scale
-            }
-            return fallbackScale()
-          } catch {
-            return fallbackScale()
-          }
-        }
-      } catch {
-        // last resort
-        chartApi.priceScale = () => fallbackScale()
-      }
-    }
-
-    ensurePriceScaleCoordinateApi(chart as any, candlestickSeries as any)
+    // Build chart adapter for liquidation overlay (centralize all Lightweight calls).
+    chartAdapterRef.current = createLightweightChartAdapter({
+      chart: chart as any,
+      mainSeries: candlestickSeries as any,
+      priceScaleId: 'right',
+      getCurrentPrice: () => displayPriceRef.current,
+    })
 
     // ==== Dynamic Indicators (series) ====
-    // NOTE: The catalog drives WHICH items exist; this switch controls HOW they render on the chart.
-    const has = (id: string) => activeIndicators.some((x) => x.id === id)
+    // NOTE: Only chartSeries indicators should affect the base K-line chart. Overlay toggles must not rebuild candles.
+    const seriesIdSet = new Set(chartSeriesKey ? chartSeriesKey.split('|') : [])
+    const has = (id: string) => seriesIdSet.has(id)
     const seriesToCreate: Array<{ id: string; type: 'line' | 'hist'; color: string; priceScaleId: string; margins?: { top: number; bottom: number } }> = []
 
     if (has('long-short-ratio')) {
@@ -397,18 +353,7 @@ export const TradingViewLightweightChart = ({
     chart.timeScale().fitContent();
     chartRef.current = chart;
 
-    // Dev-only sanity check for the required API: chart.priceScale('right').priceToCoordinate(price)
-    try {
-      const ps = (chart as any).priceScale
-      const scale = typeof ps === 'function' ? ps('right') : null
-      const hasPriceToCoordinate = Boolean(scale && typeof scale.priceToCoordinate === 'function')
-      const testY = hasPriceToCoordinate ? scale.priceToCoordinate(basePrice) : null
-       
-      console.debug('[liq-overlay] priceToCoordinate probe', { priceScaleType: typeof ps, hasPriceToCoordinate, testY })
-    } catch {
-       
-      console.debug('[liq-overlay] priceToCoordinate probe failed')
-    }
+    // NOTE: Price<->pixel mapping is provided by chartAdapterRef (no direct Lightweight calls here).
 
     // 初始设置 OHLC 为最后一个点
     const lastCandle = candleData[candleData.length - 1];
@@ -416,8 +361,9 @@ export const TradingViewLightweightChart = ({
     setLastCandleClose(typeof lastCandle?.close === 'number' ? lastCandle.close : null)
 
     const isLiqOverlayActive = () => activeIndicatorsRef.current.some((x) => x.id === 'liquidation-map')
+    const chartAdapter = chartAdapterRef.current
     // 订阅十字线移动事件 (also drives hover tooltip)
-    chart.subscribeCrosshairMove((param: any) => {
+    const onCrosshairMove = (param: any) => {
       if (param.time) {
         const data = param.seriesData.get(candlestickSeries);
         if (data) {
@@ -429,13 +375,13 @@ export const TradingViewLightweightChart = ({
 
       // Hover tooltip for liquidation overlay (does NOT block Lightweight interactions)
       if (!isLiqOverlayActive()) return
+      if (!chartAdapter) return
       if (liqLockedRef.current) {
         // Locked: keep updating position to follow pan/zoom
         const lockedPrice = liqLockedPriceRef.current
         if (lockedPrice == null) return
         const _pt = param?.point
-        const chartApi: any = chart
-        const y = chartApi.priceScale('right').priceToCoordinate?.(lockedPrice)
+        const y = chartAdapter.getPriceToY(lockedPrice)
         if (typeof y !== 'number' || !Number.isFinite(y)) return
         setLiqSelected((prev) => {
           if (!prev) return prev
@@ -460,8 +406,7 @@ export const TradingViewLightweightChart = ({
       }
 
       // Sample by y -> price -> interpolate liquidation data
-      const chartApi: any = chart
-      const p = chartApi.priceScale('right').coordinateToPrice?.(pt.y)
+      const p = chartAdapter.getYToPrice(pt.y)
       if (typeof p !== 'number' || !Number.isFinite(p)) return
 
       // Snap to the same step used by overlay densify, so highlight aligns with bars
@@ -491,14 +436,15 @@ export const TradingViewLightweightChart = ({
         cumLong: Number(cumLong.toFixed(2)),
         cumShort: Number(cumShort.toFixed(2)),
       })
-    });
+    }
+    const unsubCrosshair = chartAdapter?.subscribeCrosshairMove(onCrosshairMove) ?? (() => {})
 
     // Keep overlay y alignment in sync on pan/zoom.
     function refreshOverlay() {
       overlayRef.current?.refresh()
       // If tooltip is locked, re-position it by price (y changes with zoom/pan)
       if (liqLockedRef.current && liqLockedPriceRef.current != null) {
-        const y = (chart as any).priceScale('right').priceToCoordinate?.(liqLockedPriceRef.current)
+        const y = chartAdapter?.getPriceToY(liqLockedPriceRef.current)
         if (typeof y === 'number' && Number.isFinite(y)) {
           setLiqSelected((prev) => (prev ? { ...prev, y } : prev))
         }
@@ -506,7 +452,7 @@ export const TradingViewLightweightChart = ({
     }
 
     // Click-to-inspect (toggle lock): pick by clicked y coordinate, but only when clicking inside overlay band.
-    chart.subscribeClick((param: any) => {
+    const onChartClick = (param: any) => {
       try {
         // If overlay is not active, ignore clicks (and clear any stale lock).
         if (!isLiqOverlayActive()) {
@@ -518,6 +464,7 @@ export const TradingViewLightweightChart = ({
           }
           return
         }
+        if (!chartAdapter) return
 
         const pt = param?.point
         if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
@@ -551,8 +498,7 @@ export const TradingViewLightweightChart = ({
           return
         }
 
-        const chartApi: any = chart
-        const p = chartApi.priceScale('right').coordinateToPrice?.(pt.y)
+        const p = chartAdapter.getYToPrice(pt.y)
         if (typeof p !== 'number' || !Number.isFinite(p)) return
         const step = pickOverlayPriceStep(typeof lastCandleCloseRef.current === 'number' ? lastCandleCloseRef.current : basePrice)
         const price = Math.round(p / step) * step
@@ -585,7 +531,8 @@ export const TradingViewLightweightChart = ({
       } catch {
         // ignore
       }
-    })
+    }
+    const unsubClick = chartAdapter?.subscribeClick(onChartClick) ?? (() => {})
 
     const handleResize = () => {
       if (chart && container) {
@@ -600,8 +547,7 @@ export const TradingViewLightweightChart = ({
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
 
-    chart.timeScale().subscribeVisibleTimeRangeChange(refreshOverlay)
-    chart.timeScale().subscribeVisibleLogicalRangeChange(refreshOverlay)
+    const unsubChartChange = chartAdapter?.subscribeChartChange(refreshOverlay) ?? (() => {})
     // Initial sync (chartRef is now ready)
     refreshOverlay()
 
@@ -640,11 +586,13 @@ export const TradingViewLightweightChart = ({
 
     return () => {
       resizeObserver.disconnect();
-      chart.timeScale().unsubscribeVisibleTimeRangeChange(refreshOverlay)
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(refreshOverlay)
+      unsubChartChange()
+      unsubCrosshair()
+      unsubClick()
       if (liveTimer) clearInterval(liveTimer)
       chart.remove();
       chartRef.current = null;
+      chartAdapterRef.current = null
     };
   }, [isMounted, symbol, interval, chartSeriesKey]);
 
@@ -669,6 +617,10 @@ export const TradingViewLightweightChart = ({
     }
     return price
   }, [basePrice, isAggregated, selectedExchange, marketType])
+
+  useEffect(() => {
+    displayPriceRef.current = displayPrice
+  }, [displayPrice])
 
   // Denser mock for overlay (more price buckets -> more bars), without affecting the full page.
   const liqData = useMemo(
@@ -818,12 +770,8 @@ export const TradingViewLightweightChart = ({
             overlayOpacity={0.85}
             selectedPrice={liqSelected?.price ?? null}
             getPriceToY={(p) => {
-              const chartApi: any = chartRef.current
-              if (!chartApi) return null
               try {
-                // REQUIRED API: chart.priceScale('right').priceToCoordinate(price)
-                const y = chartApi.priceScale('right').priceToCoordinate(p)
-                return typeof y === 'number' && Number.isFinite(y) ? y : null
+                return chartAdapterRef.current?.getPriceToY(p) ?? null
               } catch {
                 return null
               }
