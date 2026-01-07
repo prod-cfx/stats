@@ -18,6 +18,7 @@ export enum AppResource {
   LLM_STRATEGY = 'llm_strategy',
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
+  WHALE_TRACKING = 'whale_tracking',
   DATA_PULL_TASK = 'data_pull_task',
   ORDERBOOK_CONFIG = 'orderbook_config',
   EXCHANGE_CONFIG = 'exchange_config',
@@ -29,6 +30,7 @@ RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
+  .readAny(AppResource.WHALE_TRACKING)
 
 RBAC_PERMISSIONS.grant(AppRole.MODERATOR).extend(AppRole.USER)
 

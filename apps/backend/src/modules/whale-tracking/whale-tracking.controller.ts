@@ -17,7 +17,7 @@ export class WhaleTrackingController {
 
   @Get('discover')
   @RequireAuth()
-  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ReadAny(AppResource.WHALE_TRACKING)
   @ApiOperation({
     summary: '鲸鱼发现页 - 获取推荐鲸鱼与详情列表',
     description:
