@@ -270,6 +270,12 @@
       "command": "npx stagewise@latest -b -s -a 3500 -p 3501 -w ./apps/admin-front",
       "description": "Stagewise 桥接 admin-front (3500→3501)",
       "ports": [3501]
+    },
+    "mock": {
+      "command": "pnpm --filter @ai/front run dev:mock",
+      "app": "front",
+      "ports": [3001],
+      "description": "启动前端开发服务(Mock后端)"
     }
   },
   "clean": {
