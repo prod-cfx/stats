@@ -4,7 +4,7 @@ import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
-import { useMockData } from '@/hooks/use-mock-data';
+import { useAsync } from '@/hooks/use-async';
 import { fetchWhaleTrackingDiscover, type WhaleDiscoverResponse } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 import type { TraderCardProps } from './TraderCard';
@@ -22,11 +22,14 @@ export const DiscoverGrid = () => {
     setIsModalOpen(true);
   };
 
-  const tradersFetcher = async (): Promise<WhaleDiscoverResponse> => {
-    return fetchWhaleTrackingDiscover();
-  };
-
-  const { data, loading, error, reload } = useMockData(tradersFetcher, [], { delay: 300 });
+  const {
+    data,
+    loading,
+    error,
+    execute: reload,
+  } = useAsync<WhaleDiscoverResponse>(fetchWhaleTrackingDiscover, {
+    immediate: true,
+  });
 
   const sortedDetails = useMemo(() => {
     if (!data?.details) return [];
@@ -76,7 +79,7 @@ export const DiscoverGrid = () => {
   return (
     <div className="space-y-12">
       {/* Recommended Section */}
-      <LoadingState isLoading={loading} error={error} onRetry={reload}>
+      <LoadingState isLoading={loading} error={!!error} onRetry={reload}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {data?.recommended.map((trader, index) => (
             <TraderCard 
@@ -115,7 +118,12 @@ export const DiscoverGrid = () => {
       </div>
 
       {/* Detail Grid Section */}
-      <LoadingState isLoading={loading} error={error} onRetry={reload} isEmpty={!loading && sortedDetails.length === 0}>
+      <LoadingState
+        isLoading={loading}
+        error={!!error}
+        onRetry={reload}
+        isEmpty={!loading && !error && sortedDetails.length === 0}
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
           {sortedDetails.map((trader, index) => (
             <TraderCard 
