@@ -79,14 +79,7 @@
 
 /* Hide TradingView attribution/logo inside lightweight-charts containers.
    We keep it only where the wrapper does NOT have `.cf-hide-tv-logo`. */
-.cf-hide-tv-logo .tv-logo,
-.cf-hide-tv-logo .tv-watermark,
-.cf-hide-tv-logo [class*="tv-logo"],
-.cf-hide-tv-logo [class*="tv-watermark"],
-.cf-hide-tv-logo a[href*="tradingview.com"],
-.cf-hide-tv-logo a[title*="TradingView"] {
-  display: none !important;
-}
+/* REMOVED for compliance */
 
 /* Subtle dark scrollbar (used in Orderbook/Trades panes) */
 .cf-scrollbar {

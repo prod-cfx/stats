@@ -74,10 +74,11 @@ const IndicatorChartPanel = ({
   registerChart,
   unregisterChart,
   onClose,
-  showTvLogo = false,
+  showTvLogo: _showTvLogo = false,
   formatter,
   priceFormatter,
 }: IndicatorChartProps) => {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<any> | null>(null)
@@ -457,7 +458,7 @@ const IndicatorChartPanel = ({
   }, [data, type])
 
   return (
-    <div className={`flex flex-col w-full flex-shrink-0 ${showTvLogo ? '' : 'cf-hide-tv-logo'}`}>
+    <div className="flex flex-col w-full flex-shrink-0">
        {/* Separator_Top strictly matching Figma structure */}
        <div className="h-[1px] w-full bg-[#30363d]" />
        <div className="relative w-full bg-[#161b22]" style={{ height }}>
@@ -468,7 +469,7 @@ const IndicatorChartPanel = ({
               onClick={onClose}
               className="absolute top-[5px] right-[80px] z-20 pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]"
               aria-label="close"
-              title="关闭"
+              title={t('common.close')}
             >
               ×
             </button>
@@ -995,7 +996,7 @@ export const TradingViewLightweightChart = ({
 
         const p = chartAdapter.getYToPrice(pt.y)
         if (typeof p !== 'number' || !Number.isFinite(p)) return
-        const step = pickOverlayPriceStep(typeof lastCandleCloseRef.current === 'number' ? lastCandleCloseRef.current : basePrice)
+        const step = pickOverlayPriceStep(typeof lastCandleCloseRef.current === 'number' ? lastCandleCloseRef.current : basePriceForHeader)
         const price = Math.round(p / step) * step
 
         const s = liqSeriesRef.current
@@ -1096,7 +1097,7 @@ export const TradingViewLightweightChart = ({
     console.log('[LOCKED PRICE LINE UPDATED]', lockedPrice)
   }, [lockedPrice])
 
-  // 切换周期/切换指标时：只更新 K 线数据与指标数据，不重建 chart（从而保证 priceLine 不会被重建）
+  // 切换周期/切换指标时：只更新 K 线数据与指标数据，不重建 chart（从而保证 priceLine 永远只有一条且不重建。
   useEffect(() => {
     if (!isMounted) return
     const candleSeries = candlestickSeriesRef.current
@@ -1404,7 +1405,7 @@ export const TradingViewLightweightChart = ({
           >
             <div className="bg-[#0d1117]/85 border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] backdrop-blur">
               <div className="flex items-center justify-between">
-                <div className="font-bold">价格: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 0 : 2)}</div>
+                <div className="font-bold">{t('common.price')}: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 0 : 2)}</div>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
                 <div className="flex items-center justify-between gap-2">
@@ -1442,7 +1443,7 @@ export const TradingViewLightweightChart = ({
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ff4d4d' }} />
-                      <span>累计多单清算</span>
+                      <span>{t('liquidationMap.legend.cumLong')}</span>
                     </span>
                     <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
                   </div>
@@ -1450,7 +1451,7 @@ export const TradingViewLightweightChart = ({
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#00c076' }} />
-                      <span>累计空单清算</span>
+                      <span>{t('liquidationMap.legend.cumShort')}</span>
                     </span>
                     <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
                   </div>
@@ -1465,7 +1466,7 @@ export const TradingViewLightweightChart = ({
       {isPanelOn('long-short-ratio') && (
         <IndicatorChartPanel 
            id="ls"
-           title="聚合多空比"
+           title={t('chart.indicators.longShortRatio')}
            color="#22c55e"
            height={70}
            type="line"
@@ -1482,7 +1483,7 @@ export const TradingViewLightweightChart = ({
       {isPanelOn('aggregated-open-interest') && (
         <IndicatorChartPanel 
            id="oi"
-           title="聚合持仓"
+           title={t('chart.indicators.aggregatedOpenInterest')}
            color="#22d3ee"
            height={70}
            type="area"
@@ -1499,7 +1500,7 @@ export const TradingViewLightweightChart = ({
       {isPanelOn('aggregated-volume') && (
         <IndicatorChartPanel 
            id="vol"
-           title="聚合成交量"
+           title={t('chart.indicators.aggregatedVolume')}
            color="#4ade80"
            height={70}
            type="bar"
@@ -1516,7 +1517,7 @@ export const TradingViewLightweightChart = ({
       {isPanelOn('liquidation-data') && (
         <IndicatorChartPanel 
            id="liq"
-           title="聚合爆仓"
+           title={t('chart.indicators.liquidationData')}
            color="#ef4444"
            height={69}
            type="liquidation"
@@ -1534,4 +1535,3 @@ export const TradingViewLightweightChart = ({
     </div>
   );
 };
-
