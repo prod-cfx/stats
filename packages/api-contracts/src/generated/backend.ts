@@ -1857,7 +1857,12 @@ const endpoints = makeApi([
       {
         name: "symbol",
         type: "Query",
-        schema: z.unknown(),
+        schema: z.string(),
+      },
+      {
+        name: "timeframe",
+        type: "Query",
+        schema: z.enum(["1h", "4h", "12h", "24h"]),
       },
     ],
     response: BaseResponseDto.and(

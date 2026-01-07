@@ -144,4 +144,15 @@ export class GetExchangeLiquidationQueryDto {
   timeframe: LiquidationTimeframe
 }
 
+export class GetAggregatedLiquidationSummaryQueryDto {
+  @ApiProperty({ description: '币种基础资产，例如 BTC', example: 'BTC' })
+  @IsString()
+  symbol: string
+}
+
+
+
+
+
+
 

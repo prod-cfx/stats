@@ -1,4 +1,5 @@
 import type {
+  GetAggregatedLiquidationSummaryQueryDto,
   GetExchangeLiquidationQueryDto,
 } from './dto/aggregated-liquidation.dto'
 import {
@@ -17,6 +18,7 @@ import { AggregatedLiquidationService } from './aggregated-liquidation.service'
 import {
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationResponseDto,
+  LIQUIDATION_TIMEFRAMES,
 } from './dto/aggregated-liquidation.dto'
 
 const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
@@ -59,9 +61,9 @@ export class AggregatedLiquidationController {
     }),
   })
   async getSummary(
-    @Query('symbol') symbol: string,
+    @Query() query: GetAggregatedLiquidationSummaryQueryDto,
   ): Promise<BaseResponseDto<AggregatedLiquidationSummaryDto>> {
-    const data = await this.service.getSummary(symbol)
+    const data = await this.service.getSummary(query.symbol)
     return new BaseResponseDto(data)
   }
 
@@ -80,6 +82,13 @@ export class AggregatedLiquidationController {
     description: '币种基础资产，例如 BTC',
     example: 'BTC',
   })
+  @ApiQuery({
+    name: 'timeframe',
+    required: true,
+    description: '时间区间/粒度，例如 1h/4h/12h/24h',
+    enum: LIQUIDATION_TIMEFRAMES,
+    example: '4h',
+  })
   @ApiResponse({
     status: HttpStatus.OK,
     description: '查询成功',
@@ -94,5 +103,10 @@ export class AggregatedLiquidationController {
     return new BaseResponseDto(data)
   }
 }
+
+
+
+
+
 
 

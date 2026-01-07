@@ -331,23 +331,11 @@ export async function fetchAggregatedLiquidationSummary(
   symbol: string,
 ): Promise<AggregatedLiquidationSummary> {
   return apiCall(async () => {
-    const url = new URL(`${API_BASE_URL}/aggregated-liquidation/summary`)
-    url.searchParams.set('symbol', symbol)
-
-    const res = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
-      },
+    const response = await client.AggregatedLiquidationController_getSummary({
+      headers: requireAuthHeaders(),
+      queries: { symbol },
     })
-
-    if (!res.ok) {
-      throw new Error(`Failed to fetch liquidation summary: ${res.status} ${res.statusText}`)
-    }
-
-    const json = await res.json()
-    return unwrapApiResponse<AggregatedLiquidationSummary>(json)
+    return unwrapResponse(response) as AggregatedLiquidationSummary
   }, 'FETCH_LIQUIDATION_SUMMARY')
 }
 
@@ -356,24 +344,11 @@ export async function fetchExchangeLiquidation(
   timeframe: '1h' | '4h' | '12h' | '24h',
 ): Promise<ExchangeLiquidationResponse> {
   return apiCall(async () => {
-    const url = new URL(`${API_BASE_URL}/aggregated-liquidation/exchanges`)
-    url.searchParams.set('symbol', symbol)
-    url.searchParams.set('timeframe', timeframe)
-
-    const res = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
-      },
+    const response = await client.AggregatedLiquidationController_getExchanges({
+      headers: requireAuthHeaders(),
+      queries: { symbol, timeframe },
     })
-
-    if (!res.ok) {
-      throw new Error(`Failed to fetch exchange liquidation: ${res.status} ${res.statusText}`)
-    }
-
-    const json = await res.json()
-    return unwrapApiResponse<ExchangeLiquidationResponse>(json)
+    return unwrapResponse(response) as ExchangeLiquidationResponse
   }, 'FETCH_LIQUIDATION_EXCHANGES')
 }
 

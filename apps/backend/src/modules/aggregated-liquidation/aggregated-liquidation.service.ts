@@ -10,9 +10,6 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import { LIQUIDATION_TIMEFRAMES } from './dto/aggregated-liquidation.dto'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-
 @Injectable()
 export class AggregatedLiquidationService {
   private static readonly AGGREGATED_EXCHANGE_CODE = 'AGGREGATED'
@@ -212,5 +209,10 @@ export class AggregatedLiquidationService {
 }
 
 type ExchangeLiquidResponse = ExchangeLiquidationResponseDto
+
+
+
+
+
 
 
