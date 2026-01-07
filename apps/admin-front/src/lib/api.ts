@@ -304,14 +304,16 @@ export async function updateSystemPromptSetting(
  * 获取所有已注册的 Job key 列表（用于创建任务时的下拉选择）
  */
 export async function fetchRegisteredJobKeys(): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
-    headers: requireAuthHeaders(),
+  return withAuthErrorHandling(async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
+      headers: requireAuthHeaders(),
+    })
+    if (!response.ok) {
+      throw new Error('获取已注册 key 列表失败')
+    }
+    const data = await response.json()
+    return data?.keys ?? data?.data?.keys ?? []
   })
-  if (!response.ok) {
-    throw new Error('获取已注册 key 列表失败')
-  }
-  const data = await response.json()
-  return data?.keys ?? data?.data?.keys ?? []
 }
 
 /**
@@ -348,11 +350,13 @@ export interface RegisteredJobInfo {
  * 获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）
  */
 export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
-  const response = await client.AdminDataPullTaskController_getRegisteredJobs({
-    headers: requireAuthHeaders(),
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_getRegisteredJobs({
+      headers: requireAuthHeaders(),
+    })
+    const data = unwrapResponse<any>(response as any)
+    return data?.jobs ?? []
   })
-  const data = unwrapResponse<any>(response as any)
-  return data?.jobs ?? []
 }
 
 /**

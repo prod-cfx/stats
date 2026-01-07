@@ -30,6 +30,8 @@ RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
+  // 普通登录用户可以查看市场相关只读数据（行情、热力图等）
+  .readAny(AppResource.MARKET_SYMBOL)
 
 RBAC_PERMISSIONS.grant(AppRole.MODERATOR).extend(AppRole.USER)
 

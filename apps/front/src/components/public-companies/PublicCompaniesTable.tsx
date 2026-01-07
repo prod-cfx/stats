@@ -397,25 +397,25 @@ export const PublicCompaniesTable = () => {
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
-        {isAuthError ? (
-          <div className="h-full flex flex-col items-center justify-center py-16 px-6 text-center space-y-4">
-            <h3 className="text-xl font-bold text-white">
-              {t('publicCompanies.authRequiredTitle', '请登录后查看完整币股榜单')}
+        {isAuthError && (
+          <div className="px-6 pt-6 pb-2 border-b border-[#30363d] bg-[#0d1117]/60 text-center space-y-2">
+            <h3 className="text-base font-semibold text-white">
+              {t('publicCompanies.authRequiredTitle', '登录后可查看实时币股榜单')}
             </h3>
-            <p className="text-sm text-[#8b949e] max-w-md">
+            <p className="text-xs text-[#8b949e] max-w-2xl mx-auto">
               {t(
                 'publicCompanies.authRequiredDescription',
-                '当前数据源仅对登录用户开放，请通过右上角入口登录或注册后返回此页面。',
+                '当前表格展示的是示例数据，登录后将自动切换为来自交易所的实时币股持仓与估值。',
               )}
             </p>
           </div>
-        ) : (
-          <LoadingState
-            isLoading={loading}
-            error={!!error}
-            onRetry={reload}
-            isEmpty={!loading && sortedData.length === 0}
-          >
+        )}
+        <LoadingState
+          isLoading={loading && !isAuthError}
+          error={!isAuthError && !!error}
+          onRetry={reload}
+          isEmpty={!loading && sortedData.length === 0}
+        >
             <div className="overflow-x-auto animate-in fade-in duration-500">
             <table className="w-full border-collapse min-w-[1200px]">
               <thead>
@@ -552,8 +552,7 @@ export const PublicCompaniesTable = () => {
               </tbody>
             </table>
           </div>
-          </LoadingState>
-        )}
+        </LoadingState>
       </div>
 
       {/* Company Detail Modal */}
