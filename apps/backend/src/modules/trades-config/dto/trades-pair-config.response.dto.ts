@@ -22,6 +22,9 @@ export class TradesPairConfigResponseDto {
   @ApiProperty({ description: '交易品种类型', enum: ['SPOT', 'PERPETUAL', 'FUTURE'] })
   instrumentType!: string
 
+  @ApiPropertyOptional({ description: '标准化 OKX instId（用于订阅/查询一致性）', nullable: true })
+  canonicalInstId?: string | null
+
   @ApiProperty({ description: '是否启用订阅' })
   enabled!: boolean
 
@@ -40,5 +43,10 @@ export class TradesPairConfigResponseDto {
   @ApiProperty({ description: '更新时间' })
   updatedAt!: string
 }
+
+
+
+
+
 
 

@@ -67,6 +67,12 @@ export default function TradesConfigsPage() {
   }, [loadConfigs])
 
   const resolveOkxInstIdForConfig = (config: TradesPairConfigResponse): string => {
+    // Prefer backend-resolved canonical instId to avoid duplicated parsing logic in UI.
+    const canonical = (config as any).canonicalInstId
+    if (typeof canonical === 'string' && canonical.trim().length) {
+      return canonical.trim().toUpperCase()
+    }
+
     if (config.exchange?.trim().toUpperCase() !== 'OKX') {
       return config.symbol.trim().toUpperCase()
     }

@@ -458,6 +458,7 @@ const TradesPairConfigResponseDto = z
     baseAsset: z.string(),
     quoteAsset: z.string(),
     instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    canonicalInstId: z.string().nullish(),
     enabled: z.boolean(),
     priority: z.number(),
     metadata: z.object({}).partial().passthrough().nullish(),

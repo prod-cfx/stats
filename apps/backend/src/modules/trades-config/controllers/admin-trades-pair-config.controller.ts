@@ -164,6 +164,7 @@ export class AdminTradesPairConfigController {
       baseAsset: config.baseAsset,
       quoteAsset: config.quoteAsset,
       instrumentType: config.instrumentType,
+      canonicalInstId: config.canonicalInstId,
       enabled: config.enabled,
       priority: config.priority,
       metadata: config.metadata as Record<string, any> | null,
@@ -173,5 +174,10 @@ export class AdminTradesPairConfigController {
     }
   }
 }
+
+
+
+
+
 
 

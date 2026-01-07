@@ -1,5 +1,6 @@
-import type { MarketTrade, Prisma } from '@prisma/client'
+import type { MarketTrade } from '@prisma/client'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -104,31 +105,34 @@ export class MarketTradesRepository {
     minValue: number,
     limit = 50,
   ): Promise<MarketTrade[]> {
-    // 注意：这里需要计算 price * size，Prisma 不支持直接计算，需要在应用层过滤
-    // 或者使用 raw query
-    const trades = await this.prisma.marketTrade.findMany({
-      where: {
-        exchange,
-        instrumentType,
-        symbol,
-      },
-      orderBy: {
-        tradeTimestamp: 'desc',
-      },
-      take: limit * 10, // 先取更多数据用于过滤
-    })
+    // 下推到数据库：筛选满足 minValue 的成交，并按时间倒序返回最近的 N 条
+    const minValueDecimal = new Prisma.Decimal(minValue)
 
-    // 计算成交金额并过滤
-    const tradesWithValue = trades
-      .map(trade => ({
-        ...trade,
-        value: Number(trade.price) * Number(trade.size),
-      }))
-      .filter(trade => trade.value >= minValue)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, limit)
+    const rows = await this.prisma.$queryRaw(Prisma.sql`
+      SELECT
+        "id",
+        "exchange",
+        "instrument_type" as "instrumentType",
+        "symbol",
+        "base_asset" as "baseAsset",
+        "quote_asset" as "quoteAsset",
+        "trade_id" as "tradeId",
+        "price",
+        "size",
+        "side",
+        "trade_timestamp" as "tradeTimestamp",
+        "created_at" as "createdAt",
+        "updated_at" as "updatedAt"
+      FROM "market_trades"
+      WHERE "exchange" = ${exchange}
+        AND "instrument_type" = ${instrumentType}
+        AND "symbol" = ${symbol}
+        AND ("price" * "size") >= ${minValueDecimal}
+      ORDER BY "trade_timestamp" DESC
+      LIMIT ${limit}
+    `)
 
-    return tradesWithValue
+    return rows as unknown as MarketTrade[]
   }
 
   /**
@@ -211,5 +215,10 @@ export class MarketTradesRepository {
     return oldest?.tradeTimestamp ?? null
   }
 }
+
+
+
+
+
 
 
