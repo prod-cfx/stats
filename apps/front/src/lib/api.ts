@@ -622,3 +622,67 @@ export async function cancelLlmSubscription(subscriptionId: string) {
   invalidateCache('llm-subscription-list:')
   invalidateCache('llm-strategy-instance:')
 }
+
+// ===== Hyperliquid Whale Alert 实时数据 API =====
+
+export interface RealtimeWhaleAlertItem {
+  user_address: string
+  symbol: string
+  position_size: number
+  entry_price: number
+  liq_price: number
+  position_value_usd: number
+  position_action: number
+  create_time: string
+  side: 'Long' | 'Short'
+}
+
+export interface FetchRealtimeWhaleAlertsParams {
+  symbol?: string
+  minPositionValueUsd?: number
+  limit?: number
+  since?: string
+}
+
+export async function fetchRealtimeWhaleAlerts(
+  params: FetchRealtimeWhaleAlertsParams = {},
+): Promise<RealtimeWhaleAlertItem[]> {
+  return apiCall(async () => {
+    const searchParams = new URLSearchParams()
+
+    if (params.symbol) {
+      searchParams.set('symbol', params.symbol)
+    }
+    if (typeof params.minPositionValueUsd === 'number') {
+      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
+    }
+    if (typeof params.limit === 'number') {
+      searchParams.set('limit', String(params.limit))
+    }
+    if (params.since) {
+      searchParams.set('since', params.since)
+    }
+
+    const queryString = searchParams.toString()
+    const url =
+      queryString.length > 0
+        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
+        : `${API_BASE_URL}/whale-alerts/realtime`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch realtime whale alerts: ${response.status} ${response.statusText}`)
+    }
+
+    const json = await response.json()
+    return unwrapResponse<RealtimeWhaleAlertItem[]>(json)
+  }, 'FETCH_REALTIME_WHALE_ALERTS')
+}
+
