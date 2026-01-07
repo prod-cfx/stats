@@ -30,6 +30,80 @@ interface CompanyData {
   infoParagraphs?: string[];
 }
 
+// 公开页面的静态示例数据：在未登录或接口不可用时作为兜底展示
+const STATIC_COMPANY_DATA: CompanyData[] = [
+  {
+    asset: 'PYUSD',
+    assetLogo: 'https://cryptologos.cc/logos/paypal-usd-pyusd-logo.png?v=040',
+    name: 'PayPal Holdings, Inc.',
+    ticker: 'PYPL',
+    exchange: '美股-NASDAQ',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
+    mNav: '-',
+    marketCap: '$58.56B',
+    holdingsValue: '-',
+    holdingsAmount: '-',
+    sharePrice: '$61.30',
+    change24h: '+0.96%',
+    change1d: '+1.25%',
+    change7d: '-0.50%',
+  },
+  {
+    asset: 'BTC',
+    assetLogo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+    name: 'MicroStrategy Incorporated',
+    ticker: 'MSTR',
+    exchange: '美股-NASDAQ',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/MicroStrategy_logo.svg/1200px-MicroStrategy_logo.svg.png',
+    mNav: '0.83',
+    marketCap: '$47.4B',
+    holdingsValue: '$58.14B',
+    holdingsAmount: '671.27K BTC',
+    sharePrice: '$167.50',
+    change24h: '+0.00%',
+    change1d: '+0.10%',
+    change7d: '+2.30%',
+    infoParagraphs: [
+      '微策略是一家美国的软件公司，提供商业智能、移动软件和云端服务。',
+      '该公司于1989年由迈克尔·塞勒（Michael J. Saylor）、桑朱·班萨尔（Sanju Bansal）和托马斯·斯宾纳（Thomas Spahr）创立，专门开发用于分析内部与外部数据的软件，协助进行商业决策以及开发移动应用程序。',
+      '公司总部位于弗吉尼亚州泰森斯（Tysons），属于华盛顿都会区的一部分。塞勒为执行主席，自1989年至2022年担任CEO。',
+      '该公司因为持有巨量比特币而被认为是与比特币挂钩的“概念股”。',
+    ],
+  },
+  {
+    asset: 'USDC',
+    assetLogo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
+    name: 'Circle Internet Group',
+    ticker: 'CRCL',
+    exchange: '美股-NYSE',
+    logo: 'https://www.circle.com/hubfs/logos/Circle_Logo_Green.svg',
+    mNav: '0.27',
+    marketCap: '$17.2B',
+    holdingsValue: '$64.46B',
+    holdingsAmount: '64.50B USDC',
+    sharePrice: '$82.85',
+    change24h: '+9.87%',
+    change1d: '+10.5%',
+    change7d: '+15.2%',
+  },
+  {
+    asset: 'ETH',
+    assetLogo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
+    name: 'BitMine Immersion',
+    ticker: 'BMNR',
+    exchange: '美股-NYSE',
+    logo: 'https://bitmine.tech/wp-content/uploads/2021/06/BitMine-Logo-1.png',
+    mNav: '0.73',
+    marketCap: '$8.94B',
+    holdingsValue: '$11.62B',
+    holdingsAmount: '3.97M ETH',
+    sharePrice: '$31.39',
+    change24h: '+1.42%',
+    change1d: '-0.88%',
+    change7d: '+4.15%',
+  },
+];
+
 type SortField = keyof Pick<
   CompanyData,
   | 'mNav'
@@ -79,7 +153,11 @@ export const PublicCompaniesTable = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const companiesFromApi: CompanyData[] = useMemo(() => {
+  const companies: CompanyData[] = useMemo(() => {
+    if (isAuthError) {
+      return STATIC_COMPANY_DATA;
+    }
+
     if (!quotes) return [];
 
     return quotes.map(q => {
@@ -129,17 +207,17 @@ export const PublicCompaniesTable = () => {
         infoParagraphs: q.infoParagraphs,
       };
     });
-  }, [i18n.language, quotes]);
+  }, [i18n.language, isAuthError, quotes]);
 
   const filteredCompanies = useMemo(() => {
-    if (!companiesFromApi.length) return [];
+    if (!companies.length) return [];
     const keyword = debouncedSearch.trim().toLowerCase();
-    if (!keyword) return companiesFromApi;
-    return companiesFromApi.filter(c =>
+    if (!keyword) return companies;
+    return companies.filter(c =>
       c.name.toLowerCase().includes(keyword) ||
       c.ticker.toLowerCase().includes(keyword),
     );
-  }, [companiesFromApi, debouncedSearch]);
+  }, [companies, debouncedSearch]);
 
   const sortedData = useMemo(() => {
     if (!filteredCompanies.length) return [];
