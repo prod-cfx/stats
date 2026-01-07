@@ -1,39 +1,22 @@
 import i18next from 'i18next'
-import { cookies, headers } from 'next/headers'
 
 import enCommon from '../../../public/locales/en/common.json'
 import zhCommon from '../../../public/locales/zh/common.json'
 
 export type AppLocale = 'zh' | 'en'
 
-function normalizeLocale(input?: string | null): AppLocale | null {
-  if (!input)
-    return null
-  const v = input.toLowerCase()
-  if (v.startsWith('zh'))
-    return 'zh'
-  if (v.startsWith('en'))
-    return 'en'
-  return null
-}
+/**
+ * In `output: 'export'` mode, Next.js cannot use dynamic
+ * APIs like `cookies()` or `headers()` when pre-rendering.
+ *
+ * We therefore resolve the locale at build time only.
+ * You can control the default via `NEXT_PUBLIC_DEFAULT_LOCALE`.
+ */
+const DEFAULT_LOCALE: AppLocale
+  = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE === 'en' ? 'en' : 'zh')
 
 export function getRequestLocale(): AppLocale {
-  // In static export mode, we can't use cookies() or headers()
-  // Default to 'zh' and let client-side i18n handle language detection
-  try {
-    // i18next-browser-languagedetector defaults to `i18next` cookie key
-    const cookieLng = normalizeLocale(cookies().get('i18next')?.value)
-    if (cookieLng)
-      return cookieLng
-
-    const accept = headers().get('accept-language')
-    const acceptLng = normalizeLocale(accept?.split(',')?.[0])
-    return acceptLng ?? 'zh'
-  }
-  catch {
-    // Fallback for static export mode
-    return 'zh'
-  }
+  return DEFAULT_LOCALE
 }
 
 export async function getServerTranslator() {
@@ -58,5 +41,4 @@ export async function getServerTranslator() {
     t: instance.t.bind(instance),
   } as const
 }
-
 

@@ -1,14 +1,12 @@
 'use client';
 
+import type { DataSource, MarketType } from '@/types/trading';
 import React, { useState } from 'react';
 import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
 import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
 import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
 import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
 import { TopBar } from '@/components/trading/TopBar/TopBar';
-
-export type DataSource = 'binance' | 'okx';
-export type MarketType = 'futures' | 'spot';
 
 export default function TradingPage() {
   const [isAggregated, setIsAggregated] = useState(true);
@@ -71,6 +69,3 @@ export default function TradingPage() {
     </div>
   );
 }
-
-
-

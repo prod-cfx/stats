@@ -46,7 +46,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   const stableSeed = useMemo(() => {
     // simple stable hash by symbol
     let h = 0;
-    for (const ch of symbol) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const s = symbol || 'BTCUSDT'; // 默认值
+    for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     return h || 1;
   }, [symbol]);
 

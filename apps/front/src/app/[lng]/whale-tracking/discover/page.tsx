@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,7 @@ import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { DiscoverGrid } from '@/components/whale-tracking/discover/DiscoverGrid';
 
 export default function DiscoverPage() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
