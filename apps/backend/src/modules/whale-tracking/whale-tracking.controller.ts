@@ -3,21 +3,16 @@
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 import { WhaleDiscoverResponseDto } from './dto/responses/whale-discover.response.dto'
 import { Controller, Get } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
-import { AppResource } from '@/modules/auth/rbac/permissions'
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 // eslint-disable-next-line ts/consistent-type-imports
 import { WhaleTrackingService } from './whale-tracking.service'
 
 @ApiTags('whale-tracking')
-@ApiBearerAuth('bearer')
 @Controller('whale-tracking')
 export class WhaleTrackingController {
   constructor(private readonly whaleTrackingService: WhaleTrackingService) {}
 
   @Get('discover')
-  @RequireAuth()
-  @ReadAny(AppResource.WHALE_TRACKING)
   @ApiOperation({
     summary: '鲸鱼发现页 - 获取推荐鲸鱼与详情列表',
     description:

@@ -60,7 +60,7 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
     const result = await safeApiCall(
       () =>
         client.WhaleTrackingController_getDiscover({
-          headers: requireAuthHeaders(),
+          headers: optionalAuthHeaders(),
         }),
       {
         url: `${API_BASE_URL}/whale-tracking/discover`,
@@ -68,7 +68,7 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
+            ...optionalAuthHeaders(),
           },
         },
         validateResponse: data =>
