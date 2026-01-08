@@ -55,15 +55,24 @@ export class CoinglassHeatmapJob implements DataPullJob {
       throw new Error('COINGLASS_API_KEY is not configured')
     }
 
-    // 规范化 endpoint，确保无论环境变量是否已包含 /modelX 或 /modelX/，最终路径与 cursor.modelType 一致
-    const normalizedBase = baseEndpoint
-      .replace(/\/model\d+\/?$/, '')
-      .replace(/\/+$/, '')
-    const endpoint = normalizedBase.endsWith('/')
-      ? `${normalizedBase}${modelSuffix}`
-      : `${normalizedBase}/${modelSuffix}`
+    // 兼容旧版 liquidation-heatmap 路径（通过 model 查询参数区分模型），避免直接拼接 /modelX 导致 404
+    const isLegacyEndpoint =
+      /liquidation-heatmap/.test(baseEndpoint) && !/\/heatmap\/model\d+/.test(baseEndpoint)
 
-    const url = new URL(endpoint)
+    const url = new URL(
+      isLegacyEndpoint
+        ? baseEndpoint
+        : (() => {
+            // 规范化 endpoint，确保无论环境变量是否已包含 /modelX 或 /modelX/，最终路径与 cursor.modelType 一致
+            const normalizedBase = baseEndpoint
+              .replace(/\/model\d+\/?$/, '')
+              .replace(/\/+$/, '')
+            return normalizedBase.endsWith('/')
+              ? `${normalizedBase}${modelSuffix}`
+              : `${normalizedBase}/${modelSuffix}`
+          })(),
+    )
+
     url.searchParams.set('symbol', cursor.symbol)
     if (cursor.interval) {
       url.searchParams.set('interval', cursor.interval)
@@ -73,6 +82,10 @@ export class CoinglassHeatmapJob implements DataPullJob {
     }
     if (cursor.contractType) {
       url.searchParams.set('contractType', cursor.contractType)
+    }
+    if (isLegacyEndpoint) {
+      // 旧版接口使用 model 查询参数区分模型，这里保持与历史行为一致
+      url.searchParams.set('model', modelType)
     }
 
     this.logger.log(`Requesting Coinglass heatmap: ${url.toString()}`)
