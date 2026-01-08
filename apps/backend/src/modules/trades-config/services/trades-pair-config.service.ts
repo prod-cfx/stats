@@ -163,10 +163,10 @@ export class TradesPairConfigService {
 
     const exchange = merged.exchange.trim().toUpperCase()
 
-    let canonicalInstId: string | null | undefined
+    let repoOptions: { canonicalInstId?: string | null } | undefined
 
     if (exchange === 'OKX') {
-      canonicalInstId = this.resolveOkxInstId(merged)
+      const canonicalInstId = this.resolveOkxInstId(merged)
 
       if (!canonicalInstId) {
         throw new DomainException(
@@ -206,9 +206,11 @@ export class TradesPairConfigService {
           )
         }
       }
+
+      repoOptions = { canonicalInstId }
     }
 
-    return this.repository.update(id, dto, { canonicalInstId })
+    return this.repository.update(id, dto, repoOptions)
   }
 
   async delete(id: string): Promise<void> {

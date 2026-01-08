@@ -197,7 +197,7 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
         this.configService,
         this.logger,
         () => this.getWsBaseUrl(),
-        (msg) => this.onMessage(msg),
+        (msg, connection) => this.onMessage(msg, connection),
       )
       this.connections.push(conn)
     }
@@ -247,7 +247,7 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     }
   }
 
-  private async onMessage(raw: WebSocket.RawData): Promise<void> {
+  private async onMessage(raw: WebSocket.RawData, conn: BinanceTradesWsConnection): Promise<void> {
     let msg: BinanceCombinedStreamMessage
     try {
       msg = JSON.parse(raw.toString()) as BinanceCombinedStreamMessage
@@ -264,17 +264,27 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       this.logger.warn(
         `Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`,
       )
-      throw new Error(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`)
+      conn.handleAckError(
+        new Error(
+          `Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`,
+        ),
+      )
+      return
     }
 
     // 2) 处理 result/error 包装的响应
-    if ('result' in plain) return
+    if ('result' in plain) {
+      // Binance 文档：{ result: null, id } 作为订阅/退订成功的 ACK
+      conn.handleAckSuccess()
+      return
+    }
     if ('error' in plain) {
       const err = plain.error
       this.logger.warn(`Binance Trades WS API error: code=${err?.code} msg=${err?.msg}`)
-      throw new Error(
+      conn.handleAckError(
         `Binance Trades WS API error: code=${err?.code ?? 'unknown'} msg=${err?.msg ?? ''}`,
       )
+      return
     }
 
     const evt = (msg as any).data ? (msg as any).data : msg
@@ -489,7 +499,7 @@ class BinanceTradesWsConnection {
     private readonly configService: ConfigService,
     private readonly baseLogger: Logger,
     private readonly getWsBaseUrl: () => string,
-    private readonly onTradesMessage: (raw: WebSocket.RawData) => void,
+    private readonly onTradesMessage: (raw: WebSocket.RawData, conn: BinanceTradesWsConnection) => void,
   ) {}
 
   async ensureConnected(): Promise<void> {
@@ -571,7 +581,7 @@ class BinanceTradesWsConnection {
     })
 
     this.ws.on('message', (data) => {
-      void this.onTradesMessage(data).catch(err => {
+      void this.onTradesMessage(data, this).catch(err => {
         const reason = err instanceof Error ? err.message : String(err)
 
         // 如果当前存在正在进行的订阅同步，则将其视为本轮 SUB/UNSUB 失败
@@ -664,6 +674,24 @@ class BinanceTradesWsConnection {
     try {
       this.ws.send(JSON.stringify(payload))
     } catch {}
+  }
+
+  handleAckSuccess(): void {
+    if (!this.pendingSync) return
+    if (this.pendingSync.remainingAcks <= 0) return
+    this.pendingSync.remainingAcks -= 1
+    if (this.pendingSync.remainingAcks === 0) {
+      this.pendingSync.resolve()
+    }
+  }
+
+  handleAckError(error: Error | string): void {
+    if (!this.pendingSync) return
+    const pending = this.pendingSync
+    this.pendingSync = null
+    this.active.clear()
+    this.desired.clear()
+    pending.reject(error instanceof Error ? error : new Error(error))
   }
 
   private createPendingSync(expectedAcks: number): {
