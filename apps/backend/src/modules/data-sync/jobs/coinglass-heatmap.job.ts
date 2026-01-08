@@ -253,13 +253,22 @@ export class CoinglassHeatmapJob implements DataPullJob {
         parsed.interval = '15m'
       }
       return parsed as CoinglassHeatmapCursor
-    } catch {
-      this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
-      return {
-        symbol: 'BTC',
-        modelType: 'MODEL3',
-        interval: '15m',
+    } catch (error) {
+      // 仅在 JSON 语法错误时回退默认值；字段取值非法等逻辑错误必须向上抛出
+      const isSyntaxError =
+        error instanceof SyntaxError ||
+        (typeof error === 'object' && error !== null && 'name' in error && (error as any).name === 'SyntaxError')
+
+      if (isSyntaxError) {
+        this.logger.warn(`Failed to parse cursor JSON: ${currentCursor}, fallback to default`)
+        return {
+          symbol: 'BTC',
+          modelType: 'MODEL3',
+          interval: '15m',
+        }
       }
+
+      throw error
     }
   }
 }
