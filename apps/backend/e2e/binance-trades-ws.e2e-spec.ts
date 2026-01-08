@@ -208,7 +208,8 @@ describeIf('Binance trades WS (E2E)', () => {
           originalStates.map(state =>
             tradesConfigService.update(state.id, {
               enabled: state.enabled,
-              metadata: state.metadata ?? undefined,
+              // 直接写回原始 metadata（允许为 null），避免因为 undefined 被 Prisma 忽略而残留测试期间写入的字段
+              metadata: state.metadata,
             }),
           ),
         )

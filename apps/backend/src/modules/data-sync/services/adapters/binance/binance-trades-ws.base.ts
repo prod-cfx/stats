@@ -472,7 +472,7 @@ class BinanceTradesWsConnection {
   private active = new Set<string>()
   /**
    * 当前订阅/退订同步过程的 pending promise。
-   * 当收到 Binance 的错误响应（code/msg 或 error）时会触发 reject，
+   * 当收到 Binance 的错误响应（code/msg 或 error）或在超时时间内未收到成功 ACK 时会触发 reject，
    * 使得 syncDesiredStreams 失败并让上层感知订阅未成功。
    */
   private pendingSync:
@@ -480,6 +480,7 @@ class BinanceTradesWsConnection {
         promise: Promise<void>
         resolve: () => void
         reject: (err: Error) => void
+        remainingAcks: number
       }
     | null = null
 
@@ -519,9 +520,10 @@ class BinanceTradesWsConnection {
       for (const s of toSub) this.active.add(s)
     }
 
-    // 若本轮确实有订阅/退订操作，则等待 Binance 的同步结果
-    if (toSub.length || toUnsub.length) {
-      this.pendingSync = this.createPendingSync()
+    // 若本轮确实有订阅/退订操作，则等待 Binance 的 ACK 结果
+    const expectedAcks = (toSub.length ? 1 : 0) + (toUnsub.length ? 1 : 0)
+    if (expectedAcks > 0) {
+      this.pendingSync = this.createPendingSync(expectedAcks)
       try {
         await this.pendingSync.promise
       } finally {
@@ -664,10 +666,11 @@ class BinanceTradesWsConnection {
     } catch {}
   }
 
-  private createPendingSync(): {
+  private createPendingSync(expectedAcks: number): {
     promise: Promise<void>
     resolve: () => void
     reject: (err: Error) => void
+    remainingAcks: number
   } {
     let resolve!: () => void
     let reject!: (err: Error) => void
@@ -690,12 +693,16 @@ class BinanceTradesWsConnection {
 
     timeout = setTimeout(() => {
       this.baseLogger.warn(
-        `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
+        `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms without receiving all ACKs`,
       )
-      resolve()
+      reject(
+        new Error(
+          `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
+        ),
+      )
     }, Math.max(1_000, timeoutMs))
 
-    return { promise, resolve, reject }
+    return { promise, resolve, reject, remainingAcks: expectedAcks }
   }
 }
 
