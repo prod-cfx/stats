@@ -52,12 +52,8 @@ jobs:
             SHOULD_REVIEW="true"
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
             if [[ "$COMMENT_BODY" == *"@gpt"* ]]; then
-              if [[ "$AUTHOR_ASSOCIATION" == "OWNER" || "$AUTHOR_ASSOCIATION" == "MEMBER" || "$AUTHOR_ASSOCIATION" == "COLLABORATOR" ]]; then
-                echo "::notice::检测到合规评论指令，开始手动审核。"
-                SHOULD_REVIEW="true"
-              else
-                echo "::warning::评论者权限不足，跳过审核。"
-              fi
+              echo "::notice::检测到合规评论指令，开始手动审核。"
+              SHOULD_REVIEW="true"
             else
               echo "::debug::普通评论，跳过。"
             fi
