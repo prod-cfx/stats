@@ -41,8 +41,8 @@ export class CoinglassHeatmapJob implements DataPullJob {
     const cursor = this.parseCursor(ctx.cursor)
 
     const modelType = cursor.modelType ?? 'MODEL3'
-    const modelMatch = /^MODEL(\d+)$/.exec(modelType)
-    const modelSuffix = modelMatch ? `model${modelMatch[1]}` : 'model3'
+    const modelSuffix =
+      modelType === 'MODEL1' ? 'model1' : modelType === 'MODEL2' ? 'model2' : 'model3'
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const baseEndpoint =
@@ -237,7 +237,16 @@ export class CoinglassHeatmapJob implements DataPullJob {
       if (!parsed.symbol) {
         parsed.symbol = 'BTC'
       }
-      if (!parsed.modelType) {
+      if (parsed.modelType) {
+        const normalized = String(parsed.modelType).trim().toUpperCase()
+        const allowed: LiquidationHeatmapModelType[] = ['MODEL1', 'MODEL2', 'MODEL3']
+        if (!allowed.includes(normalized as LiquidationHeatmapModelType)) {
+          throw new Error(
+            `Invalid Coinglass heatmap modelType in cursor: ${String(parsed.modelType)}`,
+          )
+        }
+        parsed.modelType = normalized as LiquidationHeatmapModelType
+      } else {
         parsed.modelType = 'MODEL3'
       }
       if (!parsed.interval) {
