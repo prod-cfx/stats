@@ -33,19 +33,15 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Clamp helper: respect per-item min/max，默认最小 3，但允许用户拖拽放大
+// Clamp helper: force ultra-compact size and default two-column width (6/12 cols)
 const clampLayout = (items: any[]) =>
-  (items || []).map((n) => {
-    const minH = typeof n.minH === 'number' ? n.minH : 3
-    const maxH = typeof n.maxH === 'number' ? n.maxH : 30
-    const minW = typeof n.minW === 'number' ? n.minW : 3
-    const maxW = typeof n.maxW === 'number' ? n.maxW : 12
-    return {
-      ...n,
-      h: Math.min(maxH, Math.max(minH, n?.h ?? minH)),
-      w: Math.min(maxW, Math.max(minW, n?.w ?? minW)),
-    }
-  })
+  (items || []).map((n) => ({
+    ...n,
+    h: 3,
+    w: 6,
+    minW: 6,
+    maxW: 12,
+  }))
 
 export function DashboardCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() => ensureDashboard(props.dashboardId))
@@ -94,7 +90,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         if (found) { catalogItem = found; break }
       }
       const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
-      return { i: widget.id, x: 0, y: 0, w: d.w, h: 3 }
+      return { i: widget.id, x: 0, y: 0, w: 6, h: 3, minW: 6, maxW: 12 }
     })
     setLayoutState(newLayout)
     updateDashboardLayout(props.dashboardId, newLayout)
