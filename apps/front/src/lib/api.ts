@@ -51,6 +51,40 @@ function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapApiResponse(response)
 }
 
+// ===== Whale tracking discover API =====
+
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const result = await safeApiCall(
+      () =>
+        client.WhaleTrackingController_getDiscover({
+          headers: optionalAuthHeaders(),
+        }),
+      {
+        url: `${API_BASE_URL}/whale-tracking/discover`,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...optionalAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<WhaleDiscoverResponse>(
+            data as WhaleDiscoverResponse | BaseResponse<WhaleDiscoverResponse>,
+          ),
+      },
+    )
+
+    // 统一对成功结果也执行一次 unwrapResponse，确保拿到真正的 WhaleDiscoverResponse
+    return unwrapResponse<WhaleDiscoverResponse>(
+      result as WhaleDiscoverResponse | BaseResponse<WhaleDiscoverResponse>,
+    )
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
+}
+
 /**
  * Validate JWT token format (basic structure check)
  */
@@ -688,7 +722,7 @@ export async function fetchRealtimeWhaleAlerts(
             ...requireAuthHeaders(),
           },
         },
-        validateResponse: (data) => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
+        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
       },
     )
   }, 'FETCH_REALTIME_WHALE_ALERTS')

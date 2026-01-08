@@ -55,17 +55,15 @@ export class PermissionService {
   }
 
   async hasAccess(rules: RequiredRule[], user: AuthenticatedUser | undefined): Promise<boolean> {
-    if (!user?.id) {
-      this.logger.warn('权限检查失败：缺少用户信息')
-      return false
-    }
-
     try {
-      const userRoles = await this.getUserRoles(user)
+      // 未登录用户视为 VISITOR 角色，仅具备极少读权限（例如鲸鱼 Discover 等公开统计）
+      const userRoles = user?.id ? await this.getUserRoles(user) : [AppRole.VISITOR]
 
       if (this.debugMode) {
         this.logger.debug(
-          `权限检查 - 用户: ${user.id}, 角色: ${JSON.stringify(userRoles)}, 规则: ${JSON.stringify(rules)}`,
+          `权限检查 - 用户: ${user?.id ?? 'anonymous'}, 角色: ${JSON.stringify(
+            userRoles,
+          )}, 规则: ${JSON.stringify(rules)}`,
         )
       }
 

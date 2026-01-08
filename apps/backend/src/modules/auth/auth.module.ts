@@ -12,6 +12,7 @@ import { AuthController } from './auth.controller'
 import { ACGuard } from './guards/ac.guard'
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
+import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard'
 import { ThrottlerRedisStorage } from './guards/throttler-redis-storage'
 import { RBAC_PERMISSIONS } from './rbac/permissions'
 import { AuditLogService } from './services/audit-log.service'
@@ -54,6 +55,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
   providers: [
     JwtStrategy,
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     ACGuard,
     AuthRateLimitGuard,
     PermissionService,
@@ -64,6 +66,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
   ],
   exports: [
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     ACGuard,
     AuthRateLimitGuard,
     PermissionService,
