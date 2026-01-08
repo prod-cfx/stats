@@ -33,12 +33,19 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Clamp helper: force h to exactly 3 (ultra-compact)
+// Clamp helper: respect min/max constraints but允许用户拖拽尺寸
 const clampLayout = (items: any[]) =>
-  (items || []).map((n) => ({
-    ...n,
-    h: 3,
-  }))
+  (items || []).map((n) => {
+    const minH = typeof n.minH === 'number' ? n.minH : 3
+    const maxH = typeof n.maxH === 'number' ? n.maxH : 30
+    const minW = typeof n.minW === 'number' ? n.minW : 3
+    const maxW = typeof n.maxW === 'number' ? n.maxW : 12
+    return {
+      ...n,
+      h: Math.min(maxH, Math.max(minH, n?.h ?? minH)),
+      w: Math.min(maxW, Math.max(minW, n?.w ?? minW)),
+    }
+  })
 
 export function DashboardCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() => ensureDashboard(props.dashboardId))
