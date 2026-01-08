@@ -11,7 +11,9 @@ export class GetPolymarketMarketsRequestDto extends BasePaginationRequestDto {
 
   @ApiPropertyOptional({ description: '是否只返回活跃市场', default: true })
   @IsBoolean()
-  @Transform(({ value }) => value === true || value === 'true')
+  @Transform(({ value }) =>
+    value === undefined || value === null ? undefined : value === true || value === 'true',
+  )
   @IsOptional()
   onlyActive?: boolean
 }

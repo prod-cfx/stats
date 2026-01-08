@@ -24,6 +24,7 @@ export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAc
 export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
 export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
 export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
 
 interface BaseResponse<T> {
   data?: T
@@ -722,5 +723,16 @@ export async function fetchRealtimeWhaleAlerts(
       },
     )
   }, 'FETCH_REALTIME_WHALE_ALERTS')
+}
+
+// ===== Whale Tracking Discover API =====
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const response = await client.WhaleTrackingController_getDiscover({
+      headers: optionalAuthHeaders(),
+    })
+    return unwrapResponse<WhaleDiscoverResponse>(response as any)
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }
 
