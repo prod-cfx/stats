@@ -66,50 +66,57 @@ export class TradesPairConfigService {
       })
     }
 
-    // 解析 canonical OKX instId（需与 OkxTradesWsAdapterBase.resolveInstId 保持语义一致）
-    const canonicalInstId = this.resolveOkxInstId({
-      exchange: dto.exchange,
-      instrumentType: dto.instrumentType,
-      symbol: dto.symbol,
-      baseAsset: dto.baseAsset,
-      quoteAsset: dto.quoteAsset,
-      metadata: dto.metadata,
-    })
+    const exchange = dto.exchange.trim().toUpperCase()
 
-    if (!canonicalInstId) {
-      throw new DomainException(
-        '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
-        {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-        },
-      )
-    }
+    // 仅对 OKX 计算 canonical instId 并做冲突校验；其他交易所允许 canonicalInstId 为空
+    let canonicalInstId: string | null = null
 
-    // 检查是否存在使用相同 canonical instId 的其他配置，避免 silent duplicate
-    const sameExchangeConfigs = await this.repository.findAll({
-      exchange: dto.exchange,
-      instrumentType: dto.instrumentType,
-    })
-
-    for (const cfg of sameExchangeConfigs) {
-      const cfgInstId = this.resolveOkxInstId({
-        exchange: cfg.exchange,
-        instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
-        symbol: cfg.symbol,
-        baseAsset: cfg.baseAsset,
-        quoteAsset: cfg.quoteAsset,
-        metadata: cfg.metadata ?? undefined,
+    if (exchange === 'OKX') {
+      // 解析 canonical OKX instId（需与 OkxTradesWsAdapterBase.resolveInstId 保持语义一致）
+      canonicalInstId = this.resolveOkxInstId({
+        exchange: dto.exchange,
+        instrumentType: dto.instrumentType,
+        symbol: dto.symbol,
+        baseAsset: dto.baseAsset,
+        quoteAsset: dto.quoteAsset,
+        metadata: dto.metadata,
       })
 
-      if (cfgInstId && cfgInstId === canonicalInstId) {
+      if (!canonicalInstId) {
         throw new DomainException(
-          `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+          '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
           {
-            code: ErrorCode.CONFLICT,
-            status: HttpStatus.CONFLICT,
+            code: ErrorCode.BAD_REQUEST,
+            status: HttpStatus.BAD_REQUEST,
           },
         )
+      }
+
+      // 检查是否存在使用相同 canonical instId 的其他配置，避免 silent duplicate
+      const sameExchangeConfigs = await this.repository.findAll({
+        exchange: dto.exchange,
+        instrumentType: dto.instrumentType,
+      })
+
+      for (const cfg of sameExchangeConfigs) {
+        const cfgInstId = this.resolveOkxInstId({
+          exchange: cfg.exchange,
+          instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
+          symbol: cfg.symbol,
+          baseAsset: cfg.baseAsset,
+          quoteAsset: cfg.quoteAsset,
+          metadata: cfg.metadata ?? undefined,
+        })
+
+        if (cfgInstId && cfgInstId === canonicalInstId) {
+          throw new DomainException(
+            `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+            {
+              code: ErrorCode.CONFLICT,
+              status: HttpStatus.CONFLICT,
+            },
+          )
+        }
       }
     }
 
@@ -154,48 +161,56 @@ export class TradesPairConfigService {
 
     this.assertOkxPairFieldsConsistent(merged)
 
-    const canonicalInstId = this.resolveOkxInstId(merged)
+    const exchange = merged.exchange.trim().toUpperCase()
 
-    if (!canonicalInstId) {
-      throw new DomainException(
-        '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
-        {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-        },
-      )
-    }
+    let repoOptions: { canonicalInstId?: string | null } | undefined
 
-    // 检查是否与其他配置产生 instId 冲突
-    const sameExchangeConfigs = await this.repository.findAll({
-      exchange: existing.exchange,
-      instrumentType: existing.instrumentType,
-    })
+    if (exchange === 'OKX') {
+      const canonicalInstId = this.resolveOkxInstId(merged)
 
-    for (const cfg of sameExchangeConfigs) {
-      if (cfg.id === id) continue
-
-      const cfgInstId = this.resolveOkxInstId({
-        exchange: cfg.exchange,
-        instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
-        symbol: cfg.symbol,
-        baseAsset: cfg.baseAsset,
-        quoteAsset: cfg.quoteAsset,
-        metadata: cfg.metadata ?? undefined,
-      })
-
-      if (cfgInstId && cfgInstId === canonicalInstId) {
+      if (!canonicalInstId) {
         throw new DomainException(
-          `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+          '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
           {
-            code: ErrorCode.CONFLICT,
-            status: HttpStatus.CONFLICT,
+            code: ErrorCode.BAD_REQUEST,
+            status: HttpStatus.BAD_REQUEST,
           },
         )
       }
+
+      // 检查是否与其他配置产生 instId 冲突
+      const sameExchangeConfigs = await this.repository.findAll({
+        exchange: existing.exchange,
+        instrumentType: existing.instrumentType,
+      })
+
+      for (const cfg of sameExchangeConfigs) {
+        if (cfg.id === id) continue
+
+        const cfgInstId = this.resolveOkxInstId({
+          exchange: cfg.exchange,
+          instrumentType: cfg.instrumentType as CreateTradesPairConfigDto['instrumentType'],
+          symbol: cfg.symbol,
+          baseAsset: cfg.baseAsset,
+          quoteAsset: cfg.quoteAsset,
+          metadata: cfg.metadata ?? undefined,
+        })
+
+        if (cfgInstId && cfgInstId === canonicalInstId) {
+          throw new DomainException(
+            `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
+            {
+              code: ErrorCode.CONFLICT,
+              status: HttpStatus.CONFLICT,
+            },
+          )
+        }
+      }
+
+      repoOptions = { canonicalInstId }
     }
 
-    return this.repository.update(id, dto, { canonicalInstId })
+    return this.repository.update(id, dto, repoOptions)
   }
 
   async delete(id: string): Promise<void> {
