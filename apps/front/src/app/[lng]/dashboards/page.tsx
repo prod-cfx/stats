@@ -12,6 +12,7 @@ import {
   getMyDashboards,
   getSavedDashboards,
 } from '@/features/dashboards/store/dashboardStore'
+import { useRef } from 'react'
 
 type TabView = 'explore' | 'my' | 'saved'
 
@@ -22,6 +23,7 @@ export default function DashboardsPage() {
   const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([])
   const [activeDashboard, setActiveDashboard] = useState<DashboardDoc | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const activeIdRef = useRef<string | null>(null)
 
   const loadDashboards = () => {
     setMyDashboards(getMyDashboards())
@@ -54,6 +56,10 @@ export default function DashboardsPage() {
       window.removeEventListener('storage', handler)
     }
   }, [])
+
+  useEffect(() => {
+    activeIdRef.current = activeDashboard?.id ?? null
+  }, [activeDashboard?.id])
 
   const handleCreateDashboard = () => {
     const newDash = createNewDashboard()
