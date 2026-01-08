@@ -51,7 +51,7 @@ jobs:
             echo "::notice::手动触发工作流，执行审核。"
             SHOULD_REVIEW="true"
           elif [ "$EVENT_NAME" == "issue_comment" ]; then
-            if [[ "$COMMENT_BODY" == *"@codex review"* ]]; then
+            if [[ "$COMMENT_BODY" == *"@codex"* ]]; then
               if [[ "$AUTHOR_ASSOCIATION" == "OWNER" || "$AUTHOR_ASSOCIATION" == "MEMBER" || "$AUTHOR_ASSOCIATION" == "COLLABORATOR" ]]; then
                 echo "::notice::检测到合规评论指令，开始手动审核。"
                 SHOULD_REVIEW="true"
@@ -62,7 +62,7 @@ jobs:
               echo "::debug::普通评论，跳过。"
             fi
           elif [ "$EVENT_NAME" == "pull_request" ] && [ "$EVENT_ACTION" == "synchronize" ]; then
-            echo "::notice::检测到代码更新。为了节省额度，本次将仅标记状态为成功，不执行自动审核。如需审核请评论 '@codex review'。"
+            echo "::notice::检测到代码更新。为了节省额度，本次将仅标记状态为成功，不执行自动审核。如需审核请评论 '@codex'。"
           fi
 
           echo "should_review=$SHOULD_REVIEW" >> $GITHUB_OUTPUT
