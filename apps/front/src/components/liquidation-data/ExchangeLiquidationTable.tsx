@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
 import { fetchExchangeLiquidation } from '@/lib/api';
+import { getToken } from '@/lib/auth-storage';
 
 type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE';
 
@@ -66,6 +67,7 @@ export const ExchangeLiquidationTable = () => {
   const [coinFilter, setCoinFilter] = useState<CoinFilter>('BTC');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('4h');
   const [selectedExchange, setSelectedExchange] = useState<ExchangeRowRaw | null>(null);
+  const isAuthenticated = !!getToken();
 
   const selectedCoin = coinFilter;
 
@@ -81,7 +83,11 @@ export const ExchangeLiquidationTable = () => {
 
   const { data: tableDataRaw, loading, error, reload } = useMockData<ExchangeRowRaw[] | null>(
     async () => {
-      // 当前后端接口按单一 symbol 聚合，这里先将 ALL 也映射为 BTC
+      if (!isAuthenticated) {
+        // 未登录时不发起真实请求，由 UI 提示登录
+        return null
+      }
+
       const symbol = selectedCoin
       const timeframe = timeFilter
 
@@ -129,7 +135,7 @@ export const ExchangeLiquidationTable = () => {
 
       return mappedRows
     },
-    [coinFilter, timeFilter]
+    [coinFilter, timeFilter, isAuthenticated]
   );
 
   const tableData: ExchangeData[] = useMemo(() => {
@@ -203,101 +209,111 @@ export const ExchangeLiquidationTable = () => {
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg animate-in fade-in duration-500">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.exchange')}</th>
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.total')}</th>
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.long')}</th>
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.short')}</th>
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.share')}</th>
-                  <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.longShort')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#30363d]">
-                {tableData.map((row, index) => (
-                  <tr 
-                    key={index} 
-                    className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
-                      row.isTotal ? 'bg-[#21262d]/50' : ''
-                    }`}
-                    onClick={() => setSelectedExchange(tableDataRaw?.[index] ?? null)}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        {!row.isTotal && (
-                          <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={20} />
-                        )}
-                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                          {row.exchange}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
-                        {row.amount}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center font-mono">
-                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#4ade80]'}`}>
-                        {row.long}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center font-mono">
-                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#f87171]'}`}>
-                        {row.short}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#8b949e]'}`}>
-                        {row.ratio}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`text-sm font-bold ${row.isLongDominant ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
-                        {row.longShortRatio}
-                      </span>
-                    </td>
+          {isAuthenticated ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.exchange')}</th>
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.total')}</th>
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.long')}</th>
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.short')}</th>
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.share')}</th>
+                    <th className="px-6 py-4 text-center">{t('liquidationData.table.columns.longShort')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[#30363d]">
+                  {tableData.map((row, index) => (
+                    <tr 
+                      key={index} 
+                      className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
+                        row.isTotal ? 'bg-[#21262d]/50' : ''
+                      }`}
+                      onClick={() => setSelectedExchange(tableDataRaw?.[index] ?? null)}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          {!row.isTotal && (
+                            <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={20} />
+                          )}
+                          <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
+                            {row.exchange}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'}`}>
+                          {row.amount}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center font-mono">
+                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#4ade80]'}`}>
+                          {row.long}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center font-mono">
+                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#f87171]'}`}>
+                          {row.short}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`text-sm ${row.isTotal ? 'font-bold text-white' : 'text-[#8b949e]'}`}>
+                          {row.ratio}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`text-sm font-bold ${row.isLongDominant ? 'text-[#4ade80]' : 'text-[#f87171]'}`}>
+                          {row.longShortRatio}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[300px]">
+              <p className="text-sm text-[#8b949e]">
+                {t('liquidationData.table.loginRequired', '请先登录以查看真实的按交易所爆仓数据。')}
+              </p>
+            </div>
+          )}
         </LoadingState>
       </div>
 
       {/* Detail Modal */}
-      <Modal
-        isOpen={!!selectedExchangeDisplay}
-        onClose={() => setSelectedExchange(null)}
-        title={t('liquidationData.modal.title', { exchange: selectedExchangeDisplay?.exchange ?? '' })}
-      >
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
-              <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
-              <p className="text-xl font-bold text-white">
-                {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL' ? selectedExchangeDisplay.coin : t('liquidationData.modal.multiAsset')}
-              </p>
-            </div>
-            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
-              <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.maxSingle')}</p>
-              <p className="text-xl font-bold text-orange-400">{currencyFormatter.format(1.245e6)}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <p className="text-sm font-bold text-[#e6edf3]">{t('liquidationData.modal.recent')}</p>
-            {[1, 2, 3].map(i => (
-              <div key={i} className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30">
-                <span className="text-[#e6edf3]">0x{Math.random().toString(16).substring(2, 8)}...</span>
-                <span className="text-red-400">-{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})</span>
-                <span className="text-[#8b949e] text-xs">{t('liquidationData.modal.minutesAgo', { minutes: 2 })}</span>
+      {isAuthenticated && (
+        <Modal
+          isOpen={!!selectedExchangeDisplay}
+          onClose={() => setSelectedExchange(null)}
+          title={t('liquidationData.modal.title', { exchange: selectedExchangeDisplay?.exchange ?? '' })}
+        >
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+                <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
+                <p className="text-xl font-bold text-white">
+                  {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL' ? selectedExchangeDisplay.coin : t('liquidationData.modal.multiAsset')}
+                </p>
               </div>
-            ))}
+              <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+                <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.maxSingle')}</p>
+                <p className="text-xl font-bold text-orange-400">{currencyFormatter.format(1.245e6)}</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-[#e6edf3]">{t('liquidationData.modal.recent')}</p>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30">
+                  <span className="text-[#e6edf3]">0x{Math.random().toString(16).substring(2, 8)}...</span>
+                  <span className="text-red-400">-{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})</span>
+                  <span className="text-[#8b949e] text-xs">{t('liquidationData.modal.minutesAgo', { minutes: 2 })}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 };
