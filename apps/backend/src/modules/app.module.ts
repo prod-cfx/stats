@@ -30,6 +30,7 @@ import { OrderbookConfigModule } from './orderbook-config/orderbook-config.modul
 import { SettingsModule } from './settings/settings.module'
 import { TradesConfigModule } from './trades-config/trades-config.module'
 import { UserModule } from './user/user.module'
+import { WhaleAlertModule } from './whale-alert/whale-alert.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
 const currentEnv = defaultEnvAccessor.appEnv()
@@ -93,6 +94,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
+    WhaleAlertModule,
   ],
   providers: [
     {

@@ -499,7 +499,8 @@
       "paused": "已暂停自动更新",
       "nextUpdate": "{{count}}秒后更新数据",
       "toast": {
-        "copied": "已复制地址"
+        "copied": "已复制地址",
+        "loadFailed": "实时巨鲸数据加载失败"
       },
       "table": {
         "address": "交易地址",

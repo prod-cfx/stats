@@ -488,7 +488,8 @@
       "paused": "Auto refresh paused",
       "nextUpdate": "Refresh in {{count}}s",
       "toast": {
-        "copied": "Address copied"
+        "copied": "Address copied",
+        "loadFailed": "Failed to load realtime whale alerts"
       },
       "table": {
         "address": "Address",

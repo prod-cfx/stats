@@ -615,6 +615,20 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough();
+const WhaleAlertSide = z.enum(["Long", "Short"]);
+const RealtimeWhaleAlertDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    position_size: z.number(),
+    entry_price: z.number(),
+    liq_price: z.number(),
+    position_value_usd: z.number(),
+    position_action: z.number(),
+    create_time: z.string(),
+    side: WhaleAlertSide,
+  })
+  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -669,6 +683,8 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
+  WhaleAlertSide,
+  RealtimeWhaleAlertDto,
 };
 
 const endpoints = makeApi([
@@ -2526,6 +2542,35 @@ const endpoints = makeApi([
     alias: "UserController_me",
     requestFormat: "json",
     response: UserProfileResponseDto,
+  },
+  {
+    method: "get",
+    path: "/whale-alerts/realtime",
+    alias: "WhaleAlertController_getRealtime",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "min_position_value_usd",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "since",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.array(RealtimeWhaleAlertDto),
   },
 ]);
 
