@@ -93,7 +93,11 @@ describeIf('Binance trades WS (E2E)', () => {
     const originalStates = existingForPair.map(cfg => ({
       id: cfg.id,
       enabled: cfg.enabled,
-      metadata: cfg.metadata,
+      // 深拷贝 metadata，避免后续测试中的修改污染原始配置
+      metadata:
+        cfg.metadata == null
+          ? null
+          : (JSON.parse(JSON.stringify(cfg.metadata)) as Record<string, unknown>),
     }))
 
     let targetConfig =

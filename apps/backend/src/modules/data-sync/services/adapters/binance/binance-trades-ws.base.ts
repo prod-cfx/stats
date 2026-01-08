@@ -471,10 +471,17 @@ class BinanceTradesWsConnection {
   private desired = new Set<string>()
   private active = new Set<string>()
   /**
-   * 最近一次订阅/退订相关的错误，由 message 回调捕获并在
-   * syncDesiredStreams 中抛出，避免订阅失败被静默忽略。
+   * 当前订阅/退订同步过程的 pending promise。
+   * 当收到 Binance 的错误响应（code/msg 或 error）时会触发 reject，
+   * 使得 syncDesiredStreams 失败并让上层感知订阅未成功。
    */
-  private lastSyncError: Error | null = null
+  private pendingSync:
+    | {
+        promise: Promise<void>
+        resolve: () => void
+        reject: (err: Error) => void
+      }
+    | null = null
 
   constructor(
     private readonly index: number,
@@ -512,11 +519,14 @@ class BinanceTradesWsConnection {
       for (const s of toSub) this.active.add(s)
     }
 
-    // 若在本轮订阅过程中捕获到错误，则向上抛出，让 adapter/manager 感知并重试
-    if (this.lastSyncError) {
-      const err = this.lastSyncError
-      this.lastSyncError = null
-      throw err
+    // 若本轮确实有订阅/退订操作，则等待 Binance 的同步结果
+    if (toSub.length || toUnsub.length) {
+      this.pendingSync = this.createPendingSync()
+      try {
+        await this.pendingSync.promise
+      } finally {
+        this.pendingSync = null
+      }
     }
   }
 
@@ -561,10 +571,19 @@ class BinanceTradesWsConnection {
     this.ws.on('message', (data) => {
       void this.onTradesMessage(data).catch(err => {
         const reason = err instanceof Error ? err.message : String(err)
-        // 标记本次订阅出现错误，清空 active/desired，等待上层重建订阅关系
-        this.lastSyncError = err instanceof Error ? err : new Error(reason)
-        this.active.clear()
-        this.desired.clear()
+
+        // 如果当前存在正在进行的订阅同步，则将其视为本轮 SUB/UNSUB 失败
+        if (this.pendingSync) {
+          const pending = this.pendingSync
+          this.pendingSync = null
+          // 当前连接的订阅状态已不可信，清空本地 active/desired，交由上层重建
+          this.active.clear()
+          this.desired.clear()
+          pending.reject(err instanceof Error ? err : new Error(reason))
+          return
+        }
+
+        // 否则视为运行期处理 trades 时的异常，仅记录日志以便排查
         this.baseLogger.error(
           `Binance Trades WS#${this.index} onTradesMessage error: ${reason}`,
         )
@@ -643,6 +662,40 @@ class BinanceTradesWsConnection {
     try {
       this.ws.send(JSON.stringify(payload))
     } catch {}
+  }
+
+  private createPendingSync(): {
+    promise: Promise<void>
+    resolve: () => void
+    reject: (err: Error) => void
+  } {
+    let resolve!: () => void
+    let reject!: (err: Error) => void
+
+    const timeoutMs =
+      this.configService.get<number>('TRADES_WS_SUBSCRIBE_TIMEOUT_MS') ?? 5_000
+
+    let timeout: NodeJS.Timeout | null = null
+
+    const promise = new Promise<void>((res, rej) => {
+      resolve = () => {
+        if (timeout) clearTimeout(timeout)
+        res()
+      }
+      reject = (err: Error) => {
+        if (timeout) clearTimeout(timeout)
+        rej(err)
+      }
+    })
+
+    timeout = setTimeout(() => {
+      this.baseLogger.warn(
+        `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
+      )
+      resolve()
+    }, Math.max(1_000, timeoutMs))
+
+    return { promise, resolve, reject }
   }
 }
 
