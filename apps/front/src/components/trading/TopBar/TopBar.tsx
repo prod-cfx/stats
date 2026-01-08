@@ -206,15 +206,9 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
 
   return (
     <div className="h-[61px] bg-[#161b22] border-b border-[#30363d] flex items-center text-[#c9d1d9] w-full">
-      {/* Left Area: Navigation - Matches LeftTradePanel container width limits */}
-      <div className="flex-none w-[20%] max-w-[340px] min-w-[240px] flex items-center px-4 gap-4 border-r border-[#30363d] h-full">
-        <span className="text-lg font-bold">{t('trade.title')}</span>
-        <div className="flex items-center gap-1 text-[#8b949e] text-sm cursor-pointer hover:text-[#c9d1d9] transition-colors">
-          <span>{t('trade.tools')}</span>
-        </div>
-      </div>
+      {/* Left Area: Removed Navigation */}
       
-      {/* Center & Right Area: Aligned with the Chart area */}
+      {/* Center & Right Area: Full width now */}
       <div className="flex-1 flex items-center gap-6 px-4 h-full relative min-w-0">
         {/* Symbol and Main Price */}
         <div className="flex items-center gap-4 flex-none relative" ref={menuRef}>

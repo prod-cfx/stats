@@ -238,7 +238,9 @@
     "error": "Error",
     "success": "Success",
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "close": "Close",
+    "price": "Price"
   },
   "aggregatedOrderbook": {
     "title": "Aggregated Orderbook",

@@ -193,11 +193,11 @@
     },
     "indicators": {
       "liquidationMap": "清算地图",
-      "longShortRatio": "各交易所多空比",
+      "longShortRatio": "聚合多空比",
       "aggregatedOrderbook": "聚合挂单",
       "aggregatedOpenInterest": "聚合持仓量",
       "aggregatedVolume": "聚合成交量",
-      "liquidationData": "市场爆仓数据",
+      "liquidationData": "聚合爆仓",
       "marketOverview": "市场综合数据",
       "optionsIv": "期权隐含波动率(IV)"
     },
@@ -249,7 +249,9 @@
     "error": "错误",
     "success": "成功",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "close": "关闭",
+    "price": "价格"
   },
   "aggregatedOrderbook": {
     "title": "聚合挂单数据",
