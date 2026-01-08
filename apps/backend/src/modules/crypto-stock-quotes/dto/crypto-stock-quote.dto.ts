@@ -212,4 +212,3 @@ export class GetLatestCryptoStockQuotesQueryDto {
   @IsIn(['BBX'], { message: 'source 仅支持: BBX' })
   source?: string
 }
-

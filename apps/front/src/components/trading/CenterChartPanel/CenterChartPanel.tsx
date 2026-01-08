@@ -58,6 +58,8 @@ export const CenterChartPanel = ({
 
   const chartIndicatorItems = catalogItems
     .filter((x) => x.kind === 'chartSeries' || x.kind === 'chartOverlay')
+    // Remove "Aggregated Orderbook" from indicator modal list (UI-only)
+    .filter((x) => x.id !== 'aggregated-orderbook')
     .map((x) => ({
       ...x,
       name: t(x.labelKey),

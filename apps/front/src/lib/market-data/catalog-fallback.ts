@@ -26,18 +26,6 @@ export const FALLBACK_MARKET_DATA_CATALOG: MarketDataCatalogItem[] = [
     },
   },
   {
-    id: 'aggregated-orderbook',
-    kind: 'chartOverlay',
-    labelKey: 'chart.indicators.aggregatedOrderbook',
-    group: 'featured',
-    starred: true,
-    href: '/aggregated-orderbook',
-    ui: {
-      icon: 'Layers',
-      color: '#3b82f6',
-    },
-  },
-  {
     id: 'aggregated-open-interest',
     kind: 'chartSeries',
     labelKey: 'chart.indicators.aggregatedOpenInterest',
