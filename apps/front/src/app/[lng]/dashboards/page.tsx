@@ -2,7 +2,7 @@
 
 import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
 import { Bookmark, ChevronDown, Edit2, Grid3x3, Plus, Search } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState  } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ExploreDashboards } from '@/components/dashboard/ExploreDashboards'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
@@ -12,7 +12,6 @@ import {
   getMyDashboards,
   getSavedDashboards,
 } from '@/features/dashboards/store/dashboardStore'
-import { useRef } from 'react'
 
 type TabView = 'explore' | 'my' | 'saved'
 
