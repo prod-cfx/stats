@@ -61,7 +61,7 @@ interface ExchangeRowRaw {
   isTotal?: boolean
 }
 
-export const ExchangeLiquidationTable = () => {
+export const ExchangeLiquidationTable = ({ showTitle = true }: { showTitle?: boolean }) => {
   const { t, i18n } = useTranslation();
   const [coinFilter, setCoinFilter] = useState<CoinFilter>('BTC');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('4h');
@@ -175,10 +175,10 @@ export const ExchangeLiquidationTable = () => {
   }, [currencyFormatter, selectedExchange, t])
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <SectionTitle>{t('liquidationData.table.title')}</SectionTitle>
-        <div className="flex gap-3">
+    <div className="flex flex-col gap-6 h-full">
+      <div className="flex items-center justify-between flex-none">
+        {showTitle && <SectionTitle>{t('liquidationData.table.title')}</SectionTitle>}
+        <div className={`flex gap-3 ${!showTitle ? 'w-full justify-between' : ''}`}>
           <FilterButton
             value={coinFilter}
             options={[
@@ -204,9 +204,9 @@ export const ExchangeLiquidationTable = () => {
         </div>
       </div>
 
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg animate-in fade-in duration-500">
-        <LoadingState isLoading={loading} error={error} onRetry={reload}>
-          <div className="overflow-x-auto">
+      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden flex-1 min-h-0 relative shadow-lg animate-in fade-in duration-500 flex flex-col">
+        <LoadingState isLoading={loading} error={error} onRetry={reload} className="h-full">
+          <div className="overflow-x-auto h-full custom-scrollbar">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">

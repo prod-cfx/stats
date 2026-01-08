@@ -14,8 +14,13 @@ export async function generateStaticParams() {
 }
 
 // 根据语言生成元数据
-export async function generateMetadata({ params }: { params: { lng: string } }): Promise<Metadata> {
-  const lng = params.lng as AppLocale;
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}): Promise<Metadata> {
+  const resolvedParams = await Promise.resolve(params)
+  const lng = resolvedParams.lng as AppLocale;
   
   const title = 'Coinflux - Advanced Crypto Data Aggregator';
   const description = lng === 'zh'
@@ -37,14 +42,15 @@ export async function generateMetadata({ params }: { params: { lng: string } }):
   };
 }
 
-export default function LngLayout({
+export default async function LngLayout({
   children,
   params,
 }: {
   children: ReactNode;
-  params: { lng: string };
+  params: Promise<{ lng: string }> | { lng: string };
 }) {
-  const lng = params.lng as AppLocale;
+  const resolvedParams = await Promise.resolve(params)
+  const lng = resolvedParams.lng as AppLocale;
   const htmlLang = lng === 'zh' ? 'zh-CN' : 'en';
   
   return (

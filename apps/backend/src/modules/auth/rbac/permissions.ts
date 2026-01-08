@@ -1,6 +1,7 @@
 import { RolesBuilder } from 'nest-access-control'
 
 export enum AppRole {
+  VISITOR = 'visitor',
   USER = 'user',
   MODERATOR = 'moderator',
   ADMIN = 'admin',
@@ -18,17 +19,26 @@ export enum AppResource {
   LLM_STRATEGY = 'llm_strategy',
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
+  WHALE_TRACKING = 'whale_tracking',
   DATA_PULL_TASK = 'data_pull_task',
   ORDERBOOK_CONFIG = 'orderbook_config',
   EXCHANGE_CONFIG = 'exchange_config',
+  TRADES_CONFIG = 'trades_config',
 }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
+
+// 访客角色：未登录用户的最小权限集合
+RBAC_PERMISSIONS.grant(AppRole.VISITOR).readAny(AppResource.WHALE_TRACKING)
 
 RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
+  // 普通用户可读取市场相关数据（如鲸鱼预警、持仓量等）
+  .readAny(AppResource.MARKET_SYMBOL)
+  // 普通用户可访问鲸鱼追踪 Discover 等功能
+  .readAny(AppResource.WHALE_TRACKING)
 
 RBAC_PERMISSIONS.grant(AppRole.MODERATOR).extend(AppRole.USER)
 
@@ -69,6 +79,10 @@ RBAC_PERMISSIONS.grant(AppRole.ADMIN)
   .createAny(AppResource.EXCHANGE_CONFIG)
   .updateAny(AppResource.EXCHANGE_CONFIG)
   .deleteAny(AppResource.EXCHANGE_CONFIG)
+  .readAny(AppResource.TRADES_CONFIG)
+  .createAny(AppResource.TRADES_CONFIG)
+  .updateAny(AppResource.TRADES_CONFIG)
+  .deleteAny(AppResource.TRADES_CONFIG)
   .readAny(AppResource.ADMIN_MENU)
   .readAny(AppResource.ADMIN_USER)
   .readAny(AppResource.SETTINGS)

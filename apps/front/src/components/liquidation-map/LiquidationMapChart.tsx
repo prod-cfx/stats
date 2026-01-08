@@ -36,6 +36,10 @@ interface LiquidationMapChartProps {
    * Overlay only: selected bucket price (for click-to-inspect)
    */
   selectedPrice?: number | null;
+  /**
+   * Optional className to override default container styles
+   */
+  className?: string;
 }
 
 export interface LiquidationMapChartHandle {
@@ -145,6 +149,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       overlayWidth = 260,
       overlayOpacity = 0.85,
       selectedPrice = null,
+      className,
     },
     ref,
   ) => {
@@ -798,9 +803,10 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
   return (
     <div
       className={
-        mode === 'full'
+        className ??
+        (mode === 'full'
           ? 'relative w-full h-[600px] bg-[#0d1117] border border-[#30363d] rounded-lg p-2'
-          : 'relative w-full h-full'
+          : 'relative w-full h-full')
       }
     >
       <div ref={chartRef} className="w-full h-full" />

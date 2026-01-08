@@ -9,11 +9,12 @@ import { OpenInterestModule } from '@/modules/open-interest/open-interest.module
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
+import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
-import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
+import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY, TRADES_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
@@ -28,16 +29,23 @@ import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
+import { BinanceCexFutureTradesWsAdapter } from './services/adapters/binance-cex-future-trades-ws.adapter'
 import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
+import { BinanceCexPerpetualTradesWsAdapter } from './services/adapters/binance-cex-perpetual-trades-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
+import { BinanceCexSpotTradesWsAdapter } from './services/adapters/binance-cex-spot-trades-ws.adapter'
 import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
 import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
 import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
 import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
+import { OkxCexFutureTradesWsAdapter } from './services/adapters/okx-cex-future-trades-ws.adapter'
 import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-perpetual-orderbook-ws.adapter'
+import { OkxCexPerpetualTradesWsAdapter } from './services/adapters/okx-cex-perpetual-trades-ws.adapter'
 import { OkxCexSpotOrderbookWsAdapter } from './services/adapters/okx-cex-spot-orderbook-ws.adapter'
+import { OkxCexSpotTradesWsAdapter } from './services/adapters/okx-cex-spot-trades-ws.adapter'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
+import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
 
 /**
  * 统一的数据拉取调度模块：
@@ -55,6 +63,7 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
     OrderbookConfigModule,
     SettingsModule,
     CryptoStockQuotesModule,
+    TradesConfigModule,
   ],
   controllers: [AdminDataPullTaskController],
   providers: [
@@ -176,6 +185,42 @@ import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.ser
       ],
     },
     OrderbookWsSyncManager,
+
+    // ===== Trades WS sync（动态订阅交易记录）=====
+    BinanceCexSpotTradesWsAdapter,
+    BinanceCexPerpetualTradesWsAdapter,
+    BinanceCexFutureTradesWsAdapter,
+    OkxCexSpotTradesWsAdapter,
+    OkxCexPerpetualTradesWsAdapter,
+    OkxCexFutureTradesWsAdapter,
+    {
+      provide: TRADES_WS_ADAPTER_REGISTRY,
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
+      useFactory: (
+        binanceCexSpotTradesWsAdapter: BinanceCexSpotTradesWsAdapter,
+        binanceCexPerpetualTradesWsAdapter: BinanceCexPerpetualTradesWsAdapter,
+        binanceCexFutureTradesWsAdapter: BinanceCexFutureTradesWsAdapter,
+        okxCexSpotTradesWsAdapter: OkxCexSpotTradesWsAdapter,
+        okxCexPerpetualTradesWsAdapter: OkxCexPerpetualTradesWsAdapter,
+        okxCexFutureTradesWsAdapter: OkxCexFutureTradesWsAdapter,
+      ) => [
+        binanceCexSpotTradesWsAdapter,
+        binanceCexPerpetualTradesWsAdapter,
+        binanceCexFutureTradesWsAdapter,
+        okxCexSpotTradesWsAdapter,
+        okxCexPerpetualTradesWsAdapter,
+        okxCexFutureTradesWsAdapter,
+      ],
+      inject: [
+        BinanceCexSpotTradesWsAdapter,
+        BinanceCexPerpetualTradesWsAdapter,
+        BinanceCexFutureTradesWsAdapter,
+        OkxCexSpotTradesWsAdapter,
+        OkxCexPerpetualTradesWsAdapter,
+        OkxCexFutureTradesWsAdapter,
+      ],
+    },
+    TradesWsSyncManager,
   ],
 })
 export class DataSyncModule {}

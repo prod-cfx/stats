@@ -193,11 +193,11 @@
     },
     "indicators": {
       "liquidationMap": "清算地图",
-      "longShortRatio": "各交易所多空比",
+      "longShortRatio": "聚合多空比",
       "aggregatedOrderbook": "聚合挂单",
       "aggregatedOpenInterest": "聚合持仓量",
       "aggregatedVolume": "聚合成交量",
-      "liquidationData": "市场爆仓数据",
+      "liquidationData": "聚合爆仓",
       "marketOverview": "市场综合数据",
       "optionsIv": "期权隐含波动率(IV)"
     },
@@ -249,7 +249,9 @@
     "error": "错误",
     "success": "成功",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "close": "关闭",
+    "price": "价格"
   },
   "aggregatedOrderbook": {
     "title": "聚合挂单数据",
@@ -497,7 +499,8 @@
       "paused": "已暂停自动更新",
       "nextUpdate": "{{count}}秒后更新数据",
       "toast": {
-        "copied": "已复制地址"
+        "copied": "已复制地址",
+        "loadFailed": "实时巨鲸数据加载失败"
       },
       "table": {
         "address": "交易地址",
@@ -731,7 +734,29 @@
       "aggVolume": "聚合成交量",
       "liquidationData": "爆仓数据",
       "publicCompanies": "币股",
-      "predictionMarket": "预测市场"
+      "predictionMarket": "预测市场",
+      "btcPrice": "BTC 价格",
+      "ethGas": "ETH Gas 费",
+      "fearGreed": "贪婪恐慌指数",
+      "candlestickChart": "K线图表",
+      "unit": "组件",
+      "categories": {
+        "market_data": "市场数据",
+        "derivatives": "衍生品数据",
+        "liquidation": "爆仓数据",
+        "other": "其他"
+      },
+      "descriptions": {
+        "candlestickChart": "专业的 TradingView K线图表",
+        "liquidationMap": "各交易所实时爆仓热力图数据",
+        "lsRatio": "全网多空持仓人数及持仓量比",
+        "aggOrderbook": "全网深度及订单流聚合分析",
+        "aggOI": "全网合约总持仓量聚合",
+        "aggVolume": "全网合约总成交量聚合",
+        "liquidationData": "实时爆仓订单流推送",
+        "predictionMarket": "基于链上数据的未来趋势预测",
+        "publicCompanies": "持有加密资产的上市公司概览"
+      }
     },
     "editor": {
       "addWidgetTitle": "添加一个组件",
