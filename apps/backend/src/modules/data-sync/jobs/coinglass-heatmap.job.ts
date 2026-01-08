@@ -43,7 +43,10 @@ export class CoinglassHeatmapJob implements DataPullJob {
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const endpoint =
       this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT') ??
-      'https://open-api-v4.coinglass.com/api/pro/v4/futures/liquidation-heatmap'
+      // 参考 Coinglass v4 文档：清算热力图 Model3
+      // v4 统一使用 /api 前缀，且不同模型使用不同路径（model1/model2/model3）
+      // 如需切换模型或自定义路径，可通过 COINGLASS_HEATMAP_ENDPOINT 覆盖
+      'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap/model3'
 
     if (!apiKey) {
       // 不应“默默成功”，否则后台无法感知配置缺失
