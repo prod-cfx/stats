@@ -9,14 +9,14 @@ export function WidgetShell(props: {
 }) {
   return (
     <div className="h-full w-full rounded-xl border border-white/10 bg-white/5 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 flex-shrink-0">
         <div className="min-w-0 react-draggable-handle cursor-move select-none">
-          <div className="text-sm font-semibold text-white truncate">{props.title}</div>
-          {props.description ? <div className="text-xs text-white/50 truncate">{props.description}</div> : null}
+          <div className="text-xs font-bold text-white truncate">{props.title}</div>
+          {props.description ? <div className="text-[10px] text-white/50 truncate">{props.description}</div> : null}
         </div>
         {props.onRemove ? (
           <button
-            className="text-xs text-white/60 hover:text-white"
+            className="text-[10px] text-white/40 hover:text-white react-draggable-cancel"
             onClick={props.onRemove}
             aria-label="remove-widget"
           >
@@ -24,8 +24,10 @@ export function WidgetShell(props: {
           </button>
         ) : null}
       </div>
-      <div className="p-4 flex-1 min-h-0 overflow-hidden relative" style={props.contentStyle}>{props.children}</div>
+      {/* 硬性限制内容高度，防止内部组件撑高 */}
+      <div className="p-2 flex-1 min-h-0 overflow-hidden relative flex flex-col" style={props.contentStyle}>
+        <div className="flex-1 min-h-0 overflow-hidden">{props.children}</div>
+      </div>
     </div>
   )
 }
-

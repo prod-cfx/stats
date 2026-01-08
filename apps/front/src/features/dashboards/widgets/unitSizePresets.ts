@@ -18,4 +18,3 @@ export function snapToPreset(w: number, h: number): { w: number; h: number; size
   // Should never be null, but keep safe fallback.
   return best ? { w: best.w, h: best.h, size: best.size } : { w: UNIT_SIZE_PRESETS.M.w, h: UNIT_SIZE_PRESETS.M.h, size: 'M' }
 }
-

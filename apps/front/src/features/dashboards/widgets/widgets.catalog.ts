@@ -39,8 +39,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "K线图表",
         description: "专业的 TradingView K线图表",
         iconKey: "kline",
-        // Preset: M (6×8)
-        defaultLayout: { w: 6, h: 8, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        // Ultra compact; will be clamped to 3~6
+        defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTCUSDT", venue: "OKX", interval: "15m" },
         allowMultiple: true,
       },
@@ -49,8 +49,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "预测市场",
         description: "基于链上数据的未来趋势预测",
         iconKey: "prediction",
-        // Preset: M (6×8)
-        defaultLayout: { w: 6, h: 8, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { category: "BTC", sort: "hot", showLiveOnly: false },
         allowMultiple: true,
       },
@@ -59,8 +58,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "币股",
         description: "持有加密资产的上市公司概览",
         iconKey: "stocks",
-        // Preset: M (6×8)
-        defaultLayout: { w: 6, h: 8, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { watchlist: "ALL", sort: "marketCap" },
         allowMultiple: true,
       },
@@ -76,8 +74,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "聚合多空比",
         description: "全网多空持仓人数及持仓量比",
         iconKey: "longshort",
-        // Preset: S (6×6)
-        defaultLayout: { w: 6, h: 6, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 3, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "4h" },
         allowMultiple: true,
       },
@@ -86,8 +83,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "聚合挂单",
         description: "全网深度及订单流聚合分析",
         iconKey: "orderbook",
-        // Preset: L (12×10) — heavy UI
-        defaultLayout: { w: 12, h: 10, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 12, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTCUSDT", marketType: "swap", depth: 10 },
         allowMultiple: true,
       },
@@ -96,8 +92,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "聚合持仓量",
         description: "全网合约总持仓量聚合",
         iconKey: "oi",
-        // Preset: M (6×8)
-        defaultLayout: { w: 6, h: 8, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "24h" },
         allowMultiple: true,
       },
@@ -106,8 +101,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "聚合成交量",
         description: "全网合约总成交量聚合",
         iconKey: "volume",
-        // Preset: S (6×6)
-        defaultLayout: { w: 6, h: 6, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 3, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "24h" },
         allowMultiple: true,
       },
@@ -123,8 +117,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "清算地图",
         description: "各交易所实时爆仓热力图数据",
         iconKey: "liqmap",
-        // Preset: L (12×10) — chart needs width
-        defaultLayout: { w: 12, h: 10, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 12, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", scope: "ALL", range: "1D" },
         allowMultiple: true,
       },
@@ -133,8 +126,7 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
         title: "聚合爆仓",
         description: "实时爆仓订单流推送",
         iconKey: "liqfeed",
-        // Preset: M (6×8)
-        defaultLayout: { w: 6, h: 8, minW: 6, minH: 6, maxW: 12, maxH: 16 },
+        defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "ALL", window: "4h" },
         allowMultiple: true,
       },
