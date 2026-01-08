@@ -55,8 +55,10 @@ export class CoinglassHeatmapJob implements DataPullJob {
       throw new Error('COINGLASS_API_KEY is not configured')
     }
 
-    // 规范化 endpoint，确保无论环境变量是否已包含 /modelX，最终路径与 cursor.modelType 一致
-    const normalizedBase = baseEndpoint.replace(/\/model\d+$/, '')
+    // 规范化 endpoint，确保无论环境变量是否已包含 /modelX 或 /modelX/，最终路径与 cursor.modelType 一致
+    const normalizedBase = baseEndpoint
+      .replace(/\/model\d+\/?$/, '')
+      .replace(/\/+$/, '')
     const endpoint = normalizedBase.endsWith('/')
       ? `${normalizedBase}${modelSuffix}`
       : `${normalizedBase}/${modelSuffix}`
