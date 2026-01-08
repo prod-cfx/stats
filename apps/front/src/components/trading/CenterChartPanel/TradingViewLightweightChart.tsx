@@ -74,7 +74,7 @@ const IndicatorChartPanel = ({
   registerChart,
   unregisterChart,
   onClose,
-  showTvLogo: _showTvLogo = false,
+  showTvLogo = false,
   formatter,
   priceFormatter,
 }: IndicatorChartProps) => {
@@ -458,7 +458,7 @@ const IndicatorChartPanel = ({
   }, [data, type])
 
   return (
-    <div className="flex flex-col w-full flex-shrink-0">
+    <div className={`flex flex-col w-full flex-shrink-0 ${showTvLogo ? '' : 'cf-hide-tv-logo'}`}>
        {/* Separator_Top strictly matching Figma structure */}
        <div className="h-[1px] w-full bg-[#30363d]" />
        <div className="relative w-full bg-[#161b22]" style={{ height }}>
@@ -1526,7 +1526,7 @@ export const TradingViewLightweightChart = ({
            registerChart={registerChart}
            unregisterChart={unregisterChart}
            onClose={() => onRemoveIndicator?.('liquidation-data')}
-           showTvLogo={true}
+           showTvLogo={false}
            formatter={(v) => v.toFixed(4)}
            priceFormatter={(v) => (v < 0 ? `-${formatUsdCompact(Math.abs(v))}` : formatUsdCompact(v))}
         />
