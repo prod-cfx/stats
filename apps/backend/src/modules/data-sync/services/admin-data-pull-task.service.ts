@@ -130,6 +130,8 @@ export class AdminDataPullTaskService {
       throw new NotFoundException(`DataPullTask#${id} 不存在`)
     }
 
+    const now = new Date()
+
     const job = this.findJobForTask(task.key)
     if (!job) {
       throw new BadRequestException(
@@ -137,16 +139,13 @@ export class AdminDataPullTaskService {
       )
     }
 
-    if (task.lastStatus === 'RUNNING') {
+    // 通过乐观锁方式标记为 RUNNING，避免并发“立即执行”导致重复跑同一任务
+    const claimed = await this.taskRepo.tryMarkRunningOnce(task.id, now)
+    if (!claimed) {
       throw new BadRequestException(
         `数据拉取任务 key "${task.key}" 正在运行中，请稍后再试`,
       )
     }
-
-    const now = new Date()
-
-    // 标记任务为运行中，便于前端展示
-    await this.taskRepo.markRunning(task.id, now)
 
     // 记录一次新的执行历史
     const exec = await this.execRepo.createStart(task.id, now)

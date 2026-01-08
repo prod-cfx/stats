@@ -518,33 +518,11 @@ export async function deleteDataPullTask(id: number): Promise<void> {
  */
 export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
   return withAuthErrorHandling(async () => {
-    const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}/trigger`, {
-      method: 'POST',
-      headers: {
-        ...requireAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
+    const response = await (client as any).AdminDataPullTaskController_triggerOnce({
+      headers: requireAuthHeaders(),
+      params: { id },
     })
-
-    const text = await response.text()
-    let json: any
-    try {
-      json = text ? JSON.parse(text) : {}
-    } catch {
-      json = { message: text }
-    }
-
-    if (!response.ok) {
-      // 让 withAuthErrorHandling 能识别 status / message，同时满足 no-throw-literal 规则
-      const error: any = new Error(json?.message || '触发任务失败')
-      error.response = {
-        status: response.status,
-        data: json,
-      }
-      throw error
-    }
-
-    const data = json?.data ?? json
+    const data = unwrapResponse<any>(response as any)
 
     return {
       id: data.id,
