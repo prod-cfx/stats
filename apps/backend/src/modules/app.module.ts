@@ -95,11 +95,8 @@ const currentEnv = defaultEnvAccessor.appEnv()
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
-<<<<<<< HEAD
-    CryptoStockQuotesModule,
-=======
     WhaleAlertModule,
->>>>>>> origin/main
+    CryptoStockQuotesModule,
   ],
   providers: [
     {

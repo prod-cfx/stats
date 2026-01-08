@@ -211,9 +211,11 @@ export class CryptoStockQuotesRepository {
 
     return client.cryptoStockQuote.findMany({
       where,
-      orderBy: {
-        quoteTimestamp: 'desc',
-      },
+      orderBy: [
+        { symbol: 'asc' },
+        { source: 'asc' },
+        { quoteTimestamp: 'desc' },
+      ],
       distinct: ['symbol', 'source'],
     })
   }
@@ -232,9 +234,11 @@ export class CryptoStockQuotesRepository {
 
     return client.cryptoStockQuote.findMany({
       where,
-      orderBy: {
-        quoteTimestamp: 'desc',
-      },
+      orderBy: [
+        { symbol: 'asc' },
+        { source: 'asc' },
+        { quoteTimestamp: 'desc' },
+      ],
       distinct: ['symbol', 'source'],
     })
   }
