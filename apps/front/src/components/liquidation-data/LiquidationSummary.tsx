@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
 import { fetchAggregatedLiquidationSummary } from '@/lib/api';
-import { getToken } from '@/lib/auth-storage';
 
 interface LiquidationCardProps {
   title: string;
@@ -39,7 +38,6 @@ const LiquidationCard = ({ title, total, long, short }: LiquidationCardProps) =>
 
 export const LiquidationSummary = () => {
   const { t, i18n } = useTranslation();
-  const isAuthenticated = !!getToken();
 
   const formatter = React.useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -53,14 +51,12 @@ export const LiquidationSummary = () => {
 
   // 默认使用 BTC 作为汇总 symbol，后续如需支持切换可以从上层透传
   const { data, loading, error, reload } = useMockData<AggregatedLiquidationSummary | null>(
-    async () => {
-      if (!isAuthenticated) {
-        // 未登录时不发起真实请求，由 UI 提示登录
-        return null
-      }
-      return fetchAggregatedLiquidationSummary('BTC')
+    async () => fetchAggregatedLiquidationSummary('BTC'),
+    [],
+    {
+      delay: 0,
+      ignoreQueryOverrides: true,
     },
-    [isAuthenticated],
   );
 
   if (loading) {
@@ -94,19 +90,6 @@ export const LiquidationSummary = () => {
           >
             {t('common.retry') || '重试'}
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col gap-4">
-        <SectionTitle>{t('liquidationData.summary.title')}</SectionTitle>
-        <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4">
-          <p className="text-sm text-[#8b949e]">
-            {t('liquidationData.summary.loginRequired', '请先登录以查看真实的爆仓汇总数据。')}
-          </p>
         </div>
       </div>
     );

@@ -13,7 +13,7 @@ export function useMockData<T>(
   const requestIdRef = useRef(0);
 
   const load = useCallback(async (isTransition = false) => {
-    // Determine delay based on rules: 
+    // Determine delay based on rules:
     // Initial: 1200-2000ms, Transition: 600-1000ms
     const delay = options.delay ?? (isTransition ? 800 : 1500);
     
@@ -25,9 +25,12 @@ export function useMockData<T>(
       // Simulate network delay
       await new Promise(resolve => setTimeout(resolve, delay));
 
-      // Global debug overrides via URL
-      const forceError = searchParams.get('mock_error') === '1' || options.shouldError;
-      const forceEmpty = searchParams.get('mock_empty') === '1' || options.isEmpty;
+      // Global debug overrides via URL（可通过 options.ignoreQueryOverrides 禁用）
+      const shouldUseQueryOverrides = !options.ignoreQueryOverrides;
+      const forceError =
+        (shouldUseQueryOverrides && searchParams.get('mock_error') === '1') || options.shouldError;
+      const forceEmpty =
+        (shouldUseQueryOverrides && searchParams.get('mock_empty') === '1') || options.isEmpty;
 
       if (forceError) {
         throw new Error('数据加载失败（Mock）');
@@ -52,7 +55,18 @@ export function useMockData<T>(
         setLoading(false);
       }
     }
-  }, [fetcher, options.delay, options.shouldError, options.isEmpty, searchParams, setData, setError, setLoading, ...dependencies]);
+  }, [
+    fetcher,
+    options.delay,
+    options.shouldError,
+    options.isEmpty,
+    options.ignoreQueryOverrides,
+    searchParams,
+    setData,
+    setError,
+    setLoading,
+    ...dependencies,
+  ]);
 
   useEffect(() => {
     load();

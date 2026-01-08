@@ -332,7 +332,7 @@ export async function fetchAggregatedLiquidationSummary(
 ): Promise<AggregatedLiquidationSummary> {
   return apiCall(async () => {
     const response = await client.AggregatedLiquidationController_getSummary({
-      headers: requireAuthHeaders(),
+      headers: optionalAuthHeaders(),
       queries: { symbol },
     })
     return unwrapResponse(response) as AggregatedLiquidationSummary
@@ -345,7 +345,7 @@ export async function fetchExchangeLiquidation(
 ): Promise<ExchangeLiquidationResponse> {
   return apiCall(async () => {
     const response = await client.AggregatedLiquidationController_getExchanges({
-      headers: requireAuthHeaders(),
+      headers: optionalAuthHeaders(),
       queries: { symbol, timeframe },
     })
     return unwrapResponse(response) as ExchangeLiquidationResponse
