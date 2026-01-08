@@ -71,40 +71,93 @@ export const WhalePositionsTable = () => {
 
     const now = Date.now();
 
-    const mapped: WhalePosition[] = rawHoldings.map(h => {
+    // 先在数值层面做过滤和排序，最后再做格式化，避免 locale 相关的字符串互转问题
+    const enriched = rawHoldings.map(h => {
       const createdAt = new Date(h.createTime).getTime();
       const createdMinutesAgo = Math.max(0, Math.floor((now - createdAt) / 60_000));
 
       const positionValueUsd = h.positionValueUsd;
+      const marginValue = positionValueUsd / 10; // 简单估算，仅用于展示
+      const side: 'Long' | 'Short' = h.side === 'LONG' ? 'Long' : 'Short';
+
+      return {
+        raw: h,
+        createdMinutesAgo,
+        positionValueUsd,
+        marginValue,
+        side,
+      };
+    });
+
+    const filtered = enriched.filter(item => {
+      const { raw, side } = item;
+      if (assetFilter !== 'ALL' && raw.symbol !== assetFilter) return false;
+      if (sideFilter !== 'ALL' && side !== sideFilter) return false;
+
+      // 目前后端未提供 PnL 数据，选择 PnL 过滤时保持原始集合，避免错误解析
+      return true;
+    });
+
+    const sorted = (!sortField || !sortOrder)
+      ? filtered
+      : [...filtered].sort((a, b) => {
+          let valA: number;
+          let valB: number;
+
+          switch (sortField) {
+            case 'positionValue':
+              valA = a.positionValueUsd;
+              valB = b.positionValueUsd;
+              break;
+            case 'margin':
+              valA = a.marginValue;
+              valB = b.marginValue;
+              break;
+            case 'createdTime': {
+              valA = a.createdMinutesAgo;
+              valB = b.createdMinutesAgo;
+              // smaller minutesAgo is more recent
+              return sortOrder === 'desc' ? valA - valB : valB - valA;
+            }
+            case 'pnl':
+            case 'winRate':
+            default:
+              return 0;
+          }
+
+          return sortOrder === 'desc' ? valB - valA : valA - valB;
+        });
+
+    // 最后将数值映射为用于展示的字符串
+    const mapped: WhalePosition[] = sorted.map(item => {
+      const { raw, createdMinutesAgo, positionValueUsd, marginValue, side } = item;
+
       const positionValueUSD = `$${positionValueUsd.toLocaleString(undefined, {
         maximumFractionDigits: 2,
       })}`;
 
-      const positionValueAsset = `${h.positionSize.toFixed(2)} ${h.symbol}`;
+      const positionValueAsset = `${raw.positionSize.toFixed(2)} ${raw.symbol}`;
 
-      const marginValue = positionValueUsd / 10; // 简单估算，主要用于展示
       const margin = `$${marginValue.toLocaleString(undefined, {
         maximumFractionDigits: 2,
       })}`;
 
-      const entryPrice = `$${h.entryPrice.toLocaleString(undefined, {
+      const entryPrice = `$${raw.entryPrice.toLocaleString(undefined, {
         maximumFractionDigits: 2,
       })}`;
 
-      const liqPrice = `$${h.liquidationPrice.toLocaleString(undefined, {
+      const liqPrice = `$${raw.liquidationPrice.toLocaleString(undefined, {
         maximumFractionDigits: 2,
       })}`;
-
-      const side: 'Long' | 'Short' = h.side === 'LONG' ? 'Long' : 'Short';
 
       const tags: WhalePosition['tags'] = [
         { key: 'whale', color: '#c084fc', bg: '#a855f733' },
       ];
 
       return {
-        address: h.userAddress,
+        address: raw.userAddress,
         tags,
-        asset: h.symbol,
+        asset: raw.symbol,
         side,
         leverage: '—',
         marginType: 'Cross',
@@ -121,57 +174,7 @@ export const WhalePositionsTable = () => {
       };
     });
 
-    const filtered = mapped.filter(p => {
-      if (assetFilter !== 'ALL' && p.asset !== assetFilter) return false;
-      if (sideFilter !== 'ALL' && p.side !== sideFilter) return false;
-      if (pnlFilter !== 'ALL') {
-        if (p.pnlUSD === '--') return false;
-        const pnlValue = Number.parseFloat(p.pnlUSD.replace(/[$,]/g, ''));
-        if (Number.isNaN(pnlValue)) return false;
-        if (pnlFilter === 'PROFIT' && pnlValue < 0) return false;
-        if (pnlFilter === 'LOSS' && pnlValue >= 0) return false;
-      }
-      return true;
-    });
-
-    if (!sortField || !sortOrder) return filtered;
-
-    return [...filtered].sort((a, b) => {
-      let valA: number;
-      let valB: number;
-      
-      switch (sortField) {
-        case 'positionValue':
-          valA = Number.parseFloat(a.positionValueUSD.replace(/[$,]/g, ''));
-          valB = Number.parseFloat(b.positionValueUSD.replace(/[$,]/g, ''));
-          break;
-        case 'pnl':
-          valA = a.pnlUSD === '--' ? 0 : Number.parseFloat(a.pnlUSD.replace(/[$,]/g, ''));
-          valB = b.pnlUSD === '--' ? 0 : Number.parseFloat(b.pnlUSD.replace(/[$,]/g, ''));
-          break;
-        case 'margin':
-          valA = Number.parseFloat(a.margin.replace(/[$,]/g, ''));
-          valB = Number.parseFloat(b.margin.replace(/[$,]/g, ''));
-          break;
-        case 'winRate':
-          valA = a.winRate === '--' ? -1 : Number.parseFloat(a.winRate);
-          valB = b.winRate === '--' ? -1 : Number.parseFloat(b.winRate);
-          break;
-        case 'createdTime': {
-          valA = a.createdMinutesAgo;
-          valB = b.createdMinutesAgo;
-          // smaller minutesAgo is more recent
-          return sortOrder === 'desc' ? valA - valB : valB - valA;
-        }
-        default:
-          return 0;
-      }
-
-      if (Number.isNaN(valA)) valA = 0;
-      if (Number.isNaN(valB)) valB = 0;
-
-      return sortOrder === 'desc' ? valB - valA : valA - valB;
-    });
+    return mapped;
   }, [rawHoldings, assetFilter, sideFilter, pnlFilter, sortField, sortOrder]);
 
   const handleSort = (field: Exclude<typeof sortField, null>) => {
