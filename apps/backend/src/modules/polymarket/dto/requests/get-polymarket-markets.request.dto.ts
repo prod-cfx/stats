@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
+import { Transform } from 'class-transformer'
 import { IsBoolean, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
@@ -9,8 +10,9 @@ export class GetPolymarketMarketsRequestDto extends BasePaginationRequestDto {
   category?: string
 
   @ApiPropertyOptional({ description: '是否只返回活跃市场', default: true })
-  @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsOptional()
   onlyActive?: boolean
 }
 
