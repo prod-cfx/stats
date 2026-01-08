@@ -470,6 +470,11 @@ class BinanceTradesWsConnection {
 
   private desired = new Set<string>()
   private active = new Set<string>()
+  /**
+   * 最近一次订阅/退订相关的错误，由 message 回调捕获并在
+   * syncDesiredStreams 中抛出，避免订阅失败被静默忽略。
+   */
+  private lastSyncError: Error | null = null
 
   constructor(
     private readonly index: number,
@@ -505,6 +510,13 @@ class BinanceTradesWsConnection {
     if (toSub.length) {
       this.send({ method: 'SUBSCRIBE', params: toSub, id: this.requestId++ })
       for (const s of toSub) this.active.add(s)
+    }
+
+    // 若在本轮订阅过程中捕获到错误，则向上抛出，让 adapter/manager 感知并重试
+    if (this.lastSyncError) {
+      const err = this.lastSyncError
+      this.lastSyncError = null
+      throw err
     }
   }
 
@@ -549,6 +561,10 @@ class BinanceTradesWsConnection {
     this.ws.on('message', (data) => {
       void this.onTradesMessage(data).catch(err => {
         const reason = err instanceof Error ? err.message : String(err)
+        // 标记本次订阅出现错误，清空 active/desired，等待上层重建订阅关系
+        this.lastSyncError = err instanceof Error ? err : new Error(reason)
+        this.active.clear()
+        this.desired.clear()
         this.baseLogger.error(
           `Binance Trades WS#${this.index} onTradesMessage error: ${reason}`,
         )
