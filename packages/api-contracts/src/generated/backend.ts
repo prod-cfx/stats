@@ -615,7 +615,6 @@ const UpdateExchangeConfigDto = z
   })
   .partial()
   .passthrough();
-<<<<<<< HEAD
 const PredictionMarketOutcomeDto = z
   .object({ label: z.string(), probability: z.string() })
   .passthrough();
@@ -633,7 +632,8 @@ const PredictionMarketCardDto = z
     volumeTotal: z.string().optional(),
     openInterest: z.string().optional(),
     rules: PredictionMarketRulesDto.optional(),
-=======
+  })
+  .passthrough();
 const WhaleAlertSide = z.enum(["Long", "Short"]);
 const RealtimeWhaleAlertDto = z
   .object({
@@ -646,7 +646,6 @@ const RealtimeWhaleAlertDto = z
     position_action: z.number(),
     create_time: z.string(),
     side: WhaleAlertSide,
->>>>>>> origin/main
   })
   .passthrough();
 
