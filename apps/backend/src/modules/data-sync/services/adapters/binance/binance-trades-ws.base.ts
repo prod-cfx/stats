@@ -255,11 +255,26 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       return
     }
 
-    if ('result' in (msg as any)) return
-    if ('error' in (msg as any)) {
-      const err = (msg as any).error
+    const plain = msg as any
+
+    // 1) 处理顶层 code/msg 错误响应（例如 { code: -1121, msg: 'Invalid symbol.', id: 1 }）
+    if (typeof plain.code === 'number' && typeof plain.msg === 'string') {
+      const idPart = typeof plain.id === 'number' ? ` id=${plain.id}` : ''
+      const message = String(plain.msg)
+      this.logger.warn(
+        `Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`,
+      )
+      throw new Error(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`)
+    }
+
+    // 2) 处理 result/error 包装的响应
+    if ('result' in plain) return
+    if ('error' in plain) {
+      const err = plain.error
       this.logger.warn(`Binance Trades WS API error: code=${err?.code} msg=${err?.msg}`)
-      return
+      throw new Error(
+        `Binance Trades WS API error: code=${err?.code ?? 'unknown'} msg=${err?.msg ?? ''}`,
+      )
     }
 
     const evt = (msg as any).data ? (msg as any).data : msg
@@ -532,7 +547,12 @@ class BinanceTradesWsConnection {
     })
 
     this.ws.on('message', (data) => {
-      this.onTradesMessage(data)
+      void this.onTradesMessage(data).catch(err => {
+        const reason = err instanceof Error ? err.message : String(err)
+        this.baseLogger.error(
+          `Binance Trades WS#${this.index} onTradesMessage error: ${reason}`,
+        )
+      })
     })
 
     this.ws.on('pong', () => {
