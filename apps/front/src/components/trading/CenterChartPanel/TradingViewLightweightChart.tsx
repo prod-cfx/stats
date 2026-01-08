@@ -628,6 +628,7 @@ export const TradingViewLightweightChart = ({
   marketType,
   activeIndicators = [],
   onRemoveIndicator,
+  isDashboard = false, // Add this prop
 }: {
   symbol: string
   interval: string
@@ -636,6 +637,7 @@ export const TradingViewLightweightChart = ({
   marketType: MarketType
   activeIndicators?: ActiveIndicator[]
   onRemoveIndicator?: (id: string) => void
+  isDashboard?: boolean // Type def
 }) => {
   const { t } = useTranslation();
   const chartHostRef = useRef<HTMLDivElement>(null);
@@ -742,15 +744,21 @@ export const TradingViewLightweightChart = ({
     // 彻底清空容器
     container.innerHTML = '';
 
+    // If isDashboard is true, use container height instead of fixed 500 or window logic
+    // NOTE: For dashboard, we must rely on ResizeObserver to update height, initial height might be small or 0
+    const height = isDashboard ? container.clientHeight : (container.clientHeight || 500)
+
     // 创建图表实例 (v5 API) —— 只初始化一次（避免切周期时重建导致 priceLine 重建）
     const chart = createChart(container, {
       width: container.clientWidth,
-      height: container.clientHeight || 500,
+      height,
       layout: {
         background: { type: ColorType.Solid, color: '#0d1117' },
         textColor: '#8b949e',
         fontSize: 11,
       },
+      // ... existing grid and other options
+      autoSize: !isDashboard, // Only enable autosize for standalone pages
       grid: {
         vertLines: { color: '#161b22' },
         horzLines: { color: '#161b22' },
@@ -1043,6 +1051,11 @@ export const TradingViewLightweightChart = ({
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
 
+    // Initial resize to ensure correct size if container wasn't ready
+    if (isDashboard) {
+       window.requestAnimationFrame(handleResize)
+    }
+
     // Sync main chart visible range -> all indicator sub-charts (subscribe once per chart instance)
     const timeScale = chart.timeScale()
     const syncVisibleRange = (range: any) => {
@@ -1260,7 +1273,9 @@ export const TradingViewLightweightChart = ({
   const isPanelOn = (id: string) => activeIndicators.some((x) => x.id === id)
 
   return (
-    <div className="w-full h-full bg-[#0d1117] min-h-[500px] overflow-hidden flex flex-col">
+    <div
+      className={`w-full h-full bg-[#0d1117] overflow-hidden flex flex-col ${isDashboard ? 'min-h-0' : 'min-h-[500px]'}`}
+    >
       {/* Main chart area (takes remaining height), panels are below */}
       <div className="relative flex-1 min-h-0 overflow-hidden">
         {/* Active indicators chips (click to remove) */}
@@ -1351,14 +1366,19 @@ export const TradingViewLightweightChart = ({
           </div>
         )}
 
-        {/* Floating Toolbar (Optional - like the one on the left in image) */}
-        <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
-          {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
-            <button key={i} className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors">
-              {tool}
-            </button>
-          ))}
-        </div>
+        {/* Floating Toolbar (standalone only). In dashboard, keep the chart clean & compact. */}
+        {!isDashboard && (
+          <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
+            {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
+              <button
+                key={i}
+                className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors"
+              >
+                {tool}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Chart host (Lightweight renders into this div; it may be cleared/recreated) */}
         <div ref={chartHostRef} className="w-full h-full" />

@@ -733,7 +733,29 @@
       "aggVolume": "聚合成交量",
       "liquidationData": "爆仓数据",
       "publicCompanies": "币股",
-      "predictionMarket": "预测市场"
+      "predictionMarket": "预测市场",
+      "btcPrice": "BTC 价格",
+      "ethGas": "ETH Gas 费",
+      "fearGreed": "贪婪恐慌指数",
+      "candlestickChart": "K线图表",
+      "unit": "组件",
+      "categories": {
+        "market_data": "市场数据",
+        "derivatives": "衍生品数据",
+        "liquidation": "爆仓数据",
+        "other": "其他"
+      },
+      "descriptions": {
+        "candlestickChart": "专业的 TradingView K线图表",
+        "liquidationMap": "各交易所实时爆仓热力图数据",
+        "lsRatio": "全网多空持仓人数及持仓量比",
+        "aggOrderbook": "全网深度及订单流聚合分析",
+        "aggOI": "全网合约总持仓量聚合",
+        "aggVolume": "全网合约总成交量聚合",
+        "liquidationData": "实时爆仓订单流推送",
+        "predictionMarket": "基于链上数据的未来趋势预测",
+        "publicCompanies": "持有加密资产的上市公司概览"
+      }
     },
     "editor": {
       "addWidgetTitle": "添加一个组件",

@@ -722,7 +722,29 @@
       "aggVolume": "Aggregated Volume",
       "liquidationData": "Liquidation Data",
       "publicCompanies": "Crypto Equities",
-      "predictionMarket": "Prediction Market"
+      "predictionMarket": "Prediction Market",
+      "btcPrice": "BTC Price",
+      "ethGas": "ETH Gas",
+      "fearGreed": "Fear & Greed Index",
+      "candlestickChart": "Candlestick Chart",
+      "unit": "widgets",
+      "categories": {
+        "market_data": "Market Data",
+        "derivatives": "Derivatives Data",
+        "liquidation": "Liquidation Data",
+        "other": "Other"
+      },
+      "descriptions": {
+        "candlestickChart": "Professional TradingView Candlestick Chart",
+        "liquidationMap": "Real-time liquidation heatmap across exchanges",
+        "lsRatio": "Long/Short position ratios",
+        "aggOrderbook": "Market depth and order flow aggregation",
+        "aggOI": "Total aggregated open interest",
+        "aggVolume": "Total aggregated volume",
+        "liquidationData": "Real-time liquidation streams",
+        "predictionMarket": "Future trend forecasts based on on-chain data",
+        "publicCompanies": "Overview of public companies holding crypto assets"
+      }
     },
     "editor": {
       "addWidgetTitle": "Add a Widget",
