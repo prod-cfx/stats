@@ -64,7 +64,9 @@ export class ACGuard implements CanActivate {
 
     if (!allowed) {
       this.logger.warn(
-        `权限不足：用户(${user.id}) 访问 ${request.method} ${request.url} 需要 ${JSON.stringify(rules)}`,
+        `权限不足：用户(${auditUser.id}) 访问 ${request.method} ${request.url} 需要 ${JSON.stringify(
+          rules,
+        )}`,
       )
       throw new DomainException('Forbidden', {
         code: ErrorCode.AUTH_FORBIDDEN,
