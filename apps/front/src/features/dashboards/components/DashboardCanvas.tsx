@@ -33,7 +33,7 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Clamp helper: respect min/max constraints but允许用户拖拽尺寸
+// Clamp helper: respect per-item min/max，默认最小 3，但允许用户拖拽放大
 const clampLayout = (items: any[]) =>
   (items || []).map((n) => {
     const minH = typeof n.minH === 'number' ? n.minH : 3
