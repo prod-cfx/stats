@@ -65,7 +65,6 @@ describeIf('Binance trades WS (E2E)', () => {
       })
     } catch (error: any) {
       if (typeof error?.message === 'string' && error.message.includes('does not exist')) {
-        // eslint-disable-next-line no-console
         console.warn(
           '[Binance trades E2E] skip: table "market_trades" does not exist in current database, please run DB migrations for e2e env to enable this test.',
         )

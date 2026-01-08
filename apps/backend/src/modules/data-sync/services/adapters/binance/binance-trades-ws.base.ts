@@ -225,9 +225,26 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
 
     await this.ensureConnections(Math.max(1, chunks.length))
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       this.connections.map((conn, idx) => conn.syncDesiredStreams(new Set(chunks[idx] ?? []))),
     )
+
+    let hadError = false
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        hadError = true
+        const reason =
+          result.reason instanceof Error ? result.reason.message : String(result.reason)
+        this.logger.error(
+          `Binance trades WS connection#${index} syncDesiredStreams failed: ${reason}`,
+        )
+      }
+    })
+
+    if (hadError) {
+      throw new Error('Failed to reconcile Binance trades WS subscriptions for one or more connections')
+    }
   }
 
   private async onMessage(raw: WebSocket.RawData): Promise<void> {
@@ -384,10 +401,17 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
   }
 
   private resolveSymbol(cfg: TradesConfig): string | null {
-    const metadata = this.normalizeMetadata(cfg.metadata)
     const base = cfg.baseAsset.trim().toUpperCase()
     const quote = cfg.quoteAsset.trim().toUpperCase()
 
+    // 优先使用配置自身的 symbol 字段（admin 后台已约定该字段保存交易所原生合约 ID）
+    const rawSymbol =
+      typeof cfg.symbol === 'string' ? cfg.symbol.trim().toUpperCase() : ''
+    if (rawSymbol.length) {
+      return rawSymbol
+    }
+
+    const metadata = this.normalizeMetadata(cfg.metadata)
     const metaSymbol = this.pickMetadataString(metadata, ['binanceSymbol', 'symbol'])
     if (metaSymbol) {
       const upper = metaSymbol.trim().toUpperCase()
