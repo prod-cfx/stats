@@ -499,7 +499,10 @@ class BinanceTradesWsConnection {
     private readonly configService: ConfigService,
     private readonly baseLogger: Logger,
     private readonly getWsBaseUrl: () => string,
-    private readonly onTradesMessage: (raw: WebSocket.RawData, conn: BinanceTradesWsConnection) => void,
+    private readonly onTradesMessage: (
+      raw: WebSocket.RawData,
+      conn: BinanceTradesWsConnection,
+    ) => Promise<void>,
   ) {}
 
   async ensureConnected(): Promise<void> {

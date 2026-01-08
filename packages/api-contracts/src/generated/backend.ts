@@ -471,7 +471,7 @@ const CreateTradesPairConfigDto = z
   .object({
     pairId: z
       .string()
-      .regex(/^[A-Z0-9\-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+      .regex(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
     exchange: z.string(),
     symbol: z.string(),
     baseAsset: z.string(),
