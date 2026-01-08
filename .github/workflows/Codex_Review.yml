@@ -18,19 +18,13 @@ concurrency:
 
 jobs:
   review:
-    # 触发条件控制：
-    # 1. PR 刚打开
-    # 2. 手动触发
-    # 3. 评论触发：必须在 PR 页面 + 包含指令 + 拥有协作者以上权限
+    # 移除权限限制，允许所有人通过 @gpt 触发
     if: |
       github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && 
        github.event.issue.pull_request && 
-       contains(github.event.comment.body, '@codex review') && 
-       (github.event.comment.author_association == 'OWNER' || 
-        github.event.comment.author_association == 'MEMBER' || 
-        github.event.comment.author_association == 'COLLABORATOR'))
+       contains(github.event.comment.body, '@gpt'))
     timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions:
