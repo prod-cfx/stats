@@ -4,7 +4,11 @@ import type { DataSource } from '@/types/trading';
 import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
+import { useLocalStorageState } from '@/lib/storage/useLocalStorageState'
 import { TradingViewChart } from './TradingViewChart';
+
+export type MarketType = 'futures' | 'spot';
 
 interface CenterChartPanelProps {
   isAggregated: boolean;
@@ -12,6 +16,7 @@ interface CenterChartPanelProps {
   selectedExchange: DataSource;
   setSelectedExchange: (v: DataSource) => void;
   symbol: string;
+  marketType: MarketType;
 }
 
 export const CenterChartPanel = ({ 
@@ -19,11 +24,14 @@ export const CenterChartPanel = ({
   setIsAggregated, 
   selectedExchange, 
   setSelectedExchange,
-  symbol
+  symbol,
+  marketType
 }: CenterChartPanelProps) => {
   const { t } = useTranslation();
   const [interval, setInterval] = useState('15m');
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
+  const [indicatorTab, setIndicatorTab] = useState<'featured' | 'options'>('featured')
+  const [indicatorSearch, setIndicatorSearch] = useState('')
   // Removed local state: isAggregated, selectedExchange
   const [isExchangeMenuOpen, setIsExchangeMenuOpen] = useState(false);
   const exchangeMenuRef = useRef<HTMLDivElement>(null);
@@ -43,14 +51,34 @@ export const CenterChartPanel = ({
     }
   }, [isExchangeMenuOpen]);
 
-  const indicators = [
-    { id: 'liq', name: t('chart.indicators.liquidationMap'), star: true },
-    { id: 'ls', name: t('chart.indicators.longShortRatio'), star: false },
-    { id: 'order', name: t('chart.indicators.aggregatedOrderbook'), star: false },
-    { id: 'oi', name: t('chart.indicators.aggregatedOpenInterest'), star: false },
-    { id: 'vol', name: t('chart.indicators.aggregatedVolume'), star: false },
-    { id: 'liq_data', name: t('chart.indicators.liquidationData'), star: false },
-  ];
+  const { items: catalogItems } = useMarketDataCatalog()
+
+  const storageKey = `trade:chart-indicators:${symbol}:${interval}`
+  const { value: activeIds, setValue: setActiveIds } = useLocalStorageState<string[]>(storageKey, [])
+
+  const chartIndicatorItems = catalogItems
+    .filter((x) => x.kind === 'chartSeries' || x.kind === 'chartOverlay')
+    // Remove "Aggregated Orderbook" from indicator modal list (UI-only)
+    .filter((x) => x.id !== 'aggregated-orderbook')
+    .map((x) => ({
+      ...x,
+      name: t(x.labelKey),
+      isActive: activeIds.includes(x.id),
+      kind: x.kind as 'chartSeries' | 'chartOverlay',
+    }))
+
+  const featuredIndicators = chartIndicatorItems.filter((x) => x.group === 'featured')
+  const optionIndicators = chartIndicatorItems.filter((x) => x.group === 'options')
+  const visibleIndicators = (indicatorTab === 'featured' ? featuredIndicators : optionIndicators)
+    .filter((x) => {
+      const q = indicatorSearch.trim().toLowerCase()
+      if (!q) return true
+      return x.name.toLowerCase().includes(q)
+    })
+
+  const toggleIndicator = (id: string) => {
+    setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
 
   const getTimeframeLabel = (tf: string) => {
     // Keep English compact codes; Chinese uses localized units.
@@ -180,7 +208,22 @@ export const CenterChartPanel = ({
 
       {/* Main Chart Area */}
       <div className="flex-1 relative overflow-hidden w-full">
-        <TradingViewChart symbol={symbol} interval={interval} />
+        <TradingViewChart
+          symbol={symbol}
+          interval={interval}
+          isAggregated={isAggregated}
+          selectedExchange={selectedExchange}
+          marketType={marketType}
+          activeIndicators={chartIndicatorItems
+            .filter((x) => x.isActive)
+            .map((x) => ({
+              id: x.id,
+              label: x.name,
+              kind: x.kind,
+              href: x.href,
+            }))}
+          onRemoveIndicator={(id) => setActiveIds((prev) => prev.filter((x) => x !== id))}
+        />
       </div>
 
       {/* Indicator Modal */}
@@ -203,29 +246,63 @@ export const CenterChartPanel = ({
                   <input 
                     type="text" 
                     placeholder={t('chart.modal.search')}
+                    value={indicatorSearch}
+                    onChange={(e) => setIndicatorSearch(e.target.value)}
                     className="w-full bg-[#161b22] border border-[#30363d] rounded py-1 pl-7 pr-2 text-xs text-[#c9d1d9] focus:outline-none focus:border-[#58a6ff]"
                   />
                 </div>
-                {[t('chart.modal.featured'), t('chart.modal.options')].map((cat, i) => (
-                  <button key={i} className={`text-left px-3 py-2 text-xs rounded transition-colors ${i === 0 ? 'bg-[#374151] text-[#c9d1d9] font-bold' : 'text-[#8b949e] hover:bg-[#30363d]'}`}>
-                    {cat}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setIndicatorTab('featured')}
+                  className={`text-left px-3 py-2 text-xs rounded transition-colors ${
+                    indicatorTab === 'featured'
+                      ? 'bg-[#374151] text-[#c9d1d9] font-bold'
+                      : 'text-[#8b949e] hover:bg-[#30363d]'
+                  }`}
+                >
+                  {t('chart.modal.featured')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIndicatorTab('options')}
+                  className={`text-left px-3 py-2 text-xs rounded transition-colors ${
+                    indicatorTab === 'options'
+                      ? 'bg-[#374151] text-[#c9d1d9] font-bold'
+                      : 'text-[#8b949e] hover:bg-[#30363d]'
+                  }`}
+                >
+                  {t('chart.modal.options')}
+                </button>
               </div>
 
               {/* Main List */}
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
-                {indicators.map((ind) => (
-                  <button 
-                    key={ind.id} 
-                    className="flex items-center justify-between px-3 py-2.5 rounded hover:bg-[#30363d] group transition-colors text-left"
+                {visibleIndicators.map((ind) => (
+                  <button
+                    key={ind.id}
+                    type="button"
+                    onClick={() => toggleIndicator(ind.id)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded group transition-colors text-left ${
+                      ind.isActive ? 'bg-[#1f2937]' : 'hover:bg-[#30363d]'
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Star className={`w-3.5 h-3.5 ${ind.star ? 'text-yellow-500 fill-yellow-500' : 'text-[#8b949e] group-hover:text-[#c9d1d9]'}`} />
-                      <span className="text-xs text-[#8b949e] group-hover:text-[#c9d1d9]">{ind.name}</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Star className={`w-3.5 h-3.5 ${ind.starred ? 'text-yellow-500 fill-yellow-500' : 'text-[#8b949e] group-hover:text-[#c9d1d9]'}`} />
+                      <span className={`text-xs truncate ${ind.isActive ? 'text-[#c9d1d9]' : 'text-[#8b949e] group-hover:text-[#c9d1d9]'}`}>
+                        {ind.name}
+                      </span>
+                    </div>
+                    <div className={`text-xs ${ind.isActive ? 'text-primary' : 'text-[#8b949e]'}`}>
+                      {ind.isActive ? t('chart.indicator.added') : t('chart.indicator.add')}
                     </div>
                   </button>
                 ))}
+
+                {visibleIndicators.length === 0 && (
+                  <div className="px-3 py-6 text-center text-xs text-[#8b949e]">
+                    {t('chart.modal.noResults')}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -65,6 +65,13 @@
 
     // 前端公开的后端地址（本地可放在 *.local）
     "NEXT_PUBLIC_API_SERVER_URL",
-    "NEXT_PUBLIC_API_BASE_URL"
+    "NEXT_PUBLIC_API_BASE_URL",
+
+    // Trades WS ingestion
+    "TRADES_WS_ENABLED",
+    "TRADES_WS_SYNC_INTERVAL_MS",
+    "TRADES_OKX_WS_BASE_URL",
+    "TRADES_OKX_MAX_STREAMS_PER_CONNECTION",
+    "TRADES_RETENTION_DAYS"
   ]
 }

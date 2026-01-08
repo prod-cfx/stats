@@ -1,15 +1,21 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
+import { useLocalStorageState } from '@/lib/storage/useLocalStorageState'
 import { AddWidgetModal } from './AddWidgetModal';
 
 export const EditorCanvas = () => {
   const { t } = useTranslation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeCellIndex, setActiveCellIndex] = useState<number | null>(null);
-  const [widgets, setWidgets] = useState<(string | null)[]>(Array.from({length: 15}).fill(null));
+  const { items: _catalogItems, byId: _byId } = useMarketDataCatalog()
+  const { value: widgets, setValue: setWidgets } = useLocalStorageState<(string | null)[]>(
+    'dashboard:editor:draft:widgets',
+    Array.from({ length: 15 }).fill(null),
+  )
 
   const handleOpenModal = (index: number) => {
     setActiveCellIndex(index);
@@ -23,6 +29,12 @@ export const EditorCanvas = () => {
       setWidgets(newWidgets);
     }
   };
+
+  const removeWidget = (idx: number) => {
+    const newWidgets = [...widgets]
+    newWidgets[idx] = null
+    setWidgets(newWidgets)
+  }
 
   return (
     <div className="flex flex-col gap-10">
@@ -46,7 +58,7 @@ export const EditorCanvas = () => {
           <div 
             key={idx} 
             onClick={() => handleOpenModal(idx)}
-            className={`aspect-square bg-[#161b22]/50 border-2 rounded-xl flex items-center justify-center group transition-all cursor-pointer overflow-hidden ${
+            className={`relative aspect-square bg-[#161b22]/50 border-2 rounded-xl flex items-center justify-center group transition-all cursor-pointer overflow-hidden ${
               widget 
                 ? 'border-solid border-[#30363d] bg-[#161b22] gradient-border-hover' 
                 : 'border-dashed border-[#30363d] hover:border-primary/30 hover:bg-[#161b22]'
@@ -54,13 +66,30 @@ export const EditorCanvas = () => {
           >
             {widget ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
-                <span className="text-white font-bold text-body">{t(`dashboard.widgets.${widget}`)}</span>
+                <span className="text-white font-bold text-body">
+                  {byId.get(widget)?.labelKey ? t(byId.get(widget)!.labelKey) : widget}
+                </span>
                 <span className="text-[#8b949e] text-caption mt-2 font-medium uppercase tracking-wider">{t('dashboard.editor.widgetReady')}</span>
               </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-[#0d1117] flex items-center justify-center text-[#8b949e] group-hover:text-white group-hover:bg-gradient-to-br from-primary to-secondary transition-all shadow-lg group-hover:shadow-primary/20">
                 <Plus className="w-5 h-5" />
               </div>
+            )}
+
+            {widget && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeWidget(idx)
+                }}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg bg-black/40 hover:bg-red-500/20 text-[#8b949e] hover:text-red-400"
+                aria-label={t('dashboard.editor.removeWidget')}
+                title={t('dashboard.editor.removeWidget')}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             )}
           </div>
         ))}
