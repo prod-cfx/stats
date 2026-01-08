@@ -14,6 +14,7 @@ import { Pool } from 'pg'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { AppRole } from '../src/modules/auth/rbac/permissions'
 import { seedOrderbookConfigs } from './seeds/orderbook-configs.seed'
+import { seedTradesConfigs } from './seeds/trades-configs.seed'
 import { seedDataPullTasks } from './seeds/data-pull-tasks.seed'
 
 // 使用统一的环境变量访问器
@@ -109,6 +110,15 @@ const ADMIN_MENU_DEFINITIONS: Array<{
     parentCode: 'data',
     icon: 'lucide:building-2',
     sort: 22,
+  },
+  {
+    code: 'data.trades',
+    title: '交易记录订阅',
+    type: AdminMenuType.MENU,
+    path: '/trades-configs',
+    parentCode: 'data',
+    icon: 'lucide:activity',
+    sort: 23,
   },
 ]
 
@@ -276,6 +286,7 @@ async function main() {
   await seedAdminMenus()
   await seedAdminUser()
   await seedOrderbookConfigs(prisma)
+  await seedTradesConfigs(prisma)
   await seedDataPullTasks(prisma)
 
   console.log('种子数据填充完成')

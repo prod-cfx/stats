@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/toast';
 import { PageTitle } from '@/components/ui/Typography';
+import { fetchRealtimeWhaleAlerts } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhaleTransaction {
@@ -14,6 +15,7 @@ interface WhaleTransaction {
   tagColor: string;
   tagBg: string;
   asset: string;
+  positionAction: number;
   side: 'Long' | 'Short';
   marginType: 'Cross' | 'Isolated';
   positionValueUSD: string;
@@ -23,36 +25,7 @@ interface WhaleTransaction {
   timestamp: number; // Date.now() when transaction was created
 }
 
-const initialTransactions: WhaleTransaction[] = [
-  {
-    address: '0x481234567890abcdef1234567890abcdef1234af',
-    tagKey: 'swing',
-    tagColor: '#60a5fa',
-    tagBg: '#3b82f633',
-    asset: 'BTC',
-    side: 'Short',
-    marginType: 'Cross',
-    positionValueUSD: '$1,017,138.41',
-    positionValueAsset: '-11.62816 BTC',
-    entryPrice: '$87502.6',
-    winRate: '68%',
-    timestamp: Date.now(),
-  },
-  {
-    address: '0x7e1234567890abcdef1234567890abcdef1234fd',
-    tagKey: 'trend',
-    tagColor: '#c084fc',
-    tagBg: '#a855f733',
-    asset: 'BTC',
-    side: 'Long',
-    marginType: 'Cross',
-    positionValueUSD: '$4,473,877.57',
-    positionValueAsset: '52.06421 BTC',
-    entryPrice: '$86148.8',
-    winRate: '72%',
-    timestamp: Date.now() - 60_000, // 1 minute ago
-  }
-];
+const initialTransactions: WhaleTransaction[] = [];
 
 export const RealtimeWhalesTable = () => {
   const { t } = useTranslation();
@@ -65,7 +38,8 @@ export const RealtimeWhalesTable = () => {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
-  const { success } = useToast();
+  const lastRequestIdRef = useRef(0);
+  const { success, error } = useToast();
 
   const formatRelativeTime = (timestamp: number) => {
     const minutesAgo = Math.floor((currentTime - timestamp) / 60_000);
@@ -82,60 +56,89 @@ export const RealtimeWhalesTable = () => {
   };
 
   const fetchNewData = useCallback(async () => {
-    setLoading(true);
-    // Realtime mock delay: 200-400ms
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Simulate prepending a new random transaction
-    const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'];
-    const randomAsset = assets[Math.floor(Math.random() * assets.length)];
-    const side = Math.random() > 0.5 ? 'Long' : 'Short'
-    const tagKey = Math.random() > 0.5 ? 'swing' : 'trend'
+    // 使用递增的请求 ID，避免并发请求导致旧数据覆盖新数据
+    const requestId = ++lastRequestIdRef.current;
 
-    const tagStyle = tagKey === 'swing'
-      ? { tagColor: '#60a5fa', tagBg: '#3b82f633' }
-      : { tagColor: '#c084fc', tagBg: '#a855f733' }
+    try {
+      setLoading(true);
+      const alerts = await fetchRealtimeWhaleAlerts({
+        // 默认展示名义价值 >= 100 万 USD 的最新 50 条记录
+        minPositionValueUsd: 1_000_000,
+        limit: 50,
+      });
 
-    const basePriceByAsset: Record<string, number> = {
-      BTC: 87_000,
-      ETH: 3_200,
-      SOL: 120,
-      XRP: 2.3,
-      DOGE: 0.12,
+      const mapped: WhaleTransaction[] = alerts.map(alert => {
+        const side = alert.side;
+        const tagKey: WhaleTransaction['tagKey'] = alert.position_action === 1 ? 'swing' : 'trend';
+        const tagStyle =
+          tagKey === 'swing'
+            ? { tagColor: '#60a5fa', tagBg: '#3b82f633' }
+            : { tagColor: '#c084fc', tagBg: '#a855f733' };
+
+        const positionValueNumber = Number(alert.position_value_usd);
+        const positionValueUSD =
+          Number.isFinite(positionValueNumber)
+            ? `$${positionValueNumber.toLocaleString('en-US', {
+                maximumFractionDigits: 2,
+              })}`
+            : '$-';
+
+        const absSize = Math.abs(alert.position_size);
+        const sizeText =
+          absSize >= 1 ? absSize.toFixed(4) : absSize.toPrecision(4);
+        const signedQty = side === 'Short' ? `-${sizeText}` : sizeText;
+        const positionValueAsset = `${signedQty} ${alert.symbol}`;
+
+        const entryPriceNumber = Number(alert.entry_price);
+        const entryPrice =
+          Number.isFinite(entryPriceNumber)
+            ? `$${entryPriceNumber.toLocaleString('en-US', {
+                maximumFractionDigits: 1,
+              })}`
+            : '$-';
+
+        const timestamp = new Date(alert.create_time).getTime();
+
+        return {
+          address: alert.user_address,
+          tagKey,
+          tagColor: tagStyle.tagColor,
+          tagBg: tagStyle.tagBg,
+          asset: alert.symbol,
+          positionAction: alert.position_action,
+          side,
+          // Hyperliquid / Coinglass 不暴露保证金类型，这里统一展示为 Cross
+          marginType: 'Cross',
+          positionValueUSD,
+          positionValueAsset,
+          entryPrice,
+          // 实际胜率来自交易历史，这里先占位为 '--'
+          winRate: '--',
+          timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
+        };
+      });
+
+      // 只在当前请求仍是最新时更新列表，避免并发请求造成“时间倒退”
+      if (requestId === lastRequestIdRef.current) {
+        setTransactions(mapped);
+      }
+    } catch (e) {
+      // 加载失败时保留当前列表，并给出提示，仅对最新请求弹 toast，避免并发时旧请求误报
+      console.error('Failed to fetch realtime whale alerts', e);
+      if (requestId === lastRequestIdRef.current) {
+        error(t('whaleTracking.realtime.toast.loadFailed'));
+      }
+    } finally {
+      if (requestId === lastRequestIdRef.current) {
+        setLoading(false);
+      }
     }
+  }, [error, t]);
 
-    const entryPrice = (basePriceByAsset[randomAsset] ?? 100) * (0.95 + Math.random() * 0.1)
-    const notionalUsd = (1_000_000 + Math.random() * 5_000_000)
-    const quantity = notionalUsd / entryPrice
-    const qtyAbs = randomAsset === 'BTC' ? 5 : randomAsset === 'ETH' ? 4 : randomAsset === 'SOL' ? 2 : 0
-    const qtyFixed = Math.max(2, Math.min(6, qtyAbs))
-    const qtyText = quantity.toFixed(qtyFixed)
-    const signedQty = side === 'Short' ? `-${qtyText}` : qtyText
-    const usdMillions = (notionalUsd / 1e6).toFixed(2)
-
-    // Generate full 42-character address (0x + 40 hex chars)
-    const fullAddress = `0x${Array.from({ length: 40 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('')}`
-
-    const newTx: WhaleTransaction = {
-      address: fullAddress,
-      tagKey,
-      tagColor: tagStyle.tagColor,
-      tagBg: tagStyle.tagBg,
-      asset: randomAsset,
-      side,
-      marginType: Math.random() > 0.5 ? 'Cross' : 'Isolated',
-      positionValueUSD: `$${usdMillions}M`,
-      positionValueAsset: `${signedQty} ${randomAsset}`,
-      entryPrice: `$${entryPrice.toFixed(1)}`,
-      winRate: `${Math.round(50 + Math.random() * 45)}%`,
-      timestamp: Date.now(),
-    };
-
-    setTransactions(prev => [newTx, ...prev.slice(0, 14)]);
-    setLoading(false);
-  }, []);
+  // 首次挂载时立即拉取一次最新数据
+  useEffect(() => {
+    void fetchNewData();
+  }, [fetchNewData]);
 
   useEffect(() => {
     if (!isPaused) {
@@ -221,8 +224,12 @@ export const RealtimeWhalesTable = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363d]">
-              {transactions.map((tx, idx) => (
-                <tr key={idx} className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300" onClick={() => handleShowStats(tx.address)}>
+              {transactions.map((tx) => (
+                <tr
+                  key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
+                  className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
+                  onClick={() => handleShowStats(tx.address)}
+                >
                   <td className="px-6 py-5">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
