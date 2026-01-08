@@ -702,14 +702,11 @@ export const schemas = {
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
-<<<<<<< HEAD
   PredictionMarketOutcomeDto,
   PredictionMarketRulesDto,
   PredictionMarketCardDto,
-=======
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
->>>>>>> origin/main
 };
 
 const endpoints = makeApi([

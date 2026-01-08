@@ -602,7 +602,7 @@ export async function deleteTradesConfig(id: string): Promise<void> {
 // 交易记录数据查询 API
 export interface GetLatestTradesParams {
   exchange: string
-  instrumentType: string
+  instrumentType: 'SPOT' | 'PERPETUAL' | 'FUTURE'
   symbol: string
   limit?: number
 }

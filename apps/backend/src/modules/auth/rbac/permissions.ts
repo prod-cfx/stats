@@ -31,12 +31,9 @@ RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
-<<<<<<< HEAD
   .readAny(AppResource.PREDICTION_MARKET)
-=======
   // 普通用户可读取市场相关数据（如鲸鱼预警、持仓量等）
   .readAny(AppResource.MARKET_SYMBOL)
->>>>>>> origin/main
 
 RBAC_PERMISSIONS.grant(AppRole.MODERATOR).extend(AppRole.USER)
 
@@ -102,5 +99,4 @@ RBAC_PERMISSIONS.grant(AppRole.SUPER_ADMIN)
   .createAny(AppResource.ADMIN_MENU)
   .updateAny(AppResource.ADMIN_MENU)
   .deleteAny(AppResource.ADMIN_MENU)
-
 

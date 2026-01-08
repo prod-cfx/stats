@@ -128,8 +128,8 @@ export default function TradesConfigsPage() {
 
   const handleCreateConfig = async (values: CreateTradesPairConfigPayload) => {
     try {
-      // 使用工具函数解析 metadata
-      const payload = { ...values }
+      // 使用工具函数解析 metadata（使用 any 以兼容后端 Json 类型）
+      const payload: any = { ...values }
       if (payload.metadata !== undefined) {
         try {
           payload.metadata = parseMetadataField(payload.metadata)
@@ -168,7 +168,8 @@ export default function TradesConfigsPage() {
       enabled: config.enabled,
       priority: config.priority,
       description: config.description ?? '',
-      metadata: stringifyMetadata(config.metadata, true), // 使用工具函数格式化 JSON
+      // 使用工具函数格式化 JSON，这里强制断言为 any 以兼容表单字段类型
+      metadata: stringifyMetadata(config.metadata, true) as any,
     })
   }
 
