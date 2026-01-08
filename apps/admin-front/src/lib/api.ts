@@ -513,6 +513,52 @@ export async function deleteDataPullTask(id: number): Promise<void> {
   })
 }
 
+/**
+ * 手动触发一次数据拉取任务执行（主要用于测试）
+ */
+export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
+  return withAuthErrorHandling(async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/${id}/trigger`, {
+      method: 'POST',
+      headers: {
+        ...requireAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const text = await response.text()
+    let json: any
+    try {
+      json = text ? JSON.parse(text) : {}
+    } catch {
+      json = { message: text }
+    }
+
+    if (!response.ok) {
+      // 让 withAuthErrorHandling 能识别 status / message，同时满足 no-throw-literal 规则
+      const error: any = new Error(json?.message || '触发任务失败')
+      error.response = {
+        status: response.status,
+        data: json,
+      }
+      throw error
+    }
+
+    const data = json?.data ?? json
+
+    return {
+      id: data.id,
+      taskId: data.taskId,
+      status: data.status,
+      fetchedCount: data.fetchedCount ?? 0,
+      startedAt: data.startedAt,
+      finishedAt: data.finishedAt ?? null,
+      errorMessage: data.errorMessage ?? null,
+      meta: (data.meta ?? null) as any,
+    }
+  })
+}
+
 // 订单薄交易对配置相关 API
 export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
   return withAuthErrorHandling(async () => {
