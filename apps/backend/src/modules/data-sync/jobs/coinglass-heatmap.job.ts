@@ -40,18 +40,26 @@ export class CoinglassHeatmapJob implements DataPullJob {
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
+    const modelType = cursor.modelType ?? 'MODEL3'
+    const modelMatch = /^MODEL(\d+)$/.exec(modelType)
+    const modelSuffix = modelMatch ? `model${modelMatch[1]}` : 'model3'
+
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
-    const endpoint =
+    const baseEndpoint =
       this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT') ??
-      // 参考 Coinglass v4 文档：清算热力图 Model3
-      // v4 统一使用 /api 前缀，且不同模型使用不同路径（model1/model2/model3）
-      // 如需切换模型或自定义路径，可通过 COINGLASS_HEATMAP_ENDPOINT 覆盖
-      'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap/model3'
+      // 参考 Coinglass v4 文档：清算热力图，具体模型由路径后缀 model1/model2/model3 区分
+      'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap'
 
     if (!apiKey) {
       // 不应“默默成功”，否则后台无法感知配置缺失
       throw new Error('COINGLASS_API_KEY is not configured')
     }
+
+    // 规范化 endpoint，确保无论环境变量是否已包含 /modelX，最终路径与 cursor.modelType 一致
+    const normalizedBase = baseEndpoint.replace(/\/model\d+$/, '')
+    const endpoint = normalizedBase.endsWith('/')
+      ? `${normalizedBase}${modelSuffix}`
+      : `${normalizedBase}/${modelSuffix}`
 
     const url = new URL(endpoint)
     url.searchParams.set('symbol', cursor.symbol)
@@ -63,10 +71,6 @@ export class CoinglassHeatmapJob implements DataPullJob {
     }
     if (cursor.contractType) {
       url.searchParams.set('contractType', cursor.contractType)
-    }
-    if (cursor.modelType) {
-      // Coinglass API 通常用 model 或 modelType 参数区分 MODEL1/MODEL2/MODEL3
-      url.searchParams.set('model', cursor.modelType)
     }
 
     this.logger.log(`Requesting Coinglass heatmap: ${url.toString()}`)
