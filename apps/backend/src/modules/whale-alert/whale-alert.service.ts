@@ -1,11 +1,10 @@
-/* eslint-disable perfectionist/sort-imports -- 保持按依赖类型分组的导入顺序，优先可读性 */
-import { Injectable, Logger } from '@nestjs/common'
 import type { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
-import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
+import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 
 @Injectable()
 export class WhaleAlertService {

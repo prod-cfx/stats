@@ -17,22 +17,22 @@ import { IsValidMetadata } from '@/common/validation/metadata.validator'
 
 export class CreateTradesPairConfigDto {
   @ApiProperty({ 
-    description: '交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT',
-    pattern: '^[A-Z0-9\\-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$',
-    example: 'BTC-USDT.OKX.SPOT'
+    description: '交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT 或 BTCUSD_PERP.BINANCE.PERPETUAL',
+    pattern: '^[A-Z0-9_-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$',
+    example: 'BTCUSDT.BINANCE.SPOT'
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^[A-Z0-9\-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/, {
-    message: 'pairId 必须符合格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT'
+  @Matches(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/, {
+    message: 'pairId 必须符合格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTCUSDT.BINANCE.SPOT 或 BTCUSD_PERP.BINANCE.PERPETUAL'
   })
   pairId!: string
 
-  @ApiProperty({ description: '交易所标识，目前仅支持 OKX' })
+  @ApiProperty({ description: '交易所标识，目前支持 OKX、BINANCE' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
   @IsString()
   @IsNotEmpty()
-  @IsIn(['OKX'])
+  @IsIn(['OKX', 'BINANCE'])
   exchange!: string
 
   @ApiProperty({ description: '交易对符号，例如 BTC-USDT, BTC-USDT-SWAP' })

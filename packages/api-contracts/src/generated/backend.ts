@@ -503,7 +503,7 @@ const CreateTradesPairConfigDto = z
   .object({
     pairId: z
       .string()
-      .regex(/^[A-Z0-9\-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+      .regex(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
     exchange: z.string(),
     symbol: z.string(),
     baseAsset: z.string(),
@@ -661,6 +661,51 @@ const RealtimeWhaleAlertDto = z
     side: WhaleAlertSide,
   })
   .passthrough();
+const WhaleDiscoverTraderAiTagDto = z
+  .object({
+    key: z.enum([
+      "bullWarGod",
+      "swingKing",
+      "smartTrader",
+      "treasuryKeeper",
+      "twitterKol",
+    ]),
+    color: z.string(),
+    bgColor: z.string(),
+    descriptionKey: z
+      .enum([
+        "bullWarGod",
+        "swingKing",
+        "smartTrader",
+        "treasuryKeeper",
+        "twitterKol",
+      ])
+      .optional(),
+  })
+  .passthrough();
+const WhaleDiscoverTraderDto = z
+  .object({
+    variant: z.enum(["recommended", "detail"]),
+    address: z.string(),
+    handle: z.string().nullish(),
+    tag: z.string().nullish(),
+    totalValueUsd: z.number(),
+    pnlUsd: z.number(),
+    pnlLabelKey: z.enum(["realizedPnl", "realizedPnl1m"]).optional(),
+    trades: z.number().optional(),
+    positions: z.number().optional(),
+    winRatePct: z.number(),
+    winRateLabelKey: z.enum(["winRate", "winRate1m"]).optional(),
+    avatarColor: z.string(),
+    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
+  })
+  .passthrough();
+const WhaleDiscoverResponseDto = z
+  .object({
+    recommended: z.array(WhaleDiscoverTraderDto),
+    details: z.array(WhaleDiscoverTraderDto),
+  })
+  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -718,6 +763,9 @@ export const schemas = {
   UpdateExchangeConfigDto,
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
+  WhaleDiscoverTraderAiTagDto,
+  WhaleDiscoverTraderDto,
+  WhaleDiscoverResponseDto,
 };
 
 const endpoints = makeApi([
@@ -2629,6 +2677,14 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(RealtimeWhaleAlertDto),
+  },
+  {
+    method: "get",
+    path: "/whale-tracking/discover",
+    alias: "WhaleTrackingController_getDiscover",
+    description: `基于 Hyperliquid 鲸鱼预警数据，按最近一段时间的持仓价值与活跃度聚合出一批代表性鲸鱼地址，用于 discover 页面渲染。`,
+    requestFormat: "json",
+    response: WhaleDiscoverResponseDto,
   },
 ]);
 

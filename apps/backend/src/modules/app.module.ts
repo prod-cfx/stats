@@ -25,13 +25,13 @@ import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
 import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heatmap.module'
 import { MarketsModule } from './markets/markets.module'
-import { MetaModule } from './meta/meta.module'
 import { OpenInterestModule } from './open-interest/open-interest.module'
 import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
 import { SettingsModule } from './settings/settings.module'
 import { TradesConfigModule } from './trades-config/trades-config.module'
 import { UserModule } from './user/user.module'
 import { WhaleAlertModule } from './whale-alert/whale-alert.module'
+import { WhaleTrackingModule } from './whale-tracking/whale-tracking.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
 const currentEnv = defaultEnvAccessor.appEnv()
@@ -86,7 +86,6 @@ const currentEnv = defaultEnvAccessor.appEnv()
     UserModule,
     AuthModule,
     AdminModule,
-    MetaModule,
     // 统一数据拉取 & 调度模块（K 线、新闻等）
     DataSyncModule,
     MarketsModule,
@@ -97,6 +96,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     OpenInterestModule,
     WhaleAlertModule,
     CryptoStockQuotesModule,
+    WhaleTrackingModule,
   ],
   providers: [
     {
@@ -118,3 +118,4 @@ const currentEnv = defaultEnvAccessor.appEnv()
   ],
 })
 export class AppModule {}
+
