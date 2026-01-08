@@ -51,7 +51,7 @@ docker/            # Docker 部署配置
 `CoinglassHeatmapJob` 依赖以下环境变量，否则任务会打印 “API key 未配置” 并跳过：
 
 - **`COINGLASS_API_KEY`**：必填
-- **`COINGLASS_HEATMAP_ENDPOINT`**：可选（不填则使用默认 `https://open-api-v4.coinglass.com/api/pro/v4/futures/liquidation-heatmap`）
+- **`COINGLASS_HEATMAP_ENDPOINT`**：可选（不填则使用默认 `https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap/model3`）
 
 ## 常用命令（DX CLI）
 
