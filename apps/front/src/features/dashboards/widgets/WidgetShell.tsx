@@ -25,8 +25,8 @@ export function WidgetShell(props: {
         ) : null}
       </div>
       {/* 硬性限制内容高度，防止内部组件撑高 */}
-      <div className="p-2 flex-1 min-h-0 overflow-hidden relative flex flex-col" style={props.contentStyle}>
-        <div className="flex-1 min-h-0 overflow-hidden">{props.children}</div>
+      <div className="p-2 flex-1 min-h-0 overflow-hidden relative flex flex-col react-draggable-cancel" style={props.contentStyle}>
+        <div className="flex-1 min-h-0 overflow-hidden react-draggable-cancel">{props.children}</div>
       </div>
     </div>
   )

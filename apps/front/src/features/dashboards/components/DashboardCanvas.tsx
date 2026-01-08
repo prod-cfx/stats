@@ -124,6 +124,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           isDraggable
           isResizable
           resizeHandles={['se']}
+          draggableHandle=".react-draggable-handle"
           draggableCancel=".react-draggable-cancel"
         >
           {layoutState.map((l: any) => {
