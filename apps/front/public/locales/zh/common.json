@@ -188,15 +188,26 @@
     "modal": {
       "featured": "精选指标",
       "options": "期权指标",
-      "search": "搜索"
+      "search": "搜索",
+      "noResults": "未找到匹配的指标"
     },
     "indicators": {
       "liquidationMap": "清算地图",
-      "longShortRatio": "各交易所多空比",
+      "longShortRatio": "聚合多空比",
       "aggregatedOrderbook": "聚合挂单",
       "aggregatedOpenInterest": "聚合持仓量",
       "aggregatedVolume": "聚合成交量",
-      "liquidationData": "市场爆仓数据"
+      "liquidationData": "聚合爆仓",
+      "marketOverview": "市场综合数据",
+      "optionsIv": "期权隐含波动率(IV)"
+    },
+    "indicator": {
+      "add": "添加",
+      "added": "已添加",
+      "remove": "移除 {{name}}",
+      "removeAria": "移除 {{name}}",
+      "overlayPlaceholder": "已叠加到图表（占位展示）。后续会在这里渲染该指标的真实数据与可视化。",
+      "openFull": "打开完整页面"
     }
   },
   "longShort": {
@@ -238,7 +249,9 @@
     "error": "错误",
     "success": "成功",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "close": "关闭",
+    "price": "价格"
   },
   "aggregatedOrderbook": {
     "title": "聚合挂单数据",
@@ -486,7 +499,8 @@
       "paused": "已暂停自动更新",
       "nextUpdate": "{{count}}秒后更新数据",
       "toast": {
-        "copied": "已复制地址"
+        "copied": "已复制地址",
+        "loadFailed": "实时巨鲸数据加载失败"
       },
       "table": {
         "address": "交易地址",
@@ -728,7 +742,8 @@
       "addWidgetHint": "您想看到什么样的信息？",
       "descriptionPlaceholder": "无说明",
       "addTag": "添加标签",
-      "widgetReady": "组件详情已就绪"
+      "widgetReady": "组件详情已就绪",
+      "removeWidget": "移除组件"
     }
   }
 }

@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 export const Navbar = () => {
   const pathname = usePathname();
   const { t } = useTranslation();
-  
+
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {
     const pathLng = pathname?.split('/')[1];
@@ -20,19 +21,46 @@ export const Navbar = () => {
   // 辅助函数：为路径添加语言前缀
   const withLng = (path: string) => `/${currentLng}${path}`;
 
+  const { items: catalogItems } = useMarketDataCatalog()
+
+  const normalizeHref = (href: string) => {
+    // If catalog already includes a locale prefix, keep it.
+    if (href.startsWith('/zh/') || href.startsWith('/en/')) return href
+    // Ensure leading slash
+    const p = href.startsWith('/') ? href : `/${href}`
+    return withLng(p)
+  }
+
+  const dataNavOrder = [
+    'nav-liquidation-map',
+    'nav-long-short-ratio',
+    'nav-aggregated-orderbook',
+    'nav-liquidation-data',
+    'nav-prediction-market',
+    'nav-public-companies',
+  ]
+
+  const dataChildren = catalogItems
+    .filter((x) => x.kind === 'nav' && x.href)
+    .slice()
+    .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
+    .map((x) => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
+
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
     { 
       name: t('nav.data'), 
       href: withLng('/liquidation-map'),
-      children: [
+      children: dataChildren.length
+        ? dataChildren
+        : [
         { name: t('nav.liquidation_map'), href: withLng('/liquidation-map') },
         { name: t('nav.long_short_ratio'), href: withLng('/long-short-ratio') },
         { name: t('nav.aggregated_orderbook'), href: withLng('/aggregated-orderbook') },
         { name: t('nav.liquidation_data'), href: withLng('/liquidation-data') },
         { name: t('nav.prediction_market'), href: withLng('/prediction-market') },
         { name: t('nav.public_companies'), href: withLng('/public-companies') },
-      ]
+      ],
     },
     { 
       name: t('nav.whales'), 

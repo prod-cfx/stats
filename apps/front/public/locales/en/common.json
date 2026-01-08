@@ -238,7 +238,9 @@
     "error": "Error",
     "success": "Success",
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "close": "Close",
+    "price": "Price"
   },
   "aggregatedOrderbook": {
     "title": "Aggregated Orderbook",
@@ -486,7 +488,8 @@
       "paused": "Auto refresh paused",
       "nextUpdate": "Refresh in {{count}}s",
       "toast": {
-        "copied": "Address copied"
+        "copied": "Address copied",
+        "loadFailed": "Failed to load realtime whale alerts"
       },
       "table": {
         "address": "Address",

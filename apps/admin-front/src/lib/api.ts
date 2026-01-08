@@ -65,6 +65,14 @@ export type OrderbookPairConfigResponse = z.infer<typeof schemas.OrderbookPairCo
 export type CreateOrderbookPairConfigPayload = z.infer<typeof schemas.CreateOrderbookPairConfigDto>
 export type UpdateOrderbookPairConfigPayload = z.infer<typeof schemas.UpdateOrderbookPairConfigDto>
 
+// 交易记录订阅配置相关类型
+export type TradesPairConfigResponse = z.infer<typeof schemas.TradesPairConfigResponseDto>
+export type CreateTradesPairConfigPayload = z.infer<typeof schemas.CreateTradesPairConfigDto>
+export type UpdateTradesPairConfigPayload = z.infer<typeof schemas.UpdateTradesPairConfigDto>
+
+// 交易记录相关类型
+export type MarketTradeResponse = z.infer<typeof schemas.MarketTradeResponseDto>
+
 // 交易所配置相关类型
 export type ExchangeConfigResponse = z.infer<typeof schemas.ExchangeConfigResponseDto>
 export type CreateExchangeConfigPayload = z.infer<typeof schemas.CreateExchangeConfigDto>
@@ -545,6 +553,72 @@ export async function deleteOrderbookConfig(id: string): Promise<void> {
       headers: requireAuthHeaders(),
       params: { id },
     })
+  })
+}
+
+// 交易记录订阅配置相关 API
+export async function fetchTradesConfigs(): Promise<TradesPairConfigResponse[]> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminTradesPairConfigController_getAllConfigs({
+      headers: requireAuthHeaders(),
+    })
+    return unwrapListResponse<TradesPairConfigResponse>(response)
+  })
+}
+
+export async function createTradesConfig(
+  payload: CreateTradesPairConfigPayload,
+): Promise<TradesPairConfigResponse> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminTradesPairConfigController_createConfig(payload, {
+      headers: requireAuthHeaders(),
+    })
+    return unwrapResponse<TradesPairConfigResponse>(response as any)
+  })
+}
+
+export async function updateTradesConfig(
+  id: string,
+  payload: UpdateTradesPairConfigPayload,
+): Promise<TradesPairConfigResponse> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminTradesPairConfigController_updateConfig(payload, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<TradesPairConfigResponse>(response as any)
+  })
+}
+
+export async function deleteTradesConfig(id: string): Promise<void> {
+  await withAuthErrorHandling(async () => {
+    await client.AdminTradesPairConfigController_deleteConfig(undefined, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+  })
+}
+
+// 交易记录数据查询 API
+export interface GetLatestTradesParams {
+  exchange: string
+  instrumentType: string
+  symbol: string
+  limit?: number
+}
+
+export async function getLatestTrades(params: GetLatestTradesParams): Promise<MarketTradeResponse[]> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.MarketsController_getLatestTrades({
+      headers: requireAuthHeaders(),
+      queries: {
+        exchange: params.exchange,
+        instrumentType: params.instrumentType,
+        symbol: params.symbol,
+        limit: params.limit || 50,
+      },
+    })
+    return unwrapListResponse<MarketTradeResponse>(response)
   })
 }
 
