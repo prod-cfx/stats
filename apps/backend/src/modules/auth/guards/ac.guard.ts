@@ -3,15 +3,13 @@ import type { RequiredRule } from '../services/permission.service'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
 // Nest 注入需要运行时引用 Reflector，保留值导入
- 
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 PermissionService/AuditLogService，保留值导入
- 
 import { AuditLogService } from '../services/audit-log.service'
- 
 import { PermissionService } from '../services/permission.service'
+import { AppRole } from '../rbac/permissions'
 
 export function UseRoles(...rules: RequiredRule[]) {
   const normalized =
@@ -45,31 +43,30 @@ export class ACGuard implements CanActivate {
     const request = context.switchToHttp().getRequest()
     const user = request.user as AuthenticatedUser | undefined
 
-    if (!user?.id) {
-      this.logger.warn(`访问被拒绝：未登录用户访问 ${request.method} ${request.url}`)
-      throw new DomainException('Forbidden', {
-        code: ErrorCode.AUTH_FORBIDDEN,
-        status: HttpStatus.FORBIDDEN,
-      })
-    }
-
     const allowed = await this.permissionService.hasAccess(rules, user)
 
-    await this.auditLogService.logPermissionCheck(
-      user,
-      rules,
-      allowed ? 'allowed' : 'denied',
-      {
-        method: request.method,
-        path: request.url,
-        ip: request.ip,
-        userAgent: request.headers['user-agent'],
-      },
-    )
+    // 审计日志中对于未登录用户使用虚拟 VISITOR 身份
+    const auditUser: AuthenticatedUser =
+      user ??
+      ({
+        id: 'visitor',
+        email: null,
+        roles: [AppRole.VISITOR],
+        principalType: 'user',
+      } as AuthenticatedUser)
+
+    await this.auditLogService.logPermissionCheck(auditUser, rules, allowed ? 'allowed' : 'denied', {
+      method: request.method,
+      path: request.url,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    })
 
     if (!allowed) {
       this.logger.warn(
-        `权限不足：用户(${user.id}) 访问 ${request.method} ${request.url} 需要 ${JSON.stringify(rules)}`,
+        `权限不足：用户(${auditUser.id}) 访问 ${request.method} ${request.url} 需要 ${JSON.stringify(
+          rules,
+        )}`,
       )
       throw new DomainException('Forbidden', {
         code: ErrorCode.AUTH_FORBIDDEN,

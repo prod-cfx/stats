@@ -29,8 +29,11 @@ import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
 import { BinanceCexFutureOrderbookWsAdapter } from './services/adapters/binance-cex-future-orderbook-ws.adapter'
+import { BinanceCexFutureTradesWsAdapter } from './services/adapters/binance-cex-future-trades-ws.adapter'
 import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binance-cex-perpetual-orderbook-ws.adapter'
+import { BinanceCexPerpetualTradesWsAdapter } from './services/adapters/binance-cex-perpetual-trades-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
+import { BinanceCexSpotTradesWsAdapter } from './services/adapters/binance-cex-spot-trades-ws.adapter'
 import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
 import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
 import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
@@ -184,6 +187,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OrderbookWsSyncManager,
 
     // ===== Trades WS sync（动态订阅交易记录）=====
+    BinanceCexSpotTradesWsAdapter,
+    BinanceCexPerpetualTradesWsAdapter,
+    BinanceCexFutureTradesWsAdapter,
     OkxCexSpotTradesWsAdapter,
     OkxCexPerpetualTradesWsAdapter,
     OkxCexFutureTradesWsAdapter,
@@ -191,15 +197,24 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
       provide: TRADES_WS_ADAPTER_REGISTRY,
       // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
+        binanceCexSpotTradesWsAdapter: BinanceCexSpotTradesWsAdapter,
+        binanceCexPerpetualTradesWsAdapter: BinanceCexPerpetualTradesWsAdapter,
+        binanceCexFutureTradesWsAdapter: BinanceCexFutureTradesWsAdapter,
         okxCexSpotTradesWsAdapter: OkxCexSpotTradesWsAdapter,
         okxCexPerpetualTradesWsAdapter: OkxCexPerpetualTradesWsAdapter,
         okxCexFutureTradesWsAdapter: OkxCexFutureTradesWsAdapter,
       ) => [
+        binanceCexSpotTradesWsAdapter,
+        binanceCexPerpetualTradesWsAdapter,
+        binanceCexFutureTradesWsAdapter,
         okxCexSpotTradesWsAdapter,
         okxCexPerpetualTradesWsAdapter,
         okxCexFutureTradesWsAdapter,
       ],
       inject: [
+        BinanceCexSpotTradesWsAdapter,
+        BinanceCexPerpetualTradesWsAdapter,
+        BinanceCexFutureTradesWsAdapter,
         OkxCexSpotTradesWsAdapter,
         OkxCexPerpetualTradesWsAdapter,
         OkxCexFutureTradesWsAdapter,

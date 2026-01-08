@@ -3,6 +3,7 @@ import type { RequiredRule } from '../services/permission.service'
 import { applyDecorators, SetMetadata, UseGuards } from '@nestjs/common'
 import { ACGuard } from '../guards/ac.guard'
 import { JwtAuthGuard } from '../guards/jwt-auth.guard'
+import { OptionalJwtAuthGuard } from '../guards/optional-jwt-auth.guard'
 import 'reflect-metadata'
 
 const ROLES_METADATA_KEY = 'roles'
@@ -53,5 +54,13 @@ export const DeleteAny = (resource: AppResource) => rule('delete', resource, 'an
  */
 export const AccessControl = (...rules: RequiredRule[]) =>
   applyDecorators(SetMetadata(ROLES_METADATA_KEY, rules), UseGuards(JwtAuthGuard, ACGuard))
+
+/**
+ * 可选认证 + 权限控制：
+ * - 如果携带有效 JWT，则按用户真实角色做 RBAC 判定
+ * - 如果未携带或 token 无效，则按 VISITOR 角色做最小权限判定
+ * 必须搭配 @ReadAny/@ReadOwn 等规则装饰器使用。
+ */
+export const OptionalAccessControl = () => applyDecorators(UseGuards(OptionalJwtAuthGuard, ACGuard))
 
 

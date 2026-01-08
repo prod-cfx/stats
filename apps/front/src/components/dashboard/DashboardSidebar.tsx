@@ -2,11 +2,15 @@
 
 import { Bookmark, ChevronRight, Layout, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const DashboardSidebar = () => {
   const { t } = useTranslation();
+  const params = useParams();
+  const lng = params.lng || 'zh';
+
   return (
     <aside className="w-64 flex-none border-r border-[#30363d] p-6 flex flex-col gap-10">
       <div className="space-y-8">
@@ -41,7 +45,7 @@ export const DashboardSidebar = () => {
         </button>
 
         {/* Create Button moved here */}
-        <Link href="/dashboard/editor" className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/20">
+        <Link href={`/${lng}/dashboard/editor`} className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/20">
           <Plus className="w-4 h-4" />
           <span className="text-label">{t('dashboard.actions.create')}</span>
         </Link>
