@@ -471,7 +471,7 @@ const CreateTradesPairConfigDto = z
   .object({
     pairId: z
       .string()
-      .regex(/^[A-Z0-9\-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
+      .regex(/^[A-Z0-9_-]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/),
     exchange: z.string(),
     symbol: z.string(),
     baseAsset: z.string(),
@@ -629,16 +629,49 @@ const RealtimeWhaleAlertDto = z
     side: WhaleAlertSide,
   })
   .passthrough();
-const WhaleHoldingDto = z
+const WhaleDiscoverTraderAiTagDto = z
   .object({
-    userAddress: z.string(),
-    symbol: z.string(),
-    side: z.enum(["LONG", "SHORT"]),
-    positionSize: z.number(),
-    positionValueUsd: z.number(),
-    entryPrice: z.number(),
-    liquidationPrice: z.number(),
-    createTime: z.string(),
+    key: z.enum([
+      "bullWarGod",
+      "swingKing",
+      "smartTrader",
+      "treasuryKeeper",
+      "twitterKol",
+    ]),
+    color: z.string(),
+    bgColor: z.string(),
+    descriptionKey: z
+      .enum([
+        "bullWarGod",
+        "swingKing",
+        "smartTrader",
+        "treasuryKeeper",
+        "twitterKol",
+      ])
+      .optional(),
+  })
+  .passthrough();
+const WhaleDiscoverTraderDto = z
+  .object({
+    variant: z.enum(["recommended", "detail"]),
+    address: z.string(),
+    handle: z.string().nullish(),
+    tag: z.string().nullish(),
+    totalValueUsd: z.number(),
+    pnlUsd: z.number(),
+    pnlLabelKey: z.enum(["realizedPnl", "realizedPnl1m"]).optional(),
+    trades: z.number().optional(),
+    positions: z.number().optional(),
+    winRatePct: z.number(),
+    winRateLabelKey: z.enum(["winRate", "winRate1m"]).optional(),
+    avatarColor: z.string(),
+    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
+  })
+  .passthrough();
+const WhaleDiscoverResponseDto = z
+  .object({
+    recommended: z.array(WhaleDiscoverTraderDto),
+    details: z.array(WhaleDiscoverTraderDto),
   })
   .passthrough();
 
@@ -697,7 +730,9 @@ export const schemas = {
   UpdateExchangeConfigDto,
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
-  WhaleHoldingDto,
+  WhaleDiscoverTraderAiTagDto,
+  WhaleDiscoverTraderDto,
+  WhaleDiscoverResponseDto,
 };
 
 const endpoints = makeApi([
@@ -2587,33 +2622,11 @@ const endpoints = makeApi([
   },
   {
     method: "get",
-    path: "/whale-holdings",
-    alias: "WhaleHoldingsController_getWhaleHoldings",
-    description: `以 (user_address, symbol) 维度选取最新一条开仓记录，近似表示当前持仓，仅返回名义价值较大的鲸鱼持仓。`,
+    path: "/whale-tracking/discover",
+    alias: "WhaleTrackingController_getDiscover",
+    description: `基于 Hyperliquid 鲸鱼预警数据，按最近一段时间的持仓价值与活跃度聚合出一批代表性鲸鱼地址，用于 discover 页面渲染。`,
     requestFormat: "json",
-    parameters: [
-      {
-        name: "symbol",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "minPositionValueUsd",
-        type: "Query",
-        schema: z.number().optional(),
-      },
-      {
-        name: "timeRangeHours",
-        type: "Query",
-        schema: z.number().gte(1).lte(168).optional(),
-      },
-      {
-        name: "limit",
-        type: "Query",
-        schema: z.number().gte(1).lte(500).optional(),
-      },
-    ],
-    response: z.array(WhaleHoldingDto),
+    response: WhaleDiscoverResponseDto,
   },
 ]);
 

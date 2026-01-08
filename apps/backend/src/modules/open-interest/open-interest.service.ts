@@ -27,7 +27,7 @@ export class OpenInterestService {
     try {
       const result = await this.prisma.openInterest.upsert({
         where: {
-          unique_oi_record: {
+          open_interest_exchange_symbol_data_timestamp_key: {
             exchange: data.exchange,
             symbol: data.symbol,
             dataTimestamp: new Date(data.data_timestamp),
