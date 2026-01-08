@@ -67,6 +67,23 @@ jobs:
 
           echo "should_review=$SHOULD_REVIEW" >> $GITHUB_OUTPUT
 
+      - name: Post processing comment
+        if: github.event_name == 'issue_comment' && steps.check_review.outputs.should_review == 'true'
+        id: post_comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OWNER_REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.issue.number }}"
+          RUN_URL="${{ github.server_url }}/${OWNER_REPO}/actions/runs/${{ github.run_id }}"
+          
+          # 发表进度评论并获取 ID
+          COMMENT_ID=$(gh api repos/${OWNER_REPO}/issues/${PR_NUMBER}/comments \
+            -f body="🔍 **正在处理您的审核请求...** [查看详情]($RUN_URL)" \
+            --jq '.id')
+          
+          echo "comment_id=$COMMENT_ID" >> $GITHUB_OUTPUT
+
       - name: Checkout
         if: steps.check_review.outputs.should_review == 'true'
         uses: actions/checkout@v4
@@ -126,39 +143,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh --version || echo "gh not found; ensure runner has GitHub CLI"
+          gh --version
           gh auth status || echo "GitHub CLI 将使用 GH_TOKEN 环境变量进行认证"
           gh repo view ${{ github.repository }} --json name
 
-      # --- New step: create a progress comment on the PR so updates can be shown in the PR conversation ---
-      - name: Create PR progress comment
-        if: steps.check_review.outputs.should_review == 'true'
-        id: create_progress_comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          OWNER_REPO="${{ github.repository }}"
-          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}"
-
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
-            echo "::warning::未能确定 PR 编号，跳过创建进度评论。"
-            echo "progress_comment_id=" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          BODY="🤖 Codex 代码审查已启动 — PR #${PR_NUMBER}\n\n状态: **启动中**\n\n进度日志（实时更新）:\n\`\`\`\n初始化...\n\`\`\`"
-          # Create the comment and output the comment id
-          COMMENT_ID=$(gh api -X POST /repos/${OWNER_REPO}/issues/${PR_NUMBER}/comments -f body="$BODY" --jq '.id' || echo "")
-          echo "progress_comment_id=$COMMENT_ID" >> $GITHUB_OUTPUT
-          echo "::notice::Created progress comment id $COMMENT_ID"
-
-      # Run Codex in a step that will stream log updates back into the PR comment.
       - name: Run Codex autonomously (Codex evaluates & posts PR comment itself)
         if: steps.check_review.outputs.should_review == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           CODEX_AUTH_JSON_B64: ${{ secrets.CODEX_AUTH_JSON_B64 }}
-          PROGRESS_COMMENT_ID: ${{ steps.create_progress_comment.outputs.progress_comment_id }}
+          PROGRESS_COMMENT_ID: ${{ steps.post_comment.outputs.comment_id }}
         run: |
           set -eo pipefail
           OWNER_REPO="${{ github.repository }}"
@@ -186,7 +180,7 @@ jobs:
           fi
 
           {
-            echo "你是代码审查专家。请为 PR #${PR_NUMBER} 进行代码审查并直接发布评论。"
+            echo "你是代码审查专家。请为 PR #${PR_NUMBER} 进行代码审查。"
             echo
             echo "## 环境设置"
             echo "export GH_TOKEN='${GH_TOKEN}'"
@@ -194,95 +188,41 @@ jobs:
             echo "## 任务"
             echo "1. 查看代码变更: \`gh pr diff ${PR_NUMBER} --repo ${OWNER_REPO}\`"
             echo "2. 基于评审标准进行分析"
-            echo "3. 使用 \`gh pr comment ${PR_NUMBER} --repo ${OWNER_REPO} --body-file -\` 发布"
+            
+            if [ -n "$PROGRESS_COMMENT_ID" ]; then
+               echo "3. **重要**：使用 \`gh api --method PATCH repos/${OWNER_REPO}/issues/comments/${PROGRESS_COMMENT_ID} -f body=-\` 来更新现有的进度评论。"
+            else
+               echo "3. 使用 \`gh pr comment ${PR_NUMBER} --repo ${OWNER_REPO} --body-file -\` 发布新评论。"
+            fi
             echo
             echo "## 评审标准"
             cat "$PROMPT_FILE"
           } > prompt.autonomous.txt
 
-          # Start a background updater that will periodically PATCH the PR progress comment with the latest log tail.
-          # The updater will only run if we actually created a comment (i.e., PROGRESS_COMMENT_ID not empty).
-          UPDATE_INTERVAL=6
-          LOGFILE="codex.run.log"
-          PIDFILE="/tmp/codex_updater.pid"
-
-          if [ -n "$PROGRESS_COMMENT_ID" ]; then
-            echo "启动后台进度更新器, comment id=$PROGRESS_COMMENT_ID"
-            (
-              # small debounce buffer to avoid too-frequent PATCHes
-              while true; do
-                if [ -f "$LOGFILE" ]; then
-                  # include a short header and last N lines of log
-                  LOG_SNIPPET="$(tail -n 500 "$LOGFILE" | sed 's/```/`\`\`/g')"
-                  BODY="🤖 Codex 代码审查进行中 — PR #${PR_NUMBER}\n\n状态: **运行中**\n\n最新日志（尾部，最多 500 行）:\n\`\`\`\n$LOG_SNIPPET\n\`\`\`"
-                  # PATCH the comment
-                  gh api -X PATCH /repos/${OWNER_REPO}/issues/comments/${PROGRESS_COMMENT_ID} -f body="$BODY" >/dev/null 2>&1 || true
-                fi
-                sleep $UPDATE_INTERVAL
-              done
-            ) &
-            echo $! > "$PIDFILE"
-          else
-            echo "::warning::没有可更新的进度评论 ID（可能是 workflow_dispatch 且未传入 pr_number），将不会在 PR 中显示实时进度。"
-          fi
-
-          # Run codex and capture output to log file
-          node "$(which codex)" exec \
+          # 执行审核逻辑，如果出错则更新评论状态
+          if ! node "$(which codex)" exec \
             --skip-git-repo-check \
             --dangerously-bypass-approvals-and-sandbox \
             --model gpt-5.1-codex \
             -C "${WORKDIR}" \
-            "$(cat prompt.autonomous.txt)" > "$LOGFILE" 2>&1 || true
-
-          CODEX_EXIT_CODE=$?
-          # ensure any last logs are flushed to file
-          sleep 1
-
-          # Stop updater if it was started, and produce a final comment update with result and a log snippet
-          if [ -f "$PIDFILE" ]; then
-            UPDATER_PID=$(cat "$PIDFILE" || echo "")
-            if [ -n "$UPDATER_PID" ]; then
-              kill "$UPDATER_PID" >/dev/null 2>&1 || true
-              # give process moment to exit
-              wait "$UPDATER_PID" 2>/dev/null || true
-            fi
-            rm -f "$PIDFILE"
-          fi
-
-          # Compose final update body
-          LOG_SNIPPET="$(tail -n 1000 "$LOGFILE" | sed 's/```/`\`\`/g')"
-          if [ $CODEX_EXIT_CODE -eq 0 ]; then
-            RESULT_STATUS="✅ 已完成（成功）"
-          else
-            RESULT_STATUS="❌ 已完成（失败，Exit code: $CODEX_EXIT_CODE）"
-          fi
-
-          FINAL_BODY="🤖 Codex 代码审查已完成 — PR #${PR_NUMBER}\n\n状态: **${RESULT_STATUS}**\n\n评审运行日志（尾部，最多 1000 行）:\n\`\`\`\n$LOG_SNIPPET\n\`\`\`\n\n完整运行详情可见 Actions 运行：${{ github.server_url }}/${OWNER_REPO}/actions/runs/${{ github.run_id }}"
-
-          if [ -n "$PROGRESS_COMMENT_ID" ]; then
-            gh api -X PATCH /repos/${OWNER_REPO}/issues/comments/${PROGRESS_COMMENT_ID} -f body="$FINAL_BODY" || {
-              echo "::warning::无法更新 PR 进度评论。"
-            }
-          else
-            # fallback: post a new comment with final result
-            gh api -X POST /repos/${OWNER_REPO}/issues/${PR_NUMBER}/comments -f body="$FINAL_BODY" >/dev/null 2>&1 || true
-          fi
-
-          # If triggered by issue_comment or workflow_dispatch, set Commit Status to reflect outcome (keeps visibility in Actions page)
-          if [ "${{ github.event_name }}" == "issue_comment" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # 获取 PR 的最新 Commit SHA
-            SHA=$(gh pr view ${PR_NUMBER} --repo ${OWNER_REPO} --json headRefOid --template '{{.headRefOid}}')
-            STATE="success"
-            if [ $CODEX_EXIT_CODE -ne 0 ]; then STATE="failure"; fi
+            "$(cat prompt.autonomous.txt)" > codex.run.log 2>&1; then
             
+            CODEX_EXIT_CODE=$?
+            cat codex.run.log || true
+            
+            if [ -n "$PROGRESS_COMMENT_ID" ]; then
+               gh api --method PATCH repos/${OWNER_REPO}/issues/comments/${PROGRESS_COMMENT_ID} \
+                 -f body="❌ **审核任务失败**。详情请查看 [Action 日志](${{ github.server_url }}/${OWNER_REPO}/actions/runs/${{ github.run_id }})"
+            fi
+            exit $CODEX_EXIT_CODE
+          fi
+
+          # 如果是评论触发或手动触发，将结果同步到 Commit Status
+          if [ "${{ github.event_name }}" == "issue_comment" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SHA=$(gh pr view ${PR_NUMBER} --repo ${OWNER_REPO} --json headRefOid --template '{{.headRefOid}}')
             gh api --method POST /repos/${OWNER_REPO}/statuses/${SHA} \
-              -f state="${STATE}" \
+              -f state="success" \
               -f target_url="${{ github.server_url }}/${OWNER_REPO}/actions/runs/${{ github.run_id }}" \
               -f description="Codex Manual Review Completed" \
-              -f context="Codex PR Review" >/dev/null 2>&1 || true
+              -f context="Codex PR Review"
           fi
-
-          # Print log for workflow output
-          cat "$LOGFILE" || true
-
-          exit $CODEX_EXIT_CODE
