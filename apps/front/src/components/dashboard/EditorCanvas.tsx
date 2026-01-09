@@ -1,6 +1,7 @@
 'use client'
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
@@ -9,13 +10,32 @@ import { AddWidgetModal } from './AddWidgetModal'
 
 const DEFAULT_DASHBOARD_ID = 'draft'
 
-export const EditorCanvas = () => {
+interface EditorCanvasProps {
+  dashboardId?: string
+}
+
+export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanvasProps) => {
   const { t } = useTranslation()
+  const router = useRouter()
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [doc, setDoc] = useState(() => ensureDashboard(DEFAULT_DASHBOARD_ID))
+  const [doc, setDoc] = useState(() =>
+    dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
+  )
 
   useEffect(() => {
-    const refresh = () => setDoc(getDashboard(DEFAULT_DASHBOARD_ID) ?? ensureDashboard(DEFAULT_DASHBOARD_ID))
+    const refresh = () => {
+      if (dashboardId === DEFAULT_DASHBOARD_ID) {
+        setDoc(ensureDashboard(DEFAULT_DASHBOARD_ID))
+        return
+      }
+      const existing = getDashboard(dashboardId)
+      if (!existing) {
+        // deleted or missing; go back to list
+        router.replace('/zh/dashboard/?tab=saved')
+        return
+      }
+      setDoc(existing)
+    }
     refresh()
     window.addEventListener('storage', refresh)
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
@@ -23,7 +43,7 @@ export const EditorCanvas = () => {
       window.removeEventListener('storage', refresh)
       window.removeEventListener('coinflux_dashboards_updated', refresh as any)
     }
-  }, [])
+  }, [dashboardId, router])
 
   return (
     <div className="flex flex-col gap-8 pb-20">
@@ -33,9 +53,10 @@ export const EditorCanvas = () => {
           placeholder={t('dashboard.editor.descriptionPlaceholder')}
           value={doc?.name ?? ''}
           onChange={(e) => {
+            if (!doc) return
             const next = e.target.value
-            updateDashboard(DEFAULT_DASHBOARD_ID, (d) => ({ ...d, name: next }))
-            setDoc(getDashboard(DEFAULT_DASHBOARD_ID) ?? ensureDashboard(DEFAULT_DASHBOARD_ID))
+            updateDashboard(dashboardId, (d) => ({ ...d, name: next }))
+            setDoc(getDashboard(dashboardId))
           }}
           className="w-full bg-transparent border-none text-white text-h1 font-bold focus:outline-none placeholder:text-[#8b949e] placeholder:opacity-50"
         />
@@ -63,10 +84,12 @@ export const EditorCanvas = () => {
       </div>
 
       <div className="min-h-[600px] bg-[#0d1117] rounded-xl border border-[#30363d] p-4 relative bg-grid-pattern">
-        <DashboardCanvas dashboardId={DEFAULT_DASHBOARD_ID} />
+        {doc ? <DashboardCanvas dashboardId={dashboardId} /> : (
+          <div className="text-center text-[#8b949e] py-20">看板不存在或已删除</div>
+        )}
       </div>
 
-      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={DEFAULT_DASHBOARD_ID} />
+      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={dashboardId} />
 
       <style jsx global>{`
         .bg-grid-pattern {

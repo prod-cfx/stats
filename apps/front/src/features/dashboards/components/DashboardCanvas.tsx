@@ -44,8 +44,10 @@ const clampLayout = (items: any[]) =>
   }))
 
 export function DashboardCanvas(props: { dashboardId: string }) {
-  const [doc, setDoc] = useState(() => ensureDashboard(props.dashboardId))
-  const [layoutState, setLayoutState] = useState(clampLayout(doc.layout))
+  const [doc, setDoc] = useState(() =>
+    props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
+  )
+  const [layoutState, setLayoutState] = useState(() => clampLayout((doc ?? ensureDashboard('draft')).layout))
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const [resetKey, setResetKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -61,7 +63,14 @@ export function DashboardCanvas(props: { dashboardId: string }) {
 
   useEffect(() => {
     const refresh = () => {
-      const freshDoc = getDashboard(props.dashboardId) ?? ensureDashboard(props.dashboardId)
+      if (props.dashboardId === 'draft') {
+        const freshDoc = ensureDashboard('draft')
+        setDoc(freshDoc)
+        if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
+        return
+      }
+      const freshDoc = getDashboard(props.dashboardId)
+      if (!freshDoc) return // do not recreate deleted dashboards
       setDoc(freshDoc)
       if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
     }
@@ -69,7 +78,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
   }, [props.dashboardId])
 
-  const widgetsById = useMemo(() => new Map(doc.widgets.map((w) => [w.id, w])), [doc.widgets])
+  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
 
   const onLayoutChange = (next: any[]) => {
     const clamped = clampLayout(next)
@@ -123,6 +132,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     setResetKey(prev => prev + 1)
   }
 
+  if (!doc) return <div className="text-white/30 p-10 text-center">看板不存在或已删除</div>
   if (!GridLayout) return <div className="text-white/30 p-10 text-center">加载中...</div>
 
   const rowHeight = 10
@@ -134,6 +144,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       
       <div className="flex items-center gap-4 mb-6">
         <button
+          type="button"
           onClick={() => setIsModalOpen(true)}
           className="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded text-sm font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
         >
@@ -172,9 +183,10 @@ export function DashboardCanvas(props: { dashboardId: string }) {
                   widget={w} 
                   onRemove={() => {
                     removeWidgetFromDashboard(props.dashboardId, w.id)
-                    const freshDoc = getDashboard(props.dashboardId) ?? ensureDashboard(props.dashboardId)
-                    setDoc(freshDoc)
-                    setLayoutState(clampLayout(freshDoc.layout))
+                  const freshDoc = getDashboard(props.dashboardId)
+                  if (!freshDoc) return
+                  setDoc(freshDoc)
+                  setLayoutState(clampLayout(freshDoc.layout))
                   }} 
                 />
               </div>

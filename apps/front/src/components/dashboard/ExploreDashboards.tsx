@@ -8,6 +8,10 @@ import { PageTitle, SectionTitle } from '@/components/ui/Typography';
 import { DashboardCard } from './DashboardCard';
 import { DashboardListItem } from './DashboardListItem';
 
+// 探索看板：展示社区推荐的优质看板
+// Featured: 精选看板（高质量、高保存量）
+// Hot: 热门看板（近期热度高）
+// Community: 社区推荐（用户创建的优质看板）
 const featuredDashboards = [
   {
     title: 'Bitcoin Options Data',
