@@ -8,7 +8,9 @@ export function OrderbookAggWidget(props: { config: Record<string, any> }) {
   return (
     <div className="h-full w-full overflow-hidden flex flex-col">
       <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
-        <div className="min-w-fit h-full">
+        {/* Force a minimum width to trigger horizontal scroll on small tiles, 
+            and use h-fit to allow vertical scroll when content exceeds tile height. */}
+        <div className="min-w-[500px] h-fit">
           <AggregatedOrderbookView variant="compact" />
         </div>
       </div>

@@ -178,7 +178,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   }, [orderbook, selectedExchanges])
 
   return (
-    <div className={`bg-[#161b22] border border-[#30363d] rounded-xl flex flex-col ${isCompact ? '' : 'min-h-[750px] shadow-2xl'} overflow-hidden h-full`}>
+    <div className={`bg-[#161b22] border border-[#30363d] rounded-xl flex flex-col ${isCompact ? 'min-h-fit overflow-visible' : 'min-h-[750px] shadow-2xl h-full overflow-hidden'}`}>
       <LoadingState isLoading={loading} error={error} onRetry={reload}>
         {orderbook ? (
           <>
@@ -247,8 +247,8 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
               )}
             </div>
 
-            <div className="flex-1 flex min-h-0 overflow-hidden">
-              <div className={`${isCompact ? 'w-[58%]' : 'w-1/2'} flex flex-col border-r border-[#30363d]`}>
+            <div className={`flex-1 flex ${isCompact ? 'min-h-fit' : 'min-h-0'} overflow-hidden`}>
+              <div className={`${isCompact ? 'w-[58%] min-h-fit' : 'w-1/2 flex flex-col'} border-r border-[#30363d]`}>
                 <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
                   <SectionTitle className={isCompact ? 'text-[9px]' : 'text-lg'}>
                     {t('aggregatedOrderbook.sections.realtimeOrderbook', {
@@ -351,7 +351,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                 </div>
               </div>
 
-              <div className={`${isCompact ? 'w-[42%]' : 'w-1/2'} flex flex-col min-h-0`}>
+              <div className={`${isCompact ? 'w-[42%] min-h-fit' : 'w-1/2 flex flex-col min-h-0'}`}>
                 <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
                   <SectionTitle className={isCompact ? 'text-[9px]' : 'text-lg'}>{t('aggregatedOrderbook.sections.orderDepth')}</SectionTitle>
                   {!isCompact && (
