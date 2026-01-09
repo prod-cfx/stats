@@ -84,7 +84,8 @@ class WorktreeManager {
   constructor() {
     this.repoRoot = process.cwd()
     this.baseDir = path.resolve(this.repoRoot, '..')
-    this.prefix = 'ai_monorepo_issue_'
+    const rootFolderName = path.basename(this.repoRoot)
+    this.prefix = `${rootFolderName}_issue_`
     this.assetCopyTargets = DEFAULT_COPY_TARGETS
     const rsyncInfo = this.detectRsync()
     this.hasFastCopy = rsyncInfo.available
@@ -869,7 +870,7 @@ class WorktreeManager {
 
       for (const wt of issueWorktrees) {
         // 提取 issue 编号
-        const match = wt.path.match(/ai_monorepo_issue_(\d+)/)
+        const match = wt.path.match(new RegExp(`${this.prefix}(\\d+)`))
         const issueNum = match ? match[1] : '?'
 
         // 检查状态
@@ -989,7 +990,7 @@ class WorktreeManager {
         }
 
         // 兜底：基于路径识别（使用更严格的正则）
-        const pathMatch = path.basename(wt.path).match(/^ai_monorepo_issue_(\d+)$/)
+        const pathMatch = path.basename(wt.path).match(new RegExp(`^${this.prefix}(\\d+)$`))
         if (pathMatch && pathMatch[1]) {
           issueNumbers.push(pathMatch[1])
         }
