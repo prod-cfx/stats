@@ -137,18 +137,16 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: Fixed 13 asks and 13 bids (default), or fewer for compact
-    const count = isCompact ? 13 : 13;
+    // Both mode: Fixed 13 asks and 13 bids
     return {
       rows: [
-        ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
-        // Add visual gap if compact (simulate spread area)
-        ...(isCompact ? [{ _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 } as any] : []),
-        ...bidsSorted.slice(0, count).map((x) => ({ ...x, _type: 'bid' as const })),
+        ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
+        { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
+        ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false
     };
-  }, [asks, bids, displayMode, isCompact]);
+  }, [asks, bids, displayMode]);
 
   return (
     <div className={`flex flex-col ${isCompact ? 'h-fit' : 'h-full'} bg-[#0d1117] text-[#c9d1d9] ${isCompact ? 'overflow-visible' : 'overflow-hidden'} select-none`}>

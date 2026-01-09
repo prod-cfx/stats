@@ -35,7 +35,7 @@ export const LONG_SHORT_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number;
   M: { w: 6, h: 4, label: 'M' }, // Height adjusted to 4 as requested
 }
 
-// 聚合挂单（derivatives.orderbook_agg）专用尺寸：只保留 S/M，S 宽度与 K 线一致，高度 h=3
+// 聚合挂单（derivatives.orderbook_agg）专用尺寸：只保留 S/M，M 针对数据优化
 export const ORDERBOOK_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
   S: { w: 8, h: 3, label: 'S' },
   M: { w: 10, h: 4, label: 'M' },
