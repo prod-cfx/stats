@@ -98,6 +98,17 @@ describe('Aggregated liquidation service (E2E)', () => {
   })
 
   afterAll(async () => {
+    if (prisma) {
+      const client = prisma.getClient()
+      // 清理本测试写入的数据，避免污染后续真实环境或其他用例
+      await client.aggregatedLiquidationHistory.deleteMany({
+        where: {
+          symbol: 'BTC',
+          source: 'TEST',
+        },
+      })
+    }
+
     if (app) {
       await app.close()
     }
