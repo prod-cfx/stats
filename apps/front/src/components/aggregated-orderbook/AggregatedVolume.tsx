@@ -61,7 +61,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full right-0 mt-2 w-32 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar"
+                className="absolute top-full right-0 mt-2 w-32 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 overflow-hidden max-h-[300px] overflow-y-auto cf-scrollbar"
               >
                 {TOKENS.map((t) => (
                   <button

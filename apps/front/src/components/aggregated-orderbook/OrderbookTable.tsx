@@ -159,7 +159,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
       {/* Table Body - Fixed height for exactly 26 rows */}
       <div 
-        className={`flex-1 min-h-0 ${canScroll ? 'overflow-y-auto cf-scrollbar' : 'overflow-hidden'}`}
+        className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
         style={{ height: isCompact ? 'auto' : `${TOTAL_HEIGHT}px`, maxHeight: isCompact ? 'none' : `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {

@@ -269,7 +269,7 @@ export const AggregatedOI = () => {
       <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl">
         {/* Symbol Tabs & Search */}
         <div className="flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30">
-          <div className="flex items-center overflow-x-auto no-scrollbar">
+          <div className="flex items-center overflow-x-auto cf-scrollbar">
             {symbols.map(s => (
               <button
                 type="button"
@@ -309,7 +309,7 @@ export const AggregatedOI = () => {
                 <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
               {isDropdownOpen && filteredSymbols.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto cf-scrollbar">
                   {filteredSymbols.map(s => (
                     <div 
                       key={s}
@@ -330,7 +330,7 @@ export const AggregatedOI = () => {
         </div>
 
         {/* Table Area */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto cf-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-[#0d1117]/50 text-[#8b949e] text-xs uppercase tracking-wider">

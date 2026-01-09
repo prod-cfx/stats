@@ -9,7 +9,7 @@ export function OpenInterestAggWidget(props: { config: Record<string, any> }) {
   // For now, we reuse the self-contained component as requested.
   return (
     <div className="h-full w-full overflow-hidden flex flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
         <AggregatedOI />
       </div>
     </div>
