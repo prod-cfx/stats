@@ -16,10 +16,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import {
-  ReadAny,
-  RequireAuth,
-} from '@/modules/auth/decorators/access-control.decorator'
+import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // DTO 必须用值导入以保留运行时元数据
 // eslint-disable-next-line ts/consistent-type-imports
@@ -50,7 +47,7 @@ export class CryptoStockQuotesController {
   constructor(private readonly service: CryptoStockQuotesService) {}
 
   @Get('latest')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({
     summary: '获取加密相关股票的最新报价列表',

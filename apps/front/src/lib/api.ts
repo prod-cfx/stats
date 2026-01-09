@@ -51,40 +51,6 @@ function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapApiResponse(response)
 }
 
-// ===== Whale tracking discover API =====
-
-export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
-
-export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
-  return apiCall(async () => {
-    const result = await safeApiCall(
-      () =>
-        client.WhaleTrackingController_getDiscover({
-          headers: optionalAuthHeaders(),
-        }),
-      {
-        url: `${API_BASE_URL}/whale-tracking/discover`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...optionalAuthHeaders(),
-          },
-        },
-        validateResponse: data =>
-          unwrapResponse<WhaleDiscoverResponse>(
-            data as WhaleDiscoverResponse | BaseResponse<WhaleDiscoverResponse>,
-          ),
-      },
-    )
-
-    // 统一对成功结果也执行一次 unwrapResponse，确保拿到真正的 WhaleDiscoverResponse
-    return unwrapResponse<WhaleDiscoverResponse>(
-      result as WhaleDiscoverResponse | BaseResponse<WhaleDiscoverResponse>,
-    )
-  }, 'FETCH_WHALE_TRACKING_DISCOVER')
-}
-
 /**
  * Validate JWT token format (basic structure check)
  */
@@ -189,31 +155,6 @@ async function apiCall<T>(
     
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
   }
-}
-
-// ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
-
-export type WhaleHoldingApiItem = Infer<typeof schemas.WhaleHoldingDto>
-
-export interface FetchWhaleHoldingsQuery {
-  symbol?: string
-  minPositionValueUsd?: number
-  timeRangeHours?: number
-  limit?: number
-}
-
-export async function fetchWhaleHoldings(
-  query: FetchWhaleHoldingsQuery = {},
-): Promise<WhaleHoldingApiItem[]> {
-  return apiCall(async () => {
-    const response = await client.WhaleHoldingsController_getWhaleHoldings({
-      // 持仓接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
-      headers: optionalAuthHeaders(),
-      queries: query,
-    })
-
-    return unwrapResponse(response) as WhaleHoldingApiItem[]
-  }, 'FETCH_WHALE_HOLDINGS')
 }
 
 export async function login(payload: LoginPayload) {
@@ -363,13 +304,6 @@ export async function fetchCryptoStockQuotesLatest(params?: {
   symbols?: string[]
   source?: string
 }): Promise<CryptoStockQuoteLatest[]> {
-  // 公开营销页常态存在匿名访问：如果本地根本没有 token，则直接视为未登录，
-  // 抛出 AuthenticationError 供调用方回退到静态示例数据，避免进入 apiCall 的日志记录路径。
-  const token = getToken()
-  if (!token) {
-    throw new AuthenticationError('UNAUTHENTICATED')
-  }
-
   try {
     return await apiCall(async () => {
       const searchParams = new URLSearchParams()
@@ -386,7 +320,7 @@ export async function fetchCryptoStockQuotesLatest(params?: {
       const response = await safeApiCall(
         () =>
           client.CryptoStockQuotesController_getLatest({
-            headers: requireAuthHeaders(),
+            headers: optionalAuthHeaders(),
             queries: {
               ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
               ...(params?.source ? { source: params.source } : {}),
@@ -401,7 +335,7 @@ export async function fetchCryptoStockQuotesLatest(params?: {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              ...requireAuthHeaders(),
+              ...optionalAuthHeaders(),
             },
           },
           validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
@@ -745,75 +679,4 @@ export async function cancelLlmSubscription(subscriptionId: string) {
   clearCache(CacheKeys.llmSubscription(subscriptionId))
   invalidateCache('llm-subscription-list:')
   invalidateCache('llm-strategy-instance:')
-}
-
-// ===== Hyperliquid Whale Alert 实时数据 API =====
-
-export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
-
-export interface FetchRealtimeWhaleAlertsParams {
-  symbol?: string
-  minPositionValueUsd?: number
-  limit?: number
-  since?: string
-}
-
-export async function fetchRealtimeWhaleAlerts(
-  params: FetchRealtimeWhaleAlertsParams = {},
-): Promise<RealtimeWhaleAlertItem[]> {
-  return apiCall(async () => {
-    const queries: Record<string, unknown> = {}
-
-    if (params.symbol) {
-      queries.symbol = params.symbol
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      queries.min_position_value_usd = params.minPositionValueUsd
-    }
-    if (typeof params.limit === 'number') {
-      queries.limit = params.limit
-    }
-    if (params.since) {
-      queries.since = params.since
-    }
-
-    // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
-    const searchParams = new URLSearchParams()
-    if (params.symbol) {
-      searchParams.set('symbol', params.symbol)
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
-    }
-    if (typeof params.limit === 'number') {
-      searchParams.set('limit', String(params.limit))
-    }
-    if (params.since) {
-      searchParams.set('since', params.since)
-    }
-    const queryString = searchParams.toString()
-    const fallbackUrl =
-      queryString.length > 0
-        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
-        : `${API_BASE_URL}/whale-alerts/realtime`
-
-    return safeApiCall(
-      () =>
-        client.WhaleAlertController_getRealtime({
-          headers: requireAuthHeaders(),
-          queries,
-        }),
-      {
-        url: fallbackUrl,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
-      },
-    )
-  }, 'FETCH_REALTIME_WHALE_ALERTS')
 }
