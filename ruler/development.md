@@ -35,9 +35,7 @@
 
 ## 二、命令系统
 
-### 2.1 核心规则
-
-> 详细约束见 conventions.md「输出与命令约束」
+> 命令约束见 `conventions.md`「输出与命令约束」
 
 - **环境标志**：`--dev/--staging/--prod/--test/--e2e`（禁止位置参数）
 
@@ -211,15 +209,7 @@ NEXT_PUBLIC_LOG_LEVEL=INVALID ./scripts/dx build front
 
 ### 4.1 新功能开发流程
 
-**前置检查（强制）**：
-
-1. **检查当前分支**：执行 `git branch --show-current`
-   - 如果在 `main`/`master` 分支，**禁止开始开发**
-   - 必须先获取或创建 Issue ID
-   - 创建对应的 issue 分支（如 `feat/123-add-feature`）
-2. **确认 Issue 存在**：
-   - 如果没有 Issue ID，询问用户提供或使用 `/git-create-issue` 创建
-   - 记录 Issue ID 供后续提交使用
+**前置检查**：见 `git-workflow.md`「1.2 主分支保护规则」和「1.3 Issue 分支提交规则」
 
 **开发流程**：
 
@@ -262,13 +252,13 @@ Swagger/OpenAPI 自动更新接口描述
 
 ### 4.4 提交前检查清单（强制）
 
+- [ ] 确认在 Issue 分支（见 `git-workflow.md`）
 - [ ] 识别受影响的 E2E 用例并逐个运行通过（后端改动时）
 - [ ] 按改动执行增量预检（`./scripts/dx lint` 必跑；若需构建，遵循 backend → sdk → front → admin 的顺序，并仅在 DTO/API 变更时运行 `./scripts/dx build contracts`）
-- [ ] 若增量预检包含 `./scripts/dx build contracts`，确认 SDK 构建成功；`packages/api-contracts/openapi/backend.json` 为本地生成的 OpenAPI 规范文件，**已从 Git 中移除，无需提交**
+- [ ] 若增量预检包含 `./scripts/dx build contracts`，确认 SDK 构建成功
 - [ ] 确认无 `.env` 违规文件
-- [ ] 确认 Issue ID 存在并已关联
 
-**注意**：main 分支提交和 PR 创建时，E2E 测试为强制门禁，必须全部通过
+**注意**：PR 合并到 main 分支时，E2E 测试为强制门禁，必须全部通过
 
 ### 4.5 调试工作流
 
