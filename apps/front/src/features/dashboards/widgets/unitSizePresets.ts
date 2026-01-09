@@ -47,10 +47,9 @@ export const LIQUIDATION_MAP_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: nu
   M: { w: 8, h: 4, label: 'M' }, // Height adjusted to 4 and width increased
 }
 
-// 聚合爆仓（liquidation.feed）专用尺寸：只保留 S/M
+// 聚合爆仓（liquidation.feed）专用尺寸：只保留 S
 export const LIQUIDATION_FEED_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
   S: { w: 6, h: 3, label: 'S' },
-  M: { w: 8, h: 4, label: 'M' },
 }
 
 // 聚合持仓量（derivatives.open_interest_agg）专用尺寸：只保留 S/M，M 针对数据优化
