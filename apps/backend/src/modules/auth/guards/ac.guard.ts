@@ -1,15 +1,15 @@
 import type { CanActivate, ExecutionContext } from '@nestjs/common'
-import type { RequiredRule } from '../services/permission.service'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
 // Nest 注入需要运行时引用 Reflector，保留值导入
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AppRole } from '../rbac/permissions'
 // Nest 注入需要运行时引用 PermissionService/AuditLogService，保留值导入
 import { AuditLogService } from '../services/audit-log.service'
 import { PermissionService } from '../services/permission.service'
-import { AppRole } from '../rbac/permissions'
+import type { RequiredRule } from '../services/permission.service'
 
 export function UseRoles(...rules: RequiredRule[]) {
   const normalized =

@@ -1,4 +1,4 @@
-import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService 和 CryptoStockQuotesRepository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -48,6 +48,22 @@ interface BbxJobCursor {
 }
 
 /**
+ * 任务级配置参数（存放在 data_pull_tasks.meta 中）
+ */
+interface BbxCryptoStockQuotesMeta {
+  /**
+   * 需要拉取的股票代码列表（推荐使用大写，如 "MSTR"、"COIN"）
+   */
+  symbols?: string[]
+  /**
+   * 需要拉取的股票代码列表（逗号分隔字符串形式，兼容性字段）
+   *
+   * 例如："MSTR,COIN,MARA"
+   */
+  symbolsCsv?: string
+}
+
+/**
  * BBX 加密股票报价数据拉取 Job
  * 
  * 功能：
@@ -58,11 +74,35 @@ interface BbxJobCursor {
  * 配置：
  * - BBX_API_KEY: BBX API 密钥
  * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，有默认值）
- * - BBX_CRYPTO_STOCK_SYMBOLS: 需要拉取的股票代码列表（逗号分隔，如 "MSTR,COIN,MARA"）
+ * - data_pull_tasks.meta.symbols / symbolsCsv: 需要拉取的股票代码列表
  */
 @Injectable()
-export class BbxCryptoStockQuotesJob implements DataPullJob {
+export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotesMeta> {
   readonly key = 'bbx-crypto-stock-quotes'
+  readonly name = 'BBX 加密股票报价数据'
+  readonly metaSchema: JobMetaSchema = {
+    description: '从 BBX API 拉取指定加密股票的实时报价数据',
+    fields: [
+      {
+        name: 'symbols',
+        type: 'array',
+        required: false,
+        description: '股票代码列表（数组形式，如 ["MSTR","COIN","MARA"]）',
+        defaultValue: [],
+      },
+      {
+        name: 'symbolsCsv',
+        type: 'string',
+        required: false,
+        description: '股票代码列表（逗号分隔字符串形式，如 "MSTR,COIN,MARA"）',
+        defaultValue: '',
+      },
+    ],
+    example: {
+      symbols: ['MSTR', 'COIN', 'MARA'],
+      symbolsCsv: 'MSTR,COIN,MARA',
+    },
+  }
   private readonly logger = new Logger(BbxCryptoStockQuotesJob.name)
   private readonly requestTimeoutMs = 15_000
   private readonly maxAttempts = 3
@@ -72,7 +112,7 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
     private readonly repo: CryptoStockQuotesRepository,
   ) {}
 
-  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+  async run(ctx: DataPullJobContext<BbxCryptoStockQuotesMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('BBX_API_KEY')
@@ -84,17 +124,13 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
       throw new Error('BBX_API_KEY is not configured')
     }
 
-    // 从配置中读取要拉取的股票代码列表（每次都从配置读取，确保可动态更新）
-    const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS')
-    
-    if (!symbolsConfig) {
-      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is not configured')
-    }
-
-    const symbols = symbolsConfig.split(',').map(s => s.trim()).filter(Boolean)
+    // 从任务级 meta 中解析要拉取的股票代码列表（每次执行都从 meta 读取，确保可动态调整）
+    const symbols = this.resolveSymbols(ctx.meta)
 
     if (symbols.length === 0) {
-      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is configured but contains no valid symbols')
+      throw new Error(
+        'BBX crypto stock symbols are not configured in task meta (symbols or symbolsCsv must be provided)',
+      )
     }
 
     this.logger.log(`Fetching BBX crypto stock quotes for symbols: ${symbols.join(', ')}`)
@@ -185,6 +221,46 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
         missingSymbols: missingSymbols.length > 0 ? missingSymbols : undefined, // 记录缺失的标的
       },
     }
+  }
+
+  /**
+   * 从任务级 meta 中解析股票代码列表
+   *
+   * 支持两种配置方式：
+   * - symbols: 字符串数组
+   * - symbolsCsv: 逗号分隔字符串
+   *
+   * 返回去重且剔除空字符串后的列表
+   */
+  private resolveSymbols(meta: BbxCryptoStockQuotesMeta | null): string[] {
+    if (!meta) return []
+
+    const symbols: string[] = []
+
+    // symbols 数组形式
+    if (Array.isArray(meta.symbols)) {
+      for (const item of meta.symbols) {
+        if (typeof item === 'string') {
+          const trimmed = item.trim()
+          if (trimmed) {
+            symbols.push(trimmed)
+          }
+        }
+      }
+    }
+
+    // symbolsCsv 逗号分隔形式
+    if (typeof meta.symbolsCsv === 'string' && meta.symbolsCsv.trim()) {
+      const parts = meta.symbolsCsv
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+      symbols.push(...parts)
+    }
+
+    if (!symbols.length) return []
+    // 去重，统一转为大写便于后续比较
+    return Array.from(new Set(symbols.map(s => s.toUpperCase())))
   }
 
   /**
