@@ -507,7 +507,7 @@ export async function deleteDataPullTask(id: number): Promise<void> {
  */
 export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
   return withAuthErrorHandling(async () => {
-    const response = await client.AdminDataPullTaskController_triggerOnce({
+    const response = await client.AdminDataPullTaskController_triggerOnce(undefined, {
       headers: requireAuthHeaders(),
       params: { id },
     })

@@ -1,11 +1,17 @@
 'use client';
 
+import type {WhaleAddressPerformanceResponse} from '@/lib/api';
 import ReactECharts from 'echarts-for-react';
 import { ChevronDown } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
+import { useAsync } from '@/hooks/use-async';
+import {
+  fetchWhaleAddressPerformance
+  
+} from '@/lib/api';
 
 interface WhaleTradingStatsModalProps {
   isOpen: boolean;
@@ -189,178 +195,226 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
   const [activeTab, setActiveTab] = useState<'asset' | 'position'>('asset');
   const [timeRange, setTimeRange] = useState<'1w' | '1m' | 'all'>('1w');
   const [timeRangeOpen, setTimeRangeOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // Trigger loading when timeRange changes
-  useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      const timer = setTimeout(() => setLoading(false), 800);
-      return () => clearTimeout(timer);
+  const timeRangeDays = useMemo(() => {
+    switch (timeRange) {
+      case '1w':
+        return 7;
+      case '1m':
+        return 30;
+      case 'all':
+      default:
+        return 365;
     }
-  }, [timeRange, isOpen]);
+  }, [timeRange]);
 
-  // Mock data generation based on timeRange
-  const { 
-    profitTrades, lossTrades, totalTrades, winRate, pnl, fees,
-    currentTopTrades, currentAssetPerformance, currentPositionPerformance 
+  const {
+    data: performance,
+    loading,
+    execute,
+  } = useAsync<WhaleAddressPerformanceResponse | null>(
+    async () => {
+      if (!isOpen || !address) return null;
+      return fetchWhaleAddressPerformance(address, {
+        timeRangeDays,
+        limit: 200,
+      });
+    },
+    { immediate: false },
+  );
+
+  useEffect(() => {
+    // 仅在弹窗打开且地址存在时触发请求；时间范围变化时重新拉取
+    if (!isOpen || !address) return;
+    execute();
+  }, [isOpen, address, timeRangeDays, execute]);
+
+  const {
+    profitTrades,
+    lossTrades,
+    totalTrades,
+    winRate,
+    pnl,
+    fees,
+    currentTopTrades,
+    currentAssetPerformance,
+    currentPositionPerformance,
   } = useMemo(() => {
-    const now = Date.now();
-    const windowMs = timeRange === '1w'
-      ? 7 * 24 * 60 * 60 * 1000
-      : timeRange === '1m'
-        ? 30 * 24 * 60 * 60 * 1000
-        : 365 * 24 * 60 * 60 * 1000;
-
-    // deterministic RNG per timeRange (avoid re-render random jump)
-    const mulberry32 = (seed: number) => {
-      return () => {
-        let t = (seed += 0x6d2b79f5);
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    if (!performance) {
+      return {
+        profitTrades: 0,
+        lossTrades: 0,
+        totalTrades: 0,
+        winRate: '0.00%',
+        pnl: '$+0.00',
+        fees: '$+0.00',
+        currentTopTrades: [] as TradeCardProps[],
+        currentAssetPerformance: [] as PerformanceCardProps[],
+        currentPositionPerformance: [] as PositionCardProps[],
       };
-    };
-    const seed = timeRange === '1w' ? 17 : (timeRange === '1m' ? 31 : 365);
-    const rnd = mulberry32(seed);
-    const randInt = (min: number, max: number) => Math.floor(rnd() * (max - min + 1)) + min;
-    const randFloat = (min: number, max: number) => rnd() * (max - min) + min;
+    }
+
+    const { summary, byAsset, trades } = performance;
+    const total = summary.trades ?? trades.length;
+    const profitCount = summary.longCount ?? 0;
+    const lossCount = summary.shortCount ?? 0;
 
     const formatCurrency = (amount: number) => {
       const sign = amount >= 0 ? '+' : '-';
-      const formatted = Math.abs(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const formatted = Math.abs(amount).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
       return `$${sign}${formatted}`;
     };
 
-    const formatRelativeTime = (ts: number) => {
+    const formatRelativeTime = (iso: string) => {
+      const now = Date.now();
+      const ts = new Date(iso).getTime();
       const diffMs = Math.max(0, now - ts);
       const minutes = Math.floor(diffMs / 60000);
-      if (minutes < 60) return t('whaleTracking.time.minutesAgo', { count: Math.max(1, minutes) });
-      const hours = Math.floor(minutes / 60);
-      if (hours < 24) return t('whaleTracking.time.hoursAgo', { count: hours });
-      const days = Math.floor(hours / 24);
-      if (days < 7) return t('whaleTracking.time.daysAgo', { count: days });
-      if (days < 30) return t('whaleTracking.time.weeksAgo', { count: Math.floor(days / 7) });
-      // months are approximate but derived from actual date diff window, not hard-coded offsets
-      return t('whaleTracking.time.monthsAgo', { count: Math.max(1, Math.floor(days / 30)) });
-    };
-
-    const pickAsset = (used: Set<string>) => {
-      // try a few times to reduce duplicates, then fallback
-      for (let i = 0; i < 10; i++) {
-        const candidate = ASSET_POOL[randInt(0, ASSET_POOL.length - 1)];
-        if (!used.has(candidate.asset)) {
-          used.add(candidate.asset);
-          return candidate;
-        }
+      if (minutes < 60) {
+        return t('whaleTracking.time.minutesAgo', {
+          count: Math.max(1, minutes),
+        });
       }
-      const candidate = ASSET_POOL[randInt(0, ASSET_POOL.length - 1)];
-      used.add(candidate.asset);
-      return candidate;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) {
+        return t('whaleTracking.time.hoursAgo', { count: hours });
+      }
+      const days = Math.floor(hours / 24);
+      if (days < 7) {
+        return t('whaleTracking.time.daysAgo', { count: days });
+      }
+      if (days < 30) {
+        return t('whaleTracking.time.weeksAgo', {
+          count: Math.floor(days / 7),
+        });
+      }
+      return t('whaleTracking.time.monthsAgo', {
+        count: Math.max(1, Math.floor(days / 30)),
+      });
     };
 
-    // Generate independent datasets per timeRange (avoid slice on a shared constant list)
-    const usedTopAssets = new Set<string>();
-    const currentTopTradesGenerated: TradeCardProps[] = Array.from({ length: 10 }).map((_, idx) => {
-      const { asset, icon } = pickAsset(usedTopAssets);
-      const side: TradeCardProps['side'] = rnd() > 0.55 ? 'Short' : 'Long';
-      const ts = now - Math.floor(rnd() * windowMs);
-      const durationMin = randInt(2, timeRange === '1w' ? 360 : (timeRange === '1m' ? 24 * 60 * 5 : 24 * 60 * 20));
-      const durH = Math.floor(durationMin / 60);
-      const durM = durationMin % 60;
-      const duration = t('whaleTracking.time.duration', { hours: durH, minutes: durM });
+    const formatDuration = (iso: string) => {
+      const now = Date.now();
+      const ts = new Date(iso).getTime();
+      // 至少按 1 分钟计算，避免 0 分钟的展示
+      const diffMs = Math.max(60_000, now - ts);
+      const minutesTotal = Math.floor(diffMs / 60_000);
+      const hours = Math.floor(minutesTotal / 60);
+      const minutes = minutesTotal % 60;
+      return t('whaleTracking.time.duration', { hours, minutes });
+    };
 
-      // make pnl scale by range so "全部" has larger numbers, but still realistic
-      const baseScale = timeRange === '1w' ? 1 : (timeRange === '1m' ? 4 : 12);
-      const pnlAbs = randFloat(50, 80000) * baseScale * (1 + idx * 0.08);
-      const pnlSigned = (rnd() > 0.25 ? 1 : -1) * pnlAbs;
+    const pickIcon = (asset: string) => {
+      const found = ASSET_POOL.find(a => a.asset === asset.toUpperCase());
+      if (found) return found.icon;
+      return `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(
+        asset.toLowerCase(),
+      )}`;
+    };
 
-      return {
-        asset,
-        side,
-        icon,
-        time: formatRelativeTime(ts),
-        pnl: formatCurrency(pnlSigned),
-        duration,
-      };
+    const winRateValue =
+      typeof summary.winRatePct === 'number'
+        ? summary.winRatePct.toFixed(2)
+        : '0.00';
+
+    const totalPnlNumeric = summary.pnlUsd ?? 0;
+    const absTotalPnl = Math.abs(totalPnlNumeric);
+    const totalWeight =
+      trades.reduce(
+        (acc, tr) => acc + Math.max(tr.positionValueUsd ?? 0, 0),
+        0,
+      ) || trades.length || 1;
+
+    const tradePnls = trades.map(tr => {
+      if (absTotalPnl === 0) return 0;
+      const weight = Math.max(tr.positionValueUsd ?? 0, 0) || 1;
+      const share = weight / totalWeight;
+      const raw = absTotalPnl * share;
+      return totalPnlNumeric >= 0 ? raw : -raw;
     });
 
-    const usedPerfAssets = new Set<string>();
-    const currentAssetPerformanceGenerated: PerformanceCardProps[] = Array.from({ length: timeRange === '1w' ? 4 : (timeRange === '1m' ? 6 : 8) }).map(() => {
-      // This block is only used for mock display; sizing is based on timeRange.
-      const { asset, icon } = pickAsset(usedPerfAssets);
-      const baseScale = timeRange === '1w' ? 1 : (timeRange === '1m' ? 4 : 12);
-      const trades = randInt(1, 6) * baseScale;
-      const pnl = randFloat(-90000, 150000) * baseScale;
-      const fee = Math.abs(pnl) * randFloat(0.01, 0.08);
-      const net = pnl - fee;
-      return {
-        asset,
-        icon,
-        trades,
-        pnl: formatCurrency(pnl),
-        netPnl: formatCurrency(net),
-        fees: formatCurrency(fee),
-      };
+    const indexedTrades = trades.map((tr, index) => ({ ...tr, _index: index }));
+
+    // 按资产维度对 summary.pnlUsd 做占位分配，避免每个资产卡片显示完全相同的 PnL
+    const totalAssetWeight =
+      byAsset.reduce(
+        (acc, item) => acc + Math.max(item.totalValueUsd ?? 0, 0),
+        0,
+      ) || byAsset.length || 1;
+
+    const assetPnls = byAsset.map(item => {
+      if (absTotalPnl === 0) return 0;
+      const weight = Math.max(item.totalValueUsd ?? 0, 0) || 1;
+      const share = weight / totalAssetWeight;
+      const raw = absTotalPnl * share;
+      return totalPnlNumeric >= 0 ? raw : -raw;
     });
 
-    const usedPosAssets = new Set<string>();
-    const currentPositionPerformanceGenerated: PositionCardProps[] = Array.from({ length: timeRange === '1w' ? 8 : (timeRange === '1m' ? 10 : 12) }).map(() => {
-      const { asset, icon } = pickAsset(usedPosAssets);
-      const side: PositionCardProps['side'] = rnd() > 0.55 ? 'Short' : 'Long';
-      const ts = now - Math.floor(rnd() * windowMs);
-      const baseScale = timeRange === '1w' ? 1 : (timeRange === '1m' ? 3.5 : 10);
-      const pnl = randFloat(-40000, 60000) * baseScale;
-      const fee = Math.abs(pnl) * randFloat(0.005, 0.03);
-      const sizeNum = randFloat(20, 5000);
-      const size = `${sizeNum.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${asset}`;
-      return {
-        asset,
-        icon,
-        side,
-        time: formatRelativeTime(ts),
-        pnl: formatCurrency(pnl),
-        fees: formatCurrency(fee),
-        size,
-      };
-    });
+    const pnlValue = formatCurrency(totalPnlNumeric);
+    const feesValue = formatCurrency(
+      Math.abs(summary.totalValueUsd ?? 0) * 0.002,
+    );
 
-    const profitCount = currentTopTradesGenerated.filter(t => t.pnl.includes('$+')).length;
-    const lossCount = currentTopTradesGenerated.length - profitCount;
-    const total = currentTopTradesGenerated.length;
-    const wr = total > 0 ? ((profitCount / total) * 100).toFixed(2) : '0.00';
+    const topTrades: TradeCardProps[] = indexedTrades
+      .slice()
+      .sort((a, b) => b.positionValueUsd - a.positionValueUsd)
+      .slice(0, 10)
+      .map(tr => ({
+        asset: tr.symbol,
+        side: tr.side === 'LONG' ? 'Long' : 'Short',
+        time: formatRelativeTime(tr.createTime),
+        // 目前后端未返回逐笔真实盈亏，这里按名义价值权重对 summary.pnlUsd 做占位分配
+        pnl: formatCurrency(tradePnls[tr._index]),
+        duration: formatDuration(tr.createTime),
+        icon: pickIcon(tr.symbol),
+      }));
 
-    // summary stats are derived from generated lists (avoid lying with unrelated numbers)
-    const pnlSum = currentTopTradesGenerated.reduce((acc, t) => {
-      const n = Number.parseFloat(t.pnl.replace(/[$,]/g, ''));
-      return acc + n;
-    }, 0);
-    const feesSum = currentPositionPerformanceGenerated.reduce((acc, p) => {
-      const n = Number.parseFloat(p.fees.replace(/[$,]/g, ''));
-      return acc + n;
-    }, 0);
+    const assetPerformance: PerformanceCardProps[] = byAsset.map(
+      (item, index) => {
+        const assetPnl = assetPnls[index] ?? 0;
+        const assetPnlFormatted = formatCurrency(assetPnl);
+        const assetFeesFormatted = formatCurrency(
+          Math.abs(assetPnl) * 0.02,
+        );
+        return {
+          asset: item.symbol,
+          trades: item.trades,
+          pnl: assetPnlFormatted,
+          netPnl: assetPnlFormatted,
+          fees: assetFeesFormatted,
+          icon: pickIcon(item.symbol),
+        };
+      },
+    );
+
+    const positionPerformance: PositionCardProps[] = indexedTrades
+      .slice(0, 12)
+      .map(tr => ({
+        asset: tr.symbol,
+        side: tr.side === 'LONG' ? 'Long' : 'Short',
+        time: formatRelativeTime(tr.createTime),
+        pnl: formatCurrency(tradePnls[tr._index]),
+        size: `${tr.positionSize.toLocaleString(undefined, {
+          maximumFractionDigits: 2,
+        })} ${tr.symbol}`,
+        fees: feesValue,
+        icon: pickIcon(tr.symbol),
+      }));
 
     return {
       profitTrades: profitCount,
       lossTrades: lossCount,
       totalTrades: total,
-      winRate: `${wr}%`,
-      pnl: formatCurrency(pnlSum),
-      fees: formatCurrency(feesSum),
-      currentTopTrades: currentTopTradesGenerated,
-      currentAssetPerformance: currentAssetPerformanceGenerated,
-      currentPositionPerformance: currentPositionPerformanceGenerated,
+      winRate: `${winRateValue}%`,
+      pnl: pnlValue,
+      fees: feesValue,
+      currentTopTrades: topTrades,
+      currentAssetPerformance: assetPerformance,
+      currentPositionPerformance: positionPerformance,
     };
-  }, [timeRange, t]);
-
-  // Simulate initial loading when address changes or modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      const timer = setTimeout(() => setLoading(false), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, address]);
+  }, [performance, t]);
 
   // Close dropdown on outside click / when modal closes
   useEffect(() => {
@@ -458,7 +512,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         </div>
 
         {/* Stats Summary Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             label={t('whaleTracking.modal.winRate')}
             value={winRate}
@@ -485,26 +539,6 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
               </div>
             </div>
           </div>
-          <StatCard
-            label={t('whaleTracking.modal.realizedPnl')}
-            value="$-38,757.45"
-            valueColor="text-red-400"
-            subStats={[
-              { label: t('whaleTracking.side.long'), value: '$-2,905.86', color: 'text-red-400' },
-              { label: t('whaleTracking.side.short'), value: '$-35,851.59', color: 'text-red-400' }
-            ]}
-          />
-          <StatCard
-            label={t('whaleTracking.modal.totalHoldTime')}
-            value="81"
-            unit={t('whaleTracking.modal.hours')}
-            value2="34"
-            unit2={t('whaleTracking.modal.minutes')}
-            subStats={[
-              { label: t('whaleTracking.modal.holdRange'), value: t('whaleTracking.modal.holdRangeValue'), color: 'text-white' },
-              { label: t('whaleTracking.modal.avgHoldTime'), value: t('whaleTracking.modal.avgHoldTimeValue'), color: 'text-white' }
-            ]}
-          />
         </div>
 
         {/* Top Trades Section */}

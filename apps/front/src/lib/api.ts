@@ -157,8 +157,141 @@ async function apiCall<T>(
     }
     
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
-  }
 }
+}
+
+
+
+// ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
+
+export type WhaleHoldingApiItem = Infer<typeof schemas.WhaleHoldingDto>
+
+export interface FetchWhaleHoldingsQuery {
+  symbol?: string
+  minPositionValueUsd?: number
+  timeRangeHours?: number
+  limit?: number
+}
+
+export async function fetchWhaleHoldings(
+  query: FetchWhaleHoldingsQuery = {},
+): Promise<WhaleHoldingApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.WhaleHoldingsController_getWhaleHoldings({
+      // 持仓接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+      queries: query,
+    })
+
+    return unwrapResponse(response) as WhaleHoldingApiItem[]
+  }, 'FETCH_WHALE_HOLDINGS')
+}
+
+// ===== 鲸鱼地址维度历史交易 / 绩效 API =====
+
+export type WhaleAddressPerformanceResponse = Infer<
+  (typeof schemas.WhaleAddressPerformanceResponseDto)
+>
+
+export interface FetchWhaleAddressPerformanceQuery {
+  timeRangeDays?: number
+  symbol?: string
+  limit?: number
+}
+
+export async function fetchWhaleAddressPerformance(
+  address: string,
+  query: FetchWhaleAddressPerformanceQuery = {},
+): Promise<WhaleAddressPerformanceResponse> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (typeof query.timeRangeDays === 'number') {
+      params.set('timeRangeDays', String(query.timeRangeDays))
+    }
+    if (query.symbol) {
+      params.set('symbol', query.symbol)
+    }
+    if (typeof query.limit === 'number') {
+      params.set('limit', String(query.limit))
+    }
+
+    const search = params.toString()
+    const fallbackUrl =
+      search.length > 0
+        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
+            address,
+          )}/performance?${search}`
+        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
+            address,
+          )}/performance`
+
+    const result = await safeApiCall(
+      () =>
+        client.WhaleTrackingController_getTraderPerformance({
+          headers: optionalAuthHeaders(),
+          params: { address },
+          queries: query,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...optionalAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<WhaleAddressPerformanceResponse>(
+            data as
+              | WhaleAddressPerformanceResponse
+              | BaseResponse<WhaleAddressPerformanceResponse>,
+          ),
+      },
+    )
+
+    return unwrapResponse<WhaleAddressPerformanceResponse>(
+      result as
+        | WhaleAddressPerformanceResponse
+        | BaseResponse<WhaleAddressPerformanceResponse>,
+    )
+  }, 'FETCH_WHALE_ADDRESS_PERFORMANCE')
+}
+
+// ===== 多空比（markets/long-short-ratio/exchanges）相关 API =====
+
+export type ExchangeLongShortRatioApiItem = Infer<
+  typeof schemas.ExchangeLongShortRatioResponseDto
+>
+
+export type ExchangeLongShortTimeRange =
+  | '5m'
+  | '15m'
+  | '30m'
+  | '1h'
+  | '4h'
+  | '12h'
+  | '24h'
+
+export interface FetchExchangeLongShortRatioQuery {
+  symbol: string
+  timeRange: ExchangeLongShortTimeRange
+}
+
+export async function fetchExchangeLongShortRatio(
+  query: FetchExchangeLongShortRatioQuery,
+): Promise<ExchangeLongShortRatioApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.MarketsController_getExchangeLongShortRatio({
+      // 多空比接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+      queries: query,
+    })
+
+    return unwrapResponse(response) as ExchangeLongShortRatioApiItem[]
+  }, 'FETCH_EXCHANGE_LONG_SHORT_RATIO')
+}
+
 
 export async function login(payload: LoginPayload) {
   return apiCall(async () => {

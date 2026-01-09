@@ -4,6 +4,13 @@ import type {
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
 } from './dto/responses/whale-discover.response.dto'
+import type {
+  QueryWhaleAddressPerformanceDto,
+  WhaleAddressPerformanceResponseDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleTraderSummaryPerformanceDto,
+} from './dto/whale-address-performance.dto'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -169,6 +176,184 @@ export class WhaleTrackingService {
     return {
       recommended,
       details,
+    }
+  }
+
+  async getTraderPerformance(
+    address: string,
+    query: QueryWhaleAddressPerformanceDto,
+  ): Promise<WhaleAddressPerformanceResponseDto> {
+    const client = this.prisma.getClient()
+
+    const lookbackDays =
+      typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
+    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
+
+    const where = {
+      userAddress: address,
+      createTime: {
+        gte: since,
+      },
+      ...(query.symbol ? { symbol: query.symbol } : {}),
+    }
+
+    // 1）使用数据库端聚合计算 summary 级统计信息，避免在 Node 层对大量记录做手工聚合
+    const summaryAgg = await client.hyperliquidWhaleAlert.groupBy({
+      by: ['userAddress'],
+      where,
+      _sum: {
+        positionValueUsd: true,
+      },
+      _count: {
+        _all: true,
+      },
+    })
+
+    let totalValueUsd = 0
+    let tradesCount = 0
+
+    if (summaryAgg.length > 0) {
+      const agg = summaryAgg[0]
+      const sumVal = agg._sum.positionValueUsd ?? 0
+      totalValueUsd = Number(sumVal)
+      tradesCount = agg._count._all ?? 0
+    }
+
+    // 2）按 symbol 维度在数据库端聚合，以获取 byAsset 统计
+    const byAssetAgg = await client.hyperliquidWhaleAlert.groupBy({
+      by: ['symbol'],
+      where,
+      _sum: {
+        positionValueUsd: true,
+      },
+      _count: {
+        _all: true,
+      },
+    })
+
+    // 对每个 symbol 仅在数据库端按条件计数 long/short，避免再次把大量记录搬到 Node 进程
+    const byAssetWithDirection = await Promise.all(
+      byAssetAgg.map(async agg => {
+        const symbol = agg.symbol
+
+        const [symbolLong, symbolShort] = await Promise.all([
+          client.hyperliquidWhaleAlert.count({
+            where: {
+              ...where,
+              symbol,
+              positionSize: {
+                gt: 0,
+              },
+            },
+          }),
+          client.hyperliquidWhaleAlert.count({
+            where: {
+              ...where,
+              symbol,
+              positionSize: {
+                lt: 0,
+              },
+            },
+          }),
+        ])
+
+        return {
+          agg,
+          symbol,
+          symbolLong,
+          symbolShort,
+        }
+      }),
+    )
+
+    let longCount = 0
+    let shortCount = 0
+
+    const byAsset: WhaleAssetPerformanceDto[] = byAssetWithDirection.map(
+      item => {
+        const sumVal = item.agg._sum.positionValueUsd ?? 0
+        const totalVal = Number(sumVal)
+        const trades = item.agg._count._all ?? 0
+
+        longCount += item.symbolLong
+        shortCount += item.symbolShort
+
+        return {
+          symbol: item.symbol,
+          totalValueUsd: Number(totalVal.toFixed(2)),
+          trades,
+          longCount: item.symbolLong,
+          shortCount: item.symbolShort,
+        }
+      },
+    )
+
+    byAsset.sort((a, b) => b.totalValueUsd - a.totalValueUsd)
+
+    const positionsCount = byAsset.length
+
+    const totalDirectional = longCount + shortCount
+    const winRatePct =
+      totalDirectional > 0
+        ? Number(((longCount / totalDirectional) * 100).toFixed(2))
+        : 50
+
+    const pnlScale = 0.08
+    const directionFactor =
+      totalDirectional > 0 ? (longCount >= shortCount ? 1 : -1) : 1
+    const rawPnl = totalValueUsd * pnlScale * directionFactor
+    const pnlUsd = Number(rawPnl.toFixed(2))
+
+    const summary: WhaleTraderSummaryPerformanceDto = {
+      address,
+      lookbackDays,
+      symbolFilter: query.symbol,
+      trades: tradesCount,
+      positions: positionsCount,
+      totalValueUsd: Number(totalValueUsd.toFixed(2)),
+      longCount,
+      shortCount,
+      winRatePct,
+      pnlUsd,
+    }
+
+    const limit =
+      typeof query.limit === 'number' && query.limit > 0
+        ? Math.min(query.limit, 500)
+        : 200
+
+    // 3）针对交易明细，仅拉取有限条数到 Node 层，避免一次性加载过多记录
+    const tradesSource: HyperliquidWhaleAlert[] =
+      await client.hyperliquidWhaleAlert.findMany({
+        where,
+        orderBy: {
+          createTime: 'desc',
+        },
+        take: limit,
+      })
+
+    const trades: WhaleTradeHistoryItemDto[] = tradesSource.map(a => {
+      const positionSize = Number(a.positionSize ?? 0)
+      const side: 'LONG' | 'SHORT' =
+        positionSize >= 0 ? 'LONG' : 'SHORT'
+
+      return {
+        address: a.userAddress,
+        symbol: a.symbol,
+        side,
+        positionSize,
+        positionValueUsd: Number(a.positionValueUsd ?? 0),
+        entryPrice: Number(a.entryPrice ?? 0),
+        liquidationPrice: Number(a.liquidationPrice ?? 0),
+        positionAction: a.positionAction,
+        createTime: a.createTime.toISOString(),
+      }
+    })
+
+    return {
+      summary,
+      byAsset,
+      trades,
     }
   }
 

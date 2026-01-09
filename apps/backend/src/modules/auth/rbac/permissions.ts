@@ -31,7 +31,11 @@ export const RBAC_PERMISSIONS = new RolesBuilder()
 
 // 访客角色：未登录用户的最小权限集合
 RBAC_PERMISSIONS.grant(AppRole.VISITOR)
+  // 公开鲸鱼追踪类数据（Discover / 实时鲸鱼 / 持仓等聚合统计）
   .readAny(AppResource.WHALE_TRACKING)
+  // 公开市场聚合类数据（多空比、挂单聚合等，只在 OptionalAccessControl 场景下放行）
+  .readAny(AppResource.MARKET_SYMBOL)
+  // 公开预测市场聚合数据（Polymarket prediction-market 页面）
   .readAny(AppResource.PREDICTION_MARKET)
 
 RBAC_PERMISSIONS.grant(AppRole.USER)

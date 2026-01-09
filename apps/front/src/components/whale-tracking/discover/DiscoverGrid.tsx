@@ -1,11 +1,12 @@
 'use client';
 
+import type {WhaleDiscoverResponse} from '@/lib/api';
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { useAsync } from '@/hooks/use-async';
-import { fetchWhaleTrackingDiscover, type WhaleDiscoverResponse } from '@/lib/api';
+import { fetchWhaleTrackingDiscover  } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 import { TraderCard } from './TraderCard';
 
