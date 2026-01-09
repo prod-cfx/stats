@@ -1,14 +1,16 @@
 /* eslint-disable perfectionist/sort-imports -- 保持与其他 e2e 测试一致的导入分组，优先可读性 */
 import type { ExecutionContext, INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
+import type { AuthenticatedUser } from '../src/common/types/authenticated-user.type'
 
 import { resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
-import type { AuthenticatedUser } from '../src/common/types/authenticated-user.type'
 import { AppModule } from '../src/modules/app.module'
-import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
+import { OptionalJwtAuthGuard } from '../src/modules/auth/guards/optional-jwt-auth.guard'
+import { PermissionService } from '../src/modules/auth/services/permission.service'
+import { AppRole, RBAC_PERMISSIONS } from '../src/modules/auth/rbac/permissions'
 import request from 'supertest'
 
 describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
@@ -27,9 +29,10 @@ describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      // 覆盖 JwtAuthGuard，在请求上下文中注入一个普通 user 角色，
-      // 让 ACGuard 通过 PermissionService/RoleAssignment 走真实的 RBAC 检查逻辑。
-      .overrideGuard(JwtAuthGuard)
+      // 覆盖 OptionalJwtAuthGuard，在请求上下文中注入一个普通 user 角色，
+      // 并通过自定义 PermissionService 以 USER 角色执行 RBAC 检查，
+      // 确保该接口对真实登录用户具备 readAny(MARKET_SYMBOL) 权限。
+      .overrideGuard(OptionalJwtAuthGuard)
       .useValue({
         canActivate: (context: ExecutionContext) => {
           const req = context.switchToHttp().getRequest()
@@ -41,6 +44,23 @@ describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
           }
           req.user = user
           return true
+        },
+      })
+      .overrideProvider(PermissionService)
+      .useValue({
+        hasAccess: async (rules: any[]): Promise<boolean> => {
+          for (const rule of rules) {
+            const permission = RBAC_PERMISSIONS.permission({
+              role: AppRole.USER,
+              action: rule.action,
+              resource: rule.resource,
+              possession: rule.possession ?? 'any',
+            })
+            if (permission.granted) {
+              return true
+            }
+          }
+          return false
         },
       })
       .compile()

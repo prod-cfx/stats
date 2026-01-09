@@ -188,12 +188,13 @@ export class GetLatestCryptoStockQuotesQueryDto {
       return value
         .map(v => String(v).trim())
         .filter(v => v.length > 0)
+        .map(v => v.toUpperCase())
     }
     if (typeof value === 'string') {
       if (!value.trim()) return undefined
       return value
         .split(',')
-        .map(s => s.trim())
+        .map(s => s.trim().toUpperCase())
         .filter(Boolean)
     }
     return undefined
