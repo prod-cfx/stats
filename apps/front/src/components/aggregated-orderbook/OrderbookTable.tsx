@@ -137,15 +137,19 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: Fixed 13 asks and 13 bids
+    // Both mode: 8 asks, mid price, 8 bids
+    const askCount = isCompact ? 8 : 13;
+    const bidCount = isCompact ? 8 : 13;
+    
     return {
       rows: [
-        ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
-        ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
+        ...asksSorted.slice(-askCount).map((x) => ({ ...x, _type: 'ask' as const })),
+        { isMid: true } as any, // Placeholder for mid price
+        ...bidsSorted.slice(0, bidCount).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false
     };
-  }, [asks, bids, displayMode]);
+  }, [asks, bids, displayMode, isCompact]);
 
   return (
     <div className={`flex flex-col ${isCompact ? 'h-fit' : 'h-full'} bg-[#0d1117] text-[#c9d1d9] ${isCompact ? 'overflow-visible' : 'overflow-hidden'} select-none`}>
@@ -163,6 +167,18 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
         style={{ height: isCompact ? 'auto' : `${TOTAL_HEIGHT}px`, maxHeight: isCompact ? 'none' : `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {
+          if ((r as any).isMid) {
+            return (
+              <div key="mid-price" className={`flex items-center justify-center ${isCompact ? 'h-[24px] py-1' : 'h-[36px] py-2'} bg-white/5 border-y border-white/5`}>
+                <div className={`flex items-center gap-3 ${isCompact ? 'text-[11px]' : 'text-sm'} font-bold`}>
+                  <span className="text-white">{currentPrice.price}</span>
+                  <span className={currentPrice.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}>
+                    {currentPrice.changePercent}
+                  </span>
+                </div>
+              </div>
+            );
+          }
           const key = `${r._type}-${r.price}-${idx}`;
           return (
             <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">

@@ -35,12 +35,10 @@ export const LONG_SHORT_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number;
   M: { w: 6, h: 4, label: 'M' }, // Height adjusted to 4 as requested
 }
 
-// 聚合挂单（derivatives.orderbook_agg）专用尺寸：与 K 线图表组件保持一致
-export const ORDERBOOK_UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: number; label: string }> = {
+// 聚合挂单（derivatives.orderbook_agg）专用尺寸：只保留 S/M
+export const ORDERBOOK_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
   S: { w: 8, h: 3, label: 'S' },
   M: { w: 10, h: 4, label: 'M' },
-  L: { w: 12, h: 5, label: 'L' },
-  XL: { w: 12, h: 6, label: 'XL' },
 }
 
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
