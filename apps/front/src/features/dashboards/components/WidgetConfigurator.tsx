@@ -35,7 +35,20 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     return UNIT_SIZE_PRESETS
   }, [item.type])
 
-  const layout = useMemo(() => sizePresets[selectedSize], [selectedSize, sizePresets])
+  const layout = useMemo(() => {
+    // If selectedSize is not in presets (e.g. was 'M' but now only 'S' available),
+    // fallback to the first available size
+    const preset = sizePresets[selectedSize] || Object.values(sizePresets)[0]
+    return preset
+  }, [selectedSize, sizePresets])
+
+  // Effect to sync selectedSize state if it becomes invalid
+  React.useEffect(() => {
+    if (!sizePresets[selectedSize]) {
+      const firstAvailable = Object.keys(sizePresets)[0] as UnitSize
+      if (firstAvailable) setSelectedSize(firstAvailable)
+    }
+  }, [sizePresets, selectedSize])
 
   // Generate config fields based on widget type
   const configFields = useMemo(() => {
