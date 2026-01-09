@@ -101,7 +101,6 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
 
   const selectedCoin = (coinFilter === 'ALL' ? 'ALL' : (coinFilter as CoinSymbol));
   const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
-  const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
 
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
