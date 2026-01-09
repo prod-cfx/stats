@@ -190,8 +190,8 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [rightSymbol]);
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0' : 'gap-8 pb-12'}`}>
-      <div className={`grid grid-cols-1 ${isCompact ? '' : 'xl:grid-cols-2'} ${isCompact ? 'gap-2' : 'gap-8'} items-stretch`}>
+    <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>
+      <div className={`grid grid-cols-1 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-8'} items-stretch`}>
         <VolumeComparisonCard 
           title={t('aggregatedOrderbook.volume.title', { symbol: leftSymbol })} 
           symbol={leftSymbol} 
@@ -199,13 +199,15 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
           onSymbolChange={setLeftSymbol}
           isCompact={isCompact}
         />
-        <VolumeComparisonCard 
-          title={t('aggregatedOrderbook.volume.title', { symbol: rightSymbol })} 
-          symbol={rightSymbol} 
-          items={rightItems}
-          onSymbolChange={setRightSymbol}
-          isCompact={isCompact}
-        />
+        {!isCompact && (
+          <VolumeComparisonCard 
+            title={t('aggregatedOrderbook.volume.title', { symbol: rightSymbol })} 
+            symbol={rightSymbol} 
+            items={rightItems}
+            onSymbolChange={setRightSymbol}
+            isCompact={isCompact}
+          />
+        )}
       </div>
     </div>
   );
