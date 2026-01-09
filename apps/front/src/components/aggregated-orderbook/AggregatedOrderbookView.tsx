@@ -250,7 +250,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
             <div className={`flex-1 flex ${isCompact ? 'min-h-fit' : 'min-h-0'} overflow-hidden`}>
               <div className={`${isCompact ? 'w-[58%] min-h-fit' : 'w-1/2 flex flex-col'} border-r border-[#30363d]`}>
                 <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
-                  <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[9px]' : 'text-lg'}`}>
+                  <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[11px]' : 'text-lg'}`}>
                     {t('aggregatedOrderbook.sections.realtimeOrderbook', {
                       symbol: `${symbol}/USDT`,
                       market: marketType === 'futures' ? t('aggregatedOrderbook.market.futures') : t('aggregatedOrderbook.market.spot'),
@@ -353,7 +353,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
 
               <div className={`${isCompact ? 'w-[42%] min-h-fit' : 'w-1/2 flex flex-col min-h-0'}`}>
                 <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
-                  <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[9px]' : 'text-lg'}`}>{t('aggregatedOrderbook.sections.orderDepth')}</div>
+                  <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[11px]' : 'text-lg'}`}>{t('aggregatedOrderbook.sections.orderDepth')}</div>
                   {!isCompact && (
                     <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-all">
                       <Info className="w-4 h-4" />
@@ -362,7 +362,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                   )}
                 </div>
                 <div className={`flex-1 min-h-0 ${isCompact ? 'p-1' : 'p-4'} flex flex-col`}>
-                  <div className="flex-1 min-h-0">
+                  <div className={`flex-1 ${isCompact ? 'min-h-[300px]' : 'min-h-0'}`}>
                     <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} />
                   </div>
                   {!isCompact && (
