@@ -35,10 +35,10 @@ export const LONG_SHORT_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number;
   M: { w: 6, h: 4, label: 'M' }, // Height adjusted to 4 as requested
 }
 
-// 聚合挂单（derivatives.orderbook_agg）专用尺寸：只保留 S/M，M 针对数据优化
-export const ORDERBOOK_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
-  S: { w: 8, h: 3, label: 'S' },
-  M: { w: 10, h: 4, label: 'M' },
+// 清算地图（liquidation.map）专用尺寸：只保留 S/M，M 针对数据优化
+export const LIQUIDATION_MAP_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 8, h: 4, label: 'M' }, // Height adjusted to 4 and width increased
 }
 
 // 聚合持仓量（derivatives.open_interest_agg）专用尺寸：只保留 S/M，M 针对数据优化
@@ -50,6 +50,12 @@ export const OPEN_INTEREST_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: numb
 // 聚合成交量（derivatives.volume_agg）专用尺寸：只保留 S
 export const VOLUME_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
   S: { w: 6, h: 3, label: 'S' },
+}
+
+// 清算地图（liquidation.map）专用尺寸：只保留 S/M，M 针对数据优化
+export const LIQUIDATION_MAP_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 8, h: 4, label: 'M' }, // Height adjusted to 4 and width increased
 }
 
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
@@ -83,6 +89,8 @@ export function snapToPresetForWidgetType(
     presets = ORDERBOOK_UNIT_SIZE_PRESETS
   } else if (widgetType === 'derivatives.open_interest_agg') {
     presets = OPEN_INTEREST_UNIT_SIZE_PRESETS as any
+  } else if (widgetType === 'liquidation.map') {
+    presets = LIQUIDATION_MAP_UNIT_SIZE_PRESETS as any
   } else if (widgetType === 'derivatives.volume_agg') {
     presets = VOLUME_UNIT_SIZE_PRESETS as any
   }

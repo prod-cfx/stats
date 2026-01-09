@@ -4,7 +4,7 @@ import type {UnitSize} from '../widgets/unitSizePresets';
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
-import { CRYPTO_STOCKS_UNIT_SIZE_PRESETS, KLINE_UNIT_SIZE_PRESETS, LONG_SHORT_UNIT_SIZE_PRESETS, OPEN_INTEREST_UNIT_SIZE_PRESETS, ORDERBOOK_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS, VOLUME_UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
+import { CRYPTO_STOCKS_UNIT_SIZE_PRESETS, KLINE_UNIT_SIZE_PRESETS, LIQUIDATION_MAP_UNIT_SIZE_PRESETS, LONG_SHORT_UNIT_SIZE_PRESETS, OPEN_INTEREST_UNIT_SIZE_PRESETS, ORDERBOOK_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS, VOLUME_UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 interface WidgetConfiguratorProps {
@@ -30,6 +30,8 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (item.type === 'derivatives.orderbook_agg') return ORDERBOOK_UNIT_SIZE_PRESETS as any
     // 聚合持仓量只保留 S/M 尺寸
     if (item.type === 'derivatives.open_interest_agg') return OPEN_INTEREST_UNIT_SIZE_PRESETS as any
+    // 清算地图只保留 S/M 尺寸
+    if (item.type === 'liquidation.map') return LIQUIDATION_MAP_UNIT_SIZE_PRESETS as any
     // 聚合成交量只保留 S/M 尺寸
     if (item.type === 'derivatives.volume_agg') return VOLUME_UNIT_SIZE_PRESETS as any
     return UNIT_SIZE_PRESETS
