@@ -113,7 +113,6 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 }) => {
   const { t } = useTranslation();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isCompact = variant === 'compact';
 
   // Define a precise row height to ensure alignment (font + padding)
@@ -138,32 +137,16 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: Show more rows but enable scrolling
-    // We want to display about 26 rows (13 asks + 1 gap + 12 bids) in the viewport,
-    // but allow scrolling to see more.
-    const count = isCompact ? 50 : 50; 
+    // Both mode: Fixed 13 asks and 13 bids
     return {
       rows: [
-        ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
+        ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
         { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
-        ...bidsSorted.slice(0, count).map((x) => ({ ...x, _type: 'bid' as const })),
+        ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
-      canScroll: true
+      canScroll: false
     };
-  }, [asks, bids, displayMode, isCompact]);
-
-  // Scroll to middle on mount/mode change to show spread
-  React.useEffect(() => {
-    if (canScroll && displayMode === 'both' && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      const gapIndex = rows.findIndex(r => (r as any)._type === 'gap');
-      if (gapIndex !== -1) {
-        // Calculate the position to center the gap
-        const scrollTo = gapIndex * ROW_HEIGHT - container.clientHeight / 2 + ROW_HEIGHT / 2;
-        container.scrollTop = scrollTo;
-      }
-    }
-  }, [displayMode, rows, ROW_HEIGHT, canScroll]);
+  }, [asks, bids, displayMode]);
 
   return (
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
@@ -177,7 +160,6 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
       {/* Table Body - Fixed height for exactly 26 rows */}
       <div 
-        ref={scrollContainerRef}
         className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
         style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
       >
@@ -190,7 +172,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
             <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">
               <OrderRow
                 item={r}
-                type={r._type as 'ask' | 'bid'}
+                type={r._type}
                 selected={selectedKey === key}
                 onSelect={() => setSelectedKey(key)}
                 variant={variant}
