@@ -46,6 +46,7 @@ type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
 type _CreateDataPullTaskDto = z.infer<typeof schemas.CreateAdminDataPullTaskDto>
 type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
+type _DataPullExecutionDto = z.infer<typeof schemas.AdminDataPullExecutionResponseDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -355,19 +356,7 @@ export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
   return data?.jobs ?? []
 }
 
-/**
- * 单条任务执行日志
- */
-export interface DataPullExecutionLog {
-  id: number
-  taskId: number
-  status: string
-  fetchedCount: number
-  startedAt: string
-  finishedAt?: string | null
-  errorMessage?: string | null
-  meta?: Record<string, any> | null
-}
+export type DataPullExecutionLog = _DataPullExecutionDto
 
 export interface DataPullTaskListQuery {
   page?: number
@@ -510,6 +499,19 @@ export async function deleteDataPullTask(id: number): Promise<void> {
       headers: requireAuthHeaders(),
       params: { id },
     })
+  })
+}
+
+/**
+ * 手动触发一次数据拉取任务执行（主要用于测试）
+ */
+export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_triggerOnce({
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<DataPullExecutionLog>(response as any)
   })
 }
 

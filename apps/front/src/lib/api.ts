@@ -643,7 +643,7 @@ export async function fetchPredictionMarkets(
     const limit = params.limit ?? 48
 
     const response = await client.PolymarketController_listMarkets({
-      headers: requireAuthHeaders(),
+      headers: optionalAuthHeaders(),
       queries: {
         ...(params.category && { category: params.category }),
         ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),

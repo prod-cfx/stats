@@ -32,6 +32,9 @@ export function useAsync<T>(
   const [loading, setLoading] = useState(immediate)
   const [error, setError] = useState<Error | null>(null)
 
+  // 递增的请求 ID，用于避免并发请求时旧结果覆盖新结果
+  const requestIdRef = useRef(0)
+
   // Use ref to keep the latest asyncFunction without triggering re-renders
   const asyncFunctionRef = useRef(asyncFunction)
   const onSuccessRef = useRef(onSuccess)
@@ -45,19 +48,30 @@ export function useAsync<T>(
   })
 
   const execute = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+
     setLoading(true)
     setError(null)
 
     try {
       const result = await asyncFunctionRef.current()
+
+      // 只有当前仍是最新请求时才更新数据，避免旧请求覆盖新结果
+      if (requestId !== requestIdRef.current) return
+
       setData(result)
       onSuccessRef.current?.(result)
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error')
+
+      if (requestId !== requestIdRef.current) return
+
       setError(error)
       onErrorRef.current?.(error)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 

@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 // eslint-disable-next-line ts/consistent-type-imports
@@ -17,7 +17,7 @@ export class PolymarketController {
   constructor(private readonly polymarketService: PolymarketService) {}
 
   @Get('markets')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.PREDICTION_MARKET)
   @ApiOperation({ summary: '获取 Polymarket 预测市场列表' })
   @ApiOkResponse({ type: PredictionMarketCardDto, isArray: true })

@@ -30,7 +30,9 @@ export enum AppResource {
 export const RBAC_PERMISSIONS = new RolesBuilder()
 
 // 访客角色：未登录用户的最小权限集合
-RBAC_PERMISSIONS.grant(AppRole.VISITOR).readAny(AppResource.WHALE_TRACKING)
+RBAC_PERMISSIONS.grant(AppRole.VISITOR)
+  .readAny(AppResource.WHALE_TRACKING)
+  .readAny(AppResource.PREDICTION_MARKET)
 
 RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
