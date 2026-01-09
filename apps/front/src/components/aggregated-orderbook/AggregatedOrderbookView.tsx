@@ -363,7 +363,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                 </div>
                 <div className={`flex-1 min-h-0 ${isCompact ? 'p-0' : 'p-4'} flex flex-col`}>
                   <div className="flex-1 min-h-0">
-                    <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} />
+                    <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} height={isCompact ? '100%' : 400} />
                   </div>
                   {!isCompact && (
                     <div className="flex items-center justify-between mt-4 text-xs text-[#8b949e] flex-none">

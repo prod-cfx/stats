@@ -113,12 +113,11 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 }) => {
   const { t } = useTranslation();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isCompact = variant === 'compact';
 
   // Define a precise row height to ensure alignment (font + padding)
   const ROW_HEIGHT = isCompact ? 20 : 28; 
-  const VISIBLE_ROWS = isCompact ? 13 : 26;
-  const TOTAL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
 
   const { rows, canScroll } = useMemo(() => {
     const asksSorted = [...asks].sort((a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price));
@@ -137,17 +136,29 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: Fixed 13 rows total to fill the compact tile
-    const count = isCompact ? 6 : 13;
+    // Both mode: Show more rows but enable scrolling
+    const count = isCompact ? 20 : 40; // Provide enough rows to scroll
     return {
       rows: [
         ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
         { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
         ...bidsSorted.slice(0, count).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
-      canScroll: false
+      canScroll: true
     };
   }, [asks, bids, displayMode, isCompact]);
+
+  // Scroll to middle on mount/mode change to show spread
+  useEffect(() => {
+    if (displayMode === 'both' && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      const gapIndex = rows.findIndex(r => (r as any)._type === 'gap');
+      if (gapIndex !== -1) {
+        const scrollTo = gapIndex * ROW_HEIGHT - container.clientHeight / 2 + ROW_HEIGHT / 2;
+        container.scrollTop = scrollTo;
+      }
+    }
+  }, [displayMode, rows, ROW_HEIGHT]);
 
   return (
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
@@ -161,6 +172,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
       {/* Table Body - Flexible height to align with depth chart */}
       <div 
+        ref={scrollContainerRef}
         className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
       >
         {rows.map((r, idx) => {
