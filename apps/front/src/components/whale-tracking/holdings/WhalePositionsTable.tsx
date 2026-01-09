@@ -264,11 +264,9 @@ export const WhalePositionsTable = () => {
                       {renderSortIcon('positionValue')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('pnl')}>
-                    <div className="flex items-center">
-                      {t('whaleTracking.holdings.table.unrealizedPnl')}
-                      {renderSortIcon('pnl')}
-                    </div>
+                  {/* PnL 列当前仅展示占位符，不提供排序交互以避免“空操作”体验 */}
+                  <th className="px-6 py-4 text-left whitespace-nowrap">
+                    {t('whaleTracking.holdings.table.unrealizedPnl')}
                   </th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('margin')}>
                     <div className="flex items-center">
@@ -278,11 +276,9 @@ export const WhalePositionsTable = () => {
                   </th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.entryPrice')}</th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.liqPrice')}</th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('winRate')}>
-                    <div className="flex items-center">
-                      {t('whaleTracking.holdings.table.winRate')}
-                      {renderSortIcon('winRate')}
-                    </div>
+                  {/* 胜率列同样暂无真实数值，先禁用排序 */}
+                  <th className="px-6 py-4 text-left whitespace-nowrap">
+                    {t('whaleTracking.holdings.table.winRate')}
                   </th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('createdTime')}>
                     <div className="flex items-center">
