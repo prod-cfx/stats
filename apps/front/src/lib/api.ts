@@ -218,44 +218,9 @@ export async function fetchWhaleHoldings(
 
 // ===== 鲸鱼地址维度历史交易 / 绩效 API =====
 
-export interface WhaleAddressPerformanceSummary {
-  address: string
-  lookbackDays: number
-  symbolFilter?: string
-  trades: number
-  positions: number
-  totalValueUsd: number
-  longCount: number
-  shortCount: number
-  winRatePct: number
-  pnlUsd: number
-}
-
-export interface WhaleAddressPerformanceByAssetItem {
-  symbol: string
-  totalValueUsd: number
-  trades: number
-  longCount: number
-  shortCount: number
-}
-
-export interface WhaleAddressPerformanceTradeItem {
-  address: string
-  symbol: string
-  side: 'LONG' | 'SHORT'
-  positionSize: number
-  positionValueUsd: number
-  entryPrice: number
-  liquidationPrice: number
-  positionAction: number
-  createTime: string
-}
-
-export interface WhaleAddressPerformanceResponse {
-  summary: WhaleAddressPerformanceSummary
-  byAsset: WhaleAddressPerformanceByAssetItem[]
-  trades: WhaleAddressPerformanceTradeItem[]
-}
+export type WhaleAddressPerformanceResponse = Infer<
+  (typeof schemas.WhaleAddressPerformanceResponseDto)
+>
 
 export interface FetchWhaleAddressPerformanceQuery {
   timeRangeDays?: number
@@ -268,63 +233,9 @@ export async function fetchWhaleAddressPerformance(
   query: FetchWhaleAddressPerformanceQuery = {},
 ): Promise<WhaleAddressPerformanceResponse> {
   return apiCall(async () => {
-    const anyClient = client as any
-
-    const params = new URLSearchParams()
-    if (typeof query.timeRangeDays === 'number') {
-      params.set('timeRangeDays', String(query.timeRangeDays))
-    }
-    if (query.symbol) {
-      params.set('symbol', query.symbol)
-    }
-    if (typeof query.limit === 'number') {
-      params.set('limit', String(query.limit))
-    }
-
-    const search = params.toString()
-    const fallbackUrl =
-      search.length > 0
-        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
-            address,
-          )}/performance?${search}`
-        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
-            address,
-          )}/performance`
-
-    // 如果 api-contracts 还没有生成对应方法，则直接走 fetch 分支
-    if (
-      !anyClient
-      || typeof anyClient.WhaleTrackingController_getTraderPerformance !== 'function'
-    ) {
-      const response = await fetch(fallbackUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...optionalAuthHeaders(),
-        },
-      })
-
-      if (!response.ok) {
-        const text = await response.text()
-        throw new ApiError(
-          text || '操作失败',
-          'API_ERROR',
-          response.status,
-          text,
-        )
-      }
-
-      const data = (await response.json()) as
-        | WhaleAddressPerformanceResponse
-        | BaseResponse<WhaleAddressPerformanceResponse>
-
-      return unwrapResponse<WhaleAddressPerformanceResponse>(data)
-    }
-
-    // api-contracts 已生成对应方法时，优先通过 Zodios client 调用，并保留 fetch 兜底
     const result = await safeApiCall(
       () =>
-        anyClient.WhaleTrackingController_getTraderPerformance({
+        client.WhaleTrackingController_getTraderPerformance({
           headers: optionalAuthHeaders(),
           params: { address },
           queries: query,
