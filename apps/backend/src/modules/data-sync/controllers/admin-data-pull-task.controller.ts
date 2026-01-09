@@ -163,6 +163,21 @@ export class AdminDataPullTaskController {
     return this.service.findById(id)
   }
 
+  @Post(':id/trigger')
+  @UpdateAny(AppResource.DATA_PULL_TASK)
+  @ApiOperation({
+    summary: '手动触发一次数据拉取任务执行（用于测试）',
+    description:
+      '立即执行指定任务一次，不受 intervalSeconds 限制；如果任务当前正在运行会直接报错，避免并发执行。',
+  })
+  @ApiOkResponse({
+    description: '触发成功，返回本次执行记录',
+    type: AdminDataPullExecutionResponseDto,
+  })
+  async triggerOnce(@Param('id', ParseIntPipe) id: number) {
+    return this.service.triggerOnce(id)
+  }
+
   @Post()
   @CreateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({ summary: '创建数据拉取任务' })

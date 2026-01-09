@@ -188,7 +188,7 @@ async function apiCall<T>(
     }
     
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
-  }
+}
 }
 
 // ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
@@ -285,6 +285,40 @@ export async function fetchWhaleAddressPerformance(
         | BaseResponse<WhaleAddressPerformanceResponse>,
     )
   }, 'FETCH_WHALE_ADDRESS_PERFORMANCE')
+}
+
+// ===== 多空比（markets/long-short-ratio/exchanges）相关 API =====
+
+export type ExchangeLongShortRatioApiItem = Infer<
+  typeof schemas.ExchangeLongShortRatioResponseDto
+>
+
+export type ExchangeLongShortTimeRange =
+  | '5m'
+  | '15m'
+  | '30m'
+  | '1h'
+  | '4h'
+  | '12h'
+  | '24h'
+
+export interface FetchExchangeLongShortRatioQuery {
+  symbol: string
+  timeRange: ExchangeLongShortTimeRange
+}
+
+export async function fetchExchangeLongShortRatio(
+  query: FetchExchangeLongShortRatioQuery,
+): Promise<ExchangeLongShortRatioApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.MarketsController_getExchangeLongShortRatio({
+      // 多空比接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+      queries: query,
+    })
+
+    return unwrapResponse(response) as ExchangeLongShortRatioApiItem[]
+  }, 'FETCH_EXCHANGE_LONG_SHORT_RATIO')
 }
 
 export async function login(payload: LoginPayload) {

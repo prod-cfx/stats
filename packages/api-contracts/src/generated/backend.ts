@@ -975,6 +975,21 @@ const endpoints = makeApi([
     ),
   },
   {
+    method: "post",
+    path: "/admin/data-pull-tasks/:id/trigger",
+    alias: "AdminDataPullTaskController_triggerOnce",
+    description: `立即执行指定任务一次，不受 intervalSeconds 限制；如果任务当前正在运行会直接报错，避免并发执行。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullExecutionResponseDto,
+  },
+  {
     method: "get",
     path: "/admin/data-pull-tasks/registered-jobs",
     alias: "AdminDataPullTaskController_getRegisteredJobs",
