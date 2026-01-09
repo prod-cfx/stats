@@ -46,6 +46,7 @@ type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
 type _CreateDataPullTaskDto = z.infer<typeof schemas.CreateAdminDataPullTaskDto>
 type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
+type _DataPullExecutionDto = z.infer<typeof schemas.AdminDataPullExecutionResponseDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -355,19 +356,7 @@ export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
   return data?.jobs ?? []
 }
 
-/**
- * 单条任务执行日志
- */
-export interface DataPullExecutionLog {
-  id: number
-  taskId: number
-  status: string
-  fetchedCount: number
-  startedAt: string
-  finishedAt?: string | null
-  errorMessage?: string | null
-  meta?: Record<string, any> | null
-}
+export type DataPullExecutionLog = _DataPullExecutionDto
 
 export interface DataPullTaskListQuery {
   page?: number
@@ -518,22 +507,11 @@ export async function deleteDataPullTask(id: number): Promise<void> {
  */
 export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
   return withAuthErrorHandling(async () => {
-    const response = await (client as any).AdminDataPullTaskController_triggerOnce({
+    const response = await client.AdminDataPullTaskController_triggerOnce({
       headers: requireAuthHeaders(),
       params: { id },
     })
-    const data = unwrapResponse<any>(response as any)
-
-    return {
-      id: data.id,
-      taskId: data.taskId,
-      status: data.status,
-      fetchedCount: data.fetchedCount ?? 0,
-      startedAt: data.startedAt,
-      finishedAt: data.finishedAt ?? null,
-      errorMessage: data.errorMessage ?? null,
-      meta: (data.meta ?? null) as any,
-    }
+    return unwrapResponse<DataPullExecutionLog>(response as any)
   })
 }
 
