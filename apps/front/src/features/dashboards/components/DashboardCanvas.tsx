@@ -218,10 +218,11 @@ export function DashboardCanvas(props: { dashboardId: string }) {
                   widget={w} 
                   onRemove={() => {
                     removeWidgetFromDashboard(props.dashboardId, w.id)
-                  const freshDoc = getDashboard(props.dashboardId)
-                  if (!freshDoc) return
-                  setDoc(freshDoc)
-                  setLayoutState(clampLayout(freshDoc.layout))
+                    const freshDoc = getDashboard(props.dashboardId)
+                    if (!freshDoc) return
+                    setDoc(freshDoc)
+                    const newMap = new Map((freshDoc.widgets ?? []).map((wd) => [wd.id, wd]))
+                    setLayoutState(clampLayout(freshDoc.layout, newMap))
                   }} 
                 />
               </div>

@@ -271,60 +271,93 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
       <div className={`flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
         {/* Symbol Tabs & Search */}
         <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1' : ''}`}>
-          <div className="flex items-center overflow-x-auto cf-scrollbar">
-            {symbols.map(s => (
-              <button
-                type="button"
-                key={s}
-                onClick={() => setActiveTabSymbol(s)}
-                className={`${isCompact ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'} font-semibold transition-all relative whitespace-nowrap ${
-                  activeSymbol === s 
-                    ? 'text-white' 
-                    : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
-                }`}
-              >
-                {s}
-                {activeSymbol === s && (
-                  <>
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
-                  </>
-                )}
-              </button>
-            ))}
-          </div>
+          {!isCompact ? (
+            <div className="flex items-center overflow-x-auto cf-scrollbar">
+              {symbols.map(s => (
+                <button
+                  type="button"
+                  key={s}
+                  onClick={() => setActiveTabSymbol(s)}
+                  className={`px-4 py-3 text-sm font-semibold transition-all relative whitespace-nowrap ${
+                    activeSymbol === s 
+                      ? 'text-white' 
+                      : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
+                  }`}
+                >
+                  {s}
+                  {activeSymbol === s && (
+                    <>
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                      <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
           <div className={`flex items-center gap-2 pl-4 ${isCompact ? 'py-1' : 'py-2'}`}>
             <div className="relative" ref={dropdownRef}>
-              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 text-[#8b949e] z-10 ${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
-              <input 
-                type="text" 
-                placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsDropdownOpen(true);
-                }}
-                onFocus={() => setIsDropdownOpen(true)}
-                className={`bg-[#0d1117] border border-[#30363d] rounded-md ${isCompact ? 'pl-8 pr-8 py-1 text-xs w-32' : 'pl-9 pr-10 py-1.5 text-sm w-48'} text-[#e6edf3] focus:outline-none focus:border-primary transition-all relative z-10`}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
-                <ChevronDown className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-              </div>
-              {isDropdownOpen && filteredSymbols.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto cf-scrollbar">
-                  {filteredSymbols.map(s => (
-                    <div 
-                      key={s}
-                      onClick={() => {
-                        setActiveTabSymbol(s);
-                        setSearchQuery('');
-                        setIsDropdownOpen(false);
-                      }}
-                      className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors`}
-                    >
-                      {s}
+              {/* For compact mode, combine symbol selection and search into a single button-like dropdown */}
+              {isCompact ? (
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center justify-between gap-2 bg-[#0d1117] border border-[#30363d] rounded-md px-2 py-1 text-xs text-[#e6edf3] hover:border-[#8b949e] transition-all min-w-[80px]"
+                >
+                  <span className="font-medium">{activeSymbol}</span>
+                  <ChevronDown className={`w-3 h-3 text-[#8b949e] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              ) : (
+                <>
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] z-10" />
+                  <input 
+                    type="text" 
+                    placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsDropdownOpen(true)}
+                    className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-10 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48 relative z-10"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+                    <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </>
+              )}
+              
+              {isDropdownOpen && (
+                <div className={`absolute top-full right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 overflow-hidden cf-scrollbar ${isCompact ? 'w-32 max-h-48' : 'left-0 max-h-60'}`}>
+                  {isCompact && (
+                    <div className="p-2 border-b border-[#30363d]">
+                      <input 
+                        type="text" 
+                        placeholder={t('common.search')}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary"
+                        autoFocus
+                      />
                     </div>
-                  ))}
+                  )}
+                  <div className="overflow-y-auto max-h-40 cf-scrollbar">
+                    {(searchQuery ? filteredSymbols : symbols).map(s => (
+                      <div 
+                        key={s}
+                        onClick={() => {
+                          setActiveTabSymbol(s);
+                          setSearchQuery('');
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors ${activeSymbol === s ? 'bg-primary/10 text-primary' : ''}`}
+                      >
+                        {s}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -343,7 +376,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                     onClick={() => handleSort('oiAsset')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
-                    {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
+                    {isCompact ? t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: '' }) : t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                   </button>
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
@@ -405,7 +438,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                           <img src={row.logo} alt={row.exchange} className="w-full h-full object-cover" />
                         </div>
                       )}
-                      <span className={row.isTotal ? 'text-white' : 'text-[#e6edf3]'}>
+                      <span className={row.isTotal ? `text-white ${isCompact ? 'font-bold text-sm' : ''}` : 'text-[#e6edf3]'}>
                         {row.isTotal ? t('common.all') : row.exchange}
                       </span>
                     </div>

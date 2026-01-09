@@ -70,6 +70,8 @@ export function snapToPresetForWidgetType(
     presets = LONG_SHORT_UNIT_SIZE_PRESETS as any
   } else if (widgetType === 'derivatives.orderbook_agg') {
     presets = ORDERBOOK_UNIT_SIZE_PRESETS
+  } else if (widgetType === 'derivatives.open_interest_agg') {
+    presets = OPEN_INTEREST_UNIT_SIZE_PRESETS as any
   }
 
   const entries = Object.entries(presets) as Array<[UnitSize, { w: number; h: number }]>
