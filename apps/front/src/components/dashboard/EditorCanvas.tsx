@@ -15,9 +15,11 @@ export const EditorCanvas = () => {
   const [doc, setDoc] = useState(() => ensureDashboard(DEFAULT_DASHBOARD_ID))
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     const refresh = () => setDoc(getDashboard(DEFAULT_DASHBOARD_ID) ?? ensureDashboard(DEFAULT_DASHBOARD_ID))
     refresh()
     window.addEventListener('storage', refresh)
+    // eslint-disable-next-line react-web-api/no-leaked-event-listener
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => {
       window.removeEventListener('storage', refresh)

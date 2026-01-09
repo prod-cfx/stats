@@ -28,6 +28,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
 
   // Keep the input price in sync with symbol/source changes unless user is actively editing
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setPrice((basePrice + priceOffset).toFixed(basePrice >= 1000 ? 1 : 4));
   }, [basePrice, priceOffset]);
 

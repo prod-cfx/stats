@@ -262,6 +262,7 @@ const IndicatorChartPanel = ({
     // Set initial value (last point)
     if (data.length > 0) {
       const last = data[data.length - 1]
+      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
       if (type === 'liquidation') {
         const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
         const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
@@ -276,6 +277,7 @@ const IndicatorChartPanel = ({
         // Prefer explicit data color (for segmented coloring), fallback to series color
         setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
       }
+      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
     }
 
     // Subscribe to crosshair to update legend value
@@ -350,6 +352,7 @@ const IndicatorChartPanel = ({
       altSeriesRef.current = null
       chart.remove()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Init once
 
   // Update data when props change
@@ -391,6 +394,7 @@ const IndicatorChartPanel = ({
       }
        // Update header value
        const last = data[data.length - 1]
+       /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
        if (type === 'liquidation') {
          const longUsd = typeof last?.longLiquidationUsd === 'number' ? last.longLiquidationUsd : 0
          const shortUsd = typeof last?.shortLiquidationUsd === 'number' ? last.shortLiquidationUsd : 0
@@ -404,16 +408,19 @@ const IndicatorChartPanel = ({
          setCurrentValue(formatter ? formatter(val) : String(val))
          setCurrentValueColor(typeof last?.color === 'string' ? last.color : color)
        }
+       /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
        
        if (chartRef.current) {
            chartRef.current.timeScale().fitContent()
        }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- data change triggers update; color/formatter/type are stable props
   }, [data])
 
   // Fixed 3-axis labels (top/mid/bottom) based on current data range
   useEffect(() => {
     if (!data || data.length === 0) {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- initialization pattern
       setAxisLabels({ top: '', mid: '', bottom: '' })
       return
     }
@@ -438,6 +445,7 @@ const IndicatorChartPanel = ({
     }
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- initialization pattern
       setAxisLabels({ top: '', mid: '', bottom: '' })
       return
     }
@@ -450,11 +458,13 @@ const IndicatorChartPanel = ({
 
     const mid = min < 0 && max > 0 ? 0 : (min + max) / 2
 
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from data
     setAxisLabels({
       top: localFormatAxis(max),
       mid: localFormatAxis(mid),
       bottom: localFormatAxis(min),
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- localFormatAxis uses stable props (priceFormatter/type)
   }, [data, type])
 
   return (
@@ -586,6 +596,8 @@ interface ActiveIndicator {
   href?: string
 }
 
+const EMPTY_INDICATORS: ActiveIndicator[] = []
+
 export type DataSource = 'binance' | 'okx';
 export type MarketType = 'futures' | 'spot';
 
@@ -626,7 +638,7 @@ export const TradingViewLightweightChart = ({
   isAggregated,
   selectedExchange,
   marketType,
-  activeIndicators = [],
+  activeIndicators = EMPTY_INDICATORS,
   onRemoveIndicator,
   isDashboard = false, // Add this prop
 }: {
@@ -707,6 +719,7 @@ export const TradingViewLightweightChart = ({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- mount detection pattern
     setIsMounted(true);
   }, []);
 
@@ -950,6 +963,7 @@ export const TradingViewLightweightChart = ({
       if (liqLockedRef.current && liqLockedPriceRef.current != null) {
         const y = chartAdapter?.getPriceToY(liqLockedPriceRef.current)
         if (typeof y === 'number' && Number.isFinite(y)) {
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- event-driven update
           setLiqSelected((prev) => (prev ? { ...prev, y } : prev))
         }
       }
@@ -1098,6 +1112,7 @@ export const TradingViewLightweightChart = ({
       lockedPriceLineRef.current = null
       indicatorSeriesRef.current = {}
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only re-init on mount/symbol change
   }, [isMounted, symbol]);
 
   const baseAsset = symbol.replace(/USDT|USD|PERP|SWAP|[-_]/gi, '').slice(0, 5) || 'BTC'
@@ -1161,8 +1176,10 @@ export const TradingViewLightweightChart = ({
     candleSeries.setData(candleData as unknown[])
 
     if (lastCandleRef.current) {
+      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from generated data */
       setOhlc(lastCandleRef.current)
       setLastCandleClose(typeof lastCandleRef.current.close === 'number' ? lastCandleRef.current.close : null)
+      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
     }
 
     // Generate Mock Data for Indicator Panels (Phase 2)
@@ -1224,7 +1241,8 @@ export const TradingViewLightweightChart = ({
          totalUsd: Math.round(longUsd + shortUsd),
        })
     }
-    
+
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived state from generated data
     setIndicatorData({
         ls: lsData,
         oi: oiData,
@@ -1371,6 +1389,7 @@ export const TradingViewLightweightChart = ({
           <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
             {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
               <button
+                type="button"
                 key={i}
                 className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors"
               >

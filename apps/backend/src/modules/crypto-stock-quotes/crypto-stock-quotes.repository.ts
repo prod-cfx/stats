@@ -193,5 +193,54 @@ export class CryptoStockQuotesRepository {
       },
     })
   }
+
+  /**
+   * 查询一组股票代码的最新报价记录
+   *
+   * - 对每个 symbol 返回一条最新记录（按 quoteTimestamp 降序）
+   */
+  async findLatestQuotesForSymbols(symbols: string[], source?: string): Promise<CryptoStockQuote[]> {
+    if (!symbols.length) return []
+
+    const client = this.getClient()
+
+    const where: Prisma.CryptoStockQuoteWhereInput = {
+      symbol: { in: symbols },
+      source: source ?? 'BBX',
+    }
+
+    return client.cryptoStockQuote.findMany({
+      where,
+      orderBy: [
+        { symbol: 'asc' },
+        { source: 'asc' },
+        { quoteTimestamp: 'desc' },
+      ],
+      distinct: ['symbol', 'source'],
+    })
+  }
+
+  /**
+   * 查询所有股票代码的最新报价记录
+   *
+   * - 对每个 (symbol, source) 组合返回一条最新记录
+   */
+  async findLatestQuotesForAllSymbols(source?: string): Promise<CryptoStockQuote[]> {
+    const client = this.getClient()
+
+    const where: Prisma.CryptoStockQuoteWhereInput = {
+      source: source ?? 'BBX',
+    }
+
+    return client.cryptoStockQuote.findMany({
+      where,
+      orderBy: [
+        { symbol: 'asc' },
+        { source: 'asc' },
+        { quoteTimestamp: 'desc' },
+      ],
+      distinct: ['symbol', 'source'],
+    })
+  }
 }
 

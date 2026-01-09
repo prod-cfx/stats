@@ -449,6 +449,38 @@ const VenueOrderBookDto = z
     version: z.number(),
   })
   .passthrough();
+const CryptoStockQuoteResponseDto = z
+  .object({
+    id: z.number(),
+    symbol: z.string(),
+    name: z.string().nullish(),
+    exchange: z.string().nullish(),
+    price: z.string(),
+    openPrice: z.string().nullish(),
+    highPrice: z.string().nullish(),
+    lowPrice: z.string().nullish(),
+    closePrice: z.string().nullish(),
+    volume: z.string().nullish(),
+    turnover: z.string().nullish(),
+    priceChange: z.string().nullish(),
+    priceChangePercent: z.string().nullish(),
+    marketCap: z.string().nullish(),
+    peRatio: z.string().nullish(),
+    high52Week: z.string().nullish(),
+    low52Week: z.string().nullish(),
+    assetSymbol: z.string().nullish(),
+    assetLogoUrl: z.string().nullish(),
+    companyLogoUrl: z.string().nullish(),
+    holdingsValue: z.string().nullish(),
+    holdingsAmount: z.string().nullish(),
+    mNav: z.string().nullish(),
+    infoParagraphs: z.array(z.string()).optional(),
+    source: z.string(),
+    quoteTimestamp: z.string().datetime({ offset: true }),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
 const TradesPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -704,6 +736,61 @@ const WhaleDiscoverResponseDto = z
     details: z.array(WhaleDiscoverTraderDto),
   })
   .passthrough();
+const WhaleTraderSummaryPerformanceDto = z
+  .object({
+    address: z.string(),
+    lookbackDays: z.number(),
+    symbolFilter: z.string().optional(),
+    trades: z.number(),
+    positions: z.number(),
+    totalValueUsd: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+    winRatePct: z.number(),
+    pnlUsd: z.number(),
+  })
+  .passthrough();
+const WhaleAssetPerformanceDto = z
+  .object({
+    symbol: z.string(),
+    totalValueUsd: z.number(),
+    trades: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+  })
+  .passthrough();
+const WhaleTradeHistoryItemDto = z
+  .object({
+    address: z.string(),
+    symbol: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionAction: z.union([z.literal(1), z.literal(2)]),
+    createTime: z.string(),
+  })
+  .passthrough();
+const WhaleAddressPerformanceResponseDto = z
+  .object({
+    summary: WhaleTraderSummaryPerformanceDto,
+    byAsset: z.array(WhaleAssetPerformanceDto),
+    trades: z.array(WhaleTradeHistoryItemDto),
+  })
+  .passthrough();
+const WhaleHoldingDto = z
+  .object({
+    userAddress: z.string(),
+    symbol: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    createTime: z.string(),
+  })
+  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -748,6 +835,7 @@ export const schemas = {
   UpdateOrderbookPairConfigDto,
   OrderBookLevelDto,
   VenueOrderBookDto,
+  CryptoStockQuoteResponseDto,
   TradesPairConfigResponseDto,
   CreateTradesPairConfigDto,
   UpdateTradesPairConfigDto,
@@ -767,6 +855,11 @@ export const schemas = {
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
   WhaleDiscoverResponseDto,
+  WhaleTraderSummaryPerformanceDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleAddressPerformanceResponseDto,
+  WhaleHoldingDto,
 };
 
 const endpoints = makeApi([
@@ -947,6 +1040,21 @@ const endpoints = makeApi([
         .partial()
         .passthrough()
     ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks/:id/trigger",
+    alias: "AdminDataPullTaskController_triggerOnce",
+    description: `立即执行指定任务一次，不受 intervalSeconds 限制；如果任务当前正在运行会直接报错，避免并发执行。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullExecutionResponseDto,
   },
   {
     method: "get",
@@ -2220,6 +2328,31 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/crypto-stock-quotes/latest",
+    alias: "CryptoStockQuotesController_getLatest",
+    description: `返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbols",
+        type: "Query",
+        schema: z.array(z.string()).optional(),
+      },
+      {
+        name: "source",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z
+        .object({ data: z.array(CryptoStockQuoteResponseDto) })
+        .partial()
+        .passthrough()
+    ),
+  },
+  {
+    method: "get",
     path: "/health",
     alias: "HealthController_health",
     requestFormat: "json",
@@ -2698,11 +2831,71 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/whale-holdings",
+    alias: "WhaleHoldingsController_getWhaleHoldings",
+    description: `以 (user_address, symbol) 维度选取最新一条开仓记录，近似表示当前持仓，仅返回名义价值较大的鲸鱼持仓。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "minPositionValueUsd",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "timeRangeHours",
+        type: "Query",
+        schema: z.number().gte(1).lte(168).optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(500).optional(),
+      },
+    ],
+    response: z.array(WhaleHoldingDto),
+  },
+  {
+    method: "get",
     path: "/whale-tracking/discover",
     alias: "WhaleTrackingController_getDiscover",
     description: `基于 Hyperliquid 鲸鱼预警数据，按最近一段时间的持仓价值与活跃度聚合出一批代表性鲸鱼地址，用于 discover 页面渲染。`,
     requestFormat: "json",
     response: WhaleDiscoverResponseDto,
+  },
+  {
+    method: "get",
+    path: "/whale-tracking/traders/:address/performance",
+    alias: "WhaleTrackingController_getTraderPerformance",
+    description: `基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "timeRangeDays",
+        type: "Query",
+        schema: z.number().gte(1).lte(365).optional(),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(500).optional(),
+      },
+    ],
+    response: WhaleAddressPerformanceResponseDto,
   },
 ]);
 

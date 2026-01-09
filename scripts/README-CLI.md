@@ -8,12 +8,22 @@
 
 ```
 scripts/
-├── dx                      # 主入口脚本 ✅
+├── dx                      # 主入口脚本（薄壳）✅
 ├── lib/                    # 核心功能模块 ✅
+│   ├── cli/                # CLI 核心模块 ✅
+│   │   ├── dx-cli.js       # CLI 主类
+│   │   ├── flags.js        # 标志定义与解析
+│   │   ├── args.js         # 参数解析
+│   │   ├── help.js         # 帮助信息输出
+│   │   └── commands/       # 命令分组（core/project）
+│   │       ├── core.js
+│   │       ├── project.js
+│   │       └── project/    # 项目命令实现
 │   ├── env.js             # 环境管理和检测
 │   ├── exec.js            # 命令执行和进程管理
 │   ├── logger.js          # 日志输出管理
 │   ├── confirm.js         # 用户确认交互
+│   ├── sdk-build.js       # SDK构建集成
 │   └── start-dev.js       # 开发环境启动集成
 ├── config/                # 配置文件 ✅
 │   ├── commands.json      # 命令映射配置
@@ -26,7 +36,7 @@ scripts/
 #### ✅ 主要命令
 
 - `./scripts/dx start [service] [环境标志]` - 启动/桥接服务（含 Stagewise 桥接：`stagewise-front`, `stagewise-admin`）
-- `./scripts/dx build [target] [环境标志]` - 构建应用（支持 contracts 目标）
+- `./scripts/dx build [target] [环境标志]` - 构建应用（含 `sdk` 目标）
 - `./scripts/dx package backend [环境标志]` - 生成后端部署压缩包（dist/backend/backend-<version>-<sha>.tar.gz）
   - 支持 `--skip-build`（复用既有 dist 产物）与 `--keep-workdir`（保留临时目录便于排查）
 - `./scripts/dx db [action] [环境标志]` - 数据库操作
@@ -35,8 +45,6 @@ scripts/
 - `./scripts/dx clean [target]` - 清理操作
 - `./scripts/dx status` - 查看系统状态
 - `./scripts/dx cache clear` - 清除 Nx 与依赖缓存
-- `./scripts/dx contracts [generate]` - 导出 OpenAPI 并生成 Zod 合约（packages/api-contracts）
-- `./scripts/dx demo [target]` - 运行示例程序（需指定 target）
 
 #### ✅ 环境管理
 
@@ -81,20 +89,17 @@ scripts/
 ./scripts/dx lint                       # ✅ 执行成功，支持 NX 缓存
 
 # 数据库操作（NX 目标）
-./scripts/dx db generate                              # ✅ 执行成功，使用 NX 缓存
-./scripts/dx db migrate --dev --name add_users_table  # ✅ 执行成功
-./scripts/dx deploy --dev                             # ✅ 执行成功，prisma migrate deploy
+./scripts/dx db generate                # ✅ 执行成功，使用 NX 缓存
+./scripts/dx db migrate --dev --name init_user_table  # ✅ 执行成功（开发环境必须指定 --name）
+./scripts/dx db deploy --dev            # ✅ 执行成功（应用已有迁移）
 
 # 构建操作（NX 配置）
 ./scripts/dx build backend --dev        # ✅ 执行成功，支持依赖管理
 ```
 
-> 注意：开发环境执行 `./scripts/dx db migrate` 时必须显式提供迁移名称（`--name`/`-n` 或单个位置参数）。例如：`./scripts/dx db migrate --dev --name add_users_table` 或 `./scripts/dx db migrate add_users_table --dev`。未提供时命令会立即失败并输出帮助信息，避免 Prisma 进入交互式输入。
-> 部署/CI/预发环境统一使用 `./scripts/dx deploy --<env>`（默认执行 `prisma migrate deploy`，无需提供 `--name`）。
-
 ### ✅ 环境变量处理
 
-- 正确使用 dotenv 处理环境变量层级
+- 正确使用 `pnpm exec dotenv` 处理环境变量层级
 - 支持应用特定配置（包含 apps/{app}/.env.{env}.local）
 - 环境标志正确识别和应用
 
@@ -145,6 +150,14 @@ scripts/
 
 ## 迁移功能
 
+### ✅ SDK 构建 (lib/sdk-build.js)
+
+- 完全集成 `sdk-release.sh` 功能
+- 支持开发版本和生产版本
+- 自动 OpenAPI 导出与后端服务管理
+- 完整构建流程
+- 通过 `./scripts/dx build sdk` 调用（无需 `--online/--offline` 标志）
+
 ### ✅ 开发环境启动 (lib/start-dev.js)
 
 - 完全集成 `start-dev.sh` 功能
@@ -161,19 +174,26 @@ scripts/
 # 构建所有应用（生产环境）
 ./scripts/dx build all --prod
 
-# 执行数据库迁移（开发环境）
-./scripts/dx db migrate --dev --name add_users_table
+# 创建数据库迁移（开发环境，需要显式 --name）
+./scripts/dx db migrate --dev --name add_user_table
 
-# 应用数据库迁移（部署/CI）
-./scripts/dx deploy --prod -Y
+# 应用数据库迁移（本地/CI/生产）
+./scripts/dx db deploy --dev
+./scripts/dx db deploy --prod -Y
 
 # 重置数据库（跳过确认）
 ./scripts/dx db reset --dev -Y
 
 # CI 快捷脚本（内置 -Y）
-./scripts/dx db reset --dev -Y
-./scripts/dx db migrate --prod -Y
-./scripts/dx db seed --dev -Y
+pnpm db:reset:dev:ci
+pnpm db:migrate:prod:ci
+pnpm db:seed:dev:ci
+
+# 构建SDK（自动导出 OpenAPI 并生成 SDK）
+./scripts/dx build sdk
+
+# 发布SDK版本
+node scripts/lib/sdk-build.js 1.0.0
 
 # 启动完整开发环境
 ./scripts/dx start dev
@@ -185,7 +205,7 @@ scripts/
 ./scripts/dx start stagewise-admin   # admin-front: 3500 -> 3501（apps/admin-front）
 
 # 缓存清理
-./scripts/dx cache clear             # 清除 Nx 与依赖缓存
+./scripts/dx cache clear             # 清除 Nx 与依赖缓存（nx reset + pnpm store）
 ```
 
 ## 实现状态：✅ 完成（NX 集成）
@@ -197,7 +217,7 @@ scripts/
 - [✅] 配置文件和环境管理
 - [✅] 智能错误处理和自动修复
 - [✅] 安全确认机制
-- [✅] 开发环境与常用工具链功能集成
+- [✅] SDK和开发环境功能集成
 - [✅] **NX 架构完全适配**
 - [✅] 全面测试和验证
 
@@ -221,4 +241,4 @@ CLI 系统已准备就绪，完全适配 NX 架构，可替代现有的 bash 脚
 
 # CI=true ./scripts/dx db reset --dev -Y
 
-# AI_CLI_YES=1 ./scripts/dx deploy --prod -Y
+# AI_CLI_YES=1 ./scripts/dx db deploy --prod -Y

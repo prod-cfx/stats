@@ -1,120 +1,173 @@
 ---
-allowed-tools: [Bash, Read, Glob, TodoWrite, Edit, Grep]
-description: '统一 Git 工作流：自动化创建 Issue、提交与 PR'
+allowed-tools: [Bash, Read, Glob, TodoWrite, Edit, Grep, Task]
+description: '统一 Git 工作流：多代理协作的 Issue/Commit/PR 自动化'
 ---
 
 ## Usage
 
 ```bash
-# 默认：无参数时根据状态自动执行所需阶段
+# 默认：根据状态自动执行所需阶段
 /git-commit-and-pr [--issue <ISSUE_ID>] [--message <COMMIT_MESSAGE>]
 
-# 仅创建或补全 Issue（不碰 Commit/PR）
-/git-commit-and-pr --issue-only [--title <TITLE>] [--labels <l1,l2>] [--assignees <ASSIGNEES>]
+# 仅创建 Issue
+/git-commit-and-pr --issue-only [--title <TITLE>] [--labels <l1,l2>]
 
-# Commit → PR 全流程（若缺 Issue 会先创建）
-/git-commit-and-pr --all [--issue <ISSUE_ID>] [--base <BASE_BRANCH>] [--title <TITLE>]
+# 全流程：Issue → Commit → PR
+/git-commit-and-pr --all [--issue <ISSUE_ID>] [--base <BASE_BRANCH>]
 
-# 仅创建 PR（工作目录需干净，如缺 Issue 同样自动补齐）
+# 仅创建 PR（工作目录需干净）
 /git-commit-and-pr --pr [--issue <ISSUE_ID>] [--base <BASE_BRANCH>]
 ```
 
-- `--issue <ISSUE_ID>`：显式指定 Issue；缺失时命令会触发 Issue 阶段
-- `--issue-only`：只执行 Issue 阶段，适合先整理需求
-- `--all`：串行执行 Issue → Commit → PR
-- `--pr`：跳过 Commit，仅在已有提交上创建 PR
-- `--message`：自定义提交说明（仍需使用 heredoc 生成实际提交信息）
-- `--title`/`--labels`/`--assignees`：透传 Issue 创建参数
-- `--base`：PR 基础分支（默认 `main`）
+---
 
-## 背景与约束
+## 多代理架构设计
 
-- 增量预检必须在提交前完成：`./scripts/dx lint`；如改动涉及后端需先跑 `./scripts/dx build backend`，再按需执行 `./scripts/dx build contracts`、`./scripts/dx build front`、`./scripts/dx build admin`
-- 若执行了 `./scripts/dx build contracts`，会自动生成 `packages/api-contracts/src/generated/backend.ts`，该文件为构建产物无需手动提交
-- 所有提交与 PR 必须关联 Issue（`Refs: #<id>` / `Closes: #<id>`）
-- Main 分支禁止直接提交与开 PR，只有增量预检、E2E 全通过且获得明确确认时才可例外
-- 提交与 PR 文本必须使用 heredoc（Git/GH CLI），且全程使用中文
-- 禁止将外部 I/O 放入事务；保持质量守护职责与仓库风格指南一致
-
-## 角色职责
-
-1. **状态检查员**：解析参数、读取 `git status` 与 `git branch --show-current`
-2. **Issue 协调者**：必要时调用 issue-creator agent 生成规范 Issue
-3. **分支管理员**：确保在符合规范的功能分支上工作，如在 `main` 需提示分支迁移
-4. **质量守护者**：执行增量预检、选择并运行必要的构建/测试、检查 OpenAPI
-5. **提交协调员**：生成提交信息、执行 heredoc 提交、核对变更
-6. **PR 生成器**：整理变更摘要、生成 PR 标题与正文（heredoc）
-7. **追踪维护员**：在 Issue 下回填提交与 PR 信息，保证闭环
-
-## 模式识别
+### 架构模式：Supervisor + Specialists
 
 ```
-初始化 → 检查是否需要 Issue → 确定是否存在未提交修改 → 判定执行阶段
+Orchestrator (命令层)
+├── issue-creator agent     → Issue 内容分析与创建
+├── quality-guard agent     → 增量预检与构建验证
+├── commit-composer agent   → 提交信息生成
+└── pr-composer agent       → PR 内容生成与创建
 ```
 
-- **Issue 阶段**：`--issue-only`、`--all`、无 `--issue` 且缺 Issue、或当前分支不符合规范时触发
-- **Commit 阶段**：存在未提交修改且不在 `--pr`/`--issue-only` 模式
-- **PR 阶段**：`--pr`、`--all` 或用户指定，仅在工作树干净且位于功能分支时执行
-- 若无待办事项则向用户回报当前状态（如工作目录干净、已有 PR 等）
+### 设计原则（基于 Multi-Agent Patterns 最佳实践）
 
-## 工作流阶段
+| 原则 | 实现 |
+|------|------|
+| **Context Isolation** | 每个 Agent 独立上下文窗口，避免互相污染 |
+| **Structured Handoff** | 使用明确的数据结构传递状态，避免 Telephone Game |
+| **Direct Response** | Agent 可直接输出结果到用户，Orchestrator 不做二次合成 |
+| **Failure Isolation** | 单个 Agent 失败不阻塞整体流程，提供降级策略 |
 
-### 阶段 0：初始化
+**⚠️ Telephone Game 问题与解决方案**
 
-1. 解析所有参数并向用户复述计划
-2. 运行 `git status --short` 与 `git branch --show-current`
-3. 判定当前分支：若在 `main`/`master`，提示用户必须切换或创建新分支（任何非 main/master 的分支名均可，推荐 `type/<issue>-<desc>` 格式）；如用户坚持留在主分支，标记为高风险并要求完成全部增量预检与 E2E
-4. 初始化 TodoList，列出需要执行的阶段
+LangGraph 基准测试发现 supervisor 架构因"传话游戏"问题导致性能下降 50%——supervisor 转述 sub-agent 响应时丢失关键信息。
 
-### 阶段 1：Issue 保障（按需）
+**解决方案：Direct Response 模式**
+- Agent 创建 Issue/PR 后直接输出结果，Orchestrator 不做内容合成
+- Orchestrator 仅负责调度与状态管理
+- 需要保留原始格式时，使用 `forward_message` 模式直接传递
 
-1. 如用户提供 `--issue`，验证其存在；若缺 Issue 或在主分支需创建新 Issue，进入本阶段
-2. 汇总上下文：
-   - 近期对话中的问题描述与目标
-   - `git status`、`git diff --stat`、核心文件片段
-   - 受影响模块与潜在风险
-3. 调用 Task tool，使用 issue-creator agent，模板如下：
+---
 
-```
-Use Task tool with issue-creator agent:
-"请根据当前对话上下文和代码变更创建 GitHub Issue
+## 阶段定义
 
-用户参数：
-- 标题: <若用户提供 --title>
-- 标签: <若用户提供 --labels>
-- 指派: <若用户提供 --assignees>
+### Phase 0: 状态评估（Orchestrator 直接执行）
 
-分析重点：
-- 从对话历史中提取问题描述和需求背景
-- 分析代码变更（git status, git diff）
-- 识别受影响模块与范围，检查是否有重复 Issue
-
-输出要求：
-- 生成结构化 Issue 内容（背景、现状、期望、计划、影响）
-- 使用 gh CLI，以 heredoc 方式创建 Issue
-- 返回 Issue 编号与链接"
-```
-
-4. 接收 agent 输出，记录 Issue 号并在后续所有阶段引用；若创建失败需反馈原因并终止
-5. `--issue-only` 模式在此阶段完成后直接结束，提示后续动作（如在提交/PR 时引用 Issue）
-
-### 阶段 2：Commit 流程
-
-1. 确认存在未提交修改，若无则跳过或提示
-2. 再次核对分支命名及 Issue 关联，用 `git status` 列出所有待提交文件
-3. 执行增量预检：
-   - `./scripts/dx lint`（必跑）
-   - 如涉及后端或共享逻辑：`./scripts/dx build backend`
-   - 若 DTO/API 有改动：紧接运行 `./scripts/dx build contracts`，随后检查 `openapi.json`
-   - 根据改动选择性执行 `./scripts/dx build front` / `./scripts/dx build admin`
-4. 若预检失败必须停止并提示修复；必要时记录假设（assumption）
-5. 生成提交信息草案：
-   - 遵循 Conventional Commits
-   - 用中文描述变更点（2-4 条 bullet）
-   - 追加 `Refs: #<issue-id>` 或 `Closes: #<issue-id>`
-6. 使用 heredoc 执行提交：
+**并行执行以下检查：**
 
 ```bash
+# 同时执行，无依赖关系
+git status --short
+git branch --show-current
+git log -1 --format='%H %s' 2>/dev/null || echo "no-commits"
+```
+
+**分支策略判定：**
+- 若在 `main`/`master`：要求用户提供 Issue ID 或创建 Issue 后切换分支
+- 功能分支命名：`<type>/<issue-id>-<description>`
+
+**模式识别：**
+
+| 条件 | 执行阶段 |
+|------|----------|
+| 缺 Issue 或 `--issue-only` | Phase 1 |
+| 有未提交修改且非 `--pr` | Phase 2 |
+| 工作树干净且在功能分支 | Phase 3 |
+
+---
+
+### Phase 1: Issue 创建（Delegate to issue-creator agent）
+
+**触发条件：** 缺少 Issue ID / `--issue-only` / 主分支需创建分支
+
+**Agent 调用协议：**
+
+```
+Task tool → issue-creator agent
+
+Prompt:
+"基于当前对话上下文和代码变更创建 GitHub Issue。
+
+输入上下文：
+- git status 输出
+- git diff --stat 输出（如有改动）
+- 用户提供的参数：title/labels/assignees
+
+职责：
+1. 从对话历史提取需求背景
+2. 分析代码变更范围与影响
+3. 检查是否有重复 Issue
+4. 生成结构化 Issue 内容
+5. 使用 gh CLI + heredoc 创建
+6. 返回 Issue 编号与链接"
+```
+
+**Direct Response 模式：** agent 创建成功后直接输出 Issue 信息，Orchestrator 不做二次合成。
+
+**`--issue-only` 终止点：** 输出后续提交时引用 Issue 的提示。
+
+---
+
+### Phase 2: Commit 流程
+
+#### Step 2.1: 质量门禁（Delegate to quality-guard agent）
+
+**Agent 调用协议：**
+
+```
+Task tool → codeagent skill (backend: codex)
+
+Prompt:
+"执行增量预检并验证构建通过。
+
+检测改动范围：
+1. 识别改动文件类型（后端/前端/admin/shared）
+2. 确定需要执行的检查序列
+
+执行序列（按需）：
+1. ./scripts/dx lint（必跑）
+2. ./scripts/dx build backend（后端改动时）
+3. ./scripts/dx build sdk（DTO/API 变更时，紧随 backend）
+4. ./scripts/dx build front（前端改动时）
+5. ./scripts/dx build admin（admin 改动时）
+
+并行优化：
+- lint 与 build backend 可并行（无依赖）
+- build front 与 build admin 可并行（无依赖）
+
+输出要求：
+- 逐步报告执行结果
+- 失败时明确说明阻塞原因
+- 成功时返回简洁确认"
+```
+
+**失败处理：** 预检失败必须停止，输出修复建议。
+
+#### Step 2.2: 提交生成（Delegate to commit-composer agent）
+
+**Agent 调用协议：**
+
+```
+Task tool → codeagent skill (backend: codex)
+
+Prompt:
+"基于代码变更生成规范化提交信息。
+
+输入：
+- git diff --stat
+- git diff（核心文件片段）
+- Issue ID: #<id>
+
+生成规范：
+- Conventional Commits 格式
+- 中文描述（2-4 条 bullet）
+- 末尾 Refs: #<issue-id> 或 Closes: #<issue-id>
+
+输出格式（heredoc）：
 git commit -F - <<'MSG'
 <type>: <概要>
 
@@ -124,117 +177,202 @@ git commit -F - <<'MSG'
 
 Refs: #<issue-id>
 MSG
+
+执行提交后运行 git status 确认工作树干净。"
 ```
 
-7. 提交后运行 `git status` 确认工作树干净，并向 Issue 评论提交哈希（如流程要求）
+---
 
-### 阶段 3：PR 流程
+### Phase 3: PR 流程（Delegate to pr-composer agent）
 
-1. 确认当前在功能分支且工作树干净；若存在未提交修改需回到阶段 2
-2. 审查提交列表与差异，生成 PR 摘要（变更点、测试结果、风险、回滚方案）
-3. 若 PR 目标分支为 `main` 或高风险改动，需确保受影响的后端 E2E 测试逐个运行并通过：`./scripts/dx test e2e backend <file-or-dir>`
-4. 通过 heredoc 运行 `gh pr create`（或 `gh pr draft create`，视需求）并确保正文包含：
-   - 变更概览
-   - 测试/验证结果
-   - 风险评估与回滚策略
-   - `Closes: #<issue-id>` 或 `Refs: #<issue-id>`
-5. PR 创建成功后，更新 Issue 评论并附上 PR 链接；如命令在 `--all` 模式运行，需在输出中明确宣告全流程完成
-6. ⚠️ **重要提示**：创建 PR 后，如出现 review threads（`discussion_rXXXXXXX`），必须使用 `/pr-fix-pilot <PR_NUMBER>` 命令处理：
-   - 该命令会识别并记录所有 `discussion_rXXXXXXX` 线程 ID
-   - 在 Phase E 中逐条核对并单独回复每个线程（禁止遗漏）
-   - 对每个线程使用 `gh api` 在线程内回复，而非在 PR 总评论中回复
+**前置检查（Orchestrator 执行）：**
+- 确认在功能分支且工作树干净
+- 若有未提交修改，回退至 Phase 2
 
-## Delegation
-
-- **issue-creator agent**：负责 Issue 内容分析、生成与 `gh issue create` 执行
-- **command 层**：参数解析、阶段调度、质量守护、Git/PR 操作与回执展示
-
-## 输出约定
+**Agent 调用协议：**
 
 ```
-✅ 阶段完成说明
+Task tool → codeagent skill (backend: codex)
+
+Prompt:
+"基于提交历史生成 PR 并创建。
+
+分析内容：
+- git log <base>..HEAD --oneline
+- git diff <base>...HEAD --stat
+
+生成内容：
+1. PR 标题（简洁描述核心变更）
+2. 变更概览（分模块说明）
+3. 测试/验证结果
+4. 风险评估与回滚策略
+5. Issue 关联：Closes: #<issue-id>
+
+高风险判定（需额外确认）：
+- 目标分支为 main
+- 涉及数据库 schema 变更
+- 涉及认证/支付等核心模块
+
+使用 heredoc 执行：
+gh pr create --title '<标题>' --body-file - <<'MSG'
+## 变更说明
+...
+
+## 测试结果
+...
+
+## 风险评估
+...
+
+Closes: #<issue-id>
+MSG
+
+创建成功后更新 Issue 评论并附 PR 链接。"
+```
+
+---
+
+## Agent 协作规范
+
+### 1. Handoff Protocol（Structured Handoff）
+
+**核心原则**：使用明确的数据结构传递状态，避免自然语言传递导致的信息丢失。
+
+| 源 Agent | 目标 Agent | 传递数据（结构化） |
+|----------|------------|-------------------|
+| Orchestrator | issue-creator | `{ gitStatus, diffStat, userParams: { title?, labels?, assignees? } }` |
+| Orchestrator | quality-guard | `{ changedFiles: string[], changeTypes: ('backend'|'front'|'admin'|'shared')[] }` |
+| issue-creator | Orchestrator | `{ issueId: number, url: string, title: string }` |
+| quality-guard | Orchestrator | `{ passed: boolean, errors?: { step: string, message: string }[] }` |
+| Orchestrator | commit-composer | `{ issueId: number, diff: string, diffStat: string }` |
+| Orchestrator | pr-composer | `{ issueId: number, commitLog: string, baseBranch: string, riskLevel: 'high'|'medium'|'low' }` |
+
+### 2. Direct Response 模式
+
+**目的**：避免 Telephone Game 问题，Agent 直接输出关键信息到用户。
+
+| 场景 | Agent 直接输出 | Orchestrator 行为 |
+|------|---------------|------------------|
+| Issue 创建成功 | Issue ID、URL、标题 | 仅记录状态，不转述 |
+| 质量检查日志 | 执行步骤与结果 | 透传，不合成 |
+| PR 创建成功 | PR 链接、后续动作提示 | 仅补充下一步指引 |
+| 错误详情 | 具体错误信息与修复建议 | 不做二次解释 |
+
+### 3. 错误传播与恢复（Failure Isolation）
+
+```
+Agent 失败 → 返回结构化错误 → Orchestrator 判定：
+├── 可重试（网络/临时错误）→ 重试一次，记录 fallback
+├── 需用户介入（权限/配置）→ 输出指导并停止
+└── 致命错误（数据不一致）→ 输出诊断并停止
+
+错误结构：{ type: 'retryable'|'user_action'|'fatal', message: string, suggestion?: string }
+```
+
+**降级策略**：
+- `quality-guard` 超时 → 跳过预检，提示用户手动验证
+- `commit-composer` 失败 → 回退到基础模板提交
+- `pr-composer` 失败 → 提供手动创建 PR 的命令
+
+---
+
+## 并行执行优化
+
+### 可并行操作
+
+| 操作组 | 并行项 |
+|--------|--------|
+| 初始状态检查 | git status, git branch, git log |
+| 增量预检 | lint ∥ build backend（无依赖时） |
+| 分应用构建 | build front ∥ build admin |
+
+### 串行强制点
+
+```
+lint → [若失败停止]
+build backend → build sdk（SDK 依赖 backend 产物）
+所有构建 → commit → push → PR
+```
+
+---
+
+## 输出规范
+
+### 成功输出
+
+```
+✅ 全流程完成
 
 Issue: #<编号> <标题>
-Commit: <哈希> <主题>
-PR: !<编号> <标题>
+Commit: <hash> <主题>
+PR: !<编号> <标题> → <URL>
 
-后续动作：
-- [ ] 在 Issue 下补充 <描述>
-- [ ] 执行 <命令>
-- [ ] ⚠️ 如有 review threads（discussion_rXXXXXXX），使用 `/pr-fix-pilot <PR_NUMBER>` 处理
+📋 后续步骤：使用 /pr-review-loop 进行多轮评审与自动修复
 ```
 
-- 未执行的阶段以 ⚠️/ℹ️ 说明原因（例如工作树干净、预检失败、等待用户确认）
-- PR 创建成功后，必须在输出中明确提示：后续 review threads 需使用 `/pr-fix-pilot` 命令处理，并强调逐条回复每个 `discussion_rXXXXXXX` 线程（禁止遗漏）
-- 遵循仓库中文输出规范
+### 部分完成输出
 
-## Key Constraints
+```
+⚠️ 流程在 [阶段名] 停止
+
+已完成：
+- Issue: #<编号>
+
+阻塞原因：
+- lint 失败：<错误摘要>
+
+修复后重新运行：/git-commit-and-pr --issue <编号>
+```
+
+---
+
+## 关键约束
 
 ### Git 操作
-
-- 命令必须在仓库根目录执行，统一使用 SSH 认证
-- 禁止使用 `-m`/`-b` 直接嵌入多行文本；所有提交、PR、Issue 文本采用 heredoc
-- 严禁未获确认的破坏性操作（如 `git reset --hard`）
+- 命令在仓库根目录执行，统一 SSH 认证
+- 所有多行文本使用 heredoc，禁止 `-m` 嵌入
+- 禁止未确认的破坏性操作
 
 ### 分支策略
-
-- 禁止在 `main`/`master` 分支直接提交，必须使用其他分支
-- 推荐分支命名：`<type>/<issue-id>-<description>`（如 `feat/123-add-feature`）
-- 提交前确认远端分支同步情况，必要时 `git fetch --all`
-
-### Issue 关联
-
-- 每次提交/PR 必须引用有效 Issue
-- 无 Issue 时必须先完成阶段 1 创建 Issue
-- 推送后需在 Issue 中评论提交哈希与 PR 链接
+- 禁止在 main/master 直接提交
+- 功能分支：`<type>/<issue-id>-<description>`
 
 ### 质量门禁
-
 - 增量预检通过是提交前置条件
-- 执行过 `./scripts/dx build contracts` 后必须审查 `openapi.json`
-- 高风险改动需列出回滚方案和潜在影响，必要时再次确认假设（assumption）
+- 高风险改动需列出回滚方案
 
-### 提交通知
+### Agent 调用
+- 使用 Task tool 或 Skill tool 调用 agent/skill
+- 每个 agent/skill 需明确输入/输出契约
+- 优先使用 codeagent skill（支持多后端：codex/claude/gemini）
 
-- 提交信息使用中文，保持精炼（不超过 72 字符主题）
-- 变更说明聚焦核心差异，避免罗列实现细节
+---
 
-## Success Criteria
+## 工作流衔接
 
-- ✅ Issue（新建或复用）信息完整，可在后续提交/PR 中引用
-- ✅ 增量预检与必要测试全部通过，失败时明确说明阻塞
-- ✅ 提交/PR 文本符合规范并使用 heredoc 生成
-- ✅ OpenAPI、E2E 等高风险点得到确认或注明假设
-- ✅ 输出清晰罗列已完成与待完成事项，确保使用者能快速跟进
+### PR 创建后的评审闭环
 
-## 示例场景
+本命令完成 Issue → Commit → PR 创建后，建议使用 `/pr-review-loop` 进行后续评审：
 
-### 1. 有未提交修改，缺 Issue
+```bash
+# PR 创建后自动进入评审循环
+/pr-review-loop --pr <PR_NUMBER>
 
-```
-/git-commit-and-pr --all
-→ 检测到缺失 Issue → 调用 issue-creator agent
-→ 生成 Issue #123
-→ 执行增量预检 + Commit
-→ 创建 PR 并关联 Issue
-→ 完成全流程
+# 或自动识别当前分支 PR
+/pr-review-loop
 ```
 
-### 2. 仅创建 Issue 的准备阶段
+**pr-review-loop 能力**：
+- 三 Agent 并行评审（codex-review + review + pr-comments-analyzer）
+- 人工评论线程自动分析与优先级分类
+- 自动修复 + 最多 3 轮迭代收敛
+- 结构化评审报告发布到 PR 评论
 
+**工作流完整链路**：
 ```
-/git-commit-and-pr --issue-only --title "修复钱包结算错误"
-→ 调用 issue-creator agent → 输出 Issue #456
-→ 提示后续提交需使用 Refs: #456
+/git-commit-and-pr → 创建 Issue/Commit/PR
+         ↓
+/pr-review-loop → 三源并行评审 → 自动修复 → 评审通过
+         ↓
+人工审批 → 合并
 ```
-
-### 3. 工作树干净，仅需创建 PR
-
-```
-/git-commit-and-pr --pr --issue 789
-→ 验证分支与增量预检记录
-→ 生成 PR 正文并创建
-→ 提示更新 Issue 进度
-```
-
-统一命令，掌控 Issue → Commit → PR 的完整闭环，确保流程清晰、质量达标、追踪完整。🚀

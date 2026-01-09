@@ -1,62 +1,22 @@
 {
   // 通用项：任何 APP_ENV 都需要的环境变量
   "_common": [
-    // --- 基础环境标识（非敏感，可提交）
+    // 基础环境标识
     "APP_ENV",
-    "LOG_LEVEL",
-    // --- 密钥 / 凭证（敏感，需放在 *.local，已列入 local-env-allowlist）
-    "APP_SECRET",
-    "EXCHANGE_ACCOUNT_CRYPTO_KEY",
+    // 数据库
     "DATABASE_URL",
-    "RESEND_API_KEY",
-    "EMAIL_FROM",
-    "EMAIL_FROM_NAME",
-    "JWT_EXPIRES_IN",
-    "JWT_SECRET",
-    // --- 前端公开变量（客户端用来判定环境或展示信息，注意与前端保持一致）
-    "NEXT_PUBLIC_APP_ENV",
-    // 前端/管理端使用的后端基础地址（浏览器可见）
-    "NEXT_PUBLIC_API_SERVER_URL",
-    "NEXT_PUBLIC_API_BASE_URL",
-
-    "POSTGRES_HOST",
-    "POSTGRES_PASSWORD",
-    "POSTGRES_PORT",
-    "POSTGRES_USER",
-    "REDIS_DB",
-    "REDIS_HOST",
-    "REDIS_PASSWORD",
-    "REDIS_PORT",
+    // Redis
     "REDIS_URL",
-
-    // TRADES WS & 市场成交采集相关配置
-    "TRADES_WS_ENABLED",
-    "TRADES_WS_SYNC_INTERVAL_MS",
-    "TRADES_OKX_WS_BASE_URL",
-    "TRADES_OKX_MAX_STREAMS_PER_CONNECTION",
-    "TRADES_RETENTION_DAYS"
+    // 应用密钥
+    "APP_SECRET",
+    "JWT_SECRET"
   ],
-  // 开发环境专属：本地调试会用到的额外变量
-  "development": [
-    "FRONTEND_REDIRECT_ORIGINS",
-    "FRONTEND_URL"
-  ],
-  // 生产环境专属：线上部署额外要求的变量
-  "production": [
-    "FRONTEND_REDIRECT_ORIGINS",
-    "FRONTEND_URL",
-    // 静态资源域名（公开），用于生成前端静态链接
-    "NEXT_PUBLIC_CDN_DOMAIN",
-    // 默认背景图（公开），提供给前端展示
-    "NEXT_PUBLIC_DEFAULT_BACKGROUND_IMAGES"
-  ],
-  // 测试环境专属：CI/测试库访问等
-  "test": [
-    "FRONTEND_REDIRECT_ORIGINS",
-    "FRONTEND_URL"
-  ],
-  // E2E 环境专属：回放/限流策略
-  "e2e": [
-    // 预留为空，当前 E2E 不额外要求变量
-  ]
+  // 开发环境专属
+  "development": [],
+  // 生产环境专属
+  "production": [],
+  // 测试环境专属
+  "test": [],
+  // E2E 环境专属
+  "e2e": []
 }

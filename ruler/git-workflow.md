@@ -6,20 +6,26 @@
 
 - 🔗 **Issue ID 必需**：提交前必须有 Issue ID；若无则询问用户创建或指定
 
-### 1.2 Issue 分支提交规则
+### 1.2 主分支保护规则
 
-- 🚨 **提交必须在 Issue 分支**：可以在任意分支修改代码，但提交时必须在 issue 分支
-  - ✅ 允许提交：`feat/<issue-id>-*`、`fix/<issue-id>-*`、`refactor/<issue-id>-*` 等 issue 分支
-  - ❌ 禁止提交：直接提交到 `main`、`master` 等主分支
-  - 📋 处理流程：
-    1. 可以在任意分支（包括 main）进行代码修改
-    2. 提交前执行 `git branch --show-current` 检查当前分支
-    3. 如果在主分支，询问用户提供 Issue ID 或使用 `/git-create-issue` 创建
-    4. 获取 Issue ID 后，创建对应分支：`git checkout -b <type>/<issue-id>-<description>`
-    5. 切换到 issue 分支后再执行 `git add` 和 `git commit`
-    6. 如果用户拒绝创建分支，则拒绝提交并说明原因
+- 🚨 **main/master 分支保护**：
+  - ✅ **允许**：在 main 分支修改代码、查看、调试
+  - ❌ **禁止**：直接在 main 分支执行 `git commit`
+  - ❌ **禁止**：直接 `git push` 到 main 分支（必须通过 PR 合并）
 
-### 1.3 Git 认证与格式
+### 1.3 Issue 分支提交规则
+
+- 📋 **提交流程**：
+  1. 可以在任意分支（包括 main）进行代码修改
+  2. 提交前执行 `git branch --show-current` 检查当前分支
+  3. 如果在 main/master 分支：
+     - 询问用户提供 Issue ID 或使用 `/git-create-issue` 创建
+     - 创建 issue 分支：`git checkout -b <type>/<issue-id>-<description>`
+     - 切换后再执行 `git add` 和 `git commit`
+  4. 如果用户拒绝创建分支，则拒绝提交并说明原因
+- ✅ **允许提交的分支**：`feat/<issue-id>-*`、`fix/<issue-id>-*`、`refactor/<issue-id>-*` 等 issue 分支
+
+### 1.4 Git 认证与格式
 
 - 📝 **Heredoc 格式**：Git 提交与 GitHub CLI 必须使用 heredoc（见下文）
 - 🚫 **禁止 `\n` 换行**：在命令参数中写 `\n` 只会产生字面量，不会换行

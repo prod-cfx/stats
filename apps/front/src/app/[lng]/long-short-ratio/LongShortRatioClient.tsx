@@ -1,33 +1,17 @@
 'use client'
 
+import type { ExchangeLongShortRatioApiItem, ExchangeLongShortTimeRange } from '@/lib/api'
 import { RefreshCw } from 'lucide-react'
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
-import { useMockData } from '@/hooks/use-mock-data'
+import { useAsync } from '@/hooks/use-async'
+import { fetchExchangeLongShortRatio } from '@/lib/api'
 
-interface ExchangeData {
-  rank: number
-  name: string
-  logoUrl?: string
-  longPercent: number
-  shortPercent: number
-  longAmountUsd: number
-  shortAmountUsd: number
-}
-
-const initialExchanges: ExchangeData[] = [
-  { rank: 1, name: 'Binance', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png', longPercent: 52.44, shortPercent: 47.56, longAmountUsd: 1.17e9, shortAmountUsd: 1.061e9 },
-  { rank: 2, name: 'OKX', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/294.png', longPercent: 54.73, shortPercent: 45.27, longAmountUsd: 5.74e8, shortAmountUsd: 4.75e8 },
-  { rank: 3, name: 'Bybit', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/521.png', longPercent: 51.71, shortPercent: 48.29, longAmountUsd: 4.93e8, shortAmountUsd: 4.61e8 },
-  { rank: 4, name: 'KuCoin', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png', longPercent: 47.16, shortPercent: 52.84, longAmountUsd: 2.086667e7, shortAmountUsd: 2.33841e7 },
-  { rank: 5, name: 'Gate', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png', longPercent: 47.39, shortPercent: 52.61, longAmountUsd: 4.92e8, shortAmountUsd: 5.46e8 },
-  { rank: 6, name: 'Bitget', logoUrl: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/513.png', longPercent: 48.96, shortPercent: 51.04, longAmountUsd: 3.0e8, shortAmountUsd: 3.13e8 },
-  { rank: 7, name: 'DEX', longPercent: 55.21, shortPercent: 44.79, longAmountUsd: 2.85e8, shortAmountUsd: 2.31e8 },
-]
+type ExchangeData = ExchangeLongShortRatioApiItem
 
 const ProgressBar = ({ long, short, height = 'h-8', showText = true }: { long: number, short: number, height?: string, showText?: boolean }) => (
   <div className={`relative w-full ${height} bg-[#0d1117] rounded-md overflow-hidden flex border border-[#30363d]`}>
@@ -127,7 +111,7 @@ const ExchangeRow = ({
 export function LongShortRatioClient() {
   const { t, i18n } = useTranslation()
   const [symbol, setSymbol] = React.useState('BTC')
-  const [timeRange, setTimeRange] = React.useState<'5m' | '15m' | '30m' | '1h' | '4h' | '12h' | '24h'>('4h')
+  const [timeRange, setTimeRange] = React.useState<ExchangeLongShortTimeRange>('4h')
 
   const currencyFormatter = React.useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -139,16 +123,49 @@ export function LongShortRatioClient() {
     })
   }, [i18n.language])
 
-  const { data: exchanges, loading, error, reload } = useMockData(
+  const { data: exchanges, loading, error, execute } = useAsync<ExchangeLongShortRatioApiItem[]>(
     async () => {
-      return initialExchanges.map(ex => ({
-        ...ex,
-        longPercent: Math.random() * 20 + 40,
-        shortPercent: 100 - (Math.random() * 20 + 40),
-      }))
+      return fetchExchangeLongShortRatio({
+        symbol,
+        timeRange,
+      })
     },
-    [symbol, timeRange],
+    { immediate: true },
   )
+
+  // symbol/timeRange 变化时重新拉取（首屏请求由 immediate=true 触发）
+  const hasMountedRef = useRef(false)
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true
+      return
+    }
+    execute()
+  }, [execute, symbol, timeRange])
+
+  const summary = React.useMemo(() => {
+    if (!exchanges || exchanges.length === 0) {
+      return null
+    }
+
+    const longAmountUsd = exchanges.reduce((sum, ex) => sum + ex.longAmountUsd, 0)
+    const shortAmountUsd = exchanges.reduce((sum, ex) => sum + ex.shortAmountUsd, 0)
+    const total = longAmountUsd + shortAmountUsd
+
+    if (!Number.isFinite(total) || total <= 0) {
+      return null
+    }
+
+    const longPercent = (longAmountUsd / total) * 100
+    const shortPercent = 100 - longPercent
+
+    return {
+      longAmountUsd,
+      shortAmountUsd,
+      longPercent,
+      shortPercent,
+    }
+  }, [exchanges])
 
   return (
     <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
@@ -182,7 +199,10 @@ export function LongShortRatioClient() {
             onClick={() => {
               const btn = document.querySelector('.refresh-icon')
               btn?.classList.add('animate-spin')
-              setTimeout(() => { btn?.classList.remove('animate-spin'); reload() }, 500)
+              setTimeout(() => {
+                btn?.classList.remove('animate-spin')
+                execute()
+              }, 500)
             }}
           >
             <RefreshCw className="w-4 h-4 refresh-icon" />
@@ -191,13 +211,18 @@ export function LongShortRatioClient() {
       </div>
 
       <div className="flex flex-col gap-6 relative min-h-[600px]">
-        <LoadingState isLoading={loading} error={error} onRetry={reload}>
+        <LoadingState
+          isLoading={loading}
+          error={Boolean(error)}
+          isEmpty={!loading && !error && (!exchanges || exchanges.length === 0)}
+          onRetry={execute}
+        >
           <SummaryCard
             symbol={symbol}
-            longPercent={50.61}
-            shortPercent={49.39}
-            longAmount={currencyFormatter.format(4.353e9)}
-            shortAmount={currencyFormatter.format(4.249e9)}
+            longPercent={summary?.longPercent ?? 50}
+            shortPercent={summary?.shortPercent ?? 50}
+            longAmount={currencyFormatter.format(summary?.longAmountUsd ?? 0)}
+            shortAmount={currencyFormatter.format(summary?.shortAmountUsd ?? 0)}
             totalLabel={t('longShort.summary.total')}
             longLabel={t('longShort.summary.long')}
             shortLabel={t('longShort.summary.short')}

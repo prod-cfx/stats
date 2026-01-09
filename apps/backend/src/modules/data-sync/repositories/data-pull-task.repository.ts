@@ -118,6 +118,33 @@ export class DataPullTaskRepository {
     })
   }
 
+  /**
+   * 尝试以乐观锁的方式将单个任务标记为 RUNNING。
+   *
+   * - 仅当当前 lastStatus 不是 RUNNING（或为 null）时，才会成功更新
+   * - 返回 true 表示本次调用成功“抢占”到了该任务
+   * - 返回 false 表示任务已在运行中，或被其他实例/请求抢占
+   */
+  async tryMarkRunningOnce(taskId: number, startedAt: Date): Promise<boolean> {
+    const client = this.getClient()
+    const result = await client.dataPullTask.updateMany({
+      where: {
+        id: taskId,
+        OR: [
+          { lastStatus: null },
+          { lastStatus: { not: 'RUNNING' } },
+        ],
+      },
+      data: {
+        lastStatus: 'RUNNING',
+        lastRunAt: startedAt,
+        lastError: null,
+      },
+    })
+
+    return result.count === 1
+  }
+
   async markSuccess(
     taskId: number,
     finishedAt: Date,

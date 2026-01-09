@@ -237,12 +237,14 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
               {/* Header / Tabs */}
               <div className="flex items-center border-b border-[#30363d]">
                 <button
+                  type="button"
                   className={`flex-1 py-3 text-sm font-medium transition-colors ${marketType === 'futures' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
                   onClick={() => setMarketType('futures')}
                 >
                   {t('trade.market_type_futures')}
                 </button>
                 <button
+                  type="button"
                   className={`flex-1 py-3 text-sm font-medium transition-colors ${marketType === 'spot' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
                   onClick={() => setMarketType('spot')}
                 >

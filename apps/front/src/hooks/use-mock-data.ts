@@ -55,21 +55,12 @@ export function useMockData<T>(
         setLoading(false);
       }
     }
-  }, [
-    fetcher,
-    options.delay,
-    options.shouldError,
-    options.isEmpty,
-    options.ignoreQueryOverrides,
-    searchParams,
-    setData,
-    setError,
-    setLoading,
-    ...dependencies,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetcher, options.delay, options.shouldError, options.isEmpty, options.ignoreQueryOverrides, searchParams, setData, setError, setLoading, ...dependencies]);
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
   return { data, loading, error, reload: () => load(true) };

@@ -73,6 +73,16 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       enabled: false,
       cursor: null,
     },
+    {
+      key: 'bbx-crypto-stock-quotes',
+      name: 'BBX 加密股票报价同步',
+      source: 'bbx',
+      type: 'crypto-stock-quotes',
+      // 默认每 5 分钟同步一次，按需在后台调整
+      intervalSeconds: 300,
+      enabled: false,
+      cursor: null,
+    },
   ] as const
 
   let createdCount = 0

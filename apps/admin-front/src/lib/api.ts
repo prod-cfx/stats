@@ -46,6 +46,7 @@ type UpdateAdminUserPayload = z.infer<typeof schemas.UpdateAdminUserDto>
 type _DataPullTaskDto = z.infer<typeof schemas.AdminDataPullTaskResponseDto>
 type _CreateDataPullTaskDto = z.infer<typeof schemas.CreateAdminDataPullTaskDto>
 type _UpdateDataPullTaskDto = z.infer<typeof schemas.UpdateAdminDataPullTaskDto>
+type _DataPullExecutionDto = z.infer<typeof schemas.AdminDataPullExecutionResponseDto>
 
 // 系统配置相关类型
 export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
@@ -304,14 +305,19 @@ export async function updateSystemPromptSetting(
  * 获取所有已注册的 Job key 列表（用于创建任务时的下拉选择）
  */
 export async function fetchRegisteredJobKeys(): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
-    headers: requireAuthHeaders(),
+  return withAuthErrorHandling(async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
+      headers: requireAuthHeaders(),
+    })
+    if (!response.ok) {
+      throw Object.assign(new Error('获取已注册 key 列表失败'), {
+        status: response.status,
+        response,
+      })
+    }
+    const data = await response.json()
+    return data?.keys ?? data?.data?.keys ?? []
   })
-  if (!response.ok) {
-    throw new Error('获取已注册 key 列表失败')
-  }
-  const data = await response.json()
-  return data?.keys ?? data?.data?.keys ?? []
 }
 
 /**
@@ -348,26 +354,16 @@ export interface RegisteredJobInfo {
  * 获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）
  */
 export async function fetchRegisteredJobs(): Promise<RegisteredJobInfo[]> {
-  const response = await client.AdminDataPullTaskController_getRegisteredJobs({
-    headers: requireAuthHeaders(),
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_getRegisteredJobs({
+      headers: requireAuthHeaders(),
+    })
+    const data = unwrapResponse<any>(response as any)
+    return data?.jobs ?? []
   })
-  const data = unwrapResponse<any>(response as any)
-  return data?.jobs ?? []
 }
 
-/**
- * 单条任务执行日志
- */
-export interface DataPullExecutionLog {
-  id: number
-  taskId: number
-  status: string
-  fetchedCount: number
-  startedAt: string
-  finishedAt?: string | null
-  errorMessage?: string | null
-  meta?: Record<string, any> | null
-}
+export type DataPullExecutionLog = _DataPullExecutionDto
 
 export interface DataPullTaskListQuery {
   page?: number
@@ -513,6 +509,19 @@ export async function deleteDataPullTask(id: number): Promise<void> {
   })
 }
 
+/**
+ * 手动触发一次数据拉取任务执行（主要用于测试）
+ */
+export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_triggerOnce(undefined, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<DataPullExecutionLog>(response as any)
+  })
+}
+
 // 订单薄交易对配置相关 API
 export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
   return withAuthErrorHandling(async () => {
@@ -602,7 +611,7 @@ export async function deleteTradesConfig(id: string): Promise<void> {
 // 交易记录数据查询 API
 export interface GetLatestTradesParams {
   exchange: string
-  instrumentType: string
+  instrumentType: 'SPOT' | 'PERPETUAL' | 'FUTURE'
   symbol: string
   limit?: number
 }

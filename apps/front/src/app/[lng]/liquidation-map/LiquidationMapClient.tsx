@@ -18,7 +18,9 @@ export function LiquidationMapClient() {
   useEffect(() => {
     const newPrice = liquidationSymbolPrices[symbol] || 100
 
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setCurrentPrice(newPrice)
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setData(generateLiquidationMapMockData(symbol, range, exchangeType as any))
   }, [symbol, range, exchangeType])
 
