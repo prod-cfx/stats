@@ -83,7 +83,7 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
       </div>
 
       <div className="flex-1 min-h-0 max-h-full rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden relative">
-        <div className="absolute top-2 right-2 z-10 text-right pointer-events-none">
+        <div className={`absolute ${isCompact ? 'top-10' : 'top-2'} right-2 z-10 text-right pointer-events-none transition-all duration-300`}>
           <div className="text-[10px] text-white/50">Current</div>
           <div className="font-mono text-xs text-white/90 font-bold bg-[#161b22]/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/5">
             ${currentPrice.toLocaleString()}
