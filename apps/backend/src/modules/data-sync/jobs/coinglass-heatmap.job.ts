@@ -40,17 +40,39 @@ export class CoinglassHeatmapJob implements DataPullJob {
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
+    const modelType = cursor.modelType ?? 'MODEL3'
+    const modelSuffix =
+      modelType === 'MODEL1' ? 'model1' : modelType === 'MODEL2' ? 'model2' : 'model3'
+
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
-    const endpoint =
+    const baseEndpoint =
       this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT') ??
-      'https://open-api-v4.coinglass.com/api/pro/v4/futures/liquidation-heatmap'
+      // 参考 Coinglass v4 文档：清算热力图，具体模型由路径后缀 model1/model2/model3 区分
+      'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap'
 
     if (!apiKey) {
       // 不应“默默成功”，否则后台无法感知配置缺失
       throw new Error('COINGLASS_API_KEY is not configured')
     }
 
-    const url = new URL(endpoint)
+    // 兼容旧版 liquidation-heatmap 路径（通过 model 查询参数区分模型），避免直接拼接 /modelX 导致 404
+    const isLegacyEndpoint =
+      /liquidation-heatmap/.test(baseEndpoint) && !/\/heatmap\/model\d+/.test(baseEndpoint)
+
+    const url = new URL(
+      isLegacyEndpoint
+        ? baseEndpoint
+        : (() => {
+            // 规范化 endpoint，确保无论环境变量是否已包含 /modelX 或 /modelX/，最终路径与 cursor.modelType 一致
+            const normalizedBase = baseEndpoint
+              .replace(/\/model\d+\/?$/, '')
+              .replace(/\/+$/, '')
+            return normalizedBase.endsWith('/')
+              ? `${normalizedBase}${modelSuffix}`
+              : `${normalizedBase}/${modelSuffix}`
+          })(),
+    )
+
     url.searchParams.set('symbol', cursor.symbol)
     if (cursor.interval) {
       url.searchParams.set('interval', cursor.interval)
@@ -61,9 +83,9 @@ export class CoinglassHeatmapJob implements DataPullJob {
     if (cursor.contractType) {
       url.searchParams.set('contractType', cursor.contractType)
     }
-    if (cursor.modelType) {
-      // Coinglass API 通常用 model 或 modelType 参数区分 MODEL1/MODEL2/MODEL3
-      url.searchParams.set('model', cursor.modelType)
+    if (isLegacyEndpoint) {
+      // 旧版接口使用 model 查询参数区分模型，这里保持与历史行为一致
+      url.searchParams.set('model', modelType)
     }
 
     this.logger.log(`Requesting Coinglass heatmap: ${url.toString()}`)
@@ -215,20 +237,38 @@ export class CoinglassHeatmapJob implements DataPullJob {
       if (!parsed.symbol) {
         parsed.symbol = 'BTC'
       }
-      if (!parsed.modelType) {
+      if (parsed.modelType) {
+        const normalized = String(parsed.modelType).trim().toUpperCase()
+        const allowed: LiquidationHeatmapModelType[] = ['MODEL1', 'MODEL2', 'MODEL3']
+        if (!allowed.includes(normalized as LiquidationHeatmapModelType)) {
+          throw new Error(
+            `Invalid Coinglass heatmap modelType in cursor: ${String(parsed.modelType)}`,
+          )
+        }
+        parsed.modelType = normalized as LiquidationHeatmapModelType
+      } else {
         parsed.modelType = 'MODEL3'
       }
       if (!parsed.interval) {
         parsed.interval = '15m'
       }
       return parsed as CoinglassHeatmapCursor
-    } catch {
-      this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
-      return {
-        symbol: 'BTC',
-        modelType: 'MODEL3',
-        interval: '15m',
+    } catch (error) {
+      // 仅在 JSON 语法错误时回退默认值；字段取值非法等逻辑错误必须向上抛出
+      const isSyntaxError =
+        error instanceof SyntaxError ||
+        (typeof error === 'object' && error !== null && 'name' in error && (error as any).name === 'SyntaxError')
+
+      if (isSyntaxError) {
+        this.logger.warn(`Failed to parse cursor JSON: ${currentCursor}, fallback to default`)
+        return {
+          symbol: 'BTC',
+          modelType: 'MODEL3',
+          interval: '15m',
+        }
       }
+
+      throw error
     }
   }
 }

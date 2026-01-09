@@ -2,12 +2,14 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FilterButton } from '@/components/ui/FilterButton';
 import { LoadingState } from '@/components/ui/loading';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
-import { useMockData } from '@/hooks/use-mock-data';
+import { useAsync } from '@/hooks/use-async';
+import { fetchWhaleHoldings } from '@/lib/api';
+import type { WhaleHoldingApiItem } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhalePosition {
@@ -29,77 +31,14 @@ interface WhalePosition {
   remark: string;
 }
 
-const mockPositions: WhalePosition[] = [
-  {
-    address: '0xb51754025d57d727218ef86b97828135899983ae',
-    tags: [
-      { key: 'whale', color: '#c084fc', bg: '#a855f733' },
-      { key: 'hft', color: '#60a5fa', bg: '#3b82f633' },
-    ],
-    asset: 'ETH',
-    side: 'Short',
-    leverage: '20x',
-    marginType: 'Isolated',
-    positionValueUSD: '$1,178,000',
-    positionValueAsset: '-400 ETH',
-    pnlUSD: '$-1,150.80',
-    pnlPercent: '-1.95%',
-    margin: '$58,900.00',
-    entryPrice: '$2942.12',
-    liqPrice: '$4233.52',
-    winRate: '--',
-    createdMinutesAgo: 15,
-    remark: '',
-  },
-  {
-    address: '0x701234567890abcdef1234567890abcdef12345678',
-    tags: [
-      { key: 'steady', color: '#facc15', bg: '#eab30833' },
-    ],
-    asset: 'BTC',
-    side: 'Long',
-    leverage: '25x',
-    marginType: 'Isolated',
-    positionValueUSD: '$1,059,876',
-    positionValueAsset: '360 ETH',
-    pnlUSD: '$+9,598.28',
-    pnlPercent: '+22.64%',
-    margin: '$42,395.04',
-    entryPrice: '$2917.43',
-    liqPrice: '$2869.46',
-    winRate: '82%',
-    createdMinutesAgo: 60,
-    remark: 'James WynnReal',
-  },
-  {
-    address: '0x6bb31754025d57d727218ef86b97828135899983ae',
-    tags: [
-      { key: 'whale', color: '#c084fc', bg: '#a855f733' },
-    ],
-    asset: 'SOL',
-    side: 'Long',
-    leverage: '25x',
-    marginType: 'Isolated',
-    positionValueUSD: '$1,661,700.08',
-    positionValueAsset: '564.42 ETH',
-    pnlUSD: '$+10,725.08',
-    pnlPercent: '+16.14%',
-    margin: '$66,468.00',
-    entryPrice: '$2925.09',
-    liqPrice: '$2880.70',
-    winRate: '71%',
-    createdMinutesAgo: 60,
-    remark: '-',
-  }
-];
-
 export const WhalePositionsTable = () => {
   const { t } = useTranslation();
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'BTC' | 'ETH' | 'SOL'>('ALL');
   const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL');
-  const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
+  // 目前后端未返回 PnL 相关字段，暂不开放盈亏筛选，避免“空操作”体验
+  // const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
   const [sortField, setSortField] = useState<'positionValue' | 'pnl' | 'margin' | 'winRate' | 'createdTime' | null>('positionValue');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
 
@@ -110,60 +49,139 @@ export const WhalePositionsTable = () => {
     return t('whaleTracking.time.hoursAgo', { count: hours });
   };
 
-  // Use standardized mock hook
-  const { data: positions, loading, error, reload } = useMockData<WhalePosition[]>(
+  const { data: rawHoldings, loading, error, execute } = useAsync<WhaleHoldingApiItem[]>(
     async () => {
-      // Simulate filtering
-      return mockPositions.filter(p => {
-        if (assetFilter !== 'ALL' && p.asset !== assetFilter) return false;
-        if (sideFilter !== 'ALL' && p.side !== sideFilter) return false;
-        if (pnlFilter !== 'ALL') {
-            const pnlValue = Number.parseFloat(p.pnlUSD.replace(/[$,]/g, ''));
-            if (pnlFilter === 'PROFIT' && pnlValue < 0) return false;
-            if (pnlFilter === 'LOSS' && pnlValue >= 0) return false;
-        }
-        return true;
+      return fetchWhaleHoldings({
+        symbol: assetFilter !== 'ALL' ? assetFilter : undefined,
+        // 仅保留名义价值较大的鲸鱼单子
+        minPositionValueUsd: 1_000_000,
+        timeRangeHours: 24,
+        limit: 200,
       });
     },
-    [assetFilter, sideFilter, pnlFilter]
+    { immediate: true }
   );
 
+  // 资产过滤变化时重新拉取（首屏请求由 useAsync 的 immediate=true 触发）
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    execute();
+  }, [execute, assetFilter]);
+
   const sortedPositions = useMemo(() => {
-    if (!positions) return [];
-    if (!sortField || !sortOrder) return positions;
+    if (!rawHoldings) return [];
 
-    return [...positions].sort((a, b) => {
-      let valA, valB;
-      
-      switch (sortField) {
-        case 'positionValue':
-          valA = Number.parseFloat(a.positionValueUSD.replace(/[$,]/g, ''));
-          valB = Number.parseFloat(b.positionValueUSD.replace(/[$,]/g, ''));
-          break;
-        case 'pnl':
-          valA = Number.parseFloat(a.pnlUSD.replace(/[$,]/g, ''));
-          valB = Number.parseFloat(b.pnlUSD.replace(/[$,]/g, ''));
-          break;
-        case 'margin':
-          valA = Number.parseFloat(a.margin.replace(/[$,]/g, ''));
-          valB = Number.parseFloat(b.margin.replace(/[$,]/g, ''));
-          break;
-        case 'winRate':
-          valA = a.winRate === '--' ? -1 : Number.parseFloat(a.winRate);
-          valB = b.winRate === '--' ? -1 : Number.parseFloat(b.winRate);
-          break;
-        case 'createdTime':
-            valA = a.createdMinutesAgo;
-            valB = b.createdMinutesAgo;
-            // smaller minutesAgo is more recent
-            return sortOrder === 'desc' ? valA - valB : valB - valA;
-        default:
-          return 0;
-      }
+    const now = Date.now();
 
-      return sortOrder === 'desc' ? valB - valA : valA - valB;
+    // 先在数值层面做过滤和排序，最后再做格式化，避免 locale 相关的字符串互转问题
+    const enriched = rawHoldings.map(h => {
+      const createdAt = new Date(h.createTime).getTime();
+      const createdMinutesAgo = Math.max(0, Math.floor((now - createdAt) / 60_000));
+
+      const positionValueUsd = h.positionValueUsd;
+      const marginValue = positionValueUsd / 10; // 简单估算，仅用于展示
+      const side: 'Long' | 'Short' = h.side === 'LONG' ? 'Long' : 'Short';
+
+      return {
+        raw: h,
+        createdMinutesAgo,
+        positionValueUsd,
+        marginValue,
+        side,
+      };
     });
-  }, [positions, sortField, sortOrder]);
+
+    const filtered = enriched.filter(item => {
+      const { raw, side } = item;
+      if (assetFilter !== 'ALL' && raw.symbol !== assetFilter) return false;
+      if (sideFilter !== 'ALL' && side !== sideFilter) return false;
+
+      // 目前后端未提供 PnL 数据，选择 PnL 过滤时保持原始集合，避免错误解析
+      return true;
+    });
+
+    const sorted = (!sortField || !sortOrder)
+      ? filtered
+      : [...filtered].sort((a, b) => {
+          let valA: number;
+          let valB: number;
+
+          switch (sortField) {
+            case 'positionValue':
+              valA = a.positionValueUsd;
+              valB = b.positionValueUsd;
+              break;
+            case 'margin':
+              valA = a.marginValue;
+              valB = b.marginValue;
+              break;
+            case 'createdTime': {
+              valA = a.createdMinutesAgo;
+              valB = b.createdMinutesAgo;
+              // smaller minutesAgo is more recent
+              return sortOrder === 'desc' ? valA - valB : valB - valA;
+            }
+            case 'pnl':
+            case 'winRate':
+            default:
+              return 0;
+          }
+
+          return sortOrder === 'desc' ? valB - valA : valA - valB;
+        });
+
+    // 最后将数值映射为用于展示的字符串
+    const mapped: WhalePosition[] = sorted.map(item => {
+      const { raw, createdMinutesAgo, positionValueUsd, marginValue, side } = item;
+
+      const positionValueUSD = `$${positionValueUsd.toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })}`;
+
+      const positionValueAsset = `${raw.positionSize.toFixed(2)} ${raw.symbol}`;
+
+      const margin = `$${marginValue.toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })}`;
+
+      const entryPrice = `$${raw.entryPrice.toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })}`;
+
+      const liqPrice = `$${raw.liquidationPrice.toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })}`;
+
+      const tags: WhalePosition['tags'] = [
+        { key: 'whale', color: '#c084fc', bg: '#a855f733' },
+      ];
+
+      return {
+        address: raw.userAddress,
+        tags,
+        asset: raw.symbol,
+        side,
+        leverage: '—',
+        marginType: 'Cross',
+        positionValueUSD,
+        positionValueAsset,
+        pnlUSD: '--',
+        pnlPercent: '--',
+        margin,
+        entryPrice,
+        liqPrice,
+        winRate: '--',
+        createdMinutesAgo,
+        remark: '',
+      };
+    });
+
+    return mapped;
+  }, [rawHoldings, assetFilter, sideFilter, sortField, sortOrder]);
 
   const handleSort = (field: Exclude<typeof sortField, null>) => {
     if (sortField === field) {
@@ -223,24 +241,16 @@ export const WhalePositionsTable = () => {
             ]} 
             onChange={setSideFilter} 
           />
-          <FilterButton 
-            value={pnlFilter} 
-            options={[
-              { value: 'ALL', label: t('common.all') },
-              { value: 'PROFIT', label: t('whaleTracking.holdings.filters.profit') },
-              { value: 'LOSS', label: t('whaleTracking.holdings.filters.loss') },
-            ]} 
-            onChange={setPnlFilter} 
-          />
+          {/* PnL 筛选暂未开放，待后端提供盈亏数据后再启用 */}
         </div>
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative">
         <LoadingState 
           isLoading={loading} 
-          error={error} 
+          error={Boolean(error)} 
           isEmpty={!loading && sortedPositions.length === 0}
-          onRetry={reload}
+          onRetry={execute}
         >
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -254,11 +264,9 @@ export const WhalePositionsTable = () => {
                       {renderSortIcon('positionValue')}
                     </div>
                   </th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('pnl')}>
-                    <div className="flex items-center">
-                      {t('whaleTracking.holdings.table.unrealizedPnl')}
-                      {renderSortIcon('pnl')}
-                    </div>
+                  {/* PnL 列当前仅展示占位符，不提供排序交互以避免“空操作”体验 */}
+                  <th className="px-6 py-4 text-left whitespace-nowrap">
+                    {t('whaleTracking.holdings.table.unrealizedPnl')}
                   </th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('margin')}>
                     <div className="flex items-center">
@@ -268,11 +276,9 @@ export const WhalePositionsTable = () => {
                   </th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.entryPrice')}</th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.liqPrice')}</th>
-                  <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('winRate')}>
-                    <div className="flex items-center">
-                      {t('whaleTracking.holdings.table.winRate')}
-                      {renderSortIcon('winRate')}
-                    </div>
+                  {/* 胜率列同样暂无真实数值，先禁用排序 */}
+                  <th className="px-6 py-4 text-left whitespace-nowrap">
+                    {t('whaleTracking.holdings.table.winRate')}
                   </th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('createdTime')}>
                     <div className="flex items-center">

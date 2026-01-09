@@ -706,6 +706,18 @@ const WhaleDiscoverResponseDto = z
     details: z.array(WhaleDiscoverTraderDto),
   })
   .passthrough();
+const WhaleHoldingDto = z
+  .object({
+    userAddress: z.string(),
+    symbol: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    createTime: z.string(),
+  })
+  .passthrough();
 
 export const schemas = {
   SettingResponseDto,
@@ -766,6 +778,7 @@ export const schemas = {
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
   WhaleDiscoverResponseDto,
+  WhaleHoldingDto,
 };
 
 const endpoints = makeApi([
@@ -2677,6 +2690,36 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(RealtimeWhaleAlertDto),
+  },
+  {
+    method: "get",
+    path: "/whale-holdings",
+    alias: "WhaleHoldingsController_getWhaleHoldings",
+    description: `以 (user_address, symbol) 维度选取最新一条开仓记录，近似表示当前持仓，仅返回名义价值较大的鲸鱼持仓。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "minPositionValueUsd",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "timeRangeHours",
+        type: "Query",
+        schema: z.number().gte(1).lte(168).optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(500).optional(),
+      },
+    ],
+    response: z.array(WhaleHoldingDto),
   },
   {
     method: "get",
