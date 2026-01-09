@@ -340,7 +340,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                   </div>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-hidden">
+                <div className={`flex-1 min-h-0 overflow-hidden ${isCompact ? 'p-1' : ''}`}>
                   <OrderbookTable 
                     asks={orderbook.asks} 
                     bids={orderbook.bids} 
