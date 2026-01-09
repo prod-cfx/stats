@@ -1,10 +1,10 @@
 export type UnitSize = 'S' | 'M' | 'L' | 'XL'
 
 export const UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: number; label: string }> = {
-  S: { w: 6, h: 6, label: 'S' },
-  M: { w: 6, h: 8, label: 'M' },
-  L: { w: 12, h: 10, label: 'L' },
-  XL: { w: 12, h: 16, label: 'XL' },
+  S: { w: 6, h: 3, label: 'S' }, // Default small tile
+  M: { w: 6, h: 6, label: 'M' }, // Double height
+  L: { w: 12, h: 6, label: 'L' }, // Full width
+  XL: { w: 12, h: 9, label: 'XL' }, // Full width + taller
 }
 
 // K线（market.kline）专用尺寸：S 更矮(h=3)且更宽；M/L/XL 在此基础上递增
