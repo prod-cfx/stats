@@ -117,7 +117,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
 
   // Define a precise row height to ensure alignment (font + padding)
   const ROW_HEIGHT = isCompact ? 20 : 28; 
-  const VISIBLE_ROWS = 26;
+  const VISIBLE_ROWS = isCompact ? 13 : 26;
   const TOTAL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
 
   const { rows, canScroll } = useMemo(() => {
@@ -137,16 +137,17 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: Fixed 13 asks and 13 bids
+    // Both mode: Fixed 13 rows total to fill the compact tile
+    const count = isCompact ? 6 : 13;
     return {
       rows: [
-        ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
+        ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
         { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
-        ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
+        ...bidsSorted.slice(0, count).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false
     };
-  }, [asks, bids, displayMode]);
+  }, [asks, bids, displayMode, isCompact]);
 
   return (
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
@@ -158,25 +159,25 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
         <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.total')}</span>
       </div>
 
-      {/* Table Body - Fixed height for exactly 26 rows */}
+      {/* Table Body - Flexible height to align with depth chart */}
       <div 
         className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
-        style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {
-          if ((r as any)._type === 'gap') {
-             return <div key="gap" className="h-2 bg-[#0d1117]" />
-          }
-          const key = `${r._type}-${r.price}-${idx}`;
+          const key = (r as any)._type === 'gap' ? 'gap' : `${r._type}-${r.price}-${idx}`;
           return (
             <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">
-              <OrderRow
-                item={r}
-                type={r._type}
-                selected={selectedKey === key}
-                onSelect={() => setSelectedKey(key)}
-                variant={variant}
-              />
+              {(r as any)._type === 'gap' ? (
+                <div className="w-full h-full bg-[#0d1117]" />
+              ) : (
+                <OrderRow
+                  item={r}
+                  type={r._type as 'ask' | 'bid'}
+                  selected={selectedKey === key}
+                  onSelect={() => setSelectedKey(key)}
+                  variant={variant}
+                />
+              )}
             </div>
           );
         })}
