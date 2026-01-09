@@ -3329,74 +3329,6 @@
         ]
       }
     },
-<<<<<<< HEAD
-    "/crypto-stock-quotes/latest": {
-      "get": {
-        "description": "返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的",
-        "operationId": "CryptoStockQuotesController_getLatest",
-        "parameters": [
-          {
-            "name": "symbols",
-            "required": false,
-            "in": "query",
-            "description": "股票代码列表，使用英文逗号分隔，例如：MSTR,COIN,MARA",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "source",
-            "required": false,
-            "in": "query",
-            "description": "数据源标识，例如：BBX；为空时使用默认数据源",
-            "schema": {
-              "example": "BBX",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "查询成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/BaseResponseDto"
-                    },
-                    {
-                      "properties": {
-                        "data": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/CryptoStockQuoteResponseDto"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "获取加密相关股票的最新报价列表",
-        "tags": [
-          "crypto-stock-quotes"
-        ]
-      }
-    },
-=======
->>>>>>> origin/main
     "/admin/trades-configs": {
       "get": {
         "operationId": "AdminTradesPairConfigController_getAllConfigs",
@@ -6492,235 +6424,6 @@
           }
         }
       },
-<<<<<<< HEAD
-      "CryptoStockQuoteResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number",
-            "description": "记录 ID"
-          },
-          "symbol": {
-            "type": "string",
-            "description": "股票代码",
-            "example": "MSTR"
-          },
-          "name": {
-            "type": "string",
-            "description": "股票名称",
-            "example": "MicroStrategy Inc.",
-            "nullable": true
-          },
-          "exchange": {
-            "type": "string",
-            "description": "交易所代码",
-            "example": "NASDAQ",
-            "nullable": true
-          },
-          "price": {
-            "type": "string",
-            "description": "当前价格"
-          },
-          "openPrice": {
-            "type": "string",
-            "description": "开盘价",
-            "nullable": true
-          },
-          "highPrice": {
-            "type": "string",
-            "description": "最高价",
-            "nullable": true
-          },
-          "lowPrice": {
-            "type": "string",
-            "description": "最低价",
-            "nullable": true
-          },
-          "closePrice": {
-            "type": "string",
-            "description": "收盘价（前一交易日）",
-            "nullable": true
-          },
-          "volume": {
-            "type": "string",
-            "description": "成交量",
-            "nullable": true
-          },
-          "turnover": {
-            "type": "string",
-            "description": "成交额",
-            "nullable": true
-          },
-          "priceChange": {
-            "type": "string",
-            "description": "涨跌额",
-            "nullable": true
-          },
-          "priceChangePercent": {
-            "type": "string",
-            "description": "涨跌幅（百分比）",
-            "nullable": true
-          },
-          "marketCap": {
-            "type": "string",
-            "description": "市值",
-            "nullable": true
-          },
-          "peRatio": {
-            "type": "string",
-            "description": "市盈率",
-            "nullable": true
-          },
-          "high52Week": {
-            "type": "string",
-            "description": "52周最高价",
-            "nullable": true
-          },
-          "low52Week": {
-            "type": "string",
-            "description": "52周最低价",
-            "nullable": true
-          },
-          "assetSymbol": {
-            "type": "string",
-            "description": "底层加密资产符号（例如 BTC、ETH、USDC），用于币股联动视图",
-            "example": "BTC",
-            "nullable": true
-          },
-          "assetLogoUrl": {
-            "type": "string",
-            "description": "底层加密资产 Logo URL",
-            "example": "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
-            "nullable": true
-          },
-          "companyLogoUrl": {
-            "type": "string",
-            "description": "公司 Logo URL",
-            "example": "https://upload.wikimedia.org/wikipedia/commons/d/d7/MicroStrategy_logo.svg",
-            "nullable": true
-          },
-          "holdingsValue": {
-            "type": "string",
-            "description": "持有的加密资产名义价值（可带货币符号，前端可根据需要自行解析）",
-            "example": "$58.14B",
-            "nullable": true
-          },
-          "holdingsAmount": {
-            "type": "string",
-            "description": "持有的加密资产数量描述（可包含单位和简写，例如 \"671.27K BTC\"）",
-            "example": "671.27K BTC",
-            "nullable": true
-          },
-          "mNav": {
-            "type": "string",
-            "description": "mNAV（市值/净资产比），字符串形式，前端可按需解析为数值",
-            "example": "0.83",
-            "nullable": true
-          },
-          "infoParagraphs": {
-            "description": "公司介绍文案段落列表（用于前端弹窗展示）",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "source": {
-            "type": "string",
-            "description": "数据源",
-            "example": "BBX"
-          },
-          "quoteTimestamp": {
-            "format": "date-time",
-            "type": "string",
-            "description": "报价时间戳"
-          },
-          "createdAt": {
-            "format": "date-time",
-=======
-      "TradesPairConfigResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "配置ID"
-          },
-          "pairId": {
-            "type": "string",
-            "description": "交易对唯一标识"
-          },
-          "exchange": {
-            "type": "string",
-            "description": "交易所标识"
-          },
-          "symbol": {
-            "type": "string",
-            "description": "交易对符号"
-          },
-          "baseAsset": {
-            "type": "string",
-            "description": "基础资产"
-          },
-          "quoteAsset": {
-            "type": "string",
-            "description": "计价资产"
-          },
-          "instrumentType": {
-            "type": "string",
-            "description": "交易品种类型",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
-          },
-          "canonicalInstId": {
-            "type": "string",
-            "description": "标准化 OKX instId（用于订阅/查询一致性）",
-            "nullable": true
-          },
-          "enabled": {
-            "type": "boolean",
-            "description": "是否启用订阅"
-          },
-          "priority": {
-            "type": "number",
-            "description": "优先级"
-          },
-          "metadata": {
-            "type": "object",
-            "description": "扩展配置",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "description": "备注说明",
-            "nullable": true
-          },
-          "createdAt": {
->>>>>>> origin/main
-            "type": "string",
-            "description": "创建时间"
-          },
-          "updatedAt": {
-<<<<<<< HEAD
-            "format": "date-time",
-=======
->>>>>>> origin/main
-            "type": "string",
-            "description": "更新时间"
-          }
-        },
-        "required": [
-          "id",
-<<<<<<< HEAD
-          "symbol",
-          "price",
-          "source",
-          "quoteTimestamp",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
       "TradesPairConfigResponseDto": {
         "type": "object",
         "properties": {
@@ -6791,8 +6494,6 @@
         },
         "required": [
           "id",
-=======
->>>>>>> origin/main
           "pairId",
           "exchange",
           "symbol",
@@ -6810,15 +6511,6 @@
         "properties": {
           "pairId": {
             "type": "string",
-<<<<<<< HEAD
-            "description": "交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT",
-            "pattern": "^[A-Z0-9\\-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$",
-            "example": "BTC-USDT.OKX.SPOT"
-          },
-          "exchange": {
-            "type": "string",
-            "description": "交易所标识，目前仅支持 OKX"
-=======
             "description": "交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT 或 BTCUSD_PERP.BINANCE.PERPETUAL",
             "pattern": "^[A-Z0-9_-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$",
             "example": "BTCUSDT.BINANCE.SPOT"
@@ -6826,7 +6518,6 @@
           "exchange": {
             "type": "string",
             "description": "交易所标识，目前支持 OKX、BINANCE"
->>>>>>> origin/main
           },
           "symbol": {
             "type": "string",
