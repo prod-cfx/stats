@@ -14,7 +14,10 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import {
+  OptionalAccessControl,
+  ReadAny,
+} from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // Nest 注入需要运行时引用 WhaleHoldingsService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -29,8 +32,8 @@ export class WhaleHoldingsController {
   constructor(private readonly whaleHoldingsService: WhaleHoldingsService) {}
 
   @Get()
-  @RequireAuth()
-  @ReadAny(AppResource.MARKET_SYMBOL)
+  @OptionalAccessControl()
+  @ReadAny(AppResource.WHALE_TRACKING)
   @ApiOperation({
     summary: '获取当前鲸鱼持仓列表（基于 Hyperliquid Whale Alert 数据）',
     description:
