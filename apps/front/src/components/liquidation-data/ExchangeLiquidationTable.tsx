@@ -69,6 +69,17 @@ export const ExchangeLiquidationTable = ({ showTitle = true }: { showTitle?: boo
 
   const selectedCoin = coinFilter;
 
+  // 封装筛选变更，同时重置弹窗选中项以避免显示旧数据
+  const handleCoinChange = (v: CoinFilter) => {
+    setCoinFilter(v);
+    setSelectedExchange(null);
+  };
+
+  const handleTimeChange = (v: TimeFilter) => {
+    setTimeFilter(v);
+    setSelectedExchange(null);
+  };
+
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
     return new Intl.NumberFormat(locale, {
@@ -189,7 +200,7 @@ export const ExchangeLiquidationTable = ({ showTitle = true }: { showTitle?: boo
               { value: 'DOGE', label: 'DOGE' },
               { value: 'HYPE', label: 'HYPE' },
             ]}
-            onChange={(v) => setCoinFilter(v as CoinFilter)}
+            onChange={(v) => handleCoinChange(v as CoinFilter)}
           />
           <FilterButton
             value={timeFilter}
@@ -199,7 +210,7 @@ export const ExchangeLiquidationTable = ({ showTitle = true }: { showTitle?: boo
               { value: '12h', label: t('liquidationData.time.12h') },
               { value: '24h', label: t('liquidationData.time.24h') },
             ]}
-            onChange={(v) => setTimeFilter(v as TimeFilter)}
+            onChange={(v) => handleTimeChange(v as TimeFilter)}
           />
         </div>
       </div>

@@ -577,6 +577,33 @@ const LongShortRatioPointResponseDto = z
     source: z.string(),
   })
   .passthrough();
+const ExchangeLongShortRatioResponseDto = z
+  .object({
+    rank: z.number(),
+    name: z.string(),
+    logoUrl: z.string().optional(),
+    longPercent: z.number(),
+    shortPercent: z.number(),
+    longAmountUsd: z.number(),
+    shortAmountUsd: z.number(),
+  })
+  .passthrough();
+const MarketTradeResponseDto = z
+  .object({
+    id: z.number(),
+    exchange: z.string(),
+    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
+    symbol: z.string(),
+    baseAsset: z.string(),
+    quoteAsset: z.string(),
+    tradeId: z.string(),
+    price: z.string(),
+    size: z.string(),
+    side: z.enum(["buy", "sell"]),
+    tradeTimestamp: z.string(),
+    createdAt: z.string(),
+  })
+  .passthrough();
 const LiquidationSummaryItemDto = z
   .object({
     timeframe: z.enum(["1h", "4h", "12h", "24h"]),
@@ -605,33 +632,6 @@ const ExchangeLiquidationResponseDto = z
     symbol: z.string(),
     timeframe: z.enum(["1h", "4h", "12h", "24h"]),
     rows: z.array(ExchangeLiquidationRowDto),
-  })
-  .passthrough();
-const ExchangeLongShortRatioResponseDto = z
-  .object({
-    rank: z.number(),
-    name: z.string(),
-    logoUrl: z.string().optional(),
-    longPercent: z.number(),
-    shortPercent: z.number(),
-    longAmountUsd: z.number(),
-    shortAmountUsd: z.number(),
-  })
-  .passthrough();
-const MarketTradeResponseDto = z
-  .object({
-    id: z.number(),
-    exchange: z.string(),
-    instrumentType: z.enum(["SPOT", "PERPETUAL", "FUTURE"]),
-    symbol: z.string(),
-    baseAsset: z.string(),
-    quoteAsset: z.string(),
-    tradeId: z.string(),
-    price: z.string(),
-    size: z.string(),
-    side: z.enum(["buy", "sell"]),
-    tradeTimestamp: z.string(),
-    createdAt: z.string(),
   })
   .passthrough();
 const ExchangeConfigResponseDto = z
@@ -841,12 +841,12 @@ export const schemas = {
   UpdateTradesPairConfigDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
+  ExchangeLongShortRatioResponseDto,
+  MarketTradeResponseDto,
   LiquidationSummaryItemDto,
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
   ExchangeLiquidationResponseDto,
-  ExchangeLongShortRatioResponseDto,
-  MarketTradeResponseDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
@@ -2190,14 +2190,14 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "symbol",
-        type: "Query",
-        schema: z.string(),
-      },
-      {
         name: "timeframe",
         type: "Query",
         schema: z.enum(["1h", "4h", "12h", "24h"]),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.unknown(),
       },
     ],
     response: BaseResponseDto.and(
@@ -2214,7 +2214,7 @@ const endpoints = makeApi([
       {
         name: "symbol",
         type: "Query",
-        schema: z.string(),
+        schema: z.unknown(),
       },
     ],
     response: BaseResponseDto.and(
