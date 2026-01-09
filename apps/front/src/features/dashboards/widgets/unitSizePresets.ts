@@ -15,6 +15,12 @@ export const KLINE_UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: number; l
   XL: { w: 12, h: 6, label: 'XL' },
 }
 
+// 预测市场（market.prediction）专用尺寸：只保留 S/M
+export const PREDICTION_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 6, h: 6, label: 'M' },
+}
+
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
   const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
 
@@ -32,7 +38,14 @@ export function snapToPresetForWidgetType(
   w: number,
   h: number,
 ): { w: number; h: number; size: UnitSize } {
-  const presets = widgetType === 'market.kline' ? KLINE_UNIT_SIZE_PRESETS : UNIT_SIZE_PRESETS
+  let presets: Record<string, { w: number; h: number; label: string }> = UNIT_SIZE_PRESETS
+
+  if (widgetType === 'market.kline') {
+    presets = KLINE_UNIT_SIZE_PRESETS
+  } else if (widgetType === 'market.prediction') {
+    presets = PREDICTION_UNIT_SIZE_PRESETS as any
+  }
+
   const entries = Object.entries(presets) as Array<[UnitSize, { w: number; h: number }]>
 
   let best: { size: UnitSize; w: number; h: number; score: number } | null = null
@@ -40,5 +53,11 @@ export function snapToPresetForWidgetType(
     const score = Math.abs(p.w - w) + Math.abs(p.h - h)
     if (!best || score < best.score) best = { size, w: p.w, h: p.h, score }
   }
-  return best ? { w: best.w, h: best.h, size: best.size } : { w: presets.M.w, h: presets.M.h, size: 'M' }
+  
+  // Safe fallback to 'M' if best is found, otherwise default to first available
+  if (best) return { w: best.w, h: best.h, size: best.size }
+  
+  // Fallback for prediction market (if M exists) or default M
+  const fallback = presets['M'] || presets['S'] || UNIT_SIZE_PRESETS.M
+  return { w: fallback.w, h: fallback.h, size: (presets['M'] ? 'M' : 'S') as UnitSize }
 }
