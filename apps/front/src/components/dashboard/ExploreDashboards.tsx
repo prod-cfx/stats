@@ -165,7 +165,7 @@ export const ExploreDashboards = () => {
                 <span className="text-white font-bold text-body">@{selectedDashboard?.creator}</span>
                 <span className="text-[#8b949e] text-xs">{t('dashboard.explore.publishedAgo', { days: 3 })}</span>
               </div>
-              <button type="button" className="ml-auto px-6 py-2 bg-primary text-white rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all">
+              <button type="button" className="ml-auto px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg font-bold hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-primary/20">
                 {t('dashboard.explore.saveToMyDashboards')}
               </button>
             </div>

@@ -6,10 +6,29 @@ export function addWidgetToDashboard(dashboardId: string, item: WidgetCatalogIte
   const id = crypto.randomUUID()
   updateDashboard(dashboardId, (doc) => {
     const widget = { id, type: item.type, config: item.defaultConfig }
-    // Place new widgets at the top so users can see what they just added immediately.
-    // react-grid-layout will resolve collisions via compaction.
     const snapped = snapToPreset(item.defaultLayout.w, item.defaultLayout.h)
-    const layoutItem = { i: id, x: 0, y: 0, w: snapped.w, h: snapped.h }
+    
+    // Smart placement: if width <= 6 and last row has space, place at x=6; else new row at x=0
+    let x = 0
+    let y = 0
+    if (doc.layout.length > 0) {
+      // Find the item with max y (bottom row)
+      const maxY = Math.max(...doc.layout.map((l) => l.y))
+      const bottomRow = doc.layout.filter((l) => l.y === maxY)
+      const maxX = Math.max(...bottomRow.map((l) => l.x + l.w))
+      
+      if (snapped.w <= 6 && maxX <= 6) {
+        // Place at x=6 on the same row
+        x = 6
+        y = maxY
+      } else {
+        // Start new row
+        x = 0
+        y = maxY + Math.max(...bottomRow.map((l) => l.h))
+      }
+    }
+    
+    const layoutItem = { i: id, x, y, w: snapped.w, h: snapped.h }
     return { ...doc, widgets: [...doc.widgets, widget], layout: [...doc.layout, layoutItem], updatedAt: Date.now() }
   })
   return id

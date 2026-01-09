@@ -44,7 +44,7 @@ export const EditorCanvas = () => {
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 rounded-lg text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 rounded-lg text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>{t('dashboard.editor.addWidgetTitle')}</span>

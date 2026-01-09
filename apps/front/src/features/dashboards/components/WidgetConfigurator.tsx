@@ -192,9 +192,9 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
               <button
                 key={size}
                 onClick={() => setSelectedSize(size)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   selectedSize === size
-                    ? 'bg-primary text-white'
+                    ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
                     : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
                 }`}
               >
@@ -237,7 +237,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         <div className="border-t border-[#30363d] p-6">
           <button
             onClick={() => onSave(config, layout)}
-            className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-colors"
+            className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-medium py-3 rounded-lg transition-all shadow-lg shadow-primary/20 active:scale-95"
           >
             保存并添加到看板
           </button>

@@ -76,7 +76,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         {/* Thumbnail Upload */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2 border border-primary text-primary hover:bg-primary/10 rounded-lg transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 rounded-lg transition-all text-sm font-medium shadow-lg shadow-primary/20 active:scale-95"
           title="选择缩略图"
         >
           <Image className="w-4 h-4" />
@@ -102,7 +102,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         ) : (
           <button
             onClick={handlePublish}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 rounded-lg transition-all text-sm font-medium shadow-lg shadow-primary/20 active:scale-95"
           >
             <Send className="w-4 h-4" />
             发布

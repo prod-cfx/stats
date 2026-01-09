@@ -40,7 +40,7 @@ const clampLayout = (items: any[]) =>
     h: 3,
     w: 6,
     minW: 6,
-    maxW: 12,
+    maxW: 6,
   }))
 
 export function DashboardCanvas(props: { dashboardId: string }) {
@@ -83,6 +83,10 @@ export function DashboardCanvas(props: { dashboardId: string }) {
 
   const handleResetLayout = () => {
     if (!doc.widgets.length) return
+    let currentX = 0
+    let currentY = 0
+    let currentRowHeight = 0
+    
     const newLayout = doc.widgets.map((widget) => {
       let catalogItem = null
       for (const group of WIDGET_CATALOG) {
@@ -90,7 +94,29 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         if (found) { catalogItem = found; break }
       }
       const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
-      return { i: widget.id, x: 0, y: 0, w: 6, h: 3, minW: 6, maxW: 12 }
+      const w = d.w
+      const h = d.h
+      
+      // If widget width > 6 or current row can't fit, start new row
+      if (w > 6 || currentX + w > 12) {
+        currentY += currentRowHeight
+        currentX = 0
+        currentRowHeight = 0
+      }
+      
+      const layoutItem = { i: widget.id, x: currentX, y: currentY, w, h, minW: 6, maxW: 12 }
+      
+      currentX += w
+      currentRowHeight = Math.max(currentRowHeight, h)
+      
+      // If we've filled the row (x >= 12), start new row for next widget
+      if (currentX >= 12) {
+        currentY += currentRowHeight
+        currentX = 0
+        currentRowHeight = 0
+      }
+      
+      return layoutItem
     })
     setLayoutState(newLayout)
     updateDashboardLayout(props.dashboardId, newLayout)
@@ -107,7 +133,10 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       <DashboardHeader dashboard={doc} onRefresh={() => setDoc(getDashboard(props.dashboardId)!)} />
       
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => setIsModalOpen(true)} className="bg-primary text-white px-4 py-2 rounded text-sm font-medium">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded text-sm font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
+        >
           <Plus className="w-4 h-4 inline mr-1" />添加组件
         </button>
         <button type="button" onClick={handleResetLayout} className="border border-[#30363d] text-[#8b949e] px-4 py-2 rounded text-sm hover:text-white transition-colors">
@@ -133,16 +162,12 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           {layoutState.map((l: any) => {
             const w = widgetsById.get(l.i)
             if (!w) return null
-            const calculatedPx = l.h * rowHeight + (l.h - 1) * marginY
             return (
               <div
                 key={l.i}
                 className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden shadow-sm relative group transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
-                <div className="absolute top-0 right-0 z-50 bg-black/70 text-[#00ff00] text-[9px] px-1 pointer-events-none">
-                  h:{l.h} | {calculatedPx}px
-                </div>
                 <WidgetRenderer 
                   widget={w} 
                   onRemove={() => {
