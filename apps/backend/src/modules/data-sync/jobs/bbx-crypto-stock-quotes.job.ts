@@ -74,7 +74,8 @@ interface BbxCryptoStockQuotesMeta {
  * 配置：
  * - BBX_API_KEY: BBX API 密钥
  * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，有默认值）
- * - data_pull_tasks.meta.symbols / symbolsCsv: 需要拉取的股票代码列表
+ * - data_pull_tasks.meta.symbols / symbolsCsv: 需要拉取的股票代码列表（优先）
+ * - BBX_CRYPTO_STOCK_SYMBOLS: 兼容性环境变量（逗号分隔列表，将在后续版本中废弃）
  */
 @Injectable()
 export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotesMeta> {
@@ -125,11 +126,34 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     }
 
     // 从任务级 meta 中解析要拉取的股票代码列表（每次执行都从 meta 读取，确保可动态调整）
-    const symbols = this.resolveSymbols(ctx.meta)
+    let symbols = this.resolveSymbols(ctx.meta)
+
+    // 兼容逻辑：若任务 meta 未配置 symbols，则回退到环境变量 BBX_CRYPTO_STOCK_SYMBOLS
+    if (symbols.length === 0) {
+      const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS')
+
+      if (symbolsConfig) {
+        symbols = symbolsConfig
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(s => s.toUpperCase())
+
+        // 提示即将废弃的配置方式，便于后续迁移到 meta
+        this.logger.warn(
+          'BBX_CRYPTO_STOCK_SYMBOLS is deprecated, please migrate to data_pull_tasks.meta.symbols / symbolsCsv',
+          {
+            envSymbols: symbols,
+            taskId: ctx.taskId,
+            key: ctx.key,
+          },
+        )
+      }
+    }
 
     if (symbols.length === 0) {
       throw new Error(
-        'BBX crypto stock symbols are not configured in task meta (symbols or symbolsCsv must be provided)',
+        'BBX crypto stock symbols are not configured. Please set data_pull_tasks.meta.symbols / symbolsCsv or BBX_CRYPTO_STOCK_SYMBOLS env.',
       )
     }
 
