@@ -26,7 +26,7 @@ import {
 } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import { OptionalAccessControl, ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
@@ -115,7 +115,7 @@ export class MarketsController {
   }
 
   @Get('long-short-ratio')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取交易对的多空比时间序列' })
   @ApiOkResponse({ type: LongShortRatioPointResponseDto, isArray: true })
@@ -167,7 +167,7 @@ export class MarketsController {
   }
 
   @Get('long-short-ratio/exchanges')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '按交易所维度获取指定标的的多空比快照' })
   @ApiOkResponse({
