@@ -6,10 +6,10 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AppRole } from '../rbac/permissions'
 // Nest 注入需要运行时引用 PermissionService/AuditLogService，保留值导入
 import { AuditLogService } from '../services/audit-log.service'
 import { PermissionService } from '../services/permission.service'
-import { AppRole } from '../rbac/permissions'
 
 export function UseRoles(...rules: RequiredRule[]) {
   const normalized =

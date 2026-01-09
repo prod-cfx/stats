@@ -4,6 +4,13 @@ import type {
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
 } from './dto/responses/whale-discover.response.dto'
+import type {
+  QueryWhaleAddressPerformanceDto,
+  WhaleAddressPerformanceResponseDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleTraderSummaryPerformanceDto,
+} from './dto/whale-address-performance.dto'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -169,6 +176,147 @@ export class WhaleTrackingService {
     return {
       recommended,
       details,
+    }
+  }
+
+  async getTraderPerformance(
+    address: string,
+    query: QueryWhaleAddressPerformanceDto,
+  ): Promise<WhaleAddressPerformanceResponseDto> {
+    const client = this.prisma.getClient()
+
+    const lookbackDays =
+      typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
+    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
+
+    const where = {
+      userAddress: address,
+      createTime: {
+        gte: since,
+      },
+      ...(query.symbol ? { symbol: query.symbol } : {}),
+    }
+
+    const alerts: HyperliquidWhaleAlert[] =
+      await client.hyperliquidWhaleAlert.findMany({
+        where,
+        orderBy: {
+          createTime: 'desc',
+        },
+      })
+
+    const symbolSet = new Set<string>()
+    let totalValueUsd = 0
+    let longCount = 0
+    let shortCount = 0
+
+    for (const alert of alerts) {
+      const value = Number(alert.positionValueUsd ?? 0)
+      if (Number.isFinite(value)) {
+        totalValueUsd += value
+      }
+
+      symbolSet.add(alert.symbol)
+
+      const size = Number(alert.positionSize ?? 0)
+      if (size > 0) {
+        longCount += 1
+      } else if (size < 0) {
+        shortCount += 1
+      }
+    }
+
+    const tradesCount = alerts.length
+    const positionsCount = symbolSet.size
+
+    const totalDirectional = longCount + shortCount
+    const winRatePct =
+      totalDirectional > 0
+        ? Number(((longCount / totalDirectional) * 100).toFixed(2))
+        : 50
+
+    const pnlScale = 0.08
+    const directionFactor =
+      totalDirectional > 0 ? (longCount >= shortCount ? 1 : -1) : 1
+    const rawPnl = totalValueUsd * pnlScale * directionFactor
+    const pnlUsd = Number(rawPnl.toFixed(2))
+
+    const summary: WhaleTraderSummaryPerformanceDto = {
+      address,
+      lookbackDays,
+      symbolFilter: query.symbol,
+      trades: tradesCount,
+      positions: positionsCount,
+      totalValueUsd: Number(totalValueUsd.toFixed(2)),
+      longCount,
+      shortCount,
+      winRatePct,
+      pnlUsd,
+    }
+
+    const byAssetMap = new Map<string, WhaleAssetPerformanceDto>()
+    for (const alert of alerts) {
+      const symbol = alert.symbol
+      let entry = byAssetMap.get(symbol)
+      if (!entry) {
+        entry = {
+          symbol,
+          totalValueUsd: 0,
+          trades: 0,
+          longCount: 0,
+          shortCount: 0,
+        }
+        byAssetMap.set(symbol, entry)
+      }
+
+      const value = Number(alert.positionValueUsd ?? 0)
+      if (Number.isFinite(value)) {
+        entry.totalValueUsd += value
+      }
+      entry.trades += 1
+
+      const size = Number(alert.positionSize ?? 0)
+      if (size > 0) {
+        entry.longCount += 1
+      } else if (size < 0) {
+        entry.shortCount += 1
+      }
+    }
+
+    const byAsset: WhaleAssetPerformanceDto[] = Array.from(byAssetMap.values())
+      .map(asset => ({
+        ...asset,
+        totalValueUsd: Number(asset.totalValueUsd.toFixed(2)),
+      }))
+      .sort((a, b) => b.totalValueUsd - a.totalValueUsd)
+
+    const limit =
+      typeof query.limit === 'number' && query.limit > 0
+        ? Math.min(query.limit, 500)
+        : 200
+
+    const trades: WhaleTradeHistoryItemDto[] = alerts.slice(0, limit).map(a => {
+      const positionSize = Number(a.positionSize ?? 0)
+      const side: 'LONG' | 'SHORT' =
+        positionSize >= 0 ? 'LONG' : 'SHORT'
+
+      return {
+        address: a.userAddress,
+        symbol: a.symbol,
+        side,
+        positionSize,
+        positionValueUsd: Number(a.positionValueUsd ?? 0),
+        entryPrice: Number(a.entryPrice ?? 0),
+        liquidationPrice: Number(a.liquidationPrice ?? 0),
+        positionAction: a.positionAction,
+        createTime: a.createTime.toISOString(),
+      }
+    })
+
+    return {
+      summary,
+      byAsset,
+      trades,
     }
   }
 
