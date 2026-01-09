@@ -270,7 +270,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
 
       <div className={`flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
         {/* Symbol Tabs & Search */}
-        <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1' : ''}`}>
+        <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1 flex-row-reverse' : ''}`}>
           {!isCompact ? (
             <div className="flex items-center overflow-x-auto cf-scrollbar">
               {symbols.map(s => (
@@ -297,7 +297,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
           ) : (
             <div className="flex-1" />
           )}
-          <div className={`flex items-center gap-2 pl-4 ${isCompact ? 'py-1' : 'py-2'}`}>
+          <div className={`flex items-center gap-2 ${isCompact ? 'pr-4 py-1' : 'pl-4 py-2'}`}>
             <div className="relative" ref={dropdownRef}>
               {/* For compact mode, combine symbol selection and search into a single button-like dropdown */}
               {isCompact ? (
@@ -330,7 +330,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
               )}
               
               {isDropdownOpen && (
-                <div className={`absolute top-full right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 overflow-hidden cf-scrollbar ${isCompact ? 'w-32 max-h-48' : 'left-0 max-h-60'}`}>
+                <div className={`absolute top-full ${isCompact ? 'left-0' : 'right-0'} mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 overflow-hidden cf-scrollbar ${isCompact ? 'w-32 max-h-48' : 'left-0 max-h-60'}`}>
                   {isCompact && (
                     <div className="p-2 border-b border-[#30363d]">
                       <input 
