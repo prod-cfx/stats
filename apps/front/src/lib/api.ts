@@ -233,6 +233,27 @@ export async function fetchWhaleAddressPerformance(
   query: FetchWhaleAddressPerformanceQuery = {},
 ): Promise<WhaleAddressPerformanceResponse> {
   return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (typeof query.timeRangeDays === 'number') {
+      params.set('timeRangeDays', String(query.timeRangeDays))
+    }
+    if (query.symbol) {
+      params.set('symbol', query.symbol)
+    }
+    if (typeof query.limit === 'number') {
+      params.set('limit', String(query.limit))
+    }
+
+    const search = params.toString()
+    const fallbackUrl =
+      search.length > 0
+        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
+            address,
+          )}/performance?${search}`
+        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
+            address,
+          )}/performance`
+
     const result = await safeApiCall(
       () =>
         client.WhaleTrackingController_getTraderPerformance({

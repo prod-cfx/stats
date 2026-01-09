@@ -231,51 +231,62 @@ export class WhaleTrackingService {
       },
     })
 
-    const byAsset: WhaleAssetPerformanceDto[] = []
+    // 对每个 symbol 仅在数据库端按条件计数 long/short，避免再次把大量记录搬到 Node 进程
+    const byAssetWithDirection = await Promise.all(
+      byAssetAgg.map(async agg => {
+        const symbol = agg.symbol
+
+        const [symbolLong, symbolShort] = await Promise.all([
+          client.hyperliquidWhaleAlert.count({
+            where: {
+              ...where,
+              symbol,
+              positionSize: {
+                gt: 0,
+              },
+            },
+          }),
+          client.hyperliquidWhaleAlert.count({
+            where: {
+              ...where,
+              symbol,
+              positionSize: {
+                lt: 0,
+              },
+            },
+          }),
+        ])
+
+        return {
+          agg,
+          symbol,
+          symbolLong,
+          symbolShort,
+        }
+      }),
+    )
+
     let longCount = 0
     let shortCount = 0
 
-    // 统计每个 symbol 下的 long/short 次数，以及 positions 数量
-    for (const agg of byAssetAgg) {
-      const symbol = agg.symbol
+    const byAsset: WhaleAssetPerformanceDto[] = byAssetWithDirection.map(
+      item => {
+        const sumVal = item.agg._sum.positionValueUsd ?? 0
+        const totalVal = Number(sumVal)
+        const trades = item.agg._count._all ?? 0
 
-      const symbolAlerts: HyperliquidWhaleAlert[] =
-        await client.hyperliquidWhaleAlert.findMany({
-          where: {
-            ...where,
-            symbol,
-          },
-          select: {
-            positionSize: true,
-          },
-        })
+        longCount += item.symbolLong
+        shortCount += item.symbolShort
 
-      let symbolLong = 0
-      let symbolShort = 0
-      for (const alert of symbolAlerts) {
-        const size = Number(alert.positionSize ?? 0)
-        if (size > 0) {
-          symbolLong += 1
-        } else if (size < 0) {
-          symbolShort += 1
+        return {
+          symbol: item.symbol,
+          totalValueUsd: Number(totalVal.toFixed(2)),
+          trades,
+          longCount: item.symbolLong,
+          shortCount: item.symbolShort,
         }
-      }
-
-      longCount += symbolLong
-      shortCount += symbolShort
-
-      const sumVal = agg._sum.positionValueUsd ?? 0
-      const totalVal = Number(sumVal)
-      const trades = agg._count._all ?? 0
-
-      byAsset.push({
-        symbol,
-        totalValueUsd: Number(totalVal.toFixed(2)),
-        trades,
-        longCount: symbolLong,
-        shortCount: symbolShort,
-      })
-    }
+      },
+    )
 
     byAsset.sort((a, b) => b.totalValueUsd - a.totalValueUsd)
 
