@@ -160,7 +160,7 @@ const mockOIData: OIData[] = [
 
 const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH', 'SUI', 'ADA', 'LINK', 'AVAX'];
 
-export const AggregatedOI = () => {
+export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'compact' }) => {
   const { t, i18n } = useTranslation();
   const [activeSymbol, setActiveTabSymbol] = useState('BTC');
   const [sortField, setSortField] = useState<SortField>(null);
@@ -168,6 +168,8 @@ export const AggregatedOI = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isCompact = variant === 'compact';
 
   const numberCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -261,68 +263,90 @@ export const AggregatedOI = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6 h-full">
-      <div className="flex items-center justify-between flex-none">
-        <div className="text-h3 font-bold text-white tracking-tight text-xs">
-          {t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}
-        </div>
+    <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-6'}`}>
+      <div className="flex items-center justify-between">
+        <SectionTitle className={isCompact ? '!text-sm' : ''}>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
       </div>
 
-      <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl flex-1 min-h-0">
-        {/* Search */}
-        <div className="flex items-center justify-end px-2 border-b border-[#30363d] bg-[#0d1117]/30 flex-none py-1.5">
-          <div className="relative" ref={dropdownRef}>
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#8b949e] z-10" />
-            <input 
-              type="text" 
-              placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setIsDropdownOpen(true);
-              }}
-              onFocus={() => setIsDropdownOpen(true)}
-              className="bg-[#0d1117] border border-[#30363d] rounded-md pl-7 pr-8 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-32 relative z-10"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
-              <ChevronDown className={`w-3 h-3 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-            </div>
-            {isDropdownOpen && filteredSymbols.length > 0 && (
-              <div className="absolute top-full right-0 mt-1 w-32 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-48 overflow-y-auto cf-scrollbar">
-                {filteredSymbols.map(s => (
-                  <div 
-                    key={s}
-                    onClick={() => {
-                      setActiveTabSymbol(s);
-                      setSearchQuery('');
-                      setIsDropdownOpen(false);
-                    }}
-                    className="px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
-                  >
-                    {s}
-                  </div>
-                ))}
+      <div className={`flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
+        {/* Symbol Tabs & Search */}
+        <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1' : ''}`}>
+          <div className="flex items-center overflow-x-auto cf-scrollbar">
+            {symbols.map(s => (
+              <button
+                type="button"
+                key={s}
+                onClick={() => setActiveTabSymbol(s)}
+                className={`${isCompact ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'} font-semibold transition-all relative whitespace-nowrap ${
+                  activeSymbol === s 
+                    ? 'text-white' 
+                    : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
+                }`}
+              >
+                {s}
+                {activeSymbol === s && (
+                  <>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className={`flex items-center gap-2 pl-4 ${isCompact ? 'py-1' : 'py-2'}`}>
+            <div className="relative" ref={dropdownRef}>
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 text-[#8b949e] z-10 ${isCompact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+              <input 
+                type="text" 
+                placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                className={`bg-[#0d1117] border border-[#30363d] rounded-md ${isCompact ? 'pl-8 pr-8 py-1 text-xs w-32' : 'pl-9 pr-10 py-1.5 text-sm w-48'} text-[#e6edf3] focus:outline-none focus:border-primary transition-all relative z-10`}
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+                <ChevronDown className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
-            )}
+              {isDropdownOpen && filteredSymbols.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto cf-scrollbar">
+                  {filteredSymbols.map(s => (
+                    <div 
+                      key={s}
+                      onClick={() => {
+                        setActiveTabSymbol(s);
+                        setSearchQuery('');
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors`}
+                    >
+                      {s}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Table Area */}
-        <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+        <div className="overflow-x-auto cf-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
-              <tr className="bg-[#0d1117]/50 text-[#8b949e] text-[10px] uppercase tracking-wider">
-                <th className="px-2 py-2 font-bold text-center border-b border-[#30363d] w-12">{t('aggregatedOrderbook.openInterest.table.rank')}</th>
-                <th className="px-2 py-2 font-bold border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
-                <th className="px-2 py-2 font-bold text-left border-b border-[#30363d] pl-4">
+              <tr className={`bg-[#0d1117]/50 text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d] w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('oiAsset')}
-                    className="flex items-center justify-start gap-1 w-full group hover:text-white transition-colors"
+                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
                     {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('oiUsd')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -330,7 +354,7 @@ export const AggregatedOI = () => {
                     {t('aggregatedOrderbook.openInterest.table.oiUsd')} {renderSortIcon('oiUsd')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('ratioPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -338,7 +362,7 @@ export const AggregatedOI = () => {
                     {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratioPct')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('change1hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -346,7 +370,7 @@ export const AggregatedOI = () => {
                     {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1hPct')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('change4hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -354,7 +378,7 @@ export const AggregatedOI = () => {
                     {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4hPct')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
                     onClick={() => handleSort('change24hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -362,10 +386,10 @@ export const AggregatedOI = () => {
                     {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24hPct')}
                   </button>
                 </th>
-                <th className="px-2 py-2 font-bold text-center border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
+                <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
               </tr>
             </thead>
-            <tbody className="text-xs">
+            <tbody className={isCompact ? 'text-xs' : 'text-sm'}>
               {sortedData.map((row) => (
                 <tr 
                   key={row.isTotal ? 'total' : row.exchange} 
@@ -373,11 +397,11 @@ export const AggregatedOI = () => {
                     row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                   }`}
                 >
-                  <td className="px-2 py-1.5 text-center text-[#8b949e]">{row.rank}</td>
-                  <td className="px-2 py-1.5">
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-center text-[#8b949e]`}>{row.rank}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'}`}>
                     <div className="flex items-center gap-2">
                       {row.logo && (
-                        <div className="w-4 h-4 rounded-full overflow-hidden flex-none border border-[#30363d]">
+                        <div className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
                           <img src={row.logo} alt={row.exchange} className="w-full h-full object-cover" />
                         </div>
                       )}
@@ -386,13 +410,13 @@ export const AggregatedOI = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-2 py-1.5 text-left pl-4 text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
-                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{currencyCompact.format(row.oiUsd)}</td>
-                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{formatRatio(row.ratioPct)}</td>
-                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change1hPct)}</td>
-                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change4hPct)}</td>
-                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change24hPct)}</td>
-                  <td className="px-2 py-1.5 text-center text-[#e6edf3]">{row.oiVolRatio.toFixed(4)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{formatAssetAmount(row.oiAsset)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{currencyCompact.format(row.oiUsd)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{formatRatio(row.ratioPct)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change1hPct)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change4hPct)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change24hPct)}</td>
+                  <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-center text-[#e6edf3]`}>{row.oiVolRatio.toFixed(4)}</td>
                 </tr>
               ))}
             </tbody>

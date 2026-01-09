@@ -10,7 +10,7 @@ export function OpenInterestAggWidget(props: { config: Record<string, any> }) {
   return (
     <div className="h-full w-full overflow-hidden flex flex-col">
       <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
-        <AggregatedOI />
+        <AggregatedOI variant="compact" />
       </div>
     </div>
   )
