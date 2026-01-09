@@ -8,8 +8,10 @@ import {
   HttpStatus,
   Query,
 } from '@nestjs/common'
-import { ApiExtraModels, ApiOperation, ApiQuery, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiOperation, ApiQuery, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
+import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
+import { AppResource } from '@/modules/auth/rbac/permissions'
 // Nest 注入需要运行时引用 Service，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { AggregatedLiquidationService } from './aggregated-liquidation.service'
@@ -31,12 +33,15 @@ const baseResponseSchema = (dataSchema: Record<string, unknown>) => ({
 })
 
 @ApiTags('聚合爆仓数据')
+@ApiBearerAuth('bearer')
 @ApiExtraModels(BaseResponseDto, AggregatedLiquidationSummaryDto, ExchangeLiquidationResponseDto)
 @Controller('aggregated-liquidation')
 export class AggregatedLiquidationController {
   constructor(private readonly service: AggregatedLiquidationService) {}
 
   @Get('summary')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({
     summary: '获取聚合爆仓汇总数据（多时间区间）',
     description:
@@ -63,6 +68,8 @@ export class AggregatedLiquidationController {
   }
 
   @Get('exchanges')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({
     summary: '获取按交易所拆分的聚合爆仓数据（单一时间区间）',
     description:
