@@ -35,13 +35,13 @@ function useContainerWidth() {
 }
 
 // Clamp helper:
-// - Non-Kline widgets: keep compact 2-column (w=6, h=3)
-// - Kline (market.kline): keep the chosen S/M/L/XL width+height (w/h) by snapping to widget-type presets
+// - All widgets now respect their snapped preset size if available
+// - Fallback to 6x3 if snapping fails or no type
 const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
   (items || []).map((n) => {
     const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
-    if (widgetType === 'market.kline') {
-      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 10), Number(n.h ?? 4))
+    if (widgetType) {
+      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
       return {
         ...n,
         w: snapped.w,

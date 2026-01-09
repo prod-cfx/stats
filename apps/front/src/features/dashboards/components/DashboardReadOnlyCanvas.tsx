@@ -32,13 +32,12 @@ function useContainerWidth() {
 }
 
 // Same clamp logic as editor canvas (read-only):
-// - Non-Kline widgets: compact 2-column (w=6, h=3)
-// - Kline: preserve chosen preset width/height
+// - All widgets respect preset width/height
 const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
   (items || []).map((n) => {
     const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
-    if (widgetType === 'market.kline') {
-      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 10), Number(n.h ?? 4))
+    if (widgetType) {
+      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
       return { ...n, w: snapped.w, h: snapped.h, minW: snapped.w, maxW: snapped.w }
     }
     return { ...n, h: 3, w: 6, minW: 6, maxW: 6 }
