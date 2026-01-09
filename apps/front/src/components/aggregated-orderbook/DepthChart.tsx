@@ -18,12 +18,10 @@ interface DepthDataPoint {
 interface DepthChartProps {
   bids: DepthDataPoint[];
   asks: DepthDataPoint[];
-  variant?: 'default' | 'compact';
 }
 
-export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks, variant = 'default' }) => {
+export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
   const { t } = useTranslation();
-  const isCompact = variant === 'compact';
   const option = useMemo(() => {
     // Sort data for depth chart
     const sortedBids = [...bids].sort((a, b) => a.price - b.price); // Low to High for bids
@@ -170,7 +168,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks, variant = 'd
   }, [bids, asks, t]);
 
   return (
-    <div className={`w-full h-full ${isCompact ? 'min-h-[150px]' : 'min-h-[400px]'}`}>
+    <div className="w-full h-full">
       <ReactECharts 
         option={option} 
         style={{ height: '100%', width: '100%' }}

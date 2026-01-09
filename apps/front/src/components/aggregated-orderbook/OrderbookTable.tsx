@@ -137,15 +137,14 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       };
     }
     
-    // Both mode: 8 asks, mid price, 8 bids
-    const askCount = isCompact ? 8 : 13;
-    const bidCount = isCompact ? 8 : 13;
-    
+    // Both mode: Fixed 13 asks and 13 bids (default), or fewer for compact
+    const count = isCompact ? 6 : 13;
     return {
       rows: [
-        ...asksSorted.slice(-askCount).map((x) => ({ ...x, _type: 'ask' as const })),
-        { isMid: true } as any, // Placeholder for mid price
-        ...bidsSorted.slice(0, bidCount).map((x) => ({ ...x, _type: 'bid' as const })),
+        ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
+        // Add visual gap if compact (simulate spread area)
+        ...(isCompact ? [{ _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 } as any] : []),
+        ...bidsSorted.slice(0, count).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false
     };
@@ -167,17 +166,8 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
         style={{ height: isCompact ? 'auto' : `${TOTAL_HEIGHT}px`, maxHeight: isCompact ? 'none' : `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {
-          if ((r as any).isMid) {
-            return (
-              <div key="mid-price" className={`flex items-center justify-center ${isCompact ? 'h-[24px] py-1' : 'h-[36px] py-2'} bg-white/5 border-y border-white/5`}>
-                <div className={`flex items-center gap-3 ${isCompact ? 'text-[11px]' : 'text-sm'} font-bold`}>
-                  <span className="text-white">{currentPrice.price}</span>
-                  <span className={currentPrice.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}>
-                    {currentPrice.changePercent}
-                  </span>
-                </div>
-              </div>
-            );
+          if ((r as any)._type === 'gap') {
+             return <div key="gap" className="h-2 bg-[#0d1117]" />
           }
           const key = `${r._type}-${r.price}-${idx}`;
           return (
