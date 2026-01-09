@@ -269,65 +269,41 @@ export const AggregatedOI = () => {
       </div>
 
       <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl flex-1 min-h-0">
-        {/* Symbol Tabs & Search */}
-        <div className="flex items-center justify-between px-2 border-b border-[#30363d] bg-[#0d1117]/30 flex-none">
-          <div className="flex items-center overflow-x-auto cf-scrollbar">
-            {symbols.map(s => (
-              <button
-                type="button"
-                key={s}
-                onClick={() => setActiveTabSymbol(s)}
-                className={`px-3 py-2 text-xs font-semibold transition-all relative whitespace-nowrap ${
-                  activeSymbol === s 
-                    ? 'text-white' 
-                    : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
-                }`}
-              >
-                {s}
-                {activeSymbol === s && (
-                  <>
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
-                  </>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 pl-2 py-1.5">
-            <div className="relative" ref={dropdownRef}>
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#8b949e] z-10" />
-              <input 
-                type="text" 
-                placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsDropdownOpen(true);
-                }}
-                onFocus={() => setIsDropdownOpen(true)}
-                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-7 pr-8 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-32 relative z-10"
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
-                <ChevronDown className={`w-3 h-3 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
-              </div>
-              {isDropdownOpen && filteredSymbols.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-48 overflow-y-auto cf-scrollbar">
-                  {filteredSymbols.map(s => (
-                    <div 
-                      key={s}
-                      onClick={() => {
-                        setActiveTabSymbol(s);
-                        setSearchQuery('');
-                        setIsDropdownOpen(false);
-                      }}
-                      className="px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
-                    >
-                      {s}
-                    </div>
-                  ))}
-                </div>
-              )}
+        {/* Search */}
+        <div className="flex items-center justify-end px-2 border-b border-[#30363d] bg-[#0d1117]/30 flex-none py-1.5">
+          <div className="relative" ref={dropdownRef}>
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#8b949e] z-10" />
+            <input 
+              type="text" 
+              placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsDropdownOpen(true);
+              }}
+              onFocus={() => setIsDropdownOpen(true)}
+              className="bg-[#0d1117] border border-[#30363d] rounded-md pl-7 pr-8 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-32 relative z-10"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+              <ChevronDown className={`w-3 h-3 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </div>
+            {isDropdownOpen && filteredSymbols.length > 0 && (
+              <div className="absolute top-full right-0 mt-1 w-32 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-48 overflow-y-auto cf-scrollbar">
+                {filteredSymbols.map(s => (
+                  <div 
+                    key={s}
+                    onClick={() => {
+                      setActiveTabSymbol(s);
+                      setSearchQuery('');
+                      setIsDropdownOpen(false);
+                    }}
+                    className="px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
+                  >
+                    {s}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -394,11 +370,11 @@ export const AggregatedOI = () => {
                 <tr 
                   key={row.isTotal ? 'total' : row.exchange} 
                   className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
-                    row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
+                    row.isTotal ? 'bg-[#30363d]/20 font-bold text-[11px]' : ''
                   }`}
                 >
-                  <td className="px-2 py-2 text-center text-[#8b949e]">{row.rank}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-1.5 text-center text-[#8b949e]">{row.rank}</td>
+                  <td className="px-2 py-1.5">
                     <div className="flex items-center gap-2">
                       {row.logo && (
                         <div className="w-4 h-4 rounded-full overflow-hidden flex-none border border-[#30363d]">
@@ -410,13 +386,13 @@ export const AggregatedOI = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-2 py-2 text-right text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
-                  <td className="px-2 py-2 text-right text-[#e6edf3]">{currencyCompact.format(row.oiUsd)}</td>
-                  <td className="px-2 py-2 text-right text-[#e6edf3]">{formatRatio(row.ratioPct)}</td>
-                  <td className="px-2 py-2 text-right font-medium">{renderValueWithColor(row.change1hPct)}</td>
-                  <td className="px-2 py-2 text-right font-medium">{renderValueWithColor(row.change4hPct)}</td>
-                  <td className="px-2 py-2 text-right font-medium">{renderValueWithColor(row.change24hPct)}</td>
-                  <td className="px-2 py-2 text-center text-[#e6edf3]">{row.oiVolRatio.toFixed(4)}</td>
+                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
+                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{currencyCompact.format(row.oiUsd)}</td>
+                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{formatRatio(row.ratioPct)}</td>
+                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change1hPct)}</td>
+                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change4hPct)}</td>
+                  <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change24hPct)}</td>
+                  <td className="px-2 py-1.5 text-center text-[#e6edf3]">{row.oiVolRatio.toFixed(4)}</td>
                 </tr>
               ))}
             </tbody>
