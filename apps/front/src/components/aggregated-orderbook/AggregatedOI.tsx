@@ -314,10 +314,10 @@ export const AggregatedOI = () => {
               <tr className="bg-[#0d1117]/50 text-[#8b949e] text-[10px] uppercase tracking-wider">
                 <th className="px-2 py-2 font-bold text-center border-b border-[#30363d] w-12">{t('aggregatedOrderbook.openInterest.table.rank')}</th>
                 <th className="px-2 py-2 font-bold border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
-                <th className="px-2 py-2 font-bold text-right border-b border-[#30363d]">
+                <th className="px-2 py-2 font-bold text-left border-b border-[#30363d] pl-4">
                   <button 
                     onClick={() => handleSort('oiAsset')}
-                    className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                    className="flex items-center justify-start gap-1 w-full group hover:text-white transition-colors"
                   >
                     {t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                   </button>
@@ -370,7 +370,7 @@ export const AggregatedOI = () => {
                 <tr 
                   key={row.isTotal ? 'total' : row.exchange} 
                   className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
-                    row.isTotal ? 'bg-[#30363d]/20 font-bold text-[11px]' : ''
+                    row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                   }`}
                 >
                   <td className="px-2 py-1.5 text-center text-[#8b949e]">{row.rank}</td>
@@ -386,7 +386,7 @@ export const AggregatedOI = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-2 py-1.5 text-right text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
+                  <td className="px-2 py-1.5 text-left pl-4 text-[#e6edf3]">{formatAssetAmount(row.oiAsset)}</td>
                   <td className="px-2 py-1.5 text-right text-[#e6edf3]">{currencyCompact.format(row.oiUsd)}</td>
                   <td className="px-2 py-1.5 text-right text-[#e6edf3]">{formatRatio(row.ratioPct)}</td>
                   <td className="px-2 py-1.5 text-right font-medium">{renderValueWithColor(row.change1hPct)}</td>
