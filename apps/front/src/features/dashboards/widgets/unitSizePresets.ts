@@ -29,10 +29,10 @@ export const CRYPTO_STOCKS_UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: n
   XL: { w: 12, h: 3, label: 'XL' },
 }
 
-// 聚合多空比（derivatives.long_short_ratio）专用尺寸：只保留 S/M，M 针对6条数据优化
+// 聚合多空比（derivatives.long_short_ratio）专用尺寸：只保留 S/M，M 针对 6 条数据优化
 export const LONG_SHORT_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
   S: { w: 6, h: 3, label: 'S' },
-  M: { w: 6, h: 7, label: 'M' }, // h=7 to fit 6 items comfortably without too much height
+  M: { w: 6, h: 4, label: 'M' }, // Height adjusted to 4 as requested
 }
 
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {

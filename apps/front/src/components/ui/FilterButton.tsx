@@ -19,6 +19,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const padding = size === 'sm' ? 'px-2 py-1' : 'px-3 py-2';
+  const itemPadding = size === 'sm' ? 'px-2 py-1.5' : 'px-3 py-2.5';
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
 
   const getOptionValue = (opt: FilterOption) => (typeof opt === 'string' ? opt : opt.value);
@@ -67,7 +68,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
                   onChange(optValue);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
+                className={`w-full text-left ${itemPadding} ${textSize} transition-colors ${
                   value === optValue 
                     ? 'bg-gradient-to-r from-primary to-secondary text-white font-bold' 
                     : 'text-[#e6edf3] hover:bg-primary/10 hover:text-primary'
