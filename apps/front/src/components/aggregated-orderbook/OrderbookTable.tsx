@@ -58,7 +58,7 @@ const OrderRow = ({
       type="button"
       onClick={onSelect}
       className={`
-        relative group flex items-center px-3 ${isCompact ? 'py-[2px]' : 'py-[5px]'} transition-colors cursor-pointer text-left w-full
+        relative group flex items-center px-1.5 ${isCompact ? 'py-[1px]' : 'py-[5px]'} transition-colors cursor-pointer text-left w-full
       `}
       style={{
         background: selected ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)') : rowTint,
@@ -91,15 +91,15 @@ const OrderRow = ({
         />
       )}
       
-      <div className={`relative w-full flex items-center z-10 ${isCompact ? 'text-[10px] leading-3' : 'text-[12px] leading-4'} font-mono`}>
-        <div className="w-[22%] flex items-center gap-1 opacity-70">
-          {item.exchanges.slice(0, 3).map((ex, idx) => (
-            <ExchangeLogo key={idx} logoUrl={ex} size={isCompact ? 10 : 13} />
+      <div className={`relative w-full flex items-center z-10 ${isCompact ? 'text-[9.5px] leading-3' : 'text-[12px] leading-4'} font-mono`}>
+        <div className={`${isCompact ? 'w-[15%]' : 'w-[22%]'} flex items-center gap-0 opacity-70`}>
+          {item.exchanges.slice(0, 2).map((ex, idx) => (
+            <ExchangeLogo key={idx} logoUrl={ex} size={isCompact ? 8 : 13} />
           ))}
         </div>
-        <span className={`w-[26%] text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
-        <span className="w-[26%] text-right text-[#e6edf3]">{item.amount}</span>
-        <span className="w-[26%] text-right text-[#8b949e]">{item.total}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right text-[#e6edf3] pr-0.5`}>{item.amount}</span>
+        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right text-[#8b949e]`}>{item.total}</span>
       </div>
     </button>
   );
@@ -150,11 +150,11 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
       {/* Table Header */}
-      <div className={`flex items-center px-3 border-b border-[#30363d] text-[#8b949e] ${isCompact ? 'text-[10px] h-[28px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[#0d1117] z-10`}>
-        <span className="w-[22%]">{t('aggregatedOrderbook.table.exchange')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.price')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.amount')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.total')}</span>
+      <div className={`flex items-center px-3 border-b border-[#30363d] text-[#8b949e] ${isCompact ? 'text-[8.5px] h-[22px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[#0d1117] z-10`}>
+        <span className={`${isCompact ? 'w-[15%]' : 'w-[22%]'}`}>{t('aggregatedOrderbook.table.exchange')}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.price')}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right pr-0.5`}>{t('aggregatedOrderbook.table.amount')}</span>
+        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.total')}</span>
       </div>
 
       {/* Table Body - Fixed height for exactly 26 rows */}
