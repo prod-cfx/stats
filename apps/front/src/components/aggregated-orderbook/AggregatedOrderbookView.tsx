@@ -52,7 +52,7 @@ const AsksIcon = ({ active }: { active: boolean }) => (
   </svg>
 )
 
-export function AggregatedOrderbookView() {
+export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'default' | 'compact' }) {
   const { t, i18n } = useTranslation()
   const [marketType, setMarketType] = useState('futures')
   const [symbol, setSymbol] = useState('BTC')
@@ -61,6 +61,8 @@ export function AggregatedOrderbookView() {
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(FUTURES_EXCHANGES)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
+
+  const isCompact = variant === 'compact'
 
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -176,17 +178,17 @@ export function AggregatedOrderbookView() {
   }, [orderbook, selectedExchanges])
 
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl flex flex-col min-h-[750px] overflow-hidden shadow-2xl h-full">
+    <div className={`bg-[#161b22] border border-[#30363d] rounded-xl flex flex-col ${isCompact ? '' : 'min-h-[750px] shadow-2xl'} overflow-hidden h-full`}>
       <LoadingState isLoading={loading} error={error} onRetry={reload}>
         {orderbook ? (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-[#30363d] bg-[#0d1117]/30 flex-none">
-              <div className="flex items-center gap-6">
-                <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
+            <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[#30363d] bg-[#0d1117]/30 flex-none`}>
+              <div className={`flex items-center ${isCompact ? 'gap-2' : 'gap-6'}`}>
+                <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5">
                   <button
                     type="button"
                     onClick={() => setMarketType('futures')}
-                    className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'futures'
+                    className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'futures'
                       ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
                       : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
                   >
@@ -195,18 +197,18 @@ export function AggregatedOrderbookView() {
                   <button
                     type="button"
                     onClick={() => setMarketType('spot')}
-                    className={`px-6 py-1.5 rounded-md text-sm font-medium transition-all ${marketType === 'spot'
+                    className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'spot'
                       ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
                       : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
                   >
                     {t('aggregatedOrderbook.market.spot')}
                   </button>
                 </div>
-                <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-1">
+                <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5">
                   <button
                     type="button"
                     onClick={() => setSymbol('BTC')}
-                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${symbol === 'BTC'
+                    className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-4 py-1.5 text-sm'} rounded-md font-medium transition-all ${symbol === 'BTC'
                       ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md'
                       : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
                   >
@@ -215,7 +217,7 @@ export function AggregatedOrderbookView() {
                   <button
                     type="button"
                     onClick={() => setSymbol('ETH')}
-                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${symbol === 'ETH'
+                    className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-4 py-1.5 text-sm'} rounded-md font-medium transition-all ${symbol === 'ETH'
                       ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md'
                       : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
                   >
@@ -223,41 +225,43 @@ export function AggregatedOrderbookView() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-xs text-[#8b949e]">
-                <span>
-                  {t('aggregatedOrderbook.stats.volume24h')}
-                  :
-                  {' '}
-                  <span className="text-[#e6edf3]">
-                    {numberCompact.format(68200)}
+              {!isCompact && (
+                <div className="flex items-center gap-4 text-xs text-[#8b949e]">
+                  <span>
+                    {t('aggregatedOrderbook.stats.volume24h')}
+                    :
                     {' '}
-                    BTC
+                    <span className="text-[#e6edf3]">
+                      {numberCompact.format(68200)}
+                      {' '}
+                      BTC
+                    </span>
                   </span>
-                </span>
-                <span>
-                  {t('aggregatedOrderbook.stats.turnover24h')}
-                  :
-                  {' '}
-                  <span className="text-[#e6edf3]">{currencyCompact.format(71_590_000)}</span>
-                </span>
-              </div>
+                  <span>
+                    {t('aggregatedOrderbook.stats.turnover24h')}
+                    :
+                    {' '}
+                    <span className="text-[#e6edf3]">{currencyCompact.format(71_590_000)}</span>
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 flex min-h-0">
-              <div className="w-1/2 flex flex-col border-r border-[#30363d]">
-                <div className="p-4 border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none">
-                  <SectionTitle className="text-lg">
+              <div className={`${isCompact ? 'w-full' : 'w-1/2'} flex flex-col border-r border-[#30363d]`}>
+                <div className={`${isCompact ? 'p-2' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
+                  <SectionTitle className={isCompact ? 'text-sm' : 'text-lg'}>
                     {t('aggregatedOrderbook.sections.realtimeOrderbook', {
                       symbol: `${symbol}/USDT`,
                       market: marketType === 'futures' ? t('aggregatedOrderbook.market.futures') : t('aggregatedOrderbook.market.spot'),
                     })}
                   </SectionTitle>
-                  <div className="flex items-center gap-4">
-                    <div className="flex bg-[#0d1117] border border-[#30363d] rounded-md overflow-hidden p-1">
+                  <div className={`flex items-center ${isCompact ? 'gap-2' : 'gap-4'}`}>
+                    <div className="flex bg-[#0d1117] border border-[#30363d] rounded-md overflow-hidden p-0.5">
                       <button
                         type="button"
                         onClick={() => setDisplayMode('both')}
-                        className={`p-2 transition-all rounded relative ${displayMode === 'both' ? 'text-white' : 'hover:bg-white/5'}`}
+                        className={`${isCompact ? 'p-1' : 'p-2'} transition-all rounded relative ${displayMode === 'both' ? 'text-white' : 'hover:bg-white/5'}`}
                       >
                         {displayMode === 'both' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                         <div className="relative z-10">
@@ -267,7 +271,7 @@ export function AggregatedOrderbookView() {
                       <button
                         type="button"
                         onClick={() => setDisplayMode('bids')}
-                        className={`p-2 transition-all rounded relative ${displayMode === 'bids' ? 'text-white' : 'hover:bg-white/5'}`}
+                        className={`${isCompact ? 'p-1' : 'p-2'} transition-all rounded relative ${displayMode === 'bids' ? 'text-white' : 'hover:bg-white/5'}`}
                       >
                         {displayMode === 'bids' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                         <div className="relative z-10">
@@ -277,7 +281,7 @@ export function AggregatedOrderbookView() {
                       <button
                         type="button"
                         onClick={() => setDisplayMode('asks')}
-                        className={`p-2 transition-all rounded relative ${displayMode === 'asks' ? 'text-white' : 'hover:bg-white/5'}`}
+                        className={`${isCompact ? 'p-1' : 'p-2'} transition-all rounded relative ${displayMode === 'asks' ? 'text-white' : 'hover:bg-white/5'}`}
                       >
                         {displayMode === 'asks' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                         <div className="relative z-10">
@@ -290,22 +294,23 @@ export function AggregatedOrderbookView() {
                       value={rowCount}
                       options={['1', '10', '100']}
                       onChange={setRowCount}
-                      minWidth="70px"
+                      minWidth={isCompact ? '50px' : '70px'}
+                      size={isCompact ? 'sm' : 'md'}
                     />
 
                     <div className="relative" ref={settingsRef}>
                       <button
                         type="button"
                         onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                        className={`p-2 rounded-md transition-all active:scale-95 ${isSettingsOpen
+                        className={`${isCompact ? 'p-1' : 'p-2'} rounded-md transition-all active:scale-95 ${isSettingsOpen
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
                           : 'text-[#8b949e] hover:text-white hover:bg-[#30363d]'}`}
                       >
-                        <Settings className="w-5 h-5" />
+                        <Settings className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
                       </button>
 
                       {isSettingsOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-48 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-2">
+                        <div className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-40' : 'w-48'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-2`}>
                           <p className="text-[10px] font-bold text-[#8b949e] uppercase tracking-wider px-2 py-1 mb-1">{t('aggregatedOrderbook.settings.exchangeSources')}</p>
                           {(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES).map(ex => (
                             <button
@@ -322,7 +327,7 @@ export function AggregatedOrderbookView() {
                                 {selectedExchanges.includes(ex) && <Check className="w-3 h-3 text-white" />}
                               </div>
                               <span
-                                className={`text-sm capitalize ${selectedExchanges.includes(ex) ? 'text-white font-medium' : 'text-[#8b949e]'}`}
+                                className={`${isCompact ? 'text-xs' : 'text-sm'} capitalize ${selectedExchanges.includes(ex) ? 'text-white font-medium' : 'text-[#8b949e]'}`}
                               >
                                 {ex}
                               </span>
@@ -344,42 +349,50 @@ export function AggregatedOrderbookView() {
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  <OrderbookTable asks={orderbook.asks} bids={orderbook.bids} currentPrice={orderbook.currentPrice} displayMode={displayMode as any} />
+                  <OrderbookTable 
+                    asks={orderbook.asks} 
+                    bids={orderbook.bids} 
+                    currentPrice={orderbook.currentPrice} 
+                    displayMode={displayMode as any} 
+                    variant={variant}
+                  />
                 </div>
               </div>
 
-              <div className="w-1/2 flex flex-col min-h-0">
-                <div className="p-4 border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none">
-                  <SectionTitle className="text-lg">{t('aggregatedOrderbook.sections.orderDepth')}</SectionTitle>
-                  <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-all">
-                    <Info className="w-4 h-4" />
-                    <span className="text-sm">{t('aggregatedOrderbook.sections.liquidityHeatmap')}</span>
-                  </div>
-                </div>
-                <div className="flex-1 min-h-0 p-4 flex flex-col">
-                  <div className="flex-1 min-h-0">
-                    <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} />
-                  </div>
-                  <div className="flex items-center justify-between mt-4 text-xs text-[#8b949e] flex-none">
-                    <div className="flex items-center gap-8">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500/50 rounded-sm" />
-                        <span>{t('aggregatedOrderbook.legend.bids')}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500/50 rounded-sm" />
-                        <span>{t('aggregatedOrderbook.legend.asks')}</span>
-                      </div>
+              {!isCompact && (
+                <div className="w-1/2 flex flex-col min-h-0">
+                  <div className="p-4 border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none">
+                    <SectionTitle className="text-lg">{t('aggregatedOrderbook.sections.orderDepth')}</SectionTitle>
+                    <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-all">
+                      <Info className="w-4 h-4" />
+                      <span className="text-sm">{t('aggregatedOrderbook.sections.liquidityHeatmap')}</span>
                     </div>
-                    <span>
-                      {t('aggregatedOrderbook.legend.unit')}
-                      :
-                      {' '}
-                      BTC
-                    </span>
+                  </div>
+                  <div className="flex-1 min-h-0 p-4 flex flex-col">
+                    <div className="flex-1 min-h-0">
+                      <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} />
+                    </div>
+                    <div className="flex items-center justify-between mt-4 text-xs text-[#8b949e] flex-none">
+                      <div className="flex items-center gap-8">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-green-500/50 rounded-sm" />
+                          <span>{t('aggregatedOrderbook.legend.bids')}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 bg-red-500/50 rounded-sm" />
+                          <span>{t('aggregatedOrderbook.legend.asks')}</span>
+                        </div>
+                      </div>
+                      <span>
+                        {t('aggregatedOrderbook.legend.unit')}
+                        :
+                        {' '}
+                        BTC
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </>
         ) : null}
