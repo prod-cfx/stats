@@ -263,7 +263,7 @@ export const AggregatedOI = () => {
   return (
     <div className="flex flex-col gap-6 h-full">
       <div className="flex items-center justify-between flex-none">
-        <div className="text-h3 font-bold text-white tracking-tight text-sm">
+        <div className="text-h3 font-bold text-white tracking-tight text-xs">
           {t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}
         </div>
       </div>
