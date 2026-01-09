@@ -2,7 +2,12 @@
 
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 import { WhaleDiscoverResponseDto } from './dto/responses/whale-discover.response.dto'
-import { Controller, Get } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports
+import {
+  QueryWhaleAddressPerformanceDto,
+  WhaleAddressPerformanceResponseDto,
+} from './dto/whale-address-performance.dto'
+import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
@@ -26,6 +31,23 @@ export class WhaleTrackingController {
   @ApiOkResponse({ type: WhaleDiscoverResponseDto })
   async getDiscover(): Promise<WhaleDiscoverResponseDto> {
     return this.whaleTrackingService.getDiscoverWhales()
+  }
+
+  @Get('traders/:address/performance')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.WHALE_TRACKING)
+  @ApiOperation({
+    summary: '鲸鱼地址维度的历史交易与绩效统计',
+    description:
+      '基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。'
+      + '当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。',
+  })
+  @ApiOkResponse({ type: WhaleAddressPerformanceResponseDto })
+  async getTraderPerformance(
+    @Param('address') address: string,
+    @Query() query: QueryWhaleAddressPerformanceDto,
+  ): Promise<WhaleAddressPerformanceResponseDto> {
+    return this.whaleTrackingService.getTraderPerformance(address, query)
   }
 }
 
