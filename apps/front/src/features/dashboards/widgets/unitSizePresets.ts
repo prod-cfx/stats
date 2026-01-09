@@ -52,12 +52,6 @@ export const VOLUME_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: 
   S: { w: 6, h: 3, label: 'S' },
 }
 
-// 清算地图（liquidation.map）专用尺寸：只保留 S/M，M 针对数据优化
-export const LIQUIDATION_MAP_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
-  S: { w: 6, h: 3, label: 'S' },
-  M: { w: 8, h: 4, label: 'M' }, // Height adjusted to 4 and width increased
-}
-
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
   const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
 
