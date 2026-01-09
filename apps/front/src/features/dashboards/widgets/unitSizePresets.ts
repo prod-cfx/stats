@@ -21,6 +21,14 @@ export const PREDICTION_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number;
   M: { w: 6, h: 6, label: 'M' },
 }
 
+// 币股（market.crypto_stocks）专用尺寸：固定高度 h=3，宽度递增
+export const CRYPTO_STOCKS_UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: number; label: string }> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 8, h: 3, label: 'M' },
+  L: { w: 10, h: 3, label: 'L' },
+  XL: { w: 12, h: 3, label: 'XL' },
+}
+
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
   const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
 
@@ -44,6 +52,8 @@ export function snapToPresetForWidgetType(
     presets = KLINE_UNIT_SIZE_PRESETS
   } else if (widgetType === 'market.prediction') {
     presets = PREDICTION_UNIT_SIZE_PRESETS as any
+  } else if (widgetType === 'market.crypto_stocks') {
+    presets = CRYPTO_STOCKS_UNIT_SIZE_PRESETS
   }
 
   const entries = Object.entries(presets) as Array<[UnitSize, { w: number; h: number }]>

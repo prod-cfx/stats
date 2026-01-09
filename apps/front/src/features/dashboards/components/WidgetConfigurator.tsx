@@ -4,7 +4,7 @@ import type {UnitSize} from '../widgets/unitSizePresets';
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
-import { KLINE_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
+import { CRYPTO_STOCKS_UNIT_SIZE_PRESETS, KLINE_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 interface WidgetConfiguratorProps {
@@ -22,6 +22,8 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (item.type === 'market.kline') return KLINE_UNIT_SIZE_PRESETS
     // 预测市场只保留 S/M 尺寸
     if (item.type === 'market.prediction') return PREDICTION_UNIT_SIZE_PRESETS as any
+    // 币股固定高度 h=3，只变宽
+    if (item.type === 'market.crypto_stocks') return CRYPTO_STOCKS_UNIT_SIZE_PRESETS
     return UNIT_SIZE_PRESETS
   }, [item.type])
 

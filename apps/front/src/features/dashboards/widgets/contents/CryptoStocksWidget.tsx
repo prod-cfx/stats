@@ -1,5 +1,6 @@
 'use client'
 
+import { ArrowUpDown } from 'lucide-react'
 import React, { useMemo } from 'react'
 
 interface CompanyData {
@@ -101,31 +102,42 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
   const isSmall = size === 'S'
   const isLarge = size === 'L' || size === 'XL'
 
-  const textSize = isSmall ? 'text-[10px]' : isLarge ? 'text-sm' : 'text-xs'
-  const paddingY = isSmall ? 'py-2' : isLarge ? 'py-4' : 'py-3'
+  // Reduced font sizes as requested
+  const textSize = isSmall ? 'text-[9px]' : isLarge ? 'text-xs' : 'text-[10px]'
+  const headerSize = isSmall ? 'text-[9px]' : isLarge ? 'text-[11px]' : 'text-[10px]'
+  const paddingY = isSmall ? 'py-1.5' : isLarge ? 'py-3' : 'py-2'
   const paddingX = isSmall ? 'px-2' : isLarge ? 'px-4' : 'px-3'
-  const iconSize = isSmall ? 'w-5 h-5' : isLarge ? 'w-8 h-8' : 'w-6 h-6'
-  const logoSize = isSmall ? 'w-6 h-6' : isLarge ? 'w-10 h-10' : 'w-8 h-8'
+  const iconSize = isSmall ? 'w-4 h-4' : isLarge ? 'w-6 h-6' : 'w-5 h-5'
+  const logoSize = isSmall ? 'w-5 h-5' : isLarge ? 'w-8 h-8' : 'w-6 h-6'
+  const sortIconSize = isSmall ? 'w-2 h-2' : 'w-3 h-3'
 
   const rows = useMemo(() => initialCompanyData, [])
+
+  const SortHeader = ({ label }: { label: string }) => (
+    <div className="flex items-center justify-center gap-1 cursor-pointer group hover:text-white transition-colors">
+      {label}
+      <ArrowUpDown className={`${sortIconSize} text-[#8b949e] opacity-30 group-hover:opacity-100`} />
+    </div>
+  )
 
   return (
     <div className="h-full flex flex-col gap-3">
       <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-[#0d1117]/60 flex flex-col overflow-hidden">
         {/* Scrollable Content (Both X and Y) */}
         <div className="flex-1 overflow-auto cf-scrollbar">
-          <table className="w-full border-collapse min-w-[800px]">
+          <table className="w-full border-collapse min-w-[900px]">
             <thead>
-              <tr className={`text-[#8b949e] ${textSize} font-bold border-b border-white/10 bg-[#0d1117]/50 sticky top-0 z-10`}>
+              <tr className={`text-[#8b949e] ${headerSize} font-bold border-b border-white/10 bg-[#0d1117]/50 sticky top-0 z-10`}>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>币种</th>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>公司</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>mNAV</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>市值</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>持币价值</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>持币量</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>股价</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>24h涨跌</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}>1天增减</th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="mNAV" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="市值" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="持币价值" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="持币量" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="股价" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="24h涨跌" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="1天增减" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="7天增减" /></th>
               </tr>
             </thead>
             <tbody className={`text-white ${textSize} divide-y divide-white/10`}>
@@ -143,8 +155,8 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                         <img src={row.logo} alt={row.name} className="w-full h-full object-contain" />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="font-semibold truncate">{row.name}</span>
-                        <span className="text-[#8b949e] opacity-70 truncate">{row.ticker} {row.exchange}</span>
+                        <span className="font-semibold truncate max-w-[120px]">{row.name}</span>
+                        <span className="text-[#8b949e] opacity-70 truncate max-w-[120px]">{row.ticker} {row.exchange}</span>
                       </div>
                     </div>
                   </td>
@@ -159,6 +171,7 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                   <td className={`${paddingX} ${paddingY} text-center font-mono`}>{row.sharePrice}</td>
                   <td className={`${paddingX} ${paddingY} text-center font-mono`}>{renderValueWithColor(row.change24h)}</td>
                   <td className={`${paddingX} ${paddingY} text-center font-mono`}>{renderValueWithColor(row.change1d)}</td>
+                  <td className={`${paddingX} ${paddingY} text-center font-mono`}>{renderValueWithColor(row.change7d)}</td>
                 </tr>
               ))}
             </tbody>
