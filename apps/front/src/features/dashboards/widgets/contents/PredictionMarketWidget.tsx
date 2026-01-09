@@ -32,6 +32,16 @@ function Progress({ yes, no }: { yes: number; no: number }) {
 
 export function PredictionMarketWidget(props: { config: Record<string, any> }) {
   const category = (props.config?.category as string) || 'BTC'
+  const size = (props.config?.size as string) || 'M'
+  const isSmall = size === 'S'
+  const isLarge = size === 'L' || size === 'XL'
+
+  // Adaptive styles
+  const titleSize = isSmall ? 'text-xs' : isLarge ? 'text-base' : 'text-sm'
+  const badgeSize = isSmall ? 'text-[9px] px-1.5' : 'text-[10px] px-2'
+  const subTextSize = isSmall ? 'text-[10px]' : 'text-xs'
+  const gapSize = isSmall ? 'gap-2' : 'gap-3'
+  const paddingSize = isSmall ? 'p-2' : 'p-3'
 
   const items = useMemo<PredictionItem[]>(() => {
     // Mock (6~8 items). Keep simple and consistent with existing site style.
@@ -48,21 +58,20 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
 
   return (
     <div className="h-full flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-white/50">Category: <span className="text-white/80 font-semibold">{category}</span></div>
+      <div className="flex items-center justify-end">
         <div className="text-xs text-white/50">{items.length} markets</div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className={`flex-1 overflow-y-auto min-h-0 grid grid-cols-1 ${gapSize} cf-scrollbar pr-1`}>
         {items.map((p) => (
           <div
             key={p.id}
-            className="rounded-xl border border-white/10 bg-[#0d1117]/60 hover:bg-[#0d1117]/80 transition-colors p-3"
+            className={`rounded-xl border border-white/10 bg-[#0d1117]/60 hover:bg-[#0d1117]/80 transition-colors ${paddingSize}`}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className={`flex items-start justify-between ${gapSize}`}>
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-white truncate">{p.title}</div>
-                <div className="flex items-center gap-2 mt-1 text-xs text-white/50">
+                <div className={`${titleSize} font-semibold text-white truncate`}>{p.title}</div>
+                <div className={`flex items-center gap-2 mt-1 ${subTextSize} text-white/50`}>
                   <span>{p.volume} volume</span>
                   <span className="text-white/20">•</span>
                   <span className="uppercase tracking-widest">{p.category}</span>
@@ -73,9 +82,9 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
               </div>
             </div>
 
-            <div className="mt-3 space-y-2">
+            <div className={`mt-3 space-y-2`}>
               <Progress yes={p.yes} no={p.no} />
-              <div className="flex items-center justify-between text-[11px] text-white/60">
+              <div className={`flex items-center justify-between ${isSmall ? 'text-[10px]' : 'text-[11px]'} text-white/60`}>
                 <span>Yes <span className="text-white/80 font-semibold">{p.yes}%</span></span>
                 <span>No <span className="text-white/80 font-semibold">{p.no}%</span></span>
               </div>

@@ -41,6 +41,7 @@ export function KlineWidget(props: { config: Record<string, any> }) {
           setSelectedExchange={setSelectedExchange}
           symbol={symbolForChart}
           marketType={marketType}
+          variant="compact"
         />
       </div>
     </div>

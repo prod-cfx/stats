@@ -91,6 +91,8 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     }
 
     if (item.type.includes('prediction')) {
+      // User requested to remove left-side configuration fields for prediction market
+      /*
       fields.push(
         { key: 'category', label: '分类', type: 'select', options: [
           { value: 'BTC', label: 'Bitcoin' },
@@ -104,9 +106,12 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           { value: 'new', label: '最新' },
         ]},
       )
+      */
     }
 
     if (item.type.includes('crypto_stocks')) {
+      // User requested to remove left-side configuration fields for crypto stocks
+      /*
       fields.push(
         { key: 'watchlist', label: '关注列表', type: 'select', options: [
           { value: 'ALL', label: '全部' },
@@ -118,6 +123,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           { value: 'holdings', label: '持仓量' },
         ]},
       )
+      */
     }
 
     return fields
@@ -229,7 +235,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         {/* Save Button */}
         <div className="border-t border-[#30363d] p-6">
           <button
-            onClick={() => onSave(config, layout)}
+            onClick={() => onSave({ ...config, size: selectedSize }, layout)}
             className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-medium py-3 rounded-lg transition-all shadow-lg shadow-primary/20 active:scale-95"
           >
             保存并添加到看板

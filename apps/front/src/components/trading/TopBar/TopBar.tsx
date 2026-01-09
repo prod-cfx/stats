@@ -236,17 +236,17 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
 
           {/* Symbol Selector Dropdown */}
           {isSymbolMenuOpen && (
-            <div className="absolute top-full left-0 mt-2 w-[480px] bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+            <div className={`absolute top-full left-0 mt-2 ${isCompact ? 'w-[320px]' : 'w-[480px]'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}>
               {/* Header / Tabs */}
               <div className="flex items-center border-b border-[#30363d]">
                 <button
-                  className={`flex-1 py-3 text-sm font-medium transition-colors ${marketType === 'futures' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
+                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'futures' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
                   onClick={() => setMarketType('futures')}
                 >
                   {t('trade.market_type_futures')}
                 </button>
                 <button
-                  className={`flex-1 py-3 text-sm font-medium transition-colors ${marketType === 'spot' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
+                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'spot' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
                   onClick={() => setMarketType('spot')}
                 >
                   {t('trade.market_type_spot')}
@@ -254,7 +254,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
               </div>
 
               {/* Search Bar */}
-              <div className="p-3 border-b border-[#30363d]">
+              <div className={`${isCompact ? 'p-2' : 'p-3'} border-b border-[#30363d]`}>
                 <div className="relative">
                   <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e]" />
                   <input 
@@ -262,17 +262,17 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                     placeholder={t('chart.modal.search')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded py-1.5 pl-9 pr-3 text-sm text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]"
+                    className={`w-full bg-[#0d1117] border border-[#30363d] rounded ${isCompact ? 'py-1 text-xs' : 'py-1.5 text-sm'} pl-9 pr-3 text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]`}
                   />
                 </div>
               </div>
 
               {/* List Header */}
-              <div className="grid grid-cols-4 px-4 py-2 text-xs text-[#8b949e] bg-[#1c2128]">
-                <div className="text-left">{t('trade.column_symbol')}</div>
-                <div className="text-right">{t('trade.column_price')}</div>
-                <div className="text-right">{t('trade.column_change')}</div>
-                <div className="text-right">{t('trade.column_volume')}</div>
+              <div className={`grid grid-cols-4 ${isCompact ? 'px-3 py-1.5' : 'px-4 py-2'} text-xs text-[#8b949e] bg-[#1c2128]`}>
+                <div className="text-left col-span-1">{t('trade.column_symbol')}</div>
+                <div className="text-right col-span-1">{t('trade.column_price')}</div>
+                <div className="text-right col-span-1">{t('trade.column_change')}</div>
+                <div className="text-right col-span-1">{t('trade.column_volume')}</div>
               </div>
 
               {/* Market List */}
@@ -283,7 +283,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                   <button
                     key={`${marketType}-${item.chartSymbol}`}
                     type="button"
-                    className={`w-full text-left grid grid-cols-4 px-4 py-2.5 text-xs cursor-pointer transition-colors border-b border-[#30363d]/50 last:border-0 ${
+                    className={`w-full text-left grid grid-cols-4 ${isCompact ? 'px-3 py-2' : 'px-4 py-2.5'} text-xs cursor-pointer transition-colors border-b border-[#30363d]/50 last:border-0 ${
                       isSelected ? 'bg-[#1f2937]' : 'hover:bg-[#1f2937]'
                     }`}
                     onClick={() => {
@@ -291,22 +291,22 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                       setIsSymbolMenuOpen(false);
                     }}
                   >
-                    <div className="flex items-center gap-2 text-left">
-                      <StarIcon className="w-3 h-3 text-[#8b949e] hover:text-yellow-500" />
-                      <span className={`font-bold ${isSelected ? 'text-white' : 'text-[#c9d1d9]'}`}>{item.displaySymbol}</span>
-                      {marketType === 'futures' && (
+                    <div className="flex items-center gap-2 text-left col-span-1 min-w-0">
+                      <StarIcon className="w-3 h-3 text-[#8b949e] hover:text-yellow-500 flex-shrink-0" />
+                      <span className={`font-bold truncate ${isSelected ? 'text-white' : 'text-[#c9d1d9]'}`}>{item.displaySymbol}</span>
+                      {marketType === 'futures' && !isCompact && (
                         <span className="ml-1 px-1.5 py-0.5 rounded border border-[#30363d] bg-[#0d1117] text-[10px] text-[#8b949e] whitespace-nowrap">
                           {t('trade.perpTag')}
                         </span>
                       )}
                     </div>
-                    <div className="text-right text-[#c9d1d9] font-mono">
+                    <div className="text-right text-[#c9d1d9] font-mono col-span-1">
                       {priceFormatter.format(item.price)}
                     </div>
-                    <div className={`text-right font-medium ${item.changePct >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                    <div className={`text-right font-medium col-span-1 ${item.changePct >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
                       {formatPct(item.changePct)}
                     </div>
-                    <div className="text-right text-[#c9d1d9]">
+                    <div className="text-right text-[#c9d1d9] col-span-1">
                       {compactFormatter.format(item.volume)}
                     </div>
                   </button>

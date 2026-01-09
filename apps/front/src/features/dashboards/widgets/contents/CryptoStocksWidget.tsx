@@ -18,7 +18,13 @@ function changeColor(v: string) {
 }
 
 export function CryptoStocksWidget(props: { config: Record<string, any> }) {
-  const sort = (props.config?.sort as string) || 'marketCap'
+  const size = (props.config?.size as string) || 'M'
+  const isSmall = size === 'S'
+  const isLarge = size === 'L' || size === 'XL'
+
+  const textSize = isSmall ? 'text-[10px]' : isLarge ? 'text-base' : 'text-sm'
+  const rowHeight = isSmall ? 'py-1.5' : isLarge ? 'py-3' : 'py-2'
+  const headerSize = isSmall ? 'text-[9px]' : isLarge ? 'text-xs' : 'text-[11px]'
 
   const rows = useMemo<Row[]>(() => {
     // Mock: 6 rows, table-like UI (simplified).
@@ -34,13 +40,11 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
 
   return (
     <div className="h-full flex flex-col gap-3">
-      <div className="flex items-center justify-between text-xs text-white/50">
-        <span>Watchlist: <span className="text-white/80 font-semibold">ALL</span></span>
-        <span>Sort: <span className="text-white/80 font-semibold">{sort}</span></span>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] uppercase tracking-widest text-white/40 border-b border-white/10">
+      {/* Header removed as requested */}
+      
+      <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-[#0d1117]/60 flex flex-col overflow-hidden">
+        {/* Table Header - Fixed */}
+        <div className={`grid grid-cols-12 gap-2 px-3 py-2 ${headerSize} uppercase tracking-widest text-white/40 border-b border-white/10 flex-none`}>
           <div className="col-span-2">Asset</div>
           <div className="col-span-3">Ticker</div>
           <div className="col-span-4">Company</div>
@@ -48,24 +52,27 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
           <div className="col-span-1 text-right">24h</div>
         </div>
 
-        <div className="divide-y divide-white/10">
-          {rows.map((r) => (
-            <div key={`${r.ticker}-${r.asset}`} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm hover:bg-white/5 transition-colors">
-              <div className="col-span-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/5 border border-white/10 text-xs font-semibold">
-                  {r.asset}
-                </span>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-auto cf-scrollbar">
+          <div className="divide-y divide-white/10">
+            {rows.map((r) => (
+              <div key={`${r.ticker}-${r.asset}`} className={`grid grid-cols-12 gap-2 px-3 ${rowHeight} ${textSize} hover:bg-white/5 transition-colors`}>
+                <div className="col-span-2 flex items-center">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-white/5 border border-white/10 ${isSmall ? 'text-[9px]' : 'text-xs'} font-semibold`}>
+                    {r.asset}
+                  </span>
+                </div>
+                <div className="col-span-3 font-mono text-white/90 flex items-center">{r.ticker}</div>
+                <div className="col-span-4 text-white/80 truncate flex items-center" title={r.company}>{r.company}</div>
+                <div className="col-span-2 text-right font-mono text-white/80 flex items-center justify-end">{r.marketCap}</div>
+                <div className={`col-span-1 text-right font-mono flex items-center justify-end ${changeColor(r.change24h)}`}>{r.change24h}</div>
               </div>
-              <div className="col-span-3 font-mono text-white/90">{r.ticker}</div>
-              <div className="col-span-4 text-white/80 truncate">{r.company}</div>
-              <div className="col-span-2 text-right font-mono text-white/80">{r.marketCap}</div>
-              <div className={`col-span-1 text-right font-mono ${changeColor(r.change24h)}`}>{r.change24h}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        <div className="px-3 py-2 text-xs text-white/40 border-t border-white/10">
-          * Holdings value shown in detail view (mock)
+        <div className={`px-3 py-2 ${isSmall ? 'text-[10px]' : 'text-xs'} text-white/40 border-t border-white/10 flex-none`}>
+          * Holdings value shown in detail view
         </div>
       </div>
     </div>
