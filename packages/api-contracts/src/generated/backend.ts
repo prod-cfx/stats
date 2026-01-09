@@ -706,6 +706,49 @@ const WhaleDiscoverResponseDto = z
     details: z.array(WhaleDiscoverTraderDto),
   })
   .passthrough();
+const WhaleTraderSummaryPerformanceDto = z
+  .object({
+    address: z.string(),
+    lookbackDays: z.number(),
+    symbolFilter: z.string().optional(),
+    trades: z.number(),
+    positions: z.number(),
+    totalValueUsd: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+    winRatePct: z.number(),
+    pnlUsd: z.number(),
+  })
+  .passthrough();
+const WhaleAssetPerformanceDto = z
+  .object({
+    symbol: z.string(),
+    totalValueUsd: z.number(),
+    trades: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+  })
+  .passthrough();
+const WhaleTradeHistoryItemDto = z
+  .object({
+    address: z.string(),
+    symbol: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionAction: z.union([z.literal(1), z.literal(2)]),
+    createTime: z.string(),
+  })
+  .passthrough();
+const WhaleAddressPerformanceResponseDto = z
+  .object({
+    summary: WhaleTraderSummaryPerformanceDto,
+    byAsset: z.array(WhaleAssetPerformanceDto),
+    trades: z.array(WhaleTradeHistoryItemDto),
+  })
+  .passthrough();
 const WhaleHoldingDto = z
   .object({
     userAddress: z.string(),
@@ -778,6 +821,10 @@ export const schemas = {
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
   WhaleDiscoverResponseDto,
+  WhaleTraderSummaryPerformanceDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleAddressPerformanceResponseDto,
   WhaleHoldingDto,
 };
 
@@ -959,6 +1006,21 @@ const endpoints = makeApi([
         .partial()
         .passthrough()
     ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks/:id/trigger",
+    alias: "AdminDataPullTaskController_triggerOnce",
+    description: `立即执行指定任务一次，不受 intervalSeconds 限制；如果任务当前正在运行会直接报错，避免并发执行。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: AdminDataPullExecutionResponseDto,
   },
   {
     method: "get",
@@ -2728,6 +2790,36 @@ const endpoints = makeApi([
     description: `基于 Hyperliquid 鲸鱼预警数据，按最近一段时间的持仓价值与活跃度聚合出一批代表性鲸鱼地址，用于 discover 页面渲染。`,
     requestFormat: "json",
     response: WhaleDiscoverResponseDto,
+  },
+  {
+    method: "get",
+    path: "/whale-tracking/traders/:address/performance",
+    alias: "WhaleTrackingController_getTraderPerformance",
+    description: `基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "timeRangeDays",
+        type: "Query",
+        schema: z.number().gte(1).lte(365).optional(),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(500).optional(),
+      },
+    ],
+    response: WhaleAddressPerformanceResponseDto,
   },
 ]);
 

@@ -2537,6 +2537,43 @@
         ]
       }
     },
+    "/admin/data-pull-tasks/{id}/trigger": {
+      "post": {
+        "description": "立即执行指定任务一次，不受 intervalSeconds 限制；如果任务当前正在运行会直接报错，避免并发执行。",
+        "operationId": "AdminDataPullTaskController_triggerOnce",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "触发成功，返回本次执行记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDataPullExecutionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "手动触发一次数据拉取任务执行（用于测试）",
+        "tags": [
+          "admin-data-pull-tasks"
+        ]
+      }
+    },
     "/liquidation-heatmap/latest": {
       "get": {
         "operationId": "LiquidationHeatmapController_getLatest",
@@ -3292,6 +3329,7 @@
         ]
       }
     },
+<<<<<<< HEAD
     "/crypto-stock-quotes/latest": {
       "get": {
         "description": "返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的",
@@ -3357,6 +3395,8 @@
         ]
       }
     },
+=======
+>>>>>>> origin/main
     "/admin/trades-configs": {
       "get": {
         "operationId": "AdminTradesPairConfigController_getAllConfigs",
@@ -4456,6 +4496,105 @@
         "summary": "删除交易所配置",
         "tags": [
           "admin-exchange-config"
+        ]
+      }
+    },
+    "/whale-alerts/realtime": {
+      "get": {
+        "operationId": "WhaleAlertController_getRealtime",
+        "parameters": [
+          {
+            "name": "symbol",
+            "required": false,
+            "in": "query",
+            "description": "币种符号，例如 BTC / ETH",
+            "schema": {
+              "example": "BTC",
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_position_value_usd",
+            "required": false,
+            "in": "query",
+            "description": "最小持仓名义价值（USD），默认 1_000_000",
+            "schema": {
+              "example": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "返回记录上限，默认 50，最大 200",
+            "schema": {
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "since",
+            "required": false,
+            "in": "query",
+            "description": "仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时",
+            "schema": {
+              "example": "2025-01-01T00:00:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RealtimeWhaleAlertDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "获取 Hyperliquid 鲸鱼持仓预警实时列表",
+        "tags": [
+          "whale-alerts"
+        ]
+      }
+    },
+    "/whale-tracking/discover": {
+      "get": {
+        "description": "基于 Hyperliquid 鲸鱼预警数据，按最近一段时间的持仓价值与活跃度聚合出一批代表性鲸鱼地址，用于 discover 页面渲染。",
+        "operationId": "WhaleTrackingController_getDiscover",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhaleDiscoverResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "鲸鱼发现页 - 获取推荐鲸鱼与详情列表",
+        "tags": [
+          "whale-tracking"
         ]
       }
     }
@@ -6353,6 +6492,7 @@
           }
         }
       },
+<<<<<<< HEAD
       "CryptoStockQuoteResponseDto": {
         "type": "object",
         "properties": {
@@ -6496,17 +6636,83 @@
           },
           "createdAt": {
             "format": "date-time",
+=======
+      "TradesPairConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "配置ID"
+          },
+          "pairId": {
+            "type": "string",
+            "description": "交易对唯一标识"
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所标识"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "交易对符号"
+          },
+          "baseAsset": {
+            "type": "string",
+            "description": "基础资产"
+          },
+          "quoteAsset": {
+            "type": "string",
+            "description": "计价资产"
+          },
+          "instrumentType": {
+            "type": "string",
+            "description": "交易品种类型",
+            "enum": [
+              "SPOT",
+              "PERPETUAL",
+              "FUTURE"
+            ]
+          },
+          "canonicalInstId": {
+            "type": "string",
+            "description": "标准化 OKX instId（用于订阅/查询一致性）",
+            "nullable": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用订阅"
+          },
+          "priority": {
+            "type": "number",
+            "description": "优先级"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "扩展配置",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "备注说明",
+            "nullable": true
+          },
+          "createdAt": {
+>>>>>>> origin/main
             "type": "string",
             "description": "创建时间"
           },
           "updatedAt": {
+<<<<<<< HEAD
             "format": "date-time",
+=======
+>>>>>>> origin/main
             "type": "string",
             "description": "更新时间"
           }
         },
         "required": [
           "id",
+<<<<<<< HEAD
           "symbol",
           "price",
           "source",
@@ -6585,6 +6791,8 @@
         },
         "required": [
           "id",
+=======
+>>>>>>> origin/main
           "pairId",
           "exchange",
           "symbol",
@@ -6602,6 +6810,7 @@
         "properties": {
           "pairId": {
             "type": "string",
+<<<<<<< HEAD
             "description": "交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT",
             "pattern": "^[A-Z0-9\\-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$",
             "example": "BTC-USDT.OKX.SPOT"
@@ -6609,6 +6818,15 @@
           "exchange": {
             "type": "string",
             "description": "交易所标识，目前仅支持 OKX"
+=======
+            "description": "交易对唯一标识，格式: SYMBOL.EXCHANGE.INSTRUMENT_TYPE（全大写），例如 BTC-USDT.OKX.SPOT 或 BTCUSD_PERP.BINANCE.PERPETUAL",
+            "pattern": "^[A-Z0-9_-]+\\.[A-Z0-9_]+\\.(SPOT|PERPETUAL|FUTURE)$",
+            "example": "BTCUSDT.BINANCE.SPOT"
+          },
+          "exchange": {
+            "type": "string",
+            "description": "交易所标识，目前支持 OKX、BINANCE"
+>>>>>>> origin/main
           },
           "symbol": {
             "type": "string",
@@ -7234,6 +7452,224 @@
             "nullable": true
           }
         }
+      },
+      "WhaleAlertSide": {
+        "type": "string",
+        "enum": [
+          "Long",
+          "Short"
+        ],
+        "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）"
+      },
+      "RealtimeWhaleAlertDto": {
+        "type": "object",
+        "properties": {
+          "user_address": {
+            "type": "string",
+            "description": "鲸鱼地址（Hyperliquid 用户地址）",
+            "example": "0x481234567890abcdef1234567890abcdef1234af"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "币种符号，例如 BTC / ETH",
+            "example": "BTC"
+          },
+          "position_size": {
+            "type": "number",
+            "description": "持仓大小（正数=多头，负数=空头）",
+            "example": 52.06421
+          },
+          "entry_price": {
+            "type": "number",
+            "description": "入场价格（USD）",
+            "example": 86148.8
+          },
+          "liq_price": {
+            "type": "number",
+            "description": "清算价格（USD）",
+            "example": 75000
+          },
+          "position_value_usd": {
+            "type": "number",
+            "description": "持仓名义价值（USD）",
+            "example": 4473877.57
+          },
+          "position_action": {
+            "type": "number",
+            "description": "持仓操作类型：1 = 开仓, 2 = 平仓",
+            "example": 1
+          },
+          "create_time": {
+            "type": "string",
+            "description": "持仓创建/变动时间（ISO 时间字符串）",
+            "example": "2025-01-01T08:00:00.000Z"
+          },
+          "side": {
+            "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）",
+            "example": "Long",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WhaleAlertSide"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user_address",
+          "symbol",
+          "position_size",
+          "entry_price",
+          "liq_price",
+          "position_value_usd",
+          "position_action",
+          "create_time",
+          "side"
+        ]
+      },
+      "WhaleDiscoverTraderAiTagDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "AI 标签 key，用于前端 i18n 映射",
+            "enum": [
+              "bullWarGod",
+              "swingKing",
+              "smartTrader",
+              "treasuryKeeper",
+              "twitterKol"
+            ]
+          },
+          "color": {
+            "type": "string",
+            "description": "文本颜色（十六进制或 CSS 颜色值）"
+          },
+          "bgColor": {
+            "type": "string",
+            "description": "背景颜色（十六进制或 CSS 颜色值）"
+          },
+          "descriptionKey": {
+            "type": "string",
+            "description": "描述文案对应的 i18n key，可选",
+            "enum": [
+              "bullWarGod",
+              "swingKing",
+              "smartTrader",
+              "treasuryKeeper",
+              "twitterKol"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "color",
+          "bgColor"
+        ]
+      },
+      "WhaleDiscoverTraderDto": {
+        "type": "object",
+        "properties": {
+          "variant": {
+            "type": "string",
+            "description": "卡片展示变体：推荐卡片或详情卡片",
+            "enum": [
+              "recommended",
+              "detail"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "鲸鱼地址（链上地址）"
+          },
+          "handle": {
+            "type": "string",
+            "description": "可选的社交/昵称 handle，例如 @machibigbrother",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "description": "推荐卡片右上角的小标签，例如 $10B HYPERUNIT WHALE",
+            "nullable": true
+          },
+          "totalValueUsd": {
+            "type": "number",
+            "description": "总持仓名义价值（USD），基于最近一段时间内 Hyperliquid whale alert 数据的名义金额聚合，不代表账户实际资产净值"
+          },
+          "pnlUsd": {
+            "type": "number",
+            "description": "实现盈亏（USD）。当前实现为基于名义价值和多空方向推导的占位统计值，仅用于排序与可视化，不代表真实历史 PnL。"
+          },
+          "pnlLabelKey": {
+            "type": "string",
+            "description": "盈亏标签 key，用于前端展示对应时间维度",
+            "enum": [
+              "realizedPnl",
+              "realizedPnl1m"
+            ]
+          },
+          "trades": {
+            "type": "number",
+            "description": "成交笔数（近一段时间内的鲸鱼预警条数）"
+          },
+          "positions": {
+            "type": "number",
+            "description": "涉及的标的数量（近一段时间内出现过持仓预警的币种个数）"
+          },
+          "winRatePct": {
+            "type": "number",
+            "description": "胜率百分比（0-100）。当前实现为基于多空方向占比的占位算法，仅用于 discover 视图展示，不代表真实历史胜率。"
+          },
+          "winRateLabelKey": {
+            "type": "string",
+            "description": "胜率标签 key，用于前端展示对应时间维度",
+            "enum": [
+              "winRate",
+              "winRate1m"
+            ]
+          },
+          "avatarColor": {
+            "type": "string",
+            "description": "头像圆圈的主色调"
+          },
+          "aiTags": {
+            "description": "AI 风格标签列表（可选）",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WhaleDiscoverTraderAiTagDto"
+            }
+          }
+        },
+        "required": [
+          "variant",
+          "address",
+          "totalValueUsd",
+          "pnlUsd",
+          "winRatePct",
+          "avatarColor"
+        ]
+      },
+      "WhaleDiscoverResponseDto": {
+        "type": "object",
+        "properties": {
+          "recommended": {
+            "description": "推荐鲸鱼列表，用于页面顶部推荐卡片",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WhaleDiscoverTraderDto"
+            }
+          },
+          "details": {
+            "description": "鲸鱼详情列表，用于下方网格展示",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WhaleDiscoverTraderDto"
+            }
+          }
+        },
+        "required": [
+          "recommended",
+          "details"
+        ]
       }
     }
   }

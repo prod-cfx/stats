@@ -10,6 +10,7 @@ import {
   fetchDataPullTaskExecutions,
   fetchDataPullTasks,
   fetchRegisteredJobs,
+  triggerDataPullTask,
   updateDataPullTask,
 } from '@/lib/api'
 
@@ -82,6 +83,7 @@ export default function DataPullTasksPage() {
   const [logTotal, setLogTotal] = useState(0)
   const [logPage, setLogPage] = useState(1)
   const [logLimit, setLogLimit] = useState(20)
+  const [triggeringId, setTriggeringId] = useState<number | null>(null)
 
   const loadTasks = useCallback(
     async (pageParam: number, limitParam: number, filters?: { key?: string; name?: string; enabled?: boolean }) => {
@@ -265,6 +267,37 @@ export default function DataPullTasksPage() {
     })
   }, [loadTasks, message, page, limit, queryKey, queryName, queryEnabled])
 
+  const handleTrigger = useCallback(
+    async (task: DataPullTask) => {
+      setTriggeringId(task.id)
+      try {
+        const exec = await triggerDataPullTask(task.id)
+        message.success(
+          `任务已触发，状态：${exec.status}${
+            typeof exec.fetchedCount === 'number' ? `，拉取条数：${exec.fetchedCount}` : ''
+          }`,
+        )
+        // 触发后刷新列表和日志
+        void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+        // 如果当前打开的是该任务的日志抽屉，则刷新日志
+        if (logTask && logTask.id === task.id) {
+          void loadTaskLogs(task, 1, logLimit)
+        }
+      } catch (error: any) {
+        const errorMsg =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.data?.message ||
+          error?.message ||
+          '触发任务失败'
+        message.error(errorMsg)
+      } finally {
+        setTriggeringId(null)
+      }
+    },
+    [loadTasks, loadTaskLogs, logLimit, logTask, message, page, limit, queryKey, queryName, queryEnabled],
+  )
+
   const statusBadge = useCallback((task: DataPullTask) => {
     if (!task.lastStatus) {
       return <Tag>未执行</Tag>
@@ -317,7 +350,7 @@ export default function DataPullTasksPage() {
       {
         title: '操作',
         fixed: 'right',
-        width: 260,
+        width: 360,
         render: (_, record) => (
           <>
             <Button type="link" onClick={() => openEditModal(record)}>
@@ -326,6 +359,13 @@ export default function DataPullTasksPage() {
             <Button type="link" onClick={() => openLogDrawer(record)}>
               查看日志
             </Button>
+            <Button
+              type="link"
+              onClick={() => handleTrigger(record)}
+              loading={triggeringId === record.id}
+            >
+              立即执行
+            </Button>
             <Button type="link" danger onClick={() => handleDelete(record)}>
               删除
             </Button>
@@ -333,7 +373,7 @@ export default function DataPullTasksPage() {
         ),
       },
     ],
-    [handleDelete, openEditModal, openLogDrawer, statusBadge],
+    [handleDelete, handleTrigger, openEditModal, openLogDrawer, statusBadge, triggeringId],
   )
 
   return (

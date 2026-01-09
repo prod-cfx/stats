@@ -1,6 +1,9 @@
-import type { DataPullJob, JobMetaSchema } from '../contracts/data-pull-job'
 import type {
-  AdminDataPullExecutionResponseDto,
+  DataPullJob,
+  DataPullJobContext,
+  JobMetaSchema,
+} from '../contracts/data-pull-job'
+import type {
   AdminDataPullTaskListQueryDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
@@ -9,7 +12,10 @@ import type { DataPullTask } from '../repositories/data-pull-task.repository'
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DATA_PULL_JOB_REGISTRY } from '../data-sync.tokens'
-import { AdminDataPullTaskResponseDto } from '../dto/admin-data-pull-task.dto'
+import {
+  AdminDataPullExecutionResponseDto,
+  AdminDataPullTaskResponseDto,
+} from '../dto/admin-data-pull-task.dto'
 import { DataPullExecutionRepository } from '../repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from '../repositories/data-pull-task.repository'
 
@@ -40,6 +46,27 @@ export class AdminDataPullTaskService {
   ) {
     this.registeredKeys = new Set(jobs.map(job => job.key))
     this.jobsMap = new Map(jobs.map(job => [job.key, job]))
+  }
+
+  /**
+   * 根据任务 key 查找对应的 Job 实现
+   * - 支持精确匹配和前缀匹配（key 以 "job.key:" 开头）
+   */
+  private findJobForTask(taskKey: string): DataPullJob | undefined {
+    // 优先精确匹配
+    const exactMatch = this.jobsMap.get(taskKey)
+    if (exactMatch) {
+      return exactMatch
+    }
+
+    // 前缀匹配：taskKey 格式为 "jobKey:suffix"
+    const colonIndex = taskKey.indexOf(':')
+    if (colonIndex > 0) {
+      const jobKeyPrefix = taskKey.slice(0, colonIndex)
+      return this.jobsMap.get(jobKeyPrefix)
+    }
+
+    return undefined
   }
 
   /**
@@ -88,6 +115,80 @@ export class AdminDataPullTaskService {
     }
 
     return false
+  }
+
+  /**
+   * 手动触发指定任务执行一次（主要用于测试，不受 intervalSeconds 限制）
+   *
+   * 注意：
+   * - 如果任务当前处于 RUNNING 状态，会直接报错，避免并发执行同一任务
+   * - 执行结果和错误信息会正常写入 data_pull_executions / data_pull_tasks
+   */
+  async triggerOnce(id: number): Promise<AdminDataPullExecutionResponseDto> {
+    const task = await this.taskRepo.findById(id)
+    if (!task) {
+      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+    }
+
+    const now = new Date()
+
+    const job = this.findJobForTask(task.key)
+    if (!job) {
+      throw new BadRequestException(
+        `数据拉取任务 key "${task.key}" 未注册，无法执行。当前已注册的 Job key: ${Array.from(this.registeredKeys).join(', ')}`,
+      )
+    }
+
+    // 通过乐观锁方式标记为 RUNNING，避免并发“立即执行”导致重复跑同一任务
+    const claimed = await this.taskRepo.tryMarkRunningOnce(task.id, now)
+    if (!claimed) {
+      throw new BadRequestException(
+        `数据拉取任务 key "${task.key}" 正在运行中，请稍后再试`,
+      )
+    }
+
+    // 记录一次新的执行历史
+    const exec = await this.execRepo.createStart(task.id, now)
+
+    try {
+      const ctx: DataPullJobContext = {
+        taskId: task.id,
+        key: task.key,
+        cursor: task.cursor ?? null,
+        meta: (task.meta ?? null) as any,
+        now,
+      }
+
+      const result = await job.run(ctx)
+      const finished = new Date()
+
+      await this.execRepo.markSuccess(exec.id, finished, result)
+      await this.taskRepo.markSuccess(
+        task.id,
+        finished,
+        result.newCursor ?? task.cursor ?? null,
+        result.meta,
+      )
+
+      const dto = new AdminDataPullExecutionResponseDto()
+      dto.id = exec.id
+      dto.taskId = task.id
+      dto.status = 'SUCCESS'
+      dto.fetchedCount = result.fetchedCount
+      dto.startedAt = exec.startedAt
+      dto.finishedAt = finished
+      dto.errorMessage = null
+      dto.meta = (result.meta ?? null) as any
+
+      return dto
+    } catch (error) {
+      const finished = new Date()
+      await this.execRepo.markFailed(exec.id, finished, error)
+      await this.taskRepo.markFailed(task.id, finished, error)
+
+      // 直接抛出原始错误，HTTP 层会返回 500 / 4xx
+      throw error
+    }
   }
 
   async list(query: AdminDataPullTaskListQueryDto): Promise<BasePaginationResponseDto<AdminDataPullTaskResponseDto>> {
