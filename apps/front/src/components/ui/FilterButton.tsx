@@ -11,11 +11,15 @@ interface FilterButtonProps {
   onChange: (v: string) => void;
   minWidth?: string;
   className?: string;
+  size?: 'sm' | 'md';
 }
 
-export const FilterButton = ({ value, options, onChange, minWidth = "100px", className = "" }: FilterButtonProps) => {
+export const FilterButton = ({ value, options, onChange, minWidth = "100px", className = "", size = 'md' }: FilterButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const padding = size === 'sm' ? 'px-2 py-1' : 'px-3 py-2';
+  const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
 
   const getOptionValue = (opt: FilterOption) => (typeof opt === 'string' ? opt : opt.value);
   const getOptionLabel = (opt: FilterOption) => (typeof opt === 'string' ? opt : opt.label);
@@ -38,7 +42,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between px-3 py-2 bg-[#21262d] border rounded-md text-[#e6edf3] text-sm transition-all active:scale-95 ${
+        className={`flex items-center justify-between ${padding} bg-[#21262d] border rounded-md text-[#e6edf3] ${textSize} transition-all active:scale-95 ${
           isOpen 
             ? 'border-transparent bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/20' 
             : 'border-[#30363d] hover:border-[#8b949e]'

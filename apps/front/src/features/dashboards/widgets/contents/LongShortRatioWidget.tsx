@@ -67,7 +67,7 @@ export function LongShortRatioWidget(props: { config: Record<string, any> }) {
             options={['BTC', 'ETH', 'SOL', 'XRP']}
             onChange={setSymbol}
             minWidth="70px"
-            className="text-xs"
+            size="sm"
           />
           <FilterButton
             value={windowVal}
@@ -78,7 +78,7 @@ export function LongShortRatioWidget(props: { config: Record<string, any> }) {
             ]}
             onChange={setWindow}
             minWidth="60px"
-            className="text-xs"
+            size="sm"
           />
         </div>
       </div>

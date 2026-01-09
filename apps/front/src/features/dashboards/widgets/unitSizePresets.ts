@@ -29,6 +29,12 @@ export const CRYPTO_STOCKS_UNIT_SIZE_PRESETS: Record<UnitSize, { w: number; h: n
   XL: { w: 12, h: 3, label: 'XL' },
 }
 
+// 聚合多空比（derivatives.long_short_ratio）专用尺寸：只保留 S/M，M 针对6条数据优化
+export const LONG_SHORT_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 6, h: 7, label: 'M' }, // h=7 to fit 6 items comfortably without too much height
+}
+
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
   const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
 
@@ -54,6 +60,8 @@ export function snapToPresetForWidgetType(
     presets = PREDICTION_UNIT_SIZE_PRESETS as any
   } else if (widgetType === 'market.crypto_stocks') {
     presets = CRYPTO_STOCKS_UNIT_SIZE_PRESETS
+  } else if (widgetType === 'derivatives.long_short_ratio') {
+    presets = LONG_SHORT_UNIT_SIZE_PRESETS as any
   }
 
   const entries = Object.entries(presets) as Array<[UnitSize, { w: number; h: number }]>
