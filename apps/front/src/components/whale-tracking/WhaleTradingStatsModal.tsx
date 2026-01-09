@@ -419,6 +419,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
   // Close dropdown on outside click / when modal closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
       setTimeRangeOpen(false);
       return;
     }
@@ -555,12 +556,14 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-8 border-b border-[#30363d]">
             <button
+              type="button"
               onClick={() => setActiveTab('asset')}
               className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
             >
               {t('whaleTracking.modal.byAsset')}
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('position')}
               className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'position' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
             >

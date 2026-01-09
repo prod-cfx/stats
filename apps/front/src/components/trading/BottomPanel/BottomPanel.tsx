@@ -1,7 +1,7 @@
 'use client';
 
 import { FileSearch } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMockBasePrice } from '@/lib/mock/market';
 
@@ -51,11 +51,11 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
     return h || 1;
   }, [symbol]);
 
-  const seeded = (n: number) => {
+  const seeded = useCallback((n: number) => {
     // deterministic pseudo-random in [0,1)
     const x = Math.sin((stableSeed + n) * 12.9898) * 43758.5453;
     return x - Math.floor(x);
-  };
+  }, [stableSeed]);
 
   // Mock Data
   type OrderTypeKey = 'limit' | 'market'
@@ -143,7 +143,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
       };
     };
     return [mk(1, 'long'), mk(2, 'short'), mk(3, 'long'), mk(4, 'long')];
-  }, [basePrice, priceFormatter, seeded, symbol]);
+  }, [basePrice, seeded, symbol]);
 
   const filteredPositionHistory = useMemo(() => {
     const q = searchQuery.trim().toUpperCase();

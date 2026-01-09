@@ -42,10 +42,12 @@ export function useMockData<T>(
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher, options.delay, options.shouldError, options.isEmpty, searchParams, setData, setError, setLoading, ...dependencies]);
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
   return { data, loading, error, reload: () => load(true) };

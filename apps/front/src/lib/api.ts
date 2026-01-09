@@ -696,9 +696,9 @@ export async function fetchLlmStrategyInstanceDetail(id: string) {
 
 /**
  * @internal
- * 当前后端仅返回空列表，占位用于未来将 LLM run → 交易信号的持久化打通。
- * 前端不应依赖返回结构做复杂展示逻辑。
  */
+// 当前后端仅返回空列表，占位用于未来将 LLM run → 交易信号的持久化打通。
+// 前端不应依赖返回结构做复杂展示逻辑。
 export async function fetchLlmStrategyInstanceSignals(
   id: string,
   query: LlmStrategyInstanceSignalsQuery = {},

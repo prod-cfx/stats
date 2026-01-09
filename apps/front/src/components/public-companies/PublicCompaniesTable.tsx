@@ -354,12 +354,12 @@ export const PublicCompaniesTable = () => {
       : <ChevronUp className="w-3 h-3 text-primary" />;
   };
 
-  const formatExchange = (exchange: string) => {
+  const formatExchange = React.useCallback((exchange: string) => {
     if (i18n.language !== 'en') return exchange;
     if (exchange === '美股-NASDAQ') return 'US-NASDAQ';
     if (exchange === '美股-NYSE') return 'US-NYSE';
     return exchange;
-  };
+  }, [i18n.language]);
 
   const selectedCompanyInfoParagraphs = useMemo(() => {
     if (!selectedCompany) return [];

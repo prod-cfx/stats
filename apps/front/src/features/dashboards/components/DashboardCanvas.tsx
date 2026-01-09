@@ -18,6 +18,7 @@ function useContainerWidth() {
     if (!el) return
     const read = () => {
       const w = Math.floor(el.getBoundingClientRect().width)
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- debounced resize handler
       if (w > 0) setWidth(w)
     }
     read()
@@ -45,7 +46,7 @@ const clampLayout = (items: any[]) =>
 
 export function DashboardCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() => ensureDashboard(props.dashboardId))
-  const [layoutState, setLayoutState] = useState(clampLayout(doc.layout))
+  const [layoutState, setLayoutState] = useState(() => clampLayout(doc.layout))
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const [resetKey, setResetKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -65,6 +66,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       setDoc(freshDoc)
       if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
     }
+    // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleanup in return
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
   }, [props.dashboardId])
@@ -89,8 +91,8 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         const found = group.items.find((i) => i.type === widget.type)
         if (found) { catalogItem = found; break }
       }
-      const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
-      return { i: widget.id, x: 0, y: 0, w: 6, h: 3, minW: 6, maxW: 12 }
+      const _d = catalogItem?.defaultLayout || { w: 6, h: 3 }
+      return { i: widget.id, x: 0, y: 0, w: _d.w, h: _d.h, minW: 6, maxW: 12 }
     })
     setLayoutState(newLayout)
     updateDashboardLayout(props.dashboardId, newLayout)
@@ -107,7 +109,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       <DashboardHeader dashboard={doc} onRefresh={() => setDoc(getDashboard(props.dashboardId)!)} />
       
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => setIsModalOpen(true)} className="bg-primary text-white px-4 py-2 rounded text-sm font-medium">
+        <button type="button" onClick={() => setIsModalOpen(true)} className="bg-primary text-white px-4 py-2 rounded text-sm font-medium">
           <Plus className="w-4 h-4 inline mr-1" />添加组件
         </button>
         <button type="button" onClick={handleResetLayout} className="border border-[#30363d] text-[#8b949e] px-4 py-2 rounded text-sm hover:text-white transition-colors">

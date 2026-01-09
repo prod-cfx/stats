@@ -36,6 +36,7 @@ export function useWidgetMockData(type: WidgetType, config: Record<string, any>)
     return () => {
       alive = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- config 通过 JSON.stringify 深比较，避免对象引用变化导致无限循环
   }, [type, JSON.stringify(config)])
 
   return state

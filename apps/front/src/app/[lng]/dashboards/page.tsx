@@ -25,24 +25,28 @@ export default function DashboardsPage() {
   const activeIdRef = useRef<string | null>(null)
 
   const loadDashboards = () => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setMyDashboards(getMyDashboards())
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setSavedDashboards(getSavedDashboards())
   }
 
   useEffect(() => {
     loadDashboards()
-    
+
     // Auto-select first saved dashboard if exists
     const saved = getSavedDashboards()
     if (saved.length > 0) {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
       setActiveDashboard(saved[0])
     }
 
     const handler = () => {
       loadDashboards()
       // Update active dashboard if it was modified
-      if (activeDashboard) {
-        const updated = getSavedDashboards().find(d => d.id === activeDashboard.id)
+      const currentId = activeIdRef.current
+      if (currentId) {
+        const updated = getSavedDashboards().find(d => d.id === currentId)
         if (updated) {
           setActiveDashboard(updated)
         }
@@ -80,6 +84,7 @@ export default function DashboardsPage() {
         {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#30363d]">
           <button
+            type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="flex items-center gap-2 text-white hover:text-primary transition-colors"
           >
@@ -93,6 +98,7 @@ export default function DashboardsPage() {
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {savedDashboards.map((dash) => (
             <button
+              type="button"
               key={dash.id}
               onClick={() => setActiveDashboard(dash)}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
@@ -112,6 +118,7 @@ export default function DashboardsPage() {
         {/* Saved Dashboards Section */}
         <div className="border-t border-[#30363d]">
           <button
+            type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="w-full flex items-center justify-between p-4 text-[#8b949e] hover:text-white transition-colors text-sm"
           >
@@ -126,6 +133,7 @@ export default function DashboardsPage() {
         {/* Create Dashboard Button */}
         <div className="p-3 border-t border-[#30363d]">
           <button
+            type="button"
             onClick={handleCreateDashboard}
             className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
           >
@@ -146,6 +154,7 @@ export default function DashboardsPage() {
         <div className="flex-none bg-[#0d1117] border-b border-[#30363d] px-8 py-4">
           <div className="flex items-center gap-8">
             <button
+              type="button"
               onClick={() => setCurrentTab('explore')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
                 currentTab === 'explore'
@@ -157,6 +166,7 @@ export default function DashboardsPage() {
               Explore Dashboards
             </button>
             <button
+              type="button"
               onClick={() => setCurrentTab('my')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
                 currentTab === 'my'
@@ -168,6 +178,7 @@ export default function DashboardsPage() {
               My Dashboards
             </button>
             <button
+              type="button"
               onClick={() => setCurrentTab('saved')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
                 currentTab === 'saved'
@@ -190,6 +201,7 @@ export default function DashboardsPage() {
               <Grid3x3 className="w-16 h-16 mx-auto mb-4 opacity-30" />
               <h2 className="text-xl font-medium mb-2">还没有看板</h2>
               <button
+                type="button"
                 onClick={handleCreateDashboard}
                 className="mt-4 bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg transition-colors"
               >

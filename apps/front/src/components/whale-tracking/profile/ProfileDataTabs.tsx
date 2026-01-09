@@ -255,7 +255,7 @@ export const ProfileDataTabs = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const [assetFilter, setAssetFilter] = useState('');
   const [isFilterOpen, setIsAssetFilterOpen] = useState(false);
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set());
 
   const normalizeDateLabel = (value: string) => {
     // 2025年12月19日 -> 2025-12-19 (language-agnostic)

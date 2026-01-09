@@ -13,9 +13,11 @@ interface DashboardWidgetProps {
   onRemove?: () => void;
 }
 
-export const DashboardWidget: React.FC<DashboardWidgetProps> = ({ 
-  type, 
-  config = {}, 
+const DEFAULT_CONFIG: Record<string, any> = {}
+
+export const DashboardWidget: React.FC<DashboardWidgetProps> = ({
+  type,
+  config = DEFAULT_CONFIG,
   className = '',
   onRemove
 }) => {

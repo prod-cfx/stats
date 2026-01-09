@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { AppProviders } from '@/components/providers/AppProviders';
 import '../globals.css';
 
+/* eslint-disable react-refresh/only-export-components */
+
 export type AppLocale = 'zh' | 'en';
 
 // 生成静态参数，为每种语言生成独立的静态页面
@@ -57,6 +59,7 @@ export default async function LngLayout({
     <html lang={htmlLang} suppressHydrationWarning>
       <head>
         <script
+          // eslint-disable-next-line react-dom/no-dangerously-set-innerhtml
           dangerouslySetInnerHTML={{
             __html: `
               // 拦截并忽略由插件引起的 ethereum 属性重定义错误
