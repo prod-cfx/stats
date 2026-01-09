@@ -47,6 +47,12 @@ export const OPEN_INTEREST_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: numb
   M: { w: 10, h: 4, label: 'M' },
 }
 
+// 聚合成交量（derivatives.volume_agg）专用尺寸：只保留 S/M
+export const VOLUME_UNIT_SIZE_PRESETS: Partial<Record<UnitSize, { w: number; h: number; label: string }>> = {
+  S: { w: 6, h: 3, label: 'S' },
+  M: { w: 6, h: 6, label: 'M' },
+}
+
 export function snapToPreset(w: number, h: number): { w: number; h: number; size: UnitSize } {
   const entries = Object.entries(UNIT_SIZE_PRESETS) as Array<[UnitSize, { w: number; h: number }]>
 
@@ -78,6 +84,8 @@ export function snapToPresetForWidgetType(
     presets = ORDERBOOK_UNIT_SIZE_PRESETS
   } else if (widgetType === 'derivatives.open_interest_agg') {
     presets = OPEN_INTEREST_UNIT_SIZE_PRESETS as any
+  } else if (widgetType === 'derivatives.volume_agg') {
+    presets = VOLUME_UNIT_SIZE_PRESETS as any
   }
 
   const entries = Object.entries(presets) as Array<[UnitSize, { w: number; h: number }]>
