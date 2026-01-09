@@ -449,6 +449,38 @@ const VenueOrderBookDto = z
     version: z.number(),
   })
   .passthrough();
+const CryptoStockQuoteResponseDto = z
+  .object({
+    id: z.number(),
+    symbol: z.string(),
+    name: z.string().nullish(),
+    exchange: z.string().nullish(),
+    price: z.string(),
+    openPrice: z.string().nullish(),
+    highPrice: z.string().nullish(),
+    lowPrice: z.string().nullish(),
+    closePrice: z.string().nullish(),
+    volume: z.string().nullish(),
+    turnover: z.string().nullish(),
+    priceChange: z.string().nullish(),
+    priceChangePercent: z.string().nullish(),
+    marketCap: z.string().nullish(),
+    peRatio: z.string().nullish(),
+    high52Week: z.string().nullish(),
+    low52Week: z.string().nullish(),
+    assetSymbol: z.string().nullish(),
+    assetLogoUrl: z.string().nullish(),
+    companyLogoUrl: z.string().nullish(),
+    holdingsValue: z.string().nullish(),
+    holdingsAmount: z.string().nullish(),
+    mNav: z.string().nullish(),
+    infoParagraphs: z.array(z.string()).optional(),
+    source: z.string(),
+    quoteTimestamp: z.string().datetime({ offset: true }),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough();
 const TradesPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -773,6 +805,7 @@ export const schemas = {
   UpdateOrderbookPairConfigDto,
   OrderBookLevelDto,
   VenueOrderBookDto,
+  CryptoStockQuoteResponseDto,
   TradesPairConfigResponseDto,
   CreateTradesPairConfigDto,
   UpdateTradesPairConfigDto,
@@ -2216,6 +2249,31 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/crypto-stock-quotes/latest",
+    alias: "CryptoStockQuotesController_getLatest",
+    description: `返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbols",
+        type: "Query",
+        schema: z.array(z.string()).optional(),
+      },
+      {
+        name: "source",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: BaseResponseDto.and(
+      z
+        .object({ data: z.array(CryptoStockQuoteResponseDto) })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "get",

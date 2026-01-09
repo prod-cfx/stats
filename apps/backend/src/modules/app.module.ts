@@ -19,6 +19,7 @@ import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.c
 import { PrismaModule } from '../prisma/prisma.module'
 import { AdminModule } from './admin/admin.module'
 import { AuthModule } from './auth/auth.module'
+import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
 import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
@@ -95,6 +96,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     ExchangeConfigModule,
     OpenInterestModule,
     WhaleAlertModule,
+    CryptoStockQuotesModule,
     WhaleTrackingModule,
     WhaleHoldingsModule,
   ],
