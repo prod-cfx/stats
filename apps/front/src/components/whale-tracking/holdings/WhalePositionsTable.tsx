@@ -37,7 +37,8 @@ export const WhalePositionsTable = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'BTC' | 'ETH' | 'SOL'>('ALL');
   const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL');
-  const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
+  // 目前后端未返回 PnL 相关字段，暂不开放盈亏筛选，避免“空操作”体验
+  // const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL');
   const [sortField, setSortField] = useState<'positionValue' | 'pnl' | 'margin' | 'winRate' | 'createdTime' | null>('positionValue');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc');
 
@@ -58,12 +59,14 @@ export const WhalePositionsTable = () => {
         limit: 200,
       });
     },
-    { immediate: false }
+    { immediate: true }
   );
 
-  // 过滤条件变化时重新拉取
+  // 资产过滤变化时重新拉取
   useEffect(() => {
-    execute();
+    if (assetFilter !== 'ALL') {
+      execute();
+    }
   }, [execute, assetFilter]);
 
   const sortedPositions = useMemo(() => {
@@ -175,7 +178,7 @@ export const WhalePositionsTable = () => {
     });
 
     return mapped;
-  }, [rawHoldings, assetFilter, sideFilter, pnlFilter, sortField, sortOrder]);
+  }, [rawHoldings, assetFilter, sideFilter, sortField, sortOrder]);
 
   const handleSort = (field: Exclude<typeof sortField, null>) => {
     if (sortField === field) {
@@ -235,15 +238,7 @@ export const WhalePositionsTable = () => {
             ]} 
             onChange={setSideFilter} 
           />
-          <FilterButton 
-            value={pnlFilter} 
-            options={[
-              { value: 'ALL', label: t('common.all') },
-              { value: 'PROFIT', label: t('whaleTracking.holdings.filters.profit') },
-              { value: 'LOSS', label: t('whaleTracking.holdings.filters.loss') },
-            ]} 
-            onChange={setPnlFilter} 
-          />
+          {/* PnL 筛选暂未开放，待后端提供盈亏数据后再启用 */}
         </div>
       </div>
 
