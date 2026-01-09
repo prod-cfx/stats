@@ -168,7 +168,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
   }, [bids, asks, t]);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full min-h-[400px]">
       <ReactECharts 
         option={option} 
         style={{ height: '100%', width: '100%' }}

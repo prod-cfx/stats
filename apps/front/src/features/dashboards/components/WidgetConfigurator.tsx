@@ -26,7 +26,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (item.type === 'market.crypto_stocks') return CRYPTO_STOCKS_UNIT_SIZE_PRESETS
     // 聚合多空比只保留 S/M 尺寸
     if (item.type === 'derivatives.long_short_ratio') return LONG_SHORT_UNIT_SIZE_PRESETS as any
-    // 聚合挂单 S 宽度同 K 线，高度 h=3
+    // 聚合挂单 S 宽度同 K 线，高度 h=3，只保留 S/M
     if (item.type === 'derivatives.orderbook_agg') return ORDERBOOK_UNIT_SIZE_PRESETS as any
     return UNIT_SIZE_PRESETS
   }, [item.type])

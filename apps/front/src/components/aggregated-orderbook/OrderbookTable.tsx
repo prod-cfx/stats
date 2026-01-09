@@ -138,7 +138,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
     }
     
     // Both mode: Fixed 13 asks and 13 bids (default), or fewer for compact
-    const count = isCompact ? 6 : 13;
+    const count = isCompact ? 13 : 13;
     return {
       rows: [
         ...asksSorted.slice(-count).map((x) => ({ ...x, _type: 'ask' as const })),
