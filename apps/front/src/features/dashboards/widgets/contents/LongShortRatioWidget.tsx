@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { FilterButton } from '@/components/ui/FilterButton'
 
 interface Row {
   exchange: string
@@ -28,8 +30,9 @@ function fmtUsd(v: number) {
 }
 
 export function LongShortRatioWidget(props: { config: Record<string, any> }) {
-  const symbol = (props.config?.symbol as string) || 'BTC'
-  const window = (props.config?.window as string) || '4h'
+  const { t } = useTranslation()
+  const [symbol, setSymbol] = useState((props.config?.symbol as string) || 'BTC')
+  const [windowVal, setWindow] = useState((props.config?.window as string) || '4h')
 
   const summary = useMemo(() => {
     const longPercent = 50.8
@@ -55,60 +58,75 @@ export function LongShortRatioWidget(props: { config: Record<string, any> }) {
 
   return (
     <div className="h-full flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-xs text-white/50">Symbol</div>
-          <div className="text-white font-bold">{symbol}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs text-white/50">Window</div>
-          <div className="text-white/80 font-semibold">{window}</div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-[#0d1117]/60 p-3 space-y-2">
-        <div className="flex items-center justify-between text-xs text-white/60">
-          <span>Long <span className="text-white/90 font-semibold">{summary.longPercent.toFixed(1)}%</span></span>
-          <span>Short <span className="text-white/90 font-semibold">{summary.shortPercent.toFixed(1)}%</span></span>
-        </div>
-        <ProgressBar long={summary.longPercent} short={summary.shortPercent} />
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2">
-            <div className="text-white/50">Long (USD)</div>
-            <div className="text-[#4ade80] font-semibold">{fmtUsd(summary.longAmountUsd)}</div>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2">
-            <div className="text-white/50">Short (USD)</div>
-            <div className="text-[#ef4444] font-semibold">{fmtUsd(summary.shortAmountUsd)}</div>
-          </div>
+      {/* Header: Title + Dropdowns */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-white/90 font-bold text-sm truncate">Long/Short Ratio</div>
+        <div className="flex items-center gap-2">
+          <FilterButton
+            value={symbol}
+            options={['BTC', 'ETH', 'SOL', 'XRP']}
+            onChange={setSymbol}
+            minWidth="70px"
+            className="text-xs"
+          />
+          <FilterButton
+            value={windowVal}
+            options={[
+              { value: '1h', label: '1H' },
+              { value: '4h', label: '4H' },
+              { value: '24h', label: '24H' },
+            ]}
+            onChange={setWindow}
+            minWidth="60px"
+            className="text-xs"
+          />
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] uppercase tracking-widest text-white/40 border-b border-white/10">
-          <div className="col-span-3">Exchange</div>
-          <div className="col-span-5">Ratio</div>
-          <div className="col-span-2 text-right">Long</div>
-          <div className="col-span-2 text-right">Short</div>
-        </div>
-        <div className="divide-y divide-white/10">
-          {rows.map((r) => (
-            <div key={r.exchange} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm hover:bg-white/5 transition-colors items-center">
-              <div className="col-span-3 text-white/80 font-medium">{r.exchange}</div>
-              <div className="col-span-5 flex flex-col gap-1">
-                <ProgressBar long={r.longPercent} short={r.shortPercent} />
-                <div className="flex items-center justify-between text-[11px] text-white/50">
-                  <span className="text-[#4ade80]">{r.longPercent.toFixed(1)}%</span>
-                  <span className="text-[#ef4444]">{r.shortPercent.toFixed(1)}%</span>
-                </div>
-              </div>
-              <div className="col-span-2 text-right font-mono text-[#4ade80]">{fmtUsd(r.longAmountUsd)}</div>
-              <div className="col-span-2 text-right font-mono text-[#ef4444]">{fmtUsd(r.shortAmountUsd)}</div>
+      <div className="flex-1 overflow-y-auto min-h-0 cf-scrollbar pr-1 flex flex-col gap-4">
+        <div className="rounded-xl border border-white/10 bg-[#0d1117]/60 p-3 space-y-2 flex-none">
+          <div className="flex items-center justify-between text-xs text-white/60">
+            <span>Long <span className="text-white/90 font-semibold">{summary.longPercent.toFixed(1)}%</span></span>
+            <span>Short <span className="text-white/90 font-semibold">{summary.shortPercent.toFixed(1)}%</span></span>
+          </div>
+          <ProgressBar long={summary.longPercent} short={summary.shortPercent} />
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+              <div className="text-white/50">Long (USD)</div>
+              <div className="text-[#4ade80] font-semibold">{fmtUsd(summary.longAmountUsd)}</div>
             </div>
-          ))}
+            <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+              <div className="text-white/50">Short (USD)</div>
+              <div className="text-[#ef4444] font-semibold">{fmtUsd(summary.shortAmountUsd)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden flex-none">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] uppercase tracking-widest text-white/40 border-b border-white/10 bg-[#0d1117]/50">
+            <div className="col-span-3">Exchange</div>
+            <div className="col-span-5">Ratio</div>
+            <div className="col-span-2 text-right">Long</div>
+            <div className="col-span-2 text-right">Short</div>
+          </div>
+          <div className="divide-y divide-white/10">
+            {rows.map((r) => (
+              <div key={r.exchange} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm hover:bg-white/5 transition-colors items-center">
+                <div className="col-span-3 text-white/80 font-medium truncate">{r.exchange}</div>
+                <div className="col-span-5 flex flex-col gap-1">
+                  <ProgressBar long={r.longPercent} short={r.shortPercent} />
+                  <div className="flex items-center justify-between text-[10px] text-white/50">
+                    <span className="text-[#4ade80]">{r.longPercent.toFixed(1)}%</span>
+                    <span className="text-[#ef4444]">{r.shortPercent.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div className="col-span-2 text-right font-mono text-xs text-[#4ade80] truncate">{fmtUsd(r.longAmountUsd)}</div>
+                <div className="col-span-2 text-right font-mono text-xs text-[#ef4444] truncate">{fmtUsd(r.shortAmountUsd)}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
