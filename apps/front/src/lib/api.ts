@@ -191,6 +191,31 @@ async function apiCall<T>(
   }
 }
 
+// ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
+
+export type WhaleHoldingApiItem = Infer<typeof schemas.WhaleHoldingDto>
+
+export interface FetchWhaleHoldingsQuery {
+  symbol?: string
+  minPositionValueUsd?: number
+  timeRangeHours?: number
+  limit?: number
+}
+
+export async function fetchWhaleHoldings(
+  query: FetchWhaleHoldingsQuery = {},
+): Promise<WhaleHoldingApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.WhaleHoldingsController_getWhaleHoldings({
+      // 持仓接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+      queries: query,
+    })
+
+    return unwrapResponse(response) as WhaleHoldingApiItem[]
+  }, 'FETCH_WHALE_HOLDINGS')
+}
+
 export async function login(payload: LoginPayload) {
   return apiCall(async () => {
     const response = await client.AuthController_login(payload)
@@ -727,4 +752,3 @@ export async function fetchRealtimeWhaleAlerts(
     )
   }, 'FETCH_REALTIME_WHALE_ALERTS')
 }
-
