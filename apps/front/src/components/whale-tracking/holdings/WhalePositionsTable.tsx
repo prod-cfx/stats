@@ -2,7 +2,7 @@
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FilterButton } from '@/components/ui/FilterButton';
 import { LoadingState } from '@/components/ui/loading';
@@ -62,11 +62,14 @@ export const WhalePositionsTable = () => {
     { immediate: true }
   );
 
-  // 资产过滤变化时重新拉取
+  // 资产过滤变化时重新拉取（首屏请求由 useAsync 的 immediate=true 触发）
+  const hasMountedRef = useRef(false);
   useEffect(() => {
-    if (assetFilter !== 'ALL') {
-      execute();
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
     }
+    execute();
   }, [execute, assetFilter]);
 
   const sortedPositions = useMemo(() => {
