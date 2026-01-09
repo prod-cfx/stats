@@ -23,7 +23,7 @@ export function DashboardEditorClient() {
           <Link
             href="/zh/dashboard/?tab=saved"
             className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors text-sm w-fit"
-          >
+                >
             <ArrowLeft className="w-4 h-4" />
             <span>返回看板列表</span>
           </Link>

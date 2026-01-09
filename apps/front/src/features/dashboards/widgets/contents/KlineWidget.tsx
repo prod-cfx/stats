@@ -1,35 +1,46 @@
 'use client'
 
-import type { DataSource, MarketType } from '@/components/trading/CenterChartPanel/TradingViewLightweightChart'
-import React from 'react'
-import { TradingViewLightweightChart } from '@/components/trading/CenterChartPanel/TradingViewLightweightChart'
+import type { DataSource, MarketType } from '@/types/trading'
+import React, { useMemo, useState } from 'react'
+import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
+import { TopBar } from '@/components/trading/TopBar/TopBar'
 
 export function KlineWidget(props: { config: Record<string, any> }) {
-  const symbol = (props.config?.symbol as string) || 'BTCUSDT'
-  const interval = (props.config?.interval as string) || '15m'
-  // Venue might be "OKX", "Binance", etc. Map to lowercase for DataSource.
-  const venue = (props.config?.venue as string) || 'OKX'
-  const selectedExchange = (venue.toLowerCase() === 'binance' ? 'binance' : 'okx') as DataSource
-  
-  // Default to aggregated=false if specific venue selected, or true if we want agg.
-  // The user prompt implies "use the one from Market page", which defaults to aggregated=true usually,
-  // but let's respect the venue config if possible.
-  const isAggregated = venue === 'AGG' // Example logic, adjust as needed
+  // Keep only initial symbol from config; other interactions should be handled by the embedded UI.
+  const initialSymbol = (props.config?.symbol as string) || 'BTCUSDT'
 
-  const marketType = (props.config?.marketType as string) || 'futures' as MarketType
+  const [isAggregated, setIsAggregated] = useState(true)
+  const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance')
+  const [marketType, setMarketType] = useState<MarketType>('futures')
+  const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol)
+
+  // When marketType switches to spot, TopBar shows BTC/USDT but selectedSymbol stays BTCUSDT; that's OK.
+  const symbolForChart = useMemo(() => selectedSymbol || 'BTCUSDT', [selectedSymbol])
 
   return (
-    <div className="h-full w-full max-h-full overflow-hidden flex flex-col bg-[#0d1117]">
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <TradingViewLightweightChart
-          symbol={symbol}
-          interval={interval}
+    <div className="h-full w-full max-h-full overflow-hidden flex flex-col bg-[#0d1117] cf-scrollbar-scope">
+      {/* Full header + symbol dropdown interactions (same as trade page) */}
+      <div className="flex-none">
+        <TopBar
           isAggregated={isAggregated}
           selectedExchange={selectedExchange}
-          marketType={marketType as MarketType}
-          activeIndicators={[]}
-          onRemoveIndicator={() => {}}
-          isDashboard={true}
+          marketType={marketType}
+          setMarketType={setMarketType}
+          selectedSymbol={symbolForChart}
+          setSelectedSymbol={setSelectedSymbol}
+          variant="compact"
+        />
+      </div>
+
+      {/* Timeframe / aggregation / indicators toolbar + chart (same as trade page center panel) */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <CenterChartPanel
+          isAggregated={isAggregated}
+          setIsAggregated={setIsAggregated}
+          selectedExchange={selectedExchange}
+          setSelectedExchange={setSelectedExchange}
+          symbol={symbolForChart}
+          marketType={marketType}
         />
       </div>
     </div>

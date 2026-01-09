@@ -1,12 +1,12 @@
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
-import { snapToPreset } from '../widgets/unitSizePresets'
+import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { updateDashboard } from './dashboardStore'
 
 export function addWidgetToDashboard(dashboardId: string, item: WidgetCatalogItem) {
   const id = crypto.randomUUID()
   updateDashboard(dashboardId, (doc) => {
     const widget = { id, type: item.type, config: item.defaultConfig }
-    const snapped = snapToPreset(item.defaultLayout.w, item.defaultLayout.h)
+    const snapped = snapToPresetForWidgetType(item.type, item.defaultLayout.w, item.defaultLayout.h)
     
     // Smart placement: if width <= 6 and last row has space, place at x=6; else new row at x=0
     let x = 0
@@ -52,7 +52,8 @@ export function updateDashboardLayout(dashboardId: string, layout: any[]) {
       const y0 = Number.isFinite(l.y) ? Number(l.y) : 0
       const w0 = Number.isFinite(l.w) ? Number(l.w) : 6
       const h0 = Number.isFinite(l.h) ? Number(l.h) : 8
-      const snapped = snapToPreset(w0, h0)
+      const widgetType = doc.widgets.find((w) => w.id === i)?.type
+      const snapped = snapToPresetForWidgetType(widgetType, w0, h0)
       const x = Math.max(0, Math.min(12 - snapped.w, x0))
       const y = Math.max(0, y0)
       return { i, x, y, w: snapped.w, h: snapped.h }

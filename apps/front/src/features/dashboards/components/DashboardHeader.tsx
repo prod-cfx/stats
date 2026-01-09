@@ -80,10 +80,10 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
 
     reader.onloadend = () => {
       try {
-        const base64 = reader.result as string
-        updateDashboardMeta(dashboard.id, { thumbnail: base64 })
+      const base64 = reader.result as string
+      updateDashboardMeta(dashboard.id, { thumbnail: base64 })
         setUploadStatus('success')
-        onRefresh()
+      onRefresh()
         
         // 2秒后恢复初始状态
         setTimeout(() => {
@@ -126,7 +126,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         duration: 2000,
       })
       
-      onRefresh()
+    onRefresh()
       
       // 1.5秒后恢复按钮状态
       setTimeout(() => {
@@ -193,9 +193,9 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       <div className="flex items-center gap-3">
         {/* Thumbnail Upload */}
         <div className="relative">
-          <button
+        <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+          onClick={() => fileInputRef.current?.click()}
             disabled={uploadStatus === 'uploading'}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-lg active:scale-95 ${
               uploadStatus === 'uploading'
@@ -225,11 +225,11 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               </>
             ) : (
               <>
-                <Image className="w-4 h-4" />
+          <Image className="w-4 h-4" />
                 {dashboard.thumbnail ? '更换缩略图' : '选择缩略图'}
               </>
             )}
-          </button>
+        </button>
           {uploadError && (
             <div className="absolute top-full mt-2 left-0 right-0 bg-red-500/10 border border-red-500/30 rounded px-3 py-2 text-xs text-red-400 whitespace-nowrap z-10">
               {uploadError}
@@ -245,7 +245,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         />
 
         {/* Save Button - Only shows "保存" or "未保存" states */}
-        <button
+          <button
           type="button"
           onClick={handleSaveChanges}
           disabled={savePublishStatus === 'saving' || savePublishStatus === 'success' || !hasUnsavedChanges}
@@ -289,11 +289,11 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
             </>
           ) : (
             <>
-              <Save className="w-4 h-4" />
+            <Save className="w-4 h-4" />
               {hasUnsavedChanges ? '保存' : '未保存'}
             </>
           )}
-        </button>
+          </button>
       </div>
     </div>
   )

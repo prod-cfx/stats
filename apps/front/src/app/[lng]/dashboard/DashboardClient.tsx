@@ -107,17 +107,17 @@ export function DashboardClient() {
                 
                 {activeTab === 'my' && (
                   displayDashboards.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
-                      <Layout className="w-12 h-12" />
-                      <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
-                      <button
-                        type="button"
+                  <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
+                    <Layout className="w-12 h-12" />
+                    <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
+                    <button
+                      type="button"
                         onClick={handleCreateDashboard}
-                        className="text-white bg-gradient-to-r from-primary to-secondary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-                      >
-                        {t('dashboard.actions.createFirst')}
-                      </button>
-                    </div>
+                      className="text-white bg-gradient-to-r from-primary to-secondary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+                    >
+                      {t('dashboard.actions.createFirst')}
+                    </button>
+                  </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {displayDashboards.map((dash) => (
@@ -165,17 +165,17 @@ export function DashboardClient() {
 
                 {activeTab === 'saved' && (
                   displayDashboards.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
-                      <Bookmark className="w-12 h-12" />
-                      <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
-                      <button
-                        type="button"
+                  <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">
+                    <Bookmark className="w-12 h-12" />
+                    <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
+                    <button
+                      type="button"
                         onClick={handleCreateDashboard}
                         className="text-white bg-gradient-to-r from-primary to-secondary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-                      >
+                    >
                         {t('dashboard.actions.createFirst')}
-                      </button>
-                    </div>
+                    </button>
+                  </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {displayDashboards.map((dash) => (

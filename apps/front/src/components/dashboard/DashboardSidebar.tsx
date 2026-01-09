@@ -95,12 +95,12 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
                   ) : (
                     <div className="w-4 h-4 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Grid3x3 className="w-2.5 h-2.5 text-primary" />
-                    </div>
+          </div>
                   )}
                   {dash.name || '未命名'}
                 </button>
               ))}
-            </div>
+        </div>
           )}
         </div>
 
@@ -111,21 +111,21 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
             onClick={() => setShowSavedDashboards(!showSavedDashboards)}
             className="w-full flex items-center justify-between group"
           >
-            <div className="flex items-center gap-3">
-              <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
+          <div className="flex items-center gap-3">
+            <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
               <span className="text-[#c9d1d9] text-sm font-semibold">{t('dashboard.sidebar.savedDashboards')}</span>
               {savedDashboards.length > 0 && (
                 <span className="ml-auto bg-[#30363d] text-[#8b949e] px-1.5 py-0.5 rounded text-[10px] font-bold">
                   {savedDashboards.length}
                 </span>
               )}
-            </div>
+          </div>
             <ChevronDown
               className={`w-3 h-3 text-[#8b949e] group-hover:text-white transition-all ${
                 showSavedDashboards ? '' : '-rotate-90'
               }`}
             />
-          </button>
+        </button>
 
           {showSavedDashboards && savedDashboards.length > 0 && (
             <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">

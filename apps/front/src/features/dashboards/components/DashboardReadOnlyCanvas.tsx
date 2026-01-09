@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboardStore'
+import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 type GridLayoutComponent = React.ComponentType<any> | null
@@ -30,21 +31,27 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Keep existing 2-column clamp behavior for consistency with editor.
-const clampLayout = (items: any[]) =>
-  (items || []).map((n) => ({
-    ...n,
-    h: 3,
-    w: 6,
-    minW: 6,
-    maxW: 6,
-  }))
+// Same clamp logic as editor canvas (read-only):
+// - Non-Kline widgets: compact 2-column (w=6, h=3)
+// - Kline: preserve chosen preset width/height
+const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
+  (items || []).map((n) => {
+    const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
+    if (widgetType === 'market.kline') {
+      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 10), Number(n.h ?? 4))
+      return { ...n, w: snapped.w, h: snapped.h, minW: snapped.w, maxW: snapped.w }
+    }
+    return { ...n, h: 3, w: 6, minW: 6, maxW: 6 }
+  })
 
 export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
-  const [layoutState, setLayoutState] = useState(() => clampLayout((doc ?? ensureDashboard('draft')).layout))
+  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
+  const [layoutState, setLayoutState] = useState(() =>
+    clampLayout((doc ?? ensureDashboard('draft')).layout, widgetsById),
+  )
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const { setEl: containerRef, width } = useContainerWidth()
 
@@ -59,13 +66,15 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
       if (props.dashboardId === 'draft') {
         const freshDoc = ensureDashboard('draft')
         setDoc(freshDoc)
-        setLayoutState(clampLayout(freshDoc.layout))
+        const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+        setLayoutState(clampLayout(freshDoc.layout, map))
         return
       }
       const freshDoc = getDashboard(props.dashboardId)
       if (!freshDoc) return // do not recreate deleted dashboards
       setDoc(freshDoc)
-      setLayoutState(clampLayout(freshDoc.layout))
+      const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+      setLayoutState(clampLayout(freshDoc.layout, map))
     }
     refresh()
     window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
@@ -75,8 +84,6 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
       window.removeEventListener('storage', refresh)
     }
   }, [props.dashboardId])
-
-  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
 
   if (!doc) return <div className="text-white/30 p-10 text-center">看板不存在或已删除</div>
   if (!GridLayout) return <div className="text-white/30 p-10 text-center">加载中...</div>

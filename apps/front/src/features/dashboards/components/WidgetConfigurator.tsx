@@ -4,7 +4,7 @@ import type {UnitSize} from '../widgets/unitSizePresets';
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
-import { UNIT_SIZE_PRESETS  } from '../widgets/unitSizePresets'
+import { KLINE_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 interface WidgetConfiguratorProps {
@@ -17,7 +17,12 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
   const [config, setConfig] = useState<Record<string, any>>(item.defaultConfig)
   const [selectedSize, setSelectedSize] = useState<UnitSize>('M')
 
-  const layout = useMemo(() => UNIT_SIZE_PRESETS[selectedSize], [selectedSize])
+  const sizePresets = useMemo(() => {
+    // K 线有独立的尺寸策略：S 更矮(h=3)且更宽，M/L/XL 在此基础上递增
+    return item.type === 'market.kline' ? KLINE_UNIT_SIZE_PRESETS : UNIT_SIZE_PRESETS
+  }, [item.type])
+
+  const layout = useMemo(() => sizePresets[selectedSize], [selectedSize, sizePresets])
 
   // Generate config fields based on widget type
   const configFields = useMemo(() => {
@@ -31,23 +36,11 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     // Common fields
     if (item.type.includes('kline')) {
       fields.push(
-        { key: 'symbol', label: '交易对', type: 'select', options: [
+        // 只保留一个：筛选交易对（其他配置保持默认值，不在左侧展示）
+        { key: 'symbol', label: '筛选交易对', type: 'select', options: [
           { value: 'BTCUSDT', label: 'BTC/USDT' },
           { value: 'ETHUSDT', label: 'ETH/USDT' },
           { value: 'SOLUSDT', label: 'SOL/USDT' },
-        ]},
-        { key: 'interval', label: '时间周期', type: 'select', options: [
-          { value: '1m', label: '1分钟' },
-          { value: '5m', label: '5分钟' },
-          { value: '15m', label: '15分钟' },
-          { value: '1h', label: '1小时' },
-          { value: '4h', label: '4小时' },
-          { value: '1d', label: '1天' },
-        ]},
-        { key: 'venue', label: '交易所', type: 'select', options: [
-          { value: 'OKX', label: 'OKX' },
-          { value: 'Binance', label: 'Binance' },
-          { value: 'Bybit', label: 'Bybit' },
         ]},
       )
     }
@@ -188,7 +181,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
             组件大小 (UNIT SIZE)
           </label>
           <div className="flex gap-2">
-            {(Object.keys(UNIT_SIZE_PRESETS) as UnitSize[]).map((size) => (
+            {(Object.keys(sizePresets) as UnitSize[]).map((size) => (
               <button
                 key={size}
                 onClick={() => setSelectedSize(size)}
@@ -198,7 +191,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                     : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
                 }`}
               >
-                {UNIT_SIZE_PRESETS[size].label}
+                {sizePresets[size].label}
               </button>
             ))}
           </div>

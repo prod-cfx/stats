@@ -219,15 +219,15 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               onClick={() => setShowMyDashboards(!showMyDashboards)}
               className="w-full flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3">
-                <Layout className="w-4 h-4 text-[#c9d1d9]" />
+            <div className="flex items-center gap-3">
+              <Layout className="w-4 h-4 text-[#c9d1d9]" />
                 <span className="text-[#c9d1d9] text-sm font-semibold">{t('dashboard.sidebar.myDashboards')}</span>
                 {myDashboards.length > 0 && (
                   <span className="ml-auto bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold">
                     {myDashboards.length}
                   </span>
                 )}
-              </div>
+            </div>
               <ChevronDown className={`w-3 h-3 text-[#8b949e] group-hover:text-white transition-all ${showMyDashboards ? '' : '-rotate-90'}`} />
             </button>
             
@@ -251,9 +251,9 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     className="w-full text-left px-3 py-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
                   >
                     {showAllMyDashboards ? '收起' : `查看全部 ${myDashboards.length} 个...`}
-                  </button>
+          </button>
                 )}
-              </div>
+            </div>
             )}
             {showMyDashboards && myDashboards.length === 0 && (
               <div className="pl-4 py-2 text-xs text-[#8b949e]">暂无已发布的看板</div>
@@ -267,15 +267,15 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               onClick={() => setShowSavedDashboards(!showSavedDashboards)}
               className="w-full flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3">
-                <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
+            <div className="flex items-center gap-3">
+              <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
                 <span className="text-[#c9d1d9] text-sm font-semibold">{t('dashboard.sidebar.savedDashboards')}</span>
                 {savedDashboards.length > 0 && (
                   <span className="ml-auto bg-[#30363d] text-[#8b949e] px-1.5 py-0.5 rounded text-[10px] font-bold">
                     {savedDashboards.length}
                   </span>
                 )}
-              </div>
+            </div>
               <ChevronDown className={`w-3 h-3 text-[#8b949e] group-hover:text-white transition-all ${showSavedDashboards ? '' : '-rotate-90'}`} />
             </button>
             
@@ -303,14 +303,14 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     className="w-full text-left px-3 py-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
                   >
                     {showAllSavedDashboards ? '收起' : `查看全部 ${savedDashboards.length} 个...`}
-                  </button>
+          </button>
                 )}
               </div>
             )}
             {showSavedDashboards && savedDashboards.length === 0 && (
               <div className="pl-4 py-2 text-xs text-[#8b949e]">暂无已保存的看板</div>
             )}
-          </div>
+        </div>
 
           {/* Action Buttons Section just below saved list */}
           <div className="space-y-4 pt-4 border-t border-[#30363d]">
@@ -319,10 +319,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               onClick={handleCreateDashboard}
               className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/20"
             >
-              <Plus className="w-4 h-4" />
-              <span className="text-sm">{t('dashboard.actions.create')}</span>
-            </button>
-            
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">{t('dashboard.actions.create')}</span>
+          </button>
+          
             {mode === 'edit' ? (
               <>
                 <button
@@ -349,11 +349,11 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
-                      <span className="text-sm uppercase tracking-wider">{t('dashboard.actions.publish')}</span>
+            <Send className="w-4 h-4" />
+            <span className="text-sm uppercase tracking-wider">{t('dashboard.actions.publish')}</span>
                     </>
                   )}
-                </button>
+          </button>
                 {error ? <div className="text-red-500 text-xs font-medium px-2 py-1 bg-red-500/10 rounded border border-red-500/20">{error}</div> : null}
 
                 <button
@@ -375,13 +375,13 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4 transition-transform group-hover:scale-110" />
-                      <span className="text-sm uppercase tracking-wider">{t('dashboard.actions.delete')}</span>
+            <span className="text-sm uppercase tracking-wider">{t('dashboard.actions.delete')}</span>
                     </>
                   )}
                   {deleteStatus !== 'deleting' && (
                     <div className="absolute inset-0 rounded-lg border border-red-500/0 group-hover:border-red-500/30 transition-colors pointer-events-none" />
                   )}
-                </button>
+          </button>
               </>
             ) : null}
           </div>

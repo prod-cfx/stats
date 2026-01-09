@@ -43,7 +43,8 @@ export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemov
       title={meta?.title ?? props.widget.type}
       description={meta?.description}
       onRemove={props.onRemove}
-      contentStyle={normalizedType === 'market.kline' ? { height: '500px' } : undefined}
+      // Let kline widget fully use grid height (it has its own header/toolbars inside).
+      contentStyle={undefined}
     >
       {loading ? (
         <div className="animate-pulse space-y-3">

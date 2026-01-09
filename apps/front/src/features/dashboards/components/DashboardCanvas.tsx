@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { removeWidgetFromDashboard, updateDashboardLayout } from '../store/dashboardActions'
 import { ensureDashboard, getDashboard } from '../store/dashboardStore'
+import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 import { WIDGET_CATALOG } from '../widgets/widgets.catalog'
 import { DashboardHeader } from './DashboardHeader'
@@ -33,21 +34,39 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Clamp helper: force ultra-compact size and default two-column width (6/12 cols)
-const clampLayout = (items: any[]) =>
-  (items || []).map((n) => ({
-    ...n,
-    h: 3,
-    w: 6,
-    minW: 6,
-    maxW: 6,
-  }))
+// Clamp helper:
+// - Non-Kline widgets: keep compact 2-column (w=6, h=3)
+// - Kline (market.kline): keep the chosen S/M/L/XL width+height (w/h) by snapping to widget-type presets
+const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
+  (items || []).map((n) => {
+    const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
+    if (widgetType === 'market.kline') {
+      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 10), Number(n.h ?? 4))
+      return {
+        ...n,
+        w: snapped.w,
+        h: snapped.h,
+        minW: snapped.w,
+        maxW: snapped.w,
+      }
+    }
+    return {
+      ...n,
+      h: 3,
+      w: 6,
+      minW: 6,
+      maxW: 6,
+    }
+  })
 
 export function DashboardCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
-  const [layoutState, setLayoutState] = useState(() => clampLayout((doc ?? ensureDashboard('draft')).layout))
+  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
+  const [layoutState, setLayoutState] = useState(() =>
+    clampLayout((doc ?? ensureDashboard('draft')).layout, widgetsById),
+  )
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const [resetKey, setResetKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -66,22 +85,26 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       if (props.dashboardId === 'draft') {
         const freshDoc = ensureDashboard('draft')
         setDoc(freshDoc)
-        if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
+        if (!saveTimerRef.current) {
+          const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+          setLayoutState(clampLayout(freshDoc.layout, map))
+        }
         return
       }
       const freshDoc = getDashboard(props.dashboardId)
       if (!freshDoc) return // do not recreate deleted dashboards
       setDoc(freshDoc)
-      if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
+      if (!saveTimerRef.current) {
+        const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+        setLayoutState(clampLayout(freshDoc.layout, map))
+      }
     }
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
   }, [props.dashboardId])
 
-  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
-
   const onLayoutChange = (next: any[]) => {
-    const clamped = clampLayout(next)
+    const clamped = clampLayout(next, widgetsById)
     setLayoutState(clamped)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
@@ -97,14 +120,18 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     let currentRowHeight = 0
     
     const newLayout = doc.widgets.map((widget) => {
+      const existing = doc.layout?.find((l) => String(l.i) === widget.id)
       let catalogItem = null
       for (const group of WIDGET_CATALOG) {
         const found = group.items.find((i) => i.type === widget.type)
         if (found) { catalogItem = found; break }
       }
       const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
-      const w = d.w
-      const h = d.h
+      const w0 = existing?.w ?? d.w
+      const h0 = existing?.h ?? d.h
+      const snapped = snapToPresetForWidgetType(widget.type, w0, h0)
+      const w = widget.type === 'market.kline' ? snapped.w : 6
+      const h = widget.type === 'market.kline' ? snapped.h : 3
       
       // If widget width > 6 or current row can't fit, start new row
       if (w > 6 || currentX + w > 12) {
@@ -113,7 +140,15 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         currentRowHeight = 0
       }
       
-      const layoutItem = { i: widget.id, x: currentX, y: currentY, w, h, minW: 6, maxW: 12 }
+      const layoutItem = {
+        i: widget.id,
+        x: currentX,
+        y: currentY,
+        w,
+        h,
+        minW: widget.type === 'market.kline' ? w : 6,
+        maxW: widget.type === 'market.kline' ? w : 12,
+      }
       
       currentX += w
       currentRowHeight = Math.max(currentRowHeight, h)
@@ -127,7 +162,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       
       return layoutItem
     })
-    setLayoutState(newLayout)
+    setLayoutState(clampLayout(newLayout, widgetsById))
     updateDashboardLayout(props.dashboardId, newLayout)
     setResetKey(prev => prev + 1)
   }

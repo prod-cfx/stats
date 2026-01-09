@@ -12,6 +12,7 @@ interface TopBarProps {
   setMarketType: (v: MarketType) => void;
   selectedSymbol: string; // chart symbol format, e.g. BTCUSDT
   setSelectedSymbol: (v: string) => void;
+  variant?: 'default' | 'compact';
 }
 
 interface MarketItem {
@@ -23,11 +24,13 @@ interface MarketItem {
   volume: number;
 }
 
-export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketType, selectedSymbol, setSelectedSymbol }: TopBarProps) => {
+export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketType, selectedSymbol, setSelectedSymbol, variant = 'default' }: TopBarProps) => {
   const { t, i18n } = useTranslation('common');
   const [isSymbolMenuOpen, setIsSymbolMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isCompact = variant === 'compact';
 
   // NOTE: Work around a ReactNode type mismatch (multiple @types/react copies) that can make lucide icons fail JSX typing.
   const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<any>;
@@ -205,7 +208,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   }, [marketType, selectedSymbol]);
 
   return (
-    <div className="h-[61px] bg-[#161b22] border-b border-[#30363d] flex items-center text-[#c9d1d9] w-full">
+    <div className={`${isCompact ? 'h-[48px]' : 'h-[61px]'} bg-[#161b22] border-b border-[#30363d] flex items-center text-[#c9d1d9] w-full`}>
       {/* Left Area: Removed Navigation */}
       
       {/* Center & Right Area: Full width now */}
@@ -214,20 +217,20 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         <div className="flex items-center gap-4 flex-none relative" ref={menuRef}>
           <button
             type="button"
-            className="flex items-center gap-2 cursor-pointer group hover:bg-[#1f2937] p-1 rounded transition-colors"
+            className={`flex items-center gap-2 cursor-pointer group hover:bg-[#1f2937] rounded transition-colors ${isCompact ? 'p-1' : 'p-1'}`}
             onClick={() => setIsSymbolMenuOpen(!isSymbolMenuOpen)}
           >
-            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black">
+            <div className={`${isCompact ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'} bg-orange-500 rounded-full flex items-center justify-center font-bold text-black`}>
               ₿
             </div>
             <div className="flex items-center gap-1">
-              <span className="font-bold text-base whitespace-nowrap">
+              <span className={`font-bold whitespace-nowrap ${isCompact ? 'text-sm' : 'text-base'}`}>
                 {t('trade.symbolWithType', {
                   symbol: selectedDisplaySymbol,
                   type: marketType === 'futures' ? t('trade.perpTag') : t('trade.market_type_spot'),
                 })}
               </span>
-              <ChevronDownIcon className={`w-4 h-4 text-[#8b949e] group-hover:text-[#c9d1d9] transition-transform ${isSymbolMenuOpen ? 'rotate-180' : ''}`} />
+              <ChevronDownIcon className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} text-[#8b949e] group-hover:text-[#c9d1d9] transition-transform ${isSymbolMenuOpen ? 'rotate-180' : ''}`} />
             </div>
           </button>
 
@@ -273,7 +276,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
               </div>
 
               {/* Market List */}
-              <div className="flex-1 overflow-y-auto max-h-[400px] scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
+              <div className="flex-1 overflow-y-auto max-h-[400px] cf-scrollbar pr-1">
                 {filteredMarketList.map((item) => {
                   const isSelected = item.chartSymbol === selectedSymbol;
                   return (
@@ -315,7 +318,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         </div>
 
         <div className="flex flex-col">
-          <span className="text-[#ef4444] font-semibold text-lg leading-tight">{priceFormatter.format(lastPrice)}</span>
+          <span className={`${isCompact ? 'text-base' : 'text-lg'} text-[#ef4444] font-semibold leading-tight`}>{priceFormatter.format(lastPrice)}</span>
           <div className="flex items-center gap-2 text-[10px] leading-tight text-[#ef4444]">
             <span>{changeAbs >= 0 ? `+${priceFormatter.format(changeAbs)}` : priceFormatter.format(changeAbs)}</span>
             <span>{formatPct(changePct)}</span>
@@ -323,7 +326,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         </div>
 
         {/* Market Stats - Flexible list with reduced gap for small screens */}
-        <div className="flex-1 flex items-center gap-6 text-[11px] overflow-x-auto no-scrollbar">
+        <div className={`flex-1 flex items-center gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'} overflow-x-auto no-scrollbar`}>
           <div className="flex flex-col min-w-fit">
             <span className="text-[#8b949e] whitespace-nowrap">{t('trade.index_price')}</span>
             <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd(indexPrice)}</span>
