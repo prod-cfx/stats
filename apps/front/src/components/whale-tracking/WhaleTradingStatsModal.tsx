@@ -511,7 +511,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         </div>
 
         {/* Stats Summary Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             label={t('whaleTracking.modal.winRate')}
             value={winRate}
@@ -538,26 +538,6 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
               </div>
             </div>
           </div>
-          <StatCard
-            label={t('whaleTracking.modal.realizedPnl')}
-            value="$-38,757.45"
-            valueColor="text-red-400"
-            subStats={[
-              { label: t('whaleTracking.side.long'), value: '$-2,905.86', color: 'text-red-400' },
-              { label: t('whaleTracking.side.short'), value: '$-35,851.59', color: 'text-red-400' }
-            ]}
-          />
-          <StatCard
-            label={t('whaleTracking.modal.totalHoldTime')}
-            value="81"
-            unit={t('whaleTracking.modal.hours')}
-            value2="34"
-            unit2={t('whaleTracking.modal.minutes')}
-            subStats={[
-              { label: t('whaleTracking.modal.holdRange'), value: t('whaleTracking.modal.holdRangeValue'), color: 'text-white' },
-              { label: t('whaleTracking.modal.avgHoldTime'), value: t('whaleTracking.modal.avgHoldTimeValue'), color: 'text-white' }
-            ]}
-          />
         </div>
 
         {/* Top Trades Section */}
