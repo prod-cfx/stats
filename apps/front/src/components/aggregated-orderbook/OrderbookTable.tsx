@@ -149,7 +149,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   }, [asks, bids, displayMode]);
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'h-fit' : 'h-full'} bg-[#0d1117] text-[#c9d1d9] ${isCompact ? 'overflow-visible' : 'overflow-hidden'} select-none`}>
+    <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
       {/* Table Header */}
       <div className={`flex items-center px-3 border-b border-[#30363d] text-[#8b949e] ${isCompact ? 'text-[8.5px] h-[22px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[#0d1117] z-10`}>
         <span className={`${isCompact ? 'w-[15%]' : 'w-[22%]'}`}>{t('aggregatedOrderbook.table.exchange')}</span>
@@ -161,7 +161,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       {/* Table Body - Fixed height for exactly 26 rows */}
       <div 
         className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
-        style={{ height: isCompact ? 'auto' : `${TOTAL_HEIGHT}px`, maxHeight: isCompact ? 'none' : `${TOTAL_HEIGHT}px` }}
+        style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {
           if ((r as any)._type === 'gap') {
