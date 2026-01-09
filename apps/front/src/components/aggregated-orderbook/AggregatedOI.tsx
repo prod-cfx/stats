@@ -261,21 +261,23 @@ export const AggregatedOI = () => {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <SectionTitle>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
+    <div className="flex flex-col gap-6 h-full">
+      <div className="flex items-center justify-between flex-none">
+        <div className="text-h3 font-bold text-white tracking-tight text-sm">
+          {t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}
+        </div>
       </div>
 
-      <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl">
+      <div className="flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-2xl flex-1 min-h-0">
         {/* Symbol Tabs & Search */}
-        <div className="flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30">
+        <div className="flex items-center justify-between px-2 border-b border-[#30363d] bg-[#0d1117]/30 flex-none">
           <div className="flex items-center overflow-x-auto cf-scrollbar">
             {symbols.map(s => (
               <button
                 type="button"
                 key={s}
                 onClick={() => setActiveTabSymbol(s)}
-                className={`px-4 py-3 text-sm font-semibold transition-all relative whitespace-nowrap ${
+                className={`px-3 py-2 text-xs font-semibold transition-all relative whitespace-nowrap ${
                   activeSymbol === s 
                     ? 'text-white' 
                     : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
@@ -291,9 +293,9 @@ export const AggregatedOI = () => {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 pl-4 py-2">
+          <div className="flex items-center gap-2 pl-2 py-1.5">
             <div className="relative" ref={dropdownRef}>
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] z-10" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#8b949e] z-10" />
               <input 
                 type="text" 
                 placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')} 
@@ -303,13 +305,13 @@ export const AggregatedOI = () => {
                   setIsDropdownOpen(true);
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
-                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-10 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48 relative z-10"
+                className="bg-[#0d1117] border border-[#30363d] rounded-md pl-7 pr-8 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-32 relative z-10"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
-                <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+                <ChevronDown className={`w-3 h-3 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
               {isDropdownOpen && filteredSymbols.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-60 overflow-y-auto cf-scrollbar">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 max-h-48 overflow-y-auto cf-scrollbar">
                   {filteredSymbols.map(s => (
                     <div 
                       key={s}
@@ -318,7 +320,7 @@ export const AggregatedOI = () => {
                         setSearchQuery('');
                         setIsDropdownOpen(false);
                       }}
-                      className="px-4 py-2 text-sm text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
+                      className="px-3 py-1.5 text-xs text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors"
                     >
                       {s}
                     </div>
@@ -330,8 +332,8 @@ export const AggregatedOI = () => {
         </div>
 
         {/* Table Area */}
-        <div className="overflow-x-auto cf-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+        <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-[#0d1117]/50 text-[#8b949e] text-[10px] uppercase tracking-wider">
                 <th className="px-2 py-2 font-bold text-center border-b border-[#30363d] w-12">{t('aggregatedOrderbook.openInterest.table.rank')}</th>
