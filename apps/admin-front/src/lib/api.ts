@@ -507,7 +507,7 @@ export async function deleteDataPullTask(id: number): Promise<void> {
  */
 export async function triggerDataPullTask(id: number): Promise<DataPullExecutionLog> {
   return withAuthErrorHandling(async () => {
-    const response = await client.AdminDataPullTaskController_triggerOnce({
+    const response = await client.AdminDataPullTaskController_triggerOnce(undefined, {
       headers: requireAuthHeaders(),
       params: { id },
     })
@@ -604,7 +604,7 @@ export async function deleteTradesConfig(id: string): Promise<void> {
 // 交易记录数据查询 API
 export interface GetLatestTradesParams {
   exchange: string
-  instrumentType: string
+  instrumentType: 'SPOT' | 'PERPETUAL' | 'FUTURE'
   symbol: string
   limit?: number
 }

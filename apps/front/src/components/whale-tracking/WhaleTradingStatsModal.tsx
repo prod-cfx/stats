@@ -1,5 +1,6 @@
 'use client';
 
+import type {WhaleAddressPerformanceResponse} from '@/lib/api';
 import ReactECharts from 'echarts-for-react';
 import { ChevronDown } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -8,8 +9,8 @@ import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useAsync } from '@/hooks/use-async';
 import {
-  fetchWhaleAddressPerformance,
-  type WhaleAddressPerformanceResponse,
+  fetchWhaleAddressPerformance
+  
 } from '@/lib/api';
 
 interface WhaleTradingStatsModalProps {
