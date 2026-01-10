@@ -32,7 +32,7 @@
     "METRICS_REMOTE_WRITE_USERNAME",
     "METRICS_REMOTE_WRITE_INTERVAL_MS",
 
-    // 前端公开变量（非敏感，可直接配置）
+    // 前端公开配置（NEXT_PUBLIC_* 会暴露给浏览器，非敏感）
     "NEXT_PUBLIC_APP_ENV",
     "NEXT_PUBLIC_API_SERVER_URL",
     "NEXT_PUBLIC_API_BASE_URL",

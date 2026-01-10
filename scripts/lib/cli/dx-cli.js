@@ -27,9 +27,11 @@
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { execSync } from 'child_process'
 import { logger } from '../logger.js'
 import { envManager } from '../env.js'
 import { execManager } from '../exec.js'
+import { validateEnvironment } from '../validate-env.js'
 import { FLAG_DEFINITIONS, parseFlags } from './flags.js'
 import { getCleanArgs } from './args.js'
 import { showHelp, showCommandHelp } from './help.js'
@@ -64,6 +66,7 @@ class DxCli {
     this.subcommand = this.args[1]
     this.environment = this.args[2]
     this.worktreeManager = null
+    this.envCache = null // 缓存已验证的环境变量，避免重复解析
     this.commandHandlers = {
       help: args => handleHelp(this, args),
       dev: args => handleDev(this, args),
@@ -108,7 +111,6 @@ class DxCli {
     if (!existsSync(nodeModulesPath) || !existsSync(join(nodeModulesPath, '.pnpm'))) {
       logger.warn('检测到依赖未安装，正在自动安装...')
       logger.info('将以 NODE_ENV=development 安装完整依赖（含 devDependencies）')
-      const { execSync } = await import('child_process')
       try {
         execSync('pnpm install --frozen-lockfile', {
           stdio: 'inherit',
@@ -126,6 +128,131 @@ class DxCli {
     }
   }
 
+  // 每次启动时执行的检查流程
+  async runStartupChecks() {
+    if (this.flags.help || !this.command || this.command === 'help') return
+
+    // 1. 在 worktree 中自动同步根目录的 .env.*.local 文件
+    try {
+      const worktreeManager = await this.getWorktreeManager()
+      worktreeManager.syncEnvFilesFromMainRoot()
+    } catch (error) {
+      logger.warn(`自动同步 env 文件失败: ${error.message}`)
+    }
+
+    // 跳过 db 命令本身的启动检查（避免递归）
+    if (this.command === 'db') return
+
+    // 2. 检测 Prisma Client 是否存在，不存在则执行 db generate
+    await this.ensurePrismaClient()
+
+    // 3. 验证环境变量（仅对需要验证的命令执行）
+    // 注意：某些命令（如 lint）配置了 skipEnvValidation: true，不需要验证
+    const commandConfig = this.getCommandConfig(this.command)
+    if (!commandConfig?.skipEnvValidation) {
+      await this.validateEnvVars()
+    }
+  }
+
+  // 获取命令配置
+  getCommandConfig(command) {
+    return this.commands[command]
+  }
+
+  // 检测并生成 Prisma Client
+  async ensurePrismaClient() {
+    // pnpm 结构下检测 @prisma/client 生成的 default.js 文件
+    const prismaClientPath = join(process.cwd(), 'node_modules', '@prisma', 'client', 'default.js')
+
+    if (!existsSync(prismaClientPath)) {
+      const environment = this.determineEnvironment()
+      const envFlag = this.getEnvironmentFlag(environment)
+
+      logger.step('检测到 Prisma Client 未生成，正在生成...')
+      try {
+        execSync(`./scripts/dx db generate ${envFlag}`, {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        })
+        logger.success('Prisma Client 生成完成')
+      } catch (error) {
+        logger.error('Prisma Client 生成失败')
+        logger.error(error.message)
+        process.exit(1)
+      }
+    }
+  }
+
+  // 验证环境变量（与 build 命令一致的检测逻辑）
+  async validateEnvVars() {
+    const environment = this.determineEnvironment()
+
+    // 如果已缓存且环境相同，跳过重复验证
+    if (this.envCache?.environment === environment) {
+      return this.envCache.layeredEnv
+    }
+
+    try {
+      // 验证 .env 文件结构规则
+      validateEnvironment()
+
+      // 加载分层环境变量并检查必填变量
+      const layeredEnv = envManager.collectEnvFromLayers('backend', environment)
+      if (envManager.latestEnvWarnings && envManager.latestEnvWarnings.length > 0) {
+        envManager.latestEnvWarnings.forEach(message => {
+          logger.warn(message)
+        })
+      }
+
+      const effectiveEnv = { ...process.env, ...layeredEnv }
+      const requiredVars = envManager.getRequiredEnvVars(environment)
+      if (requiredVars.length > 0) {
+        const { valid, missing, placeholders } = envManager.validateRequiredVars(
+          requiredVars,
+          effectiveEnv,
+        )
+        if (!valid) {
+          const problems = ['环境变量校验未通过']
+          if (missing.length > 0) {
+            problems.push(`缺少必填环境变量: ${missing.join(', ')}`)
+          }
+          if (placeholders.length > 0) {
+            problems.push(`以下环境变量仍为占位值或空串: ${placeholders.join(', ')}`)
+          }
+          if (missing.length > 0 || placeholders.length > 0) {
+            problems.push(`请在 .env.${environment} / .env.${environment}.local 中补齐配置`)
+          }
+          throw new Error(problems.join('\n'))
+        }
+      }
+
+      // 验证成功，缓存结果
+      this.envCache = { environment, layeredEnv }
+      return layeredEnv
+    } catch (error) {
+      logger.error('环境变量验证失败')
+      logger.error(error.message)
+      process.exit(1)
+    }
+  }
+
+  // 获取环境对应的命令行 flag
+  getEnvironmentFlag(environment) {
+    switch (environment) {
+      case 'production':
+        return '--prod'
+      case 'staging':
+        return '--staging'
+      case 'test':
+        return '--test'
+      case 'e2e':
+        return '--e2e'
+      case 'development':
+      default:
+        return '--dev'
+    }
+  }
+
   // 主执行方法
   async run() {
     try {
@@ -139,16 +266,9 @@ class DxCli {
         return
       }
 
-      // 在 worktree 中自动同步根目录的 .env.*.local 文件
-      try {
-        const worktreeManager = await this.getWorktreeManager()
-        worktreeManager.syncEnvFilesFromMainRoot()
-      } catch (error) {
-        logger.warn(`自动同步 env 文件失败: ${error.message}`)
-      }
-
       // 在执行命令前先校验参数与选项
       await this.ensureDependencies()
+      await this.runStartupChecks()
       this.validateInputs()
 
       // 设置详细模式
