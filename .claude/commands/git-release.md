@@ -259,7 +259,7 @@ description: 'Create release versions with intelligent changelog generation from
     ## 📋 发布后操作清单
 
     - [ ] 检查 CI/CD 自动部署状态
-    - [ ] 更新 SDK:`./scripts/dx build contracts`
+    - [ ] 更新 SDK:`./scripts/dx build sdk`
     - [ ] 通知团队成员新版本发布
     - [ ] 监控生产环境状态
     - [ ] 更新项目文档(如需要)
@@ -399,7 +399,7 @@ Release URL:https://github.com/owner/repo/releases/tag/v0.1.10
 ## 📋 发布后操作清单
 
 - [ ] 检查 CI/CD 自动部署状态
-- [ ] 更新 SDK:`./scripts/dx build contracts`
+- [ ] 更新 SDK:`./scripts/dx build sdk`
 - [ ] 通知团队成员新版本发布
 - [ ] 监控生产环境状态
 

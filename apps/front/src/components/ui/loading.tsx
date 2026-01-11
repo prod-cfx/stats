@@ -195,7 +195,7 @@ export function LoadingState({
         title={t('common.emptyTitle')}
         description={t('common.emptyDescription')}
         action={onRetry && (
-          <button onClick={onRetry} className="text-primary hover:underline text-sm font-medium">
+          <button type="button" onClick={onRetry} className="text-primary hover:underline text-sm font-medium">
             {t('common.clearFiltersAndRetry')}
           </button>
         )}

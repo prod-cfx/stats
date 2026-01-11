@@ -63,6 +63,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           <h1 className="text-4xl font-bold text-white">{dashboard.name}</h1>
         )}
         <button
+          type="button"
           onClick={() => setIsEditingTitle(!isEditingTitle)}
           className="text-[#8b949e] hover:text-white transition-colors p-2"
           title="编辑标题"
@@ -75,6 +76,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       <div className="flex items-center gap-3">
         {/* Thumbnail Upload */}
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-2 px-4 py-2 border border-primary text-primary hover:bg-primary/10 rounded-lg transition-colors text-sm font-medium"
           title="选择缩略图"
@@ -93,6 +95,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         {/* Save/Publish */}
         {dashboard.isPublished ? (
           <button
+            type="button"
             onClick={() => onRefresh()}
             className="flex items-center gap-2 px-4 py-2 bg-[#21262d] text-white hover:bg-[#30363d] rounded-lg transition-colors text-sm font-medium"
           >
@@ -101,6 +104,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           </button>
         ) : (
           <button
+            type="button"
             onClick={handlePublish}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white hover:bg-primary/90 rounded-lg transition-colors text-sm font-medium"
           >

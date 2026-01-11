@@ -258,6 +258,92 @@ export async function fetchWhaleAddressPerformance(
   }, 'FETCH_WHALE_ADDRESS_PERFORMANCE')
 }
 
+// ===== 鲸鱼 Discover 聚合数据（whale-tracking/discover）相关 API =====
+
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const response = await client.WhaleTrackingController_getDiscover({
+      // Discover 接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+    })
+
+    return unwrapResponse(response) as WhaleDiscoverResponse
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
+}
+
+// ===== Hyperliquid Whale Alert 实时数据 API =====
+
+export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
+
+export interface FetchRealtimeWhaleAlertsParams {
+  symbol?: string
+  minPositionValueUsd?: number
+  limit?: number
+  since?: string
+}
+
+export async function fetchRealtimeWhaleAlerts(
+  params: FetchRealtimeWhaleAlertsParams = {},
+): Promise<RealtimeWhaleAlertItem[]> {
+  return apiCall(async () => {
+    const queries: Record<string, unknown> = {}
+
+    if (params.symbol) {
+      queries.symbol = params.symbol
+    }
+    if (typeof params.minPositionValueUsd === 'number') {
+      queries.min_position_value_usd = params.minPositionValueUsd
+    }
+    if (typeof params.limit === 'number') {
+      queries.limit = params.limit
+    }
+    if (params.since) {
+      queries.since = params.since
+    }
+
+    // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
+    const searchParams = new URLSearchParams()
+    if (params.symbol) {
+      searchParams.set('symbol', params.symbol)
+    }
+    if (typeof params.minPositionValueUsd === 'number') {
+      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
+    }
+    if (typeof params.limit === 'number') {
+      searchParams.set('limit', String(params.limit))
+    }
+    if (params.since) {
+      searchParams.set('since', params.since)
+    }
+    const queryString = searchParams.toString()
+    const fallbackUrl =
+      queryString.length > 0
+        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
+        : `${API_BASE_URL}/whale-alerts/realtime`
+
+    return safeApiCall(
+      () =>
+        client.WhaleAlertController_getRealtime({
+          headers: requireAuthHeaders(),
+          queries,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...requireAuthHeaders(),
+          },
+        },
+        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
+      },
+    )
+  }, 'FETCH_REALTIME_WHALE_ALERTS')
+}
+
 // ===== 多空比（markets/long-short-ratio/exchanges）相关 API =====
 
 export type ExchangeLongShortRatioApiItem = Infer<
@@ -432,6 +518,120 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+// ===== 聚合爆仓数据（Liquidation Data）API =====
+
+export interface LiquidationSummaryItem {
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  totalUsd: number
+  longUsd: number
+  shortUsd: number
+}
+
+export interface AggregatedLiquidationSummary {
+  symbol: string
+  items: LiquidationSummaryItem[]
+}
+
+export interface ExchangeLiquidationRow {
+  exchange: string
+  symbol: string
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  amountUsd: number
+  longUsd: number
+  shortUsd: number
+  longShare?: number
+  isTotal?: boolean
+}
+
+export interface ExchangeLiquidationResponse {
+  symbol: string
+  timeframe: '1h' | '4h' | '12h' | '24h'
+  rows: ExchangeLiquidationRow[]
+}
+
+export async function fetchAggregatedLiquidationSummary(
+  symbol: string,
+): Promise<AggregatedLiquidationSummary> {
+  return apiCall(async () => {
+    const response = await client.AggregatedLiquidationController_getSummary({
+      headers: optionalAuthHeaders(),
+      queries: { symbol },
+    })
+    return unwrapResponse(response) as AggregatedLiquidationSummary
+  }, 'FETCH_LIQUIDATION_SUMMARY')
+}
+
+export async function fetchExchangeLiquidation(
+  symbol: string,
+  timeframe: '1h' | '4h' | '12h' | '24h',
+): Promise<ExchangeLiquidationResponse> {
+  return apiCall(async () => {
+    const response = await client.AggregatedLiquidationController_getExchanges({
+      headers: optionalAuthHeaders(),
+      queries: { symbol, timeframe },
+    })
+    return unwrapResponse(response) as ExchangeLiquidationResponse
+  }, 'FETCH_LIQUIDATION_EXCHANGES')
+}
+
+// === 公共市场数据：加密股票报价（币股页面） ===
+
+export type CryptoStockQuoteLatest = Infer<typeof schemas.CryptoStockQuoteResponseDto>
+
+export async function fetchCryptoStockQuotesLatest(params?: {
+  symbols?: string[]
+  source?: string
+}): Promise<CryptoStockQuoteLatest[]> {
+  try {
+    return await apiCall(async () => {
+      const searchParams = new URLSearchParams()
+      if (params?.symbols?.length) {
+        for (const symbol of params.symbols) {
+          searchParams.append('symbols', symbol)
+        }
+      }
+      if (params?.source) {
+        searchParams.set('source', params.source)
+      }
+      const query = searchParams.toString()
+
+      const response = await safeApiCall(
+        () =>
+          client.CryptoStockQuotesController_getLatest({
+            headers: optionalAuthHeaders(),
+            queries: {
+              ...(params?.symbols && params.symbols.length > 0 ? { symbols: params.symbols } : {}),
+              ...(params?.source ? { source: params.source } : {}),
+            },
+          }),
+        {
+          url:
+            query.length > 0
+              ? `${API_BASE_URL}/crypto-stock-quotes/latest?${query}`
+              : `${API_BASE_URL}/crypto-stock-quotes/latest`,
+          options: {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...optionalAuthHeaders(),
+            },
+          },
+          validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
+        },
+      )
+
+      return unwrapResponse<CryptoStockQuoteLatest[]>(response)
+    }, 'FETCH_CRYPTO_STOCK_QUOTES_LATEST')
+  } catch (error) {
+    // 对于携带过期 / 无效 token 的情况，将 ApiError(401/403) 显式转为 AuthenticationError，
+    // 方便公共页面用统一逻辑回退到静态示例数据。
+    if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
+      throw new AuthenticationError('TOKEN_EXPIRED')
+    }
+    throw error
+  }
+}
+
 export interface PositionsQueryParams {
   page?: number
   limit?: number
@@ -557,9 +757,9 @@ export async function fetchLlmStrategyInstanceDetail(id: string) {
 
 /**
  * @internal
- * 当前后端仅返回空列表，占位用于未来将 LLM run → 交易信号的持久化打通。
- * 前端不应依赖返回结构做复杂展示逻辑。
  */
+// 当前后端仅返回空列表，占位用于未来将 LLM run → 交易信号的持久化打通。
+// 前端不应依赖返回结构做复杂展示逻辑。
 export async function fetchLlmStrategyInstanceSignals(
   id: string,
   query: LlmStrategyInstanceSignalsQuery = {},
@@ -868,4 +1068,3 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
     return unwrapResponse<WhaleDiscoverResponse>(response as any)
   }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }
-

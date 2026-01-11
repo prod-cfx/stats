@@ -1,8 +1,11 @@
 'use client';
 
+import type { AggregatedLiquidationSummary } from '@/lib/api';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { SectionTitle } from '@/components/ui/Typography';
+import { useMockData } from '@/hooks/use-mock-data';
+import { fetchAggregatedLiquidationSummary } from '@/lib/api';
 
 interface LiquidationCardProps {
   title: string;
@@ -46,17 +49,79 @@ export const LiquidationSummary = () => {
     });
   }, [i18n.language]);
 
-  const summaryData = [
-    { title: t('liquidationData.summary.1h'), total: 2.82710e7, long: 2.75548e7, short: 7.162e5 },
-    { title: t('liquidationData.summary.4h'), total: 3.65974e7, long: 3.07189e7, short: 5.8785e6 },
-    { title: t('liquidationData.summary.12h'), total: 1.35e8, long: 1.17e8, short: 1.80936e7 },
-    { title: t('liquidationData.summary.24h'), total: 2.22e8, long: 1.44e8, short: 7.84277e7 },
-  ].map(row => ({
-    title: row.title,
-    total: formatter.format(row.total),
-    long: formatter.format(row.long),
-    short: formatter.format(row.short),
-  }));
+  // 默认使用 BTC 作为汇总 symbol，后续如需支持切换可以从上层透传
+  const { data, loading, error, reload } = useMockData<AggregatedLiquidationSummary | null>(
+    async () => fetchAggregatedLiquidationSummary('BTC'),
+    [],
+    {
+      delay: 0,
+      ignoreQueryOverrides: true,
+    },
+  );
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <SectionTitle>{t('liquidationData.summary.title')}</SectionTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 animate-pulse h-[120px]"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4">
+        <SectionTitle>{t('liquidationData.summary.title')}</SectionTitle>
+        <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 flex items-center justify-between">
+          <p className="text-[#f97373] text-sm">
+            {t('common.error') || '爆仓汇总数据加载失败，请稍后重试。'}
+          </p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-md border border-[#30363d] text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
+            onClick={() => reload()}
+          >
+            {t('common.retry') || '重试'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const items = data?.items ?? [];
+
+  const summaryData = items.map(item => {
+    let titleKey: string;
+    switch (item.timeframe) {
+      case '1h':
+        titleKey = 'liquidationData.summary.1h';
+        break;
+      case '4h':
+        titleKey = 'liquidationData.summary.4h';
+        break;
+      case '12h':
+        titleKey = 'liquidationData.summary.12h';
+        break;
+      case '24h':
+      default:
+        titleKey = 'liquidationData.summary.24h';
+        break;
+    }
+
+    return {
+      title: t(titleKey),
+      total: formatter.format(item.totalUsd),
+      long: formatter.format(item.longUsd),
+      short: formatter.format(item.shortUsd),
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6">

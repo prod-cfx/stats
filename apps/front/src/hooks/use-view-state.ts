@@ -13,7 +13,7 @@ export function useViewState<T>(initialData: T | null = null) {
   }, []);
 
   const setError = useCallback((error: boolean) => {
-    setState(prev => ({ ...prev, error, loading: false }));
+    setState(prev => ({ ...prev, error }));
   }, []);
 
   const setData = useCallback((data: T | null) => {

@@ -6,6 +6,7 @@ import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanva
 // 静态导出模式需要预定义所有动态参数
 // 由于看板 ID 是用户动态创建的，使用占位 ID
 // 实际页面将通过客户端路由访问
+// eslint-disable-next-line react-refresh/only-export-components
 export async function generateStaticParams() {
   // 为静态导出提供占位参数，实际数据通过客户端加载
   return [

@@ -1,3 +1,5 @@
+# Codex Review Standards
+
 ⚠️ 核心约束（评审前必读）
 - **禁止复制构建日志**：评审评论中不得包含任何构建日志、命令输出、测试结果等文本，仅聚焦代码分析
 - **禁止运行命令**：不要尝试运行构建、测试、lint 等命令，这些由 CI 流水线保障
@@ -23,13 +25,11 @@
   - OpenAPI 装饰齐全（用于 SDK 生成）；分页统一使用 `BasePaginationRequestDto`
 - 数据与事务（Prisma）：
   - Schema 位置：`apps/backend/src/share/schema/*.prisma`
-- 变更流程：修改 → `./scripts/dx db format` → `./scripts/dx db generate` → `./scripts/dx db migrate --dev`
-- 应用迁移：CI/预发/生产务必运行 `./scripts/dx deploy --<env>`（如 `--staging`、`--prod`），统一执行 `prisma migrate deploy`
+  - 变更流程：修改 → `./scripts/dx db format` → `./scripts/dx db generate` → `./scripts/dx db migrate --dev --name <migration-name>`
   - 优先使用枚举作为 case 值；大小写转换在模型提供商内部处理
   - 查询优化（避免 N+1；合理索引；分页/过滤正确；读写分离策略如有）
 - API/SDK 一致性：
-- 若后端 DTO/接口变更，必须在 PR 中体现已运行 `./scripts/dx build sdk`，前端跟随更新
-  - 前端必须通过 SDK 调用 API，避免手写 fetch 破坏类型一致
+- 前端必须通过 SDK 调用 API，避免手写 fetch 破坏类型一致
 - 路径与代码风格：
   - TypeScript 严格模式；路径映射使用 `@shared/*`，避免跨模块相对路径
   - ESLint（@antfu）与 Prettier 配置通过；保持 2 空格缩进与 LF 行尾

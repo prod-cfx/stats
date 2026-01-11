@@ -337,7 +337,8 @@ export const AggregatedOI = () => {
                 <th className="px-4 py-4 font-bold text-center border-b border-[#30363d] w-16">{t('aggregatedOrderbook.openInterest.table.rank')}</th>
                 <th className="px-4 py-4 font-bold border-b border-[#30363d]">{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('oiAsset')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -345,7 +346,8 @@ export const AggregatedOI = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('oiUsd')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -353,7 +355,8 @@ export const AggregatedOI = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('ratioPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -361,7 +364,8 @@ export const AggregatedOI = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('change1hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -369,7 +373,8 @@ export const AggregatedOI = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('change4hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -377,7 +382,8 @@ export const AggregatedOI = () => {
                   </button>
                 </th>
                 <th className="px-4 py-4 font-bold text-right border-b border-[#30363d]">
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => handleSort('change24hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >

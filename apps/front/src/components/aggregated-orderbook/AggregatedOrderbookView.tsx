@@ -82,6 +82,7 @@ export function AggregatedOrderbookView() {
 
   // Update selected exchanges when market type changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setSelectedExchanges(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES)
   }, [marketType])
 

@@ -36,9 +36,19 @@ function formatProbability(raw?: string | null): string | undefined {
   return `${pct.toFixed(0)}%`;
 }
 
-function mapToPredictionItem(item: PredictionMarketCardResponse, index: number): PredictionMarketItem {
-  const Icon = ICONS[index % ICONS.length];
-  const iconBgColor = ICON_BG_CLASSES[index % ICON_BG_CLASSES.length];
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
+  const hash = hashCode(item.id);
+  const Icon = ICONS[hash % ICONS.length];
+  const iconBgColor = ICON_BG_CLASSES[hash % ICON_BG_CLASSES.length];
 
   return {
     id: item.id,
@@ -69,9 +79,13 @@ export const PredictionMarketGrid = () => {
   const { data: predictions, loading, error, reload } = useMockData(
     async () => {
       const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48 });
-      return result.map((item, index) => mapToPredictionItem(item, index));
+      return result.map(item => mapToPredictionItem(item));
     },
-    []
+    [],
+    {
+      delay: 0,
+      ignoreQueryOverrides: true,
+    },
   );
 
   const handleCardClick = (p: PredictionMarketItem) => {
@@ -86,8 +100,8 @@ export const PredictionMarketGrid = () => {
       <div className="relative min-h-[400px]">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-12 animate-in fade-in duration-500">
-            {predictions?.map((prediction, index) => (
-              <div key={index} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
+            {predictions?.map(prediction => (
+              <div key={prediction.id} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
                 <PredictionCard {...prediction} />
               </div>
             ))}
@@ -111,7 +125,7 @@ export const PredictionMarketGrid = () => {
             <div>
               <h3 className="text-xl font-bold text-white leading-tight">{selectedPrediction?.title}</h3>
               <div className="flex gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume}</span>
+                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume ?? '-'}</span>
                 <span className="text-xs text-[#f87171] font-bold">
                   ● {t(`predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`, { defaultValue: selectedPrediction?.status || 'LIVE' })}
                 </span>
