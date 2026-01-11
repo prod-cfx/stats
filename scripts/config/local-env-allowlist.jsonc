@@ -50,6 +50,13 @@
     "OPENAI_COMPATIBLE_BASE_URL",
     // UniAPI / AI Provider
     "UNIAPI_API_KEY",
+    "UNIAPI_BASE_URL",
+    // Polymarket 配置
+    "POLYMARKET_CATEGORY",
+    "POLYMARKET_TAGS",
+    "POLYMARKET_GAMMA_TIMEOUT_MS",
+    "POLYMARKET_GAMMA_LIMIT",
+    "POLYMARKET_CLOB_TIMEOUT_MS",
     // 交易所账户加密
     "EXCHANGE_ACCOUNT_CRYPTO_KEY",
     // CoinGlass
