@@ -82,9 +82,23 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       intervalSeconds: 300,
       enabled: false,
       cursor: null,
-      meta: JSON.stringify({
+      meta: {
         symbols: ['MSTR', 'COIN', 'MARA', 'RIOT', 'CLSK'],
-      }),
+      },
+    },
+    {
+      key: 'bbx-crypto-stock-scraper',
+      name: 'BBX 币股数据页面抓取',
+      source: 'bbx',
+      type: 'crypto-stock-scraper',
+      // 页面抓取较慢，默认每 10 分钟同步一次
+      intervalSeconds: 600,
+      enabled: false,
+      cursor: null,
+      meta: {
+        url: 'https://bbx.com/zh-Hans/traditional-finance',
+        waitTimeout: 10000,
+      },
     },
   ] as const
 
@@ -95,7 +109,10 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     try {
       await prisma.dataPullTask.upsert({
         where: { key: task.key },
-        update: {},
+        update: {
+          // 仅更新 meta 字段（如有），避免覆盖用户手动修改的其他配置
+          ...('meta' in task ? { meta: task.meta } : {}),
+        },
         create: {
           key: task.key,
           name: task.name,
@@ -104,7 +121,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
           intervalSeconds: task.intervalSeconds,
           enabled: task.enabled,
           cursor: task.cursor,
-          meta: 'meta' in task ? (task.meta as any) : undefined,
+          meta: 'meta' in task ? task.meta : undefined,
         },
       })
       createdCount += 1

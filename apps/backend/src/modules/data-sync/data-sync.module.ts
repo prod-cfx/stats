@@ -16,6 +16,7 @@ import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY, TRADES_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
+import { BbxCryptoStockScraperJob } from './jobs/bbx-crypto-stock-scraper.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
@@ -81,6 +82,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     CoinglassAggregatedLiquidationJob,
     CoinglassLongShortRatioJob,
     BbxCryptoStockQuotesJob,
+    BbxCryptoStockScraperJob,
     PolymarketMarketsJob,
     PolymarketOrderbookJob,
     PolymarketGammaClient,
@@ -101,6 +103,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob: CoinglassLongShortRatioJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
+        bbxCryptoStockScraperJob: BbxCryptoStockScraperJob,
         polymarketMarketsJob: PolymarketMarketsJob,
         polymarketOrderbookJob: PolymarketOrderbookJob,
       ): DataPullJob[] => [
@@ -114,6 +117,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob,
         bbxCryptoStockQuotesJob,
+        bbxCryptoStockScraperJob,
         polymarketMarketsJob,
         polymarketOrderbookJob,
       ],
@@ -128,6 +132,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         CoinglassAggregatedLiquidationJob,
         CoinglassLongShortRatioJob,
         BbxCryptoStockQuotesJob,
+        BbxCryptoStockScraperJob,
         PolymarketMarketsJob,
         PolymarketOrderbookJob,
       ],

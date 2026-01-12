@@ -317,6 +317,18 @@ model CryptoStockQuote {
   /// 52周最低价
   low52Week Decimal? @map("low_52_week") @db.Decimal(20, 8)
 
+  /// 净资产值比率 (mNAV)，币股特有指标
+  mNav Decimal? @map("m_nav") @db.Decimal(30, 10)
+
+  /// 持仓金额 (USD)
+  holdingValue Decimal? @map("holding_value") @db.Decimal(30, 10)
+
+  /// 持仓数量
+  holdingQuantity Decimal? @map("holding_quantity") @db.Decimal(30, 10)
+
+  /// 公司类型标签，如 "Crypto Strategic Reserve", "Crypto Mining"
+  companyType String? @map("company_type")
+
   /// 数据源，例如：'BBX'
   source String @default("BBX")
 

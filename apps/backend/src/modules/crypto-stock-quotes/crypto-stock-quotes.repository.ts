@@ -21,6 +21,10 @@ export interface CreateCryptoStockQuoteInput {
   peRatio?: Decimal | string | number | null
   high52Week?: Decimal | string | number | null
   low52Week?: Decimal | string | number | null
+  mNav?: Decimal | string | number | null
+  holdingValue?: Decimal | string | number | null
+  holdingQuantity?: Decimal | string | number | null
+  companyType?: string | null
   source?: string
   quoteTimestamp: Date
   rawData?: unknown
@@ -66,6 +70,10 @@ export class CryptoStockQuotesRepository {
       peRatio: input.peRatio ?? null,
       high52Week: input.high52Week ?? null,
       low52Week: input.low52Week ?? null,
+      mNav: input.mNav ?? null,
+      holdingValue: input.holdingValue ?? null,
+      holdingQuantity: input.holdingQuantity ?? null,
+      companyType: input.companyType ?? null,
       source: input.source ?? 'BBX',
       quoteTimestamp: input.quoteTimestamp,
       rawData: input.rawData as any,
@@ -92,6 +100,10 @@ export class CryptoStockQuotesRepository {
       peRatio: input.peRatio ?? null,
       high52Week: input.high52Week ?? null,
       low52Week: input.low52Week ?? null,
+      mNav: input.mNav ?? null,
+      holdingValue: input.holdingValue ?? null,
+      holdingQuantity: input.holdingQuantity ?? null,
+      companyType: input.companyType ?? null,
       rawData: input.rawData as any,
     }
   }

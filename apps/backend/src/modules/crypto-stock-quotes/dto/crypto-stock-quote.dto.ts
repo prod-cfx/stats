@@ -110,6 +110,27 @@ export class CryptoStockQuoteResponseDto {
   mNav?: string | null
 
   @ApiPropertyOptional({
+    description: '持仓金额 (USD)，数据库原始值',
+    example: '61810000000',
+    nullable: true,
+  })
+  holdingValue?: string | null
+
+  @ApiPropertyOptional({
+    description: '持仓数量，数据库原始值',
+    example: '673780',
+    nullable: true,
+  })
+  holdingQuantity?: string | null
+
+  @ApiPropertyOptional({
+    description: '公司类型标签',
+    example: 'Crypto Strategic Reserve',
+    nullable: true,
+  })
+  companyType?: string | null
+
+  @ApiPropertyOptional({
     description: '公司介绍文案段落列表（用于前端弹窗展示）',
     type: [String],
   })
@@ -210,6 +231,6 @@ export class GetLatestCryptoStockQuotesQueryDto {
   })
   @IsOptional()
   @IsString()
-  @IsIn(['BBX'], { message: 'source 仅支持: BBX' })
+  @IsIn(['BBX', 'BBX_SCRAPER'], { message: 'source 仅支持: BBX, BBX_SCRAPER' })
   source?: string
 }
