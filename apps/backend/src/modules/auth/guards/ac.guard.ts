@@ -8,7 +8,6 @@ import { Reflector } from '@nestjs/core'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { AppRole } from '../rbac/permissions'
 // Nest 注入需要运行时引用 PermissionService/AuditLogService，保留值导入
-import { AppRole } from '../rbac/permissions'
 import { AuditLogService } from '../services/audit-log.service'
 import { PermissionService } from '../services/permission.service'
 
