@@ -9,6 +9,24 @@ export const BinanceIcon = ({ size = 24 }: { size?: number }) => (
   </svg>
 );
 
+export const OkxIcon = ({ size = 24 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="16" fill="black"/>
+    <rect x="7" y="7" width="7" height="7" rx="1" fill="white"/>
+    <rect x="18" y="7" width="7" height="7" rx="1" fill="white"/>
+    <rect x="7" y="18" width="7" height="7" rx="1" fill="white"/>
+    <rect x="18" y="18" width="7" height="7" rx="1" fill="white"/>
+    <rect x="12.5" y="12.5" width="7" height="7" rx="1" fill="white"/>
+  </svg>
+);
+
+export const BybitIcon = ({ size = 24 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="16" fill="#F7A600"/>
+    <path d="M8 10h5v12H8V10zm6 0h5l3 6-3 6h-5l3-6-3-6z" fill="black"/>
+  </svg>
+);
+
 export const DexIcon = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect width="24" height="24" rx="12" fill="url(#dex_gradient_common)" />
@@ -31,13 +49,20 @@ interface ExchangeLogoProps {
 }
 
 export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: ExchangeLogoProps) => {
+  // Normalize name: handle venue IDs like "binance-perp", "okx-spot"
+  const normalizedName = name?.toLowerCase().split('-')[0] || '';
+
   // Identify exchange by name or URL
-  const isBinance = name?.toLowerCase().includes('binance') || logoUrl?.includes('270.png');
-  const isKuCoin = name?.toLowerCase().includes('kucoin') || logoUrl?.includes('311.png') || logoUrl?.includes('16.png');
-  const isDex = name?.toLowerCase().includes('dex');
+  const isBinance = normalizedName === 'binance' || logoUrl?.includes('270.png');
+  const isOkx = normalizedName === 'okx';
+  const isBybit = normalizedName === 'bybit';
+  const isKuCoin = normalizedName === 'kucoin' || logoUrl?.includes('311.png') || logoUrl?.includes('16.png');
+  const isDex = normalizedName === 'dex' || name?.toLowerCase().includes('dex');
 
   if (isBinance) return <div className={className}><BinanceIcon size={size} /></div>;
-  
+  if (isOkx) return <div className={className}><OkxIcon size={size} /></div>;
+  if (isBybit) return <div className={className}><BybitIcon size={size} /></div>;
+
   if (isKuCoin) {
     const finalUrl = logoUrl || 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png';
     return (
@@ -59,7 +84,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
 
   return (
     <div className={`rounded bg-primary/20 flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
-      <span className="text-[10px] text-primary font-bold">{name?.charAt(0) || 'E'}</span>
+      <span className="text-[10px] text-primary font-bold">{name?.charAt(0).toUpperCase() || 'E'}</span>
     </div>
   );
 };

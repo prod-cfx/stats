@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { useToast } from '@/components/ui/toast';
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 export const Navbar = () => {

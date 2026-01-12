@@ -982,3 +982,55 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
     return unwrapResponse<WhaleDiscoverResponse>(response as any)
   }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }
+
+// ===== 聚合订单簿 API =====
+
+export type AggregatedOrderbookMarketType = 'spot' | 'perp'
+
+export interface AggregatedOrderbookVenueDetail {
+  venueId: string
+  size: number
+}
+
+export interface AggregatedOrderbookLevel {
+  price: number
+  sizeTotal: number
+  details: AggregatedOrderbookVenueDetail[]
+}
+
+export interface AggregatedOrderbookResponse {
+  marketKey: string
+  base: string
+  type: string
+  asks: AggregatedOrderbookLevel[]
+  bids: AggregatedOrderbookLevel[]
+  midPrice: number
+  updatedAt: number
+  venues: string[]
+  mergedQuotes: string[]
+}
+
+export interface FetchAggregatedOrderbookParams {
+  base: string
+  type: AggregatedOrderbookMarketType
+  venues?: string
+  depth?: number
+  tickSize?: number
+}
+
+export async function fetchAggregatedOrderbook(
+  params: FetchAggregatedOrderbookParams,
+): Promise<AggregatedOrderbookResponse> {
+  return apiCall(async () => {
+    const response = await client.AggregatedOrderbookController_getAggregatedOrderbook({
+      queries: {
+        base: params.base,
+        type: params.type,
+        ...(params.venues && { venues: params.venues }),
+        ...(params.depth && { depth: params.depth }),
+        ...(params.tickSize && { tickSize: params.tickSize }),
+      },
+    })
+    return unwrapResponse<AggregatedOrderbookResponse>(response as any)
+  }, 'FETCH_AGGREGATED_ORDERBOOK')
+}
