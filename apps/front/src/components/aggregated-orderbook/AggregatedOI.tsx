@@ -22,6 +22,80 @@ interface OIData {
 type SortField = 'oiAsset' | 'oiUsd' | 'ratioPct' | 'change1hPct' | 'change4hPct' | 'change24hPct' | null;
 type SortDirection = 'asc' | 'desc' | null;
 
+// Prefer consistent brand logos, but be resilient: many public logo/CDN domains can be blocked/slow.
+// We therefore try multiple sources in order and fall back to an inline SVG if all fail.
+const EXCHANGE_LOGO_SOURCES: Record<string, string[]> = {
+  CME: ['/images/exchanges/cme.png'],
+  Binance: ['/images/exchanges/binance.png'],
+  OKX: ['/images/exchanges/okx.png'],
+  Bybit: ['/images/exchanges/bybit.png'],
+  KuCoin: ['/images/exchanges/kucoin.png'],
+  Bitfinex: ['/images/exchanges/bitfinex.png'],
+  Bitget: ['/images/exchanges/bitget.png'],
+  MEXC: ['/images/exchanges/mexc.png'],
+  Hyperliquid: ['/images/exchanges/hyperliquid.png'],
+  Gate: ['/images/exchanges/gate.png'],
+  Aster: ['/images/exchanges/aster.png'],
+  Lighter: ['/images/exchanges/lighter.svg'],
+  Deribit: ['/images/exchanges/deribit.png'],
+  Coinbase: ['/images/exchanges/coinbase.png'],
+  Kraken: ['/images/exchanges/kraken.png'],
+  HTX: ['/images/exchanges/htx.png'],
+}
+
+const buildMonogramSvgDataUri = (letter: string) =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6366f1"/>
+          <stop offset="1" stop-color="#ec4899"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="64" height="64" rx="32" fill="#0d1117"/>
+      <circle cx="32" cy="32" r="22" fill="url(#g)" opacity="0.35"/>
+      <text x="32" y="39" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="20" font-weight="800" fill="#e6edf3">${letter}</text>
+    </svg>`,
+  )}`
+
+const getExchangeLogoCandidates = (exchange: string, fallback: string) => {
+  const candidates = EXCHANGE_LOGO_SOURCES[exchange] ?? []
+  const out = [...candidates]
+  if (fallback) out.push(fallback)
+  // Always end with a deterministic inline fallback.
+  out.push(buildMonogramSvgDataUri(exchange.slice(0, 1).toUpperCase()))
+  return out
+}
+
+function ExchangeLogo({
+  exchange,
+  fallback,
+  className,
+}: {
+  exchange: string
+  fallback: string
+  className: string
+}) {
+  const candidates = useMemo(() => getExchangeLogoCandidates(exchange, fallback), [exchange, fallback])
+  const [idx, setIdx] = useState(0)
+
+  // Reset when exchange changes
+  useEffect(() => setIdx(0), [exchange])
+
+  const src = candidates[Math.min(idx, candidates.length - 1)]
+
+  return (
+    <img
+      src={src}
+      alt={exchange}
+      className={className}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setIdx((i) => Math.min(i + 1, candidates.length - 1))}
+    />
+  )
+}
+
 const mockOIData: OIData[] = [
   {
     rank: '',
@@ -38,20 +112,8 @@ const mockOIData: OIData[] = [
   },
   {
     rank: 1,
-    exchange: 'Binance',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
-    oiAsset: 123_500,
-    oiUsd: 11_098_000_000,
-    ratioPct: 18.68,
-    change1hPct: 0.49,
-    change4hPct: 2.25,
-    change24hPct: 0.40,
-    oiVolRatio: 0.9406
-  },
-  {
-    rank: 2,
     exchange: 'CME',
-    logo: 'https://www.cmegroup.com/favicon.ico',
+    logo: '/images/exchanges/cme.png',
     oiAsset: 123_000,
     oiUsd: 11_049_000_000,
     ratioPct: 18.6,
@@ -61,57 +123,21 @@ const mockOIData: OIData[] = [
     oiVolRatio: 1.2749
   },
   {
+    rank: 2,
+    exchange: 'Binance',
+    logo: '/images/exchanges/binance.png',
+    oiAsset: 123_500,
+    oiUsd: 11_098_000_000,
+    ratioPct: 18.68,
+    change1hPct: 0.49,
+    change4hPct: 2.25,
+    change24hPct: 0.40,
+    oiVolRatio: 0.9406
+  },
+  {
     rank: 3,
-    exchange: 'Bybit',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
-    oiAsset: 60_600,
-    oiUsd: 5_447_000_000,
-    ratioPct: 9.17,
-    change1hPct: -0.05,
-    change4hPct: 2.17,
-    change24hPct: 0.35,
-    oiVolRatio: 1.0773
-  },
-  {
-    rank: 4,
-    exchange: 'MEXC',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/544.png',
-    oiAsset: 58_600,
-    oiUsd: 5_261_000_000,
-    ratioPct: 8.85,
-    change1hPct: 0.35,
-    change4hPct: 2.84,
-    change24hPct: 1.57,
-    oiVolRatio: 0.4723
-  },
-  {
-    rank: 5,
-    exchange: 'Gate',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/87.png',
-    oiAsset: 53_300,
-    oiUsd: 4_789_000_000,
-    ratioPct: 8.06,
-    change1hPct: 0.98,
-    change4hPct: 6.05,
-    change24hPct: 4.81,
-    oiVolRatio: 0.9265
-  },
-  {
-    rank: 6,
-    exchange: 'HTX',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/102.png',
-    oiAsset: 39_900,
-    oiUsd: 3_580_000_000,
-    ratioPct: 6.02,
-    change1hPct: 0.18,
-    change4hPct: 0.89,
-    change24hPct: 1.29,
-    oiVolRatio: 0.8976
-  },
-  {
-    rank: 7,
     exchange: 'OKX',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
+    logo: '/images/exchanges/okx.png',
     oiAsset: 37_800,
     oiUsd: 3_391_000_000,
     ratioPct: 5.71,
@@ -121,40 +147,100 @@ const mockOIData: OIData[] = [
     oiVolRatio: 0.6
   },
   {
+    rank: 4,
+    exchange: 'Bybit',
+    logo: '/images/exchanges/bybit.png',
+    oiAsset: 60_600,
+    oiUsd: 5_447_000_000,
+    ratioPct: 9.17,
+    change1hPct: -0.05,
+    change4hPct: 2.17,
+    change24hPct: 0.35,
+    oiVolRatio: 1.0773
+  },
+  {
+    rank: 5,
+    exchange: 'KuCoin',
+    logo: '/images/exchanges/kucoin.png',
+    oiAsset: 12_000,
+    oiUsd: 1_080_000_000,
+    ratioPct: 1.82,
+    change1hPct: 0.12,
+    change4hPct: 0.45,
+    change24hPct: 0.78,
+    oiVolRatio: 0.85
+  },
+  {
+    rank: 6,
+    exchange: 'Bitfinex',
+    logo: '/images/exchanges/bitfinex.png',
+    oiAsset: 11_000,
+    oiUsd: 990_000_000,
+    ratioPct: 1.67,
+    change1hPct: -0.08,
+    change4hPct: 0.22,
+    change24hPct: 0.55,
+    oiVolRatio: 0.92
+  },
+  {
+    rank: 7,
+    exchange: 'Bitget',
+    logo: '/images/exchanges/bitget.png',
+    oiAsset: 10_500,
+    oiUsd: 945_000_000,
+    ratioPct: 1.59,
+    change1hPct: 0.31,
+    change4hPct: 1.15,
+    change24hPct: 2.45,
+    oiVolRatio: 0.78
+  },
+  {
     rank: 8,
-    exchange: 'Hyperliquid',
-    logo: 'https://app.hyperliquid.xyz/favicon.ico',
-    oiAsset: 18_900,
-    oiUsd: 1_698_000_000,
-    ratioPct: 2.86,
-    change1hPct: 0.87,
-    change4hPct: 2.34,
-    change24hPct: 1.92,
-    oiVolRatio: 0.8234
+    exchange: 'Aster',
+    logo: '/images/exchanges/aster.png',
+    oiAsset: 10_200,
+    oiUsd: 918_000_000,
+    ratioPct: 1.55,
+    change1hPct: 0.15,
+    change4hPct: 0.88,
+    change24hPct: 1.25,
+    oiVolRatio: 0.65
   },
   {
     rank: 9,
-    exchange: 'Aster',
-    logo: 'https://via.placeholder.com/20/6366f1/ffffff?text=A',
-    oiAsset: 9_800,
-    oiUsd: 881_000_000,
-    ratioPct: 1.48,
-    change1hPct: 0.56,
-    change4hPct: 1.78,
-    change24hPct: 1.23,
-    oiVolRatio: 0.7156
+    exchange: 'MEXC',
+    logo: '/images/exchanges/mexc.png',
+    oiAsset: 10_000,
+    oiUsd: 900_000_000,
+    ratioPct: 1.52,
+    change1hPct: -0.15,
+    change4hPct: 0.35,
+    change24hPct: 0.95,
+    oiVolRatio: 0.45
   },
   {
     rank: 10,
     exchange: 'Lighter',
-    logo: 'https://lighter.xyz/favicon.ico',
-    oiAsset: 6_700,
-    oiUsd: 602_000_000,
-    ratioPct: 1.01,
-    change1hPct: -0.12,
-    change4hPct: 0.89,
-    change24hPct: 0.67,
-    oiVolRatio: 0.6789
+    logo: '/images/exchanges/lighter.svg',
+    oiAsset: 9_900,
+    oiUsd: 891_000_000,
+    ratioPct: 1.5,
+    change1hPct: 0.45,
+    change4hPct: 1.25,
+    change24hPct: 2.15,
+    oiVolRatio: 0.55
+  },
+  {
+    rank: 11,
+    exchange: 'Hyperliquid',
+    logo: '/images/exchanges/hyperliquid.png',
+    oiAsset: 9_800,
+    oiUsd: 882_000_000,
+    ratioPct: 1.49,
+    change1hPct: 0.87,
+    change4hPct: 2.34,
+    change24hPct: 1.92,
+    oiVolRatio: 0.8234
   }
 ];
 
@@ -441,7 +527,11 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                     <div className="flex items-center gap-2">
                       {row.logo && (
                         <div className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
-                          <img src={row.logo} alt={row.exchange} className="w-full h-full object-cover" />
+                          <ExchangeLogo
+                            exchange={row.exchange}
+                            fallback={row.logo}
+                            className="w-full h-full object-contain bg-[#0d1117]"
+                          />
                         </div>
                       )}
                       <span className={row.isTotal ? `text-white ${isCompact ? 'font-bold text-sm' : ''}` : 'text-[#e6edf3]'}>

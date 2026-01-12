@@ -6,7 +6,7 @@
 import { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
-import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import { OptionalAccessControl, ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports
 import { WhaleAlertService } from './whale-alert.service'
@@ -18,7 +18,7 @@ export class WhaleAlertController {
   constructor(private readonly service: WhaleAlertService) {}
 
   @Get('realtime')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取 Hyperliquid 鲸鱼持仓预警实时列表' })
   @ApiQuery({

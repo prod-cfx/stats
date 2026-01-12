@@ -326,7 +326,7 @@ export async function fetchRealtimeWhaleAlerts(
     return safeApiCall(
       () =>
         client.WhaleAlertController_getRealtime({
-          headers: requireAuthHeaders(),
+          headers: optionalAuthHeaders(),
           queries,
         }),
       {
@@ -335,7 +335,7 @@ export async function fetchRealtimeWhaleAlerts(
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
+            ...optionalAuthHeaders(),
           },
         },
         validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
@@ -989,82 +989,3 @@ export async function fetchPredictionMarkets(
   }, 'FETCH_PREDICTION_MARKETS')
 }
 
-// ===== Hyperliquid Whale Alert 实时数据 API =====
-
-export interface FetchRealtimeWhaleAlertsParams {
-  symbol?: string
-  minPositionValueUsd?: number
-  limit?: number
-  since?: string
-}
-
-export async function fetchRealtimeWhaleAlerts(
-  params: FetchRealtimeWhaleAlertsParams = {},
-): Promise<RealtimeWhaleAlertItem[]> {
-  return apiCall(async () => {
-    const queries: Record<string, unknown> = {}
-
-    if (params.symbol) {
-      queries.symbol = params.symbol
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      queries.min_position_value_usd = params.minPositionValueUsd
-    }
-    if (typeof params.limit === 'number') {
-      queries.limit = params.limit
-    }
-    if (params.since) {
-      queries.since = params.since
-    }
-
-    // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
-    const searchParams = new URLSearchParams()
-    if (params.symbol) {
-      searchParams.set('symbol', params.symbol)
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
-    }
-    if (typeof params.limit === 'number') {
-      searchParams.set('limit', String(params.limit))
-    }
-    if (params.since) {
-      searchParams.set('since', params.since)
-    }
-    const queryString = searchParams.toString()
-    const fallbackUrl =
-      queryString.length > 0
-        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
-        : `${API_BASE_URL}/whale-alerts/realtime`
-
-    return safeApiCall(
-      () =>
-        client.WhaleAlertController_getRealtime({
-          headers: requireAuthHeaders(),
-          queries,
-        }),
-      {
-        url: fallbackUrl,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
-      },
-    )
-  }, 'FETCH_REALTIME_WHALE_ALERTS')
-}
-
-// ===== Whale Tracking Discover API =====
-
-export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
-  return apiCall(async () => {
-    const response = await client.WhaleTrackingController_getDiscover({
-      headers: optionalAuthHeaders(),
-    })
-    return unwrapResponse<WhaleDiscoverResponse>(response as any)
-  }, 'FETCH_WHALE_TRACKING_DISCOVER')
-}

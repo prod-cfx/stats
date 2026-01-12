@@ -101,8 +101,6 @@ const IndicatorChartPanel = ({
   useEffect(() => {
     if (!containerRef.current) return
 
-    const hasPerPointColor = type === 'line' && data.some((d) => d && typeof d.color === 'string')
-
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height,
@@ -142,36 +140,18 @@ const IndicatorChartPanel = ({
 
     let series: ISeriesApi<any>
     if (type === 'line') {
-      // For segmented red/green lines (e.g. LS ratio), render two line series with whitespace gaps.
-      if (hasPerPointColor) {
-        const bull = chart.addSeries(LineSeries, {
-          color: '#22c55e',
-          lineWidth: 2,
-          crosshairMarkerVisible: false,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        })
-        const bear = chart.addSeries(LineSeries, {
-          color: '#ef4444',
-          lineWidth: 2,
-          crosshairMarkerVisible: false,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        })
-        series = bull
-        altSeriesRef.current = bear
-      } else {
-        series = chart.addSeries(LineSeries, {
-          color,
-          lineWidth: 2,
-          crosshairMarkerVisible: false,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          ...(priceFormatter
-            ? { priceFormat: { type: 'custom', minMove: 0.0001, formatter: priceFormatter } }
-            : {}),
-        })
-      }
+      // Use a single LineSeries. If data points include `color`, lightweight-charts will apply per-point color,
+      // which avoids the "double line on first open" issue caused by creating two series depending on timing.
+      series = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 2,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        ...(priceFormatter
+          ? { priceFormat: { type: 'custom', minMove: 0.0001, formatter: priceFormatter } }
+          : {}),
+      })
     } else if (type === 'area') {
       // Filled area to bottom (Coinglass-like OI panel)
       series = chart.addSeries(AreaSeries, {
@@ -222,28 +202,8 @@ const IndicatorChartPanel = ({
     // Store data for legend lookup (crosshair move)
     dataByTimeRef.current = new Map(data.map((d) => [String(d?.time), d]))
 
-    // Set series data (support segmented line via whitespace gaps)
-    if (type === 'line' && hasPerPointColor && altSeriesRef.current) {
-      // Build segmented lines by inserting a single whitespace point ONLY on trend switch.
-      // This avoids the "flat horizontal line" artifact caused by dense whitespace points.
-      const bullData: any[] = []
-      const bearData: any[] = []
-      let prevBull: boolean | null = null
-      for (const d of data) {
-        if (!d || typeof d.value !== 'number') continue
-        const isBull = d.value >= 1
-        if (isBull) {
-          bullData.push({ time: d.time, value: d.value })
-          if (prevBull === false) bearData.push({ time: d.time }) // break bear
-        } else {
-          bearData.push({ time: d.time, value: d.value })
-          if (prevBull === true) bullData.push({ time: d.time }) // break bull
-        }
-        prevBull = isBull
-      }
-      series.setData(bullData as any)
-      altSeriesRef.current.setData(bearData as any)
-    } else if (type === 'liquidation' && altSeriesRef.current) {
+    // Set series data
+    if (type === 'liquidation' && altSeriesRef.current) {
       const shortData = data
         .filter((d) => d && typeof d.shortLiquidationUsd === 'number')
         .map((d) => ({ time: d.time, value: d.shortLiquidationUsd, color: '#22c55e' }))
@@ -361,26 +321,7 @@ const IndicatorChartPanel = ({
       // refresh lookup
       dataByTimeRef.current = new Map(data.map((d) => [String(d?.time), d]))
 
-      const hasPerPointColor = type === 'line' && data.some((d) => d && typeof d.color === 'string') && altSeriesRef.current
-      if (hasPerPointColor) {
-        const bullData: any[] = []
-        const bearData: any[] = []
-        let prevBull: boolean | null = null
-        for (const d of data) {
-          if (!d || typeof d.value !== 'number') continue
-          const isBull = d.value >= 1
-          if (isBull) {
-            bullData.push({ time: d.time, value: d.value })
-            if (prevBull === false) bearData.push({ time: d.time })
-          } else {
-            bearData.push({ time: d.time, value: d.value })
-            if (prevBull === true) bullData.push({ time: d.time })
-          }
-          prevBull = isBull
-        }
-        seriesRef.current.setData(bullData as any)
-        altSeriesRef.current!.setData(bearData as any)
-      } else if (type === 'liquidation' && altSeriesRef.current) {
+      if (type === 'liquidation' && altSeriesRef.current) {
         const shortData = data
           .filter((d) => d && typeof d.shortLiquidationUsd === 'number')
           .map((d) => ({ time: d.time, value: d.shortLiquidationUsd, color: '#22c55e' }))

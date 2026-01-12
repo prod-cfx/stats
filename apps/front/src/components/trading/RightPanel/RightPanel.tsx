@@ -1,7 +1,7 @@
 'use client';
 
 import type { DataSource, MarketType } from '@/types/trading';
-import { AlignJustify, ArrowDownUp, ChevronDown, Copy, ExternalLink, RotateCcw } from 'lucide-react';
+import { AlignJustify, ArrowDownUp, ChevronDown, Copy, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Spinner } from '@/components/ui/loading';
@@ -247,9 +247,10 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
             <span className="font-bold text-sm">{displaySymbol}</span>
             <Copy className="w-3 h-3 text-[#8b949e] cursor-pointer" />
           </div>
-          <div className="flex items-center gap-1 text-xs text-primary cursor-pointer hover:underline">
-            <span>{isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${(selectedExchange || 'binance').charAt(0).toUpperCase() + (selectedExchange || 'binance').slice(1)}`)}</span>
-            <ExternalLink className="w-3 h-3" />
+          <div className="flex items-center gap-1 text-xs">
+            <span className="bg-gradient-to-br from-primary to-secondary text-transparent bg-clip-text">
+              {isAggregated ? t('chart.toolbar.aggregationOn') : t(`rightPanel.exchange${(selectedExchange || 'binance').charAt(0).toUpperCase() + (selectedExchange || 'binance').slice(1)}`)}
+            </span>
           </div>
         </div>
 
@@ -276,18 +277,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           </div>
         </div>
 
-        <div className="px-3 pb-2 flex items-center gap-2">
-          {[
-            t('rightPanel.addAlert'),
-            t('rightPanel.addWatchlist'),
-            t('rightPanel.strategy'),
-            t('rightPanel.overview'),
-          ].map((label, i) => (
-            <button key={i} type="button" className="flex-1 bg-[#21262d] border border-[#30363d] rounded py-1 text-[10px] text-[#c9d1d9] hover:bg-[#30363d] transition-all">
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* 用户系统未接入：隐藏“加预警/加自选/策略/简况”等用户态入口 */}
       </div>
 
       {/* --- MODULE 2: Orderbook --- */}

@@ -32,7 +32,7 @@ interface ExchangeLogoProps {
 
 export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: ExchangeLogoProps) => {
   // Identify exchange by name or URL
-  const isBinance = name?.toLowerCase().includes('binance') || logoUrl?.includes('270.png');
+  const isBinance = name?.toLowerCase().includes('binance');
   const isKuCoin = name?.toLowerCase().includes('kucoin') || logoUrl?.includes('311.png') || logoUrl?.includes('16.png');
   const isDex = name?.toLowerCase().includes('dex');
 
@@ -52,7 +52,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   if (logoUrl) {
     return (
       <div className={`rounded bg-[#21262d] border border-[#30363d] flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
-        <img src={logoUrl} alt={name || 'exchange'} className="w-full h-full object-cover" />
+        <img src={logoUrl} alt={name || 'exchange'} className="w-full h-full object-contain p-0.5" />
       </div>
     );
   }
