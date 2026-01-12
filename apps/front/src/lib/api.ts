@@ -22,6 +22,9 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 
 export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAccountDto>
 export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
+export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
+export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
 
 interface BaseResponse<T> {
   data?: T
@@ -156,6 +159,8 @@ async function apiCall<T>(
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
 }
 }
+
+
 
 // ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
 
@@ -952,4 +957,114 @@ export async function cancelLlmSubscription(subscriptionId: string) {
   clearCache(CacheKeys.llmSubscription(subscriptionId))
   invalidateCache('llm-subscription-list:')
   invalidateCache('llm-strategy-instance:')
+}
+
+// ===== 预测市场（Polymarket）相关 API =====
+
+export interface FetchPredictionMarketsParams {
+  category?: string
+  onlyActive?: boolean
+  limit?: number
+  page?: number
+}
+
+export async function fetchPredictionMarkets(
+  params: FetchPredictionMarketsParams = {},
+): Promise<PredictionMarketCardResponse[]> {
+  return apiCall(async () => {
+    const page = params.page ?? 1
+    const limit = params.limit ?? 48
+
+    const response = await client.PolymarketController_listMarkets({
+      headers: optionalAuthHeaders(),
+      queries: {
+        ...(params.category && { category: params.category }),
+        ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
+        page,
+        limit,
+      },
+    })
+
+    return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
+  }, 'FETCH_PREDICTION_MARKETS')
+}
+
+// ===== Hyperliquid Whale Alert 实时数据 API =====
+
+export interface FetchRealtimeWhaleAlertsParams {
+  symbol?: string
+  minPositionValueUsd?: number
+  limit?: number
+  since?: string
+}
+
+export async function fetchRealtimeWhaleAlerts(
+  params: FetchRealtimeWhaleAlertsParams = {},
+): Promise<RealtimeWhaleAlertItem[]> {
+  return apiCall(async () => {
+    const queries: Record<string, unknown> = {}
+
+    if (params.symbol) {
+      queries.symbol = params.symbol
+    }
+    if (typeof params.minPositionValueUsd === 'number') {
+      queries.min_position_value_usd = params.minPositionValueUsd
+    }
+    if (typeof params.limit === 'number') {
+      queries.limit = params.limit
+    }
+    if (params.since) {
+      queries.since = params.since
+    }
+
+    // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
+    const searchParams = new URLSearchParams()
+    if (params.symbol) {
+      searchParams.set('symbol', params.symbol)
+    }
+    if (typeof params.minPositionValueUsd === 'number') {
+      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
+    }
+    if (typeof params.limit === 'number') {
+      searchParams.set('limit', String(params.limit))
+    }
+    if (params.since) {
+      searchParams.set('since', params.since)
+    }
+    const queryString = searchParams.toString()
+    const fallbackUrl =
+      queryString.length > 0
+        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
+        : `${API_BASE_URL}/whale-alerts/realtime`
+
+    return safeApiCall(
+      () =>
+        client.WhaleAlertController_getRealtime({
+          headers: requireAuthHeaders(),
+          queries,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...requireAuthHeaders(),
+          },
+        },
+        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
+      },
+    )
+  }, 'FETCH_REALTIME_WHALE_ALERTS')
+}
+
+// ===== Whale Tracking Discover API =====
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const response = await client.WhaleTrackingController_getDiscover({
+      headers: optionalAuthHeaders(),
+    })
+    return unwrapResponse<WhaleDiscoverResponse>(response as any)
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }

@@ -28,6 +28,7 @@ import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heat
 import { MarketsModule } from './markets/markets.module'
 import { OpenInterestModule } from './open-interest/open-interest.module'
 import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
+import { PolymarketModule } from './polymarket/polymarket.module'
 import { SettingsModule } from './settings/settings.module'
 import { TradesConfigModule } from './trades-config/trades-config.module'
 import { UserModule } from './user/user.module'
@@ -97,6 +98,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
+    PolymarketModule,
     WhaleAlertModule,
     CryptoStockQuotesModule,
     WhaleTrackingModule,
