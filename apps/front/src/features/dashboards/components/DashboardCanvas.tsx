@@ -2,9 +2,11 @@
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { removeWidgetFromDashboard, updateDashboardLayout } from '../store/dashboardActions'
 import { ensureDashboard, getDashboard } from '../store/dashboardStore'
+import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 import { WIDGET_CATALOG } from '../widgets/widgets.catalog'
 import { DashboardHeader } from './DashboardHeader'
@@ -34,19 +36,40 @@ function useContainerWidth() {
   return { setEl, width }
 }
 
-// Clamp helper: force ultra-compact size and default two-column width (6/12 cols)
-const clampLayout = (items: any[]) =>
-  (items || []).map((n) => ({
-    ...n,
-    h: 3,
-    w: 6,
-    minW: 6,
-    maxW: 12,
-  }))
+// Clamp helper:
+// - All widgets now respect their snapped preset size if available
+// - Fallback to 6x3 if snapping fails or no type
+const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
+  (items || []).map((n) => {
+    const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
+    if (widgetType) {
+      const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
+      return {
+        ...n,
+        w: snapped.w,
+        h: snapped.h,
+        minW: snapped.w,
+        maxW: snapped.w,
+      }
+    }
+    return {
+      ...n,
+      h: 3,
+      w: 6,
+      minW: 6,
+      maxW: 6,
+    }
+  })
 
 export function DashboardCanvas(props: { dashboardId: string }) {
-  const [doc, setDoc] = useState(() => ensureDashboard(props.dashboardId))
-  const [layoutState, setLayoutState] = useState(() => clampLayout(doc.layout))
+  const { t } = useTranslation()
+  const [doc, setDoc] = useState(() =>
+    props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
+  )
+  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
+  const [layoutState, setLayoutState] = useState(() =>
+    clampLayout((doc ?? ensureDashboard('draft')).layout, widgetsById),
+  )
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const [resetKey, setResetKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -62,19 +85,30 @@ export function DashboardCanvas(props: { dashboardId: string }) {
 
   useEffect(() => {
     const refresh = () => {
-      const freshDoc = getDashboard(props.dashboardId) ?? ensureDashboard(props.dashboardId)
+      if (props.dashboardId === 'draft') {
+        const freshDoc = ensureDashboard('draft')
+        setDoc(freshDoc)
+        if (!saveTimerRef.current) {
+          const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+          setLayoutState(clampLayout(freshDoc.layout, map))
+        }
+        return
+      }
+      const freshDoc = getDashboard(props.dashboardId)
+      if (!freshDoc) return // do not recreate deleted dashboards
       setDoc(freshDoc)
-      if (!saveTimerRef.current) setLayoutState(clampLayout(freshDoc.layout))
+      if (!saveTimerRef.current) {
+        const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+        setLayoutState(clampLayout(freshDoc.layout, map))
+      }
     }
     // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleanup in return
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
   }, [props.dashboardId])
 
-  const widgetsById = useMemo(() => new Map(doc.widgets.map((w) => [w.id, w])), [doc.widgets])
-
   const onLayoutChange = (next: any[]) => {
-    const clamped = clampLayout(next)
+    const clamped = clampLayout(next, widgetsById)
     setLayoutState(clamped)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
@@ -85,21 +119,61 @@ export function DashboardCanvas(props: { dashboardId: string }) {
 
   const handleResetLayout = () => {
     if (!doc.widgets.length) return
+    let currentX = 0
+    let currentY = 0
+    let currentRowHeight = 0
+
     const newLayout = doc.widgets.map((widget) => {
+      const existing = doc.layout?.find((l) => String(l.i) === widget.id)
       let catalogItem = null
       for (const group of WIDGET_CATALOG) {
         const found = group.items.find((i) => i.type === widget.type)
         if (found) { catalogItem = found; break }
       }
-      const _d = catalogItem?.defaultLayout || { w: 6, h: 3 }
-      return { i: widget.id, x: 0, y: 0, w: _d.w, h: _d.h, minW: 6, maxW: 12 }
+      const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
+      const w0 = existing?.w ?? d.w
+      const h0 = existing?.h ?? d.h
+      // Use snapped preset for all widget types
+      const snapped = snapToPresetForWidgetType(widget.type, w0, h0)
+      const w = snapped.w
+      const h = snapped.h
+
+      // If widget width > 6 or current row can't fit, start new row
+      if (w > 6 || currentX + w > 12) {
+        currentY += currentRowHeight
+        currentX = 0
+        currentRowHeight = 0
+      }
+
+      const layoutItem = {
+        i: widget.id,
+        x: currentX,
+        y: currentY,
+        w,
+        h,
+        minW: w,
+        maxW: w,
+      }
+
+      currentX += w
+      currentRowHeight = Math.max(currentRowHeight, h)
+
+      // If we've filled the row (x >= 12), start new row for next widget
+      if (currentX >= 12) {
+        currentY += currentRowHeight
+        currentX = 0
+        currentRowHeight = 0
+      }
+
+      return layoutItem
     })
-    setLayoutState(newLayout)
+    setLayoutState(clampLayout(newLayout, widgetsById))
     updateDashboardLayout(props.dashboardId, newLayout)
     setResetKey(prev => prev + 1)
   }
 
-  if (!GridLayout) return <div className="text-white/30 p-10 text-center">加载中...</div>
+  if (!doc) return <div className="text-white/30 p-10 text-center">{t('dashboard.notFound')}</div>
+  if (!GridLayout) return <div className="text-white/30 p-10 text-center">{t('common.loading')}</div>
 
   const rowHeight = 10
   const marginY = 6
@@ -109,11 +183,15 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       <DashboardHeader dashboard={doc} onRefresh={() => setDoc(getDashboard(props.dashboardId)!)} />
       
       <div className="flex items-center gap-4 mb-6">
-        <button type="button" onClick={() => setIsModalOpen(true)} className="bg-primary text-white px-4 py-2 rounded text-sm font-medium">
-          <Plus className="w-4 h-4 inline mr-1" />添加组件
+        <button
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+          className="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded text-sm font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
+        >
+          <Plus className="w-4 h-4 inline mr-1" />{t('dashboard.addWidget')}
         </button>
         <button type="button" onClick={handleResetLayout} className="border border-[#30363d] text-[#8b949e] px-4 py-2 rounded text-sm hover:text-white transition-colors">
-          <LayoutIcon className="w-4 h-4 inline mr-1" />重置布局
+          <LayoutIcon className="w-4 h-4 inline mr-1" />{t('dashboard.resetLayout')}
         </button>
       </div>
 
@@ -135,23 +213,21 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           {layoutState.map((l: any) => {
             const w = widgetsById.get(l.i)
             if (!w) return null
-            const calculatedPx = l.h * rowHeight + (l.h - 1) * marginY
             return (
               <div
                 key={l.i}
                 className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden shadow-sm relative group transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
-                <div className="absolute top-0 right-0 z-50 bg-black/70 text-[#00ff00] text-[9px] px-1 pointer-events-none">
-                  h:{l.h} | {calculatedPx}px
-                </div>
                 <WidgetRenderer 
                   widget={w} 
                   onRemove={() => {
                     removeWidgetFromDashboard(props.dashboardId, w.id)
-                    const freshDoc = getDashboard(props.dashboardId) ?? ensureDashboard(props.dashboardId)
+                    const freshDoc = getDashboard(props.dashboardId)
+                    if (!freshDoc) return
                     setDoc(freshDoc)
-                    setLayoutState(clampLayout(freshDoc.layout))
+                    const newMap = new Map((freshDoc.widgets ?? []).map((wd) => [wd.id, wd]))
+                    setLayoutState(clampLayout(freshDoc.layout, newMap))
                   }} 
                 />
               </div>

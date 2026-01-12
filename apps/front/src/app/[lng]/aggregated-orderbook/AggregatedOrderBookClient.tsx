@@ -41,18 +41,18 @@ export function AggregatedOrderBookClient() {
       <div className="relative min-h-[750px]">
         {activeTab === 'aggregated-orderbook' ? (
           <AggregatedOrderbookView />
-        ) : activeTab === 'aggregated-oi' ? (
-          <AggregatedOI />
-        ) : activeTab === 'aggregated-volume' ? (
-          <AggregatedVolume />
-        ) : (
-          <div className="flex-1 flex items-center justify-center bg-[#161b22] border border-[#30363d] rounded-xl min-h-[600px]">
-            <div className="flex flex-col items-center gap-4 text-[#8b949e]">
-              <LayoutGrid className="w-12 h-12 opacity-20" />
-              <p>{t('common.featureInProgress')}</p>
+          ) : activeTab === 'aggregated-oi' ? (
+            <AggregatedOI />
+          ) : activeTab === 'aggregated-volume' ? (
+            <AggregatedVolume />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-[#161b22] border border-[#30363d] rounded-xl min-h-[600px]">
+              <div className="flex flex-col items-center gap-4 text-[#8b949e]">
+                <LayoutGrid className="w-12 h-12 opacity-20" />
+                <p>{t('common.featureInProgress')}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
     </>
   )

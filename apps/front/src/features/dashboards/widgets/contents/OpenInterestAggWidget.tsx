@@ -9,8 +9,12 @@ export function OpenInterestAggWidget(props: { config: Record<string, any> }) {
   // For now, we reuse the self-contained component as requested.
   return (
     <div className="h-full w-full overflow-hidden flex flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-        <AggregatedOI />
+      <div className="flex-1 min-h-0 overflow-auto cf-scrollbar">
+        {/* Force a minimum width to trigger horizontal scroll on small tiles, 
+            and use h-fit to allow vertical scroll when content exceeds tile height. */}
+        <div className="min-w-[600px] h-fit">
+          <AggregatedOI variant="compact" />
+        </div>
       </div>
     </div>
   )

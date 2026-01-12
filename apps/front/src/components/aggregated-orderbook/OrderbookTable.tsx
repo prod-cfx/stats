@@ -22,6 +22,7 @@ interface OrderbookTableProps {
     changePercent: string;
   };
   displayMode?: 'both' | 'bids' | 'asks';
+  variant?: 'default' | 'compact';
 }
 
 const OrderRow = ({
@@ -29,13 +30,16 @@ const OrderRow = ({
   type,
   selected,
   onSelect,
+  variant = 'default',
 }: {
   item: OrderItem;
   type: 'ask' | 'bid';
   selected: boolean;
   onSelect: () => void;
+  variant?: 'default' | 'compact';
 }) => {
   const [isFlash, setIsFlash] = useState(false);
+  const isCompact = variant === 'compact';
 
   // Lightweight "tick" effect when data changes (kept subtle, CoinGlass-like)
   React.useEffect(() => {
@@ -55,7 +59,7 @@ const OrderRow = ({
       type="button"
       onClick={onSelect}
       className={`
-        relative group flex items-center px-3 py-[5px] transition-colors cursor-pointer text-left w-full
+        relative group flex items-center px-1.5 ${isCompact ? 'py-[1px]' : 'py-[5px]'} transition-colors cursor-pointer text-left w-full
       `}
       style={{
         background: selected ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)') : rowTint,
@@ -88,15 +92,15 @@ const OrderRow = ({
         />
       )}
       
-      <div className="relative w-full flex items-center z-10 text-[12px] leading-4 font-mono">
-        <div className="w-[22%] flex items-center gap-1 opacity-70">
-          {item.exchanges.slice(0, 3).map((ex, idx) => (
-            <ExchangeLogo key={idx} logoUrl={ex} size={13} />
+      <div className={`relative w-full flex items-center z-10 ${isCompact ? 'text-[9.5px] leading-3' : 'text-[12px] leading-4'} font-mono`}>
+        <div className={`${isCompact ? 'w-[15%]' : 'w-[22%]'} flex items-center gap-0 opacity-70`}>
+          {item.exchanges.slice(0, 2).map((ex, idx) => (
+            <ExchangeLogo key={idx} logoUrl={ex} size={isCompact ? 8 : 13} />
           ))}
         </div>
-        <span className={`w-[26%] text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
-        <span className="w-[26%] text-right text-[#e6edf3]">{item.amount}</span>
-        <span className="w-[26%] text-right text-[#8b949e]">{item.total}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right text-[#e6edf3] pr-0.5`}>{item.amount}</span>
+        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right text-[#8b949e]`}>{item.total}</span>
       </div>
     </button>
   );
@@ -105,13 +109,15 @@ const OrderRow = ({
 export const OrderbookTable: React.FC<OrderbookTableProps> = ({ 
   asks, 
   bids, 
-  displayMode = 'both'
+  displayMode = 'both',
+  variant = 'default'
 }) => {
   const { t } = useTranslation();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const isCompact = variant === 'compact';
 
   // Define a precise row height to ensure alignment (font + padding)
-  const ROW_HEIGHT = 28; 
+  const ROW_HEIGHT = isCompact ? 20 : 28; 
   const VISIBLE_ROWS = 26;
   const TOTAL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
 
@@ -136,6 +142,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
     return {
       rows: [
         ...asksSorted.slice(-13).map((x) => ({ ...x, _type: 'ask' as const })),
+        { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
         ...bidsSorted.slice(0, 13).map((x) => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false
@@ -145,19 +152,22 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
       {/* Table Header */}
-      <div className="flex items-center px-3 py-2 border-b border-[#30363d] text-[#8b949e] text-[12px] font-semibold flex-none bg-[#0d1117] z-10 h-[36px]">
-        <span className="w-[22%]">{t('aggregatedOrderbook.table.exchange')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.price')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.amount')}</span>
-        <span className="w-[26%] text-right">{t('aggregatedOrderbook.table.total')}</span>
+      <div className={`flex items-center px-3 border-b border-[#30363d] text-[#8b949e] ${isCompact ? 'text-[8.5px] h-[22px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[#0d1117] z-10`}>
+        <span className={`${isCompact ? 'w-[15%]' : 'w-[22%]'}`}>{t('aggregatedOrderbook.table.exchange')}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.price')}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right pr-0.5`}>{t('aggregatedOrderbook.table.amount')}</span>
+        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.total')}</span>
       </div>
 
       {/* Table Body - Fixed height for exactly 26 rows */}
       <div 
-        className={`flex-1 min-h-0 ${canScroll ? 'overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent' : 'overflow-hidden'}`}
+        className={`flex-1 min-h-0 ${canScroll ? 'overflow-auto cf-scrollbar' : 'overflow-hidden'}`}
         style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
       >
         {rows.map((r, idx) => {
+          if ((r as any)._type === 'gap') {
+             return <div key="gap" className="h-2 bg-[#0d1117]" />
+          }
           const key = `${r._type}-${r.price}-${idx}`;
           return (
             <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">
@@ -166,6 +176,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
                 type={r._type}
                 selected={selectedKey === key}
                 onSelect={() => setSelectedKey(key)}
+                variant={variant}
               />
             </div>
           );

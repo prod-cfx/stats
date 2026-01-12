@@ -20,7 +20,7 @@ interface DepthChartProps {
   asks: DepthDataPoint[];
 }
 
-export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
+export const DepthChart: React.FC<DepthChartProps & { height?: number | string }> = ({ bids, asks, height = '100%' }) => {
   const { t } = useTranslation();
   const option = useMemo(() => {
     // Sort data for depth chart
@@ -168,7 +168,7 @@ export const DepthChart: React.FC<DepthChartProps> = ({ bids, asks }) => {
   }, [bids, asks, t]);
 
   return (
-    <div className="w-full h-full min-h-[400px]">
+    <div className="w-full h-full" style={{ minHeight: typeof height === 'number' ? `${height}px` : height }}>
       <ReactECharts 
         option={option} 
         style={{ height: '100%', width: '100%' }}

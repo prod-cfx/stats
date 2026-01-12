@@ -104,13 +104,40 @@
   background: transparent;
 }
 .cf-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(139, 148, 158, 0.22);
+  background-color: rgba(139, 148, 158, 0.45);
   border-radius: 999px;
   border: 2px solid transparent; /* creates inset look */
   background-clip: content-box;
 }
 .cf-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(139, 148, 158, 0.38);
+  background-color: rgba(139, 148, 158, 0.65);
+}
+
+/* Apply cf-scrollbar styling to all scrollable descendants within a scope (useful for embedded widgets). */
+.cf-scrollbar-scope,
+.cf-scrollbar-scope * {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(139, 148, 158, 0.35) transparent;
+}
+.cf-scrollbar-scope::-webkit-scrollbar,
+.cf-scrollbar-scope *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.cf-scrollbar-scope::-webkit-scrollbar-track,
+.cf-scrollbar-scope *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cf-scrollbar-scope::-webkit-scrollbar-thumb,
+.cf-scrollbar-scope *::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 148, 158, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent; /* creates inset look */
+  background-clip: content-box;
+}
+.cf-scrollbar-scope:hover::-webkit-scrollbar-thumb,
+.cf-scrollbar-scope *:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 148, 158, 0.65);
 }
 
 body {

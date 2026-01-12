@@ -18,11 +18,12 @@ interface VolumeComparisonCardProps {
   symbol: string;
   items: VolumeItem[];
   onSymbolChange?: (symbol: string) => void;
+  isCompact?: boolean;
 }
 
 const TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'];
 
-const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symbol, items, onSymbolChange }) => {
+const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symbol, items, onSymbolChange, isCompact }) => {
   const { t } = useTranslation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<VolumeItem | null>(null);
@@ -41,27 +42,27 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
   }, []);
 
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 shadow-xl h-full relative">
+    <div className={`bg-[#161b22] border border-[#30363d] rounded-2xl ${isCompact ? 'p-4 gap-4' : 'p-6 gap-6'} flex flex-col shadow-xl h-full relative`}>
       {/* Card Header ... */}
       <div className="flex items-center justify-between">
-        <SubTitle>{title}</SubTitle>
+        <SubTitle className={isCompact ? '!text-sm' : ''}>{title}</SubTitle>
         <div className="relative" ref={dropdownRef}>
           <button 
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-1.5 text-sm font-medium text-[#8b949e] hover:border-[#8b949e] transition-all hover:text-white"
+            className={`flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded-lg ${isCompact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'} font-medium text-[#8b949e] hover:border-[#8b949e] transition-all hover:text-white`}
           >
             <span>{symbol}</span>
-            <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
-
+          
           <AnimatePresence>
             {isDropdownOpen && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full right-0 mt-2 w-32 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar"
+                className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-24' : 'w-32'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 overflow-hidden max-h-[300px] overflow-y-auto cf-scrollbar`}
               >
                 {TOKENS.map((t) => (
                   <button
@@ -71,12 +72,12 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                       onSymbolChange?.(t);
                       setIsDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-white/10 ${
+                    className={`w-full flex items-center justify-between ${isCompact ? 'px-3 py-2 text-xs' : 'px-4 py-2.5 text-sm'} transition-colors hover:bg-white/10 ${
                       symbol === t ? 'text-white bg-white/5 font-bold' : 'text-[#8b949e]'
                     }`}
                   >
                     <span>{t}</span>
-                    {symbol === t && <Check className="w-3.5 h-3.5 text-primary" />}
+                    {symbol === t && <Check className={`${isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-primary`} />}
                   </button>
                 ))}
               </motion.div>
@@ -86,23 +87,23 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
       </div>
 
       {/* Rows List */}
-      <div className="flex flex-col gap-4 relative">
+      <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-4'} relative`}>
         {items.map((item, idx) => (
           <div 
             key={idx} 
-            className="flex items-center gap-4 group cursor-pointer relative"
+            className={`flex items-center ${isCompact ? 'gap-2' : 'gap-4'} group cursor-pointer relative`}
             onMouseEnter={() => setHoveredItem(item)}
             onMouseLeave={() => setHoveredItem(null)}
           >
             {/* Name */}
-            <span className={`w-24 text-sm font-medium transition-colors ${
+            <span className={`${isCompact ? 'w-16 text-xs' : 'w-24 text-sm'} font-medium transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${
               hoveredItem?.name === item.name ? 'text-white bg-[#0d1117] px-2 py-0.5 rounded border border-[#30363d]' : 'text-[#8b949e] group-hover:text-[#e6edf3]'
             }`}>
               {displayName(item.name)}
             </span>
 
             {/* Progress Bar Container */}
-            <div className="flex-1 h-2 bg-[#0d1117] rounded-full overflow-hidden relative border border-white/5">
+            <div className={`flex-1 ${isCompact ? 'h-1.5' : 'h-2'} bg-[#0d1117] rounded-full overflow-hidden relative border border-white/5`}>
               <div 
                 className="h-full transition-all duration-1000 ease-out"
                 style={{ 
@@ -114,10 +115,10 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
             </div>
 
             {/* Amount */}
-            <span className="w-24 text-right text-sm font-bold text-[#e6edf3]">
+            <span className={`${isCompact ? 'w-16 text-xs' : 'w-24 text-sm'} text-right font-bold text-[#e6edf3]`}>
               {item.amount}
             </span>
-
+            
             {/* Tooltip */}
             <AnimatePresence>
               {hoveredItem?.name === item.name && (
@@ -126,7 +127,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: -10 }}
                   className="absolute -top-16 z-[100] bg-[#0d1117]/95 border border-[#30363d] rounded-xl p-3 shadow-2xl backdrop-blur-md min-w-[200px] pointer-events-none -translate-x-1/4"
-                  style={{ left: `calc(96px + ${item.percent / 2}%)` }}
+                  style={{ left: `calc(${isCompact ? '64px' : '96px'} + ${item.percent / 2}%)` }}
                 >
                   <div className="flex flex-col gap-2">
                     <div className="text-sm font-bold text-white border-b border-white/10 pb-1.5">{displayName(item.name)}</div>
@@ -150,10 +151,12 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
   );
 };
 
-export const AggregatedVolume = () => {
+export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' | 'compact' }) => {
   const { t } = useTranslation();
   const [leftSymbol, setLeftSymbol] = useState('BTC');
   const [rightSymbol, setRightSymbol] = useState('ETH');
+  
+  const isCompact = variant === 'compact';
 
   // Stable seed-based "random" for mock data consistency
   const getStableAmount = (symbol: string) => {
@@ -187,20 +190,24 @@ export const AggregatedVolume = () => {
   const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [getItemsForSymbol, rightSymbol]);
 
   return (
-    <div className="flex flex-col gap-8 pb-12">
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 items-stretch">
+    <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>
+      <div className={`grid grid-cols-1 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-8'} items-stretch`}>
         <VolumeComparisonCard 
           title={t('aggregatedOrderbook.volume.title', { symbol: leftSymbol })} 
           symbol={leftSymbol} 
           items={leftItems}
           onSymbolChange={setLeftSymbol}
+          isCompact={isCompact}
         />
-        <VolumeComparisonCard 
-          title={t('aggregatedOrderbook.volume.title', { symbol: rightSymbol })} 
-          symbol={rightSymbol} 
-          items={rightItems}
-          onSymbolChange={setRightSymbol}
-        />
+        {!isCompact && (
+          <VolumeComparisonCard 
+            title={t('aggregatedOrderbook.volume.title', { symbol: rightSymbol })} 
+            symbol={rightSymbol} 
+            items={rightItems}
+            onSymbolChange={setRightSymbol}
+            isCompact={isCompact}
+          />
+        )}
       </div>
     </div>
   );

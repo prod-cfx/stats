@@ -1,6 +1,7 @@
 'use client'
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
@@ -9,14 +10,34 @@ import { AddWidgetModal } from './AddWidgetModal'
 
 const DEFAULT_DASHBOARD_ID = 'draft'
 
-export const EditorCanvas = () => {
+interface EditorCanvasProps {
+  dashboardId?: string
+}
+
+export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanvasProps) => {
   const { t } = useTranslation()
+  const router = useRouter()
+  const params = useParams()
+  const lng = params.lng as string || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [doc, setDoc] = useState(() => ensureDashboard(DEFAULT_DASHBOARD_ID))
+  const [doc, setDoc] = useState(() =>
+    dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
+  )
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-    const refresh = () => setDoc(getDashboard(DEFAULT_DASHBOARD_ID) ?? ensureDashboard(DEFAULT_DASHBOARD_ID))
+    const refresh = () => {
+      if (dashboardId === DEFAULT_DASHBOARD_ID) {
+        setDoc(ensureDashboard(DEFAULT_DASHBOARD_ID))
+        return
+      }
+      const existing = getDashboard(dashboardId)
+      if (!existing) {
+        // deleted or missing; go back to list
+        router.replace(`/${lng}/dashboard/?tab=saved`)
+        return
+      }
+      setDoc(existing)
+    }
     refresh()
     window.addEventListener('storage', refresh)
     // eslint-disable-next-line react-web-api/no-leaked-event-listener
@@ -25,7 +46,7 @@ export const EditorCanvas = () => {
       window.removeEventListener('storage', refresh)
       window.removeEventListener('coinflux_dashboards_updated', refresh as any)
     }
-  }, [])
+  }, [dashboardId, router, lng])
 
   return (
     <div className="flex flex-col gap-8 pb-20">
@@ -35,9 +56,10 @@ export const EditorCanvas = () => {
           placeholder={t('dashboard.editor.descriptionPlaceholder')}
           value={doc?.name ?? ''}
           onChange={(e) => {
+            if (!doc) return
             const next = e.target.value
-            updateDashboard(DEFAULT_DASHBOARD_ID, (d) => ({ ...d, name: next }))
-            setDoc(getDashboard(DEFAULT_DASHBOARD_ID) ?? ensureDashboard(DEFAULT_DASHBOARD_ID))
+            updateDashboard(dashboardId, (d) => ({ ...d, name: next }))
+            setDoc(getDashboard(dashboardId))
           }}
           className="w-full bg-transparent border-none text-white text-h1 font-bold focus:outline-none placeholder:text-[#8b949e] placeholder:opacity-50"
         />
@@ -46,7 +68,7 @@ export const EditorCanvas = () => {
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 rounded-lg text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 rounded-lg text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>{t('dashboard.editor.addWidgetTitle')}</span>
@@ -59,16 +81,18 @@ export const EditorCanvas = () => {
             className="flex items-center gap-2 px-3 py-1.5 text-[#8b949e] hover:text-white transition-colors text-xs font-medium"
           >
             <LayoutIcon className="w-3.5 h-3.5" />
-            <span>Reset Layout</span>
+            <span>{t('dashboard.resetLayout')}</span>
           </button>
         </div>
       </div>
 
       <div className="min-h-[600px] bg-[#0d1117] rounded-xl border border-[#30363d] p-4 relative bg-grid-pattern">
-        <DashboardCanvas dashboardId={DEFAULT_DASHBOARD_ID} />
+        {doc ? <DashboardCanvas dashboardId={dashboardId} /> : (
+          <div className="text-center text-[#8b949e] py-20">{t('dashboard.notFound')}</div>
+        )}
       </div>
 
-      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={DEFAULT_DASHBOARD_ID} />
+      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={dashboardId} />
 
       <style jsx global>{`
         .bg-grid-pattern {

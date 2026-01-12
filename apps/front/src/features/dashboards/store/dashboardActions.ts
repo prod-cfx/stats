@@ -1,15 +1,34 @@
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
-import { snapToPreset } from '../widgets/unitSizePresets'
+import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { updateDashboard } from './dashboardStore'
 
 export function addWidgetToDashboard(dashboardId: string, item: WidgetCatalogItem) {
   const id = crypto.randomUUID()
   updateDashboard(dashboardId, (doc) => {
     const widget = { id, type: item.type, config: item.defaultConfig }
-    // Place new widgets at the top so users can see what they just added immediately.
-    // react-grid-layout will resolve collisions via compaction.
-    const snapped = snapToPreset(item.defaultLayout.w, item.defaultLayout.h)
-    const layoutItem = { i: id, x: 0, y: 0, w: snapped.w, h: snapped.h }
+    const snapped = snapToPresetForWidgetType(item.type, item.defaultLayout.w, item.defaultLayout.h)
+    
+    // Smart placement: if width <= 6 and last row has space, place at x=6; else new row at x=0
+    let x = 0
+    let y = 0
+    if (doc.layout.length > 0) {
+      // Find the item with max y (bottom row)
+      const maxY = Math.max(...doc.layout.map((l) => l.y))
+      const bottomRow = doc.layout.filter((l) => l.y === maxY)
+      const maxX = Math.max(...bottomRow.map((l) => l.x + l.w))
+      
+      if (snapped.w <= 6 && maxX <= 6) {
+        // Place at x=6 on the same row
+        x = 6
+        y = maxY
+      } else {
+        // Start new row
+        x = 0
+        y = maxY + Math.max(...bottomRow.map((l) => l.h))
+      }
+    }
+    
+    const layoutItem = { i: id, x, y, w: snapped.w, h: snapped.h }
     return { ...doc, widgets: [...doc.widgets, widget], layout: [...doc.layout, layoutItem], updatedAt: Date.now() }
   })
   return id
@@ -33,7 +52,8 @@ export function updateDashboardLayout(dashboardId: string, layout: any[]) {
       const y0 = Number.isFinite(l.y) ? Number(l.y) : 0
       const w0 = Number.isFinite(l.w) ? Number(l.w) : 6
       const h0 = Number.isFinite(l.h) ? Number(l.h) : 8
-      const snapped = snapToPreset(w0, h0)
+      const widgetType = doc.widgets.find((w) => w.id === i)?.type
+      const snapped = snapToPresetForWidgetType(widgetType, w0, h0)
       const x = Math.max(0, Math.min(12 - snapped.w, x0))
       const y = Math.max(0, y0)
       return { i, x, y, w: snapped.w, h: snapped.h }

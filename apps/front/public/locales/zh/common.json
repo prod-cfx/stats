@@ -422,7 +422,10 @@
     "tooltip": {
       "price": "价格"
     },
-    "currentPrice": "当前价格"
+    "currentPrice": "当前价格",
+    "current": "当前",
+    "above": "上方",
+    "below": "下方"
   },
   "whaleTracking": {
     "side": {
@@ -765,7 +768,79 @@
       "descriptionPlaceholder": "无说明",
       "addTag": "添加标签",
       "widgetReady": "组件详情已就绪",
-      "removeWidget": "移除组件"
-    }
+      "removeWidget": "移除组件",
+      "backToList": "返回看板列表",
+      "componentsCount": "{{count}} 个组件",
+      "status": {
+        "published": "已发布",
+        "draft": "草稿"
+      },
+      "validation": {
+        "titleRequired": "请先设置看板标题",
+        "thumbnailRequired": "请先上传缩略图",
+        "widgetsRequired": "请至少添加一个组件",
+        "publishSuccess": "发布成功",
+        "publishSuccessDesc": "看板 \"{{name}}\" 已成功发布",
+        "publishFail": "发布失败",
+        "publishFailDesc": "发布看板时出现错误，请稍后重试",
+        "deleteSuccess": "删除成功",
+        "deleteSuccessDesc": "看板 \"{{name}}\" 已删除",
+        "deleteFail": "删除失败",
+        "deleteFailDesc": "删除看板时出现错误，请重试",
+        "saveSuccess": "保存成功",
+        "saveSuccessDesc": "看板修改已保存",
+        "saveFail": "保存失败",
+        "saveFailDesc": "保存看板时出现错误，请重试"
+      },
+      "actions": {
+        "save": "保存",
+        "saved": "已保存",
+        "saving": "保存中...",
+        "unsaved": "未保存",
+        "noChanges": "无修改",
+        "saveChanges": "保存修改",
+        "selectThumbnail": "选择缩略图",
+        "changeThumbnail": "更换缩略图",
+        "uploading": "上传中...",
+        "uploadSuccess": "上传成功",
+        "uploadFail": "上传失败",
+        "editTitle": "编辑标题",
+        "view": "查看"
+      },
+      "dialog": {
+        "deleteTitle": "确认删除看板",
+        "deleteDesc": "确定要删除看板 \"{{name}}\" 吗？\n\n此操作无法撤销，所有数据将永久丢失。",
+        "deleteConfirm": "删除",
+        "deleteCancel": "取消"
+      }
+    },
+    "notFound": "看板不存在或已删除",
+    "view": {
+      "missingId": "缺少看板 ID",
+      "backToList": "返回看板列表",
+      "notFound": "看板不存在"
+    },
+    "viewAll": "查看全部 {{count}} 个...",
+    "collapse": "收起",
+    "resetLayout": "重置布局",
+    "addWidget": "添加组件"
+  },
+  "widget": {
+    "config": {
+      "selectSymbol": "筛选交易对",
+      "symbol": "币种",
+      "timeWindow": "时间窗口",
+      "timeRange": "时间范围",
+      "exchangeScope": "交易所范围",
+      "category": "分类",
+      "sort": "排序",
+      "watchlist": "关注列表",
+      "size": "组件大小 (UNIT SIZE)",
+      "gridSize": "网格尺寸",
+      "preview": "组件预览 (UNIT PREVIEW)",
+      "saveAndAdd": "保存并添加到看板",
+      "back": "返回"
+    },
+    "loading": "组件开发中"
   }
 }

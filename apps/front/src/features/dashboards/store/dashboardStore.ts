@@ -58,7 +58,10 @@ export function getDashboard(id: string): DashboardDoc | null {
 
 export function getAllDashboards(): DashboardDoc[] {
   const all = readAll()
-  return Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt)
+  // `draft` is an internal editor placeholder; it should not appear in any user-facing lists/counts.
+  return Object.values(all)
+    .filter((d) => d.id !== 'draft')
+    .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export function getMyDashboards(): DashboardDoc[] {

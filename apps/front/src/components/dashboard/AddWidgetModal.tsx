@@ -92,8 +92,8 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
         step === 'groups' 
           ? t('dashboard.editor.addWidgetTitle') 
           : step === 'preview' 
-            ? selectedGroup?.title || ''
-            : selectedItem?.title || ''
+            ? t(selectedGroup?.title || '')
+            : t(selectedItem?.title || '')
       }
       width="max-w-5xl"
       loading={loading}
@@ -126,19 +126,19 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                     </div>
                     
                     <h3 className="text-white font-bold text-lg mb-2 group-hover:text-primary transition-colors">
-                      {group.title}
+                      {t(group.title)}
                     </h3>
                     
                     <p className="text-[#8b949e] text-xs mb-3 line-clamp-2">
-                      {group.subtitle}
+                      {t(group.subtitle)}
                     </p>
                     
                     <div className="flex items-center justify-between">
                       <span className="text-[#8b949e] text-xs">
-                        {group.items.length} 个组件
+                        {t('dashboard.editor.componentsCount', { count: group.items.length })}
                       </span>
                       <span className="text-primary text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                        查看 →
+                        {t('dashboard.editor.actions.view')} →
                       </span>
                     </div>
                   </button>
