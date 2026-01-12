@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboardStore'
 import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
@@ -44,6 +45,7 @@ const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
   })
 
 export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
+  const { t } = useTranslation()
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
@@ -84,8 +86,8 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
     }
   }, [props.dashboardId])
 
-  if (!doc) return <div className="text-white/30 p-10 text-center">看板不存在或已删除</div>
-  if (!GridLayout) return <div className="text-white/30 p-10 text-center">加载中...</div>
+  if (!doc) return <div className="text-white/30 p-10 text-center">{t('dashboard.notFound')}</div>
+  if (!GridLayout) return <div className="text-white/30 p-10 text-center">{t('common.loading')}</div>
 
   const rowHeight = 10
   const marginY = 6

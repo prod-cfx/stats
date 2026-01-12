@@ -2,7 +2,7 @@
 
 import type {DashboardDoc} from '@/features/dashboards/store/dashboardStore';
 import { Bookmark, Check, ChevronDown, Layout, Loader2, Plus, Send, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -17,6 +17,8 @@ interface DashboardEditorSidebarProps {
 export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }: DashboardEditorSidebarProps) => {
   const { t } = useTranslation();
   const router = useRouter();
+  const params = useParams();
+  const lng = params.lng as string || 'zh';
   const [doc, setDoc] = useState(() => ensureDashboard(dashboardId));
   const [error, setError] = useState<string | null>(null);
   const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success'>('idle');
@@ -54,10 +56,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     // 验证标题
     const hasTitle = !!doc.name?.trim();
     if (!hasTitle) {
-      setError('请先设置看板标题');
+      setError(t('dashboard.editor.validation.titleRequired'));
       toast.error({
-        title: '无法发布',
-        description: '请先设置看板标题',
+        title: t('dashboard.editor.validation.publishFail'),
+        description: t('dashboard.editor.validation.titleRequired'),
       });
       setTimeout(() => setError(null), 3000);
       return false;
@@ -66,10 +68,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     // 验证缩略图
     const hasThumb = !!doc.thumbnail;
     if (!hasThumb) {
-      setError('请先上传缩略图');
+      setError(t('dashboard.editor.validation.thumbnailRequired'));
       toast.error({
-        title: '无法发布',
-        description: '请先上传缩略图',
+        title: t('dashboard.editor.validation.publishFail'),
+        description: t('dashboard.editor.validation.thumbnailRequired'),
       });
       setTimeout(() => setError(null), 3000);
       return false;
@@ -78,10 +80,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     // 验证组件数量
     const hasWidgets = doc.widgets && doc.widgets.length > 0;
     if (!hasWidgets) {
-      setError('请至少添加一个组件');
+      setError(t('dashboard.editor.validation.widgetsRequired'));
       toast.error({
-        title: '无法发布',
-        description: '看板内容不能为空，请至少添加一个组件',
+        title: t('dashboard.editor.validation.publishFail'),
+        description: t('dashboard.editor.validation.widgetsRequired'),
         duration: 3000,
       });
       setTimeout(() => setError(null), 3000);
@@ -107,7 +109,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
       const updated = getDashboard(dashboardId) ?? (dashboardId === 'draft' ? ensureDashboard(dashboardId) : null);
       if (!updated) {
         // If it was removed while publishing, fall back to list
-        router.push('/zh/dashboard/?tab=my');
+        router.push(`/${lng}/dashboard/?tab=my`);
         return;
       }
       setDoc(updated);
@@ -115,22 +117,22 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
 
       // 显示成功提示
       toast.success({
-        title: '发布成功',
-        description: `看板 "${updated.name}" 已成功发布`,
+        title: t('dashboard.editor.validation.publishSuccess'),
+        description: t('dashboard.editor.validation.publishSuccessDesc', { name: updated.name }),
         duration: 3000,
       });
 
       // 1.5秒后跳转到我的看板（已发布tab）
       setTimeout(() => {
-        router.push('/zh/dashboard/?tab=my');
+        router.push(`/${lng}/dashboard/?tab=my`);
       }, 1500);
     } catch (err) {
       void err
       setPublishStatus('idle');
-      setError('发布失败，请重试');
+      setError(t('dashboard.editor.validation.publishFail'));
       toast.error({
-        title: '发布失败',
-        description: '发布看板时出现错误，请稍后重试',
+        title: t('dashboard.editor.validation.publishFail'),
+        description: t('dashboard.editor.validation.publishFailDesc'),
       });
       setTimeout(() => setError(null), 3000);
     }
@@ -148,7 +150,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     setDeleteStatus('deleting');
     setError(null);
 
-    const dashboardName = doc.name || '未命名看板';
+    const dashboardName = doc.name || t('dashboard.sidebar.untitled');
     const deletedId = dashboardId;
 
     try {
@@ -166,8 +168,8 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
       
       // 成功提示
       toast.success({
-        title: '删除成功',
-        description: `看板 "${dashboardName}" 已删除`,
+        title: t('dashboard.editor.validation.deleteSuccess'),
+        description: t('dashboard.editor.validation.deleteSuccessDesc', { name: dashboardName }),
         duration: 2000,
       });
 
@@ -176,10 +178,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
         if (updatedSaved.length > 0) {
           // 如果还有其他看板，跳转到第一个
           const nextDashboard = updatedSaved[0];
-          router.push(`/zh/dashboard/editor?id=${nextDashboard.id}`);
+          router.push(`/${lng}/dashboard/editor?id=${nextDashboard.id}`);
         } else {
           // 如果没有看板了，跳转到列表页
-          router.push('/zh/dashboard/?tab=saved');
+          router.push(`/${lng}/dashboard/?tab=saved`);
         }
         
         // 重置删除状态
@@ -188,10 +190,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     } catch (err) {
       void err
       setDeleteStatus('idle');
-      setError('删除失败，请重试');
+      setError(t('dashboard.editor.validation.deleteFail'));
       toast.error({
-        title: '删除失败',
-        description: '删除看板时出现错误，请稍后重试',
+        title: t('dashboard.editor.validation.deleteFail'),
+        description: t('dashboard.editor.validation.deleteFailDesc'),
         duration: 3000,
       });
       setTimeout(() => setError(null), 3000);
@@ -204,7 +206,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
 
   const handleCreateDashboard = () => {
     const newDash = createNewDashboard();
-    router.push(`/zh/dashboard/editor?id=${newDash.id}`);
+    router.push(`/${lng}/dashboard/editor?id=${newDash.id}`);
   };
 
   return (
@@ -238,10 +240,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                   <button
                     key={dash.id}
                     type="button"
-                    onClick={() => router.push(`/zh/dashboard/view?id=${dash.id}`)}
+                    onClick={() => router.push(`/${lng}/dashboard/view?id=${dash.id}`)}
                     className="w-full text-left px-3 py-2 rounded text-xs text-[#8b949e] hover:bg-[#161b22] hover:text-white transition-colors truncate"
                   >
-                    {dash.name || '未命名'}
+                    {dash.name || t('dashboard.sidebar.untitled')}
                   </button>
                 ))}
                 {myDashboards.length > 5 && (
@@ -250,13 +252,13 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     onClick={() => setShowAllMyDashboards((v) => !v)}
                     className="w-full text-left px-3 py-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
                   >
-                    {showAllMyDashboards ? '收起' : `查看全部 ${myDashboards.length} 个...`}
-          </button>
+                    {showAllMyDashboards ? t('dashboard.collapse') : t('dashboard.viewAll', { count: myDashboards.length })}
+                  </button>
                 )}
             </div>
             )}
             {showMyDashboards && myDashboards.length === 0 && (
-              <div className="pl-4 py-2 text-xs text-[#8b949e]">暂无已发布的看板</div>
+              <div className="pl-4 py-2 text-xs text-[#8b949e]">{t('dashboard.no_published')}</div>
             )}
           </div>
 
@@ -286,14 +288,14 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                   <button
                     key={dash.id}
                     type="button"
-                    onClick={() => router.push(`/zh/dashboard/editor?id=${dash.id}`)}
+                    onClick={() => router.push(`/${lng}/dashboard/editor?id=${dash.id}`)}
                     className={`w-full text-left px-3 py-2 rounded text-xs transition-colors truncate ${
                       dash.id === dashboardId
                         ? 'bg-primary/10 text-primary font-medium'
                         : 'text-[#8b949e] hover:bg-[#161b22] hover:text-white'
                     }`}
                   >
-                    {dash.name || '未命名'}
+                    {dash.name || t('dashboard.sidebar.untitled')}
                   </button>
                 ))}
                 {savedDashboards.length > 5 && (
@@ -302,13 +304,13 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     onClick={() => setShowAllSavedDashboards((v) => !v)}
                     className="w-full text-left px-3 py-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
                   >
-                    {showAllSavedDashboards ? '收起' : `查看全部 ${savedDashboards.length} 个...`}
-          </button>
+                    {showAllSavedDashboards ? t('dashboard.collapse') : t('dashboard.viewAll', { count: savedDashboards.length })}
+                  </button>
                 )}
               </div>
             )}
             {showSavedDashboards && savedDashboards.length === 0 && (
-              <div className="pl-4 py-2 text-xs text-[#8b949e]">暂无已保存的看板</div>
+              <div className="pl-4 py-2 text-xs text-[#8b949e]">{t('dashboard.no_saved')}</div>
             )}
         </div>
 
@@ -340,12 +342,12 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                   {publishStatus === 'publishing' ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm uppercase tracking-wider">发布中...</span>
+                      <span className="text-sm uppercase tracking-wider">{t('dashboard.editor.actions.saving')}</span>
                     </>
                   ) : publishStatus === 'success' ? (
                     <>
                       <Check className="w-4 h-4" />
-                      <span className="text-sm uppercase tracking-wider">发布成功</span>
+                      <span className="text-sm uppercase tracking-wider">{t('dashboard.editor.validation.publishSuccess')}</span>
                     </>
                   ) : (
                     <>
@@ -365,12 +367,12 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                       ? 'bg-red-500/20 cursor-not-allowed text-red-400 scale-[0.98]'
                       : 'bg-transparent hover:bg-red-500/10 text-[#8b949e] hover:text-red-500 active:scale-[0.98]'
                   }`}
-                  title={deleteStatus === 'deleting' ? '删除中，请稍候...' : '删除看板'}
+                  title={deleteStatus === 'deleting' ? t('dashboard.editor.actions.deleting') : t('dashboard.actions.delete')}
                 >
                   {deleteStatus === 'deleting' ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm uppercase tracking-wider">删除中...</span>
+                      <span className="text-sm uppercase tracking-wider">{t('dashboard.editor.actions.deleting')}...</span>
                     </>
                   ) : (
                     <>
@@ -392,10 +394,10 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
       {mode === 'edit' ? (
         <ConfirmDialog
           isOpen={showDeleteConfirm}
-          title="确认删除看板"
-          description={`确定要删除看板 "${doc.name || '未命名看板'}" 吗？\n\n此操作无法撤销，所有数据将永久丢失。`}
-          confirmText="删除"
-          cancelText="取消"
+          title={t('dashboard.editor.dialog.deleteTitle')}
+          description={t('dashboard.editor.dialog.deleteDesc', { name: doc.name || t('dashboard.sidebar.untitled') })}
+          confirmText={t('dashboard.editor.dialog.deleteConfirm')}
+          cancelText={t('dashboard.editor.dialog.deleteCancel')}
           confirmVariant="danger"
           onConfirm={handleDeleteConfirm}
           onCancel={handleDeleteCancel}

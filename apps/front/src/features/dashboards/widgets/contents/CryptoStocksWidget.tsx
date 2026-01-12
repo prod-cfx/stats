@@ -2,6 +2,7 @@
 
 import { ArrowUpDown } from 'lucide-react'
 import React, { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface CompanyData {
   asset: string;
@@ -26,7 +27,7 @@ const initialCompanyData: CompanyData[] = [
     assetLogo: 'https://cryptologos.cc/logos/paypal-usd-pyusd-logo.png?v=040',
     name: 'PayPal Holdings, Inc.',
     ticker: 'PYPL',
-    exchange: '美股-NASDAQ',
+    exchange: 'NASDAQ',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
     mNav: '-',
     marketCap: '$58.56B',
@@ -42,7 +43,7 @@ const initialCompanyData: CompanyData[] = [
     assetLogo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
     name: 'MicroStrategy Incorporated',
     ticker: 'MSTR',
-    exchange: '美股-NASDAQ',
+    exchange: 'NASDAQ',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/MicroStrategy_logo.svg/1200px-MicroStrategy_logo.svg.png',
     mNav: '0.83',
     marketCap: '$47.4B',
@@ -58,7 +59,7 @@ const initialCompanyData: CompanyData[] = [
     assetLogo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
     name: 'Circle Internet Group',
     ticker: 'CRCL',
-    exchange: '美股-NYSE',
+    exchange: 'NYSE',
     logo: 'https://www.circle.com/hubfs/logos/Circle_Logo_Green.svg',
     mNav: '0.27',
     marketCap: '$17.2B',
@@ -74,7 +75,7 @@ const initialCompanyData: CompanyData[] = [
     assetLogo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
     name: 'BitMine Immersion',
     ticker: 'BMNR',
-    exchange: '美股-NYSE',
+    exchange: 'NYSE',
     logo: 'https://bitmine.tech/wp-content/uploads/2021/06/BitMine-Logo-1.png',
     mNav: '0.73',
     marketCap: '$8.94B',
@@ -98,6 +99,7 @@ function renderValueWithColor(val: string) {
 }
 
 export function CryptoStocksWidget(props: { config: Record<string, any> }) {
+  const { t } = useTranslation()
   const size = (props.config?.size as string) || 'M'
   const isSmall = size === 'S'
   const isLarge = size === 'L' || size === 'XL'
@@ -128,16 +130,16 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
           <table className="w-full border-collapse min-w-[900px]">
             <thead>
               <tr className={`text-[#8b949e] ${headerSize} font-bold border-b border-white/10 bg-[#0d1117]/50 sticky top-0 z-10`}>
-                <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>币种</th>
-                <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>公司</th>
+                <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.asset')}</th>
+                <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.company')}</th>
                 <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="mNAV" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="市值" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="持币价值" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="持币量" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="股价" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="24h涨跌" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="1天增减" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="7天增减" /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.marketCap')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsValue')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsAmount')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.sharePrice')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change24h')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change1d')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change7d')} /></th>
               </tr>
             </thead>
             <tbody className={`text-white ${textSize} divide-y divide-white/10`}>

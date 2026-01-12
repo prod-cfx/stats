@@ -4,6 +4,7 @@ import type {UnitSize} from '../widgets/unitSizePresets';
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CRYPTO_STOCKS_UNIT_SIZE_PRESETS, KLINE_UNIT_SIZE_PRESETS, LIQUIDATION_FEED_UNIT_SIZE_PRESETS, LIQUIDATION_MAP_UNIT_SIZE_PRESETS, LONG_SHORT_UNIT_SIZE_PRESETS, OPEN_INTEREST_UNIT_SIZE_PRESETS, ORDERBOOK_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS, VOLUME_UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
@@ -14,6 +15,7 @@ interface WidgetConfiguratorProps {
 }
 
 export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorProps) {
+  const { t } = useTranslation()
   const [config, setConfig] = useState<Record<string, any>>(item.defaultConfig)
   const [selectedSize, setSelectedSize] = useState<UnitSize>('M')
 
@@ -67,7 +69,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (item.type.includes('kline')) {
       fields.push(
         // 只保留一个：筛选交易对（其他配置保持默认值，不在左侧展示）
-        { key: 'symbol', label: '筛选交易对', type: 'select', options: [
+        { key: 'symbol', label: t('widget.config.selectSymbol'), type: 'select', options: [
           { value: 'BTCUSDT', label: 'BTC/USDT' },
           { value: 'ETHUSDT', label: 'ETH/USDT' },
           { value: 'SOLUSDT', label: 'SOL/USDT' },
@@ -77,90 +79,53 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
 
     if (item.type.includes('long_short')) {
       fields.push(
-        { key: 'symbol', label: '币种', type: 'select', options: [
+        { key: 'symbol', label: t('widget.config.symbol'), type: 'select', options: [
           { value: 'BTC', label: 'Bitcoin (BTC)' },
           { value: 'ETH', label: 'Ethereum (ETH)' },
           { value: 'SOL', label: 'Solana (SOL)' },
         ]},
-        { key: 'window', label: '时间窗口', type: 'select', options: [
-          { value: '1h', label: '1小时' },
-          { value: '4h', label: '4小时' },
-          { value: '24h', label: '24小时' },
+        { key: 'window', label: t('widget.config.timeWindow'), type: 'select', options: [
+          { value: '1h', label: t('chart.timeframes.1h') },
+          { value: '4h', label: t('chart.timeframes.4h') },
+          { value: '24h', label: t('longShort.timeRanges.24h') },
         ]},
       )
     }
 
     if (item.type.includes('orderbook_agg') || item.type.includes('open_interest') || item.type.includes('volume_agg')) {
       // User requested to remove left-side configuration fields for orderbook
-      /*
-      fields.push(
-        { key: 'symbol', label: '币种', type: 'select', options: [
-          { value: 'BTC', label: 'BTC' },
-          { value: 'ETH', label: 'ETH' },
-          { value: 'SOL', label: 'SOL' },
-        ]},
-      )
-      */
     }
 
     if (item.type.includes('liquidation.map')) {
       fields.push(
-        { key: 'symbol', label: '币种', type: 'select', options: [
+        { key: 'symbol', label: t('widget.config.symbol'), type: 'select', options: [
           { value: 'BTC', label: 'BTC' },
           { value: 'ETH', label: 'ETH' },
           { value: 'SOL', label: 'SOL' },
         ]},
-        { key: 'range', label: '时间范围', type: 'select', options: [
-          { value: '1D', label: '1天' },
-          { value: '7D', label: '7天' },
-          { value: '30D', label: '30天' },
+        { key: 'range', label: t('widget.config.timeRange'), type: 'select', options: [
+          { value: '1D', label: t('chart.timeframes.1d') },
+          { value: '7D', label: t('liquidationMap.range.7d') },
+          { value: '30D', label: t('liquidationMap.range.30d') },
         ]},
-        { key: 'scope', label: '交易所范围', type: 'select', options: [
-          { value: 'ALL', label: '全部' },
-          { value: 'CEX', label: 'CEX' },
-          { value: 'DEX', label: 'DEX' },
+        { key: 'scope', label: t('widget.config.exchangeScope'), type: 'select', options: [
+          { value: 'ALL', label: t('liquidationMap.exchangeType.all') },
+          { value: 'CEX', label: t('liquidationMap.exchangeType.cex') },
+          { value: 'DEX', label: t('liquidationMap.exchangeType.dex') },
         ]},
       )
     }
 
     if (item.type.includes('prediction')) {
       // User requested to remove left-side configuration fields for prediction market
-      /*
-      fields.push(
-        { key: 'category', label: '分类', type: 'select', options: [
-          { value: 'BTC', label: 'Bitcoin' },
-          { value: 'ETH', label: 'Ethereum' },
-          { value: 'Politics', label: 'Politics' },
-          { value: 'Sports', label: 'Sports' },
-        ]},
-        { key: 'sort', label: '排序', type: 'select', options: [
-          { value: 'hot', label: '热门' },
-          { value: 'volume', label: '成交量' },
-          { value: 'new', label: '最新' },
-        ]},
-      )
-      */
     }
 
     if (item.type.includes('crypto_stocks')) {
       // User requested to remove left-side configuration fields for crypto stocks
-      /*
-      fields.push(
-        { key: 'watchlist', label: '关注列表', type: 'select', options: [
-          { value: 'ALL', label: '全部' },
-          { value: 'BTC', label: 'BTC持有者' },
-          { value: 'ETH', label: 'ETH持有者' },
-        ]},
-        { key: 'sort', label: '排序', type: 'select', options: [
-          { value: 'marketCap', label: '市值' },
-          { value: 'holdings', label: '持仓量' },
-        ]},
-      )
-      */
     }
 
     return fields
-  }, [item.type])
+  }, [item.type, t])
 
   const handleConfigChange = (key: string, value: any) => {
     setConfig((prev) => ({ ...prev, [key]: value }))
@@ -175,11 +140,11 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           className="flex items-center gap-2 text-[#8b949e] hover:text-white mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
-          <span className="text-sm">返回</span>
+          <span className="text-sm">{t('widget.config.back')}</span>
         </button>
 
-        <h3 className="text-white font-bold text-lg mb-1">{item.title}</h3>
-        <p className="text-[#8b949e] text-xs mb-6">{item.description}</p>
+        <h3 className="text-white font-bold text-lg mb-1">{t(item.title)}</h3>
+        <p className="text-[#8b949e] text-xs mb-6">{t(item.description)}</p>
 
         <div className="space-y-4">
           {configFields.map((field) => (
@@ -217,7 +182,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         {/* Size Selection */}
         <div className="border-b border-[#30363d] p-6">
           <label className="block text-[#8b949e] text-xs font-medium mb-3 uppercase tracking-wide">
-            组件大小 (UNIT SIZE)
+            {t('widget.config.size')}
           </label>
           <div className="flex gap-2">
             {(Object.keys(sizePresets) as UnitSize[]).map((size) => (
@@ -235,7 +200,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
             ))}
           </div>
           <div className="mt-2 text-xs text-[#8b949e]">
-            网格尺寸: {layout.w} × {layout.h}
+            {t('widget.config.gridSize')}: {layout.w} × {layout.h}
           </div>
         </div>
 
@@ -243,7 +208,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         <div className="flex-1 p-6 overflow-auto">
           <div className="mb-3">
             <div className="text-[#8b949e] text-xs font-medium uppercase tracking-wide mb-2">
-              组件预览 (UNIT PREVIEW)
+              {t('widget.config.preview')}
             </div>
           </div>
           <div
@@ -271,7 +236,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
             onClick={() => onSave({ ...config, size: selectedSize }, layout)}
             className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-medium py-3 rounded-lg transition-all shadow-lg shadow-primary/20 active:scale-95"
           >
-            保存并添加到看板
+            {t('widget.config.saveAndAdd')}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
 import { Bookmark, Compass, Grid3x3, Layout } from 'lucide-react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar'
@@ -20,6 +20,8 @@ type TabType = 'explore' | 'my' | 'saved'
 export function DashboardClient() {
   const { t } = useTranslation()
   const router = useRouter()
+  const params = useParams()
+  const lng = params.lng as string || 'zh'
   const searchParams = useSearchParams()
   const urlTab = (searchParams.get('tab') as TabType) || 'explore'
   const [activeTab, setActiveTab] = useState<TabType>(urlTab)
@@ -58,13 +60,13 @@ export function DashboardClient() {
       return
     setLoading(true)
     setActiveTab(tab)
-    router.replace(`/zh/dashboard/?tab=${tab}`)
+    router.replace(`/${lng}/dashboard/?tab=${tab}`)
     setTimeout(() => setLoading(false), 800)
   }
 
   const handleCreateDashboard = () => {
     const newDash = createNewDashboard()
-    router.push(`/zh/dashboard/editor?id=${newDash.id}`)
+    router.push(`/${lng}/dashboard/editor?id=${newDash.id}`)
   }
 
   const displayDashboards = activeTab === 'my' ? myDashboards : savedDashboards
@@ -112,7 +114,7 @@ export function DashboardClient() {
                     <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
                     <button
                       type="button"
-                        onClick={handleCreateDashboard}
+                      onClick={handleCreateDashboard}
                       className="text-white bg-gradient-to-r from-primary to-secondary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
                     >
                       {t('dashboard.actions.createFirst')}
@@ -124,7 +126,7 @@ export function DashboardClient() {
                         <button
                           key={dash.id}
                           type="button"
-                          onClick={() => router.push(`/zh/dashboard/view?id=${dash.id}`)}
+                          onClick={() => router.push(`/${lng}/dashboard/view?id=${dash.id}`)}
                           className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-[#30363d] hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/20 bg-[#161b22]"
                         >
                           {dash.thumbnail ? (
@@ -144,14 +146,14 @@ export function DashboardClient() {
 
                           <div className="absolute inset-0 p-4 flex flex-col justify-end">
                             <h3 className="text-white font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors">
-                              {dash.name || '未命名看板'}
+                              {dash.name || t('dashboard.sidebar.untitled')}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[#8b949e]">
-                                {dash.widgets?.length || 0} 个组件
+                                {t('dashboard.editor.componentsCount', { count: dash.widgets?.length || 0 })}
                               </span>
                               <span className="px-2 py-0.5 bg-green-600/20 text-green-400 rounded-full border border-green-600/30 font-medium">
-                                已发布
+                                {t('dashboard.editor.status.published')}
                               </span>
                             </div>
                           </div>
@@ -170,7 +172,7 @@ export function DashboardClient() {
                     <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
                     <button
                       type="button"
-                        onClick={handleCreateDashboard}
+                      onClick={handleCreateDashboard}
                         className="text-white bg-gradient-to-r from-primary to-secondary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
                     >
                         {t('dashboard.actions.createFirst')}
@@ -182,7 +184,7 @@ export function DashboardClient() {
                         <button
                           key={dash.id}
                           type="button"
-                          onClick={() => router.push(`/zh/dashboard/editor?id=${dash.id}`)}
+                          onClick={() => router.push(`/${lng}/dashboard/editor?id=${dash.id}`)}
                           className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-[#30363d] hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/20 bg-[#161b22]"
                         >
                           {dash.thumbnail ? (
@@ -202,14 +204,14 @@ export function DashboardClient() {
 
                           <div className="absolute inset-0 p-4 flex flex-col justify-end">
                             <h3 className="text-white font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors">
-                              {dash.name || '未命名看板'}
+                              {dash.name || t('dashboard.sidebar.untitled')}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[#8b949e]">
-                                {dash.widgets?.length || 0} 个组件
+                                {t('dashboard.editor.componentsCount', { count: dash.widgets?.length || 0 })}
                               </span>
                               <span className="px-2 py-0.5 bg-[#30363d] text-[#8b949e] rounded-full font-medium">
-                                草稿
+                                {t('dashboard.editor.status.draft')}
                               </span>
                             </div>
                           </div>

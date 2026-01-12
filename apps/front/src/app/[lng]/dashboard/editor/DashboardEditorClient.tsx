@@ -2,12 +2,16 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardEditorSidebar } from '@/components/dashboard/DashboardEditorSidebar';
 import { EditorCanvas } from '@/components/dashboard/EditorCanvas';
 
 export function DashboardEditorClient() {
+  const { t } = useTranslation();
+  const params = useParams();
+  const lng = params.lng as string || 'zh';
   const searchParams = useSearchParams();
   const dashboardId = searchParams.get('id') || 'draft';
 
@@ -21,11 +25,11 @@ export function DashboardEditorClient() {
         <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6">
           {/* Back Button */}
           <Link
-            href="/zh/dashboard/?tab=saved"
+            href={`/${lng}/dashboard/?tab=saved`}
             className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors text-sm w-fit"
                 >
             <ArrowLeft className="w-4 h-4" />
-            <span>返回看板列表</span>
+            <span>{t('dashboard.editor.backToList')}</span>
           </Link>
 
           {/* Editor Content */}

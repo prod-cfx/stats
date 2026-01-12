@@ -411,7 +411,10 @@
     "tooltip": {
       "price": "Price"
     },
-    "currentPrice": "Current Price"
+    "currentPrice": "Current Price",
+    "current": "Current",
+    "above": "Above",
+    "below": "Below"
   },
   "whaleTracking": {
     "side": {
@@ -753,7 +756,75 @@
       "addWidgetHint": "What kind of intel do you want to see?",
       "descriptionPlaceholder": "No description",
       "addTag": "Add Tag",
-      "widgetReady": "Widget ready"
-    }
+      "widgetReady": "Widget ready",
+      "removeWidget": "Remove Widget",
+      "backToList": "Back to Dashboard List",
+      "componentsCount": "{{count}} Components",
+      "status": {
+        "published": "Published",
+        "draft": "Draft"
+      },
+      "validation": {
+        "titleRequired": "Dashboard title is required",
+        "thumbnailRequired": "Thumbnail is required",
+        "widgetsRequired": "At least one widget is required",
+        "publishSuccess": "Published Successfully",
+        "publishSuccessDesc": "Dashboard \"{{name}}\" published successfully",
+        "publishFail": "Publish Failed",
+        "publishFailDesc": "Error publishing dashboard, please try again later",
+        "deleteSuccess": "Deleted Successfully",
+        "deleteSuccessDesc": "Dashboard \"{{name}}\" deleted",
+        "deleteFail": "Delete Failed",
+        "deleteFailDesc": "Error deleting dashboard, please try again later",
+        "saveSuccess": "Saved Successfully",
+        "saveSuccessDesc": "Dashboard changes saved",
+        "saveFail": "Save Failed",
+        "saveFailDesc": "Error saving dashboard, please try again"
+      },
+      "actions": {
+        "save": "Save",
+        "saved": "Saved",
+        "saving": "Saving...",
+        "unsaved": "Unsaved",
+        "noChanges": "No Changes",
+        "saveChanges": "Save Changes",
+        "selectThumbnail": "Select Thumbnail",
+        "changeThumbnail": "Change Thumbnail",
+        "uploading": "Uploading...",
+        "uploadSuccess": "Upload Success",
+        "uploadFail": "Upload Failed",
+        "editTitle": "Edit Title",
+        "view": "View"
+      },
+      "dialog": {
+        "deleteTitle": "Delete Dashboard",
+        "deleteDesc": "Are you sure you want to delete dashboard \"{{name}}\"?\n\nThis action cannot be undone.",
+        "deleteConfirm": "Delete",
+        "deleteCancel": "Cancel"
+      }
+    },
+    "notFound": "Dashboard not found or deleted",
+    "viewAll": "View All {{count}}...",
+    "collapse": "Collapse",
+    "resetLayout": "Reset Layout",
+    "addWidget": "Add Widget"
+  },
+  "widget": {
+    "config": {
+      "selectSymbol": "Select Symbol",
+      "symbol": "Symbol",
+      "timeWindow": "Time Window",
+      "timeRange": "Time Range",
+      "exchangeScope": "Exchange Scope",
+      "category": "Category",
+      "sort": "Sort",
+      "watchlist": "Watchlist",
+      "size": "Widget Size (UNIT SIZE)",
+      "gridSize": "Grid Size",
+      "preview": "Preview (UNIT PREVIEW)",
+      "saveAndAdd": "Save & Add",
+      "back": "Back"
+    },
+    "loading": "Under Development"
   }
 }

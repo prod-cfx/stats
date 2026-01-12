@@ -1,5 +1,6 @@
 import type { DashboardWidgetInstance } from '../store/dashboardStore'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useWidgetMockData } from '../mock/useWidgetMockData'
 import { WIDGET_CATALOG } from '../widgets/widgets.catalog'
 import { CryptoStocksWidget } from './contents/CryptoStocksWidget'
@@ -34,14 +35,15 @@ function findMeta(type: string) {
 }
 
 export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemove?: () => void }) {
+  const { t } = useTranslation()
   const normalizedType = normalizeWidgetType(String((props.widget as any).type))
   const meta = findMeta(normalizedType)
   const { loading, data, error } = useWidgetMockData(normalizedType as any, props.widget.config)
 
   return (
     <WidgetShell
-      title={meta?.title ?? props.widget.type}
-      description={meta?.description}
+      title={meta?.title ? t(meta.title) : props.widget.type}
+      description={meta?.description ? t(meta.description) : undefined}
       onRemove={props.onRemove}
       // Let kline widget fully use grid height (it has its own header/toolbars inside).
       contentStyle={undefined}
@@ -85,9 +87,9 @@ export function WidgetRenderer(props: { widget: DashboardWidgetInstance; onRemov
               default:
                 return (
                   <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-white/80 text-sm font-semibold">组件开发中</div>
+                    <div className="text-white/80 text-sm font-semibold">{t('widget.loading')}</div>
                     <div className="text-white/60 text-xs mt-1">
-                      {meta?.title ?? normalizedType}
+                      {meta?.title ? t(meta.title) : normalizedType}
                     </div>
                   </div>
                 )

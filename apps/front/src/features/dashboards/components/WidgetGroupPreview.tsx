@@ -3,6 +3,7 @@
 import type { WidgetCatalogGroup, WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface WidgetGroupPreviewProps {
   group: WidgetCatalogGroup
@@ -11,6 +12,7 @@ interface WidgetGroupPreviewProps {
 }
 
 export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGroupPreviewProps) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-6">
       <button
@@ -19,15 +21,12 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
         className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
-        <span className="text-sm">返回</span>
+        <span className="text-sm">{t('widget.config.back')}</span>
       </button>
 
       <div>
-        <h2 className="text-white font-bold text-2xl mb-2">{group.title}</h2>
-        <p className="text-[#8b949e] text-sm mb-1">{group.subtitle}</p>
-        <p className="text-[#8b949e] text-xs">
-          查看有关{group.title.toLowerCase()}的信息
-        </p>
+        <h2 className="text-white font-bold text-2xl mb-2">{t(group.title)}</h2>
+        <p className="text-[#8b949e] text-sm mb-1">{t(group.subtitle)}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -40,7 +39,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
           >
             <div className="flex items-start justify-between mb-3">
               <h3 className="text-white font-bold text-base group-hover:text-primary transition-colors">
-                {item.title}
+                {t(item.title)}
               </h3>
               <span className="text-[#8b949e] text-xs bg-[#21262d] px-2 py-1 rounded">
                 {item.defaultLayout.w}×{item.defaultLayout.h}
@@ -48,7 +47,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
             </div>
             
             <p className="text-[#8b949e] text-xs mb-4 line-clamp-2">
-              {item.description}
+              {t(item.description)}
             </p>
 
             {/* Mock Preview Thumbnail */}
@@ -164,7 +163,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                !item.type.includes('open_interest') &&
                !item.type.includes('volume') && (
                 <div className="text-[#8b949e] text-xs">
-                  {item.title}
+                  {t(item.title)}
                 </div>
               )}
             </div>

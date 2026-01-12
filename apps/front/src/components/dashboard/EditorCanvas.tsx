@@ -1,7 +1,7 @@
 'use client'
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
@@ -17,6 +17,8 @@ interface EditorCanvasProps {
 export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanvasProps) => {
   const { t } = useTranslation()
   const router = useRouter()
+  const params = useParams()
+  const lng = params.lng as string || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [doc, setDoc] = useState(() =>
     dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
@@ -31,7 +33,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
       const existing = getDashboard(dashboardId)
       if (!existing) {
         // deleted or missing; go back to list
-        router.replace('/zh/dashboard/?tab=saved')
+        router.replace(`/${lng}/dashboard/?tab=saved`)
         return
       }
       setDoc(existing)
@@ -43,7 +45,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
       window.removeEventListener('storage', refresh)
       window.removeEventListener('coinflux_dashboards_updated', refresh as any)
     }
-  }, [dashboardId, router])
+  }, [dashboardId, router, lng])
 
   return (
     <div className="flex flex-col gap-8 pb-20">
@@ -78,14 +80,14 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             className="flex items-center gap-2 px-3 py-1.5 text-[#8b949e] hover:text-white transition-colors text-xs font-medium"
           >
             <LayoutIcon className="w-3.5 h-3.5" />
-            <span>Reset Layout</span>
+            <span>{t('dashboard.resetLayout')}</span>
           </button>
         </div>
       </div>
 
       <div className="min-h-[600px] bg-[#0d1117] rounded-xl border border-[#30363d] p-4 relative bg-grid-pattern">
         {doc ? <DashboardCanvas dashboardId={dashboardId} /> : (
-          <div className="text-center text-[#8b949e] py-20">看板不存在或已删除</div>
+          <div className="text-center text-[#8b949e] py-20">{t('dashboard.notFound')}</div>
         )}
       </div>
 

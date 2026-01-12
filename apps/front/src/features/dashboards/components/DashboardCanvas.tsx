@@ -2,6 +2,7 @@
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { removeWidgetFromDashboard, updateDashboardLayout } from '../store/dashboardActions'
 import { ensureDashboard, getDashboard } from '../store/dashboardStore'
@@ -60,6 +61,7 @@ const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
   })
 
 export function DashboardCanvas(props: { dashboardId: string }) {
+  const { t } = useTranslation()
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
@@ -167,8 +169,8 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     setResetKey(prev => prev + 1)
   }
 
-  if (!doc) return <div className="text-white/30 p-10 text-center">看板不存在或已删除</div>
-  if (!GridLayout) return <div className="text-white/30 p-10 text-center">加载中...</div>
+  if (!doc) return <div className="text-white/30 p-10 text-center">{t('dashboard.notFound')}</div>
+  if (!GridLayout) return <div className="text-white/30 p-10 text-center">{t('common.loading')}</div>
 
   const rowHeight = 10
   const marginY = 6
@@ -183,10 +185,10 @@ export function DashboardCanvas(props: { dashboardId: string }) {
           onClick={() => setIsModalOpen(true)}
           className="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded text-sm font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
         >
-          <Plus className="w-4 h-4 inline mr-1" />添加组件
+          <Plus className="w-4 h-4 inline mr-1" />{t('dashboard.addWidget')}
         </button>
         <button type="button" onClick={handleResetLayout} className="border border-[#30363d] text-[#8b949e] px-4 py-2 rounded text-sm hover:text-white transition-colors">
-          <LayoutIcon className="w-4 h-4 inline mr-1" />重置布局
+          <LayoutIcon className="w-4 h-4 inline mr-1" />{t('dashboard.resetLayout')}
         </button>
       </div>
 

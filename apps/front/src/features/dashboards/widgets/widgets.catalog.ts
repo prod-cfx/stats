@@ -31,13 +31,13 @@ export interface WidgetCatalogGroup {
 export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
   {
     id: "market",
-    title: "市场数据",
-    subtitle: "K线图表・预测市场・币股",
+    title: "dashboard.widgets.categories.market_data",
+    subtitle: "dashboard.widgets.candlestickChart・dashboard.widgets.predictionMarket・dashboard.widgets.publicCompanies",
     items: [
       {
         type: "market.kline",
-        title: "K线图表",
-        description: "专业的 TradingView K线图表",
+        title: "dashboard.widgets.candlestickChart",
+        description: "dashboard.widgets.descriptions.candlestickChart",
         iconKey: "kline",
         // Ultra compact; will be clamped to 3~6
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
@@ -46,8 +46,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "market.prediction",
-        title: "预测市场",
-        description: "基于链上数据的未来趋势预测",
+        title: "dashboard.widgets.predictionMarket",
+        description: "dashboard.widgets.descriptions.predictionMarket",
         iconKey: "prediction",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { category: "BTC", sort: "hot", showLiveOnly: false },
@@ -55,8 +55,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "market.crypto_stocks",
-        title: "币股",
-        description: "持有加密资产的上市公司概览",
+        title: "dashboard.widgets.publicCompanies",
+        description: "dashboard.widgets.descriptions.publicCompanies",
         iconKey: "stocks",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { watchlist: "ALL", sort: "marketCap" },
@@ -66,13 +66,13 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
   },
   {
     id: "derivatives",
-    title: "衍生品数据",
-    subtitle: "聚合多空比・聚合挂单・聚合持仓量・聚合成交量",
+    title: "dashboard.widgets.categories.derivatives",
+    subtitle: "dashboard.widgets.lsRatio・dashboard.widgets.aggOrderbook・dashboard.widgets.aggOI・dashboard.widgets.aggVolume",
     items: [
       {
         type: "derivatives.long_short_ratio",
-        title: "聚合多空比",
-        description: "全网多空持仓人数及持仓量比",
+        title: "dashboard.widgets.lsRatio",
+        description: "dashboard.widgets.descriptions.lsRatio",
         iconKey: "longshort",
         defaultLayout: { w: 6, h: 3, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "4h" },
@@ -80,8 +80,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "derivatives.orderbook_agg",
-        title: "聚合挂单",
-        description: "全网深度及订单流聚合分析",
+        title: "dashboard.widgets.aggOrderbook",
+        description: "dashboard.widgets.descriptions.aggOrderbook",
         iconKey: "orderbook",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTCUSDT", marketType: "swap", depth: 10 },
@@ -89,8 +89,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "derivatives.open_interest_agg",
-        title: "聚合持仓量",
-        description: "全网合约总持仓量聚合",
+        title: "dashboard.widgets.aggOI",
+        description: "dashboard.widgets.descriptions.aggOI",
         iconKey: "oi",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "24h" },
@@ -98,8 +98,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "derivatives.volume_agg",
-        title: "聚合成交量",
-        description: "全网合约总成交量聚合",
+        title: "dashboard.widgets.aggVolume",
+        description: "dashboard.widgets.descriptions.aggVolume",
         iconKey: "volume",
         defaultLayout: { w: 6, h: 3, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", window: "24h" },
@@ -109,13 +109,13 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
   },
   {
     id: "liquidation",
-    title: "爆仓数据",
-    subtitle: "清算地图・聚合爆仓",
+    title: "dashboard.widgets.categories.liquidation",
+    subtitle: "dashboard.widgets.liquidationMap・dashboard.widgets.liquidationData",
     items: [
       {
         type: "liquidation.map",
-        title: "清算地图",
-        description: "各交易所实时爆仓热力图数据",
+        title: "dashboard.widgets.liquidationMap",
+        description: "dashboard.widgets.descriptions.liquidationMap",
         iconKey: "liqmap",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "BTC", scope: "ALL", range: "1D" },
@@ -123,8 +123,8 @@ export const WIDGET_CATALOG: WidgetCatalogGroup[] = [
       },
       {
         type: "liquidation.feed",
-        title: "聚合爆仓",
-        description: "实时爆仓订单流推送",
+        title: "dashboard.widgets.liquidationData",
+        description: "dashboard.widgets.descriptions.liquidationData",
         iconKey: "liqfeed",
         defaultLayout: { w: 6, h: 6, minW: 6, minH: 3, maxW: 12, maxH: 16 },
         defaultConfig: { symbol: "ALL", window: "4h" },

@@ -145,7 +145,7 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
                       <Grid3x3 className="w-2.5 h-2.5 text-[#8b949e]" />
                     </div>
                   )}
-                  {dash.name || '未命名'}
+                  {dash.name || t('dashboard.sidebar.untitled')}
                 </button>
               ))}
             </div>

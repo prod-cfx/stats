@@ -84,7 +84,7 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
 
       <div className="flex-1 min-h-0 max-h-full rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden relative">
         <div className={`absolute ${isCompact ? 'top-[44px]' : 'top-2'} right-2 z-10 text-right pointer-events-none transition-all duration-300`}>
-          <div className="text-[10px] text-white/50">Current</div>
+          <div className="text-[10px] text-white/50">{t('liquidationMap.current')}</div>
           <div className="font-mono text-xs text-white/90 font-bold bg-[#161b22]/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/5">
             ${currentPrice.toLocaleString()}
           </div>
@@ -99,13 +99,13 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg border border-white/10 bg-white/5 p-2 flex items-center justify-between">
-          <div className="text-white/50">Above</div>
+          <div className="text-white/50">{t('liquidationMap.above')}</div>
           <div className="font-mono text-[#ef4444] font-medium">
             ${(data.cumulativeShort?.[data.cumulativeShort.length - 1] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/5 p-2 flex items-center justify-between">
-          <div className="text-white/50">Below</div>
+          <div className="text-white/50">{t('liquidationMap.below')}</div>
           <div className="font-mono text-[#22c55e] font-medium">
             ${(data.cumulativeLong?.[0] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>

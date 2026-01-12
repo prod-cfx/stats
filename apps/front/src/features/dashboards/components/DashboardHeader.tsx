@@ -3,6 +3,7 @@
 import type { DashboardDoc } from '../store/dashboardStore'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { updateDashboardMeta } from '../store/dashboardStore'
 
@@ -17,6 +18,7 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'ima
 type SavePublishStatus = 'idle' | 'saving' | 'success' | 'error'
 
 export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) {
+  const { t } = useTranslation()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState(dashboard.name)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
@@ -45,7 +47,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
     // 验证文件类型
     if (!ALLOWED_TYPES.includes(file.type)) {
       setUploadStatus('error')
-      setUploadError('不支持的图片格式，请选择 JPG、PNG、GIF 或 WebP')
+      setUploadError(t('dashboard.editor.actions.uploadFail'))
       setTimeout(() => {
         setUploadStatus('idle')
         setUploadError(null)
@@ -56,7 +58,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
     // 验证文件大小
     if (file.size > MAX_FILE_SIZE) {
       setUploadStatus('error')
-      setUploadError('图片大小超过 5MB，请选择更小的文件')
+      setUploadError(t('dashboard.editor.actions.uploadFail'))
       setTimeout(() => {
         setUploadStatus('idle')
         setUploadError(null)
@@ -71,7 +73,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
     
     reader.onerror = () => {
       setUploadStatus('error')
-      setUploadError('图片读取失败，请重试')
+      setUploadError(t('dashboard.editor.actions.uploadFail'))
       setTimeout(() => {
         setUploadStatus('idle')
         setUploadError(null)
@@ -92,7 +94,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       } catch (err) {
         void err
         setUploadStatus('error')
-        setUploadError('上传失败，请重试')
+        setUploadError(t('dashboard.editor.actions.uploadFail'))
         setTimeout(() => {
           setUploadStatus('idle')
           setUploadError(null)
@@ -121,8 +123,8 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       setSavePublishStatus('success')
       
       toast.success({
-        title: '保存成功',
-        description: '看板修改已保存',
+        title: t('dashboard.editor.validation.saveSuccess'),
+        description: t('dashboard.editor.validation.saveSuccessDesc'),
         duration: 2000,
       })
       
@@ -136,8 +138,8 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       void err
       setSavePublishStatus('error')
       toast.error({
-        title: '保存失败',
-        description: '保存看板时出现错误，请重试',
+        title: t('dashboard.editor.validation.saveFail'),
+        description: t('dashboard.editor.validation.saveFailDesc'),
       })
       setTimeout(() => {
         setSavePublishStatus('idle')
@@ -183,7 +185,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           type="button"
           onClick={() => setIsEditingTitle(!isEditingTitle)}
           className="text-[#8b949e] hover:text-white transition-colors p-2"
-          title="编辑标题"
+          title={t('dashboard.editor.actions.editTitle')}
         >
           <Edit2 className="w-4 h-4" />
         </button>
@@ -206,27 +208,27 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
                     ? 'bg-red-600 text-white'
                     : 'bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-primary/20'
             }`}
-            title={uploadStatus === 'idle' ? '选择缩略图' : uploadStatus === 'uploading' ? '上传中...' : uploadStatus === 'success' ? '上传成功' : '上传失败'}
+            title={uploadStatus === 'idle' ? t('dashboard.editor.actions.selectThumbnail') : uploadStatus === 'uploading' ? t('dashboard.editor.actions.uploading') : uploadStatus === 'success' ? t('dashboard.editor.actions.uploadSuccess') : t('dashboard.editor.actions.uploadFail')}
           >
             {uploadStatus === 'uploading' ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                上传中...
+                {t('dashboard.editor.actions.uploading')}
               </>
             ) : uploadStatus === 'success' ? (
               <>
                 <Check className="w-4 h-4" />
-                上传成功
+                {t('dashboard.editor.actions.uploadSuccess')}
               </>
             ) : uploadStatus === 'error' ? (
               <>
                 <X className="w-4 h-4" />
-                上传失败
+                {t('dashboard.editor.actions.uploadFail')}
               </>
             ) : (
               <>
           <Image className="w-4 h-4" />
-                {dashboard.thumbnail ? '更换缩略图' : '选择缩略图'}
+                {dashboard.thumbnail ? t('dashboard.editor.actions.changeThumbnail') : t('dashboard.editor.actions.selectThumbnail')}
               </>
             )}
         </button>
@@ -262,35 +264,35 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           }`}
           title={
             savePublishStatus === 'saving'
-              ? '保存中...'
+              ? t('dashboard.editor.actions.saving')
               : savePublishStatus === 'success'
-                ? '保存成功'
+                ? t('dashboard.editor.validation.saveSuccess')
                 : savePublishStatus === 'error'
-                  ? '保存失败'
+                  ? t('dashboard.editor.validation.saveFail')
                   : !hasUnsavedChanges
-                    ? '无修改'
-                    : '保存修改'
+                    ? t('dashboard.editor.actions.noChanges')
+                    : t('dashboard.editor.actions.saveChanges')
           }
         >
           {savePublishStatus === 'saving' ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              保存中...
+              {t('dashboard.editor.actions.saving')}
             </>
           ) : savePublishStatus === 'success' ? (
             <>
               <Check className="w-4 h-4" />
-              已保存
+              {t('dashboard.editor.actions.saved')}
             </>
           ) : savePublishStatus === 'error' ? (
             <>
               <X className="w-4 h-4" />
-              保存失败
+              {t('dashboard.editor.validation.saveFail')}
             </>
           ) : (
             <>
             <Save className="w-4 h-4" />
-              {hasUnsavedChanges ? '保存' : '未保存'}
+              {hasUnsavedChanges ? t('dashboard.editor.actions.save') : t('dashboard.editor.actions.unsaved')}
             </>
           )}
           </button>
