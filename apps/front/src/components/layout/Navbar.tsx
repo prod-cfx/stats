@@ -6,11 +6,13 @@ import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
+import { useToast } from '@/components/ui/toast';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 export const Navbar = () => {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const { info } = useToast();
 
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {
@@ -174,8 +176,18 @@ export const Navbar = () => {
             className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] focus:outline-none focus:bg-[#0d1117] transition-all w-64 relative z-0 group-focus-within:border-transparent"
           />
         </div>
-        <button type="button" className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors">{t('nav.login')}</button>
-        <button type="button" className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95">
+        <button 
+          type="button" 
+          className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors"
+          onClick={() => info('Coming Soon')}
+        >
+          {t('nav.login')}
+        </button>
+        <button 
+          type="button" 
+          className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+          onClick={() => info('Coming Soon')}
+        >
           {t('nav.register')}
         </button>
         <LanguageSwitcher />
