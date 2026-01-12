@@ -815,6 +815,11 @@
       }
     },
     "notFound": "看板不存在或已删除",
+    "view": {
+      "missingId": "缺少看板 ID",
+      "backToList": "返回看板列表",
+      "notFound": "看板不存在"
+    },
     "viewAll": "查看全部 {{count}} 个...",
     "collapse": "收起",
     "resetLayout": "重置布局",

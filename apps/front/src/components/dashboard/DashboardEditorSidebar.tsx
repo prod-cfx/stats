@@ -36,10 +36,11 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
       // IMPORTANT: do not recreate deleted dashboards implicitly
       if (dashboardId === 'draft') {
         setDoc(ensureDashboard('draft'))
-        return
+      } else {
+        const existing = getDashboard(dashboardId)
+        if (existing) setDoc(existing)
       }
-      const existing = getDashboard(dashboardId)
-      if (existing) setDoc(existing)
+      // Always refresh lists regardless of current dashboard
       setMyDashboards(getMyDashboards());
       setSavedDashboards(getSavedDashboards());
     };

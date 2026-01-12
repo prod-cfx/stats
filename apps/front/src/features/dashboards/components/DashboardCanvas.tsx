@@ -120,7 +120,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     let currentX = 0
     let currentY = 0
     let currentRowHeight = 0
-    
+
     const newLayout = doc.widgets.map((widget) => {
       const existing = doc.layout?.find((l) => String(l.i) === widget.id)
       let catalogItem = null
@@ -131,37 +131,38 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
       const w0 = existing?.w ?? d.w
       const h0 = existing?.h ?? d.h
+      // Use snapped preset for all widget types
       const snapped = snapToPresetForWidgetType(widget.type, w0, h0)
-      const w = widget.type === 'market.kline' ? snapped.w : 6
-      const h = widget.type === 'market.kline' ? snapped.h : 3
-      
+      const w = snapped.w
+      const h = snapped.h
+
       // If widget width > 6 or current row can't fit, start new row
       if (w > 6 || currentX + w > 12) {
         currentY += currentRowHeight
         currentX = 0
         currentRowHeight = 0
       }
-      
+
       const layoutItem = {
         i: widget.id,
         x: currentX,
         y: currentY,
         w,
         h,
-        minW: widget.type === 'market.kline' ? w : 6,
-        maxW: widget.type === 'market.kline' ? w : 12,
+        minW: w,
+        maxW: w,
       }
-      
+
       currentX += w
       currentRowHeight = Math.max(currentRowHeight, h)
-      
+
       // If we've filled the row (x >= 12), start new row for next widget
       if (currentX >= 12) {
         currentY += currentRowHeight
         currentX = 0
         currentRowHeight = 0
       }
-      
+
       return layoutItem
     })
     setLayoutState(clampLayout(newLayout, widgetsById))

@@ -7,7 +7,6 @@ import { DepthChart } from '@/components/aggregated-orderbook/DepthChart'
 import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
-import { SectionTitle } from '@/components/ui/Typography'
 import { useMockData } from '@/hooks/use-mock-data'
 
 const EXCHANGE_LOGOS = [

@@ -804,6 +804,11 @@
       }
     },
     "notFound": "Dashboard not found or deleted",
+    "view": {
+      "missingId": "Missing dashboard ID",
+      "backToList": "Back to Dashboard List",
+      "notFound": "Dashboard not found"
+    },
     "viewAll": "View All {{count}}...",
     "collapse": "Collapse",
     "resetLayout": "Reset Layout",
