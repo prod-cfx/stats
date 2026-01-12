@@ -71,7 +71,7 @@ export const PredictionCard = ({
 
       <div className="flex justify-between items-center mt-auto">
         <div className="flex items-center gap-2">
-          {status === 'LIVE' && (
+          {(status === 'LIVE' || status === 'OPEN' || status === 'ACTIVE') && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#f87171] animate-pulse" />
               <span className="text-[#f87171] text-xs font-bold tracking-wider">LIVE</span>

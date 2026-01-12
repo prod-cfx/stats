@@ -20,6 +20,7 @@ export enum AppResource {
   LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
   MARKET_SYMBOL = 'market_symbol',
   WHALE_TRACKING = 'whale_tracking',
+  PREDICTION_MARKET = 'prediction_market',
   DATA_PULL_TASK = 'data_pull_task',
   ORDERBOOK_CONFIG = 'orderbook_config',
   EXCHANGE_CONFIG = 'exchange_config',
@@ -34,11 +35,14 @@ RBAC_PERMISSIONS.grant(AppRole.VISITOR)
   .readAny(AppResource.WHALE_TRACKING)
   // 公开市场聚合类数据（多空比、挂单聚合等，只在 OptionalAccessControl 场景下放行）
   .readAny(AppResource.MARKET_SYMBOL)
+  // 公开预测市场聚合数据（Polymarket prediction-market 页面）
+  .readAny(AppResource.PREDICTION_MARKET)
 
 RBAC_PERMISSIONS.grant(AppRole.USER)
   .createOwn(AppResource.PORTFOLIO_ACCOUNT)
   .readOwn(AppResource.PORTFOLIO_ACCOUNT)
   .updateOwn(AppResource.PORTFOLIO_ACCOUNT)
+  .readAny(AppResource.PREDICTION_MARKET)
   // 普通用户可读取市场相关数据（如鲸鱼预警、持仓量等）
   .readAny(AppResource.MARKET_SYMBOL)
   // 普通用户可访问鲸鱼追踪 Discover 等功能
@@ -108,5 +112,4 @@ RBAC_PERMISSIONS.grant(AppRole.SUPER_ADMIN)
   .createAny(AppResource.ADMIN_MENU)
   .updateAny(AppResource.ADMIN_MENU)
   .deleteAny(AppResource.ADMIN_MENU)
-
 
