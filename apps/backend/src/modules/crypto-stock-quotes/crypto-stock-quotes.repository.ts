@@ -198,7 +198,7 @@ export class CryptoStockQuotesRepository {
     return client.cryptoStockQuote.findFirst({
       where: {
         symbol,
-        source: source ?? 'BBX',
+        source: source ?? 'BBX_SCRAPER',
       },
       orderBy: {
         quoteTimestamp: 'desc',
@@ -218,7 +218,7 @@ export class CryptoStockQuotesRepository {
 
     const where: Prisma.CryptoStockQuoteWhereInput = {
       symbol: { in: symbols },
-      source: source ?? 'BBX',
+      source: source ?? 'BBX_SCRAPER',
     }
 
     return client.cryptoStockQuote.findMany({
@@ -241,7 +241,7 @@ export class CryptoStockQuotesRepository {
     const client = this.getClient()
 
     const where: Prisma.CryptoStockQuoteWhereInput = {
-      source: source ?? 'BBX',
+      source: source ?? 'BBX_SCRAPER',
     }
 
     return client.cryptoStockQuote.findMany({

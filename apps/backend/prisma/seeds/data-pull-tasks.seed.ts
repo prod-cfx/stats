@@ -55,13 +55,17 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     },
     {
       key: 'polymarket-markets-crypto',
-      name: 'Polymarket Crypto 市场列表同步',
+      name: 'Polymarket 市场列表同步',
       source: 'polymarket',
       type: 'markets',
       // 每 10 分钟同步一次
       intervalSeconds: 600,
       enabled: false,
       cursor: null,
+      meta: {
+        category: '',
+        onlyActive: true,
+      },
     },
     {
       key: 'polymarket-orderbook-crypto',

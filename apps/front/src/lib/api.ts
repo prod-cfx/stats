@@ -988,4 +988,3 @@ export async function fetchPredictionMarkets(
     return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
   }, 'FETCH_PREDICTION_MARKETS')
 }
-
