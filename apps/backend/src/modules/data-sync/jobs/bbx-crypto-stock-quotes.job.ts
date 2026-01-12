@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService 和 CryptoStockQuotesRepository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { BbxSigner } from '@/clients/bbx'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
 
@@ -65,15 +66,16 @@ interface BbxCryptoStockQuotesMeta {
 
 /**
  * BBX 加密股票报价数据拉取 Job
- * 
+ *
  * 功能：
  * - 定期从 BBX API 拉取加密股票报价数据
  * - 支持多个股票代码同时拉取
  * - 自动去重和更新数据
- * 
+ *
  * 配置：
- * - BBX_API_KEY: BBX API 密钥
- * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，有默认值）
+ * - BBX_ACCESS_KEY_ID: BBX API 访问密钥 ID
+ * - BBX_ACCESS_SECRET: BBX API 访问密钥
+ * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，默认 https://open.bbx.com/api/upgrade/v2/crypto_stock/quotes）
  * - data_pull_tasks.meta.symbols / symbolsCsv: 需要拉取的股票代码列表（优先）
  * - BBX_CRYPTO_STOCK_SYMBOLS: 兼容性环境变量（逗号分隔列表，将在后续版本中废弃）
  */
@@ -116,14 +118,17 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
   async run(ctx: DataPullJobContext<BbxCryptoStockQuotesMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
-    const apiKey = this.configService.get<string>('BBX_API_KEY')
-    const endpoint =
-      this.configService.get<string>('BBX_CRYPTO_STOCK_ENDPOINT') ??
-      'https://api.bbx.com/v1/crypto-stocks/quotes'
+    const accessKeyId = this.configService.get<string>('BBX_ACCESS_KEY_ID')
+    const accessSecret = this.configService.get<string>('BBX_ACCESS_SECRET')
+    const rawEndpoint = this.configService.get<string>('BBX_CRYPTO_STOCK_ENDPOINT')
+    // 使用 || 确保空字符串也回退到默认值
+    const endpoint = rawEndpoint?.trim() || 'https://open.bbx.com/api/upgrade/v2/crypto_stock/quotes'
 
-    if (!apiKey) {
-      throw new Error('BBX_API_KEY is not configured')
+    if (!accessKeyId || !accessSecret) {
+      throw new Error('BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required')
     }
+
+    const signer = new BbxSigner(accessKeyId, accessSecret)
 
     // 从任务级 meta 中解析要拉取的股票代码列表（每次执行都从 meta 读取，确保可动态调整）
     let symbols = this.resolveSymbols(ctx.meta)
@@ -157,13 +162,15 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
       )
     }
 
-    this.logger.log(`Fetching BBX crypto stock quotes for symbols: ${symbols.join(', ')}`)
+    // 将 symbol 转换为 BBX ticker 格式: MSTR -> i:mstr:nasdaq
+    const tickers = symbols.map(s => `i:${s.toLowerCase()}:nasdaq`)
+    this.logger.log(`Fetching BBX crypto stock quotes for tickers: ${tickers.join(', ')}`)
 
     const url = new URL(endpoint)
-    // 根据实际的 BBX API 文档调整参数名称
-    url.searchParams.set('symbols', symbols.join(','))
+    // BBX API 使用 tickers 参数，格式为 i:symbol:exchange
+    url.searchParams.set('tickers', tickers.join(','))
 
-    const json = await this.fetchQuotesJson(url, apiKey)
+    const json = await this.fetchQuotesJson(url, signer)
 
     // 检查 BBX API 业务错误码
     if (json.success === false || (json.code && json.code !== 0 && json.code !== '0')) {
@@ -378,14 +385,18 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
   /**
    * 调用 BBX API 获取报价数据
    */
-  private async fetchQuotesJson(url: URL, apiKey: string): Promise<BbxApiResponse> {
+  private async fetchQuotesJson(url: URL, signer: BbxSigner): Promise<BbxApiResponse> {
+    // 生成 BBX 签名认证参数并添加到 URL 查询参数
+    const authParams = signer.generateAuthHeaders()
+    url.searchParams.set('AccessKeyId', authParams.AccessKeyId)
+    url.searchParams.set('SignatureNonce', authParams.SignatureNonce)
+    url.searchParams.set('Timestamp', authParams.Timestamp)
+    url.searchParams.set('Signature', authParams.Signature)
+
     const requestInit: RequestInit = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 根据实际的 BBX API 文档调整 header 名称
-        'Authorization': `Bearer ${apiKey}`,
-        'X-API-KEY': apiKey,
       },
     }
 

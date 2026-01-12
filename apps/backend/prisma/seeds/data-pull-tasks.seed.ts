@@ -82,6 +82,9 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       intervalSeconds: 300,
       enabled: false,
       cursor: null,
+      meta: JSON.stringify({
+        symbols: ['MSTR', 'COIN', 'MARA', 'RIOT', 'CLSK'],
+      }),
     },
   ] as const
 
@@ -101,6 +104,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
           intervalSeconds: task.intervalSeconds,
           enabled: task.enabled,
           cursor: task.cursor,
+          meta: 'meta' in task ? (task.meta as any) : undefined,
         },
       })
       createdCount += 1
