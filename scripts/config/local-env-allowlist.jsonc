@@ -61,6 +61,8 @@
     "EXCHANGE_ACCOUNT_CRYPTO_KEY",
     // CoinGlass
     "COINGLASS_API_KEY",
+    // BBX
+    "BBX_API_KEY",
     // 前端公开变量（生产环境域名/CDN 信息不提交到仓库）
     "NEXT_PUBLIC_APP_ENV",
     "NEXT_PUBLIC_API_SERVER_URL",
