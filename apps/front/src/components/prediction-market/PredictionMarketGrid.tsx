@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import type { PredictionMarketCardResponse } from '@/lib/api';
 import { fetchPredictionMarkets } from '@/lib/api';
 import { useMockData } from '@/hooks/use-mock-data';
-import { formatNumber } from '@/lib/formatters';
+import { formatDateTimeFull, formatNumber } from '@/lib/formatters';
 import { PredictionCard } from './PredictionCard';
 
 type PredictionMarketItem = PredictionCardProps & {
@@ -43,6 +43,12 @@ function hashCode(str: string): number {
     hash |= 0;
   }
   return Math.abs(hash);
+}
+
+const ISO_DATE_REGEX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g;
+
+function formatRuleText(text: string): string {
+  return text.replace(ISO_DATE_REGEX, match => formatDateTimeFull(match));
 }
 
 function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
@@ -164,7 +170,7 @@ export const PredictionMarketGrid = () => {
             <div className="text-sm leading-relaxed text-[#e6edf3] px-1">
               {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
                 <React.Fragment key={idx}>
-                  <p>{p}</p>
+                  <p>{formatRuleText(p)}</p>
                   {idx !== (selectedPrediction?.rules?.paragraphs?.length ?? 0) - 1 && <div className="h-5" />}
                 </React.Fragment>
               ))}
@@ -173,7 +179,7 @@ export const PredictionMarketGrid = () => {
             {selectedPrediction?.rules?.createdAt && (
               <div className="pt-6 border-t border-[#30363d] text-xs text-[#8b949e]">
                 <span className="font-bold">
-                  {t('predictionMarket.modal.createdAt', { date: selectedPrediction.rules.createdAt })}
+                  {t('predictionMarket.modal.createdAt', { date: formatDateTimeFull(selectedPrediction.rules.createdAt) })}
                 </span>
               </div>
             )}

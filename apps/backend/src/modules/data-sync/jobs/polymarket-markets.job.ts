@@ -28,6 +28,11 @@ export interface PolymarketTaskMeta {
    */
   tags?: string[]
   tagsCsv?: string
+  /**
+   * 仅同步活跃市场（closed=false）。
+   * 设为 true 可跳过已关闭的历史市场，大幅减少同步数据量。
+   */
+  onlyActive?: boolean
 }
 
 @Injectable()
@@ -66,6 +71,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
     // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
     // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
+    const onlyActive = ctx.meta?.onlyActive ?? false
     const response = await this.gammaClient.listMarkets({
       limit: this.batchSize,
       cursor: cursor.nextCursor ?? null,
@@ -73,8 +79,8 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       updatedSince: null, // API 不支持，保持 null
       category: category ?? null,
       tags: tags ?? undefined,
-      // 不过滤 active/closed 状态，以便能够标记已关闭的市场为 inactive
-      // isActive 标志会根据 API 返回的 active/closed 字段在 processMarket 中正确设置
+      // 当 onlyActive=true 时，仅获取未关闭的市场，跳过海量历史数据
+      closed: onlyActive ? false : undefined,
     })
 
     let processed = 0
@@ -314,7 +320,12 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   private resolveCategory(meta: PolymarketTaskMeta | null): string | null {
     const fromMeta = meta?.category
-    const value = (fromMeta ?? this.defaultCategory ?? 'crypto') || 'crypto'
+    // 如果 meta.category 显式设置为空字符串，返回 null（不过滤 category）
+    if (fromMeta === '') return null
+    // 如果 defaultCategory 为空字符串且无 meta 覆盖，也返回 null
+    if (fromMeta === undefined && this.defaultCategory === '') return null
+    const value = fromMeta ?? this.defaultCategory ?? 'crypto'
+    if (!value) return null
     return value.trim().toLowerCase()
   }
 

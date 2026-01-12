@@ -17,6 +17,20 @@ export function formatDateTime(isoString: string): string {
 }
 
 /**
+ * 格式化 ISO 日期字符串为 YYYY-MM-DD HH:mm 格式
+ */
+export function formatDateTimeFull(isoString: string): string {
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return '-'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+/**
  * 格式化数字，添加千分位分隔符
  */
 export function formatNumber(value: string | number, decimals = 2): string {
