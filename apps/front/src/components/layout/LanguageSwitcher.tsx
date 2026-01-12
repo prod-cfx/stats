@@ -14,6 +14,7 @@ export function LanguageSwitcher() {
 
   // Avoid hydration mismatch
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setMounted(true)
   }, [])
 
@@ -72,6 +73,7 @@ export function LanguageSwitcher() {
           <div className="py-1">
             {languages.map((lang) => (
               <button
+                type="button"
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
                 className={`flex w-full items-center justify-between px-4 py-2 text-sm text-left ${

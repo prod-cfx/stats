@@ -43,6 +43,7 @@ const OrderRow = ({
 
   // Lightweight "tick" effect when data changes (kept subtle, CoinGlass-like)
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setIsFlash(true);
     const timer = setTimeout(() => setIsFlash(false), 180);
     return () => clearTimeout(timer);

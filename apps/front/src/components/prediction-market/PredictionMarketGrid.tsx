@@ -1,190 +1,75 @@
 'use client';
 
+/* eslint-disable perfectionist/sort-imports -- 按语义分组导入，保持与其他组件一致 */
+
 import type { PredictionCardProps, PredictionRulesMeta } from './PredictionCard';
 import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
+import type { PredictionMarketCardResponse } from '@/lib/api';
+import { fetchPredictionMarkets } from '@/lib/api';
 import { useMockData } from '@/hooks/use-mock-data';
+import { formatNumber } from '@/lib/formatters';
 import { PredictionCard } from './PredictionCard';
 
 type PredictionMarketItem = PredictionCardProps & {
   rules?: PredictionRulesMeta;
 };
 
-function rulesById(id: string): PredictionRulesMeta {
-  // Per-market metadata (mock). Key point: not hard-coded globally in UI; each item carries its own rules.
-  switch (id) {
-    case 'btc-2025-price':
-      return {
-        paragraphs: [
-          'This market will resolve to "Yes" if the Binance 1 minute candle for BTC/USDT 12:00 in the ET timezone (noon) on the date specified in the title has a final "Close" price higher than the price specified in the title. Otherwise, this market will resolve to "No".',
-          'The resolution source for this market is Binance, specifically the BTC/USDT "Close" prices currently available at binance.com/en/trade/BTC_USDT with "1m" and "Candles" selected on the top bar.',
-          'Please note that this market is about the price according to Binance BTC/USDT, not according to other sources or spot markets.',
-          'Price precision is determined by the number of decimal places in the source.',
-        ],
-        createdAt: 'Dec 25, 2025, 1:00 AM GMT+8',
-      };
-    default:
-      return {
-        paragraphs: [
-          'Resolution criteria and data source are defined by the market rules for this event.',
-          'This is mock data for UI interaction preview; final rules may differ from production.',
-        ],
-      };
-  }
+const ICONS = [Bitcoin, Rocket, Coins, Shield, Globe, Landmark] as const;
+const ICON_BG_CLASSES = [
+  'bg-orange-500',
+  'bg-primary',
+  'bg-secondary',
+  'bg-indigo-600',
+  'bg-slate-600',
+  'bg-purple-600',
+] as const;
+
+function formatProbability(raw?: string | null): string | undefined {
+  if (!raw) return undefined;
+  const num = Number.parseFloat(raw);
+  if (Number.isNaN(num)) return raw;
+  const pct = num <= 1 ? num * 100 : num;
+  return `${pct.toFixed(0)}%`;
 }
 
-const initialPredictions: PredictionMarketItem[] = [
-  {
-    id: 'btc-2025-price',
-    title: 'What price will Bitcoin hit in 2025?',
-    icon: <Bitcoin className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-orange-500',
-    options: [
-      { label: '↑ 1,000,000', probability: '86%' },
-      { label: '↑ 250,000', probability: '20%' },
-    ],
-    status: 'LIVE',
-    volume: '$35m',
-    rules: rulesById('btc-2025-price'),
-  },
-  {
-    id: 'lighter-fdv',
-    title: 'Lighter market cap (FDV) one day after launch?',
-    icon: <Rocket className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-primary',
-    options: [
-      { label: '>$1B', probability: '86%' },
-      { label: '>$2B', probability: '84%' },
-    ],
-    volume: '$35m',
-    rules: rulesById('lighter-fdv'),
-  },
-  {
-    id: 'eth-2025-price',
-    title: 'What price will Ethereum hit in 2025?',
-    icon: <Coins className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-secondary',
-    options: [
-      { label: '$17,000', probability: '16%' },
-      { label: '$14,000', probability: '86%' },
-    ],
-    status: 'LIVE',
-    volume: '$12m',
-    rules: rulesById('eth-2025-price'),
-  },
-  {
-    id: 'lighter-airdrop-day',
-    title: 'What day will the Lighter airdrop be?',
-    icon: <Shield className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-indigo-600',
-    options: [
-      { label: 'December 22', probability: '26%' },
-      { label: 'December 23', probability: '15%' },
-    ],
-    volume: '$5m',
-    rules: rulesById('lighter-airdrop-day'),
-  },
-  {
-    id: 'btc-above-dec23',
-    title: 'Bitcoin above __ on December 23?',
-    icon: <Bitcoin className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-orange-500',
-    options: [
-      { label: '78,000', probability: '100%' },
-      { label: '80,000', probability: '100%' },
-    ],
-    status: 'LIVE',
-    volume: '$8m',
-    rules: rulesById('btc-above-dec23'),
-  },
-  {
-    id: 'satoshi-move-2025',
-    title: 'Will Satoshi move any Bitcoin in 2025?',
-    icon: <Globe className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-slate-600',
-    probability: '<1%',
-    volume: '$21m',
-    rules: rulesById('satoshi-move-2025'),
-  },
-  {
-    id: 'mstr-sell-by',
-    title: 'MicroStrategy sells any Bitcoin by __?',
-    icon: <Landmark className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-primary',
-    options: [
-      { label: 'December 31, 2025', probability: '86%' },
-      { label: 'December 30, 2025', probability: '86%' },
-    ],
-    volume: '$12m',
-    rules: rulesById('mstr-sell-by'),
-  },
-  {
-    id: 'eth-2026-price',
-    title: 'What price will Ethereum hit in 2026?',
-    icon: <Coins className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-secondary',
-    options: [
-      { label: '$100,000', probability: '86%' },
-      { label: '$80,000', probability: '86%' },
-    ],
-    status: 'LIVE',
-    volume: '$4m',
-    rules: rulesById('eth-2026-price'),
-  },
-  {
-    id: 'trump-mention-btc',
-    title: 'Trump to mention "Bitcoin" in Inauguration Speech?',
-    icon: <Globe className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-blue-600',
-    options: [
-      { label: 'Yes', probability: '64%' },
-      { label: 'No', probability: '36%' },
-    ],
-    status: 'LIVE',
-    volume: '$2.5m',
-    rules: rulesById('trump-mention-btc'),
-  },
-  {
-    id: 'sol-flip-eth',
-    title: 'Solana to flip Ethereum in Market Cap by June?',
-    icon: <Coins className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-purple-600',
-    options: [
-      { label: 'Yes', probability: '12%' },
-      { label: 'No', probability: '88%' },
-    ],
-    volume: '$45m',
-    rules: rulesById('sol-flip-eth'),
-  },
-  {
-    id: 'next-legal-tender',
-    title: 'Next country to adopt Bitcoin as legal tender?',
-    icon: <Landmark className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-green-600',
-    options: [
-      { label: 'Paraguay', probability: '25%' },
-      { label: 'Argentina', probability: '18%' },
-    ],
-    volume: '$1.2m',
-    rules: rulesById('next-legal-tender'),
-  },
-  {
-    id: 'spacex-doge',
-    title: 'SpaceX to accept DOGE for Moon Mission?',
-    icon: <Rocket className="w-5 h-5 text-white" />,
-    iconBgColor: 'bg-orange-400',
-    options: [
-      { label: 'Yes', probability: '42%' },
-      { label: 'No', probability: '58%' },
-    ],
-    status: 'LIVE',
-    volume: '$9m',
-    rules: rulesById('spacex-doge'),
-  },
-];
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
+  const hash = hashCode(item.id);
+  const Icon = ICONS[hash % ICONS.length];
+  const iconBgColor = ICON_BG_CLASSES[hash % ICON_BG_CLASSES.length];
+
+  return {
+    id: item.id,
+    title: item.title,
+    icon: <Icon className="w-5 h-5 text-white" />,
+    iconBgColor,
+    options: item.options?.map(opt => ({
+      label: opt.label,
+      probability: formatProbability(opt.probability) ?? '',
+    })),
+    probability: formatProbability(item.probability),
+    status: item.status,
+    volume: item.volume24h ? `$${formatNumber(item.volume24h, 0)}` : undefined,
+    rules: item.rules
+      ? {
+          paragraphs: item.rules.paragraphs,
+          createdAt: item.rules.createdAt,
+        }
+      : undefined,
+  };
+}
 
 export const PredictionMarketGrid = () => {
   const { t } = useTranslation();
@@ -192,8 +77,15 @@ export const PredictionMarketGrid = () => {
   const [modalLoading, setModalLoading] = useState(false);
 
   const { data: predictions, loading, error, reload } = useMockData(
-    async () => initialPredictions,
-    []
+    async () => {
+      const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48 });
+      return result.map(item => mapToPredictionItem(item));
+    },
+    [],
+    {
+      delay: 0,
+      ignoreQueryOverrides: true,
+    },
   );
 
   const handleCardClick = (p: PredictionMarketItem) => {
@@ -208,8 +100,8 @@ export const PredictionMarketGrid = () => {
       <div className="relative min-h-[400px]">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-12 animate-in fade-in duration-500">
-            {predictions?.map((prediction, index) => (
-              <div key={index} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
+            {predictions?.map(prediction => (
+              <div key={prediction.id} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
                 <PredictionCard {...prediction} />
               </div>
             ))}
@@ -233,7 +125,7 @@ export const PredictionMarketGrid = () => {
             <div>
               <h3 className="text-xl font-bold text-white leading-tight">{selectedPrediction?.title}</h3>
               <div className="flex gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume}</span>
+                <span className="text-xs text-[#8b949e]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume ?? '-'}</span>
                 <span className="text-xs text-[#f87171] font-bold">
                   ● {t(`predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`, { defaultValue: selectedPrediction?.status || 'LIVE' })}
                 </span>
@@ -291,3 +183,4 @@ export const PredictionMarketGrid = () => {
     </div>
   );
 };
+

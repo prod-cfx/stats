@@ -10,6 +10,7 @@ export function useMarketDataCatalog() {
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setLoading(true)
     fetchMarketDataCatalog()
       .then((data) => {

@@ -20,6 +20,7 @@ function useContainerWidth() {
     if (!el) return
     const read = () => {
       const w = Math.floor(el.getBoundingClientRect().width)
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- debounced resize handler
       if (w > 0) setWidth(w)
     }
     read()
@@ -101,6 +102,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         setLayoutState(clampLayout(freshDoc.layout, map))
       }
     }
+    // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleanup in return
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => window.removeEventListener('coinflux_dashboards_updated', refresh as any)
   }, [props.dashboardId])

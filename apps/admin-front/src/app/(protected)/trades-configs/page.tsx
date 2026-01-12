@@ -132,7 +132,8 @@ export default function TradesConfigsPage() {
       const payload = { ...values }
       if (payload.metadata !== undefined) {
         try {
-          payload.metadata = parseMetadataField(payload.metadata)
+          // null 转为 undefined，因为 Create DTO 不接受 null
+          payload.metadata = parseMetadataField(payload.metadata) ?? undefined
         } catch (error) {
           message.error(error instanceof Error ? error.message : '扩展配置格式错误')
           return
@@ -164,12 +165,13 @@ export default function TradesConfigsPage() {
 
   const openEditModal = (config: TradesPairConfigResponse) => {
     dispatch({ type: 'OPEN_EDIT_MODAL', payload: config })
+    // 表单中 metadata 使用字符串展示（TextArea），与 API payload 类型不同
     editForm.setFieldsValue({
       enabled: config.enabled,
       priority: config.priority,
       description: config.description ?? '',
-      metadata: stringifyMetadata(config.metadata, true), // 使用工具函数格式化 JSON
-    })
+      metadata: stringifyMetadata(config.metadata, true),
+    } as any)
   }
 
   const handleEditSubmit = async () => {

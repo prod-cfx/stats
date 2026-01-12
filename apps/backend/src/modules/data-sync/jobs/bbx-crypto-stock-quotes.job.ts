@@ -1,8 +1,9 @@
-import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService 和 CryptoStockQuotesRepository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { BbxSigner } from '@/clients/bbx'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
 
@@ -48,21 +49,63 @@ interface BbxJobCursor {
 }
 
 /**
+ * 任务级配置参数（存放在 data_pull_tasks.meta 中）
+ */
+interface BbxCryptoStockQuotesMeta {
+  /**
+   * 需要拉取的股票代码列表（推荐使用大写，如 "MSTR"、"COIN"）
+   */
+  symbols?: string[]
+  /**
+   * 需要拉取的股票代码列表（逗号分隔字符串形式，兼容性字段）
+   *
+   * 例如："MSTR,COIN,MARA"
+   */
+  symbolsCsv?: string
+}
+
+/**
  * BBX 加密股票报价数据拉取 Job
- * 
+ *
  * 功能：
  * - 定期从 BBX API 拉取加密股票报价数据
  * - 支持多个股票代码同时拉取
  * - 自动去重和更新数据
- * 
+ *
  * 配置：
- * - BBX_API_KEY: BBX API 密钥
- * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，有默认值）
- * - BBX_CRYPTO_STOCK_SYMBOLS: 需要拉取的股票代码列表（逗号分隔，如 "MSTR,COIN,MARA"）
+ * - BBX_ACCESS_KEY_ID: BBX API 访问密钥 ID
+ * - BBX_ACCESS_SECRET: BBX API 访问密钥
+ * - BBX_CRYPTO_STOCK_ENDPOINT: BBX API 端点（可选，默认 https://open.bbx.com/api/upgrade/v2/crypto_stock/quotes）
+ * - data_pull_tasks.meta.symbols / symbolsCsv: 需要拉取的股票代码列表（优先）
+ * - BBX_CRYPTO_STOCK_SYMBOLS: 兼容性环境变量（逗号分隔列表，将在后续版本中废弃）
  */
 @Injectable()
-export class BbxCryptoStockQuotesJob implements DataPullJob {
+export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotesMeta> {
   readonly key = 'bbx-crypto-stock-quotes'
+  readonly name = 'BBX 加密股票报价数据'
+  readonly metaSchema: JobMetaSchema = {
+    description: '从 BBX API 拉取指定加密股票的实时报价数据',
+    fields: [
+      {
+        name: 'symbols',
+        type: 'array',
+        required: false,
+        description: '股票代码列表（数组形式，如 ["MSTR","COIN","MARA"]）',
+        defaultValue: [],
+      },
+      {
+        name: 'symbolsCsv',
+        type: 'string',
+        required: false,
+        description: '股票代码列表（逗号分隔字符串形式，如 "MSTR,COIN,MARA"）',
+        defaultValue: '',
+      },
+    ],
+    example: {
+      symbols: ['MSTR', 'COIN', 'MARA'],
+      symbolsCsv: 'MSTR,COIN,MARA',
+    },
+  }
   private readonly logger = new Logger(BbxCryptoStockQuotesJob.name)
   private readonly requestTimeoutMs = 15_000
   private readonly maxAttempts = 3
@@ -72,38 +115,62 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
     private readonly repo: CryptoStockQuotesRepository,
   ) {}
 
-  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+  async run(ctx: DataPullJobContext<BbxCryptoStockQuotesMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
-    const apiKey = this.configService.get<string>('BBX_API_KEY')
-    const endpoint =
-      this.configService.get<string>('BBX_CRYPTO_STOCK_ENDPOINT') ??
-      'https://api.bbx.com/v1/crypto-stocks/quotes'
+    const accessKeyId = this.configService.get<string>('BBX_ACCESS_KEY_ID')
+    const accessSecret = this.configService.get<string>('BBX_ACCESS_SECRET')
+    const rawEndpoint = this.configService.get<string>('BBX_CRYPTO_STOCK_ENDPOINT')
+    // 使用 || 确保空字符串也回退到默认值
+    const endpoint = rawEndpoint?.trim() || 'https://open.bbx.com/api/upgrade/v2/crypto_stock/quotes'
 
-    if (!apiKey) {
-      throw new Error('BBX_API_KEY is not configured')
+    if (!accessKeyId || !accessSecret) {
+      throw new Error('BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required')
     }
 
-    // 从配置中读取要拉取的股票代码列表（每次都从配置读取，确保可动态更新）
-    const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS')
-    
-    if (!symbolsConfig) {
-      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is not configured')
-    }
+    const signer = new BbxSigner(accessKeyId, accessSecret)
 
-    const symbols = symbolsConfig.split(',').map(s => s.trim()).filter(Boolean)
+    // 从任务级 meta 中解析要拉取的股票代码列表（每次执行都从 meta 读取，确保可动态调整）
+    let symbols = this.resolveSymbols(ctx.meta)
+
+    // 兼容逻辑：若任务 meta 未配置 symbols，则回退到环境变量 BBX_CRYPTO_STOCK_SYMBOLS
+    if (symbols.length === 0) {
+      const symbolsConfig = this.configService.get<string>('BBX_CRYPTO_STOCK_SYMBOLS')
+
+      if (symbolsConfig) {
+        symbols = symbolsConfig
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(s => s.toUpperCase())
+
+        // 提示即将废弃的配置方式，便于后续迁移到 meta
+        this.logger.warn(
+          'BBX_CRYPTO_STOCK_SYMBOLS is deprecated, please migrate to data_pull_tasks.meta.symbols / symbolsCsv',
+          {
+            envSymbols: symbols,
+            taskId: ctx.taskId,
+            key: ctx.key,
+          },
+        )
+      }
+    }
 
     if (symbols.length === 0) {
-      throw new Error('BBX_CRYPTO_STOCK_SYMBOLS is configured but contains no valid symbols')
+      throw new Error(
+        'BBX crypto stock symbols are not configured. Please set data_pull_tasks.meta.symbols / symbolsCsv or BBX_CRYPTO_STOCK_SYMBOLS env.',
+      )
     }
 
-    this.logger.log(`Fetching BBX crypto stock quotes for symbols: ${symbols.join(', ')}`)
+    // 将 symbol 转换为 BBX ticker 格式: MSTR -> i:mstr:nasdaq
+    const tickers = symbols.map(s => `i:${s.toLowerCase()}:nasdaq`)
+    this.logger.log(`Fetching BBX crypto stock quotes for tickers: ${tickers.join(', ')}`)
 
     const url = new URL(endpoint)
-    // 根据实际的 BBX API 文档调整参数名称
-    url.searchParams.set('symbols', symbols.join(','))
+    // BBX API 使用 tickers 参数，格式为 i:symbol:exchange
+    url.searchParams.set('tickers', tickers.join(','))
 
-    const json = await this.fetchQuotesJson(url, apiKey)
+    const json = await this.fetchQuotesJson(url, signer)
 
     // 检查 BBX API 业务错误码
     if (json.success === false || (json.code && json.code !== 0 && json.code !== '0')) {
@@ -185,6 +252,46 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
         missingSymbols: missingSymbols.length > 0 ? missingSymbols : undefined, // 记录缺失的标的
       },
     }
+  }
+
+  /**
+   * 从任务级 meta 中解析股票代码列表
+   *
+   * 支持两种配置方式：
+   * - symbols: 字符串数组
+   * - symbolsCsv: 逗号分隔字符串
+   *
+   * 返回去重且剔除空字符串后的列表
+   */
+  private resolveSymbols(meta: BbxCryptoStockQuotesMeta | null): string[] {
+    if (!meta) return []
+
+    const symbols: string[] = []
+
+    // symbols 数组形式
+    if (Array.isArray(meta.symbols)) {
+      for (const item of meta.symbols) {
+        if (typeof item === 'string') {
+          const trimmed = item.trim()
+          if (trimmed) {
+            symbols.push(trimmed)
+          }
+        }
+      }
+    }
+
+    // symbolsCsv 逗号分隔形式
+    if (typeof meta.symbolsCsv === 'string' && meta.symbolsCsv.trim()) {
+      const parts = meta.symbolsCsv
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+      symbols.push(...parts)
+    }
+
+    if (!symbols.length) return []
+    // 去重，统一转为大写便于后续比较
+    return Array.from(new Set(symbols.map(s => s.toUpperCase())))
   }
 
   /**
@@ -278,14 +385,18 @@ export class BbxCryptoStockQuotesJob implements DataPullJob {
   /**
    * 调用 BBX API 获取报价数据
    */
-  private async fetchQuotesJson(url: URL, apiKey: string): Promise<BbxApiResponse> {
+  private async fetchQuotesJson(url: URL, signer: BbxSigner): Promise<BbxApiResponse> {
+    // 生成 BBX 签名认证参数并添加到 URL 查询参数
+    const authParams = signer.generateAuthHeaders()
+    url.searchParams.set('AccessKeyId', authParams.AccessKeyId)
+    url.searchParams.set('SignatureNonce', authParams.SignatureNonce)
+    url.searchParams.set('Timestamp', authParams.Timestamp)
+    url.searchParams.set('Signature', authParams.Signature)
+
     const requestInit: RequestInit = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 根据实际的 BBX API 文档调整 header 名称
-        'Authorization': `Bearer ${apiKey}`,
-        'X-API-KEY': apiKey,
       },
     }
 

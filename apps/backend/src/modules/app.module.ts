@@ -18,7 +18,9 @@ import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
 import { PrismaModule } from '../prisma/prisma.module'
 import { AdminModule } from './admin/admin.module'
+import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated-liquidation.module'
 import { AuthModule } from './auth/auth.module'
+import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
 import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
@@ -26,10 +28,12 @@ import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heat
 import { MarketsModule } from './markets/markets.module'
 import { OpenInterestModule } from './open-interest/open-interest.module'
 import { OrderbookConfigModule } from './orderbook-config/orderbook-config.module'
+import { PolymarketModule } from './polymarket/polymarket.module'
 import { SettingsModule } from './settings/settings.module'
 import { TradesConfigModule } from './trades-config/trades-config.module'
 import { UserModule } from './user/user.module'
 import { WhaleAlertModule } from './whale-alert/whale-alert.module'
+import { WhaleHoldingsModule } from './whale-holdings/whale-holdings.module'
 import { WhaleTrackingModule } from './whale-tracking/whale-tracking.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
@@ -89,12 +93,16 @@ const currentEnv = defaultEnvAccessor.appEnv()
     DataSyncModule,
     MarketsModule,
     LiquidationHeatmapModule,
+    AggregatedLiquidationModule,
     OrderbookConfigModule,
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
+    PolymarketModule,
     WhaleAlertModule,
+    CryptoStockQuotesModule,
     WhaleTrackingModule,
+    WhaleHoldingsModule,
   ],
   providers: [
     {

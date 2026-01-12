@@ -7,18 +7,209 @@ import { logger } from './logger.js'
 import { confirmManager } from './confirm.js'
 //
 
-const MANUAL_SETUP_STEPS = [
-  { description: '安装依赖', command: 'pnpm install' },
-  { description: '构建后端', command: './scripts/dx build backend --dev' },
-  { description: '构建用户前端', command: './scripts/dx build front --dev' },
-  { description: '构建管理后台', command: './scripts/dx build admin --dev' },
+const DEFAULT_COPY_TARGETS = [
+  {
+    path: 'node_modules',
+    label: '根依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'apps/backend/node_modules',
+    label: '后端依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'apps/front/node_modules',
+    label: '用户前端依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'apps/admin-front/node_modules',
+    label: '管理后台依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'packages/shared/node_modules',
+    label: '共享包依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'apps/sdk/node_modules',
+    label: 'SDK 依赖 node_modules',
+    required: false,
+    category: 'deps',
+    linkable: false,
+    skip: true,
+  },
+  {
+    path: 'apps/sdk/src',
+    label: 'SDK 生成源码',
+    required: false,
+    category: 'sdk',
+    linkable: false,
+  },
+  {
+    path: 'apps/sdk/dist',
+    label: 'SDK 构建输出',
+    required: false,
+    category: 'build',
+    linkable: true,
+    copyMode: 'archive',
+  },
 ]
+
+const shellEscape = value => {
+  if (!value) return '""'
+  return `"${value.replace(/(["\\$`])/g, '\\$1')}"`
+}
+
+const ensureTrailingSlash = value => (value.endsWith('/') ? value : `${value}/`)
 
 class WorktreeManager {
   constructor() {
     this.repoRoot = process.cwd()
     this.baseDir = path.resolve(this.repoRoot, '..')
-    this.prefix = 'ai_monorepo_issue_'
+    const rootFolderName = path.basename(this.repoRoot)
+    this.prefix = `${rootFolderName}_issue_`
+    this.assetCopyTargets = DEFAULT_COPY_TARGETS
+    const rsyncInfo = this.detectRsync()
+    this.hasFastCopy = rsyncInfo.available
+    this.rsyncSupportsProgress2 = rsyncInfo.supportsProgress2
+    this.hasTar = this.detectTar()
+  }
+
+  detectRsync() {
+    try {
+      const output = execSync('rsync --version', { encoding: 'utf8' })
+      const versionMatch = output.match(/version\s+(\d+)\.(\d+)\.(\d+)/i)
+      if (!versionMatch) {
+        return { available: true, supportsProgress2: false }
+      }
+      const [, major, minor] = versionMatch.map(Number)
+      const supportsProgress2 = major > 3 || (major === 3 && minor >= 1)
+      return { available: true, supportsProgress2 }
+    } catch {
+      return { available: false, supportsProgress2: false }
+    }
+  }
+
+  detectTar() {
+    try {
+      execSync('tar --version', { stdio: 'ignore' })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  copyDirectoryWithNode(sourcePath, destinationPath) {
+    if (fs.existsSync(destinationPath)) {
+      fs.rmSync(destinationPath, { recursive: true, force: true })
+    }
+    fs.mkdirSync(destinationPath, { recursive: true })
+    fs.cpSync(sourcePath, destinationPath, { recursive: true, force: true })
+  }
+
+  copyDirectoryWithRsync(sourcePath, destinationPath) {
+    fs.mkdirSync(destinationPath, { recursive: true })
+    const sourceArg = shellEscape(ensureTrailingSlash(sourcePath))
+    const destinationArg = shellEscape(ensureTrailingSlash(destinationPath))
+    const progressFlag = this.rsyncSupportsProgress2 ? '--info=progress2' : '--progress'
+    const command = `rsync -a --delete --human-readable ${progressFlag} ${sourceArg} ${destinationArg}`
+    execSync(command, { stdio: 'inherit' })
+  }
+
+  copyDirectoryWithTar(sourcePath, destinationPath) {
+    const sourceParent = path.dirname(sourcePath)
+    const sourceName = path.basename(sourcePath)
+    const destinationParent = path.dirname(destinationPath)
+
+    if (fs.existsSync(destinationPath)) {
+      fs.rmSync(destinationPath, { recursive: true, force: true })
+    }
+    fs.mkdirSync(destinationParent, { recursive: true })
+
+    const sourceParentArg = shellEscape(sourceParent)
+    const sourceNameArg = shellEscape(sourceName)
+    const destinationParentArg = shellEscape(destinationParent)
+    const command = `tar -C ${sourceParentArg} -cf - ${sourceNameArg} | tar -C ${destinationParentArg} -xf -`
+    execSync(command, { stdio: 'inherit' })
+  }
+
+  copyFile(sourcePath, destinationPath) {
+    const dir = path.dirname(destinationPath)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.copyFileSync(sourcePath, destinationPath)
+  }
+
+  linkAsset(sourcePath, destinationPath) {
+    const stats = fs.lstatSync(sourcePath)
+
+    if (fs.existsSync(destinationPath)) {
+      fs.rmSync(destinationPath, { recursive: true, force: true })
+    }
+
+    const parentDir = path.dirname(destinationPath)
+    fs.mkdirSync(parentDir, { recursive: true })
+
+    const isDir = stats.isDirectory()
+    const linkType = this.getSymlinkType(isDir)
+    fs.symlinkSync(sourcePath, destinationPath, linkType)
+
+    return isDir ? 'link-dir' : 'link-file'
+  }
+
+  getSymlinkType(isDir) {
+    if (process.platform === 'win32') {
+      return isDir ? 'junction' : 'file'
+    }
+    return isDir ? 'dir' : 'file'
+  }
+
+  copyAsset(sourcePath, destinationPath, target = {}) {
+    const stats = fs.lstatSync(sourcePath)
+    const copyMode = target.copyMode || 'auto'
+
+    if (stats.isDirectory()) {
+      if (copyMode === 'archive' && this.hasTar) {
+        try {
+          this.copyDirectoryWithTar(sourcePath, destinationPath)
+          return 'tar'
+        } catch (error) {
+          logger.warn(`⚠️  tar 复制失败，回退到常规复制: ${error.message}`)
+        }
+      }
+
+      if (this.hasFastCopy) {
+        try {
+          this.copyDirectoryWithRsync(sourcePath, destinationPath)
+          return 'rsync'
+        } catch (error) {
+          this.hasFastCopy = false
+          logger.warn(`⚠️  rsync 复制失败，回退到 Node.js 复制: ${error.message}`)
+        }
+      }
+      this.copyDirectoryWithNode(sourcePath, destinationPath)
+      return 'node'
+    }
+
+    this.copyFile(sourcePath, destinationPath)
+    return 'file'
   }
 
   // 获取 worktree 路径
@@ -31,10 +222,12 @@ class WorktreeManager {
     const worktreePath = this.getWorktreePath(issueNumber)
     const branchName = `issue-${issueNumber}`
     const baseBranch = (options.baseBranch || 'main').trim()
+    const linkStrategy = options.linkStrategy || 'deps'
 
     logger.info(`\n${'='.repeat(50)}`)
     logger.info(`🔧 创建 Worktree: ${branchName}`)
     logger.info(`基础分支: ${baseBranch}`)
+    logger.info('模式: 不再自动同步 node_modules，请在新 worktree 中自行安装依赖（例如: pnpm install）')
     logger.info('='.repeat(50))
 
     // 检查目标目录是否存在
@@ -102,8 +295,9 @@ class WorktreeManager {
       logger.step('复制环境变量文件到新 worktree...')
       await this.copyEnvFiles(worktreePath)
 
-      // 提示后续需要手动安装依赖
-      this.printManualSetupInstructions(worktreePath)
+      // 同步主目录中的依赖与构建产物
+      logger.info('\n📦 同步依赖与构建产物...')
+      await this.buildWorktree(worktreePath, { linkStrategy })
 
       // 提供快速切换命令
       logger.info('\n快速切换到新 worktree:')
@@ -167,15 +361,207 @@ class WorktreeManager {
     }
   }
 
-  printManualSetupInstructions(worktreePath) {
-    logger.info('\n📋 手动初始化步骤')
-    logger.info('该命令不再自动软链接 node_modules 或复制任何构建产物。')
-    logger.info('请进入新 worktree 后按需执行以下操作:')
-    logger.info(`  $ cd ${worktreePath}`)
-    MANUAL_SETUP_STEPS.forEach(step => {
-      logger.info(`  $ ${step.command}  —— ${step.description}`)
+  getGitRoot() {
+    try {
+      const output = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim()
+      return output ? path.resolve(output) : null
+    } catch {
+      return null
+    }
+  }
+
+  getMainWorktreeRoot() {
+    try {
+      const output = execSync('git rev-parse --git-common-dir', { encoding: 'utf8' }).trim()
+      if (!output) return null
+      const commonDir = path.isAbsolute(output) ? output : path.resolve(process.cwd(), output)
+      return path.dirname(commonDir)
+    } catch {
+      return null
+    }
+  }
+
+  syncEnvFilesFromMainRoot(options = {}) {
+    const { onlyMissing = true } = options
+    const currentRoot = this.getGitRoot()
+    if (!currentRoot) return false
+
+    const mainRoot = this.getMainWorktreeRoot()
+    if (!mainRoot) return false
+    if (currentRoot === mainRoot) return false
+
+    let entries = []
+    try {
+      entries = fs.readdirSync(mainRoot, { withFileTypes: true })
+    } catch (error) {
+      logger.warn(`读取主工作区目录失败: ${error.message}`)
+      return false
+    }
+
+    const envFiles = entries
+      .filter(entry => entry.isFile())
+      .map(entry => entry.name)
+      .filter(name => name.startsWith('.env.') && name.endsWith('.local') && name !== '.env.local')
+
+    if (envFiles.length === 0) return false
+
+    let copiedCount = 0
+    let skippedCount = 0
+    const copiedFiles = []
+    const skippedFiles = []
+
+    logger.step('检测到 worktree，自动同步 .env.*.local 文件...')
+
+    for (const envFile of envFiles) {
+      const sourcePath = path.join(mainRoot, envFile)
+      const targetPath = path.join(currentRoot, envFile)
+
+      if (onlyMissing && fs.existsSync(targetPath)) {
+        skippedCount++
+        skippedFiles.push(envFile)
+        continue
+      }
+
+      try {
+        fs.copyFileSync(sourcePath, targetPath)
+        copiedCount++
+        copiedFiles.push(envFile)
+      } catch (error) {
+        logger.warn(`复制 ${envFile} 失败: ${error.message}`)
+      }
+    }
+
+    if (copiedCount > 0) {
+      logger.success(`已同步 ${copiedCount} 个 env 文件到当前 worktree: ${copiedFiles.join(', ')}`)
+    }
+    if (skippedCount > 0) {
+      logger.info(`已跳过 ${skippedCount} 个已存在的 env 文件: ${skippedFiles.join(', ')}`)
+    }
+
+    return copiedCount > 0
+  }
+
+  // 判定当前资源是否允许按照指定策略创建软链接
+  shouldLinkTarget(target, linkStrategy) {
+    if (!target?.linkable) return false
+    if (linkStrategy === 'all') return true
+    if (linkStrategy === 'deps') return target?.category === 'deps'
+    return false
+  }
+
+  // 同步 worktree 所需依赖与构建产物
+  async buildWorktree(worktreePath, options = {}) {
+    const linkStrategy = options.linkStrategy || 'deps'
+
+    const targets = this.assetCopyTargets
+    const totalTargets = targets.length
+
+    logger.info(`\n${'='.repeat(50)}`)
+    logger.info('📦 同步 Worktree 依赖与构建产物')
+    logger.info('说明: 所有 node_modules 目录已不再自动同步，请在新 worktree 中手动安装依赖。')
+    if (linkStrategy === 'all') {
+      logger.info('模式: 仅非依赖型可缓存目录仍可能使用软链接')
+    }
+    logger.info('='.repeat(50))
+
+    const summary = {
+      copied: [],
+      linked: [],
+      skipped: [],
+      failed: [],
+    }
+
+    targets.forEach((target, index) => {
+      const label = target.label || target.path
+      const sourcePath = path.join(this.repoRoot, target.path)
+      const destinationPath = path.join(worktreePath, target.path)
+      const required = Boolean(target.required)
+      const shouldLink = this.shouldLinkTarget(target, linkStrategy)
+      const actionVerb = shouldLink ? '链接' : '复制'
+
+      // node_modules 等显式跳过的目标：不再做任何同步，只给一条提示
+      if (target.skip) {
+        logger.progress(`[${index + 1}/${totalTargets}] 跳过 ${label}`)
+        logger.progressDone()
+        logger.info(`  📝 ${label} 已不再自动同步，请在新 worktree 中自行安装对应依赖。`)
+        summary.skipped.push({ label, reason: 'skip-config', required: false })
+        return
+      }
+
+      if (!fs.existsSync(sourcePath)) {
+        logger.progress(`[${index + 1}/${totalTargets}] 检查 ${label}`)
+        logger.progressDone()
+        logger.info(`  ⚠️  源路径不存在，跳过 ${label}`)
+        summary.skipped.push({ label, reason: 'missing', required })
+        if (required) {
+          summary.failed.push({ label, reason: '源路径不存在', required: true })
+        }
+        return
+      }
+
+      logger.progress(`[${index + 1}/${totalTargets}] ${actionVerb} ${label}`)
+      try {
+        const method = shouldLink
+          ? this.linkAsset(sourcePath, destinationPath)
+          : this.copyAsset(sourcePath, destinationPath, target)
+        const methodNote = shouldLink
+          ? '（软链接）'
+          : method === 'rsync'
+            ? '（rsync）'
+            : method === 'tar'
+              ? '（tar 打包传输）'
+              : method === 'node'
+                ? '（Node.js 复制）'
+                : ''
+
+        logger.info(`  ✅ 已${actionVerb} ${label}${methodNote}`)
+        if (shouldLink) {
+          summary.linked.push(label)
+        } else {
+          summary.copied.push(label)
+        }
+      } catch (error) {
+        summary.failed.push({ label, reason: error.message, required })
+        logger.error(`  ❌ ${actionVerb} ${label} 失败: ${error.message}`)
+      } finally {
+        logger.progressDone()
+      }
     })
-    logger.info('根据需求运行 ./scripts/dx start|build|test 等命令完成后续工作。')
+
+    if (summary.linked.length > 0) {
+      logger.info(`🔗 已软链接 ${summary.linked.length} 项资源`)
+    }
+
+    if (summary.copied.length > 0) {
+      logger.info(`📁 已复制 ${summary.copied.length} 项资源`)
+    }
+
+    if (summary.skipped.length > 0) {
+      const skippedLabels = summary.skipped.map(item => item.label).join(', ')
+      logger.info(`📝 跳过: ${skippedLabels}`)
+    }
+
+    if (summary.failed.length > 0) {
+      const requiredFailed = summary.failed.filter(item => item.required)
+      if (requiredFailed.length > 0) {
+        logger.error('❌ 必需资源同步失败，请先在主目录完成依赖安装或构建后再尝试创建 worktree。')
+        requiredFailed.forEach(item => {
+          logger.error(`    - ${item.label}: ${item.reason}`)
+        })
+        process.exitCode = 1
+      }
+
+      const optionalFailed = summary.failed.filter(item => !item.required)
+      if (optionalFailed.length > 0) {
+        logger.warn('⚠️  部分非必需资源同步失败，可在新 worktree 中按需重新构建。')
+        optionalFailed.forEach(item => {
+          logger.warn(`    - ${item.label}: ${item.reason}`)
+        })
+      }
+    } else {
+      const syncedCount = summary.copied.length + summary.linked.length
+      logger.success(`✅ Worktree 依赖与构建产物同步完成（同步 ${syncedCount} 项）`)
+    }
   }
 
   // 删除 worktree（支持批量删除）
@@ -484,7 +870,7 @@ class WorktreeManager {
 
       for (const wt of issueWorktrees) {
         // 提取 issue 编号
-        const match = wt.path.match(/ai_monorepo_issue_(\d+)/)
+        const match = wt.path.match(new RegExp(`${this.prefix}(\\d+)`))
         const issueNum = match ? match[1] : '?'
 
         // 检查状态
@@ -604,7 +990,7 @@ class WorktreeManager {
         }
 
         // 兜底：基于路径识别（使用更严格的正则）
-        const pathMatch = path.basename(wt.path).match(/^ai_monorepo_issue_(\d+)$/)
+        const pathMatch = path.basename(wt.path).match(new RegExp(`^${this.prefix}(\\d+)$`))
         if (pathMatch && pathMatch[1]) {
           issueNumbers.push(pathMatch[1])
         }

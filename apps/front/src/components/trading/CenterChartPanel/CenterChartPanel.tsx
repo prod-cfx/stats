@@ -24,9 +24,9 @@ export const CenterChartPanel = ({
   isAggregated, 
   setIsAggregated, 
   selectedExchange, 
-  setSelectedExchange,
-  symbol,
-  marketType,
+  setSelectedExchange, 
+  symbol, 
+  marketType, 
   variant = 'default'
 }: CenterChartPanelProps) => {
   const { t } = useTranslation();
@@ -104,6 +104,7 @@ export const CenterChartPanel = ({
           {timeframes.map((tf) => (
             <button
               key={tf}
+              type="button"
               onClick={() => setInterval(tf)}
               className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} transition-colors hover:text-[#c9d1d9] ${
                 interval === tf ? 'bg-[#374151] text-[#c9d1d9] font-bold' : 'text-[#8b949e]'
@@ -113,14 +114,16 @@ export const CenterChartPanel = ({
             </button>
           ))}
           <div className="h-4 w-[1px] bg-[#30363d] mx-1" />
-          <button 
+          <button
+            type="button"
             className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[#8b949e] flex items-center gap-1 hover:text-[#c9d1d9]`}
             onClick={() => setIsIndicatorModalOpen(true)}
           >
             <span>{t('chart.toolbar.indicators')}</span>
             <ChevronDown className="w-3 h-3" />
           </button>
-          <button 
+          <button
+            type="button"
             className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[#8b949e] flex items-center gap-1 hover:text-[#c9d1d9]`}
             onClick={() => setIsIndicatorModalOpen(true)}
           >
@@ -133,6 +136,7 @@ export const CenterChartPanel = ({
           <div className={`flex items-center gap-2 ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
             {/* Toggle Switch */}
             <button
+              type="button"
               onClick={() => {
                 setIsAggregated(!isAggregated);
                 if (!isAggregated) {
@@ -157,6 +161,7 @@ export const CenterChartPanel = ({
             ) : (
               <div className="relative" ref={exchangeMenuRef}>
                 <button
+                  type="button"
                   onClick={() => setIsExchangeMenuOpen(!isExchangeMenuOpen)}
                   className="bg-[#1f2937] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#374151] transition-colors whitespace-nowrap"
                 >
@@ -168,6 +173,7 @@ export const CenterChartPanel = ({
                 {isExchangeMenuOpen && (
                   <div className="absolute top-full right-0 mt-1 w-[120px] bg-[#161b22] border border-[#30363d] rounded shadow-lg z-50 py-1">
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedExchange('binance');
                         setIsExchangeMenuOpen(false);
@@ -181,6 +187,7 @@ export const CenterChartPanel = ({
                       </span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedExchange('okx');
                         setIsExchangeMenuOpen(false);
@@ -199,13 +206,13 @@ export const CenterChartPanel = ({
             )}
           </div>
           <div className="h-4 w-[1px] bg-[#30363d]" />
-          <button className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
             <BarChart2 className="w-4 h-4" />
           </button>
-          <button className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
             <Eye className="w-4 h-4" />
           </button>
-          <button className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
             <Settings className="w-4 h-4" />
           </button>
         </div>
@@ -238,7 +245,7 @@ export const CenterChartPanel = ({
             {/* Modal Header */}
             <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[#30363d]`}>
               <span className={`text-[#c9d1d9] font-bold ${isCompact ? 'text-xs' : 'text-sm'}`}>{t('chart.modal.featured')}</span>
-              <button onClick={() => setIsIndicatorModalOpen(false)} className="text-[#8b949e] hover:text-[#c9d1d9]">
+              <button type="button" onClick={() => setIsIndicatorModalOpen(false)} className="text-[#8b949e] hover:text-[#c9d1d9]">
                 <X className="w-5 h-5" />
               </button>
             </div>

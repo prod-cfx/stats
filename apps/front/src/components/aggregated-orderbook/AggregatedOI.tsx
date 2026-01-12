@@ -373,6 +373,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('oiAsset')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -381,6 +382,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('oiUsd')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -389,6 +391,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('ratioPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -397,6 +400,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('change1hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -405,6 +409,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('change4hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -413,6 +418,7 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
                 </th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                   <button 
+                    type="button"
                     onClick={() => handleSort('change24hPct')}
                     className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
                   >
@@ -459,4 +465,3 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
     </div>
   );
 };
-

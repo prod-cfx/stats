@@ -79,7 +79,8 @@ export const PnLTrendCard = () => {
         <div className="flex items-center gap-2">
           {/* Time Range Dropdown */}
           <div className="relative">
-            <button 
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'time' ? null : 'time'); }}
               className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'time' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
@@ -89,7 +90,8 @@ export const PnLTrendCard = () => {
             {dropdownOpen === 'time' && (
               <div className="absolute right-0 mt-2 w-24 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['1d', '1w', '1m', 'all'] as const).map(opt => (
-                  <button 
+                  <button
+                    type="button"
                     key={opt}
                     onClick={() => { setTimeRange(opt); setDropdownOpen(null); }}
                     className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${timeRange === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}
@@ -103,7 +105,8 @@ export const PnLTrendCard = () => {
 
           {/* Contract Type Dropdown */}
           <div className="relative">
-            <button 
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'contract' ? null : 'contract'); }}
               className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'contract' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
@@ -113,7 +116,8 @@ export const PnLTrendCard = () => {
             {dropdownOpen === 'contract' && (
               <div className="absolute right-0 mt-2 w-36 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['all', 'perpOnly'] as const).map(opt => (
-                  <button 
+                  <button
+                    type="button"
                     key={opt}
                     onClick={() => { setContractType(opt); setDropdownOpen(null); }}
                     className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${contractType === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}
@@ -127,7 +131,8 @@ export const PnLTrendCard = () => {
 
           {/* PnL Type Dropdown */}
           <div className="relative">
-            <button 
+            <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'pnl' ? null : 'pnl'); }}
               className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'pnl' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
@@ -137,7 +142,8 @@ export const PnLTrendCard = () => {
             {dropdownOpen === 'pnl' && (
               <div className="absolute right-0 mt-2 w-28 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['accountValue', 'totalPnl'] as const).map(opt => (
-                  <button 
+                  <button
+                    type="button"
                     key={opt}
                     onClick={() => { setPnlType(opt); setDropdownOpen(null); }}
                     className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${pnlType === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}

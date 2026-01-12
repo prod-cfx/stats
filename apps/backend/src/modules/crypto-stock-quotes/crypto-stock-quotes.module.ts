@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { AuthModule } from '../auth/auth.module'
+import { CryptoStockQuotesController } from './crypto-stock-quotes.controller'
 import { CryptoStockQuotesRepository } from './crypto-stock-quotes.repository'
+import { CryptoStockQuotesService } from './crypto-stock-quotes.service'
 
 /**
  * 加密股票报价模块
@@ -10,9 +13,10 @@ import { CryptoStockQuotesRepository } from './crypto-stock-quotes.repository'
  * - 支持从多个数据源（如 BBX）获取数据
  */
 @Module({
-  imports: [PrismaModule],
-  providers: [CryptoStockQuotesRepository],
-  exports: [CryptoStockQuotesRepository],
+  imports: [PrismaModule, AuthModule],
+  providers: [CryptoStockQuotesRepository, CryptoStockQuotesService],
+  controllers: [CryptoStockQuotesController],
+  exports: [CryptoStockQuotesRepository, CryptoStockQuotesService],
 })
 export class CryptoStockQuotesModule {}
 

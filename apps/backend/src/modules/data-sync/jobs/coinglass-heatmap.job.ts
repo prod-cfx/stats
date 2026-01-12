@@ -45,9 +45,10 @@ export class CoinglassHeatmapJob implements DataPullJob {
       modelType === 'MODEL1' ? 'model1' : modelType === 'MODEL2' ? 'model2' : 'model3'
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
+    const rawEndpoint = this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT')
+    // 使用 || 确保空字符串也回退到默认值；参考 Coinglass v4 文档
     const baseEndpoint =
-      this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT') ??
-      // 参考 Coinglass v4 文档：清算热力图，具体模型由路径后缀 model1/model2/model3 区分
+      rawEndpoint?.trim() ||
       'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap'
 
     if (!apiKey) {

@@ -113,6 +113,7 @@ type Point2D = [number, number]
  * - Smooth, C1-continuous curve through all points
  * - Works well for chart-like polylines
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function smoothPath(points: Point2D[]): string {
   if (!points || points.length < 2) return ''
   const p = points
@@ -793,6 +794,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
     chart.resize();
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useImperativeHandle(ref, () => ({ refresh: apply }), [mode, data, currentPrice, t, getPriceToY, overlayWidth, overlayOpacity]);
 
   useEffect(() => {

@@ -136,6 +136,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
       {/* Left: Configuration */}
       <div className="w-1/3 border-r border-[#30363d] p-6 overflow-y-auto">
         <button
+          type="button"
           onClick={onBack}
           className="flex items-center gap-2 text-[#8b949e] hover:text-white mb-6 transition-colors"
         >
@@ -187,6 +188,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           <div className="flex gap-2">
             {(Object.keys(sizePresets) as UnitSize[]).map((size) => (
               <button
+                type="button"
                 key={size}
                 onClick={() => setSelectedSize(size)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -233,6 +235,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         {/* Save Button */}
         <div className="border-t border-[#30363d] p-6">
           <button
+            type="button"
             onClick={() => onSave({ ...config, size: selectedSize }, layout)}
             className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-medium py-3 rounded-lg transition-all shadow-lg shadow-primary/20 active:scale-95"
           >

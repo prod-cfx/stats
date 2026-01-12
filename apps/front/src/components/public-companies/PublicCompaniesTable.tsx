@@ -1,11 +1,16 @@
 'use client';
 
+import type { CryptoStockQuoteLatest } from '@/lib/api';
+
 import { ArrowUpDown, ChevronDown, ChevronUp, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
-import { useMockData } from '@/hooks/use-mock-data';
+import { useAsync } from '@/hooks/use-async';
+import { fetchCryptoStockQuotesLatest } from '@/lib/api';
+import { AuthenticationError } from '@/lib/errors';
+import { formatNumber } from '@/lib/formatters';
 
 interface CompanyData {
   asset: string;
@@ -25,7 +30,8 @@ interface CompanyData {
   infoParagraphs?: string[];
 }
 
-const initialCompanyData: CompanyData[] = [
+// 公开页面的静态示例数据：在未登录或接口不可用时作为兜底展示
+const STATIC_COMPANY_DATA: CompanyData[] = [
   {
     asset: 'PYUSD',
     assetLogo: 'https://cryptologos.cc/logos/paypal-usd-pyusd-logo.png?v=040',
@@ -95,7 +101,7 @@ const initialCompanyData: CompanyData[] = [
     change24h: '+1.42%',
     change1d: '-0.88%',
     change7d: '+4.15%',
-  }
+  },
 ];
 
 type SortField = keyof Pick<
@@ -118,6 +124,26 @@ export const PublicCompaniesTable = () => {
   const [sortField, setSortField] = useState<SortField>('marketCap');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const [isAuthError, setIsAuthError] = useState(false);
+
+  const {
+    data: quotes,
+    loading,
+    error,
+    execute: reload,
+  } = useAsync<CryptoStockQuoteLatest[]>(
+    async () => fetchCryptoStockQuotesLatest(),
+    {
+      onSuccess: () => {
+        setIsAuthError(false);
+      },
+      onError: err => {
+        if (err instanceof AuthenticationError) {
+          setIsAuthError(true);
+        }
+      },
+    },
+  );
 
   // Debounce search
   useEffect(() => {
@@ -127,19 +153,75 @@ export const PublicCompaniesTable = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const { data: companies, loading, error, reload } = useMockData(
-    async () => {
-      return initialCompanyData.filter(c => 
-        c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
-        c.ticker.toLowerCase().includes(debouncedSearch.toLowerCase())
-      );
-    },
-    [debouncedSearch]
-  );
+  const companies: CompanyData[] = useMemo(() => {
+    if (isAuthError) {
+      return STATIC_COMPANY_DATA;
+    }
+
+    if (!quotes) return [];
+
+    return quotes.map(q => {
+      // 全量依赖后端返回的扩展字段；缺失时在 UI 使用中性占位符，避免在界面展示 TODO
+      const asset = q.assetSymbol ?? q.symbol;
+      const assetLogo = q.assetLogoUrl ?? '/images/icon-default.svg';
+      const logo = q.companyLogoUrl ?? q.assetLogoUrl ?? '/images/icon-default.svg';
+      const name = q.name ?? q.symbol;
+      const exchange = (() => {
+        if (!q.exchange) return '-';
+        // 中文环境：前缀“美股-”，英文环境直接展示原始交易所代码
+        return i18n.language === 'en' ? q.exchange : `美股-${q.exchange}`;
+      })();
+
+      const priceNumber = Number.parseFloat(q.price);
+      const sharePrice =
+        Number.isFinite(priceNumber) && priceNumber > 0
+          ? `$${formatNumber(priceNumber, 2)}`
+          : '-';
+
+      const marketCap =
+        q.marketCap != null
+          ? `$${formatNumber(q.marketCap, 0)}`
+          : '-';
+
+      const pctRaw = q.priceChangePercent != null ? Number.parseFloat(q.priceChangePercent) : Number.NaN;
+      const pctString = Number.isFinite(pctRaw)
+        ? `${pctRaw >= 0 ? '+' : ''}${pctRaw.toFixed(2)}%`
+        : '-';
+
+      return {
+        asset,
+        assetLogo,
+        name,
+        ticker: q.symbol,
+        exchange,
+        logo,
+        mNav: q.mNav ?? '-',
+        marketCap,
+        holdingsValue: q.holdingsValue ?? '-',
+        holdingsAmount: q.holdingsAmount ?? '-',
+        sharePrice,
+        change24h: pctString,
+        change1d: pctString,
+        // 暂无真实 7 日涨跌幅数据，这里保留为占位符，后端补充后再改为真实字段映射
+        change7d: '-',
+        infoParagraphs: q.infoParagraphs,
+      };
+    });
+  }, [i18n.language, isAuthError, quotes]);
+
+  const filteredCompanies = useMemo(() => {
+    if (!companies.length) return [];
+    const keyword = debouncedSearch.trim().toLowerCase();
+    if (!keyword) return companies;
+    return companies.filter(c =>
+      c.name.toLowerCase().includes(keyword) ||
+      c.ticker.toLowerCase().includes(keyword),
+    );
+  }, [companies, debouncedSearch]);
 
   const sortedData = useMemo(() => {
-    if (!companies) return [];
-    if (!sortField || !sortDirection) return companies;
+    if (!filteredCompanies.length) return [];
+    if (!sortField || !sortDirection) return filteredCompanies;
 
     const parseCompactNumber = (raw: string): number | null => {
       const val = raw.trim();
@@ -225,7 +307,7 @@ export const PublicCompaniesTable = () => {
       return parseCompactNumber(raw);
     };
 
-    return [...companies].sort((a, b) => {
+    return [...filteredCompanies].sort((a, b) => {
       const aVal = sortValueOf(a, sortField);
       const bVal = sortValueOf(b, sortField);
       // Always push missing/invalid values to the bottom, regardless of sort direction.
@@ -237,7 +319,7 @@ export const PublicCompaniesTable = () => {
 
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [companies, sortField, sortDirection]);
+  }, [filteredCompanies, sortField, sortDirection]);
 
   const renderValueWithColor = (val: string) => {
     const isPositive = val.startsWith('+');
@@ -272,12 +354,12 @@ export const PublicCompaniesTable = () => {
       : <ChevronUp className="w-3 h-3 text-primary" />;
   };
 
-  const formatExchange = (exchange: string) => {
+  const formatExchange = React.useCallback((exchange: string) => {
     if (i18n.language !== 'en') return exchange;
     if (exchange === '美股-NASDAQ') return 'US-NASDAQ';
     if (exchange === '美股-NYSE') return 'US-NYSE';
     return exchange;
-  };
+  }, [i18n.language]);
 
   const selectedCompanyInfoParagraphs = useMemo(() => {
     if (!selectedCompany) return [];
@@ -315,8 +397,26 @@ export const PublicCompaniesTable = () => {
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
-        <LoadingState isLoading={loading} error={error} onRetry={reload} isEmpty={!loading && sortedData.length === 0}>
-          <div className="overflow-x-auto animate-in fade-in duration-500">
+        {isAuthError && (
+          <div className="px-6 pt-6 pb-2 border-b border-[#30363d] bg-[#0d1117]/60 text-center space-y-2">
+            <h3 className="text-base font-semibold text-white">
+              {t('publicCompanies.authRequiredTitle', '登录后可查看实时币股榜单')}
+            </h3>
+            <p className="text-xs text-[#8b949e] max-w-2xl mx-auto">
+              {t(
+                'publicCompanies.authRequiredDescription',
+                '当前表格展示的是示例数据，登录后将自动切换为来自交易所的实时币股持仓与估值。',
+              )}
+            </p>
+          </div>
+        )}
+        <LoadingState
+          isLoading={loading && !isAuthError}
+          error={!isAuthError && !!error}
+          onRetry={reload}
+          isEmpty={!loading && sortedData.length === 0}
+        >
+            <div className="overflow-x-auto animate-in fade-in duration-500">
             <table className="w-full border-collapse min-w-[1200px]">
               <thead>
                 <tr className="text-[#8b949e] text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">

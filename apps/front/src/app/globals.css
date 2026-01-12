@@ -34,7 +34,8 @@
 
 :root {
   --color-scheme: light dark;
-  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-sans:
+    Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
   --text-h1-size: 28px;
   --text-h1-line: 36px;
@@ -67,11 +68,12 @@
   .gradient-border-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .gradient-border-hover:hover {
     border-color: transparent;
-    background: linear-gradient(#161b22, #161b22) padding-box,
-                linear-gradient(to bottom right, var(--color-primary), var(--color-secondary)) border-box;
+    background:
+      linear-gradient(#161b22, #161b22) padding-box,
+      linear-gradient(to bottom right, var(--color-primary), var(--color-secondary)) border-box;
     box-shadow: 0 10px 30px -10px rgba(57, 107, 255, 0.3);
     transform: translateY(-2px);
   }
@@ -152,7 +154,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, .h1 {
+h1,
+.h1 {
   font-size: var(--text-h1-size);
   line-height: var(--text-h1-line);
   font-weight: var(--text-h1-weight);
@@ -160,7 +163,8 @@ h1, .h1 {
   margin: 0;
 }
 
-h2, .h2 {
+h2,
+.h2 {
   font-size: var(--text-h2-size);
   line-height: var(--text-h2-line);
   font-weight: var(--text-h2-weight);
@@ -168,27 +172,31 @@ h2, .h2 {
   margin: 0;
 }
 
-h3, .h3 {
+h3,
+.h3 {
   font-size: var(--text-h3-size);
   line-height: var(--text-h3-line);
   font-weight: var(--text-h3-weight);
   margin: 0;
 }
 
-p, .body {
+p,
+.body {
   font-size: var(--text-body-size);
   line-height: var(--text-body-line);
   font-weight: var(--text-body-weight);
   margin: 0;
 }
 
-small, .caption {
+small,
+.caption {
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
   font-weight: var(--text-caption-weight);
 }
 
-label, .label {
+label,
+.label {
   font-size: var(--text-label-size);
   line-height: var(--text-label-line);
   font-weight: var(--text-label-weight);
@@ -208,12 +216,38 @@ table td {
 }
 
 /* 统一字号实用类 */
-.text-h1 { font-size: var(--text-h1-size); line-height: var(--text-h1-line); font-weight: var(--text-h1-weight); letter-spacing: var(--text-h1-letter); }
-.text-h2 { font-size: var(--text-h2-size); line-height: var(--text-h2-line); font-weight: var(--text-h2-weight); letter-spacing: var(--text-h2-letter); }
-.text-h3 { font-size: var(--text-h3-size); line-height: var(--text-h3-line); font-weight: var(--text-h3-weight); }
-.text-body { font-size: var(--text-body-size); line-height: var(--text-body-line); font-weight: var(--text-body-weight); }
-.text-caption { font-size: var(--text-caption-size); line-height: var(--text-caption-line); font-weight: var(--text-caption-weight); }
-.text-label { font-size: var(--text-label-size); line-height: var(--text-label-line); font-weight: var(--text-label-weight); }
+.text-h1 {
+  font-size: var(--text-h1-size);
+  line-height: var(--text-h1-line);
+  font-weight: var(--text-h1-weight);
+  letter-spacing: var(--text-h1-letter);
+}
+.text-h2 {
+  font-size: var(--text-h2-size);
+  line-height: var(--text-h2-line);
+  font-weight: var(--text-h2-weight);
+  letter-spacing: var(--text-h2-letter);
+}
+.text-h3 {
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+.text-body {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: var(--text-body-weight);
+}
+.text-caption {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-caption-weight);
+}
+.text-label {
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
 
 /* 覆盖浏览器的默认链接颜色 */
 a {

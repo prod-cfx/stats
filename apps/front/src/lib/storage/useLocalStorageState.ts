@@ -18,8 +18,10 @@ export function useLocalStorageState<T>(key: string, initial: T) {
   useEffect(() => {
     const existing = safeParse<T>(window.localStorage.getItem(key))
     if (existing !== undefined) {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
       setValue(existing)
     }
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setHydrated(true)
   }, [key])
 

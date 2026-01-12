@@ -34,7 +34,8 @@ export class PolymarketGammaClient {
 
   constructor(private readonly configService: ConfigService) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
-    this.baseUrl = cfg?.gamma.baseUrl ?? 'https://gamma-api.polymarket.com'
+    // 使用 || 确保空字符串也回退到默认值
+    this.baseUrl = cfg?.gamma.baseUrl?.trim() || 'https://gamma-api.polymarket.com'
     this.apiKey = cfg?.gamma.apiKey
     this.timeoutMs = cfg?.gamma.timeoutMs ?? 10_000
     this.maxLimit = cfg?.gamma.maxLimit ?? 200

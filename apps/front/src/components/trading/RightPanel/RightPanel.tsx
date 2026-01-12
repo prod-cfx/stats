@@ -158,9 +158,11 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
   useEffect(() => {
     // When source / symbol / precision changes, sync deterministic initial data immediately (no blank SSR/CSR)
+    /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
     setOrderbook(createDeterministicMock.initialOrderbook);
     setTrades(createDeterministicMock.initialTrades);
     setLoading(false);
+    /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
 
     const interval = setInterval(() => {
       const { basePrice, tick, priceOffset, volumeMultiplier } = createDeterministicMock.meta;

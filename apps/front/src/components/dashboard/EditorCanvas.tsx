@@ -40,6 +40,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
     }
     refresh()
     window.addEventListener('storage', refresh)
+    // eslint-disable-next-line react-web-api/no-leaked-event-listener
     window.addEventListener('coinflux_dashboards_updated', refresh as any)
     return () => {
       window.removeEventListener('storage', refresh)

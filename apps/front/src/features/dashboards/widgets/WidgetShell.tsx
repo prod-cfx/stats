@@ -16,6 +16,7 @@ export function WidgetShell(props: {
         </div>
         {props.onRemove ? (
           <button
+            type="button"
             className="text-[10px] text-white/40 hover:text-white react-draggable-cancel"
             onClick={props.onRemove}
             aria-label="remove-widget"

@@ -39,10 +39,12 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
 
   useEffect(() => {
     if (isOpen) {
+      /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
       setLoading(true);
       setStep('groups')
       setSelectedGroup(null)
       setSelectedItem(null)
+      /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
       const timer = setTimeout(() => setLoading(false), 300);
       return () => clearTimeout(timer);
     }
@@ -111,6 +113,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                 
                 return (
                   <button
+                    type="button"
                     key={group.id}
                     onClick={() => handleSelectGroup(group)}
                     className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 hover:bg-[#21262d] hover:border-primary/50 transition-all group text-left"

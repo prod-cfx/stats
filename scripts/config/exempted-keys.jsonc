@@ -1,32 +1,55 @@
 {
   // 豁免键：这些键在非 *.local 文件中可以使用非占位符值
   "exempted": [
+    // 数据库端口与主机（非敏感，开发/测试环境可直接配置）
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+    // Redis 端口与主机（非敏感）
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_DB",
+
     // Seed 配置（布尔值，非敏感）
     "SEED_INIT_WALLET_BALANCE",
-
-    // 支付回调 URL（公开的回调地址，非敏感）
-    "WGQPAY_NOTIFY_URL",
-    "WGQPAY_RETURN_URL",
 
     // 日志配置（非敏感，允许在 .env.* 设置默认值并可在 .local 覆盖）
     "LOG_CONTEXT_FILTER",
     "LOG_LEVEL",
 
-    // 数据库/Redis 端口与本地联调地址（非敏感）
-    "POSTGRES_PORT",
-    "REDIS_PORT",
-    "POSTGRES_HOST",
-    "REDIS_HOST",
+    // Vercel 部署配置（非敏感，仅 VERCEL_TOKEN 需保密）
+    "VERCEL_ORG_ID",
+    "VERCEL_PROJECT_ID_FRONT",
+    "VERCEL_PROJECT_ID_ADMIN",
 
-    // Redis DB 索引（非敏感）
-    "REDIS_DB",
+    // Metrics 配置（非敏感，仅 PASSWORD 需保密）
+    "METRICS_ENABLED",
+    "METRICS_EXPORTER_TYPE",
+    "METRICS_PROMETHEUS_PORT",
+    "METRICS_PROMETHEUS_ENDPOINT",
+    "METRICS_SERVICE_NAME",
+    "METRICS_REMOTE_WRITE_ENABLED",
+    "METRICS_REMOTE_WRITE_ENDPOINT",
+    "METRICS_REMOTE_WRITE_USERNAME",
+    "METRICS_REMOTE_WRITE_INTERVAL_MS",
 
-    // 前端公开的 API 服务器地址（浏览器可见，非敏感）
+    // 前端公开配置（NEXT_PUBLIC_* 会暴露给浏览器，非敏感）
+    "NEXT_PUBLIC_APP_ENV",
     "NEXT_PUBLIC_API_SERVER_URL",
     "NEXT_PUBLIC_API_BASE_URL",
+    "NEXT_PUBLIC_APP_NAME",
+    "NEXT_PUBLIC_APP_VERSION",
+    "NEXT_PUBLIC_LOG_LEVEL",
+    "NEXT_PUBLIC_DEV_BACKEND_PORT",
 
-    // 应用环境标识（每个环境文件都需要设置对应的真实值）
-    "APP_ENV"
+    // UniAPI 配置（非敏感）
+    "UNIAPI_BASE_URL",
+
+    // Polymarket 配置（非敏感）
+    "POLYMARKET_CATEGORY",
+    "POLYMARKET_TAGS",
+    "POLYMARKET_GAMMA_TIMEOUT_MS",
+    "POLYMARKET_GAMMA_LIMIT",
+    "POLYMARKET_CLOB_TIMEOUT_MS"
   ]
 }
 

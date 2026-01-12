@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
 
@@ -167,9 +167,9 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   };
 
   // Mock data generator based on symbol
-  const getItemsForSymbol = (symbol: string) => {
+  const getItemsForSymbol = useCallback((symbol: string) => {
     const baseAmount = getStableAmount(symbol);
-    
+
     return [
       { name: 'TOTAL', amount: `$${baseAmount.toFixed(2)}B`, percent: 100, color: '#3b82f6' },
       { name: 'MEXC', amount: `$${(baseAmount * 0.28).toFixed(2)}B`, percent: 28.9, color: '#a855f7' },
@@ -184,10 +184,10 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
       { name: 'LBank', amount: `$${(baseAmount * 0.019).toFixed(2)}B`, percent: 1.9, color: '#10b981' },
       { name: 'Lighter', amount: `$${(baseAmount * 0.022).toFixed(2)}B`, percent: 2.2, color: '#0ea5e9' },
     ];
-  };
+  }, []);
 
-  const leftItems = React.useMemo(() => getItemsForSymbol(leftSymbol), [leftSymbol]);
-  const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [rightSymbol]);
+  const leftItems = React.useMemo(() => getItemsForSymbol(leftSymbol), [getItemsForSymbol, leftSymbol]);
+  const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [getItemsForSymbol, rightSymbol]);
 
   return (
     <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>

@@ -54,6 +54,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setMounted(true)
   }, [])
 
@@ -137,6 +138,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const context = useContext(ToastContext)
   if (!context) {

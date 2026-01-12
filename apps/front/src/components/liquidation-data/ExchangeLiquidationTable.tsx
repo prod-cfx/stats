@@ -1,5 +1,6 @@
 'use client';
 
+import type { ExchangeLiquidationResponse } from '@/lib/api';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
@@ -8,6 +9,7 @@ import { LoadingState } from '@/components/ui/loading';
 import { Modal } from '@/components/ui/Modal';
 import { SectionTitle } from '@/components/ui/Typography';
 import { useMockData } from '@/hooks/use-mock-data';
+import { fetchExchangeLiquidation } from '@/lib/api';
 
 type CoinSymbol = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'HYPE';
 
@@ -24,7 +26,7 @@ interface ExchangeData {
   isTotal?: boolean;
 }
 
-type CoinFilter = 'ALL' | CoinSymbol
+type CoinFilter = CoinSymbol
 type TimeFilter = '1h' | '4h' | '12h' | '24h'
 
 const EXCHANGES = [
@@ -46,35 +48,6 @@ const EXCHANGES = [
   },
 ];
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-
-function hashToUnit(str: string): number {
-  // deterministic 0..1 based on string hash
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 2 ** 32;
-}
-
-function timeToHours(timeFilter: TimeFilter): number {
-  switch (timeFilter) {
-    case '1h':
-      return 1;
-    case '4h':
-      return 4;
-    case '12h':
-      return 12;
-    case '24h':
-      return 24;
-    default:
-      return 4;
-  }
-}
-
 interface ExchangeRowRaw {
   exchange: string
   logo: string
@@ -90,7 +63,7 @@ interface ExchangeRowRaw {
 
 export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default' }: { showTitle?: boolean; variant?: 'default' | 'compact' }) => {
   const { t, i18n } = useTranslation();
-  const [coinFilter, setCoinFilter] = useState<CoinFilter>('ALL');
+  const [coinFilter, setCoinFilter] = useState<CoinFilter>('BTC');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('4h');
   const [selectedExchange, setSelectedExchange] = useState<ExchangeRowRaw | null>(null);
 
@@ -100,7 +73,17 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
   const headerTextSize = isCompact ? 'text-[10px]' : 'text-xs';
 
   const selectedCoin = (coinFilter === 'ALL' ? 'ALL' : (coinFilter as CoinSymbol));
-  const hours = useMemo(() => timeToHours(timeFilter), [timeFilter]);
+
+  // Encapsulate filter change to reset selected item
+  const handleCoinChange = (v: CoinFilter) => {
+    setCoinFilter(v);
+    setSelectedExchange(null);
+  };
+
+  const handleTimeChange = (v: TimeFilter) => {
+    setTimeFilter(v);
+    setSelectedExchange(null);
+  };
 
   const currencyFormatter = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -112,115 +95,60 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
     })
   }, [i18n.language])
 
-  const { data: tableDataRaw, loading, error, reload } = useMockData(
+  const { data: tableDataRaw, loading, error, reload } = useMockData<ExchangeRowRaw[] | null>(
     async () => {
-      // Mock dataset: each row has coin metadata and varies by coin + time.
-      const coins: CoinSymbol[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE'];
+      const symbol = selectedCoin
+      const timeframe = timeFilter
 
-      const timeScale = clamp(hours / 4, 0.5, 6); // baseline 4h
+      const response: ExchangeLiquidationResponse = await fetchExchangeLiquidation(symbol, timeframe)
 
-      // Build per-exchange-per-coin records
-      const perCoinRows: Array<{
-        exchange: string
-        logo: string
-        coin: CoinSymbol
-        amountUsd: number
-        longUsd: number
-        shortUsd: number
-        longShare: number
-      }> = [];
-      for (const ex of EXCHANGES) {
-        for (const coin of coins) {
-          // Base in USD (millions), scaled by time filter.
-          const baseMillions = 2 + 12 * hashToUnit(`${ex.exchange}:${coin}`); // 2..14 (M)
-          const volatility = 0.85 + 0.35 * hashToUnit(`${ex.exchange}:${coin}:${hours}`); // 0.85..1.2
-          const amountUsd = baseMillions * 1e6 * timeScale * volatility;
+      const totalRow = response.rows.find(row => row.isTotal)
+      const exchangeRows = response.rows.filter(row => !row.isTotal)
 
-          const longShare = clamp(0.35 + 0.55 * hashToUnit(`${ex.exchange}:${coin}:long:${hours}`), 0.05, 0.95);
-          const longUsd = amountUsd * longShare;
-          const shortUsd = amountUsd - longUsd;
+      const totalAmountUsd =
+        totalRow?.amountUsd ??
+        exchangeRows.reduce((sum, row) => sum + row.amountUsd, 0)
 
-          perCoinRows.push({
-            exchange: ex.exchange,
-            logo: ex.logo,
-            coin,
-            amountUsd,
-            longUsd,
-            shortUsd,
-            longShare,
-          });
-        }
-      }
+      const mappedRows: ExchangeRowRaw[] = response.rows.map(row => {
+        const isTotal = !!row.isTotal
+        const longUsd = row.longUsd
+        const shortUsd = row.shortUsd
+        const amountUsd = row.amountUsd
+        const longShare = typeof row.longShare === 'number'
+          ? row.longShare
+          : amountUsd > 0
+            ? longUsd / amountUsd
+            : 0
 
-      // Filter by coin, or aggregate "ALL" across coins.
-      const internalRows: Array<Omit<ExchangeRowRaw, 'ratio'>> = selectedCoin === 'ALL'
-        ? EXCHANGES.map(ex => {
-          const rows = perCoinRows.filter(r => r.exchange === ex.exchange)
-          const amountUsd = rows.reduce((acc, r) => acc + r.amountUsd, 0)
-          const longUsd = rows.reduce((acc, r) => acc + r.longUsd, 0)
-          const shortUsd = rows.reduce((acc, r) => acc + r.shortUsd, 0)
-          const longShare = amountUsd === 0 ? 0 : longUsd / amountUsd
-          return {
-            exchange: ex.exchange,
-            logo: ex.logo,
-            coin: 'ALL' as const,
-            amountUsd,
-            longUsd,
-            shortUsd,
-            longShare,
-            isLongDominant: longUsd > shortUsd,
-          }
-        })
-        : perCoinRows
-          .filter(r => r.coin === selectedCoin)
-          .map(r => ({
-            exchange: r.exchange,
-            logo: r.logo,
-            coin: r.coin,
-            amountUsd: r.amountUsd,
-            longUsd: r.longUsd,
-            shortUsd: r.shortUsd,
-            longShare: r.longShare,
-            isLongDominant: r.longUsd > r.shortUsd,
-          }))
+        const exMeta = EXCHANGES.find(ex => ex.exchange.toLowerCase() === row.exchange.toLowerCase())
 
-      internalRows.sort((a, b) => b.amountUsd - a.amountUsd)
+        const ratio = isTotal
+          ? 100
+          : totalAmountUsd > 0
+            ? (amountUsd / totalAmountUsd) * 100
+            : 0
 
-      const totalAmountUsd = internalRows.reduce((acc, r) => acc + r.amountUsd, 0)
-      const totalLongUsd = internalRows.reduce((acc, r) => acc + r.longUsd, 0)
-      const totalShortUsd = internalRows.reduce((acc, r) => acc + r.shortUsd, 0)
-
-      const rows: ExchangeRowRaw[] = internalRows.map(r => {
-        const ratio = totalAmountUsd === 0 ? 0 : (r.amountUsd / totalAmountUsd) * 100
         return {
-          exchange: r.exchange,
-          logo: r.logo,
-          coin: r.coin,
-          amountUsd: r.amountUsd,
-          longUsd: r.longUsd,
-          shortUsd: r.shortUsd,
-          longShare: r.longShare,
+          exchange: row.exchange === 'TOTAL' ? 'TOTAL' : row.exchange,
+          logo: isTotal ? '' : (exMeta?.logo ?? ''),
+          coin: row.symbol as CoinSymbol,
+          amountUsd,
+          longUsd,
+          shortUsd,
+          longShare,
           ratio,
-          isLongDominant: r.isLongDominant,
+          isLongDominant: longUsd > shortUsd,
+          isTotal,
         }
       })
 
-      const total: ExchangeRowRaw = {
-        exchange: 'TOTAL',
-        logo: '',
-        coin: selectedCoin === 'ALL' ? 'ALL' : selectedCoin,
-        amountUsd: totalAmountUsd,
-        longUsd: totalLongUsd,
-        shortUsd: totalShortUsd,
-        longShare: totalAmountUsd === 0 ? 0 : totalLongUsd / totalAmountUsd,
-        ratio: 100,
-        isLongDominant: totalLongUsd > totalShortUsd,
-        isTotal: true,
-      }
-
-      return [total, ...rows]
+      return mappedRows
     },
-    [coinFilter, timeFilter, hours]
+    [coinFilter, timeFilter],
+    {
+      delay: 0,
+      ignoreQueryOverrides: true,
+    },
   );
 
   const tableData: ExchangeData[] = useMemo(() => {
@@ -267,10 +195,9 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
       <div className="flex items-center justify-between flex-none">
         {showTitle && <SectionTitle>{t('liquidationData.table.title')}</SectionTitle>}
         <div className={`flex gap-3 ${!showTitle ? 'w-full justify-between' : ''}`}>
-          <FilterButton 
-            value={coinFilter} 
+          <FilterButton
+            value={coinFilter}
             options={[
-              { value: 'ALL', label: t('common.all') },
               { value: 'BTC', label: 'BTC' },
               { value: 'ETH', label: 'ETH' },
               { value: 'SOL', label: 'SOL' },
@@ -278,18 +205,18 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
               { value: 'DOGE', label: 'DOGE' },
               { value: 'HYPE', label: 'HYPE' },
             ]} 
-            onChange={(v) => setCoinFilter(v as CoinFilter)}
+            onChange={(v) => handleCoinChange(v as CoinFilter)}
             size={isCompact ? 'sm' : 'md'}
           />
-          <FilterButton 
-            value={timeFilter} 
+          <FilterButton
+            value={timeFilter}
             options={[
               { value: '1h', label: t('liquidationData.time.1h') },
               { value: '4h', label: t('liquidationData.time.4h') },
               { value: '12h', label: t('liquidationData.time.12h') },
               { value: '24h', label: t('liquidationData.time.24h') },
             ]} 
-            onChange={(v) => setTimeFilter(v as TimeFilter)}
+            onChange={(v) => handleTimeChange(v as TimeFilter)}
             size={isCompact ? 'sm' : 'md'}
           />
         </div>
@@ -311,8 +238,8 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
               </thead>
               <tbody className="divide-y divide-[#30363d]">
                 {tableData.map((row, index) => (
-                  <tr 
-                    key={index} 
+                  <tr
+                    key={index}
                     className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
                       row.isTotal ? 'bg-[#21262d]/50' : ''
                     }`}
@@ -372,7 +299,9 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
               <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
               <p className="text-xl font-bold text-white">
-                {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL' ? selectedExchangeDisplay.coin : t('liquidationData.modal.multiAsset')}
+                {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL'
+                  ? selectedExchangeDisplay.coin
+                  : t('liquidationData.modal.multiAsset')}
               </p>
             </div>
             <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
@@ -383,10 +312,17 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
           <div className="space-y-3">
             <p className="text-sm font-bold text-[#e6edf3]">{t('liquidationData.modal.recent')}</p>
             {[1, 2, 3].map(i => (
-              <div key={i} className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30">
+              <div
+                key={i}
+                className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30"
+              >
                 <span className="text-[#e6edf3]">0x{Math.random().toString(16).substring(2, 8)}...</span>
-                <span className="text-red-400">-{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})</span>
-                <span className="text-[#8b949e] text-xs">{t('liquidationData.modal.minutesAgo', { minutes: 2 })}</span>
+                <span className="text-red-400">
+                  -{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})
+                </span>
+                <span className="text-[#8b949e] text-xs">
+                  {t('liquidationData.modal.minutesAgo', { minutes: 2 })}
+                </span>
               </div>
             ))}
           </div>
