@@ -1034,3 +1034,31 @@ export async function fetchAggregatedOrderbook(
     return unwrapResponse<AggregatedOrderbookResponse>(response as any)
   }, 'FETCH_AGGREGATED_ORDERBOOK')
 }
+
+// ===== 聚合持仓量（Open Interest）API =====
+
+export type OpenInterestApiItem = Infer<typeof schemas.OpenInterestDto>
+
+export interface FetchAggregatedOpenInterestQuery {
+  symbol: string
+  exchange?: string
+  limit?: number
+}
+
+export async function fetchAggregatedOpenInterest(
+  query: FetchAggregatedOpenInterestQuery,
+): Promise<OpenInterestApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.OpenInterestController_query({
+      headers: optionalAuthHeaders(),
+      queries: {
+        symbol: query.symbol,
+        ...(query.exchange && { exchange: query.exchange }),
+        limit: query.limit ?? 100,
+      },
+    })
+
+    const result = unwrapResponse(response) as { items?: OpenInterestApiItem[] }
+    return result.items ?? []
+  }, 'FETCH_AGGREGATED_OPEN_INTEREST')
+}

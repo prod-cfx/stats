@@ -98,6 +98,14 @@ function renderValueWithColor(val: string) {
   );
 }
 
+// Extract SortHeader component to avoid nesting
+const SortHeader = ({ label, iconSize }: { label: string; iconSize: string }) => (
+  <div className="flex items-center justify-center gap-1 cursor-pointer group hover:text-white transition-colors">
+    {label}
+    <ArrowUpDown className={`${iconSize} text-[#8b949e] opacity-30 group-hover:opacity-100`} />
+  </div>
+)
+
 export function CryptoStocksWidget(props: { config: Record<string, any> }) {
   const { t } = useTranslation()
   const size = (props.config?.size as string) || 'M'
@@ -115,13 +123,6 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
 
   const rows = useMemo(() => initialCompanyData, [])
 
-  const SortHeader = ({ label }: { label: string }) => (
-    <div className="flex items-center justify-center gap-1 cursor-pointer group hover:text-white transition-colors">
-      {label}
-      <ArrowUpDown className={`${sortIconSize} text-[#8b949e] opacity-30 group-hover:opacity-100`} />
-    </div>
-  )
-
   return (
     <div className="h-full flex flex-col gap-3">
       <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-[#0d1117]/60 flex flex-col overflow-hidden">
@@ -132,14 +133,14 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
               <tr className={`text-[#8b949e] ${headerSize} font-bold border-b border-white/10 bg-[#0d1117]/50 sticky top-0 z-10`}>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.asset')}</th>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.company')}</th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="mNAV" /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.marketCap')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsValue')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsAmount')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.sharePrice')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change24h')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change1d')} /></th>
-                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change7d')} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="mNAV" iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.marketCap')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsValue')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.holdingsAmount')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.sharePrice')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change24h')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change1d')} iconSize={sortIconSize} /></th>
+                <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change7d')} iconSize={sortIconSize} /></th>
               </tr>
             </thead>
             <tbody className={`text-white ${textSize} divide-y divide-white/10`}>

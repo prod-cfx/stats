@@ -291,6 +291,8 @@
     "openInterest": {
       "title": "{{symbol}} 合约总持仓",
       "searchPlaceholder": "搜索",
+      "authRequired": "请登录后查看完整数据",
+      "loadError": "加载数据失败，请稍后重试",
       "table": {
         "rank": "排名",
         "exchange": "交易所",
