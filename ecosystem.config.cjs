@@ -78,8 +78,8 @@ function createFrontConfig() {
     return {
       name: 'front',
       cwd: path.join(projectRoot, 'apps/front'),
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3001',
+      script: 'pnpm',
+      args: 'exec next start -p 3001',
       instances: 1,
       env: {
         NODE_ENV: 'production',
@@ -120,8 +120,8 @@ function createAdminConfig() {
     return {
       name: 'admin',
       cwd: path.join(projectRoot, 'apps/admin-front'),
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3500',
+      script: 'pnpm',
+      args: 'exec next start -p 3500',
       instances: 1,
       env: {
         NODE_ENV: 'production',
