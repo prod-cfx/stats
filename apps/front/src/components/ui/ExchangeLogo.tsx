@@ -53,7 +53,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   const normalizedName = name?.toLowerCase().split('-')[0] || '';
 
   // Identify exchange by name or URL
-  const isBinance = normalizedName === 'binance' || logoUrl?.includes('270.png');
+  const isBinance = normalizedName === 'binance' || (name?.toLowerCase().includes('binance') && !name?.toLowerCase().includes('htx') && !logoUrl?.includes('102.png')); // Defensive check
   const isOkx = normalizedName === 'okx';
   const isBybit = normalizedName === 'bybit';
   const isKuCoin = normalizedName === 'kucoin' || logoUrl?.includes('311.png') || logoUrl?.includes('16.png');
@@ -77,7 +77,7 @@ export const ExchangeLogo = ({ name, logoUrl, size = 24, className = "" }: Excha
   if (logoUrl) {
     return (
       <div className={`rounded bg-[#21262d] border border-[#30363d] flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
-        <img src={logoUrl} alt={name || 'exchange'} className="w-full h-full object-cover" />
+        <img src={logoUrl} alt={name || 'exchange'} className="w-full h-full object-contain p-0.5" />
       </div>
     );
   }

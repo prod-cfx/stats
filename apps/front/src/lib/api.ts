@@ -225,7 +225,7 @@ export async function fetchWhaleAddressPerformance(
             address,
           )}/performance`
 
-    const result = await safeApiCall(
+    return safeApiCall(
       () =>
         client.WhaleTrackingController_getTraderPerformance({
           headers: optionalAuthHeaders(),
@@ -258,7 +258,24 @@ export async function fetchWhaleAddressPerformance(
   }, 'FETCH_WHALE_ADDRESS_PERFORMANCE')
 }
 
+// ===== 鲸鱼 Discover 聚合数据（whale-tracking/discover）相关 API =====
+
+export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
+
+export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
+  return apiCall(async () => {
+    const response = await client.WhaleTrackingController_getDiscover({
+      // Discover 接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+      headers: optionalAuthHeaders(),
+    })
+
+    return unwrapResponse(response) as WhaleDiscoverResponse
+  }, 'FETCH_WHALE_TRACKING_DISCOVER')
+}
+
 // ===== Hyperliquid Whale Alert 实时数据 API =====
+
+export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 
 export interface FetchRealtimeWhaleAlertsParams {
   symbol?: string
@@ -309,7 +326,7 @@ export async function fetchRealtimeWhaleAlerts(
     return safeApiCall(
       () =>
         client.WhaleAlertController_getRealtime({
-          headers: requireAuthHeaders(),
+          headers: optionalAuthHeaders(),
           queries,
         }),
       {
@@ -318,7 +335,7 @@ export async function fetchRealtimeWhaleAlerts(
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
+            ...optionalAuthHeaders(),
           },
         },
         validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
@@ -970,17 +987,6 @@ export async function fetchPredictionMarkets(
 
     return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
   }, 'FETCH_PREDICTION_MARKETS')
-}
-
-// ===== Whale Tracking Discover API =====
-
-export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
-  return apiCall(async () => {
-    const response = await client.WhaleTrackingController_getDiscover({
-      headers: optionalAuthHeaders(),
-    })
-    return unwrapResponse<WhaleDiscoverResponse>(response as any)
-  }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }
 
 // ===== 聚合订单簿 API =====

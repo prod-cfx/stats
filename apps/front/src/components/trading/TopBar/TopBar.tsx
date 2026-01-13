@@ -1,9 +1,10 @@
 'use client';
 
 import type { DataSource, MarketType } from '@/types/trading';
-import { ChevronDown, Info, Search, Star } from 'lucide-react';
+import { ChevronDown, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 
 interface TopBarProps {
   isAggregated: boolean;
@@ -36,7 +37,6 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<any>;
   const InfoIcon = Info as unknown as React.ComponentType<any>;
   const SearchIcon = Search as unknown as React.ComponentType<any>;
-  const StarIcon = Star as unknown as React.ComponentType<any>;
 
   // Close on click outside
   useEffect(() => {
@@ -145,52 +145,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
 
   // Mock Market Data
   const marketList = useMemo(() => {
-    const baseList: MarketItem[] = [
-      { displaySymbol: 'BTC', chartSymbol: 'BTCUSDT', base: 'BTC', price: 87010.0, changePct: -0.45, volume: 68200 * 87000 },
-      { displaySymbol: 'ETH', chartSymbol: 'ETHUSDT', base: 'ETH', price: 4850.2, changePct: 1.25, volume: 450000 * 4800 },
-      { displaySymbol: 'SOL', chartSymbol: 'SOLUSDT', base: 'SOL', price: 145.8, changePct: 5.4, volume: 1200000 * 145 },
-      { displaySymbol: 'XRP', chartSymbol: 'XRPUSDT', base: 'XRP', price: 1.12, changePct: -2.3, volume: 50000000 * 1.1 },
-      { displaySymbol: 'BNB', chartSymbol: 'BNBUSDT', base: 'BNB', price: 620.5, changePct: 0.8, volume: 150000 * 620 },
-      { displaySymbol: 'DOGE', chartSymbol: 'DOGEUSDT', base: 'DOGE', price: 0.38, changePct: 8.5, volume: 800000000 * 0.38 },
-      { displaySymbol: 'ADA', chartSymbol: 'ADAUSDT', base: 'ADA', price: 0.75, changePct: -1.1, volume: 45000000 * 0.75 },
-      { displaySymbol: 'AVAX', chartSymbol: 'AVAXUSDT', base: 'AVAX', price: 42.6, changePct: 3.2, volume: 800000 * 42 },
-      { displaySymbol: 'LINK', chartSymbol: 'LINKUSDT', base: 'LINK', price: 18.9, changePct: 0.5, volume: 1200000 * 18 },
-      { displaySymbol: 'DOT', chartSymbol: 'DOTUSDT', base: 'DOT', price: 8.4, changePct: -0.9, volume: 2500000 * 8.4 },
-    ];
-
-    // Adjust prices based on exchange selection simulation
-    return baseList.map(item => {
-      let price = item.price;
-      let volume = item.volume;
-
-      if (!isAggregated) {
-        if (selectedExchange === 'binance') {
-          price *= 1.0001;
-          volume *= 0.6;
-        } else {
-          price *= 0.9999;
-          volume *= 0.3;
-        }
-      }
-
-      // Slightly different data for Spot vs Futures
-      if (marketType === 'spot') {
-        price *= 1.0005; // Spot usually slight premium/discount
-        volume *= 0.8; 
-      }
-
-      const displaySymbol =
-        marketType === 'futures'
-          ? `${item.chartSymbol}` // BTCUSDT
-          : `${item.base}/USDT`; // BTC/USDT
-
-      return {
-        ...item,
-        displaySymbol,
-        price,
-        volume
-      };
-    });
+    return getMockMarketList({ marketType, isAggregated, selectedExchange }) as MarketItem[]
   }, [marketType, isAggregated, selectedExchange]);
 
   const filteredMarketList = useMemo(() => {
@@ -294,7 +249,6 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                     }}
                   >
                     <div className="flex items-center gap-2 text-left col-span-1 min-w-0">
-                      <StarIcon className="w-3 h-3 text-[#8b949e] hover:text-yellow-500 flex-shrink-0" />
                       <span className={`font-bold truncate ${isSelected ? 'text-white' : 'text-[#c9d1d9]'}`}>{item.displaySymbol}</span>
                       {marketType === 'futures' && !isCompact && (
                         <span className="ml-1 px-1.5 py-0.5 rounded border border-[#30363d] bg-[#0d1117] text-[10px] text-[#8b949e] whitespace-nowrap">

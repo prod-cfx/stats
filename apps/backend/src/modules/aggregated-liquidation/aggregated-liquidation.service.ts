@@ -93,22 +93,34 @@ export class AggregatedLiquidationService {
     // 若只有聚合行，则退化为以聚合行为明细行返回。
     const baseRows = detailRows.length > 0 ? detailRows : aggregatedRows
 
-    const perExchange: ExchangeLiquidationRowDto[] = baseRows.map(row => {
-      const longUsd = Number(row.longLiquidationUsd)
-      const shortUsd = Number(row.shortLiquidationUsd)
+    // 对 baseRows 进行二次聚合，确保每个交易所只有一行（防止数据库中存在同一时间点的重复数据）
+    const groupedMap = new Map<string, { longUsd: number; shortUsd: number }>()
+    for (const row of baseRows) {
+      const current = groupedMap.get(row.exchangeCode) || { longUsd: 0, shortUsd: 0 }
+      groupedMap.set(row.exchangeCode, {
+        longUsd: current.longUsd + Number(row.longLiquidationUsd),
+        shortUsd: current.shortUsd + Number(row.shortLiquidationUsd),
+      })
+    }
+
+    const perExchange: ExchangeLiquidationRowDto[] = Array.from(groupedMap.entries()).map(
+      ([exchangeCode, data]) => {
+        const longUsd = data.longUsd
+        const shortUsd = data.shortUsd
       const amountUsd = longUsd + shortUsd
       const longShare = amountUsd > 0 ? longUsd / amountUsd : 0
 
       return {
-        exchange: row.exchangeCode,
-        symbol: row.symbol,
+          exchange: exchangeCode,
+          symbol,
         timeframe,
         amountUsd,
         longUsd,
         shortUsd,
         longShare,
       }
-    })
+      },
+    )
 
     perExchange.sort((a, b) => b.amountUsd - a.amountUsd)
 

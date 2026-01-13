@@ -1,11 +1,11 @@
 'use client'
 
-import type {OpenInterestApiItem} from '@/lib/api';
+import type { OpenInterestApiItem } from '@/lib/api'
 import { AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, Loader2, Search } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SectionTitle } from '@/components/ui/Typography'
-import { fetchAggregatedOpenInterest  } from '@/lib/api'
+import { fetchAggregatedOpenInterest } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
 
 interface OIData {
@@ -26,24 +26,87 @@ interface OIData {
 type SortField = 'oiAsset' | 'oiUsd' | 'ratioPct' | 'change1hPct' | 'change4hPct' | 'change24hPct' | null
 type SortDirection = 'asc' | 'desc' | null
 
-const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH', 'SUI', 'ADA', 'LINK', 'AVAX']
-
-const EXCHANGE_LOGOS: Record<string, string> = {
-  Binance: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
-  Bybit: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
-  OKX: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
-  Bitget: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/739.png',
-  Gate: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/87.png',
-  'Gate.io': 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/87.png',
-  HTX: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/102.png',
-  Huobi: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/102.png',
-  MEXC: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/544.png',
-  Kraken: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png',
-  Deribit: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/203.png',
-  CME: 'https://www.cmegroup.com/favicon.ico',
-  Hyperliquid: 'https://app.hyperliquid.xyz/favicon.ico',
-  dYdX: 'https://dydx.exchange/favicon.ico',
+// Prefer consistent brand logos, but be resilient: many public logo/CDN domains can be blocked/slow.
+// We therefore try multiple sources in order and fall back to an inline SVG if all fail.
+const EXCHANGE_LOGO_SOURCES: Record<string, string[]> = {
+  CME: ['/images/exchanges/cme.png'],
+  Binance: ['/images/exchanges/binance.png'],
+  OKX: ['/images/exchanges/okx.png'],
+  Bybit: ['/images/exchanges/bybit.png'],
+  KuCoin: ['/images/exchanges/kucoin.png'],
+  Bitfinex: ['/images/exchanges/bitfinex.png'],
+  Bitget: ['/images/exchanges/bitget.png'],
+  MEXC: ['/images/exchanges/mexc.png'],
+  Hyperliquid: ['/images/exchanges/hyperliquid.png'],
+  Gate: ['/images/exchanges/gate.png'],
+  'Gate.io': ['/images/exchanges/gate.png'],
+  Aster: ['/images/exchanges/aster.png'],
+  Lighter: ['/images/exchanges/lighter.svg'],
+  Deribit: ['/images/exchanges/deribit.png'],
+  Coinbase: ['/images/exchanges/coinbase.png'],
+  Kraken: ['/images/exchanges/kraken.png'],
+  HTX: ['/images/exchanges/htx.png'],
+  Huobi: ['/images/exchanges/htx.png'],
+  dYdX: ['https://dydx.exchange/favicon.ico'],
 }
+
+const buildMonogramSvgDataUri = (letter: string) =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6366f1"/>
+          <stop offset="1" stop-color="#ec4899"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="64" height="64" rx="32" fill="#0d1117"/>
+      <circle cx="32" cy="32" r="22" fill="url(#g)" opacity="0.35"/>
+      <text x="32" y="39" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="20" font-weight="800" fill="#e6edf3">${letter}</text>
+    </svg>`,
+  )}`
+
+const getExchangeLogoCandidates = (exchange: string, fallback: string) => {
+  // Try to match case-insensitive
+  const key = Object.keys(EXCHANGE_LOGO_SOURCES).find(k => k.toLowerCase() === exchange.toLowerCase())
+  const candidates = key ? EXCHANGE_LOGO_SOURCES[key] : []
+  
+  const out = [...candidates]
+  if (fallback && !fallback.includes('coinmarketcap')) out.push(fallback) // Only use fallback if it's not the generic CMC one which might be broken/blocked
+  // Always end with a deterministic inline fallback.
+  out.push(buildMonogramSvgDataUri(exchange.slice(0, 1).toUpperCase()))
+  return out
+}
+
+function ExchangeLogo({
+  exchange,
+  fallback,
+  className,
+}: {
+  exchange: string
+  fallback: string
+  className: string
+}) {
+  const candidates = useMemo(() => getExchangeLogoCandidates(exchange, fallback), [exchange, fallback])
+  const [idx, setIdx] = useState(0)
+
+  // Reset when exchange changes
+  useEffect(() => setIdx(0), [exchange])
+
+  const src = candidates[Math.min(idx, candidates.length - 1)]
+
+  return (
+    <img
+      src={src}
+      alt={exchange}
+      className={className}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setIdx((i) => Math.min(i + 1, candidates.length - 1))}
+    />
+  )
+}
+
+const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB', 'ZEC', 'BCH', 'SUI', 'ADA', 'LINK', 'AVAX']
 
 function transformApiData(apiData: OpenInterestApiItem[]): OIData[] {
   if (!apiData || apiData.length === 0) return []
@@ -86,7 +149,7 @@ function transformApiData(apiData: OpenInterestApiItem[]): OIData[] {
       id: `${item.exchange}-${index}`,
       rank: index + 1,
       exchange: item.exchange,
-      logo: EXCHANGE_LOGOS[item.exchange] ?? '',
+      logo: '', // Logo will be handled by ExchangeLogo component
       oiAsset: item.open_interest_quantity,
       oiUsd: item.open_interest_usd,
       ratioPct: totalOiUsd > 0 ? (item.open_interest_usd / totalOiUsd) * 100 : 0,
@@ -236,12 +299,12 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   )
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-6'}`}>
+    <div className={`flex flex-col h-full ${isCompact ? 'gap-2' : 'gap-6'}`}>
       <div className="flex items-center justify-between">
         <SectionTitle className={isCompact ? '!text-sm' : ''}>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
       </div>
 
-      <div className={`flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
+      <div className={`flex flex-col flex-1 min-h-0 bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
         {/* Symbol Tabs & Search */}
         <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1 flex-row-reverse' : ''}`}>
           {!isCompact ? (
@@ -356,14 +419,14 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
         {/* Table Area */}
         {!loading && !error && data.length > 0 && (
-          <div className="overflow-x-auto cf-scrollbar">
+          <div className="flex-1 overflow-auto cf-scrollbar relative">
             <table className="w-full text-left border-collapse min-w-[1000px]">
-              <thead>
-                <tr className={`bg-[#0d1117]/50 text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+              <thead className="sticky top-0 z-10 bg-[#0d1117]">
+                <tr className={`text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d] w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('oiAsset')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -372,7 +435,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('oiUsd')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -381,7 +444,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('ratioPct')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -390,7 +453,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('change1hPct')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -399,7 +462,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('change4hPct')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -408,7 +471,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     </button>
                   </th>
                   <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
-                    <button
+                    <button 
                       type="button"
                       onClick={() => handleSort('change24hPct')}
                       className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
@@ -420,9 +483,9 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                 </tr>
               </thead>
               <tbody className={isCompact ? 'text-xs' : 'text-sm'}>
-                {sortedData.map(row => (
-                  <tr
-                    key={row.id}
+                {sortedData.map((row) => (
+                  <tr 
+                    key={row.id} 
                     className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
                       row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                     }`}
@@ -430,11 +493,14 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                     <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-center text-[#8b949e]`}>{row.rank}</td>
                     <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'}`}>
                       <div className="flex items-center gap-2">
-                        {row.logo && (
-                          <div className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
-                            <img src={row.logo} alt={row.exchange} className="w-full h-full object-cover" />
-                          </div>
-                        )}
+                        {/* Always use ExchangeLogo component for consistency and fallbacks */}
+                        <div className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
+                          <ExchangeLogo
+                            exchange={row.exchange}
+                            fallback={row.logo}
+                            className="w-full h-full object-contain bg-[#0d1117]"
+                          />
+                        </div>
                         <span className={row.isTotal ? `text-white ${isCompact ? 'font-bold text-sm' : ''}` : 'text-[#e6edf3]'}>
                           {row.isTotal ? t('common.all') : row.exchange}
                         </span>
