@@ -34,8 +34,6 @@ function createBackendConfig() {
       name: 'backend',
       cwd: projectRoot,
       script: 'apps/backend/dist/apps/backend/src/main.js',
-      interpreter: 'node',
-      node_args: '-r tsconfig-paths/register',
       exec_mode: 'cluster',
       instances: 2,
       env: {

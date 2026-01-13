@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only=false --project tsconfig.json -r tsconfig-paths/register src/main.ts",
     "start": "node dist/main.js",
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -57,7 +57,6 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.4.2",
     "rxjs": "^7.8.1",
-    "tsconfig-paths": "^4.2.0",
     "winston": "^3.17.0",
     "ws": "^8.18.3"
   },
@@ -75,6 +74,8 @@
     "supertest": "^7.0.0",
     "ts-jest": "^29.4.1",
     "ts-node-dev": "^2.0.0",
+    "tsc-alias": "^1.8.16",
+    "tsconfig-paths": "^4.2.0",
     "tsx": "^4.19.1",
     "typescript": "^5.9.2"
   }
