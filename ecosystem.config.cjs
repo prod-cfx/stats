@@ -77,8 +77,8 @@ function createFrontConfig() {
     return {
       name: 'front',
       cwd: projectRoot,
-      script: 'npx',
-      args: 'serve dist/front -l 3001 -s',
+      script: 'node_modules/.bin/serve',
+      args: 'dist/front -l 3001',
       instances: 1,
       env: {
         NODE_ENV: 'production',
@@ -119,8 +119,8 @@ function createAdminConfig() {
     return {
       name: 'admin',
       cwd: projectRoot,
-      script: 'npx',
-      args: 'serve dist/admin-front -l 3500 -s',
+      script: 'node_modules/.bin/serve',
+      args: 'dist/admin-front -l 3500',
       instances: 1,
       env: {
         NODE_ENV: 'production',
