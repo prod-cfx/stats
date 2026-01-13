@@ -30,77 +30,125 @@ interface CompanyData {
   infoParagraphs?: string[];
 }
 
+const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: string }) => {
+  if (!rawValue || rawValue === '-') return <span className="text-[#8b949e]">-</span>;
+
+  // Try to parse out the number and the suffix
+  // Handles formats like "55.07 B", "$58.14B", "671.27 K BTC"
+  const cleanValue = rawValue.replace('$', '').trim();
+  
+  // Regex to match: [number] [optional suffix B/M/K] [optional anything else like BTC]
+  const match = cleanValue.match(/^([\d,.]+)\s*([BMK]?)(.*)$/i);
+
+  if (match) {
+    const [_, num, suffix, rest] = match;
+    const finalSubText = subText || rest.trim();
+    
+    return (
+      <div className="flex flex-col items-center leading-tight">
+        <div className="flex items-baseline gap-0.5">
+          <span className="text-white font-mono font-medium">{num}</span>
+          {suffix && <span className="text-white font-mono font-medium ml-0.5">{suffix.toUpperCase()}</span>}
+        </div>
+        {finalSubText && (
+          <span className="text-[#8b949e] text-[10px] font-sans uppercase mt-0.5">
+            {finalSubText}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return <span className="text-white font-mono">{rawValue}</span>;
+};
+
 // 公开页面的静态示例数据：在未登录或接口不可用时作为兜底展示
 const STATIC_COMPANY_DATA: CompanyData[] = [
   {
     asset: 'PYUSD',
-    assetLogo: 'https://cryptologos.cc/logos/paypal-usd-pyusd-logo.png?v=040',
+    assetLogo: 'https://static.aicoinstorge.com/coin/20240606/171763829567331.png',
     name: 'PayPal Holdings, Inc.',
     ticker: 'PYPL',
     exchange: '美股-NASDAQ',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg',
+    logo: 'https://static.aicoinstorge.com/index/20250702/175145518572384.png',
     mNav: '-',
-    marketCap: '$58.56B',
+    marketCap: '55.07 B',
     holdingsValue: '-',
     holdingsAmount: '-',
-    sharePrice: '$61.30',
-    change24h: '+0.96%',
-    change1d: '+1.25%',
-    change7d: '-0.50%',
+    sharePrice: '$57.64',
+    change24h: '+0.00%',
+    change1d: '+0.00%',
+    change7d: '+0.00%',
   },
   {
     asset: 'BTC',
-    assetLogo: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+    assetLogo: 'https://static.aicoinstorge.com/coin/20180523/152707758483056.png',
     name: 'MicroStrategy Incorporated',
     ticker: 'MSTR',
     exchange: '美股-NASDAQ',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/MicroStrategy_logo.svg/1200px-MicroStrategy_logo.svg.png',
-    mNav: '0.83',
-    marketCap: '$47.4B',
-    holdingsValue: '$58.14B',
-    holdingsAmount: '671.27K BTC',
-    sharePrice: '$167.50',
+    logo: 'https://static.aicoinstorge.com/index/20250702/175145459724376.jpg',
+    mNav: '0.82',
+    marketCap: '44.52 B',
+    holdingsValue: '61.00 B',
+    holdingsAmount: '673.78 K BTC',
+    sharePrice: '$157.33',
     change24h: '+0.00%',
-    change1d: '+0.10%',
-    change7d: '+2.30%',
+    change1d: '+0.00%',
+    change7d: '+0.00%',
     infoParagraphs: [
-      '微策略是一家美国的软件公司，提供商业智能、移动软件和云端服务。',
-      '该公司于1989年由迈克尔·塞勒（Michael J. Saylor）、桑朱·班萨尔（Sanju Bansal）和托马斯·斯宾纳（Thomas Spahr）创立，专门开发用于分析内部与外部数据的软件，协助进行商业决策以及开发移动应用程序。',
-      '公司总部位于弗吉尼亚州泰森斯（Tysons），属于华盛顿都会区的一部分。塞勒为执行主席，自1989年至2022年担任CEO。',
+      '微策略是一家美国的 software 公司，提供商业智能、移动软件和云端服务。',
+      '该公司于 1989 年由迈克尔·塞勒（Michael J. Saylor）、桑朱·班萨尔（Sanju Bansal）和托马斯·斯宾纳（Thomas Spahr）创立，专门开发用于分析内部与外部数据的软件，协助进行商业决策以及开发移动应用程序。',
+      '公司总部位于弗吉尼亚州泰森斯（Tysons），属于华盛顿都会区的一部分。塞勒为执行主席，自 1989 年至 2022 年担任 CEO。',
       '该公司因为持有巨量比特币而被认为是与比特币挂钩的“概念股”。',
     ],
   },
   {
     asset: 'USDC',
-    assetLogo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
+    assetLogo: 'https://static.aicoinstorge.com/coin/20220808/165993003785920.png',
     name: 'Circle Internet Group',
     ticker: 'CRCL',
     exchange: '美股-NYSE',
-    logo: 'https://www.circle.com/hubfs/logos/Circle_Logo_Green.svg',
+    logo: 'https://static.aicoinstorge.com/index/20251020/176096250685792.jpg',
     mNav: '0.27',
-    marketCap: '$17.2B',
-    holdingsValue: '$64.46B',
-    holdingsAmount: '64.50B USDC',
-    sharePrice: '$82.85',
-    change24h: '+9.87%',
-    change1d: '+10.5%',
-    change7d: '+15.2%',
+    marketCap: '17.22 B',
+    holdingsValue: '64.54 B',
+    holdingsAmount: '64.50 B USDC',
+    sharePrice: '$82.94',
+    change24h: '+0.00%',
+    change1d: '+0.00%',
+    change7d: '+0.00%',
   },
   {
     asset: 'ETH',
-    assetLogo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
+    assetLogo: 'https://static.aicoinstorge.com/coin/20250425/174556604535555.png',
     name: 'BitMine Immersion',
     ticker: 'BMNR',
     exchange: '美股-NYSE',
-    logo: 'https://bitmine.tech/wp-content/uploads/2021/06/BitMine-Logo-1.png',
-    mNav: '0.73',
-    marketCap: '$8.94B',
-    holdingsValue: '$11.62B',
-    holdingsAmount: '3.97M ETH',
-    sharePrice: '$31.39',
-    change24h: '+1.42%',
-    change1d: '-0.88%',
-    change7d: '+4.15%',
+    logo: 'https://static.aicoinstorge.com/index/20251216/176585071943612.png',
+    mNav: '0.94',
+    marketCap: '12.81 B',
+    holdingsValue: '12.67 B',
+    holdingsAmount: '4.07 M ETH',
+    sharePrice: '$30.07',
+    change24h: '+0.00%',
+    change1d: '+0.00%',
+    change7d: '+0.00%',
+  },
+  {
+    asset: 'BCH',
+    assetLogo: 'https://static.aicoinstorge.com/coin/20240522/171633960967508.png',
+    name: 'Bitdeer Technologies Group',
+    ticker: 'BTDR',
+    exchange: '美股-NASDAQ',
+    logo: 'https://static.aicoinstorge.com/index/20250729/175376116579089.jpg',
+    mNav: '-',
+    marketCap: '1.75 B',
+    holdingsValue: '-',
+    holdingsAmount: '-',
+    sharePrice: '$11.51',
+    change24h: '+0.00%',
+    change1d: '+0.00%',
+    change7d: '+0.00%',
   },
 ];
 
@@ -178,10 +226,17 @@ export const PublicCompaniesTable = () => {
           ? `$${formatNumber(priceNumber, 2)}`
           : '-';
 
-      const marketCap =
-        q.marketCap != null
-          ? `$${formatNumber(q.marketCap, 0)}`
-          : '-';
+      const formatCompact = (val: string | number | null) => {
+        if (val == null || val === '') return '-';
+        const num = typeof val === 'string' ? Number.parseFloat(val) : val;
+        if (Number.isNaN(num)) return '-';
+        if (num >= 1e9) return `${(num / 1e9).toFixed(2)} B`;
+        if (num >= 1e6) return `${(num / 1e6).toFixed(2)} M`;
+        if (num >= 1e3) return `${(num / 1e3).toFixed(2)} K`;
+        return num.toString();
+      };
+
+      const marketCap = formatCompact(q.marketCap);
 
       const pctRaw = q.priceChangePercent != null ? Number.parseFloat(q.priceChangePercent) : Number.NaN;
       const pctString = Number.isFinite(pctRaw)
@@ -540,9 +595,15 @@ export const PublicCompaniesTable = () => {
                         {row.mNav}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-center text-white font-mono">{row.marketCap}</td>
-                    <td className="px-4 py-4 text-center text-white font-mono">{row.holdingsValue}</td>
-                    <td className="px-4 py-4 text-center text-white font-mono text-xs">{row.holdingsAmount}</td>
+                    <td className="px-4 py-4 text-center">
+                      <CompactValueCell rawValue={row.marketCap} subText="USD" />
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <CompactValueCell rawValue={row.holdingsValue} subText="USD" />
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <CompactValueCell rawValue={row.holdingsAmount} />
+                    </td>
                     <td className="px-4 py-4 text-center text-white font-mono">{row.sharePrice}</td>
                     <td className="px-4 py-4 text-center font-mono">{renderValueWithColor(row.change24h)}</td>
                     <td className="px-4 py-4 text-center font-mono">{renderValueWithColor(row.change1d)}</td>

@@ -2,6 +2,7 @@
 
 import { Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -44,6 +45,8 @@ export const TraderCard = ({
   onShowStats
 }: TraderCardProps) => {
   const { t, i18n } = useTranslation();
+  const params = useParams();
+  const lng = (params as any)?.lng ?? (i18n.language?.startsWith('zh') ? 'zh' : 'en');
   const isPnlPositive = pnlUsd >= 0;
 
   const currencyCompact = useMemo(() => {
@@ -91,7 +94,7 @@ export const TraderCard = ({
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-2">
               <Link 
-                href={`/whale-tracking/profile/?address=${address}`}
+                href={`/${lng}/whale-tracking/profile/?address=${address}`}
                 className="text-white font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -142,7 +145,7 @@ export const TraderCard = ({
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2">
           <Link 
-            href={`/whale-tracking/profile/?address=${address}`}
+            href={`/${lng}/whale-tracking/profile/?address=${address}`}
             className="text-white font-bold text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
             onClick={(e) => e.stopPropagation()}
           >

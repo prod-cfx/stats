@@ -58,7 +58,9 @@ export async function safeApiCall<T>(
 ): Promise<T> {
   try {
     // 首先尝试使用 Zodios（提供类型安全和验证）
-    return await zodiosCall()
+    const response = await zodiosCall()
+    // 统一处理后端包裹的 { data: T } 结构
+    return unwrapApiResponse(response) as T
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     

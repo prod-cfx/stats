@@ -32,19 +32,39 @@ type TimeFilter = '1h' | '4h' | '12h' | '24h'
 const EXCHANGES = [
   {
     exchange: 'Hyperliquid',
-    logo: 'https://app.hyperliquid.xyz/favicon.ico',
+    logo: '/images/exchanges/hyperliquid.png',
   },
   {
     exchange: 'Binance',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png',
+    logo: '/images/exchanges/binance.png',
   },
   {
     exchange: 'Bybit',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/542.png',
+    logo: '/images/exchanges/bybit.png',
   },
   {
     exchange: 'OKX',
-    logo: 'https://s2.coinmarketcap.com/static/img/exchanges/64x64/302.png',
+    logo: '/images/exchanges/okx.png',
+  },
+  {
+    exchange: 'Bitget',
+    logo: '/images/exchanges/bitget.png',
+  },
+  {
+    exchange: 'HTX',
+    logo: '/images/exchanges/htx.png',
+  },
+  {
+    exchange: 'MEXC',
+    logo: '/images/exchanges/mexc.png',
+  },
+  {
+    exchange: 'Aster',
+    logo: '/images/exchanges/aster.png',
+  },
+  {
+    exchange: 'Lighter',
+    logo: '/images/exchanges/lighter.svg',
   },
 ];
 

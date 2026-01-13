@@ -2,6 +2,7 @@
 
 import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/toast';
@@ -29,6 +30,8 @@ const initialTransactions: WhaleTransaction[] = [];
 
 export const RealtimeWhalesTable = () => {
   const { t } = useTranslation();
+  const params = useParams();
+  const lng = (params as any)?.lng ?? 'zh';
   const [isPaused, setIsPaused] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [transactions, setTransactions] = useState<WhaleTransaction[]>(initialTransactions);
@@ -39,6 +42,8 @@ export const RealtimeWhalesTable = () => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
   const lastRequestIdRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const fetchNewDataRef = useRef<(() => Promise<void>) | null>(null);
   const { success, error } = useToast();
 
   const formatRelativeTime = (timestamp: number) => {
@@ -56,8 +61,15 @@ export const RealtimeWhalesTable = () => {
   };
 
   const fetchNewData = useCallback(async () => {
+    // 防抖：如果当前已有请求在飞，直接跳过，避免计时器/重复挂载导致并发请求风暴
+    if (inFlightRef.current) {
+      return;
+    }
+    inFlightRef.current = true;
+
     // 使用递增的请求 ID，避免并发请求导致旧数据覆盖新数据
     const requestId = ++lastRequestIdRef.current;
+    const startedAt = Date.now();
 
     try {
       setLoading(true);
@@ -132,8 +144,13 @@ export const RealtimeWhalesTable = () => {
       if (requestId === lastRequestIdRef.current) {
         setLoading(false);
       }
+      inFlightRef.current = false;
     }
   }, [error, t]);
+
+  useEffect(() => {
+    fetchNewDataRef.current = fetchNewData;
+  }, [fetchNewData]);
 
   // 首次挂载时立即拉取一次最新数据
   useEffect(() => {
@@ -141,11 +158,17 @@ export const RealtimeWhalesTable = () => {
   }, [fetchNewData]);
 
   useEffect(() => {
+    // 保险：每次 effect 触发前都清理一次旧 interval，防止 ref 被覆盖导致遗留定时器
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     if (!isPaused) {
       timerRef.current = setInterval(() => {
         setCountdown(prev => {
           if (prev <= 1) {
-            fetchNewData();
+            fetchNewDataRef.current?.();
             return 5;
           }
           return prev - 1;
@@ -158,7 +181,7 @@ export const RealtimeWhalesTable = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPaused, fetchNewData]);
+  }, [isPaused]);
 
   // Update currentTime every 10 seconds to refresh relative time display
   useEffect(() => {
@@ -205,10 +228,7 @@ export const RealtimeWhalesTable = () => {
       </div>
 
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[600px] relative shadow-2xl">
-        {/* Realtime mini-loading indicator */}
-        {loading && (
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary to-secondary animate-pulse z-30" />
-        )}
+        {/* Loading indicator removed per UX request (kept data fetching + logs) */}
         
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -234,7 +254,7 @@ export const RealtimeWhalesTable = () => {
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
                         <Link 
-                          href={`/whale-tracking/profile/?address=${tx.address}`}
+                          href={`/${lng}/whale-tracking/profile/?address=${tx.address}`}
                           className="text-white text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
                           onClick={(e) => e.stopPropagation()}
                         >

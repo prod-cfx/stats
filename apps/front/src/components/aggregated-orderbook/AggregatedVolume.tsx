@@ -176,13 +176,11 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
       { name: 'OKX', amount: `$${(baseAmount * 0.19).toFixed(2)}B`, percent: 19.2, color: '#f43f5e' },
       { name: 'Bybit', amount: `$${(baseAmount * 0.14).toFixed(2)}B`, percent: 14.6, color: '#eab308' },
       { name: 'Bitget', amount: `$${(baseAmount * 0.10).toFixed(2)}B`, percent: 10.8, color: '#22c55e' },
-      { name: 'BingX', amount: `$${(baseAmount * 0.06).toFixed(2)}B`, percent: 6.7, color: '#06b6d4' },
-      { name: 'Bitunix', amount: `$${(baseAmount * 0.04).toFixed(2)}B`, percent: 4.3, color: '#6366f1' },
+      { name: 'Aster', amount: `$${(baseAmount * 0.06).toFixed(2)}B`, percent: 6.7, color: '#ef4444' },
+      { name: 'Lighter', amount: `$${(baseAmount * 0.04).toFixed(2)}B`, percent: 4.3, color: '#0ea5e9' },
       { name: 'Hyperliquid', amount: `$${(baseAmount * 0.03).toFixed(2)}B`, percent: 3.1, color: '#8b5cf6' },
-      { name: 'Aster', amount: `$${(baseAmount * 0.03).toFixed(2)}B`, percent: 3.0, color: '#ef4444' },
       { name: 'KuCoin', amount: `$${(baseAmount * 0.03).toFixed(2)}B`, percent: 3.0, color: '#f59e0b' },
       { name: 'LBank', amount: `$${(baseAmount * 0.019).toFixed(2)}B`, percent: 1.9, color: '#10b981' },
-      { name: 'Lighter', amount: `$${(baseAmount * 0.022).toFixed(2)}B`, percent: 2.2, color: '#0ea5e9' },
     ];
   }, []);
 
