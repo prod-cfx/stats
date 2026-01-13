@@ -76,10 +76,9 @@ function createFrontConfig() {
   if (isProduction) {
     return {
       name: 'front',
-      cwd: path.join(projectRoot, 'apps/front'),
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3001',
-      interpreter: '/bin/bash',
+      cwd: projectRoot,
+      script: 'npx',
+      args: 'serve dist/front -l 3001 -s',
       instances: 1,
       env: {
         NODE_ENV: 'production',
@@ -119,10 +118,9 @@ function createAdminConfig() {
   if (isProduction) {
     return {
       name: 'admin',
-      cwd: path.join(projectRoot, 'apps/admin-front'),
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3500',
-      interpreter: '/bin/bash',
+      cwd: projectRoot,
+      script: 'npx',
+      args: 'serve dist/admin-front -l 3500 -s',
       instances: 1,
       env: {
         NODE_ENV: 'production',
