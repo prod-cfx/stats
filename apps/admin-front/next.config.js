@@ -45,8 +45,8 @@ const nextConfig = {
     unoptimized: true,
   },
   reactStrictMode: false,
-  output: 'export',
-  trailingSlash: false,
+  // output: 'export',  // 已禁用静态导出，使用 next start
+  // trailingSlash: false,
   transpilePackages: ['@ai/shared', '@ai/api-contracts'],
   experimental: {
     optimizePackageImports: ['@ai/shared', '@ai/api-contracts'],
