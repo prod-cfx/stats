@@ -34,13 +34,13 @@ function createBackendConfig() {
       name: 'backend',
       cwd: projectRoot,
       script: 'apps/backend/dist/apps/backend/src/main.js',
-      exec_mode: 'cluster',
+      exec_mode: 'fork',
       instances: 2,
+      node_args: `--require ${path.join(projectRoot, 'apps/backend/scripts/module-paths.js')}`,
       env: {
         NODE_ENV: 'production',
         APP_ENV: 'production',
         PORT: 3000,
-        NODE_PATH: path.join(projectRoot, 'node_modules'),
       },
       max_memory_restart: '1G',
       error_file: path.join(projectRoot, 'logs/pm2-prod/backend-error.log'),
@@ -77,8 +77,9 @@ function createFrontConfig() {
     return {
       name: 'front',
       cwd: path.join(projectRoot, 'apps/front'),
-      script: 'pnpm',
-      args: 'exec next start -p 3001',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3001',
+      interpreter: '/bin/bash',
       instances: 1,
       env: {
         NODE_ENV: 'production',
@@ -119,8 +120,9 @@ function createAdminConfig() {
     return {
       name: 'admin',
       cwd: path.join(projectRoot, 'apps/admin-front'),
-      script: 'pnpm',
-      args: 'exec next start -p 3500',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3500',
+      interpreter: '/bin/bash',
       instances: 1,
       env: {
         NODE_ENV: 'production',
