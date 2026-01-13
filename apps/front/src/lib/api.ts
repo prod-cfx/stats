@@ -225,7 +225,7 @@ export async function fetchWhaleAddressPerformance(
             address,
           )}/performance`
 
-    const result = await safeApiCall(
+    return safeApiCall(
       () =>
         client.WhaleTrackingController_getTraderPerformance({
           headers: optionalAuthHeaders(),

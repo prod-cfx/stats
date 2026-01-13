@@ -349,12 +349,12 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
   };
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-6'}`}>
+    <div className={`flex flex-col h-full ${isCompact ? 'gap-2' : 'gap-6'}`}>
       <div className="flex items-center justify-between">
         <SectionTitle className={isCompact ? '!text-sm' : ''}>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
       </div>
 
-      <div className={`flex flex-col bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
+      <div className={`flex flex-col flex-1 min-h-0 bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
         {/* Symbol Tabs & Search */}
         <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1 flex-row-reverse' : ''}`}>
           {!isCompact ? (
@@ -451,10 +451,10 @@ export const AggregatedOI = ({ variant = 'default' }: { variant?: 'default' | 'c
         </div>
 
         {/* Table Area */}
-        <div className="overflow-x-auto cf-scrollbar">
+        <div className="flex-1 overflow-auto cf-scrollbar relative">
           <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
-              <tr className={`bg-[#0d1117]/50 text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+            <thead className="sticky top-0 z-10 bg-[#0d1117]">
+              <tr className={`text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d] w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
                 <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>

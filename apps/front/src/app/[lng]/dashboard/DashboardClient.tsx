@@ -1,12 +1,11 @@
 'use client'
 
 import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
-import { Bookmark, Compass, Grid3x3, Layout } from 'lucide-react'
+import { Bookmark, Grid3x3, Layout } from 'lucide-react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar'
-import { ExploreDashboards } from '@/components/dashboard/ExploreDashboards'
 import { LoadingState } from '@/components/ui/loading'
 import {
   createNewDashboard,
@@ -23,14 +22,15 @@ export function DashboardClient() {
   const params = useParams()
   const lng = params.lng as string || 'zh'
   const searchParams = useSearchParams()
-  const urlTab = (searchParams.get('tab') as TabType) || 'explore'
+  const urlTabRaw = (searchParams.get('tab') as TabType) || 'my'
+  // 暂时隐藏「探索看板」，避免早期内容稀缺时干扰体验
+  const urlTab: TabType = urlTabRaw === 'explore' ? 'my' : urlTabRaw
   const [activeTab, setActiveTab] = useState<TabType>(urlTab)
   const [loading, setLoading] = useState(false)
   const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>([])
   const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([])
 
   const tabs = [
-    { id: 'explore', label: t('dashboard.tabs.explore'), icon: Compass },
     { id: 'my', label: t('dashboard.tabs.my'), icon: Layout },
     { id: 'saved', label: t('dashboard.tabs.saved'), icon: Bookmark },
   ]
@@ -105,8 +105,6 @@ export function DashboardClient() {
           <div className="relative min-h-[400px]">
             <LoadingState isLoading={loading}>
               <div className="animate-in fade-in duration-500">
-                {activeTab === 'explore' && <ExploreDashboards />}
-                
                 {activeTab === 'my' && (
                   displayDashboards.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 text-[#8b949e] gap-4 border-2 border-dashed border-[#30363d] rounded-2xl">

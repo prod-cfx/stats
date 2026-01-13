@@ -107,18 +107,18 @@ export class AggregatedLiquidationService {
       ([exchangeCode, data]) => {
         const longUsd = data.longUsd
         const shortUsd = data.shortUsd
-        const amountUsd = longUsd + shortUsd
-        const longShare = amountUsd > 0 ? longUsd / amountUsd : 0
+      const amountUsd = longUsd + shortUsd
+      const longShare = amountUsd > 0 ? longUsd / amountUsd : 0
 
-        return {
+      return {
           exchange: exchangeCode,
           symbol,
-          timeframe,
-          amountUsd,
-          longUsd,
-          shortUsd,
-          longShare,
-        }
+        timeframe,
+        amountUsd,
+        longUsd,
+        shortUsd,
+        longShare,
+      }
       },
     )
 

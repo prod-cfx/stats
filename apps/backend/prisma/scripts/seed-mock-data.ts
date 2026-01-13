@@ -3,14 +3,28 @@ import { loadEnvironment } from '@net/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
+import { createEnvAccessor } from '../../src/common/env/env.accessor'
 
 // Load env
 const rootDir = path.resolve(__dirname, '../../../../')
 loadEnvironment({ basePath: rootDir })
 
-const dbUrl = process.env.DATABASE_URL
+const env = createEnvAccessor()
+const appEnv = env.appEnv()
+const dbUrl = env.str('DATABASE_URL')
 
-if (!dbUrl) {
+const allowedEnvs = new Set(['development', 'test', 'e2e'])
+if (!allowedEnvs.has(appEnv)) {
+  console.error(`❌ mock seed 禁止在 ${appEnv} 环境运行`)
+  process.exit(1)
+}
+
+if (!env.bool('ALLOW_MOCK_SEED', false)) {
+  console.error('❌ 未设置 ALLOW_MOCK_SEED=true，拒绝执行 mock seed')
+  process.exit(1)
+}
+
+if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
   console.error('❌ DATABASE_URL invalid')
   process.exit(1)
 }
@@ -24,9 +38,15 @@ async function main() {
 
   // 1. 清理旧模拟数据
   console.log('🧹 清理旧数据...')
-  await prisma.polymarketOutcome.deleteMany({})
-  await prisma.polymarketMarket.deleteMany({})
-  await prisma.cryptoStockQuote.deleteMany({})
+  await prisma.polymarketOutcome.deleteMany({
+    where: { outcomeTokenId: { startsWith: 'poly-' } },
+  })
+  await prisma.polymarketMarket.deleteMany({
+    where: { marketId: { startsWith: 'poly-' } },
+  })
+  await prisma.cryptoStockQuote.deleteMany({
+    where: { source: 'MOCK' },
+  })
   await prisma.hyperliquidWhaleAlert.deleteMany({
     where: { source: 'MOCK' }
   })
@@ -99,7 +119,7 @@ async function main() {
         symbol: stock.symbol,
         name: stock.name,
         exchange: stock.exchange,
-        source: 'BBX',
+        source: 'MOCK',
         price: Math.random() * 200 + 10,
         openPrice: Math.random() * 200 + 10,
         highPrice: Math.random() * 210 + 10,
@@ -129,6 +149,7 @@ async function main() {
   ]
   const whaleSymbols = ['BTC', 'ETH', 'SOL', 'HYPE', 'ARB', 'SUI', 'LINK']
 
+  let whaleAlertFailures = 0
   for (let i = 0; i < 200; i++) {
     const address = whaleAddresses[i % whaleAddresses.length]
     const symbol = whaleSymbols[i % whaleSymbols.length]
@@ -150,9 +171,15 @@ async function main() {
         positionValueUsd: value,
         positionAction: i % 10 === 0 ? 2 : 1, // 10% are closures
         createTime,
-        source: 'MOCK'
-      }
-    }).catch(() => {}) 
+        source: 'MOCK',
+      },
+    }).catch(() => {
+      whaleAlertFailures += 1
+    })
+  }
+
+  if (whaleAlertFailures > 0) {
+    console.warn(`⚠️ Whale Alert mock 写入失败 ${whaleAlertFailures} 条`)
   }
 
   console.log('✅ 全量模拟数据填充完成！')

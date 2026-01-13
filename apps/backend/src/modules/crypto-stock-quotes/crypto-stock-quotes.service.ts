@@ -34,7 +34,7 @@ export class CryptoStockQuotesService {
    *
    * - 所有数值字段统一转为字符串，避免前后端小数精度问题
    */
-  private toResponseDto(entity: any): CryptoStockQuoteResponseDto {
+  private toResponseDto(entity: CryptoStockQuote): CryptoStockQuoteResponseDto {
     const config = PUBLIC_COMPANY_CONFIG[entity.symbol]
 
     return {
@@ -74,7 +74,6 @@ export class CryptoStockQuotesService {
     }
   }
 }
-
 
 
 

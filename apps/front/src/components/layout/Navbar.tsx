@@ -570,22 +570,22 @@ export const Navbar = () => {
       <div className="flex items-center gap-4">
         {ENABLE_GLOBAL_SEARCH && (
           <div className="relative group" ref={searchWrapRef}>
-            <svg width="0" height="0" className="absolute">
-              <defs>
-                <linearGradient id="search_icon_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="var(--color-primary)" />
-                  <stop offset="100%" stopColor="var(--color-secondary)" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] group-focus-within:text-primary transition-colors z-10"
-              style={{
+          <svg width="0" height="0" className="absolute">
+            <defs>
+              <linearGradient id="search_icon_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="var(--color-primary)" />
+                <stop offset="100%" stopColor="var(--color-secondary)" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <Search 
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] group-focus-within:text-primary transition-colors z-10" 
+            style={{ 
                 stroke: 'url(#search_icon_gradient)',
-              }}
-            />
+            }}
+          />
             <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-md opacity-0 group-focus-within:opacity-100 transition-opacity p-[1.5px] pointer-events-none">
-              <div className="w-full h-full bg-[#0d1117] rounded-[5px]" />
+            <div className="w-full h-full bg-[#0d1117] rounded-[5px]" />
             </div>
             <button
               type="button"
@@ -603,20 +603,20 @@ export const Navbar = () => {
         )}
         {ENABLE_USER_SYSTEM && (
           <>
-            <button 
-              type="button" 
-              className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors"
-              onClick={() => info('Coming Soon')}
-            >
-              {t('nav.login')}
-            </button>
-            <button 
-              type="button" 
-              className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
-              onClick={() => info('Coming Soon')}
-            >
-              {t('nav.register')}
-            </button>
+        <button 
+          type="button" 
+          className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors"
+          onClick={() => info('Coming Soon')}
+        >
+          {t('nav.login')}
+        </button>
+        <button 
+          type="button" 
+          className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+          onClick={() => info('Coming Soon')}
+        >
+          {t('nav.register')}
+        </button>
           </>
         )}
         <LanguageSwitcher />

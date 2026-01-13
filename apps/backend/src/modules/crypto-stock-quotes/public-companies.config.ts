@@ -11,7 +11,7 @@ export interface PublicCompanyConfig {
 export const PUBLIC_COMPANY_CONFIG: Record<string, PublicCompanyConfig> = {
   "1931": {
     "assetSymbol": "ETH",
-    "assetLogoUrl": "http://static.aicoinstorge.com/coin/20220808/165993003785920.png",
+    "assetLogoUrl": "https://static.aicoinstorge.com/coin/20220808/165993003785920.png",
     "companyLogoUrl": "/images/companies/1931.png",
     "mNav": "2.59",
     "holdingsValue": "$112.68M",
@@ -27,7 +27,7 @@ export const PUBLIC_COMPANY_CONFIG: Record<string, PublicCompanyConfig> = {
   },
   "1499.HK": {
     "assetSymbol": "OKB",
-    "assetLogoUrl": "http://static.aicoinstorge.com/coin/20220208/164431982343909.png",
+    "assetLogoUrl": "https://static.aicoinstorge.com/coin/20220208/164431982343909.png",
     "companyLogoUrl": "/images/companies/1499.png",
     "mNav": "0",
     "holdingsValue": "-",
@@ -115,7 +115,7 @@ export const PUBLIC_COMPANY_CONFIG: Record<string, PublicCompanyConfig> = {
   },
   "SBET": {
     "assetSymbol": "ETH",
-    "assetLogoUrl": "http://static.aicoinstorge.com/coin/20220808/165993003785920.png",
+    "assetLogoUrl": "https://static.aicoinstorge.com/coin/20220808/165993003785920.png",
     "companyLogoUrl": "/images/companies/sbet.png",
     "mNav": "-",
     "holdingsValue": "$6.09B",
@@ -243,7 +243,7 @@ export const PUBLIC_COMPANY_CONFIG: Record<string, PublicCompanyConfig> = {
   },
   "HOOD": {
     "assetSymbol": "ETH",
-    "assetLogoUrl": "http://static.aicoinstorge.com/coin/20220808/165993003785920.png",
+    "assetLogoUrl": "https://static.aicoinstorge.com/coin/20220808/165993003785920.png",
     "companyLogoUrl": "/images/companies/hood.png",
     "mNav": "-",
     "holdingsValue": "$32.41B",

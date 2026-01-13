@@ -142,16 +142,16 @@ const IndicatorChartPanel = ({
     if (type === 'line') {
       // Use a single LineSeries. If data points include `color`, lightweight-charts will apply per-point color,
       // which avoids the "double line on first open" issue caused by creating two series depending on timing.
-      series = chart.addSeries(LineSeries, {
-        color,
-        lineWidth: 2,
-        crosshairMarkerVisible: false,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        ...(priceFormatter
-          ? { priceFormat: { type: 'custom', minMove: 0.0001, formatter: priceFormatter } }
-          : {}),
-      })
+        series = chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 2,
+          crosshairMarkerVisible: false,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          ...(priceFormatter
+            ? { priceFormat: { type: 'custom', minMove: 0.0001, formatter: priceFormatter } }
+            : {}),
+        })
     } else if (type === 'area') {
       // Filled area to bottom (Coinglass-like OI panel)
       series = chart.addSeries(AreaSeries, {
