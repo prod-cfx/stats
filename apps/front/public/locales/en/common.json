@@ -280,6 +280,8 @@
     "openInterest": {
       "title": "{{symbol}} Futures Open Interest",
       "searchPlaceholder": "Search",
+      "authRequired": "Please login to view full data",
+      "loadError": "Failed to load data, please try again",
       "table": {
         "rank": "Rank",
         "exchange": "Exchange",

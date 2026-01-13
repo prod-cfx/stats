@@ -138,9 +138,6 @@ export class OpenInterestController {
   }
 
   @Get()
-  @ApiBearerAuth()
-  @RequireAuth()
-  @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '查询持仓量数据' })
   @ApiQuery({ name: 'exchange', required: false, type: String, description: '交易所名称', example: 'All' })
   @ApiQuery({ name: 'symbol', required: false, type: String, description: '币种符号', example: 'BTC' })

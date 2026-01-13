@@ -19,6 +19,7 @@ import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.c
 import { PrismaModule } from '../prisma/prisma.module'
 import { AdminModule } from './admin/admin.module'
 import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated-liquidation.module'
+import { AggregatedOrderbookModule } from './aggregated-orderbook/aggregated-orderbook.module'
 import { AuthModule } from './auth/auth.module'
 import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
@@ -95,6 +96,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     LiquidationHeatmapModule,
     AggregatedLiquidationModule,
     OrderbookConfigModule,
+    AggregatedOrderbookModule,
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,

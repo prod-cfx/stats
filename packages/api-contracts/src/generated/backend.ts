@@ -637,6 +637,29 @@ const ExchangeLiquidationResponseDto = z
     rows: z.array(ExchangeLiquidationRowDto),
   })
   .passthrough();
+const VenueDetailDto = z
+  .object({ venueId: z.string(), size: z.number() })
+  .passthrough();
+const AggregatedLevelDto = z
+  .object({
+    price: z.number(),
+    sizeTotal: z.number(),
+    details: z.array(VenueDetailDto),
+  })
+  .passthrough();
+const AggregatedOrderbookResponseDto = z
+  .object({
+    marketKey: z.string(),
+    base: z.string(),
+    type: z.string(),
+    asks: z.array(AggregatedLevelDto),
+    bids: z.array(AggregatedLevelDto),
+    midPrice: z.number(),
+    updatedAt: z.number(),
+    venues: z.array(z.string()),
+    mergedQuotes: z.array(z.string()),
+  })
+  .passthrough();
 const ExchangeConfigResponseDto = z
   .object({
     id: z.string(),
@@ -869,6 +892,9 @@ export const schemas = {
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
   ExchangeLiquidationResponseDto,
+  VenueDetailDto,
+  AggregatedLevelDto,
+  AggregatedOrderbookResponseDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
@@ -2817,6 +2843,44 @@ const endpoints = makeApi([
         schema: z.void(),
       },
     ],
+  },
+  {
+    method: "get",
+    path: "/orderbook/aggregated",
+    alias: "AggregatedOrderbookController_getAggregatedOrderbook",
+    description: `合并多个交易所的订单簿数据，USDT/USDC 计价会自动合并`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "base",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "type",
+        type: "Query",
+        schema: z.enum(["spot", "perp"]),
+      },
+      {
+        name: "venues",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "depth",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "tickSize",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+    ],
+    response: z
+      .object({ data: AggregatedOrderbookResponseDto, message: z.string() })
+      .partial()
+      .passthrough(),
   },
   {
     method: "get",

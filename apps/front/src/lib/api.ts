@@ -988,3 +988,83 @@ export async function fetchPredictionMarkets(
     return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
   }, 'FETCH_PREDICTION_MARKETS')
 }
+
+// ===== 聚合订单簿 API =====
+
+export type AggregatedOrderbookMarketType = 'spot' | 'perp'
+
+export interface AggregatedOrderbookVenueDetail {
+  venueId: string
+  size: number
+}
+
+export interface AggregatedOrderbookLevel {
+  price: number
+  sizeTotal: number
+  details: AggregatedOrderbookVenueDetail[]
+}
+
+export interface AggregatedOrderbookResponse {
+  marketKey: string
+  base: string
+  type: string
+  asks: AggregatedOrderbookLevel[]
+  bids: AggregatedOrderbookLevel[]
+  midPrice: number
+  updatedAt: number
+  venues: string[]
+  mergedQuotes: string[]
+}
+
+export interface FetchAggregatedOrderbookParams {
+  base: string
+  type: AggregatedOrderbookMarketType
+  venues?: string
+  depth?: number
+  tickSize?: number
+}
+
+export async function fetchAggregatedOrderbook(
+  params: FetchAggregatedOrderbookParams,
+): Promise<AggregatedOrderbookResponse> {
+  return apiCall(async () => {
+    const response = await client.AggregatedOrderbookController_getAggregatedOrderbook({
+      queries: {
+        base: params.base,
+        type: params.type,
+        ...(params.venues && { venues: params.venues }),
+        ...(params.depth && { depth: params.depth }),
+        ...(params.tickSize && { tickSize: params.tickSize }),
+      },
+    })
+    return unwrapResponse<AggregatedOrderbookResponse>(response as any)
+  }, 'FETCH_AGGREGATED_ORDERBOOK')
+}
+
+// ===== 聚合持仓量（Open Interest）API =====
+
+export type OpenInterestApiItem = Infer<typeof schemas.OpenInterestDto>
+
+export interface FetchAggregatedOpenInterestQuery {
+  symbol: string
+  exchange?: string
+  limit?: number
+}
+
+export async function fetchAggregatedOpenInterest(
+  query: FetchAggregatedOpenInterestQuery,
+): Promise<OpenInterestApiItem[]> {
+  return apiCall(async () => {
+    const response = await client.OpenInterestController_query({
+      headers: optionalAuthHeaders(),
+      queries: {
+        symbol: query.symbol,
+        ...(query.exchange && { exchange: query.exchange }),
+        limit: query.limit ?? 100,
+      },
+    })
+
+    const result = unwrapResponse(response) as { items?: OpenInterestApiItem[] }
+    return result.items ?? []
+  }, 'FETCH_AGGREGATED_OPEN_INTEREST')
+}

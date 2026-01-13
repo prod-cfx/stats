@@ -114,6 +114,6 @@ export function snapToPresetForWidgetType(
   if (best) return { w: best.w, h: best.h, size: best.size }
   
   // Fallback for prediction market (if M exists) or default M
-  const fallback = presets['M'] || presets['S'] || UNIT_SIZE_PRESETS.M
-  return { w: fallback.w, h: fallback.h, size: (presets['M'] ? 'M' : 'S') as UnitSize }
+  const fallback = presets.M || presets.S || UNIT_SIZE_PRESETS.M
+  return { w: fallback.w, h: fallback.h, size: (presets.M ? 'M' : 'S') as UnitSize }
 }

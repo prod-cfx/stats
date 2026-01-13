@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { FilterButton } from '@/components/ui/FilterButton'
 
 interface Row {
@@ -30,7 +29,6 @@ function fmtUsd(v: number) {
 }
 
 export function LongShortRatioWidget(props: { config: Record<string, any> }) {
-  const { t } = useTranslation()
   const [symbol, setSymbol] = useState((props.config?.symbol as string) || 'BTC')
   const [windowVal, setWindow] = useState((props.config?.window as string) || '4h')
 

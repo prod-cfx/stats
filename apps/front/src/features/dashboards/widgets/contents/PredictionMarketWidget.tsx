@@ -1,6 +1,6 @@
 'use client'
 
-import { Bitcoin, Coins, Globe, Info, Landmark, MoreHorizontal, Rocket, Shield } from 'lucide-react'
+import { Bitcoin, Coins, Globe, Landmark, MoreHorizontal, Rocket, Shield } from 'lucide-react'
 import React, { useMemo } from 'react'
 
 interface PredictionOption {

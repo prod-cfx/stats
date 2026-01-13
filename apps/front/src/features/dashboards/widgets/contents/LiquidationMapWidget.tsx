@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
-import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
-import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
 import { RefreshCcw } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { FilterButton } from '@/components/ui/FilterButton'
+import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
 
 type Range = '1d' | '7d' | '30d'
 

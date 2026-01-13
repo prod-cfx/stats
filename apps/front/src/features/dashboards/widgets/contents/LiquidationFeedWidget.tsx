@@ -3,8 +3,7 @@
 import React from 'react'
 import { ExchangeLiquidationTable } from '@/components/liquidation-data/ExchangeLiquidationTable'
 
-export function LiquidationFeedWidget(props: { config: Record<string, any> }) {
-  const isCompact = props.config?.size === 'S'
+export function LiquidationFeedWidget(_props: { config: Record<string, any> }) {
   // Reuse the existing ExchangeLiquidationTable component which provides "Aggregated Liquidation" data by exchange.
   // We hide the title since the widget shell provides one.
   return (

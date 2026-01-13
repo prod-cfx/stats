@@ -95,7 +95,7 @@ const OrderRow = ({
       <div className={`relative w-full flex items-center z-10 ${isCompact ? 'text-[9.5px] leading-3' : 'text-[12px] leading-4'} font-mono`}>
         <div className={`${isCompact ? 'w-[15%]' : 'w-[22%]'} flex items-center gap-0 opacity-70`}>
           {item.exchanges.slice(0, 2).map((ex, idx) => (
-            <ExchangeLogo key={idx} logoUrl={ex} size={isCompact ? 8 : 13} />
+            <ExchangeLogo key={idx} name={ex} size={isCompact ? 8 : 13} />
           ))}
         </div>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
