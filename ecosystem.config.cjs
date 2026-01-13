@@ -33,7 +33,7 @@ function createBackendConfig() {
     return {
       name: 'backend',
       cwd: path.join(projectRoot, 'apps/backend'),
-      script: 'dist/main.js',
+      script: 'dist/apps/backend/src/main.js',
       exec_mode: 'cluster',
       instances: 2,
       env: {
@@ -76,7 +76,7 @@ function createFrontConfig() {
     return {
       name: 'front',
       cwd: path.join(projectRoot, 'apps/front'),
-      script: path.join(projectRoot, 'node_modules/.bin/next'),
+      script: 'node_modules/.bin/next',
       args: 'start -p 3001',
       instances: 1,
       env: {
@@ -118,7 +118,7 @@ function createAdminConfig() {
     return {
       name: 'admin',
       cwd: path.join(projectRoot, 'apps/admin-front'),
-      script: path.join(projectRoot, 'node_modules/.bin/next'),
+      script: 'node_modules/.bin/next',
       args: 'start -p 3500',
       instances: 1,
       env: {
