@@ -32,8 +32,10 @@ function createBackendConfig() {
   if (isProduction) {
     return {
       name: 'backend',
-      cwd: path.join(projectRoot, 'apps/backend'),
-      script: 'dist/apps/backend/src/main.js',
+      cwd: projectRoot,
+      script: 'apps/backend/dist/apps/backend/src/main.js',
+      interpreter: 'node',
+      node_args: '-r tsconfig-paths/register',
       exec_mode: 'cluster',
       instances: 2,
       env: {
