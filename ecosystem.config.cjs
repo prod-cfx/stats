@@ -40,6 +40,7 @@ function createBackendConfig() {
         NODE_ENV: 'production',
         APP_ENV: 'production',
         PORT: 3000,
+        NODE_PATH: path.join(projectRoot, 'node_modules'),
       },
       max_memory_restart: '1G',
       error_file: path.join(projectRoot, 'logs/pm2-prod/backend-error.log'),
