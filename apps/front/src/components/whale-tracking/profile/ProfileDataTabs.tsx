@@ -6,6 +6,52 @@ import { useTranslation } from 'react-i18next';
 
 type TabType = 'spot' | 'perpetual' | 'orders' | 'trades' | 'history' | 'delegation';
 
+// 后端 API 数据类型
+interface PerpPositionDto {
+  coin: string;
+  side: 'LONG' | 'SHORT';
+  size: number;
+  entryPrice: number;
+  markPrice: number;
+  liquidationPrice: number;
+  positionValue: number;
+  marginUsed: number;
+  leverage: { type: 'cross' | 'isolated'; value: number };
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  fundingRate?: number;
+  roi: number;
+}
+
+interface SpotBalanceDto {
+  coin: string;
+  total: number;
+  hold: number;
+  available: number;
+  value: number;
+}
+
+interface OpenOrderDto {
+  orderId: number;
+  coin: string;
+  side: 'BUY' | 'SELL';
+  type: string;
+  price: number;
+  size: number;
+  origSize: number;
+  value: number;
+  timestamp: string;
+  triggerPrice?: number | null;
+}
+
+// Props 接口
+interface ProfileDataTabsProps {
+  spotPositions: SpotBalanceDto[];
+  perpPositions: PerpPositionDto[];
+  openOrders: OpenOrderDto[];
+}
+
+// 前端显示类型
 interface SpotPosition {
   asset: string;
   assetLogo: string;
@@ -108,148 +154,118 @@ interface HistoryOrder {
   id: string;
 }
 
-const mockSpotPositions: SpotPosition[] = [
-  {
-    asset: 'XAUT',
-    assetLogo: 'https://api.dicebear.com/7.x/identicon/svg?seed=xaut',
-    share: '98.96 %',
-    value: '$ 12.09',
-    amount: '0.0027915 XAUT',
-    price: '$ 4,332.0'
-  },
-  {
-    asset: 'HYPE',
-    assetLogo: 'https://api.dicebear.com/7.x/identicon/svg?seed=hype',
-    share: '0.95 %',
-    value: '$ 0.11',
-    amount: '0.00449572 HYPE',
-    price: '$ 25.8'
-  },
-  {
-    asset: 'USDC',
-    assetLogo: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
-    share: '0.05 %',
-    value: '$ 0',
-    amount: '0.00560107 USDC',
-    price: '$ 1'
-  },
-  {
-    asset: 'FLY',
-    assetLogo: 'https://api.dicebear.com/7.x/identicon/svg?seed=fly',
-    share: '0.03 %',
-    value: '$ 0',
-    amount: '1,000.0 FLY',
-    price: '$ 0.000004'
-  }
-];
-
-const mockPerpetualPositions: PerpetualPosition[] = [
-  {
-    asset: 'BTC',
-    side: 'Short',
-    marginType: 'cross',
-    leverage: '10x',
-    valueUSD: '$ 166,034,001.73',
-    valueAsset: '-1,899.07241 BTC',
-    pnlUSD: '$ +1,232,483.39',
-    pnlPercent: '+7.42 %',
-    entryPrice: '$ 88,077.9',
-    markPrice: '$ 87,429.0',
-    liqPrice: '$ 97,656.0',
-    margin: '$ 16,603,400.17',
-    fundingFee: '$ 32,146.82'
-  },
-  {
-    asset: 'ETH',
-    side: 'Short',
-    marginType: 'cross',
-    leverage: '15x',
-    valueUSD: '$ 54,863,721.24',
-    valueAsset: '-18,527.5298 ETH',
-    pnlUSD: '$ +956,913.25',
-    pnlPercent: '+26.16 %',
-    entryPrice: '$ 3,012.84',
-    markPrice: '$ 2,961.2',
-    liqPrice: '$ 4,014.61',
-    margin: '$ 3,657,581.42',
-    fundingFee: '$ 7,966.62'
-  },
-  {
-    asset: 'SOL',
-    side: 'Short',
-    marginType: 'cross',
-    leverage: '20x',
-    valueUSD: '$ 18,772,607.28',
-    valueAsset: '-151,209.08 SOL',
-    pnlUSD: '$ +224,700.09',
-    pnlPercent: '+23.94 %',
-    entryPrice: '$ 125.636',
-    markPrice: '$ 124.15',
-    liqPrice: '$ 252.594',
-    margin: '$ 1,877,260.73',
-    fundingFee: '$ 1,246.82'
-  }
-];
-
-const mockOpenOrders: OpenOrder[] = [
-  { 
-    time: '2025年12月11日', 
-    asset: 'ETH', 
-    side: 'Sell', 
-    count: 2, 
-    value: '$ 222,404,000', 
-    amount: '52,000 ETH', 
-    price: '$ 4,277 - 4,277',
-    details: [
-      { time: '2025年12月11日', type: 'limit', value: '$ 94,094,000.00', amount: '22,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007812594' },
-      { time: '2025年12月11日', type: 'limit', value: '$ 128,310,000.00', amount: '30,000.0 ETH', price: '$ 4,277.0', trigger: '-', status: 'open', id: '# 265007673433' },
-    ]
-  },
-  { 
-    time: '2025年11月27日', 
-    asset: 'XRP', 
-    side: 'Sell', 
-    count: 3, 
-    value: '$ 120,554,468.1', 
-    amount: '37,934,068 XRP', 
-    price: '$ 3.178 - 3.178',
-    details: [
-      { time: '2025年11月27日', type: 'limit', value: '$ 40,000,000.00', amount: '12,586,532 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812595' },
-      { time: '2025年11月27日', type: 'limit', value: '$ 80,554,468.10', amount: '25,347,536 XRP', price: '$ 3.178', trigger: '-', status: 'open', id: '# 265007812596' },
-    ]
-  },
-];
-
-const mockRecentTrades: RecentTrade[] = [
-  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '123.3 HYPE', startPosition: '230,598.33 HYPE', price: '$ 24.306', pnl: '-', fee: '0.36 USDC', value: '$ 2,997.13' },
-  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '34.17 HYPE', startPosition: '230,564.16 HYPE', price: '$ 24.306', pnl: '-', fee: '0.10 USDC', value: '$ 830.54' },
-  { time: '2025年12月19日', asset: 'HYPE', action: 'openLongAdd', amount: '39,120.76 HYPE', startPosition: '191,443.4 HYPE', price: '$ 24.3000178902', pnl: '-', fee: '380.25 USDC', value: '$ 950,634.42' },
-  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '361.27 HYPE', startPosition: '191,082.13 HYPE', price: '$ 25.111', pnl: '-', fee: '1.09 USDC', value: '$ 9,071.85' },
-  { time: '2025年12月18日', asset: 'HYPE', action: 'openLongAdd', amount: '126.92 HYPE', startPosition: '190,955.21 HYPE', price: '$ 25.111', pnl: '-', fee: '0.38 USDC', value: '$ 3,187.09' },
-];
-
-const mockCompletedTrades: CompletedTrade[] = [
-  { endTime: '2025年11月21日', asset: 'kPEPE', side: 'Short', duration: '925小时 35分', netPnl: '$ +6,535,295.63', size: '10,736,581 kPEPE', exitPrice: '$ 0.0052744813', fee: '$ 1,666.32' },
-  { endTime: '2025年11月21日', asset: 'DOGE', side: 'Long', duration: '394小时 46分', netPnl: '$ -3,417.66', size: '79,441 DOGE', exitPrice: '$ 0.1338342817', fee: '$ 6.26' },
-  { endTime: '2025年11月17日', asset: 'ASTER', side: 'Short', duration: '824小时 59分', netPnl: '$ +3,151,403.12', size: '4,336 ASTER', exitPrice: '$ 1.1350020521', fee: '$ 9,725.01' },
-  { endTime: '2025年11月5日', asset: 'DOGE', side: 'Short', duration: '555小时 57分', netPnl: '$ +7,867,537.75', size: '68,487 DOGE', exitPrice: '$ 0.1569813989', fee: '$ 4,538.00' },
-  { endTime: '2025年11月5日', asset: 'XRP', side: 'Short', duration: '598小时 51分', netPnl: '$ +1,698,568.27', size: '5,652 XRP', exitPrice: '$ 2.1570388694', fee: '$ 3,425.56' },
-  { endTime: '2025年11月5日', asset: 'ETH', side: 'Short', duration: '595小时 18分', netPnl: '$ +3,186,000.00', size: '200.2266 ETH', exitPrice: '$ 3,413', fee: '$ 3,825.44' },
-  { endTime: '2025年10月11日', asset: 'DOGE', side: 'Long', duration: '24分', netPnl: '$ +332,142.15', size: '76,593 DOGE', exitPrice: '$ 0.1788799913', fee: '$ 485.32' },
-];
-
-const mockHistoryOrders: HistoryOrder[] = [
-  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '39,278.23 HYPE', price: '$ 24.306', trigger: '-', status: 'cancelled', id: '# 273191937200' },
-  { time: '2025年12月19日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '160,909.26 HYPE', price: '$ 24.306', trigger: '-', status: 'openOrder', id: '# 273191937200' },
-  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '0 HYPE', price: '$ 24.666', trigger: '-', status: 'cancelled', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '230,601.34 HYPE', price: '$ 24.666', trigger: '-', status: 'openOrder', id: '# 273034661279' },
-  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '45,155.62 HYPE', price: '$ 25.111', trigger: '-', status: 'cancelled', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '219,729.19 HYPE', price: '$ 25.111', trigger: '-', status: 'openOrder', id: '# 273022680305' },
-  { time: '2025年12月18日', asset: 'HYPE', type: 'limit', side: 'Buy', amount: '116,124.2 HYPE', price: '$ 25.111', trigger: '-', status: 'filled', id: '# 273021487169' },
-];
-
-export const ProfileDataTabs = () => {
+export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: ProfileDataTabsProps) => {
   const { t } = useTranslation();
+
+  // 数据转换函数
+  const convertSpotToDisplay = (spots: SpotBalanceDto[]): SpotPosition[] => {
+    if (!spots || spots.length === 0) return [];
+
+    const totalValue = spots.reduce((sum, s) => sum + s.value, 0);
+
+    return spots.map(spot => {
+      const sharePercent = totalValue > 0 ? (spot.value / totalValue * 100).toFixed(2) : '0.00';
+      const price = spot.total > 0 ? (spot.value / spot.total).toFixed(2) : '0';
+
+      return {
+        asset: spot.coin,
+        assetLogo: `https://api.dicebear.com/7.x/identicon/svg?seed=${spot.coin.toLowerCase()}`,
+        share: `${sharePercent} %`,
+        value: `$ ${spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        amount: `${spot.total} ${spot.coin}`,
+        price: `$ ${price}`,
+      };
+    });
+  };
+
+  const convertPerpToDisplay = (perps: PerpPositionDto[]): PerpetualPosition[] => {
+    if (!perps || perps.length === 0) return [];
+
+    return perps.map(perp => {
+      const isNegativePnl = perp.unrealizedPnl < 0;
+      const pnlSign = isNegativePnl ? '' : '+';
+
+      return {
+        asset: perp.coin,
+        side: perp.side === 'LONG' ? 'Long' : 'Short',
+        marginType: perp.leverage.type,
+        leverage: `${perp.leverage.value}x`,
+        valueUSD: `$ ${Math.abs(perp.positionValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        valueAsset: `${perp.size} ${perp.coin}`,
+        pnlUSD: `$ ${pnlSign}${Math.abs(perp.unrealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        pnlPercent: `${pnlSign}${perp.unrealizedPnlPercent.toFixed(2)} %`,
+        entryPrice: `$ ${perp.entryPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
+        markPrice: `$ ${perp.markPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
+        liqPrice: `$ ${perp.liquidationPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
+        margin: `$ ${perp.marginUsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        fundingFee: perp.fundingRate ? `$ ${Math.abs(perp.fundingRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$ 0.00',
+      };
+    });
+  };
+
+  const convertOrdersToDisplay = (orders: OpenOrderDto[]): OpenOrder[] => {
+    if (!orders || orders.length === 0) return [];
+
+    // 按 coin + side + date 分组
+    type GroupKey = string;
+    const groups = new Map<GroupKey, OpenOrderDto[]>();
+
+    orders.forEach(order => {
+      const date = new Date(order.timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
+      const key = `${order.coin}:${order.side}:${date}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(order);
+    });
+
+    // 将每组转换为一个 OpenOrder
+    return Array.from(groups.entries()).map(([_, groupOrders]) => {
+      const first = groupOrders[0];
+      const totalValue = groupOrders.reduce((sum, o) => sum + o.value, 0);
+      const totalSize = groupOrders.reduce((sum, o) => sum + o.size, 0);
+      const prices = groupOrders.map(o => o.price);
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      const priceRange = minPrice === maxPrice
+        ? `$ ${minPrice.toFixed(2)}`
+        : `$ ${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}`;
+
+      const displayDate = new Date(first.timestamp).toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      return {
+        id: `group-${first.coin}-${first.side}-${first.timestamp}`,
+        time: displayDate,
+        asset: first.coin,
+        side: first.side === 'BUY' ? 'Buy' : 'Sell',
+        count: groupOrders.length,
+        value: `$ ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+        amount: `${totalSize.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 4 })} ${first.coin}`,
+        price: priceRange,
+        details: groupOrders.map(order => ({
+          time: displayDate,
+          type: order.type,
+          value: `$ ${order.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          amount: `${order.size} ${order.coin}`,
+          price: `$ ${order.price.toFixed(2)}`,
+          trigger: order.triggerPrice ? `$ ${order.triggerPrice.toFixed(2)}` : '-',
+          status: 'open', // Hyperliquid API 返回的都是 open orders
+          id: `# ${order.orderId}`,
+        })),
+      };
+    });
+  };
+
+  // 转换后的数据
+  const displaySpotPositions = useMemo(() => convertSpotToDisplay(spotPositions), [spotPositions]);
+  const displayPerpPositions = useMemo(() => convertPerpToDisplay(perpPositions), [perpPositions]);
+  const displayOpenOrders = useMemo(() => convertOrdersToDisplay(openOrders), [openOrders]);
+
   const [activeTab, setActiveTab] = useState<TabType>('perpetual');
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
@@ -300,9 +316,9 @@ export const ProfileDataTabs = () => {
   };
 
   const tabs = [
-    { id: 'spot', label: t('whaleTracking.profile.tabs.spot', { count: mockSpotPositions.length }) },
-    { id: 'perpetual', label: t('whaleTracking.profile.tabs.perpetual', { count: mockPerpetualPositions.length }) },
-    { id: 'orders', label: t('whaleTracking.profile.tabs.orders', { count: mockOpenOrders.length }) },
+    { id: 'spot', label: t('whaleTracking.profile.tabs.spot', { count: displaySpotPositions.length }) },
+    { id: 'perpetual', label: t('whaleTracking.profile.tabs.perpetual', { count: displayPerpPositions.length }) },
+    { id: 'orders', label: t('whaleTracking.profile.tabs.orders', { count: displayOpenOrders.length }) },
     { id: 'trades', label: t('whaleTracking.profile.tabs.trades') },
     { id: 'history', label: t('whaleTracking.profile.tabs.history') },
     { id: 'delegation', label: t('whaleTracking.profile.tabs.delegation') },
@@ -379,29 +395,22 @@ export const ProfileDataTabs = () => {
     return data;
   };
 
-  const filteredSpotData = useMemo(() => 
-    getFilteredAndSortedData(mockSpotPositions, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
+  const filteredSpotData = useMemo(() =>
+    getFilteredAndSortedData(displaySpotPositions, sortField, sortOrder, assetFilter),
+  [displaySpotPositions, assetFilter, sortField, sortOrder]);
 
-  const filteredPerpData = useMemo(() => 
-    getFilteredAndSortedData(mockPerpetualPositions, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
+  const filteredPerpData = useMemo(() =>
+    getFilteredAndSortedData(displayPerpPositions, sortField, sortOrder, assetFilter),
+  [displayPerpPositions, assetFilter, sortField, sortOrder]);
 
-  const filteredOpenOrders = useMemo(() => 
-    getFilteredAndSortedData(mockOpenOrders, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
+  const filteredOpenOrders = useMemo(() =>
+    getFilteredAndSortedData(displayOpenOrders, sortField, sortOrder, assetFilter),
+  [displayOpenOrders, assetFilter, sortField, sortOrder]);
 
-  const filteredRecentTrades = useMemo(() => 
-    getFilteredAndSortedData(mockRecentTrades, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
-
-  const filteredCompletedTrades = useMemo(() => 
-    getFilteredAndSortedData(mockCompletedTrades, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
-
-  const filteredHistoryOrders = useMemo(() => 
-    getFilteredAndSortedData(mockHistoryOrders, sortField, sortOrder, assetFilter),
-  [assetFilter, sortField, sortOrder]);
+  // trades/history/delegation 暂无后端 API，显示空数据
+  const filteredRecentTrades = useMemo<RecentTrade[]>(() => [], []);
+  const filteredCompletedTrades = useMemo<CompletedTrade[]>(() => [], []);
+  const filteredHistoryOrders = useMemo<HistoryOrder[]>(() => [], []);
 
   const renderSideBadge = (side: string) => {
     const isLong = side === 'Long' || side === 'Buy';
@@ -480,7 +489,7 @@ export const ProfileDataTabs = () => {
                         )}
                       </div>
                       <div className="max-h-40 overflow-y-auto">
-                        {Array.from(new Set([...mockSpotPositions, ...mockPerpetualPositions, ...mockOpenOrders, ...mockRecentTrades, ...mockCompletedTrades, ...mockHistoryOrders].map(i => i.asset))).map(asset => (
+                        {Array.from(new Set([...displaySpotPositions, ...displayPerpPositions, ...displayOpenOrders].map(i => i.asset))).map(asset => (
                           <button 
                             key={asset}
                             type="button"

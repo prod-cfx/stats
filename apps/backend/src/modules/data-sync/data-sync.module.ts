@@ -10,6 +10,7 @@ import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-conf
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
+import { WhaleTrackingModule } from '@/modules/whale-tracking/whale-tracking.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
@@ -26,6 +27,9 @@ import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
+import { HyperliquidUserFillsSyncJob } from './jobs/hyperliquid-user-fills-sync.job'
+import { HyperliquidUserFundingSyncJob } from './jobs/hyperliquid-user-funding-sync.job'
+import { HyperliquidUserOrdersSyncJob } from './jobs/hyperliquid-user-orders-sync.job'
 import { PolymarketMarketsJob } from './jobs/polymarket-markets.job'
 import { PolymarketOrderbookJob } from './jobs/polymarket-orderbook.job'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
@@ -66,6 +70,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     SettingsModule,
     CryptoStockQuotesModule,
     TradesConfigModule,
+    WhaleTrackingModule,
   ],
   controllers: [AdminDataPullTaskController],
   providers: [
@@ -87,6 +92,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     BbxCryptoStockScraperJob,
     PolymarketMarketsJob,
     PolymarketOrderbookJob,
+    HyperliquidUserFillsSyncJob,
+    HyperliquidUserOrdersSyncJob,
+    HyperliquidUserFundingSyncJob,
     PolymarketGammaClient,
     PolymarketClobClient,
     PolymarketRepository,
@@ -109,6 +117,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         bbxCryptoStockScraperJob: BbxCryptoStockScraperJob,
         polymarketMarketsJob: PolymarketMarketsJob,
         polymarketOrderbookJob: PolymarketOrderbookJob,
+        hyperliquidUserFillsSyncJob: HyperliquidUserFillsSyncJob,
+        hyperliquidUserOrdersSyncJob: HyperliquidUserOrdersSyncJob,
+        hyperliquidUserFundingSyncJob: HyperliquidUserFundingSyncJob,
       ): DataPullJob[] => [
         exampleKlineJob,
         exampleNewsJob,
@@ -124,6 +135,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         bbxCryptoStockScraperJob,
         polymarketMarketsJob,
         polymarketOrderbookJob,
+        hyperliquidUserFillsSyncJob,
+        hyperliquidUserOrdersSyncJob,
+        hyperliquidUserFundingSyncJob,
       ],
       inject: [
         ExampleKlineJob,
@@ -140,6 +154,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         BbxCryptoStockScraperJob,
         PolymarketMarketsJob,
         PolymarketOrderbookJob,
+        HyperliquidUserFillsSyncJob,
+        HyperliquidUserOrdersSyncJob,
+        HyperliquidUserFundingSyncJob,
       ],
     },
     // 统一编排 & Cron

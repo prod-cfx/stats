@@ -1,15 +1,15 @@
 'use client';
 
-import { ChevronDown, Search, Menu, X } from 'lucide-react';
+import { ChevronDown, Menu, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/toast'
-import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
-import { getMockMarketList } from '@/lib/market-data/mock-market-list'
-import { getToken } from '@/lib/auth-storage'
 import { API_BASE_URL } from '@/lib/api-client'
+import { getToken } from '@/lib/auth-storage'
+import { getMockMarketList } from '@/lib/market-data/mock-market-list'
+import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'

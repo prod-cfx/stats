@@ -273,6 +273,158 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
   }, 'FETCH_WHALE_TRACKING_DISCOVER')
 }
 
+// ===== 鲸鱼交易者账户快照 API =====
+
+export type TraderSnapshotResponse = Infer<typeof schemas.TraderSnapshotResponseDto>
+
+export interface FetchTraderSnapshotQuery {
+  skipCache?: boolean
+}
+
+export async function fetchTraderSnapshot(
+  address: string,
+  query: FetchTraderSnapshotQuery = {},
+): Promise<TraderSnapshotResponse> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (query.skipCache) {
+      params.set('skipCache', 'true')
+    }
+
+    const search = params.toString()
+    const fallbackUrl = search.length > 0
+      ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot?${search}`
+      : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot`
+
+    return safeApiCall(
+      () =>
+        client.WhaleTrackingController_getTraderSnapshot({
+          headers: optionalAuthHeaders(),
+          params: { address },
+          queries: query,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...optionalAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<TraderSnapshotResponse>(
+            data as TraderSnapshotResponse | BaseResponse<TraderSnapshotResponse>,
+          ),
+      },
+    )
+  }, 'FETCH_TRADER_SNAPSHOT')
+}
+
+// ===== 鲸鱼交易者持仓详情 API =====
+
+export type TraderPositionsResponse = Infer<typeof schemas.TraderPositionsResponseDto>
+
+export interface FetchTraderPositionsQuery {
+  type?: 'perp' | 'spot' | 'all'
+  skipCache?: boolean
+}
+
+export async function fetchTraderPositions(
+  address: string,
+  query: FetchTraderPositionsQuery = {},
+): Promise<TraderPositionsResponse> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (query.type) {
+      params.set('type', query.type)
+    }
+    if (query.skipCache) {
+      params.set('skipCache', 'true')
+    }
+
+    const search = params.toString()
+    const fallbackUrl = search.length > 0
+      ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions?${search}`
+      : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions`
+
+    return safeApiCall(
+      () =>
+        client.WhaleTrackingController_getTraderPositions({
+          headers: optionalAuthHeaders(),
+          params: { address },
+          queries: query,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...optionalAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<TraderPositionsResponse>(
+            data as TraderPositionsResponse | BaseResponse<TraderPositionsResponse>,
+          ),
+      },
+    )
+  }, 'FETCH_TRADER_POSITIONS')
+}
+
+// ===== 鲸鱼交易者挂单列表 API =====
+
+export type TraderOpenOrdersResponse = Infer<typeof schemas.TraderOpenOrdersResponseDto>
+
+export interface FetchTraderOpenOrdersQuery {
+  coin?: string
+  skipCache?: boolean
+}
+
+export async function fetchTraderOpenOrders(
+  address: string,
+  query: FetchTraderOpenOrdersQuery = {},
+): Promise<TraderOpenOrdersResponse> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (query.coin) {
+      params.set('coin', query.coin)
+    }
+    if (query.skipCache) {
+      params.set('skipCache', 'true')
+    }
+
+    const search = params.toString()
+    const fallbackUrl = search.length > 0
+      ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders?${search}`
+      : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders`
+
+    return safeApiCall(
+      () =>
+        client.WhaleTrackingController_getTraderOpenOrders({
+          headers: optionalAuthHeaders(),
+          params: { address },
+          queries: query,
+        }),
+      {
+        url: fallbackUrl,
+        options: {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...optionalAuthHeaders(),
+          },
+        },
+        validateResponse: data =>
+          unwrapResponse<TraderOpenOrdersResponse>(
+            data as TraderOpenOrdersResponse | BaseResponse<TraderOpenOrdersResponse>,
+          ),
+      },
+    )
+  }, 'FETCH_TRADER_OPEN_ORDERS')
+}
+
 // ===== Hyperliquid Whale Alert 实时数据 API =====
 
 export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>

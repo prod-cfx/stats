@@ -47,6 +47,7 @@
     "dotenv-expand": "^12.0.3",
     "ethers": "^6.15.0",
     "ioredis": "^5.7.0",
+    "lru-cache": "^11.2.4",
     "nest-access-control": "^2.2.0",
     "nest-winston": "^1.10.2",
     "nestjs-cls": "^5.4.3",

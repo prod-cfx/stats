@@ -257,6 +257,8 @@ model HyperliquidWhaleAlert {
   @@index([userAddress, createTime], map: "idx_whale_alert_user_time")
   @@index([createTime], map: "idx_whale_alert_time")
   @@index([positionValueUsd], map: "idx_whale_alert_value")
+  /// 复合索引：优化 getTraderPerformance 查询（userAddress + symbol + createTime 组合过滤）
+  @@index([userAddress, symbol, createTime], map: "idx_whale_alert_user_symbol_time")
   @@map("hyperliquid_whale_alerts")
 }
 
@@ -485,4 +487,171 @@ model FuturesPairsMarket {
   @@index([symbol, exchangeName], map: "idx_futures_pairs_market_symbol_exchange")
   @@index([exchangeName], map: "idx_futures_pairs_market_exchange")
   @@map("futures_pairs_markets")
+}
+
+/// Hyperliquid 用户成交历史记录
+///
+/// 设计说明：
+/// - 存储用户在 Hyperliquid 平台的历史成交记录
+/// - 用于分析交易行为、计算 PnL 趋势等
+/// - 通过增量同步任务定期从 Hyperliquid API 拉取数据
+model HyperliquidUserFill {
+  id Int @id @default(autoincrement())
+
+  /// 用户地址
+  userAddress String @map("user_address")
+
+  /// 币种符号
+  coin String
+
+  /// 成交价格
+  price Decimal @db.Decimal(30, 10)
+
+  /// 成交数量（正=多，负=空）
+  size Decimal @db.Decimal(30, 10)
+
+  /// 方向（A = 主动买入, B = 主动卖出）
+  side String
+
+  /// 成交时间
+  time DateTime
+
+  /// 成交前持仓数量
+  startPosition Decimal @map("start_position") @db.Decimal(30, 10)
+
+  /// 仓位变化方向
+  direction String @map("dir")
+
+  /// 已实现盈亏
+  closedPnl Decimal @map("closed_pnl") @db.Decimal(30, 10)
+
+  /// 交易哈希
+  hash String
+
+  /// 订单 ID
+  orderId BigInt @map("order_id") @db.BigInt
+
+  /// 成交 ID
+  tradeId BigInt @map("trade_id") @db.BigInt
+
+  /// 是否为吃单
+  crossed Boolean
+
+  /// 手续费
+  fee Decimal @db.Decimal(30, 10)
+
+  /// 是否为强平
+  liquidation Boolean
+
+  /// 数据来源
+  source String @default("HYPERLIQUID")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userAddress, coin, time, tradeId], map: "uniq_hyperliquid_user_fill")
+  @@index([userAddress, time], map: "idx_hyperliquid_fill_user_time")
+  @@index([coin, time], map: "idx_hyperliquid_fill_coin_time")
+  @@map("hyperliquid_user_fills")
+}
+
+/// Hyperliquid 用户订单历史记录
+///
+/// 设计说明：
+/// - 存储用户在 Hyperliquid 平台的历史订单记录
+/// - 包含限价单、市价单、止损单等各类订单类型
+/// - 用于订单历史查询和交易行为分析
+model HyperliquidUserOrder {
+  id Int @id @default(autoincrement())
+
+  /// 用户地址
+  userAddress String @map("user_address")
+
+  /// 币种符号
+  coin String
+
+  /// 订单 ID
+  orderId BigInt @map("order_id") @db.BigInt
+
+  /// 客户端订单 ID（可选）
+  clientOrderId String? @map("client_order_id")
+
+  /// 方向（A = 买入, B = 卖出）
+  side String
+
+  /// 限价
+  limitPrice Decimal @map("limit_price") @db.Decimal(30, 10)
+
+  /// 订单数量
+  size Decimal @db.Decimal(30, 10)
+
+  /// 原始数量
+  originalSize Decimal @map("original_size") @db.Decimal(30, 10)
+
+  /// 订单类型（limit, market, stop, etc.）
+  orderType String? @map("order_type")
+
+  /// 触发价格（止损/止盈订单）
+  triggerPrice Decimal? @map("trigger_price") @db.Decimal(30, 10)
+
+  /// 触发条件
+  triggerCondition String? @map("trigger_condition")
+
+  /// 是否只减仓
+  reduceOnly Boolean? @map("reduce_only")
+
+  /// 订单状态（open, filled, canceled, rejected）
+  status String
+
+  /// 订单创建时间
+  timestamp DateTime
+
+  /// 数据来源
+  source String @default("HYPERLIQUID")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userAddress, orderId], map: "uniq_hyperliquid_user_order")
+  @@index([userAddress, timestamp], map: "idx_hyperliquid_order_user_time")
+  @@index([status, timestamp], map: "idx_hyperliquid_order_status_time")
+  @@map("hyperliquid_user_orders")
+}
+
+/// Hyperliquid 用户资金费率历史
+///
+/// 设计说明：
+/// - 存储用户在 Hyperliquid 平台的资金费率支付/收取记录
+/// - 用于分析持仓成本和资金费率趋势
+/// - 资金费率每 8 小时结算一次
+model HyperliquidUserFunding {
+  id Int @id @default(autoincrement())
+
+  /// 用户地址
+  userAddress String @map("user_address")
+
+  /// 币种符号
+  coin String
+
+  /// 资金费率金额（正=收入，负=支出）
+  fundingRate Decimal @map("funding_rate") @db.Decimal(30, 10)
+
+  /// 持仓数量
+  szi Decimal @db.Decimal(30, 10)
+
+  /// USDC 金额
+  usdc Decimal @db.Decimal(30, 10)
+
+  /// 时间戳
+  time DateTime
+
+  /// 数据来源
+  source String @default("HYPERLIQUID")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userAddress, coin, time], map: "uniq_hyperliquid_user_funding")
+  @@index([userAddress, time], map: "idx_hyperliquid_funding_user_time")
+  @@map("hyperliquid_user_funding")
 }

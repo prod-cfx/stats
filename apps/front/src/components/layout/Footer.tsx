@@ -1,6 +1,6 @@
 'use client';
 
-import { Github, Send, FileText, X as XIcon } from 'lucide-react';
+import { FileText, Github, Send, X as XIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';

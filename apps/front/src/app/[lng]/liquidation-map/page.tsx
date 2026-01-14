@@ -2,8 +2,8 @@
 
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { Navbar } from '@/components/layout/Navbar';
 import { LiquidationMapClient } from './LiquidationMapClient';
 
 export default function LiquidationMapPage() {

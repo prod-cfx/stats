@@ -527,6 +527,183 @@ const UpdateTradesPairConfigDto = z
   })
   .partial()
   .passthrough();
+const WhaleDiscoverTraderAiTagDto = z
+  .object({
+    key: z.enum([
+      "bullWarGod",
+      "swingKing",
+      "smartTrader",
+      "treasuryKeeper",
+      "twitterKol",
+    ]),
+    color: z.string(),
+    bgColor: z.string(),
+    descriptionKey: z
+      .enum([
+        "bullWarGod",
+        "swingKing",
+        "smartTrader",
+        "treasuryKeeper",
+        "twitterKol",
+      ])
+      .optional(),
+  })
+  .passthrough();
+const WhaleDiscoverTraderDto = z
+  .object({
+    variant: z.enum(["recommended", "detail"]),
+    address: z.string(),
+    handle: z.string().nullish(),
+    tag: z.string().nullish(),
+    totalValueUsd: z.number(),
+    pnlUsd: z.number(),
+    pnlLabelKey: z.enum(["realizedPnl", "realizedPnl1m"]).optional(),
+    trades: z.number().optional(),
+    positions: z.number().optional(),
+    winRatePct: z.number(),
+    winRateLabelKey: z.enum(["winRate", "winRate1m"]).optional(),
+    avatarColor: z.string(),
+    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
+  })
+  .passthrough();
+const WhaleDiscoverResponseDto = z
+  .object({
+    recommended: z.array(WhaleDiscoverTraderDto),
+    details: z.array(WhaleDiscoverTraderDto),
+  })
+  .passthrough();
+const WhaleTraderSummaryPerformanceDto = z
+  .object({
+    address: z.string(),
+    lookbackDays: z.number(),
+    symbolFilter: z.string().optional(),
+    trades: z.number(),
+    positions: z.number(),
+    totalValueUsd: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+    winRatePct: z.number(),
+    pnlUsd: z.number(),
+  })
+  .passthrough();
+const WhaleAssetPerformanceDto = z
+  .object({
+    symbol: z.string(),
+    totalValueUsd: z.number(),
+    trades: z.number(),
+    longCount: z.number(),
+    shortCount: z.number(),
+  })
+  .passthrough();
+const WhaleTradeHistoryItemDto = z
+  .object({
+    address: z.string(),
+    symbol: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    positionSize: z.number(),
+    positionValueUsd: z.number(),
+    entryPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionAction: z.union([z.literal(1), z.literal(2)]),
+    createTime: z.string(),
+  })
+  .passthrough();
+const WhaleAddressPerformanceResponseDto = z
+  .object({
+    summary: WhaleTraderSummaryPerformanceDto,
+    byAsset: z.array(WhaleAssetPerformanceDto),
+    trades: z.array(WhaleTradeHistoryItemDto),
+  })
+  .passthrough();
+const SnapshotPerpDto = z
+  .object({
+    accountValue: z.number(),
+    totalMarginUsed: z.number(),
+    totalPositionValue: z.number(),
+    withdrawable: z.number(),
+    marginUsagePercent: z.number(),
+    leverageRatio: z.number(),
+    unrealizedPnl: z.number(),
+    roi: z.number(),
+  })
+  .passthrough();
+const SpotBalanceItemDto = z
+  .object({
+    coin: z.string(),
+    total: z.number(),
+    hold: z.number(),
+    value: z.number(),
+    sharePercent: z.number(),
+  })
+  .passthrough();
+const SnapshotSpotDto = z
+  .object({ totalValue: z.number(), balances: z.array(SpotBalanceItemDto) })
+  .passthrough();
+const SnapshotTotalDto = z
+  .object({
+    accountValue: z.number(),
+    perpPercent: z.number(),
+    spotPercent: z.number(),
+  })
+  .passthrough();
+const TraderSnapshotResponseDto = z
+  .object({
+    perp: SnapshotPerpDto,
+    spot: SnapshotSpotDto,
+    total: SnapshotTotalDto,
+  })
+  .passthrough();
+const LeverageDto = z
+  .object({ type: z.enum(["cross", "isolated"]), value: z.number() })
+  .passthrough();
+const PerpPositionDto = z
+  .object({
+    coin: z.string(),
+    side: z.enum(["LONG", "SHORT"]),
+    size: z.number(),
+    entryPrice: z.number(),
+    markPrice: z.number(),
+    liquidationPrice: z.number(),
+    positionValue: z.number(),
+    marginUsed: z.number(),
+    leverage: LeverageDto,
+    unrealizedPnl: z.number(),
+    unrealizedPnlPercent: z.number(),
+    fundingRate: z.number().optional(),
+    roi: z.number(),
+  })
+  .passthrough();
+const SpotBalanceDto = z
+  .object({
+    coin: z.string(),
+    total: z.number(),
+    hold: z.number(),
+    available: z.number(),
+    value: z.number(),
+  })
+  .passthrough();
+const TraderPositionsResponseDto = z
+  .object({ perp: z.array(PerpPositionDto), spot: z.array(SpotBalanceDto) })
+  .passthrough();
+const OpenOrderDto = z
+  .object({
+    orderId: z.number(),
+    coin: z.string(),
+    side: z.enum(["BUY", "SELL"]),
+    type: z.string(),
+    price: z.number(),
+    size: z.number(),
+    origSize: z.number(),
+    value: z.number(),
+    timestamp: z.string(),
+    triggerPrice: z.number().optional(),
+    triggerCondition: z.string().optional(),
+    reduceOnly: z.boolean(),
+  })
+  .passthrough();
+const TraderOpenOrdersResponseDto = z
+  .object({ orders: z.array(OpenOrderDto) })
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -736,94 +913,6 @@ const RealtimeWhaleAlertDto = z
     side: WhaleAlertSide,
   })
   .passthrough();
-const WhaleDiscoverTraderAiTagDto = z
-  .object({
-    key: z.enum([
-      "bullWarGod",
-      "swingKing",
-      "smartTrader",
-      "treasuryKeeper",
-      "twitterKol",
-    ]),
-    color: z.string(),
-    bgColor: z.string(),
-    descriptionKey: z
-      .enum([
-        "bullWarGod",
-        "swingKing",
-        "smartTrader",
-        "treasuryKeeper",
-        "twitterKol",
-      ])
-      .optional(),
-  })
-  .passthrough();
-const WhaleDiscoverTraderDto = z
-  .object({
-    variant: z.enum(["recommended", "detail"]),
-    address: z.string(),
-    handle: z.string().nullish(),
-    tag: z.string().nullish(),
-    totalValueUsd: z.number(),
-    pnlUsd: z.number(),
-    pnlLabelKey: z.enum(["realizedPnl", "realizedPnl1m"]).optional(),
-    trades: z.number().optional(),
-    positions: z.number().optional(),
-    winRatePct: z.number(),
-    winRateLabelKey: z.enum(["winRate", "winRate1m"]).optional(),
-    avatarColor: z.string(),
-    aiTags: z.array(WhaleDiscoverTraderAiTagDto).optional(),
-  })
-  .passthrough();
-const WhaleDiscoverResponseDto = z
-  .object({
-    recommended: z.array(WhaleDiscoverTraderDto),
-    details: z.array(WhaleDiscoverTraderDto),
-  })
-  .passthrough();
-const WhaleTraderSummaryPerformanceDto = z
-  .object({
-    address: z.string(),
-    lookbackDays: z.number(),
-    symbolFilter: z.string().optional(),
-    trades: z.number(),
-    positions: z.number(),
-    totalValueUsd: z.number(),
-    longCount: z.number(),
-    shortCount: z.number(),
-    winRatePct: z.number(),
-    pnlUsd: z.number(),
-  })
-  .passthrough();
-const WhaleAssetPerformanceDto = z
-  .object({
-    symbol: z.string(),
-    totalValueUsd: z.number(),
-    trades: z.number(),
-    longCount: z.number(),
-    shortCount: z.number(),
-  })
-  .passthrough();
-const WhaleTradeHistoryItemDto = z
-  .object({
-    address: z.string(),
-    symbol: z.string(),
-    side: z.enum(["LONG", "SHORT"]),
-    positionSize: z.number(),
-    positionValueUsd: z.number(),
-    entryPrice: z.number(),
-    liquidationPrice: z.number(),
-    positionAction: z.union([z.literal(1), z.literal(2)]),
-    createTime: z.string(),
-  })
-  .passthrough();
-const WhaleAddressPerformanceResponseDto = z
-  .object({
-    summary: WhaleTraderSummaryPerformanceDto,
-    byAsset: z.array(WhaleAssetPerformanceDto),
-    trades: z.array(WhaleTradeHistoryItemDto),
-  })
-  .passthrough();
 const WhaleHoldingDto = z
   .object({
     userAddress: z.string(),
@@ -884,6 +973,24 @@ export const schemas = {
   TradesPairConfigResponseDto,
   CreateTradesPairConfigDto,
   UpdateTradesPairConfigDto,
+  WhaleDiscoverTraderAiTagDto,
+  WhaleDiscoverTraderDto,
+  WhaleDiscoverResponseDto,
+  WhaleTraderSummaryPerformanceDto,
+  WhaleAssetPerformanceDto,
+  WhaleTradeHistoryItemDto,
+  WhaleAddressPerformanceResponseDto,
+  SnapshotPerpDto,
+  SpotBalanceItemDto,
+  SnapshotSpotDto,
+  SnapshotTotalDto,
+  TraderSnapshotResponseDto,
+  LeverageDto,
+  PerpPositionDto,
+  SpotBalanceDto,
+  TraderPositionsResponseDto,
+  OpenOrderDto,
+  TraderOpenOrdersResponseDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   ExchangeLongShortRatioResponseDto,
@@ -903,13 +1010,6 @@ export const schemas = {
   PredictionMarketCardDto,
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
-  WhaleDiscoverTraderAiTagDto,
-  WhaleDiscoverTraderDto,
-  WhaleDiscoverResponseDto,
-  WhaleTraderSummaryPerformanceDto,
-  WhaleAssetPerformanceDto,
-  WhaleTradeHistoryItemDto,
-  WhaleAddressPerformanceResponseDto,
   WhaleHoldingDto,
 };
 
@@ -2987,6 +3087,31 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/whale-tracking/traders/:address/open-orders",
+    alias: "WhaleTrackingController_getTraderOpenOrders",
+    description: `通过 Hyperliquid API 实时查询指定地址的当前挂单列表，包括订单 ID、币种、方向、类型、限价、数量、订单价值、创建时间等信息。支持按币种筛选，默认缓存 5 秒。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "coin",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "skipCache",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: TraderOpenOrdersResponseDto,
+  },
+  {
+    method: "get",
     path: "/whale-tracking/traders/:address/performance",
     alias: "WhaleTrackingController_getTraderPerformance",
     description: `基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。`,
@@ -3014,6 +3139,51 @@ const endpoints = makeApi([
       },
     ],
     response: WhaleAddressPerformanceResponseDto,
+  },
+  {
+    method: "get",
+    path: "/whale-tracking/traders/:address/positions",
+    alias: "WhaleTrackingController_getTraderPositions",
+    description: `通过 Hyperliquid API 实时查询指定地址的持仓详情，包括永续合约持仓（币种、方向、数量、入场价、标记价、清算价、未实现盈亏、杠杆信息）与现货余额（币种、总量、锁定量、可用量、价值）。支持按类型筛选（perp/spot/all），默认缓存 5 秒。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "type",
+        type: "Query",
+        schema: z.enum(["perp", "spot", "all"]).optional(),
+      },
+      {
+        name: "skipCache",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: TraderPositionsResponseDto,
+  },
+  {
+    method: "get",
+    path: "/whale-tracking/traders/:address/snapshot",
+    alias: "WhaleTrackingController_getTraderSnapshot",
+    description: `通过 Hyperliquid API 实时查询指定地址的账户快照数据，包括永续合约账户状态（账户价值、保证金使用率、杠杆倍数、未实现盈亏）与现货余额汇总。数据直接来源于 Hyperliquid 清算所状态，默认缓存 5 秒。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+      {
+        name: "skipCache",
+        type: "Query",
+        schema: z.boolean().optional(),
+      },
+    ],
+    response: TraderSnapshotResponseDto,
   },
 ]);
 

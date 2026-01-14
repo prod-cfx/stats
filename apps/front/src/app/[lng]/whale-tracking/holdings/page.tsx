@@ -2,8 +2,8 @@
 
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { Navbar } from '@/components/layout/Navbar';
 import { WhalePositionsTable } from '@/components/whale-tracking/holdings/WhalePositionsTable';
 
 export default function WhalePositionsPage() {

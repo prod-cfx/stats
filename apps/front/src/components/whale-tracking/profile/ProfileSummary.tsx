@@ -5,6 +5,39 @@ import { Info } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+// 后端 API 数据类型
+interface SnapshotPerpDto {
+  accountValue: number;
+  totalMarginUsed: number;
+  totalPositionValue: number;
+  withdrawable: number;
+  marginUsagePercent: number;
+  leverageRatio: number;
+  unrealizedPnl: number;
+  roi: number;
+}
+
+interface SnapshotSpotDto {
+  totalValue: number;
+  balances: Array<{ coin: string; total: number; hold: number; value: number; sharePercent: number }>;
+}
+
+interface SnapshotTotalDto {
+  accountValue: number;
+  perpPercent: number;
+  spotPercent: number;
+}
+
+interface TraderSnapshotResponse {
+  perp: SnapshotPerpDto;
+  spot: SnapshotSpotDto;
+  total: SnapshotTotalDto;
+}
+
+interface ProfileSummaryProps {
+  snapshot: TraderSnapshotResponse;
+}
+
 interface SummaryCardProps {
   label: string;
   value?: string;
@@ -75,50 +108,76 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData }: Summar
   );
 };
 
-export const ProfileSummary = () => {
+export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
   const { t } = useTranslation();
+
+  // 格式化金额
+  const formatAmount = (value: number): string => {
+    if (value >= 1000000) {
+      return `$ ${(value / 1000000).toFixed(2)}M`;
+    }
+    if (value >= 1000) {
+      return `$ ${(value / 1000).toFixed(2)}K`;
+    }
+    return `$ ${value.toFixed(2)}`;
+  };
+
+  // 账户价值数据
+  const totalAccountValue = snapshot.total.accountValue;
+  const perpAccountValue = snapshot.perp.accountValue;
+  const spotAccountValue = snapshot.spot.totalValue;
+
+  // 可用保证金数据
+  const withdrawable = snapshot.perp.withdrawable;
+  const marginUsagePercent = snapshot.perp.marginUsagePercent;
+  const availablePercent = 100 - marginUsagePercent;
+
+  // 总持仓价值数据
+  const totalPositionValue = snapshot.perp.totalPositionValue;
+  const leverageRatio = snapshot.perp.leverageRatio;
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <SummaryCard 
-        label={t('whaleTracking.profile.summary.accountValue')} 
-        value="$ 792,013.10" 
+      <SummaryCard
+        label={t('whaleTracking.profile.summary.accountValue')}
+        value={formatAmount(totalAccountValue)}
         chartData={[
-          { value: 792013.09, name: t('whaleTracking.profile.summary.perpetual'), itemStyle: { color: '#5470c6' } },
-          { value: 0.01, name: t('whaleTracking.profile.summary.spot'), itemStyle: { color: '#91cc75' } }
+          { value: perpAccountValue, name: t('whaleTracking.profile.summary.perpetual'), itemStyle: { color: '#5470c6' } },
+          { value: spotAccountValue, name: t('whaleTracking.profile.summary.spot'), itemStyle: { color: '#91cc75' } }
         ]}
         subText={
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#5470c6]" />
               <span className="truncate">{t('whaleTracking.profile.summary.perpetual')}</span>
-              <span className="text-[#e5e5e5] ml-auto">$ 792K</span>
+              <span className="text-[#e5e5e5] ml-auto">{formatAmount(perpAccountValue)}</span>
             </div>
             <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#91cc75]" />
               <span className="truncate">{t('whaleTracking.profile.summary.spot')}</span>
-              <span className="text-[#e5e5e5] ml-auto">$ 0.01</span>
+              <span className="text-[#e5e5e5] ml-auto">{formatAmount(spotAccountValue)}</span>
             </div>
           </div>
         }
       />
-      <SummaryCard 
-        label={t('whaleTracking.profile.summary.availableMargin')} 
-        value="$ 73,015.45" 
+      <SummaryCard
+        label={t('whaleTracking.profile.summary.availableMargin')}
+        value={formatAmount(withdrawable)}
         chartData={[
-          { value: 9.22, name: t('whaleTracking.profile.summary.used'), itemStyle: { color: '#fac858' } },
-          { value: 90.78, name: t('whaleTracking.profile.summary.available'), itemStyle: { color: '#3a3a3a' } }
+          { value: marginUsagePercent, name: t('whaleTracking.profile.summary.used'), itemStyle: { color: '#fac858' } },
+          { value: availablePercent, name: t('whaleTracking.profile.summary.available'), itemStyle: { color: '#3a3a3a' } }
         ]}
         subText={
           <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.withdrawable')}</span>
-            <span className="text-[#e5e5e5] ml-auto">9.22 %</span>
+            <span className="text-[#e5e5e5] ml-auto">{availablePercent.toFixed(2)} %</span>
           </div>
         }
       />
-      <SummaryCard 
-        label={t('whaleTracking.profile.summary.totalPositionValue')} 
-        value="$ 31,034,500" 
+      <SummaryCard
+        label={t('whaleTracking.profile.summary.totalPositionValue')}
+        value={formatAmount(totalPositionValue)}
         chartData={[
           { value: 100, name: t('whaleTracking.profile.summary.shortExposure'), itemStyle: { color: '#fac858' } }
         ]}
@@ -127,12 +186,12 @@ export const ProfileSummary = () => {
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.leverageRatio')}</span>
             <Info className="w-2.5 h-2.5 md:w-3 md:h-3 text-[#8b949e]" />
-            <span className="text-[#e5e5e5] ml-auto">39.18x</span>
+            <span className="text-[#e5e5e5] ml-auto">{leverageRatio.toFixed(2)}x</span>
           </div>
         }
       />
-      <SummaryCard 
-        label={t('whaleTracking.profile.summary.performanceWeek')} 
+      <SummaryCard
+        label={t('whaleTracking.profile.summary.performanceWeek')}
         isPerformance
       />
     </div>

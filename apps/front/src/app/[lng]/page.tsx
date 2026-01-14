@@ -2,8 +2,8 @@
 
 import type { DataSource, MarketType } from '@/types/trading';
 import React, { useState } from 'react';
-import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { Navbar } from '@/components/layout/Navbar';
 // import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
 import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
 // import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';

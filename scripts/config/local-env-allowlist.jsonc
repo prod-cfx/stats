@@ -64,6 +64,8 @@
     // BBX
     "BBX_ACCESS_KEY_ID",
     "BBX_ACCESS_SECRET",
+    // Hyperliquid API
+    "HYPERLIQUID_API_URL",
     // 前端公开变量（生产环境域名/CDN 信息不提交到仓库）
     "NEXT_PUBLIC_APP_ENV",
     "NEXT_PUBLIC_API_SERVER_URL",

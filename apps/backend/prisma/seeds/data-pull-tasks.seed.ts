@@ -104,6 +104,55 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
         waitTimeout: 10000,
       },
     },
+    {
+      key: 'hyperliquid-user-fills-sync',
+      name: 'Hyperliquid 用户成交历史同步',
+      source: 'hyperliquid',
+      type: 'user-fills',
+      // 每 10 分钟同步一次（Hyperliquid API 限制每次最多 2000 条）
+      intervalSeconds: 600,
+      enabled: false,
+      cursor: JSON.stringify({
+        userAddress: '',
+        lastSyncTime: 0,
+      } satisfies { userAddress: string; lastSyncTime: number }),
+      meta: {
+        description: '同步鲸鱼交易者的成交记录，用于历史 PnL 和交易行为分析',
+        aggregateByTime: false,
+      },
+    },
+    {
+      key: 'hyperliquid-user-orders-sync',
+      name: 'Hyperliquid 用户订单历史同步',
+      source: 'hyperliquid',
+      type: 'user-orders',
+      // 每 10 分钟同步一次
+      intervalSeconds: 600,
+      enabled: false,
+      cursor: JSON.stringify({
+        userAddress: '',
+        lastSyncTime: 0,
+      } satisfies { userAddress: string; lastSyncTime: number }),
+      meta: {
+        description: '同步鲸鱼交易者的订单历史，包含已完成、已取消订单',
+      },
+    },
+    {
+      key: 'hyperliquid-user-funding-sync',
+      name: 'Hyperliquid 用户资金费率同步',
+      source: 'hyperliquid',
+      type: 'user-funding',
+      // 每 30 分钟同步一次（资金费率每 8 小时结算）
+      intervalSeconds: 1800,
+      enabled: false,
+      cursor: JSON.stringify({
+        userAddress: '',
+        lastSyncTime: 0,
+      } satisfies { userAddress: string; lastSyncTime: number }),
+      meta: {
+        description: '同步鲸鱼交易者的资金费率历史，用于计算持仓成本',
+      },
+    },
   ] as const
 
   let createdCount = 0

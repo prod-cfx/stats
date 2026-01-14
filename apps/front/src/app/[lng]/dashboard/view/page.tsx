@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react'
-import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
 import { DashboardViewClient } from './DashboardViewClient'
 
 export default function DashboardViewPage() {
