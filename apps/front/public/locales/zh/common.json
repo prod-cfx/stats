@@ -135,6 +135,11 @@
       "cancelled": "已撤单"
     }
   },
+  "footer": {
+    "tagline": "专业的加密资产数据聚合与多维行情分析终端",
+    "terms": "服务条款",
+    "privacy": "隐私政策"
+  },
   "rightPanel": {
     "exchangeBinance": "币安",
     "exchangeOkx": "OKX",

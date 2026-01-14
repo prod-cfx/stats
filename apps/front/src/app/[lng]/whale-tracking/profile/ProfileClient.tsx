@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { EmptyState, LoadingState } from '@/components/ui/loading';
 import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard';
 import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile';
@@ -68,6 +69,7 @@ export function ProfileClient({ address }: { address: string }) {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { RealtimeWhalesClient } from './RealtimeWhalesClient';
 
 export default function RealtimeWhalesPage() {
@@ -17,6 +18,7 @@ export default function RealtimeWhalesPage() {
           </Suspense>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

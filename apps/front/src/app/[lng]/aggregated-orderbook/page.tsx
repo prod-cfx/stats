@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { AggregatedOrderBookClient } from './AggregatedOrderBookClient';
 
@@ -22,6 +23,7 @@ export default function AggregatedOrderBookPage() {
           </Suspense>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

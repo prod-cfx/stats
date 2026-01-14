@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { WhalePositionsTable } from '@/components/whale-tracking/holdings/WhalePositionsTable';
 
 export default function WhalePositionsPage() {
@@ -17,6 +18,7 @@ export default function WhalePositionsPage() {
           </Suspense>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

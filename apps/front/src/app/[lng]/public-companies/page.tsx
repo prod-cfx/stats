@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { PublicCompaniesTable } from '@/components/public-companies/PublicCompaniesTable';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 
@@ -22,6 +23,7 @@ export default function PublicCompaniesPage() {
           </div>
         </Suspense>
       </main>
+      <Footer />
     </div>
   );
 }

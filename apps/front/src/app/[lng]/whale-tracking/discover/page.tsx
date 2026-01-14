@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { BodyText, PageTitle } from '@/components/ui/Typography';
 import { DiscoverGrid } from '@/components/whale-tracking/discover/DiscoverGrid';
 
@@ -23,6 +24,7 @@ export default function DiscoverPage() {
           </Suspense>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

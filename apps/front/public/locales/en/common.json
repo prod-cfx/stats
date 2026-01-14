@@ -135,6 +135,11 @@
       "cancelled": "Cancelled"
     }
   },
+  "footer": {
+    "tagline": "Professional crypto asset data aggregation and multi-dimensional market analysis terminal",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy"
+  },
   "rightPanel": {
     "exchangeBinance": "Binance",
     "exchangeOkx": "OKX",
