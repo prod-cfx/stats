@@ -1,10 +1,11 @@
 'use client';
 
-import { Github, Twitter, Send, FileText } from 'lucide-react';
+import { Github, Send, FileText, X as XIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from '@/lib/toast';
 
 export const Footer = () => {
   const pathname = usePathname();
@@ -18,6 +19,14 @@ export const Footer = () => {
 
   // 辅助函数：为路径添加语言前缀
   const withLng = (path: string) => `/${currentLng}${path}`;
+
+  const handleSocialClick = () => {
+    toast.info({
+      title: t('common.comingSoonTitle') || 'Coming Soon',
+      description: t('common.comingSoonDesc') || 'This link will be available soon.',
+      duration: 2500,
+    })
+  }
 
   return (
     <footer className="bg-[#0d1117] border-t border-[#30363d] py-8 px-4 md:px-8">
@@ -33,33 +42,30 @@ export const Footer = () => {
         </div>
 
         <div className="flex items-center gap-6">
-          <a
-            href="https://t.me/coinflux"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={handleSocialClick}
             className="text-[#8b949e] hover:text-white transition-colors"
             aria-label="Telegram"
           >
             <Send className="w-5 h-5" />
-          </a>
-          <a
-            href="https://twitter.com/coinflux"
-            target="_blank"
-            rel="noopener noreferrer"
+          </button>
+          <button
+            type="button"
+            onClick={handleSocialClick}
             className="text-[#8b949e] hover:text-white transition-colors"
-            aria-label="Twitter"
+            aria-label="X"
           >
-            <Twitter className="w-5 h-5" />
-          </a>
-          <a
-            href="https://github.com/coinflux"
-            target="_blank"
-            rel="noopener noreferrer"
+            <XIcon className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleSocialClick}
             className="text-[#8b949e] hover:text-white transition-colors"
             aria-label="GitHub"
           >
             <Github className="w-5 h-5" />
-          </a>
+          </button>
           <Link
             href={withLng('/docs')}
             className="text-[#8b949e] hover:text-white transition-colors text-sm font-medium no-underline flex items-center gap-1.5"
@@ -72,14 +78,6 @@ export const Footer = () => {
       
       <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-[#30363d]/50 flex flex-col md:flex-row items-center justify-between gap-4 text-[#8b949e] text-xs">
         <p>© {new Date().getFullYear()} Coinflux. All rights reserved.</p>
-        <div className="flex items-center gap-6">
-          <Link href={withLng('/terms')} className="hover:text-white transition-colors no-underline">
-            {t('footer.terms') || 'Terms of Service'}
-          </Link>
-          <Link href={withLng('/privacy')} className="hover:text-white transition-colors no-underline">
-            {t('footer.privacy') || 'Privacy Policy'}
-          </Link>
-        </div>
       </div>
     </footer>
   );

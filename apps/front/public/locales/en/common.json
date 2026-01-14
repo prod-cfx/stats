@@ -233,6 +233,8 @@
     "all": "All",
     "applyChanges": "Apply changes",
     "featureInProgress": "Work in progress...",
+    "comingSoonTitle": "Coming Soon",
+    "comingSoonDesc": "This link will be available soon.",
     "loading": "Loading...",
     "loadFailed": "Failed to load",
     "yesterday": "Yesterday",

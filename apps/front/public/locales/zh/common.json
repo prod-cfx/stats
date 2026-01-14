@@ -244,6 +244,8 @@
     "all": "全部",
     "applyChanges": "应用更改",
     "featureInProgress": "功能开发中...",
+    "comingSoonTitle": "敬请期待",
+    "comingSoonDesc": "该链接即将上线",
     "loading": "加载中...",
     "loadFailed": "数据加载失败（Mock）",
     "yesterday": "昨天",
