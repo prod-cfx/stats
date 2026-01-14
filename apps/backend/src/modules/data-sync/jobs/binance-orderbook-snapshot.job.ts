@@ -16,6 +16,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
 import type Redis from 'ioredis'
+import { TokenBucketRateLimiter } from '@/common/utils/token-bucket-rate-limiter'
 
 type BinanceDepthLevel = [string, string]
 
@@ -31,6 +32,17 @@ interface BinanceOrderbookCursor {
   /** 下次从 configs 的哪个索引开始处理（轮询） */
   nextIndex: number
 }
+
+/**
+ * 币安 REST API 全局频率限制器
+ * 所有币安适配器（spot/perp/future）和 Job 共享此限制器
+ * 速率：每分钟 2000 次（留 20% 余量，币安限制为 2400/min）
+ * 桶容量：100（允许短时突发，覆盖冷启动场景）
+ */
+export const binanceRestApiRateLimiter = new TokenBucketRateLimiter(
+  100,    // maxTokens: 允许 100 次突发请求（应对冷启动）
+  33.33,  // refillRate: 每秒补充 33.33 个令牌（约 2000/min）
+)
 
 @Injectable()
 export class BinanceOrderBookSnapshotJob implements DataPullJob {
@@ -144,6 +156,9 @@ export class BinanceOrderBookSnapshotJob implements DataPullJob {
     timeoutMs: number,
     limit: number,
   ): Promise<BinanceDepthResponse> {
+    // 在 fetch 前获取限流器令牌，避免与 WS 适配器争抢 API 配额
+    await binanceRestApiRateLimiter.acquire(10_000)
+
     const url = new URL('/api/v3/depth', baseUrl)
     url.searchParams.set('symbol', symbol)
     url.searchParams.set('limit', String(limit > 0 ? limit : 100))

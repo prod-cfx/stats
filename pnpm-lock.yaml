@@ -357,15 +357,15 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
-      tsconfig-paths:
-        specifier: ^4.2.0
-        version: 4.2.0
       winston:
         specifier: ^3.17.0
         version: 3.18.3
       ws:
         specifier: ^8.18.3
         version: 8.18.3
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.10
@@ -409,6 +409,9 @@ importers:
       tsc-alias:
         specifier: ^1.8.16
         version: 1.8.16
+      tsconfig-paths:
+        specifier: ^4.2.0
+        version: 4.2.0
       tsx:
         specifier: ^4.19.1
         version: 4.20.6

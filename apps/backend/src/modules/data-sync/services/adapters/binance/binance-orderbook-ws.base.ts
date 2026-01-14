@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Redis } from 'ioredis'
 import type { OrderbookAdapterKey, OrderbookWsAdapter } from '../../orderbook-ws-adapter'
 import { RedisService } from '@/common/services/redis.service'
+import { TokenBucketRateLimiter } from '@/common/utils/token-bucket-rate-limiter'
 
 type BinanceDepthLevel = [string, string]
 
@@ -44,6 +45,17 @@ interface BookState {
   isReady: boolean
   lastPublishTs: number
 }
+
+/**
+ * 币安 REST API 全局频率限制器
+ * 所有币安适配器（spot/perp/future）共享此限制器
+ * 速率：每分钟 2000 次（留 20% 余量，币安限制为 2400/min）
+ * 桶容量：100（允许短时突发，覆盖冷启动场景）
+ */
+const binanceRestApiRateLimiter = new TokenBucketRateLimiter(
+  100,    // maxTokens: 允许 100 次突发请求（应对冷启动）
+  33.33,  // refillRate: 每秒补充 33.33 个令牌（约 2000/min）
+)
 
 /**
  * Binance 订单薄 WS 同步通用基类：
@@ -344,23 +356,57 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     timeoutMs: number,
     limit: number,
   ): Promise<BinanceDepthSnapshotResponse> {
-    const url = new URL(this.getRestDepthPath(), baseUrl)
-    url.searchParams.set('symbol', symbol)
-    url.searchParams.set('limit', String(limit > 0 ? limit : 100))
+    const maxRetries = 3
+    let lastError: Error | null = null
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs || 10_000)
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+      try {
+        // 获取频率限制令牌（最多等待 10 秒）
+        await binanceRestApiRateLimiter.acquire(10_000)
 
-    try {
-      const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new TypeError(`HTTP ${res.status} ${res.statusText} body=${text.slice(0, 200)}`)
+        const url = new URL(this.getRestDepthPath(), baseUrl)
+        url.searchParams.set('symbol', symbol)
+        url.searchParams.set('limit', String(limit > 0 ? limit : 100))
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), timeoutMs || 10_000)
+
+        try {
+          const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            const error = new TypeError(`HTTP ${res.status} ${res.statusText} body=${text.slice(0, 200)}`)
+
+            // 429 Too Many Requests: 指数退避重试
+            if (res.status === 429 && attempt < maxRetries) {
+              const backoffMs = 2 ** (attempt - 1) * 1000 // 1s, 2s, 4s
+              this.logger.warn(
+                `Binance API rate limit (429) for ${symbol}, retry ${attempt}/${maxRetries} after ${backoffMs}ms`,
+              )
+              await this.sleep(backoffMs)
+              lastError = error
+              continue
+            }
+
+            throw error
+          }
+          return (await res.json()) as BinanceDepthSnapshotResponse
+        } finally {
+          clearTimeout(timeout)
+        }
+      } catch (error) {
+        if (attempt === maxRetries) {
+          throw lastError ?? error
+        }
+        lastError = error as Error
       }
-      return (await res.json()) as BinanceDepthSnapshotResponse
-    } finally {
-      clearTimeout(timeout)
     }
+
+    throw lastError ?? new Error('fetchSnapshot failed after retries')
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 
   private levelsToMap(levels: BinanceDepthLevel[]): Map<string, number> {
