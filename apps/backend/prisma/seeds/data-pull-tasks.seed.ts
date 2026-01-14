@@ -104,6 +104,17 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
         waitTimeout: 10000,
       },
     },
+// Coinglass Pairs Markets - 各币种独立任务（使用冒号前缀匹配）
+    ...['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].map(symbol => ({
+      key: `coinglass-pairs-markets:${symbol}`,
+      name: `Coinglass Pairs Markets - ${symbol}`,
+      source: 'COINGLASS',
+      type: 'pairs-markets',
+      intervalSeconds: 180, // 每3分钟
+      enabled: true,
+      cursor: JSON.stringify({ symbol }),
+      meta: { symbol },
+    })),
     {
       key: 'hyperliquid-user-fills-sync',
       name: 'Hyperliquid 用户成交历史同步',

@@ -784,6 +784,19 @@ const MarketTradeResponseDto = z
     createdAt: z.string(),
   })
   .passthrough();
+const AggregatedVolumeResponseDto = z
+  .object({
+    id: z.number(),
+    exchange: z.string(),
+    symbol: z.string(),
+    instrumentType: z.enum(["SPOT", "PERPETUAL"]),
+    volumeUsd: z.string(),
+    dataTimestamp: z.string(),
+    source: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough();
 const LiquidationSummaryItemDto = z
   .object({
     timeframe: z.enum(["1h", "4h", "12h", "24h"]),
@@ -995,6 +1008,7 @@ export const schemas = {
   LongShortRatioPointResponseDto,
   ExchangeLongShortRatioResponseDto,
   MarketTradeResponseDto,
+  AggregatedVolumeResponseDto,
   LiquidationSummaryItemDto,
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
@@ -2777,6 +2791,40 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(MarketTradeResponseDto),
+  },
+  {
+    method: "get",
+    path: "/markets/volume/aggregated",
+    alias: "MarketsController_getAggregatedVolumes",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "page",
+        type: "Query",
+        schema: z.number().gte(1),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().gte(1).lte(100),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "instrumentType",
+        type: "Query",
+        schema: z.enum(["SPOT", "PERPETUAL"]),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AggregatedVolumeResponseDto) })
+        .partial()
+        .passthrough()
+    ),
   },
   {
     method: "post",

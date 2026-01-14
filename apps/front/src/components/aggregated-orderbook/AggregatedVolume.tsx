@@ -5,6 +5,20 @@ import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
+import { API_BASE_URL } from '@/lib/api-client';
+
+// Type definition matching backend AggregatedVolumeResponseDto
+interface AggregatedVolumeItem {
+  id: number;
+  exchange: string;
+  symbol: string;
+  instrumentType?: 'SPOT' | 'PERPETUAL';
+  volumeUsd: string;
+  dataTimestamp: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface VolumeItem {
   name: string;
@@ -155,37 +169,115 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   const { t } = useTranslation();
   const [leftSymbol, setLeftSymbol] = useState('BTC');
   const [rightSymbol, setRightSymbol] = useState('ETH');
-  
+  const [leftItems, setLeftItems] = useState<VolumeItem[]>([]);
+  const [rightItems, setRightItems] = useState<VolumeItem[]>([]);
+  const [_isLoading, setIsLoading] = useState(true);
+
   const isCompact = variant === 'compact';
 
-  // Stable seed-based "random" for mock data consistency
-  const getStableAmount = (symbol: string) => {
-    if (symbol === 'BTC') return 44.59;
-    if (symbol === 'ETH') return 38.24;
-    const seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return ((seed * 9301 + 49297) % 233280) / 233280 * 20 + 5;
-  };
+  // Color palette for exchanges
+  const EXCHANGE_COLORS = [
+    '#3b82f6', '#a855f7', '#f43f5e', '#eab308', '#22c55e',
+    '#06b6d4', '#6366f1', '#8b5cf6', '#ef4444', '#f59e0b',
+    '#10b981', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316'
+  ];
 
-  // Mock data generator based on symbol
-  const getItemsForSymbol = useCallback((symbol: string) => {
-    const baseAmount = getStableAmount(symbol);
+  // Fetch aggregated volume data from backend
+  const fetchVolumeData = useCallback(async (symbol: string) => {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/markets/volume/aggregated?symbol=${symbol}&instrumentType=PERPETUAL&page=1&limit=20`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
 
-    return [
-      { name: 'TOTAL', amount: `$${baseAmount.toFixed(2)}B`, percent: 100, color: '#3b82f6' },
-      { name: 'MEXC', amount: `$${(baseAmount * 0.28).toFixed(2)}B`, percent: 28.9, color: '#a855f7' },
-      { name: 'OKX', amount: `$${(baseAmount * 0.19).toFixed(2)}B`, percent: 19.2, color: '#f43f5e' },
-      { name: 'Bybit', amount: `$${(baseAmount * 0.14).toFixed(2)}B`, percent: 14.6, color: '#eab308' },
-      { name: 'Bitget', amount: `$${(baseAmount * 0.10).toFixed(2)}B`, percent: 10.8, color: '#22c55e' },
-      { name: 'Aster', amount: `$${(baseAmount * 0.06).toFixed(2)}B`, percent: 6.7, color: '#ef4444' },
-      { name: 'Lighter', amount: `$${(baseAmount * 0.04).toFixed(2)}B`, percent: 4.3, color: '#0ea5e9' },
-      { name: 'Hyperliquid', amount: `$${(baseAmount * 0.03).toFixed(2)}B`, percent: 3.1, color: '#8b5cf6' },
-      { name: 'KuCoin', amount: `$${(baseAmount * 0.03).toFixed(2)}B`, percent: 3.0, color: '#f59e0b' },
-      { name: 'LBank', amount: `$${(baseAmount * 0.019).toFixed(2)}B`, percent: 1.9, color: '#10b981' },
-    ];
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const body = await res.json();
+      const response = body && typeof body === 'object' && 'data' in body ? body : { data: body };
+
+      if (response.data && response.data.items) {
+        const items = response.data.items;
+
+        // Calculate total volume for percentage calculation
+        const totalVolume = items.find((item: AggregatedVolumeItem) => item.exchange === 'All')?.volumeUsd
+          ? Number.parseFloat(items.find((item: AggregatedVolumeItem) => item.exchange === 'All')!.volumeUsd)
+          : 0;
+
+        // Convert API data to VolumeItem format
+        const volumeItems: VolumeItem[] = items.map((item: AggregatedVolumeItem, idx: number) => {
+          const volumeUsd = Number.parseFloat(item.volumeUsd);
+          const percent = totalVolume > 0 ? (volumeUsd / totalVolume) * 100 : 0;
+          const amountB = volumeUsd / 1_000_000_000;
+
+          return {
+            name: item.exchange === 'All' ? 'TOTAL' : item.exchange,
+            amount: `$${amountB.toFixed(2)}B`,
+            percent,
+            color: EXCHANGE_COLORS[idx % EXCHANGE_COLORS.length],
+          };
+        });
+
+        return volumeItems;
+      }
+
+      return [];
+    } catch (error) {
+      console.error(`Failed to fetch volume data for ${symbol}:`, error);
+      return [];
+    }
   }, []);
 
-  const leftItems = React.useMemo(() => getItemsForSymbol(leftSymbol), [getItemsForSymbol, leftSymbol]);
-  const rightItems = React.useMemo(() => getItemsForSymbol(rightSymbol), [getItemsForSymbol, rightSymbol]);
+  // Fetch left symbol data
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLeft = async () => {
+      const data = await fetchVolumeData(leftSymbol);
+      if (isMounted) {
+        setLeftItems(data);
+        setIsLoading(false);
+      }
+    };
+
+    fetchLeft();
+
+    // Poll every 3 seconds
+    const interval = setInterval(fetchLeft, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [leftSymbol, fetchVolumeData]);
+
+  // Fetch right symbol data (only if not compact)
+  useEffect(() => {
+    if (isCompact) return;
+
+    let isMounted = true;
+
+    const fetchRight = async () => {
+      const data = await fetchVolumeData(rightSymbol);
+      if (isMounted) {
+        setRightItems(data);
+      }
+    };
+
+    fetchRight();
+
+    // Poll every 3 seconds
+    const interval = setInterval(fetchRight, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [rightSymbol, fetchVolumeData, isCompact]);
 
   return (
     <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>

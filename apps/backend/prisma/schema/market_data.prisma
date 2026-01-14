@@ -402,6 +402,27 @@ model MarketTrade {
   @@map("market_trades")
 }
 
+/// 聚合交易量数据模型 - 已移除，交给其他任务处理
+///
+/// 注释原因：数据拉取与存储由外部系统负责
+/// API 接口保留但返回空数据
+// model AggregatedVolume {
+//   id Int @id @default(autoincrement())
+//   exchange String
+//   symbol String
+//   instrumentType String @map("instrument_type")
+//   volumeUsd Decimal @map("volume_usd") @db.Decimal(30, 10)
+//   dataTimestamp DateTime @map("data_timestamp")
+//   source String @default("COINGLASS")
+//   createdAt DateTime @default(now()) @map("created_at")
+//   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+//   @@unique([exchange, symbol, instrumentType, dataTimestamp], name: "aggregated_volume_exchange_symbol_type_timestamp_key")
+//   @@index([symbol, instrumentType, dataTimestamp], name: "idx_agg_vol_symbol_type_timestamp")
+//   @@index([exchange, instrumentType, dataTimestamp], name: "idx_agg_vol_exchange_type_timestamp")
+//   @@index([dataTimestamp], name: "idx_agg_vol_timestamp")
+//   @@map("aggregated_volumes")
+// }
+
 /// 期货交易对市场数据快照（Coinglass Pairs-Markets）
 ///
 /// 参考文档：

@@ -6,14 +6,19 @@ import type { LongShortRatio } from './repositories/long-short-ratio.repository'
 import { LongShortRatioRepository } from './repositories/long-short-ratio.repository'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketTradesRepository } from './repositories/market-trades.repository'
+// eslint-disable-next-line ts/consistent-type-imports
+import { FuturesPairsMarketRepository } from './repositories/futures-pairs-market.repository'
 import type { ExchangeId, MarketInstrumentType, MarketTimeframe, TradingPairConfig, TradingVenueType } from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
 import type { MarketTrade } from '@prisma/client'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 import type { ExchangeLongShortTimeRange } from './dto/requests/get-exchange-long-short-ratio.request.dto'
 import type { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
+import type { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
 
 export interface MarketsFilter {
   venueType?: TradingVenueType
@@ -77,6 +82,7 @@ export class MarketsService {
   constructor(
     private readonly longShortRatioRepository: LongShortRatioRepository,
     private readonly marketTradesRepository: MarketTradesRepository,
+    private readonly futuresPairsMarketRepository: FuturesPairsMarketRepository,
   ) {
     this.pairs = TRADING_PAIRS
   }
@@ -251,6 +257,66 @@ export class MarketsService {
       longAmountUsd: row.longAmountUsd,
       shortAmountUsd: row.shortAmountUsd,
     }))
+  }
+
+  /**
+   * 查询聚合交易量（分页）
+   *
+   * 从 FuturesPairsMarket 表聚合各交易所的交易量数据
+   */
+  async getAggregatedVolumes(
+    query: GetAggregatedVolumeRequestDto,
+  ): Promise<BasePaginationResponseDto<AggregatedVolumeResponseDto>> {
+    const symbol = query.symbol.trim().toUpperCase()
+    const page = query.page ?? 1
+    const limit = query.limit ?? 20
+    const offset = (page - 1) * limit
+
+    // 从 Repository 查询各交易所的交易量
+    const result = await this.futuresPairsMarketRepository.findVolumesBySymbol({
+      symbol,
+      limit,
+      offset,
+    })
+
+    const now = new Date()
+    const nowIso = now.toISOString()
+
+    // 计算总交易量（所有交易所之和）
+    const totalVolumeUsd = result.data.reduce((sum, item) => {
+      return sum + Number.parseFloat(item.volumeUsd)
+    }, 0)
+
+    // 构建响应数据：先插入 All 总量，再追加各交易所数据
+    const items: AggregatedVolumeResponseDto[] = [
+      {
+        id: 0,
+        exchange: 'All',
+        symbol,
+        instrumentType: query.instrumentType,
+        volumeUsd: totalVolumeUsd.toString(),
+        dataTimestamp: nowIso,
+        source: 'COINGLASS',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      ...result.data.map((item, idx) => ({
+        id: idx + 1,
+        exchange: item.exchange,
+        symbol,
+        instrumentType: query.instrumentType,
+        volumeUsd: item.volumeUsd,
+        dataTimestamp: nowIso,
+        source: 'COINGLASS',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      })),
+    ]
+
+    // 总条数 = All记录 + 实际交易所数量
+    const total = result.total + 1
+
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 
   private timeRangeToHours(timeRange: ExchangeLongShortTimeRange): number {

@@ -135,7 +135,7 @@ export const Navbar = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- normalizeHref depends on currentLng
   }, [catalogItems, currentLng, t])
 
-  const filteredSearchItems = useMemo(() => {
+  const _filteredSearchItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return searchItems.slice(0, 8)
     const hits = searchItems

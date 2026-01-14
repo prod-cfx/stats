@@ -4,6 +4,7 @@ import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarke
 import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
+// MarketsVolumeSyncJob 已移除：数据拉取由其他系统负责
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
 import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-config.module'

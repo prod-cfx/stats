@@ -13,6 +13,8 @@ import {
   GetLatestTradesRequestDto,
   GetMarketTradesRequestDto,
 } from './dto/requests/get-market-trades.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import {
@@ -33,6 +35,7 @@ import { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long
 import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio.response.dto'
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
+import { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 
@@ -56,7 +59,13 @@ const baseArrayResponseSchema = (itemDto: unknown) => ({
 
 @ApiTags('markets')
 @ApiBearerAuth('bearer')
-@ApiExtraModels(BaseResponseDto, ExchangeLongShortRatioResponseDto, BasePaginationResponseDto, MarketTradeResponseDto)
+@ApiExtraModels(
+  BaseResponseDto,
+  ExchangeLongShortRatioResponseDto,
+  BasePaginationResponseDto,
+  MarketTradeResponseDto,
+  AggregatedVolumeResponseDto,
+)
 @Controller('markets')
 export class MarketsController {
   constructor(private readonly marketsService: MarketsService) {}
@@ -277,5 +286,31 @@ export class MarketsController {
     }))
 
     return new BasePaginationResponseDto(pageResult.total, pageResult.page, pageResult.limit, items)
+  }
+
+  @Get('volume/aggregated')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '查询聚合交易量（分页）' })
+  @ApiOkResponse({
+    description: '查询成功',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(AggregatedVolumeResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  async getAggregatedVolumes(
+    @Query() query: GetAggregatedVolumeRequestDto,
+  ): Promise<BasePaginationResponseDto<AggregatedVolumeResponseDto>> {
+    return this.marketsService.getAggregatedVolumes(query)
   }
 }
