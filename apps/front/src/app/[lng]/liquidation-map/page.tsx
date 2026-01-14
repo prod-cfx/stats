@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { LiquidationMapClient } from './LiquidationMapClient';
 
 export default function LiquidationMapPage() {
@@ -16,6 +17,7 @@ export default function LiquidationMapPage() {
           <LiquidationMapClient />
         </Suspense>
       </main>
+      <Footer />
     </div>
   );
 }

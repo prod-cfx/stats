@@ -85,31 +85,31 @@ export const TraderCard = ({
   };
 
   const content = variant === 'recommended' ? (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
+    <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 md:p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
+        <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <Link 
                 href={`/${lng}/whale-tracking/profile/?address=${address}`}
-                className="text-white font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                className="text-white font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all truncate"
                 onClick={(e) => e.stopPropagation()}
               >
-                {address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
+                {address.length > 12 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
               </Link>
-              <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={copyAddress}>
+              <button type="button" className="text-[#8b949e] hover:text-white transition-colors flex-shrink-0" onClick={copyAddress}>
                 <Copy className="w-4 h-4" />
               </button>
             </div>
-            {tag && <span className="text-[#8b949e] text-caption font-medium uppercase">{tag}</span>}
+            {tag && <span className="text-[#8b949e] text-caption font-medium uppercase truncate">{tag}</span>}
           </div>
         </div>
         <button 
           type="button"
-          className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all"
+          className="w-9 h-9 flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white active:scale-95 transition-all flex-shrink-0 ml-2"
           onClick={(e) => {
             e.stopPropagation();
             onShowStats?.(address);
@@ -119,7 +119,7 @@ export const TraderCard = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+      <div className="grid grid-cols-2 gap-x-4 md:gap-x-8 gap-y-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-[#8b949e] text-caption font-medium">{t('whaleTracking.discover.labels.totalValue')}</span>
           <span className="text-white font-bold text-h3">{resolvedTotalValue}</span>

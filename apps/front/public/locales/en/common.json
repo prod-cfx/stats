@@ -21,6 +21,7 @@
     "realtime_whales": "Realtime Whales",
     "whale_holdings": "Whale Holdings",
     "search": "Search",
+    "docs": "Doc",
     "login": "Login",
     "register": "Register",
     "yesterday": "Yesterday"
@@ -135,6 +136,11 @@
       "cancelled": "Cancelled"
     }
   },
+  "footer": {
+    "tagline": "Professional crypto asset data aggregation and multi-dimensional market analysis terminal",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy"
+  },
   "rightPanel": {
     "exchangeBinance": "Binance",
     "exchangeOkx": "OKX",
@@ -227,6 +233,8 @@
     "all": "All",
     "applyChanges": "Apply changes",
     "featureInProgress": "Work in progress...",
+    "comingSoonTitle": "Coming Soon",
+    "comingSoonDesc": "This link will be available soon.",
     "loading": "Loading...",
     "loadFailed": "Failed to load",
     "yesterday": "Yesterday",

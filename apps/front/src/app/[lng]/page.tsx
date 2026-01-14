@@ -3,6 +3,7 @@
 import type { DataSource, MarketType } from '@/types/trading';
 import React, { useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 // import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
 import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
 // import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
@@ -16,7 +17,7 @@ export default function MarketPage() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
+    <div className="flex flex-col min-h-screen w-full bg-[#0d1117] text-[#c9d1d9]">
       {/* Global Navbar */}
       <div className="flex-none">
         <Navbar />
@@ -35,12 +36,12 @@ export default function MarketPage() {
           />
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
           
           {/* Main Layout: Center(Chart) + Right */}
-          <div className="flex-1 flex min-h-0 w-full">
+          <div className="flex flex-col md:flex-row min-h-0 w-full">
             {/* Center Content (Chart Only) */}
-            <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117] relative overflow-hidden">
+            <div className="flex-none h-[50vh] md:h-[calc(100vh-120px)] md:flex-1 flex flex-col min-w-0 bg-[#0d1117] relative overflow-hidden border-b md:border-b-0 border-[#30363d]">
               <CenterChartPanel
                 isAggregated={isAggregated}
                 setIsAggregated={setIsAggregated}
@@ -51,7 +52,7 @@ export default function MarketPage() {
             </div>
 
             {/* Right Panel - Independent Scroll */}
-              <div className="flex-none w-[20%] max-w-[340px] min-w-[240px] border-l border-[#30363d] h-full overflow-y-auto cf-scrollbar pr-1">
+            <div className="flex-none w-full md:w-[20%] md:max-w-[340px] md:min-w-[240px] border-l-0 md:border-l border-[#30363d] h-auto md:h-[calc(100vh-120px)] overflow-y-visible md:overflow-y-auto cf-scrollbar pr-1 pb-10 md:pb-0">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}
@@ -62,6 +63,7 @@ export default function MarketPage() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

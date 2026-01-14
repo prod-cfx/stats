@@ -21,6 +21,7 @@
     "realtime_whales": "实时巨鲸",
     "whale_holdings": "鲸鱼持仓",
     "search": "搜索",
+    "docs": "文档",
     "login": "登录",
     "register": "注册",
     "yesterday": "昨天"
@@ -135,6 +136,11 @@
       "cancelled": "已撤单"
     }
   },
+  "footer": {
+    "tagline": "专业的加密资产数据聚合与多维行情分析终端",
+    "terms": "服务条款",
+    "privacy": "隐私政策"
+  },
   "rightPanel": {
     "exchangeBinance": "币安",
     "exchangeOkx": "OKX",
@@ -211,7 +217,7 @@
     }
   },
   "longShort": {
-    "title": "交易所 多空比 {{symbol}}",
+    "title": "交易所多空比{{symbol}}",
     "subtitle": "交易所多空持仓人数及持仓量比",
     "timeRanges": {
       "5m": "5分钟",
@@ -238,6 +244,8 @@
     "all": "全部",
     "applyChanges": "应用更改",
     "featureInProgress": "功能开发中...",
+    "comingSoonTitle": "敬请期待",
+    "comingSoonDesc": "该链接即将上线",
     "loading": "加载中...",
     "loadFailed": "数据加载失败（Mock）",
     "yesterday": "昨天",

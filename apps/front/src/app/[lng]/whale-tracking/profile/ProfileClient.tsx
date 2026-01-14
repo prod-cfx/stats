@@ -3,6 +3,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navbar } from '@/components/layout/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { EmptyState, LoadingState } from '@/components/ui/loading';
 import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard';
 import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile';
@@ -30,7 +31,7 @@ export function ProfileClient({ address }: { address: string }) {
     <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
       <Navbar />
       
-      <main className="flex-1 overflow-y-auto p-8 no-scrollbar">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
         <div className="max-w-[1440px] mx-auto w-full">
           <LoadingState 
             isLoading={loading} 
@@ -68,6 +69,7 @@ export function ProfileClient({ address }: { address: string }) {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

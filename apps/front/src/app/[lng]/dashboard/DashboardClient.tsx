@@ -72,14 +72,14 @@ export function DashboardClient() {
   const displayDashboards = activeTab === 'my' ? myDashboards : savedDashboards
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full flex min-h-0 gap-8">
-      <div className="flex-none">
+    <div className="max-w-[1440px] mx-auto w-full flex flex-col md:flex-row min-h-0 gap-8">
+      <div className="flex-none hidden md:block">
         <DashboardSidebar activeTab={activeTab} />
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 relative">
         <div className="flex flex-col gap-10">
-          <div className="flex items-center gap-2 border-b border-[#30363d]">
+          <div className="flex items-center gap-2 border-b border-[#30363d] overflow-x-auto no-scrollbar">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id

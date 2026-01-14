@@ -29,7 +29,7 @@ export function LiquidationMapClient() {
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
+    <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6 md:gap-10 p-4 md:p-8">
       <LiquidationMapHeader
         symbol={symbol}
         setSymbol={setSymbol}

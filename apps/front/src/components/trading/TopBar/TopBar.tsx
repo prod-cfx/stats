@@ -167,9 +167,9 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
       {/* Left Area: Removed Navigation */}
       
       {/* Center & Right Area: Full width now */}
-      <div className="flex-1 flex items-center gap-6 px-4 h-full relative min-w-0">
+      <div className="flex-1 flex items-center gap-2 md:gap-6 px-2 md:px-4 h-full relative min-w-0">
         {/* Symbol and Main Price */}
-        <div className="flex items-center gap-4 flex-none relative" ref={menuRef}>
+        <div className="flex items-center gap-2 md:gap-4 flex-none relative" ref={menuRef}>
           <button
             type="button"
             className={`flex items-center gap-2 cursor-pointer group hover:bg-[#1f2937] rounded transition-colors ${isCompact ? 'p-1' : 'p-1'}`}
@@ -191,7 +191,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
 
           {/* Symbol Selector Dropdown */}
           {isSymbolMenuOpen && (
-            <div className={`absolute top-full left-0 mt-2 ${isCompact ? 'w-[320px]' : 'w-[480px]'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}>
+            <div className={`absolute top-full left-0 mt-2 w-[90vw] md:w-[480px] max-w-[480px] bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}>
               {/* Header / Tabs */}
               <div className="flex items-center border-b border-[#30363d]">
                 <button
@@ -282,7 +282,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         </div>
 
         {/* Market Stats - Flexible list with reduced gap for small screens */}
-        <div className={`flex-1 flex items-center gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'} overflow-x-auto no-scrollbar`}>
+        <div className={`flex-1 flex items-center gap-3 md:gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'} overflow-x-auto no-scrollbar`}>
           <div className="flex flex-col min-w-fit">
             <span className="text-[#8b949e] whitespace-nowrap">{t('trade.index_price')}</span>
             <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd(indexPrice)}</span>
