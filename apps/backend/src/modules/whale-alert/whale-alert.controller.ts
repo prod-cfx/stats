@@ -6,7 +6,7 @@
 import { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
-import { OptionalAccessControl, ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports
 import { WhaleAlertService } from './whale-alert.service'

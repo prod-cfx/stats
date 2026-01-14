@@ -21,6 +21,7 @@ import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-l
 import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.job'
+import { CoinglassPairsMarketsJob } from './jobs/coinglass-pairs-markets.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -81,6 +82,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OpenInterestSyncJob,
     CoinglassAggregatedLiquidationJob,
     CoinglassLongShortRatioJob,
+    CoinglassPairsMarketsJob,
     BbxCryptoStockQuotesJob,
     BbxCryptoStockScraperJob,
     PolymarketMarketsJob,
@@ -102,6 +104,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         openInterestSyncJob: OpenInterestSyncJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob: CoinglassLongShortRatioJob,
+        coinglassPairsMarketsJob: CoinglassPairsMarketsJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
         bbxCryptoStockScraperJob: BbxCryptoStockScraperJob,
         polymarketMarketsJob: PolymarketMarketsJob,
@@ -116,6 +119,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         openInterestSyncJob,
         coinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob,
+        coinglassPairsMarketsJob,
         bbxCryptoStockQuotesJob,
         bbxCryptoStockScraperJob,
         polymarketMarketsJob,
@@ -131,6 +135,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         OpenInterestSyncJob,
         CoinglassAggregatedLiquidationJob,
         CoinglassLongShortRatioJob,
+        CoinglassPairsMarketsJob,
         BbxCryptoStockQuotesJob,
         BbxCryptoStockScraperJob,
         PolymarketMarketsJob,

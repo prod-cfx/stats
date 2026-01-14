@@ -399,3 +399,90 @@ model MarketTrade {
   @@index([baseAsset, quoteAsset, tradeTimestamp], name: "idx_trade_assets_time")
   @@map("market_trades")
 }
+
+/// 期货交易对市场数据快照（Coinglass Pairs-Markets）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/pairs-markets
+///
+/// 设计说明：
+/// - 快照模式（snapshot-only），使用 upsert 更新现有记录
+/// - 包含资金费率字段（funding_rate / next_funding_time），避免分表复杂度
+/// - 唯一键：(symbol, exchangeName, instrumentId)
+model FuturesPairsMarket {
+  id Int @id @default(autoincrement())
+
+  /// 合约 ID（如 BTCUSDT）
+  instrumentId String @map("instrument_id")
+
+  /// 交易所名称（如 Binance / OKX）
+  exchangeName String @map("exchange_name")
+
+  /// 交易对符号（如 BTC/USDT）
+  symbol String
+
+  /// 当前价格
+  currentPrice Decimal @map("current_price") @db.Decimal(30, 10)
+
+  /// 指数价格
+  indexPrice Decimal? @map("index_price") @db.Decimal(30, 10)
+
+  /// 24小时价格变化百分比
+  priceChangePercent24h Decimal? @map("price_change_percent_24h") @db.Decimal(10, 4)
+
+  /// 24小时成交量（USD）
+  volumeUsd Decimal @map("volume_usd") @db.Decimal(30, 10)
+
+  /// 24小时成交量变化百分比
+  volumeUsdChangePercent24h Decimal? @map("volume_usd_change_percent_24h") @db.Decimal(10, 4)
+
+  /// 多头成交量（USD）
+  longVolumeUsd Decimal? @map("long_volume_usd") @db.Decimal(30, 10)
+
+  /// 空头成交量（USD）
+  shortVolumeUsd Decimal? @map("short_volume_usd") @db.Decimal(30, 10)
+
+  /// 多头成交量（数量）
+  longVolumeQuantity Decimal? @map("long_volume_quantity") @db.Decimal(30, 10)
+
+  /// 空头成交量（数量）
+  shortVolumeQuantity Decimal? @map("short_volume_quantity") @db.Decimal(30, 10)
+
+  /// 持仓量（数量）
+  openInterestQuantity Decimal? @map("open_interest_quantity") @db.Decimal(30, 10)
+
+  /// 持仓量（USD）
+  openInterestUsd Decimal? @map("open_interest_usd") @db.Decimal(30, 10)
+
+  /// 24小时持仓量变化百分比
+  openInterestChangePercent24h Decimal? @map("open_interest_change_percent_24h") @db.Decimal(10, 4)
+
+  /// 24小时多头清算金额（USD）
+  longLiquidationUsd24h Decimal? @map("long_liquidation_usd_24h") @db.Decimal(30, 10)
+
+  /// 24小时空头清算金额（USD）
+  shortLiquidationUsd24h Decimal? @map("short_liquidation_usd_24h") @db.Decimal(30, 10)
+
+  /// 资金费率
+  fundingRate Decimal? @map("funding_rate") @db.Decimal(18, 8)
+
+  /// 下次资金费率时间（毫秒时间戳）
+  nextFundingTime BigInt? @map("next_funding_time")
+
+  /// 持仓量/成交量比率
+  openInterestVolumeRatio Decimal? @map("open_interest_volume_ratio") @db.Decimal(10, 4)
+
+  /// 24小时持仓量/成交量比率变化百分比
+  oiVolRatioChangePercent24h Decimal? @map("oi_vol_ratio_change_percent_24h") @db.Decimal(10, 4)
+
+  /// 数据来源
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, exchangeName, instrumentId], map: "uniq_futures_pairs_market_symbol_exchange_instrument")
+  @@index([symbol, exchangeName], map: "idx_futures_pairs_market_symbol_exchange")
+  @@index([exchangeName], map: "idx_futures_pairs_market_exchange")
+  @@map("futures_pairs_markets")
+}
