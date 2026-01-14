@@ -420,12 +420,12 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {/* Table Area */}
         {!loading && !error && data.length > 0 && (
           <div className="flex-1 overflow-auto cf-scrollbar relative">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
+            <table className="w-full text-left border-collapse min-w-[800px] md:min-w-[1000px]">
               <thead className="sticky top-0 z-10 bg-[#0d1117]">
-                <tr className={`text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d] w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                <tr className={`text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-[10px] md:text-xs'}`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[#30363d] w-10 md:w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold border-b border-[#30363d] sticky left-0 z-20 bg-[#0d1117] border-r border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('oiAsset')}
@@ -434,7 +434,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {isCompact ? t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: '' }) : t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('oiUsd')}
@@ -443,7 +443,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {t('aggregatedOrderbook.openInterest.table.oiUsd')} {renderSortIcon('oiUsd')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('ratioPct')}
@@ -452,7 +452,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratioPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d] hidden sm:table-cell`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change1hPct')}
@@ -461,7 +461,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d] hidden sm:table-cell`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change4hPct')}
@@ -470,7 +470,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change24hPct')}
@@ -479,10 +479,10 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} font-bold text-center border-b border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[#30363d] hidden md:table-cell`}>{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
                 </tr>
               </thead>
-              <tbody className={isCompact ? 'text-xs' : 'text-sm'}>
+              <tbody className={isCompact ? 'text-xs' : 'text-[11px] md:text-sm'}>
                 {sortedData.map((row) => (
                   <tr 
                     key={row.id} 
@@ -490,29 +490,28 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
                     }`}
                   >
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-center text-[#8b949e]`}>{row.rank}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'}`}>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[#8b949e]`}>{row.rank}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/30 ${row.isTotal ? 'bg-[#21262d]' : ''}`}>
                       <div className="flex items-center gap-2">
-                        {/* Always use ExchangeLogo component for consistency and fallbacks */}
-                        <div className={`${isCompact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
+                        <div className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4 md:w-5 md:h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
                           <ExchangeLogo
                             exchange={row.exchange}
                             fallback={row.logo}
                             className="w-full h-full object-contain bg-[#0d1117]"
                           />
                         </div>
-                        <span className={row.isTotal ? `text-white ${isCompact ? 'font-bold text-sm' : ''}` : 'text-[#e6edf3]'}>
+                        <span className={`${row.isTotal ? 'text-white font-bold' : 'text-[#e6edf3]'} truncate max-w-[60px] md:max-w-none`}>
                           {row.isTotal ? t('common.all') : row.exchange}
                         </span>
                       </div>
                     </td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{formatAssetAmount(row.oiAsset)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{currencyCompact.format(row.oiUsd)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right text-[#e6edf3]`}>{formatRatio(row.ratioPct)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change1hPct)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change4hPct)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change24hPct)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-4 py-4'} text-center text-[#e6edf3]`}>{row.oiVolRatio.toFixed(4)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{formatAssetAmount(row.oiAsset)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{currencyCompact.format(row.oiUsd)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{formatRatio(row.ratioPct)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium hidden sm:table-cell`}>{renderValueWithColor(row.change1hPct)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium hidden sm:table-cell`}>{renderValueWithColor(row.change4hPct)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change24hPct)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[#8b949e] hidden md:table-cell`}>{row.oiVolRatio.toFixed(4)}</td>
                   </tr>
                 ))}
               </tbody>

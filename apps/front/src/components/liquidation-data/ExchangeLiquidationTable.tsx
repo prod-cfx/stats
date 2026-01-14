@@ -211,49 +211,53 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
   }, [currencyFormatter, selectedExchange, t])
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-6'} h-full`}>
-      <div className="flex items-center justify-between flex-none">
-        {showTitle && <SectionTitle>{t('liquidationData.table.title')}</SectionTitle>}
-        <div className={`flex gap-3 ${!showTitle ? 'w-full justify-between' : ''}`}>
-          <FilterButton
-            value={coinFilter}
-            options={[
-              { value: 'BTC', label: 'BTC' },
-              { value: 'ETH', label: 'ETH' },
-              { value: 'SOL', label: 'SOL' },
-              { value: 'XRP', label: 'XRP' },
-              { value: 'DOGE', label: 'DOGE' },
-              { value: 'HYPE', label: 'HYPE' },
-            ]} 
-            onChange={(v) => handleCoinChange(v as CoinFilter)}
-            size={isCompact ? 'sm' : 'md'}
-          />
-          <FilterButton
-            value={timeFilter}
-            options={[
-              { value: '1h', label: t('liquidationData.time.1h') },
-              { value: '4h', label: t('liquidationData.time.4h') },
-              { value: '12h', label: t('liquidationData.time.12h') },
-              { value: '24h', label: t('liquidationData.time.24h') },
-            ]} 
-            onChange={(v) => handleTimeChange(v as TimeFilter)}
-            size={isCompact ? 'sm' : 'md'}
-          />
+    <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-4 md:gap-6'} h-full`}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-none">
+        {showTitle && <SectionTitle className="text-xl md:text-2xl">{t('liquidationData.table.title')}</SectionTitle>}
+        <div className={`flex flex-wrap gap-2 md:gap-3 ${!showTitle ? 'w-full justify-between' : ''}`}>
+          <div className="flex gap-2">
+            <FilterButton
+              value={coinFilter}
+              options={[
+                { value: 'BTC', label: 'BTC' },
+                { value: 'ETH', label: 'ETH' },
+                { value: 'SOL', label: 'SOL' },
+                { value: 'XRP', label: 'XRP' },
+                { value: 'DOGE', label: 'DOGE' },
+                { value: 'HYPE', label: 'HYPE' },
+              ]} 
+              onChange={(v) => handleCoinChange(v as CoinFilter)}
+              size={isCompact ? 'sm' : 'md'}
+            />
+          </div>
+          <div className="flex gap-2">
+            <FilterButton
+              value={timeFilter}
+              options={[
+                { value: '1h', label: t('liquidationData.time.1h') },
+                { value: '4h', label: t('liquidationData.time.4h') },
+                { value: '12h', label: t('liquidationData.time.12h') },
+                { value: '24h', label: t('liquidationData.time.24h') },
+              ]} 
+              onChange={(v) => handleTimeChange(v as TimeFilter)}
+              size={isCompact ? 'sm' : 'md'}
+            />
+          </div>
         </div>
       </div>
 
       <div className={`bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden flex-1 min-h-0 relative ${isCompact ? '' : 'shadow-lg'} animate-in fade-in duration-500 flex flex-col`}>
         <LoadingState isLoading={loading} error={error} onRetry={reload} className="h-full">
           <div className="overflow-x-auto h-full cf-scrollbar">
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse min-w-[600px] md:min-w-[800px]">
               <thead>
                 <tr className={`text-[#8b949e] ${headerTextSize} font-bold border-b border-[#30363d] bg-[#0d1117]/50`}>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.exchange')}</th>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.total')}</th>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.long')}</th>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.short')}</th>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.share')}</th>
-                  <th className={`${cellPadding} text-center`}>{t('liquidationData.table.columns.longShort')}</th>
+                  <th className={`${cellPadding} text-left sticky left-0 z-10 bg-[#0d1117]/95 border-r border-[#30363d]`}>{t('liquidationData.table.columns.exchange')}</th>
+                  <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.total')}</th>
+                  <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.long')}</th>
+                  <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.short')}</th>
+                  <th className={`${cellPadding} text-right hidden sm:table-cell`}>{t('liquidationData.table.columns.share')}</th>
+                  <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.longShort')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#30363d]">
@@ -265,37 +269,39 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
                     }`}
                     onClick={() => setSelectedExchange(tableDataRaw?.[index] ?? null)}
                   >
-                    <td className={cellPadding}>
-                      <div className="flex items-center justify-center gap-2">
+                    <td className={`${cellPadding} sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50`}>
+                      <div className="flex items-center justify-start gap-2">
                         {!row.isTotal && (
-                          <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={isCompact ? 16 : 20} />
+                          <div className="flex-shrink-0">
+                            <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={isCompact ? 14 : 18} />
+                          </div>
                         )}
-                        <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'} tracking-tight`}>
+                        <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'} tracking-tight truncate`}>
                           {row.exchange}
                         </span>
                       </div>
                     </td>
-                    <td className={`${cellPadding} text-center`}>
+                    <td className={`${cellPadding} text-right`}>
                       <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'} tracking-tight`}>
                         {row.amount}
                       </span>
                     </td>
-                    <td className={`${cellPadding} text-center font-mono`}>
+                    <td className={`${cellPadding} text-right font-mono`}>
                       <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#4ade80]'} tracking-tight`}>
                         {row.long}
                       </span>
                     </td>
-                    <td className={`${cellPadding} text-center font-mono`}>
+                    <td className={`${cellPadding} text-right font-mono`}>
                       <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#f87171]'} tracking-tight`}>
                         {row.short}
                       </span>
                     </td>
-                    <td className={`${cellPadding} text-center`}>
+                    <td className={`${cellPadding} text-right hidden sm:table-cell`}>
                       <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#8b949e]'} tracking-tight`}>
                         {row.ratio}
                       </span>
                     </td>
-                    <td className={`${cellPadding} text-center`}>
+                    <td className={`${cellPadding} text-right`}>
                       <span className={`${textSize} font-bold ${row.isLongDominant ? 'text-[#4ade80]' : 'text-[#f87171]'} tracking-tight`}>
                         {row.longShortRatio}
                       </span>

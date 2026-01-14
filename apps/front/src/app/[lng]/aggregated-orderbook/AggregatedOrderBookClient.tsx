@@ -12,8 +12,8 @@ export function AggregatedOrderBookClient() {
   const [activeTab, setActiveTab] = useState('aggregated-orderbook')
 
   return (
-    <>
-      <div className="flex border-b border-[#30363d] w-fit">
+    <div className="flex flex-col w-full h-full p-4 md:p-8">
+      <div className="flex border-b border-[#30363d] w-full md:w-fit overflow-x-auto no-scrollbar">
         {[
           { id: 'aggregated-orderbook', name: t('aggregatedOrderbook.tabs.orderbook') },
           { id: 'aggregated-oi', name: t('aggregatedOrderbook.tabs.openInterest') },
@@ -23,7 +23,7 @@ export function AggregatedOrderBookClient() {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`px-8 py-3 text-sm font-semibold transition-all relative ${activeTab === tab.id
+            className={`flex-1 md:flex-none whitespace-nowrap px-4 md:px-8 py-3 text-sm font-semibold transition-all relative ${activeTab === tab.id
               ? 'text-white'
               : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'}`}
           >
@@ -38,7 +38,7 @@ export function AggregatedOrderBookClient() {
         ))}
       </div>
 
-      <div className="relative min-h-[750px]">
+      <div className="relative min-h-[750px] mt-6">
         {activeTab === 'aggregated-orderbook' ? (
           <AggregatedOrderbookView />
           ) : activeTab === 'aggregated-oi' ? (
@@ -54,6 +54,6 @@ export function AggregatedOrderBookClient() {
             </div>
           )}
       </div>
-    </>
+    </div>
   )
 }

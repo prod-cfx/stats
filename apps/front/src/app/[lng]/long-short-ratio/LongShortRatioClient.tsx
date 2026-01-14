@@ -43,28 +43,28 @@ const SummaryCard = ({
   longLabel: string
   shortLabel: string
 }) => (
-  <div className="w-full bg-[#161b22] border border-[#30363d] rounded-xl p-4 mb-6 shadow-sm">
-    <div className="flex flex-col md:flex-row items-center gap-8">
-      <div className="flex items-center gap-4 min-w-[180px]">
-        <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
-          <span className="text-yellow-500 font-bold text-xl">₿</span>
+  <div className="w-full bg-[#161b22] border border-[#30363d] rounded-xl p-4 md:p-6 mb-6 shadow-sm">
+    <div className="flex flex-col lg:flex-row items-center gap-4 md:gap-8">
+      <div className="flex items-center gap-4 min-w-[140px] md:min-w-[180px] w-full lg:w-auto">
+        <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 flex-shrink-0">
+          <span className="text-yellow-500 font-bold text-lg md:text-xl">₿</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-white font-bold text-xl">{symbol}</span>
-          <span className="text-[#8b949e] text-sm">{totalLabel}</span>
+          <span className="text-white font-bold text-lg md:text-xl">{symbol}</span>
+          <span className="text-[#8b949e] text-xs md:text-sm">{totalLabel}</span>
         </div>
       </div>
       <div className="flex-1 w-full">
-        <ProgressBar long={longPercent} short={shortPercent} height="h-10" />
+        <ProgressBar long={longPercent} short={shortPercent} height="h-8 md:h-10" />
       </div>
-      <div className="flex items-center min-w-[300px]">
-        <div className="flex flex-col w-32">
-          <span className="text-[#8b949e] text-xs mb-1">{longLabel}</span>
-          <span className="text-[#4ade80] font-bold text-lg">{longAmount}</span>
+      <div className="flex items-center min-w-full lg:min-w-[300px] w-full lg:w-auto justify-between lg:justify-start">
+        <div className="flex flex-col w-1/2 lg:w-32">
+          <span className="text-[#8b949e] text-[10px] md:text-xs mb-1">{longLabel}</span>
+          <span className="text-[#4ade80] font-bold text-base md:text-lg">{longAmount}</span>
         </div>
-        <div className="flex flex-col w-32 ml-auto md:ml-0">
-          <span className="text-[#8b949e] text-xs mb-1">{shortLabel}</span>
-          <span className="text-[#ef4444] font-bold text-lg">{shortAmount}</span>
+        <div className="flex flex-col w-1/2 lg:w-32 text-right lg:text-left">
+          <span className="text-[#8b949e] text-[10px] md:text-xs mb-1">{shortLabel}</span>
+          <span className="text-[#ef4444] font-bold text-base md:text-lg">{shortAmount}</span>
         </div>
       </div>
     </div>
@@ -85,23 +85,23 @@ const ExchangeRow = ({
   shortAmount: string
 }) => (
   <div className="w-full transition-colors group">
-    <div className="flex items-center gap-6">
-      <div className="flex items-center gap-4 min-w-[180px]">
-        <span className="text-[#8b949e] font-semibold w-6 text-center">{data.rank}</span>
-        <ExchangeLogo name={data.name} logoUrl={data.logoUrl} size={28} />
-        <span className="text-white font-medium text-sm">{data.name}</span>
+    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3 md:gap-6">
+      <div className="flex items-center gap-3 md:gap-4 min-w-[140px] md:min-w-[180px]">
+        <span className="text-[#8b949e] font-semibold w-5 md:w-6 text-center text-xs md:text-sm">{data.rank}</span>
+        <ExchangeLogo name={data.name} logoUrl={data.logoUrl} size={24} className="md:w-7 md:h-7" />
+        <span className="text-white font-medium text-xs md:text-sm">{data.name}</span>
       </div>
-      <div className="flex-1">
-        <ProgressBar long={data.longPercent} short={data.shortPercent} height="h-8" />
+      <div className="flex-1 w-full lg:w-auto">
+        <ProgressBar long={data.longPercent} short={data.shortPercent} height="h-6 md:h-8" />
       </div>
-      <div className="flex items-center min-w-[300px]">
-        <div className="flex flex-col w-32">
-          <span className="text-[#8b949e] text-xs">{longLabel}</span>
-          <span className="text-[#4ade80] font-semibold text-xs">{longAmount}</span>
+      <div className="flex items-center min-w-full lg:min-w-[300px] w-full lg:w-auto justify-between lg:justify-start">
+        <div className="flex flex-col w-1/2 lg:w-32">
+          <span className="text-[#8b949e] text-[9px] md:text-xs">{longLabel}</span>
+          <span className="text-[#4ade80] font-semibold text-[10px] md:text-xs">{longAmount}</span>
         </div>
-        <div className="flex flex-col w-32 ml-auto md:ml-0">
-          <span className="text-[#8b949e] text-xs">{shortLabel}</span>
-          <span className="text-[#ef4444] font-semibold text-xs">{shortAmount}</span>
+        <div className="flex flex-col w-1/2 lg:w-32 text-right lg:text-left">
+          <span className="text-[#8b949e] text-[9px] md:text-xs">{shortLabel}</span>
+          <span className="text-[#ef4444] font-semibold text-[10px] md:text-xs">{shortAmount}</span>
         </div>
       </div>
     </div>
@@ -168,16 +168,16 @@ export function LongShortRatioClient() {
   }, [exchanges])
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-3">
-          <PageTitle>{t('longShort.title', { symbol })}</PageTitle>
-          <BodyText>{t('longShort.subtitle')}</BodyText>
+    <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6 md:gap-10 p-4 md:p-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-2 md:gap-3">
+          <PageTitle className="text-xl md:text-2xl">{t('longShort.title', { symbol })}</PageTitle>
+          <BodyText className="text-xs md:text-sm">{t('longShort.subtitle')}</BodyText>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1">
-            <FilterButton value={symbol} options={['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'DOGE', 'BNB']} onChange={setSymbol} minWidth="80px" />
+        <div className="flex items-center gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+          <div className="flex gap-1 flex-shrink-0">
+            <FilterButton value={symbol} options={['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'DOGE', 'BNB']} onChange={setSymbol} minWidth="70px" size="sm" />
             <FilterButton
               value={timeRange}
               options={[
@@ -190,12 +190,13 @@ export function LongShortRatioClient() {
                 { value: '24h', label: t('longShort.timeRanges.24h') },
               ]}
               onChange={(v) => setTimeRange(v as any)}
-              minWidth="100px"
+              minWidth="80px"
+              size="sm"
             />
           </div>
           <button
             type="button"
-            className="p-2.5 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-all hover:bg-[#30363d] active:scale-95 group"
+            className="p-2 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-all hover:bg-[#30363d] active:scale-95 group flex-shrink-0"
             onClick={() => {
               const btn = document.querySelector('.refresh-icon')
               btn?.classList.add('animate-spin')
@@ -205,7 +206,7 @@ export function LongShortRatioClient() {
               }, 500)
             }}
           >
-            <RefreshCw className="w-4 h-4 refresh-icon" />
+            <RefreshCw className="w-3.5 h-3.5 refresh-icon" />
           </button>
         </div>
       </div>
@@ -228,7 +229,7 @@ export function LongShortRatioClient() {
             shortLabel={t('longShort.summary.short')}
           />
           <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-lg animate-in fade-in duration-500">
-            <div className="flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d] bg-[#0d1117]/50">
+            <div className="hidden md:flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d] bg-[#0d1117]/50">
               <span className="w-[180px] pl-10">{t('longShort.table.exchange')}</span>
               <span className="flex-1 text-center">{t('longShort.table.ratio')}</span>
               <div className="flex w-[300px]">
@@ -238,7 +239,7 @@ export function LongShortRatioClient() {
             </div>
             <div className="flex flex-col divide-y divide-[#30363d]">
               {exchanges?.map((ex) => (
-                <div key={ex.name} className="px-6 py-4 hover:bg-[#21262d] transition-colors">
+                <div key={ex.name} className="px-4 md:px-6 py-4 hover:bg-[#21262d] transition-colors">
                   <ExchangeRow
                     data={ex}
                     longLabel={t('longShort.summary.long')}

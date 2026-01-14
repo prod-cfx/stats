@@ -205,23 +205,23 @@ export const RealtimeWhalesTable = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex flex-col gap-1">
-          <PageTitle>{t('whaleTracking.realtime.title')}</PageTitle>
-          <p className="text-xs text-[#8b949e]">{t('whaleTracking.realtime.subtitle')}</p>
+          <PageTitle className="text-xl md:text-2xl">{t('whaleTracking.realtime.title')}</PageTitle>
+          <p className="text-[10px] md:text-xs text-[#8b949e]">{t('whaleTracking.realtime.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto">
           <button 
             type="button"
             onClick={() => setIsPaused(!isPaused)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-full text-label font-bold transition-all active:scale-95 ${
+            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 border rounded-full text-xs md:text-label font-bold transition-all active:scale-95 ${
               isPaused 
                 ? 'bg-[#21262d] border-[#30363d] text-[#8b949e]' 
                 : 'bg-primary/10 border-primary text-primary shadow-lg shadow-primary/10'
             }`}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${!isPaused ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+            <RefreshCw className={`w-3 h-3 md:w-3.5 md:h-3.5 ${!isPaused ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
             <span>{isPaused ? t('whaleTracking.realtime.paused') : t('whaleTracking.realtime.nextUpdate', { count: countdown })}</span>
           </button>
         </div>
@@ -230,17 +230,17 @@ export const RealtimeWhalesTable = () => {
       <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[600px] relative shadow-2xl">
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
         
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+        <div className="overflow-x-auto cf-scrollbar">
+          <table className="w-full border-collapse min-w-[1000px]">
             <thead>
               <tr className="text-[#8b949e] border-b border-[#30363d] bg-[#0d1117]/50">
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.address')}</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
-                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.winRate')}</th>
-                <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.time')}</th>
-                <th className="px-6 py-4 text-center w-16">{t('whaleTracking.realtime.table.actions')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider sticky left-0 z-10 bg-[#0d1117]/95 border-r border-[#30363d]">{t('whaleTracking.realtime.table.address')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.winRate')}</th>
+                <th className="px-3 md:px-6 py-4 text-right text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.time')}</th>
+                <th className="px-3 md:px-6 py-4 text-center w-12 md:w-16">{t('whaleTracking.realtime.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363d]">
@@ -250,64 +250,64 @@ export const RealtimeWhalesTable = () => {
                   className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
                   onClick={() => handleShowStats(tx.address)}
                 >
-                  <td className="px-6 py-5">
+                  <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
                         <Link 
                           href={`/${lng}/whale-tracking/profile/?address=${tx.address}`}
-                          className="text-white text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
+                          className="text-white text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {`${tx.address.slice(0, 6)}...${tx.address.slice(-4)}`}
+                          {`${tx.address.slice(0, 4)}...${tx.address.slice(-4)}`}
                         </Link>
                         <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
-                          <Copy className="w-3.5 h-3.5" />
+                          <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />
                         </button>
                       </div>
                       <span 
-                        className="w-fit px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                        className="w-fit px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-bold uppercase"
                         style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                       >
                         {t(`whaleTracking.tags.${tx.tagKey}`)}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-5">
+                  <td className="px-3 md:px-6 py-5">
                     <div className="flex items-center gap-1.5">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                      <div className={`w-6 h-6 md:w-8 md:h-8 rounded md:rounded-lg flex items-center justify-center text-[10px] md:text-xs font-bold ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                         {tx.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-white text-body font-bold">{tx.asset}</span>
-                        <span className="text-[#8b949e] text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
+                        <span className="text-white text-[11px] md:text-body font-bold">{tx.asset}</span>
+                        <span className="text-[#8b949e] text-[8px] md:text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-5">
+                  <td className="px-3 md:px-6 py-5">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-white text-body font-bold">{tx.positionValueUSD}</span>
-                      <span className="text-[#8b949e] text-xs">{tx.positionValueAsset}</span>
+                      <span className="text-white text-[11px] md:text-body font-bold">{tx.positionValueUSD}</span>
+                      <span className="text-[#8b949e] text-[9px] md:text-xs">{tx.positionValueAsset}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-5 text-white text-body font-mono">
+                  <td className="px-3 md:px-6 py-5 text-white text-[11px] md:text-body font-mono">
                     {tx.entryPrice}
                   </td>
-                  <td className="px-6 py-5 text-[#4ade80] text-body font-bold">
+                  <td className="px-3 md:px-6 py-5 text-[#4ade80] text-[11px] md:text-body font-bold">
                     {tx.winRate}
                   </td>
-                  <td className="px-6 py-5 text-[#8b949e] text-caption text-right font-medium">
+                  <td className="px-3 md:px-6 py-5 text-[#8b949e] text-[10px] md:text-caption text-right font-medium">
                     {formatRelativeTime(tx.timestamp)}
                   </td>
-                  <td className="px-6 py-5 text-center">
+                  <td className="px-3 md:px-6 py-5 text-center">
                     <button 
                       type="button"
-                      className="w-9 h-9 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-xl text-[#8b949e] hover:text-white hover:border-primary/50 hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
+                      className="w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded md:rounded-xl text-[#8b949e] hover:text-white hover:border-primary/50 hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleShowStats(tx.address);
                       }}
                     >
-                      <TrendingUp className="w-5 h-5" />
+                      <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
                   </td>
                 </tr>

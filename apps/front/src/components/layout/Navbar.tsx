@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -35,6 +35,8 @@ export const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [extraBases, setExtraBases] = useState<string[]>([])
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
@@ -438,6 +440,7 @@ export const Navbar = () => {
     if (!ENABLE_GLOBAL_SEARCH) return
     // Close on route change
     setSearchOpen(false)
+    setMobileMenuOpen(false)
     setActiveIndex(0)
   }, [ENABLE_GLOBAL_SEARCH, pathname])
 
@@ -492,16 +495,34 @@ export const Navbar = () => {
     )
   }
 
+  const toggleMobileSubmenu = (name: string) => {
+    setExpandedMobileMenus(prev => 
+      prev.includes(name) 
+        ? prev.filter(item => item !== name)
+        : [...prev, name]
+    )
+  }
+
   return (
-    <nav className="h-20 bg-[#0d1117] border-b border-[#30363d] px-8 flex items-center justify-between sticky top-0 z-50">
-      <div className="flex items-center gap-12">
-        <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
-          <div className="flex flex-col">
-            <span className="text-white font-bold text-xl leading-tight">Coinflux</span>
-            <span className="text-[#8b949e] text-xs">Crypto Data Aggregation</span>
-          </div>
-        </Link>
+    <nav className="h-16 md:h-20 bg-[#0d1117] border-b border-[#30363d] px-4 md:px-8 flex items-center justify-between sticky top-0 z-50">
+      <div className="flex items-center gap-4 md:gap-12">
+        <div className="flex items-center gap-3">
+          {/* Mobile Menu Button */}
+          <button 
+            className="md:hidden text-[#8b949e] hover:text-white"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          
+          <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-lg md:text-xl leading-tight">Coinflux</span>
+              <span className="hidden md:block text-[#8b949e] text-xs">Crypto Data Aggregation</span>
+            </div>
+          </Link>
+        </div>
         
         <div className="hidden md:flex items-center gap-8 h-full">
             {navLinks.map((link) => {
@@ -567,9 +588,22 @@ export const Navbar = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {ENABLE_GLOBAL_SEARCH && (
           <div className="relative group" ref={searchWrapRef}>
+          {/* Mobile Search Icon Only */}
+          <button 
+             className="md:hidden text-[#8b949e] p-2"
+             onClick={() => {
+               setSearchOpen(true)
+               setTimeout(() => searchInputRef.current?.focus(), 0)
+             }}
+          >
+            <Search className="w-5 h-5" />
+          </button>
+
+          {/* Desktop Search Bar */}
+          <div className="hidden md:block relative group">
           <svg width="0" height="0" className="absolute">
             <defs>
               <linearGradient id="search_icon_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -599,6 +633,7 @@ export const Navbar = () => {
               <span className="text-[#8b949e]">{t('nav.search')}</span>
               <span className="ml-2 text-[11px] text-[#8b949e] opacity-70">/</span>
             </button>
+            </div>
           </div>
         )}
         {ENABLE_USER_SYSTEM && (
@@ -619,8 +654,93 @@ export const Navbar = () => {
         </button>
           </>
         )}
-        <LanguageSwitcher />
+        <div className="hidden md:block">
+          <LanguageSwitcher />
+        </div>
+        <div className="md:hidden">
+            {/* Mobile Language Switcher could go here or in the drawer */}
+        </div>
       </div>
+
+      {/* Mobile Menu Drawer */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] md:hidden">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="absolute left-0 top-0 bottom-0 w-[80vw] max-w-sm bg-[#0d1117] border-r border-[#30363d] p-6 overflow-y-auto">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary" />
+                <span className="text-white font-bold text-lg">Coinflux</span>
+              </div>
+              <button 
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-[#8b949e] hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {navLinks.map((link) => (
+                <div key={link.name} className="border-b border-[#30363d] last:border-0 pb-2">
+                  {link.children ? (
+                    <div>
+                      <button 
+                        onClick={() => toggleMobileSubmenu(link.name)}
+                        className="w-full flex items-center justify-between py-2 text-[#e6edf3] font-medium"
+                      >
+                        {link.name}
+                        <ChevronDown 
+                          className={`w-4 h-4 transition-transform ${
+                            expandedMobileMenus.includes(link.name) ? 'rotate-180' : ''
+                          }`} 
+                        />
+                      </button>
+                      
+                      {expandedMobileMenus.includes(link.name) && (
+                        <div className="pl-4 py-2 space-y-2 bg-[#161b22]/50 rounded-lg mt-1">
+                          {link.children.map((child) => (
+                            <Link 
+                              key={child.name}
+                              href={child.href}
+                              className={`block py-2 text-sm ${
+                                pathname === child.href 
+                                  ? 'text-primary font-medium' 
+                                  : 'text-[#8b949e]'
+                              }`}
+                            >
+                              {child.name}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Link 
+                      href={link.href}
+                      className={`block py-2 text-[#e6edf3] font-medium ${
+                        pathname === link.href ? 'text-primary' : ''
+                      }`}
+                    >
+                      {link.name}
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-[#30363d]">
+               <div className="flex justify-between items-center">
+                 <span className="text-sm text-[#8b949e]">Language</span>
+                 <LanguageSwitcher />
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Search Modal (Coinglass-style) */}
       {ENABLE_GLOBAL_SEARCH && searchOpen && (

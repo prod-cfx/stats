@@ -102,10 +102,10 @@ export const PredictionMarketGrid = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-8">
       <div className="relative min-h-[400px]">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-12 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12 animate-in fade-in duration-500">
             {predictions?.map(prediction => (
               <div key={prediction.id} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
                 <PredictionCard {...prediction} />

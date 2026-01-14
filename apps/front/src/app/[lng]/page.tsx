@@ -38,9 +38,9 @@ export default function MarketPage() {
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
           
           {/* Main Layout: Center(Chart) + Right */}
-          <div className="flex-1 flex min-h-0 w-full">
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 w-full overflow-y-auto md:overflow-hidden">
             {/* Center Content (Chart Only) */}
-            <div className="flex-1 flex flex-col min-w-0 bg-[#0d1117] relative overflow-hidden">
+            <div className="flex-none h-[50vh] md:flex-1 md:h-auto flex flex-col min-w-0 bg-[#0d1117] relative overflow-hidden border-b md:border-b-0 border-[#30363d]">
               <CenterChartPanel
                 isAggregated={isAggregated}
                 setIsAggregated={setIsAggregated}
@@ -51,7 +51,7 @@ export default function MarketPage() {
             </div>
 
             {/* Right Panel - Independent Scroll */}
-              <div className="flex-none w-[20%] max-w-[340px] min-w-[240px] border-l border-[#30363d] h-full overflow-y-auto cf-scrollbar pr-1">
+            <div className="flex-none w-full md:w-[20%] md:max-w-[340px] md:min-w-[240px] border-l-0 md:border-l border-[#30363d] h-auto md:h-full overflow-y-visible md:overflow-y-auto cf-scrollbar pr-1 pb-10 md:pb-0">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}

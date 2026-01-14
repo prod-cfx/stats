@@ -211,7 +211,7 @@
     }
   },
   "longShort": {
-    "title": "交易所 多空比 {{symbol}}",
+    "title": "交易所多空比{{symbol}}",
     "subtitle": "交易所多空持仓人数及持仓量比",
     "timeRanges": {
       "5m": "5分钟",
