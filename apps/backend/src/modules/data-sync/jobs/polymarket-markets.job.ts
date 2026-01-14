@@ -227,8 +227,32 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       clobTokenIds = rawClobTokenIds.map(String)
     }
 
-    // 1. 如果 outcomes 是数组，直接返回
+    let outcomePrices: string[] | undefined
+    const rawOutcomePrices = (market as { outcomePrices?: unknown }).outcomePrices
+    if (typeof rawOutcomePrices === 'string') {
+      try {
+        const parsed = JSON.parse(rawOutcomePrices)
+        if (Array.isArray(parsed)) {
+          outcomePrices = parsed.map(String)
+        }
+      } catch {
+        // ignore parse error
+      }
+    } else if (Array.isArray(rawOutcomePrices)) {
+      outcomePrices = rawOutcomePrices.map(String)
+    }
+
+    // 1. 如果 outcomes 是数组，处理字符串数组或对象数组
     if (Array.isArray(market.outcomes)) {
+      if (market.outcomes.every((outcome) => typeof outcome === 'string')) {
+        // 注意：只有当有真实的 clobTokenIds 时才创建 outcome
+        // 否则订单簿作业会对假 token_id 永远返回 404
+        if (!clobTokenIds || clobTokenIds.length === 0) {
+          this.logger.debug(`Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`)
+          return []
+        }
+        return this.buildOutcomesFromStringArray(market.id, market.outcomes, clobTokenIds, outcomePrices)
+      }
       return market.outcomes
     }
 
@@ -244,17 +268,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
             this.logger.debug(`Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`)
             return []
           }
-          return parsed
-            .map((name, index) => {
-              const tokenId = clobTokenIds[index]
-              if (!tokenId) return null
-              return {
-                id: `${market.id}-outcome-${index}`,
-                token_id: tokenId,
-                name: String(name),
-              }
-            })
-            .filter((outcome): outcome is NonNullable<typeof outcome> => outcome !== null)
+          return this.buildOutcomesFromStringArray(market.id, parsed, clobTokenIds, outcomePrices)
         }
       } catch (error) {
         this.logger.warn(`Failed to parse outcomes JSON for market ${market.id}: ${String(error)}`)
@@ -272,6 +286,27 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
     // 4. 返回空数组
     return []
+  }
+
+  private buildOutcomesFromStringArray(
+    marketId: string,
+    names: string[],
+    clobTokenIds: string[],
+    outcomePrices?: string[],
+  ): PolymarketGammaOutcome[] {
+    return names
+      .map((name, index) => {
+        const tokenId = clobTokenIds[index]
+        if (!tokenId) return null
+        const probability = outcomePrices?.[index]
+        return {
+          id: `${marketId}-outcome-${index}`,
+          token_id: tokenId,
+          name: String(name),
+          ...(probability !== undefined ? { probability } : {}),
+        }
+      })
+      .filter((outcome): outcome is NonNullable<typeof outcome> => outcome !== null)
   }
 
   private mapOutcome(outcome: PolymarketGammaOutcome, marketDbId: number) {
