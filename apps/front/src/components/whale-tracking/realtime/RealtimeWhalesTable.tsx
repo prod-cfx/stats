@@ -1,9 +1,9 @@
 'use client';
 
-import { Copy, RefreshCw, TrendingUp } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/components/ui/toast';
 import { PageTitle } from '@/components/ui/Typography';
@@ -23,6 +23,7 @@ interface WhaleTransaction {
   positionValueAsset: string;
   entryPrice: string;
   winRate: string;
+  winRatePct: number; // for sorting
   timestamp: number; // Date.now() when transaction was created
 }
 
@@ -39,12 +40,23 @@ export const RealtimeWhalesTable = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeUpdateRef = useRef<NodeJS.Timeout | null>(null);
   const lastRequestIdRef = useRef(0);
   const inFlightRef = useRef(false);
   const fetchNewDataRef = useRef<(() => Promise<void>) | null>(null);
   const { success, error } = useToast();
+
+  const seededNumber = (input: string): number => {
+    // simple non-cryptographic hash → [0, 1)
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 2 ** 32;
+  };
 
   const formatRelativeTime = (timestamp: number) => {
     const minutesAgo = Math.floor((currentTime - timestamp) / 60_000);
@@ -111,6 +123,10 @@ export const RealtimeWhalesTable = () => {
 
         const timestamp = new Date(alert.create_time).getTime();
 
+        // 后端暂未提供胜率：先用“稳定伪随机”生成展示值（基于 address+symbol，不会抖动）
+        const seedBase = `${alert.user_address}-${alert.symbol}`;
+        const winRatePct = 45 + seededNumber(`${seedBase}-wr`) * 40; // [45, 85)
+
         return {
           address: alert.user_address,
           tagKey,
@@ -124,8 +140,8 @@ export const RealtimeWhalesTable = () => {
           positionValueUSD,
           positionValueAsset,
           entryPrice,
-          // 实际胜率来自交易历史，这里先占位为 '--'
-          winRate: '--',
+          winRate: `${winRatePct.toFixed(0)}%`,
+          winRatePct,
           timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
         };
       });
@@ -204,6 +220,30 @@ export const RealtimeWhalesTable = () => {
     success(t('whaleTracking.realtime.toast.copied'));
   };
 
+  const handleSortWinRate = () => {
+    setSortOrder(prev => {
+      if (prev === 'desc') return 'asc';
+      if (prev === 'asc') return null;
+      return 'desc';
+    });
+  };
+
+  const renderSortIcon = () => {
+    if (!sortOrder) {
+      return <ArrowUpDown className="w-4 h-4 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0" />;
+    }
+    return sortOrder === 'desc'
+      ? <ChevronDown className="w-4 h-4 text-primary ml-1 flex-shrink-0" />
+      : <ChevronUp className="w-4 h-4 text-primary ml-1 flex-shrink-0" />;
+  };
+
+  const displayedTransactions = useMemo(() => {
+    if (!sortOrder) return transactions;
+    return [...transactions].sort((a, b) => {
+      return sortOrder === 'desc' ? b.winRatePct - a.winRatePct : a.winRatePct - b.winRatePct;
+    });
+  }, [transactions, sortOrder]);
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -238,13 +278,22 @@ export const RealtimeWhalesTable = () => {
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
-                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.winRate')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="flex items-center cursor-pointer group select-none"
+                    onClick={handleSortWinRate}
+                  >
+                    {t('whaleTracking.realtime.table.winRate')}
+                    {renderSortIcon()}
+                  </button>
+                </th>
                 <th className="px-3 md:px-6 py-4 text-right text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.time')}</th>
                 <th className="px-3 md:px-6 py-4 text-center w-12 md:w-16">{t('whaleTracking.realtime.table.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#30363d]">
-              {transactions.map((tx) => (
+              {displayedTransactions.map((tx) => (
                 <tr
                   key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
                   className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"

@@ -317,9 +317,15 @@ export const WhalePositionsTable = () => {
                   </th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.entryPrice')}</th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.liqPrice')}</th>
-                  {/* 胜率列同样暂无真实数值，先禁用排序 */}
                   <th className="px-6 py-4 text-left whitespace-nowrap">
-                    {t('whaleTracking.holdings.table.winRate')}
+                    <button
+                      type="button"
+                      className="flex items-center cursor-pointer group select-none"
+                      onClick={() => handleSort('winRate')}
+                    >
+                      {t('whaleTracking.holdings.table.winRate')}
+                      {renderSortIcon('winRate')}
+                    </button>
                   </th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none whitespace-nowrap" onClick={() => handleSort('createdTime')}>
                     <div className="flex items-center">
