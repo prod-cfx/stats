@@ -35,7 +35,7 @@ function createBackendConfig() {
       cwd: projectRoot,
       script: 'apps/backend/dist/apps/backend/src/main.js',
       exec_mode: 'fork',
-      instances: 2,
+      instances: 1,
       node_args: `--require ${path.join(projectRoot, 'apps/backend/scripts/module-paths.js')}`,
       env: {
         NODE_ENV: 'production',
