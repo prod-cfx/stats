@@ -789,7 +789,7 @@ const AggregatedVolumeResponseDto = z
     id: z.number(),
     exchange: z.string(),
     symbol: z.string(),
-    instrumentType: z.enum(["SPOT", "PERPETUAL"]),
+    instrumentType: z.enum(["SPOT", "PERPETUAL"]).optional(),
     volumeUsd: z.string(),
     dataTimestamp: z.string(),
     source: z.string(),
@@ -1205,6 +1205,24 @@ const endpoints = makeApi([
         .partial()
         .passthrough()
     ),
+  },
+  {
+    method: "post",
+    path: "/admin/data-pull-tasks/:id/interrupt",
+    alias: "AdminDataPullTaskController_interruptTask",
+    description: `将任务状态从 RUNNING 重置为 IDLE，使其可以被重新调度。用于处理卡住的任务。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "id",
+        type: "Path",
+        schema: z.number(),
+      },
+    ],
+    response: z
+      .object({ success: z.boolean(), message: z.string() })
+      .partial()
+      .passthrough(),
   },
   {
     method: "post",
@@ -2816,7 +2834,7 @@ const endpoints = makeApi([
       {
         name: "instrumentType",
         type: "Query",
-        schema: z.enum(["SPOT", "PERPETUAL"]),
+        schema: z.enum(["SPOT", "PERPETUAL"]).optional(),
       },
     ],
     response: BasePaginationResponseDto.and(

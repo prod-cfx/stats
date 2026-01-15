@@ -178,6 +178,26 @@ export class AdminDataPullTaskController {
     return this.service.triggerOnce(id)
   }
 
+  @Post(':id/interrupt')
+  @UpdateAny(AppResource.DATA_PULL_TASK)
+  @ApiOperation({
+    summary: '中断正在运行的数据拉取任务',
+    description: '将任务状态从 RUNNING 重置为 IDLE，使其可以被重新调度。用于处理卡住的任务。',
+  })
+  @ApiOkResponse({
+    description: '中断成功',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: '任务 "xxx" 已中断，状态已重置为 IDLE' },
+      },
+    },
+  })
+  async interruptTask(@Param('id', ParseIntPipe) id: number) {
+    return this.service.interruptTask(id)
+  }
+
   @Post()
   @CreateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({ summary: '创建数据拉取任务' })
@@ -205,6 +225,5 @@ export class AdminDataPullTaskController {
     return { success: true }
   }
 }
-
 
 

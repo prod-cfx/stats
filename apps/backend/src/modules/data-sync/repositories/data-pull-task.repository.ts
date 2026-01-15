@@ -177,6 +177,26 @@ export class DataPullTaskRepository {
     })
   }
 
+  /**
+   * 强制重置任务状态（用于中断卡住的任务）
+   * 仅当 lastStatus 为 RUNNING 时才会重置
+   * @returns true 表示成功重置，false 表示任务不在 RUNNING 状态
+   */
+  async forceResetStatus(taskId: number): Promise<boolean> {
+    const client = this.getClient()
+    const result = await client.dataPullTask.updateMany({
+      where: {
+        id: taskId,
+        lastStatus: 'RUNNING',
+      },
+      data: {
+        lastStatus: 'IDLE',
+        lastError: '任务被管理员手动中断',
+      },
+    })
+    return result.count === 1
+  }
+
   private truncateError(error: any, maxLength = 1000): string {
     const raw =
       typeof error === 'string'
@@ -333,4 +353,3 @@ export class DataPullTaskRepository {
     ])
   }
 }
-

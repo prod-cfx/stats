@@ -10,6 +10,7 @@ import {
   fetchDataPullTaskExecutions,
   fetchDataPullTasks,
   fetchRegisteredJobs,
+  interruptDataPullTask,
   triggerDataPullTask,
   updateDataPullTask,
 } from '@/lib/api'
@@ -298,6 +299,34 @@ export default function DataPullTasksPage() {
     [loadTasks, loadTaskLogs, logLimit, logTask, message, page, limit, queryKey, queryName, queryEnabled],
   )
 
+  const handleInterrupt = useCallback(
+    async (task: DataPullTask) => {
+      Modal.confirm({
+        title: `确认中断任务「${task.name}」?`,
+        content: '中断后任务状态将重置为 IDLE，可以被重新调度。正在执行的 Job 不会立即停止，但会在完成或超时后标记为失败。',
+        okText: '中断',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        async onOk() {
+          try {
+            const result = await interruptDataPullTask(task.id)
+            message.success(result.message)
+            void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          } catch (error: unknown) {
+            const errorMsg =
+              (typeof error === 'object' && error !== null
+                ? (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message
+                  ?? (error as { message?: string }).message
+                : undefined) ||
+              '中断任务失败'
+            message.error(errorMsg)
+          }
+        },
+      })
+    },
+    [loadTasks, message, page, limit, queryKey, queryName, queryEnabled],
+  )
+
   const statusBadge = useCallback((task: DataPullTask) => {
     if (!task.lastStatus) {
       return <Tag>未执行</Tag>
@@ -366,6 +395,14 @@ export default function DataPullTasksPage() {
             >
               立即执行
             </Button>
+            <Button
+              type="link"
+              danger
+              disabled={record.lastStatus !== 'RUNNING'}
+              onClick={() => handleInterrupt(record)}
+            >
+              中断
+            </Button>
             <Button type="link" danger onClick={() => handleDelete(record)}>
               删除
             </Button>
@@ -373,7 +410,7 @@ export default function DataPullTasksPage() {
         ),
       },
     ],
-    [handleDelete, handleTrigger, openEditModal, openLogDrawer, statusBadge, triggeringId],
+    [handleDelete, handleInterrupt, handleTrigger, openEditModal, openLogDrawer, statusBadge, triggeringId],
   )
 
   return (
@@ -643,6 +680,4 @@ export default function DataPullTasksPage() {
     </div>
   )
 }
-
-
 

@@ -53,6 +53,7 @@ export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
 
 // 数据拉取任务相关类型
 export type DataPullTask = _DataPullTaskDto
+interface InterruptDataPullTaskResult { success: boolean; message: string }
 
 interface _PaginationResult<T> {
   total: number
@@ -522,6 +523,24 @@ export async function triggerDataPullTask(id: number): Promise<DataPullExecution
   })
 }
 
+export async function interruptDataPullTask(id: number): Promise<InterruptDataPullTaskResult> {
+  return withAuthErrorHandling(async () => {
+    const typedClient = client as unknown as {
+      AdminDataPullTaskController_interruptTask: (
+        body: undefined,
+        options: { headers: { Authorization: string }; params: { id: number } },
+      ) => Promise<unknown>
+    }
+    const response = await typedClient.AdminDataPullTaskController_interruptTask(undefined, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<InterruptDataPullTaskResult>(
+      response as BaseResponse<InterruptDataPullTaskResult>,
+    )
+  })
+}
+
 // 订单薄交易对配置相关 API
 export async function fetchOrderbookConfigs(): Promise<OrderbookPairConfigResponse[]> {
   return withAuthErrorHandling(async () => {
@@ -727,4 +746,3 @@ export async function fetchOrderbookSnapshotByConfigId(
 // - 交易信号管理（Trading Signals）
 // - 市场交易对管理（Market Symbols）
 // 如需这些功能，请参考产品规划文档或联系后端团队
-

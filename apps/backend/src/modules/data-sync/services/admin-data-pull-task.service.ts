@@ -191,6 +191,30 @@ export class AdminDataPullTaskService {
     }
   }
 
+  /**
+   * 中断（重置）正在运行的任务
+   * 将 lastStatus 从 RUNNING 重置为 IDLE，使任务可以被重新调度
+   */
+  async interruptTask(id: number): Promise<{ success: boolean; message: string }> {
+    const task = await this.taskRepo.findById(id)
+    if (!task) {
+      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+    }
+
+    if (task.lastStatus !== 'RUNNING') {
+      throw new BadRequestException(
+        `任务 "${task.name}" 当前状态为 ${task.lastStatus ?? 'IDLE'}，不需要中断`,
+      )
+    }
+
+    const reset = await this.taskRepo.forceResetStatus(id)
+    if (!reset) {
+      throw new BadRequestException(`任务状态已变更，请刷新后重试`)
+    }
+
+    return { success: true, message: `任务 "${task.name}" 已中断，状态已重置为 IDLE` }
+  }
+
   async list(query: AdminDataPullTaskListQueryDto): Promise<BasePaginationResponseDto<AdminDataPullTaskResponseDto>> {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
@@ -331,6 +355,4 @@ export class AdminDataPullTaskService {
     return dto
   }
 }
-
-
 
