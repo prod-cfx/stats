@@ -60,7 +60,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       type: 'markets',
       // 每 10 分钟同步一次
       intervalSeconds: 600,
-      enabled: false,
+      enabled: true,
       cursor: null,
       meta: {
         category: '',
@@ -174,7 +174,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       await prisma.dataPullTask.upsert({
         where: { key: task.key },
         update: {
-          // 仅更新 meta 字段（如有），避免覆盖用户手动修改的其他配置
+          // 仅更新 meta，保留用户已配置的 enabled 和 lastRunAt
           ...('meta' in task ? { meta: task.meta } : {}),
         },
         create: {
