@@ -43,19 +43,19 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between ${padding} bg-[#21262d] border rounded-md text-[#e6edf3] ${textSize} transition-all active:scale-95 ${
+        className={`flex items-center justify-between ${padding} bg-[color:var(--cf-surface-2)] border rounded-md text-[color:var(--cf-text)] ${textSize} transition-all active:scale-95 ${
           isOpen 
             ? 'border-transparent bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/20' 
-            : 'border-[#30363d] hover:border-[#8b949e]'
+            : 'border-[color:var(--cf-border)] hover:border-[color:var(--cf-muted)]'
         }`}
         style={{ minWidth }}
       >
         <span className={`mr-2 ${isOpen ? 'text-white font-bold' : ''}`}>{selectedLabel}</span>
-        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[#8b949e]'}`} />
+        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : 'text-[color:var(--cf-muted)]'}`} />
       </button>
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="absolute top-full left-0 mt-1 w-full bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-md shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in duration-150">
           <div className="max-h-60 overflow-y-auto no-scrollbar">
             {options.map((opt) => {
               const optValue = getOptionValue(opt);
@@ -71,7 +71,7 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
                 className={`w-full text-left ${itemPadding} ${textSize} transition-colors ${
                   value === optValue 
                     ? 'bg-gradient-to-r from-primary to-secondary text-white font-bold' 
-                    : 'text-[#e6edf3] hover:bg-primary/10 hover:text-primary'
+                    : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-primary'
                 }`}
               >
                 {optLabel}

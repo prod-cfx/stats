@@ -7,6 +7,7 @@ import { I18nextProvider } from 'react-i18next'
 import { ToastProvider } from '@/components/ui/toast'
 import { createAppI18n } from '@/lib/i18n'
 import { I18nSync } from './I18nSync'
+import { ThemeProvider } from './ThemeProvider'
 
 interface AppProvidersProps {
   children: ReactNode
@@ -19,10 +20,12 @@ export function AppProviders({ children, lng = 'zh' }: AppProvidersProps) {
 
   return (
     <I18nextProvider i18n={i18n}>
-      <ToastProvider>
-        <I18nSync />
-        {children}
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <I18nSync />
+          {children}
+        </ToastProvider>
+      </ThemeProvider>
     </I18nextProvider>
   )
 }

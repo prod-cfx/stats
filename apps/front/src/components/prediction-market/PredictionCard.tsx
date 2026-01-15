@@ -36,7 +36,7 @@ export const PredictionCard = ({
   volume 
 }: PredictionCardProps) => {
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex flex-col h-full relative group gradient-border-hover">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col h-full relative group gradient-border-hover">
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-3 items-start">
           {icon && (
@@ -44,11 +44,11 @@ export const PredictionCard = ({
               {icon}
             </div>
           )}
-          <SubTitle className="leading-snug line-clamp-2 pr-6">
+          <SubTitle className="leading-snug line-clamp-2 pr-6 text-[color:var(--cf-text-strong)]">
             {title}
           </SubTitle>
         </div>
-        <button type="button" className="text-[#8b949e] hover:text-white transition-colors absolute top-5 right-5">
+        <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors absolute top-5 right-5">
           <Info className="w-4 h-4" />
         </button>
       </div>
@@ -57,14 +57,14 @@ export const PredictionCard = ({
         {options ? (
           options.map((option, idx) => (
             <div key={idx} className="flex justify-between items-center text-sm">
-              <span className="text-[#e6edf3]">{option.label}</span>
-              <span className="text-white font-medium">{option.probability}</span>
+              <span className="text-[color:var(--cf-text)]">{option.label}</span>
+              <span className="text-[color:var(--cf-text-strong)] font-medium">{option.probability}</span>
             </div>
           ))
         ) : probability ? (
           <div className="flex flex-col items-center justify-center py-2">
-            <span className="text-white text-3xl font-bold">{probability}</span>
-            <span className="text-[#8b949e] text-xs uppercase tracking-wider mt-1">probability</span>
+            <span className="text-[color:var(--cf-text-strong)] text-3xl font-bold">{probability}</span>
+            <span className="text-[color:var(--cf-muted)] text-xs uppercase tracking-wider mt-1">probability</span>
           </div>
         ) : null}
       </div>
@@ -78,10 +78,10 @@ export const PredictionCard = ({
             </div>
           )}
           {volume && (
-            <span className="text-[#8b949e] text-xs font-medium">{volume} Vol.</span>
+            <span className="text-[color:var(--cf-muted)] text-xs font-medium">{volume} Vol.</span>
           )}
         </div>
-        <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
+        <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors">
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>

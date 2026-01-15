@@ -11,6 +11,7 @@ import { getToken } from '@/lib/auth-storage'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ThemeToggle } from './ThemeToggle'
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
 
@@ -504,12 +505,12 @@ export const Navbar = () => {
   }
 
   return (
-    <nav className="h-16 md:h-20 bg-[#0d1117] border-b border-[#30363d] px-4 md:px-8 flex items-center justify-between sticky top-0 z-50">
+    <nav className="h-16 md:h-20 bg-[color:var(--cf-bg)] border-b border-[color:var(--cf-border)] px-4 md:px-8 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center gap-4 md:gap-12">
         <div className="flex items-center gap-3">
           {/* Mobile Menu Button */}
           <button 
-            className="md:hidden text-[#8b949e] hover:text-white"
+            className="md:hidden text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
             onClick={() => setMobileMenuOpen(true)}
           >
             <Menu className="w-6 h-6" />
@@ -518,8 +519,8 @@ export const Navbar = () => {
           <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
             <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
             <div className="flex flex-col">
-              <span className="text-white font-bold text-lg md:text-xl leading-tight">Coinflux</span>
-              <span className="hidden md:block text-[#8b949e] text-xs">Crypto Data Aggregation</span>
+              <span className="text-[color:var(--cf-text-strong)] font-bold text-lg md:text-xl leading-tight">Coinflux</span>
+              <span className="hidden md:block text-[color:var(--cf-muted)] text-xs">Crypto Data Aggregation</span>
             </div>
           </Link>
         </div>
@@ -535,8 +536,8 @@ export const Navbar = () => {
                     href={link.href}
                     className={`font-medium transition-colors flex items-center gap-1 h-full transition-all cursor-pointer no-underline relative ${
                       isActive 
-                        ? 'text-[#e6edf3]' 
-                        : 'text-[#8b949e] hover:text-[#e6edf3]'
+                        ? 'text-[color:var(--cf-text-strong)]' 
+                        : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
                     } text-body`}
                   >
                     {link.name}
@@ -547,7 +548,7 @@ export const Navbar = () => {
                   </Link>
                   
                   {/* Dropdown Menu */}
-                  <div className="absolute top-[95%] left-0 w-48 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 overflow-hidden z-50">
+                  <div className="absolute top-[95%] left-0 w-48 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 overflow-hidden z-50">
                     <div className="py-1">
                       {link.children.map((child) => (
                         <Link 
@@ -556,7 +557,7 @@ export const Navbar = () => {
                           className={`block px-4 py-2.5 text-caption transition-colors ${
                             pathname === child.href 
                               ? 'bg-gradient-to-r from-primary to-secondary text-white' 
-                              : 'text-[#c9d1d9] hover:bg-primary/10 hover:text-primary'
+                              : 'text-[color:var(--cf-text)] hover:bg-primary/10 hover:text-primary'
                           }`}
                         >
                           {child.name}
@@ -574,8 +575,8 @@ export const Navbar = () => {
                 href={link.href} 
                 className={`font-medium transition-colors no-underline flex items-center h-full transition-all relative ${
                   isActive 
-                    ? 'text-[#e6edf3]' 
-                    : 'text-[#8b949e] hover:text-[#e6edf3]'
+                    ? 'text-[color:var(--cf-text-strong)]' 
+                    : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
                 } text-body`}
               >
                 {link.name}
@@ -593,7 +594,7 @@ export const Navbar = () => {
           <div className="relative group" ref={searchWrapRef}>
           {/* Mobile Search Icon Only */}
           <button 
-             className="md:hidden text-[#8b949e] p-2"
+             className="md:hidden text-[color:var(--cf-muted)] p-2"
              onClick={() => {
                setSearchOpen(true)
                setTimeout(() => searchInputRef.current?.focus(), 0)
@@ -613,25 +614,25 @@ export const Navbar = () => {
             </defs>
           </svg>
           <Search 
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] group-focus-within:text-primary transition-colors z-10" 
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--cf-muted)] group-focus-within:text-primary transition-colors z-10" 
             style={{ 
                 stroke: 'url(#search_icon_gradient)',
             }}
           />
             <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-md opacity-0 group-focus-within:opacity-100 transition-opacity p-[1.5px] pointer-events-none">
-            <div className="w-full h-full bg-[#0d1117] rounded-[5px]" />
+            <div className="w-full h-full bg-[color:var(--cf-bg)] rounded-[5px]" />
             </div>
             <button
               type="button"
-              className="bg-[#21262d] border border-[#30363d] rounded-md pl-10 pr-4 py-2 text-caption text-[#e6edf3] transition-all w-64 relative z-0 text-left"
+              className="bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md pl-10 pr-4 py-2 text-caption text-[color:var(--cf-text-strong)] transition-all w-64 relative z-0 text-left"
               onClick={() => {
                 setSearchOpen(true)
                 setTimeout(() => searchInputRef.current?.focus(), 0)
               }}
               aria-label={t('nav.search')}
             >
-              <span className="text-[#8b949e]">{t('nav.search')}</span>
-              <span className="ml-2 text-[11px] text-[#8b949e] opacity-70">/</span>
+              <span className="text-[color:var(--cf-muted)]">{t('nav.search')}</span>
+              <span className="ml-2 text-[11px] text-[color:var(--cf-muted)] opacity-70">/</span>
             </button>
             </div>
           </div>
@@ -640,7 +641,7 @@ export const Navbar = () => {
           <>
         <button 
           type="button" 
-          className="px-4 py-2 text-label font-medium text-[#e6edf3] hover:text-white transition-colors"
+          className="px-4 py-2 text-label font-medium text-[color:var(--cf-text-strong)] hover:text-[color:var(--cf-text)] transition-colors"
           onClick={() => info('Coming Soon')}
         >
           {t('nav.login')}
@@ -657,6 +658,9 @@ export const Navbar = () => {
         <div className="hidden md:block">
           <LanguageSwitcher />
         </div>
+        <div className="hidden md:block">
+          <ThemeToggle />
+        </div>
         <div className="md:hidden">
             {/* Mobile Language Switcher could go here or in the drawer */}
         </div>
@@ -669,15 +673,15 @@ export const Navbar = () => {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="absolute left-0 top-0 bottom-0 w-[80vw] max-w-sm bg-[#0d1117] border-r border-[#30363d] p-6 overflow-y-auto">
+          <div className="absolute left-0 top-0 bottom-0 w-[80vw] max-w-sm bg-[color:var(--cf-bg)] border-r border-[color:var(--cf-border)] p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary" />
-                <span className="text-white font-bold text-lg">Coinflux</span>
+                <span className="text-[color:var(--cf-text-strong)] font-bold text-lg">Coinflux</span>
               </div>
               <button 
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-[#8b949e] hover:text-white"
+                className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -685,12 +689,12 @@ export const Navbar = () => {
 
             <div className="space-y-4">
               {navLinks.map((link) => (
-                <div key={link.name} className="border-b border-[#30363d] last:border-0 pb-2">
+                <div key={link.name} className="border-b border-[color:var(--cf-border)] last:border-0 pb-2">
                   {link.children ? (
                     <div>
                       <button 
                         onClick={() => toggleMobileSubmenu(link.name)}
-                        className="w-full flex items-center justify-between py-2 text-[#e6edf3] font-medium"
+                        className="w-full flex items-center justify-between py-2 text-[color:var(--cf-text-strong)] font-medium"
                       >
                         {link.name}
                         <ChevronDown 
@@ -701,7 +705,7 @@ export const Navbar = () => {
                       </button>
                       
                       {expandedMobileMenus.includes(link.name) && (
-                        <div className="pl-4 py-2 space-y-2 bg-[#161b22]/50 rounded-lg mt-1">
+                        <div className="pl-4 py-2 space-y-2 bg-[color:var(--cf-surface)]/50 rounded-lg mt-1">
                           {link.children.map((child) => (
                             <Link 
                               key={child.name}
@@ -709,7 +713,7 @@ export const Navbar = () => {
                               className={`block py-2 text-sm ${
                                 pathname === child.href 
                                   ? 'text-primary font-medium' 
-                                  : 'text-[#8b949e]'
+                                  : 'text-[color:var(--cf-muted)]'
                               }`}
                             >
                               {child.name}
@@ -721,7 +725,7 @@ export const Navbar = () => {
                   ) : (
                     <Link 
                       href={link.href}
-                      className={`block py-2 text-[#e6edf3] font-medium ${
+                      className={`block py-2 text-[color:var(--cf-text-strong)] font-medium ${
                         pathname === link.href ? 'text-primary' : ''
                       }`}
                     >
@@ -732,11 +736,17 @@ export const Navbar = () => {
               ))}
             </div>
 
-            <div className="mt-8 pt-8 border-t border-[#30363d]">
-               <div className="flex justify-between items-center">
-                 <span className="text-sm text-[#8b949e]">Language</span>
-                 <LanguageSwitcher />
-               </div>
+            <div className="mt-8 pt-8 border-t border-[color:var(--cf-border)]">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[color:var(--cf-muted)]">Language</span>
+                  <LanguageSwitcher />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[color:var(--cf-muted)]">Theme</span>
+                  <ThemeToggle />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -754,13 +764,13 @@ export const Navbar = () => {
             }}
           />
           <div className="relative mx-auto mt-20 w-[920px] max-w-[92vw]">
-            <div className="bg-[#0d1117] border border-[#30363d] rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-2xl shadow-2xl overflow-hidden">
               {/* Header */}
-              <div className="px-6 py-4 border-b border-[#30363d] flex items-center justify-between gap-4">
+              <div className="px-6 py-4 border-b border-[color:var(--cf-border)] flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1">
                   <div className="relative flex-1">
                     <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-xl opacity-100 p-[1.5px]">
-                      <div className="w-full h-full bg-[#0d1117] rounded-[11px]" />
+                      <div className="w-full h-full bg-[color:var(--cf-bg)] rounded-[11px]" />
                     </div>
                     <div className="relative flex items-center">
                       <Search
@@ -772,7 +782,7 @@ export const Navbar = () => {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="搜索币种、指标、合约地址"
-                        className="w-full bg-transparent pl-12 pr-12 py-3 text-sm text-[#e6edf3] placeholder-[#8b949e] focus:outline-none"
+                        className="w-full bg-transparent pl-12 pr-12 py-3 text-sm text-[color:var(--cf-text-strong)] placeholder-[color:var(--cf-muted)] focus:outline-none"
                         onKeyDown={(e) => {
                           if (e.key === 'Escape') {
                             e.preventDefault()
@@ -796,7 +806,7 @@ export const Navbar = () => {
                       />
                       <button
                         type="button"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#c9d1d9] transition-colors text-xl"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] transition-colors text-xl"
                         onClick={() => {
                           setSearchOpen(false)
                           setSearchQuery('')
@@ -815,7 +825,7 @@ export const Navbar = () => {
               <div className="px-6 py-5 max-h-[70vh] overflow-y-auto cf-scrollbar">
                 {/* Grouped UI (币种 / 指标 / 地址 / 功能 / 页面), but still one global index for keyboard navigation */}
                 {filteredEntries.length === 0 ? (
-                  <div className="px-2 py-6 text-sm text-[#8b949e]">未找到匹配项</div>
+                  <div className="px-2 py-6 text-sm text-[color:var(--cf-muted)]">未找到匹配项</div>
                 ) : (
                   (() => {
                     const groupOrder: Array<{ type: SearchEntryType; title: string }> = [
@@ -839,10 +849,10 @@ export const Navbar = () => {
                         {sections.map((section) => {
                           return (
                             <div key={section.type}>
-                              <div className="text-xs text-[#8b949e] mb-2 flex items-center justify-between">
+                              <div className="text-xs text-[color:var(--cf-muted)] mb-2 flex items-center justify-between">
                                 <span>{section.title}</span>
                                 {section.type === 'coin' && extraBases.length > 0 && (
-                                  <span className="text-[11px] text-[#8b949e] opacity-70">
+                                  <span className="text-[11px] text-[color:var(--cf-muted)] opacity-70">
                                     已合并后端交易对：{extraBases.length}
                                   </span>
                                 )}
@@ -860,19 +870,19 @@ export const Navbar = () => {
                                       onClick={() => handleSelectSearchItem(entry.href)}
                                       className={`w-full text-left px-4 py-3 rounded-xl border transition-colors flex items-center justify-between gap-4 ${
                                         isActive
-                                          ? 'bg-[#1f2937] border-[#30363d]'
-                                          : 'bg-[#161b22] border-[#30363d] hover:bg-[#21262d]'
+                                          ? 'bg-[color:var(--cf-surface-hover)] border-[color:var(--cf-border)]'
+                                          : 'bg-[color:var(--cf-surface)] border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]'
                                       }`}
                                     >
                                       <div className="min-w-0">
-                                        <div className="text-sm text-[#e6edf3] truncate">
+                                        <div className="text-sm text-[color:var(--cf-text-strong)] truncate">
                                           {highlight(entry.label)}
                                         </div>
-                                        <div className="text-[11px] text-[#8b949e] truncate">
+                                        <div className="text-[11px] text-[color:var(--cf-muted)] truncate">
                                           {entry.subtitle ?? section.title}
                                         </div>
                                       </div>
-                                      <div className="text-[11px] text-[#8b949e] flex-none">↵</div>
+                                      <div className="text-[11px] text-[color:var(--cf-muted)] flex-none">↵</div>
                                     </button>
                                   )
                                 })}

@@ -17,7 +17,7 @@ export default function MarketPage() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
 
   return (
-    <div className="flex flex-col min-h-screen w-full bg-[#0d1117] text-[#c9d1d9]">
+    <div className="flex flex-col min-h-screen w-full bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       {/* Global Navbar */}
       <div className="flex-none">
         <Navbar />
@@ -41,7 +41,7 @@ export default function MarketPage() {
           {/* Main Layout: Center(Chart) + Right */}
           <div className="flex flex-col md:flex-row min-h-0 w-full">
             {/* Center Content (Chart Only) */}
-            <div className="flex-none h-[50vh] md:h-[calc(100vh-120px)] md:flex-1 flex flex-col min-w-0 bg-[#0d1117] relative overflow-hidden border-b md:border-b-0 border-[#30363d]">
+            <div className="flex-none h-[50vh] md:h-[calc(100vh-120px)] md:flex-1 flex flex-col min-w-0 bg-[color:var(--cf-bg)] relative overflow-hidden border-b md:border-b-0 border-[color:var(--cf-border)]">
               <CenterChartPanel
                 isAggregated={isAggregated}
                 setIsAggregated={setIsAggregated}
@@ -52,7 +52,7 @@ export default function MarketPage() {
             </div>
 
             {/* Right Panel - Independent Scroll */}
-            <div className="flex-none w-full md:w-[20%] md:max-w-[340px] md:min-w-[240px] border-l-0 md:border-l border-[#30363d] h-auto md:h-[calc(100vh-120px)] overflow-y-visible md:overflow-y-auto cf-scrollbar pr-1 pb-10 md:pb-0">
+            <div className="flex-none w-full md:w-[20%] md:max-w-[340px] md:min-w-[240px] border-l-0 md:border-l border-[color:var(--cf-border)] h-auto md:h-[calc(100vh-120px)] overflow-y-visible md:overflow-y-auto cf-scrollbar pr-1 pb-10 md:pb-0">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}

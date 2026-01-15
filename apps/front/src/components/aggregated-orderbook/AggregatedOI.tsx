@@ -59,9 +59,9 @@ const buildMonogramSvgDataUri = (letter: string) =>
           <stop offset="1" stop-color="#ec4899"/>
         </linearGradient>
       </defs>
-      <rect x="0" y="0" width="64" height="64" rx="32" fill="#0d1117"/>
+      <rect x="0" y="0" width="64" height="64" rx="32" fill="var(--cf-bg)"/>
       <circle cx="32" cy="32" r="22" fill="url(#g)" opacity="0.35"/>
-      <text x="32" y="39" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="20" font-weight="800" fill="#e6edf3">${letter}</text>
+      <text x="32" y="39" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="20" font-weight="800" fill="var(--cf-text-strong)">${letter}</text>
     </svg>`,
   )}`
 
@@ -266,7 +266,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   }
 
   const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />
     return sortDirection === 'desc'
       ? <ChevronDown className="w-3 h-3 text-primary" />
       : <ChevronUp className="w-3 h-3 text-primary" />
@@ -276,7 +276,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     const isPositive = val > 0
     const isNegative = val < 0
     return (
-      <span className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[#e6edf3]'}>
+      <span className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[color:var(--cf-text-strong)]'}>
         {formatSignedPct(val)}
       </span>
     )
@@ -285,7 +285,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
   const renderError = () => (
     <div className="flex flex-col items-center justify-center py-12 gap-4">
       <AlertCircle className={`w-12 h-12 ${needsAuth ? 'text-yellow-500' : 'text-red-500'}`} />
-      <p className="text-[#8b949e] text-center">{error}</p>
+      <p className="text-[color:var(--cf-muted)] text-center">{error}</p>
       {!needsAuth && (
         <button
           type="button"
@@ -304,9 +304,9 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         <SectionTitle className={isCompact ? '!text-sm' : ''}>{t('aggregatedOrderbook.openInterest.title', { symbol: activeSymbol })}</SectionTitle>
       </div>
 
-      <div className={`flex flex-col flex-1 min-h-0 bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
+      <div className={`flex flex-col flex-1 min-h-0 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden ${isCompact ? '' : 'shadow-2xl'}`}>
         {/* Symbol Tabs & Search */}
-        <div className={`flex items-center justify-between px-4 border-b border-[#30363d] bg-[#0d1117]/30 ${isCompact ? 'py-1 flex-row-reverse' : ''}`}>
+        <div className={`flex items-center justify-between px-4 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/30 ${isCompact ? 'py-1 flex-row-reverse' : ''}`}>
           {!isCompact ? (
             <div className="flex items-center overflow-x-auto cf-scrollbar">
               {symbols.map(s => (
@@ -316,8 +316,8 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                   onClick={() => setActiveSymbol(s)}
                   className={`px-4 py-3 text-sm font-semibold transition-all relative whitespace-nowrap ${
                     activeSymbol === s
-                      ? 'text-white'
-                      : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'
+                      ? 'text-[color:var(--cf-text-strong)]'
+                      : 'text-[color:var(--cf-muted)] border-transparent hover:text-[color:var(--cf-text-strong)]'
                   }`}
                 >
                   {s}
@@ -339,14 +339,14 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className="flex items-center justify-between gap-2 bg-[#0d1117] border border-[#30363d] rounded-md px-2 py-1 text-xs text-[#e6edf3] hover:border-[#8b949e] transition-all min-w-[80px]"
+                  className="flex items-center justify-between gap-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md px-2 py-1 text-xs text-[color:var(--cf-text-strong)] hover:border-[color:var(--cf-muted)] transition-all min-w-[80px]"
                 >
                   <span className="font-medium">{activeSymbol}</span>
-                  <ChevronDown className={`w-3 h-3 text-[#8b949e] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 text-[color:var(--cf-muted)] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
               ) : (
                 <>
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e] z-10" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--cf-muted)] z-10" />
                   <input
                     type="text"
                     placeholder={t('aggregatedOrderbook.openInterest.searchPlaceholder')}
@@ -356,24 +356,24 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                       setIsDropdownOpen(true)
                     }}
                     onFocus={() => setIsDropdownOpen(true)}
-                    className="bg-[#0d1117] border border-[#30363d] rounded-md pl-9 pr-10 py-1.5 text-sm text-[#e6edf3] focus:outline-none focus:border-primary transition-all w-48 relative z-10"
+                    className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md pl-9 pr-10 py-1.5 text-sm text-[color:var(--cf-text-strong)] focus:outline-none focus:border-primary transition-all w-48 relative z-10"
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] pointer-events-none z-10">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)] pointer-events-none z-10">
                     <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
                 </>
               )}
 
               {isDropdownOpen && (
-                <div className={`absolute top-full ${isCompact ? 'left-0' : 'right-0'} mt-1 bg-[#161b22] border border-[#30363d] rounded-md shadow-xl z-50 overflow-hidden cf-scrollbar ${isCompact ? 'w-32 max-h-48' : 'left-0 max-h-60'}`}>
+                <div className={`absolute top-full ${isCompact ? 'left-0' : 'right-0'} mt-1 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-md shadow-xl z-50 overflow-hidden cf-scrollbar ${isCompact ? 'w-32 max-h-48' : 'left-0 max-h-60'}`}>
                   {isCompact && (
-                    <div className="p-2 border-b border-[#30363d]">
+                    <div className="p-2 border-b border-[color:var(--cf-border)]">
                       <input
                         type="text"
                         placeholder={t('common.search')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-xs text-[#e6edf3] focus:outline-none focus:border-primary"
+                        className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-2 py-1 text-xs text-[color:var(--cf-text-strong)] focus:outline-none focus:border-primary"
                         autoFocus
                       />
                     </div>
@@ -387,7 +387,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
                           setSearchQuery('')
                           setIsDropdownOpen(false)
                         }}
-                        className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} text-[#e6edf3] hover:bg-[#30363d] cursor-pointer transition-colors ${activeSymbol === s ? 'bg-primary/10 text-primary' : ''}`}
+                        className={`px-4 ${isCompact ? 'py-1.5 text-xs' : 'py-2 text-sm'} text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] cursor-pointer transition-colors ${activeSymbol === s ? 'bg-primary/10 text-primary' : ''}`}
                       >
                         {s}
                       </div>
@@ -403,7 +403,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {loading && (
           <div className="flex items-center justify-center py-8 gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-[#8b949e]">{t('common.loading')}</span>
+            <span className="text-[color:var(--cf-muted)]">{t('common.loading')}</span>
           </div>
         )}
 
@@ -413,7 +413,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {/* Empty State */}
         {!loading && !error && data.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-4">
-            <p className="text-[#8b949e]">{t('common.noData')}</p>
+            <p className="text-[color:var(--cf-muted)]">{t('common.noData')}</p>
           </div>
         )}
 
@@ -421,97 +421,97 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
         {!loading && !error && data.length > 0 && (
           <div className="flex-1 overflow-auto cf-scrollbar relative">
             <table className="w-full text-left border-collapse min-w-[800px] md:min-w-[1000px]">
-              <thead className="sticky top-0 z-10 bg-[#0d1117]">
-                <tr className={`text-[#8b949e] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-[10px] md:text-xs'}`}>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[#30363d] w-10 md:w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold border-b border-[#30363d] sticky left-0 z-20 bg-[#0d1117] border-r border-[#30363d]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+              <thead className="sticky top-0 z-10 bg-[color:var(--cf-bg)]">
+                <tr className={`text-[color:var(--cf-muted)] uppercase tracking-wider ${isCompact ? 'text-[10px]' : 'text-[10px] md:text-xs'}`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[color:var(--cf-border)] w-10 md:w-16`}>{t('aggregatedOrderbook.openInterest.table.rank')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold border-b border-[color:var(--cf-border)] sticky left-0 z-20 bg-[color:var(--cf-bg)] border-r border-[color:var(--cf-border)]`}>{t('aggregatedOrderbook.openInterest.table.exchange')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('oiAsset')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {isCompact ? t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: '' }) : t('aggregatedOrderbook.openInterest.table.oiBtc', { symbol: activeSymbol })} {renderSortIcon('oiAsset')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('oiUsd')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('aggregatedOrderbook.openInterest.table.oiUsd')} {renderSortIcon('oiUsd')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('ratioPct')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('aggregatedOrderbook.openInterest.table.ratio')} {renderSortIcon('ratioPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d] hidden sm:table-cell`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)] hidden sm:table-cell`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change1hPct')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change1h')} {renderSortIcon('change1hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d] hidden sm:table-cell`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)] hidden sm:table-cell`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change4hPct')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change4h')} {renderSortIcon('change4hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[#30363d]`}>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-right border-b border-[color:var(--cf-border)]`}>
                     <button 
                       type="button"
                       onClick={() => handleSort('change24hPct')}
-                      className="flex items-center justify-end gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-end gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('aggregatedOrderbook.openInterest.table.change24h')} {renderSortIcon('change24hPct')}
                     </button>
                   </th>
-                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[#30363d] hidden md:table-cell`}>{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
+                  <th className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} font-bold text-center border-b border-[color:var(--cf-border)] hidden md:table-cell`}>{t('aggregatedOrderbook.openInterest.table.oiVolRatio')}</th>
                 </tr>
               </thead>
               <tbody className={isCompact ? 'text-xs' : 'text-[11px] md:text-sm'}>
                 {sortedData.map((row) => (
                   <tr 
                     key={row.id} 
-                    className={`border-b border-[#30363d]/50 hover:bg-[#1f2937]/30 transition-colors ${
-                      row.isTotal ? 'bg-[#30363d]/20 font-bold' : ''
+                    className={`border-b border-[color:var(--cf-border)]/50 hover:bg-[color:var(--cf-surface-hover)]/30 transition-colors ${
+                      row.isTotal ? 'bg-[color:var(--cf-surface-2)]/20 font-bold' : ''
                     }`}
                   >
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[#8b949e]`}>{row.rank}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/30 ${row.isTotal ? 'bg-[#21262d]' : ''}`}>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[color:var(--cf-muted)]`}>{row.rank}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]/30 ${row.isTotal ? 'bg-[color:var(--cf-surface-2)]' : ''}`}>
                       <div className="flex items-center gap-2">
-                        <div className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4 md:w-5 md:h-5'} rounded-full overflow-hidden flex-none border border-[#30363d]`}>
+                        <div className={`${isCompact ? 'w-3.5 h-3.5' : 'w-4 h-4 md:w-5 md:h-5'} rounded-full overflow-hidden flex-none border border-[color:var(--cf-border)]`}>
                           <ExchangeLogo
                             exchange={row.exchange}
                             fallback={row.logo}
-                            className="w-full h-full object-contain bg-[#0d1117]"
+                            className="w-full h-full object-contain bg-[color:var(--cf-bg)]"
                           />
                         </div>
-                        <span className={`${row.isTotal ? 'text-white font-bold' : 'text-[#e6edf3]'} truncate max-w-[60px] md:max-w-none`}>
+                        <span className={`${row.isTotal ? 'text-[color:var(--cf-text-strong)] font-bold' : 'text-[color:var(--cf-text)]'} truncate max-w-[60px] md:max-w-none`}>
                           {row.isTotal ? t('common.all') : row.exchange}
                         </span>
                       </div>
                     </td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{formatAssetAmount(row.oiAsset)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{currencyCompact.format(row.oiUsd)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[#e6edf3]`}>{formatRatio(row.ratioPct)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[color:var(--cf-text-strong)]`}>{formatAssetAmount(row.oiAsset)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[color:var(--cf-text-strong)]`}>{currencyCompact.format(row.oiUsd)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right text-[color:var(--cf-text-strong)]`}>{formatRatio(row.ratioPct)}</td>
                     <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium hidden sm:table-cell`}>{renderValueWithColor(row.change1hPct)}</td>
                     <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium hidden sm:table-cell`}>{renderValueWithColor(row.change4hPct)}</td>
                     <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-right font-medium`}>{renderValueWithColor(row.change24hPct)}</td>
-                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[#8b949e] hidden md:table-cell`}>{row.oiVolRatio.toFixed(4)}</td>
+                    <td className={`${isCompact ? 'px-2 py-2' : 'px-3 md:px-4 py-4'} text-center text-[color:var(--cf-muted)] hidden md:table-cell`}>{row.oiVolRatio.toFixed(4)}</td>
                   </tr>
                 ))}
               </tbody>

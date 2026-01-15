@@ -14,7 +14,7 @@ import { fetchExchangeLongShortRatio } from '@/lib/api'
 type ExchangeData = ExchangeLongShortRatioApiItem
 
 const ProgressBar = ({ long, short, height = 'h-8', showText = true }: { long: number, short: number, height?: string, showText?: boolean }) => (
-  <div className={`relative w-full ${height} bg-[#0d1117] rounded-md overflow-hidden flex border border-[#30363d]`}>
+  <div className={`relative w-full ${height} bg-[color:var(--cf-bg)] rounded-md overflow-hidden flex border border-[color:var(--cf-border)]`}>
     <div className="h-full bg-gradient-to-r from-[#22c55e] to-[#4ade80] flex items-center justify-center transition-all duration-500" style={{ width: `${long}%` }}>
       {showText && long > 15 && <span className="text-white text-xs font-bold">{long.toFixed(2)}%</span>}
     </div>
@@ -43,15 +43,15 @@ const SummaryCard = ({
   longLabel: string
   shortLabel: string
 }) => (
-  <div className="w-full bg-[#161b22] border border-[#30363d] rounded-xl p-4 md:p-6 mb-6 shadow-sm">
+  <div className="w-full bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 md:p-6 mb-6 shadow-sm">
     <div className="flex flex-col lg:flex-row items-center gap-4 md:gap-8">
       <div className="flex items-center gap-4 min-w-[140px] md:min-w-[180px] w-full lg:w-auto">
         <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 flex-shrink-0">
           <span className="text-yellow-500 font-bold text-lg md:text-xl">₿</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-white font-bold text-lg md:text-xl">{symbol}</span>
-          <span className="text-[#8b949e] text-xs md:text-sm">{totalLabel}</span>
+          <span className="text-[color:var(--cf-text-strong)] font-bold text-lg md:text-xl">{symbol}</span>
+          <span className="text-[color:var(--cf-muted)] text-xs md:text-sm">{totalLabel}</span>
         </div>
       </div>
       <div className="flex-1 w-full">
@@ -59,11 +59,11 @@ const SummaryCard = ({
       </div>
       <div className="flex items-center min-w-full lg:min-w-[300px] w-full lg:w-auto justify-between lg:justify-start">
         <div className="flex flex-col w-1/2 lg:w-32">
-          <span className="text-[#8b949e] text-[10px] md:text-xs mb-1">{longLabel}</span>
+          <span className="text-[color:var(--cf-muted)] text-[10px] md:text-xs mb-1">{longLabel}</span>
           <span className="text-[#4ade80] font-bold text-base md:text-lg">{longAmount}</span>
         </div>
         <div className="flex flex-col w-1/2 lg:w-32 text-right lg:text-left">
-          <span className="text-[#8b949e] text-[10px] md:text-xs mb-1">{shortLabel}</span>
+          <span className="text-[color:var(--cf-muted)] text-[10px] md:text-xs mb-1">{shortLabel}</span>
           <span className="text-[#ef4444] font-bold text-base md:text-lg">{shortAmount}</span>
         </div>
       </div>
@@ -87,20 +87,20 @@ const ExchangeRow = ({
   <div className="w-full transition-colors group">
     <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3 md:gap-6">
       <div className="flex items-center gap-3 md:gap-4 min-w-[140px] md:min-w-[180px]">
-        <span className="text-[#8b949e] font-semibold w-5 md:w-6 text-center text-xs md:text-sm">{data.rank}</span>
+        <span className="text-[color:var(--cf-muted)] font-semibold w-5 md:w-6 text-center text-xs md:text-sm">{data.rank}</span>
         <ExchangeLogo name={data.name} logoUrl={data.logoUrl} size={24} className="md:w-7 md:h-7" />
-        <span className="text-white font-medium text-xs md:text-sm">{data.name}</span>
+        <span className="text-[color:var(--cf-text-strong)] font-medium text-xs md:text-sm">{data.name}</span>
       </div>
       <div className="flex-1 w-full lg:w-auto">
         <ProgressBar long={data.longPercent} short={data.shortPercent} height="h-6 md:h-8" />
       </div>
       <div className="flex items-center min-w-full lg:min-w-[300px] w-full lg:w-auto justify-between lg:justify-start">
         <div className="flex flex-col w-1/2 lg:w-32">
-          <span className="text-[#8b949e] text-[9px] md:text-xs">{longLabel}</span>
+          <span className="text-[color:var(--cf-muted)] text-[9px] md:text-xs">{longLabel}</span>
           <span className="text-[#4ade80] font-semibold text-[10px] md:text-xs">{longAmount}</span>
         </div>
         <div className="flex flex-col w-1/2 lg:w-32 text-right lg:text-left">
-          <span className="text-[#8b949e] text-[9px] md:text-xs">{shortLabel}</span>
+          <span className="text-[color:var(--cf-muted)] text-[9px] md:text-xs">{shortLabel}</span>
           <span className="text-[#ef4444] font-semibold text-[10px] md:text-xs">{shortAmount}</span>
         </div>
       </div>
@@ -196,7 +196,7 @@ export function LongShortRatioClient() {
           </div>
           <button
             type="button"
-            className="p-2 bg-[#161b22] border border-[#30363d] rounded-md text-[#8b949e] hover:text-[#c9d1d9] transition-all hover:bg-[#30363d] active:scale-95 group flex-shrink-0"
+            className="p-2 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] transition-all hover:bg-[color:var(--cf-surface-hover)] active:scale-95 group flex-shrink-0"
             onClick={() => {
               const btn = document.querySelector('.refresh-icon')
               btn?.classList.add('animate-spin')
@@ -228,8 +228,8 @@ export function LongShortRatioClient() {
             longLabel={t('longShort.summary.long')}
             shortLabel={t('longShort.summary.short')}
           />
-          <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden shadow-lg animate-in fade-in duration-500">
-            <div className="hidden md:flex items-center px-6 py-4 text-caption text-[#8b949e] uppercase tracking-wider font-bold border-b border-[#30363d] bg-[#0d1117]/50">
+          <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden shadow-lg animate-in fade-in duration-500">
+            <div className="hidden md:flex items-center px-6 py-4 text-caption text-[color:var(--cf-muted)] uppercase tracking-wider font-bold border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70">
               <span className="w-[180px] pl-10">{t('longShort.table.exchange')}</span>
               <span className="flex-1 text-center">{t('longShort.table.ratio')}</span>
               <div className="flex w-[300px]">
@@ -237,9 +237,9 @@ export function LongShortRatioClient() {
                 <span className="w-32">{t('longShort.table.shortAmount')}</span>
               </div>
             </div>
-            <div className="flex flex-col divide-y divide-[#30363d]">
+            <div className="flex flex-col divide-y divide-[color:var(--cf-border)]">
               {exchanges?.map((ex) => (
-                <div key={ex.name} className="px-4 md:px-6 py-4 hover:bg-[#21262d] transition-colors">
+                <div key={ex.name} className="px-4 md:px-6 py-4 hover:bg-[color:var(--cf-surface-hover)] transition-colors">
                   <ExchangeRow
                     data={ex}
                     longLabel={t('longShort.summary.long')}

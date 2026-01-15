@@ -31,7 +31,7 @@ interface CompanyData {
 }
 
 const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: string }) => {
-  if (!rawValue || rawValue === '-') return <span className="text-[#8b949e]">-</span>;
+  if (!rawValue || rawValue === '-') return <span className="text-[color:var(--cf-muted)]">-</span>;
 
   // Try to parse out the number and the suffix
   // Handles formats like "55.07 B", "$58.14B", "671.27 K BTC"
@@ -47,11 +47,11 @@ const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: s
     return (
       <div className="flex flex-col items-center leading-tight">
         <div className="flex items-baseline gap-0.5">
-          <span className="text-white font-mono font-medium">{num}</span>
-          {suffix && <span className="text-white font-mono font-medium ml-0.5">{suffix.toUpperCase()}</span>}
+          <span className="text-[color:var(--cf-text-strong)] font-mono font-medium">{num}</span>
+          {suffix && <span className="text-[color:var(--cf-text-strong)] font-mono font-medium ml-0.5">{suffix.toUpperCase()}</span>}
         </div>
         {finalSubText && (
-          <span className="text-[#8b949e] text-[10px] font-sans uppercase mt-0.5">
+          <span className="text-[color:var(--cf-muted)] text-[10px] font-sans uppercase mt-0.5">
             {finalSubText}
           </span>
         )}
@@ -59,7 +59,7 @@ const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: s
     );
   }
 
-  return <span className="text-white font-mono">{rawValue}</span>;
+  return <span className="text-[color:var(--cf-text-strong)] font-mono">{rawValue}</span>;
 };
 
 // 公开页面的静态示例数据：在未登录或接口不可用时作为兜底展示
@@ -403,7 +403,7 @@ export const PublicCompaniesTable = () => {
   };
 
   const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />;
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />;
     return sortDirection === 'desc'
       ? <ChevronDown className="w-3 h-3 text-primary" />
       : <ChevronUp className="w-3 h-3 text-primary" />;
@@ -437,27 +437,27 @@ export const PublicCompaniesTable = () => {
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="relative w-full md:max-w-md">
-        <div className="group rounded-xl p-[1px] bg-[#30363d] transition-colors focus-within:bg-gradient-to-r focus-within:from-primary focus-within:to-secondary">
-          <div className="relative rounded-xl bg-[#161b22]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-[#8b949e] group-focus-within:text-primary transition-colors" />
+        <div className="group rounded-xl p-[1px] bg-[color:var(--cf-border)] transition-colors focus-within:bg-gradient-to-r focus-within:from-primary focus-within:to-secondary">
+          <div className="relative rounded-xl bg-[color:var(--cf-surface)]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-[color:var(--cf-muted)] group-focus-within:text-primary transition-colors" />
             <input 
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={t('publicCompanies.searchPlaceholder')} 
-              className="w-full bg-transparent border-0 rounded-xl pl-10 md:pl-12 pr-4 py-2 md:py-2.5 text-xs md:text-sm text-white focus:outline-none focus:ring-0 transition-all placeholder:text-[#8b949e]"
+              className="w-full bg-transparent border-0 rounded-xl pl-10 md:pl-12 pr-4 py-2 md:py-2.5 text-xs md:text-sm text-[color:var(--cf-text)] focus:outline-none focus:ring-0 transition-all placeholder:text-[color:var(--cf-muted)]"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
+      <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden min-h-[400px] relative shadow-lg">
         {isAuthError && (
-          <div className="px-4 md:px-6 pt-4 md:pt-6 pb-2 border-b border-[#30363d] bg-[#0d1117]/60 text-center space-y-1 md:space-y-2">
-            <h3 className="text-sm md:text-base font-semibold text-white">
+          <div className="px-4 md:px-6 pt-4 md:pt-6 pb-2 border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/60 text-center space-y-1 md:space-y-2">
+            <h3 className="text-sm md:text-base font-semibold text-[color:var(--cf-text-strong)]">
               {t('publicCompanies.authRequiredTitle', '登录后可查看实时币股榜单')}
             </h3>
-            <p className="text-[10px] md:text-xs text-[#8b949e] max-w-2xl mx-auto">
+            <p className="text-[10px] md:text-xs text-[color:var(--cf-muted)] max-w-2xl mx-auto">
               {t(
                 'publicCompanies.authRequiredDescription',
                 '当前表格展示的是示例数据，登录后将自动切换为来自交易所的实时币股持仓与估值。',
@@ -474,14 +474,14 @@ export const PublicCompaniesTable = () => {
             <div className="overflow-x-auto animate-in fade-in duration-500 cf-scrollbar">
             <table className="w-full border-collapse min-w-[1000px] md:min-w-[1200px]">
               <thead>
-                <tr className="text-[#8b949e] text-[10px] md:text-xs font-bold border-b border-[#30363d] bg-[#0d1117]/50">
-                  <th className="px-4 md:px-6 py-4 md:py-6 text-left sticky left-0 z-10 bg-[#0d1117]/95 border-r border-[#30363d]">{t('publicCompanies.columns.asset')}</th>
-                  <th className="px-4 md:px-6 py-4 md:py-6 text-left sticky left-[70px] md:left-[88px] z-10 bg-[#0d1117]/95 border-r border-[#30363d]">{t('publicCompanies.columns.company')}</th>
+                <tr className="text-[color:var(--cf-muted)] text-[10px] md:text-xs font-bold border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70">
+                  <th className="px-4 md:px-6 py-4 md:py-6 text-left sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)]">{t('publicCompanies.columns.asset')}</th>
+                  <th className="px-4 md:px-6 py-4 md:py-6 text-left sticky left-[70px] md:left-[88px] z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)]">{t('publicCompanies.columns.company')}</th>
                   <th className="px-2 md:px-4 py-4 md:py-6 font-bold">
                     <button
                       type="button"
                       onClick={() => handleSort('mNav')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors uppercase"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors uppercase"
                     >
                       mNAV {renderSortIcon('mNav')}
                     </button>
@@ -490,7 +490,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('marketCap')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('publicCompanies.columns.marketCap')} {renderSortIcon('marketCap')}
                     </button>
@@ -499,7 +499,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('holdingsValue')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('publicCompanies.columns.holdingsValue')} {renderSortIcon('holdingsValue')}
                     </button>
@@ -508,7 +508,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('holdingsAmount')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('publicCompanies.columns.holdingsAmount')} {renderSortIcon('holdingsAmount')}
                     </button>
@@ -517,7 +517,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('sharePrice')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors"
                     >
                       {t('publicCompanies.columns.sharePrice')} {renderSortIcon('sharePrice')}
                     </button>
@@ -526,7 +526,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('change24h')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors text-center"
                     >
                       {t('publicCompanies.columns.change24h')} {renderSortIcon('change24h')}
                     </button>
@@ -535,7 +535,7 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('change1d')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors text-center"
                     >
                       {t('publicCompanies.columns.change1d')} {renderSortIcon('change1d')}
                     </button>
@@ -544,40 +544,40 @@ export const PublicCompaniesTable = () => {
                     <button
                       type="button"
                       onClick={() => handleSort('change7d')}
-                      className="flex items-center justify-center gap-1 w-full group hover:text-white transition-colors text-center"
+                      className="flex items-center justify-center gap-1 w-full group hover:text-[color:var(--cf-text-strong)] transition-colors text-center"
                     >
                       {t('publicCompanies.columns.change7d')} {renderSortIcon('change7d')}
                     </button>
                   </th>
                 </tr>
               </thead>
-              <tbody className="text-[11px] md:text-sm divide-y divide-[#30363d]">
+              <tbody className="text-[11px] md:text-sm divide-y divide-[color:var(--cf-border)]">
                 {sortedData.map((row, index) => (
                   <tr 
                     key={index} 
-                    className="transition-colors hover:bg-[#1f2937]/50 cursor-pointer"
+                    className="transition-colors hover:bg-[color:var(--cf-surface-hover)] cursor-pointer"
                     onClick={() => setSelectedCompany(row)}
                   >
-                    <td className="px-4 md:px-6 py-3 md:py-4 sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50">
+                    <td className="px-4 md:px-6 py-3 md:py-4 sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]">
                       <div className="flex items-center justify-start gap-2 md:gap-3">
                         <div className="w-5 h-5 md:w-6 md:h-6 flex-none">
                           <img src={row.assetLogo} alt={row.asset} className="w-full h-full rounded-full object-contain" />
                         </div>
-                        <span className="text-white font-medium min-w-[40px] md:min-w-[50px]">{row.asset}</span>
+                        <span className="text-[color:var(--cf-text-strong)] font-medium min-w-[40px] md:min-w-[50px]">{row.asset}</span>
                       </div>
                     </td>
-                    <td className="px-4 md:px-6 py-3 md:py-4 sticky left-[70px] md:left-[88px] z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50">
+                    <td className="px-4 md:px-6 py-3 md:py-4 sticky left-[70px] md:left-[88px] z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]">
                       <div className="flex items-center justify-start gap-2 md:gap-3 min-w-0">
                         <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-white p-0.5 md:p-1 flex-none overflow-hidden">
                           <img src={row.logo} alt={row.name} className="w-full h-full object-contain" />
                         </div>
                         <div className="flex flex-col min-w-0">
                           <div className="flex items-start gap-1 min-w-0">
-                            <span className="text-white font-semibold truncate min-w-0">{row.name}</span>
+                            <span className="text-[color:var(--cf-text-strong)] font-semibold truncate min-w-0">{row.name}</span>
                             <button
                               type="button"
                               aria-label={t('publicCompanies.aria.viewCompanyInfo')}
-                              className="text-[#8b949e] hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 flex-none -mt-1 hidden md:block"
+                              className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors p-1 rounded-lg hover:bg-[color:var(--cf-surface-hover)] flex-none -mt-1 hidden md:block"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedCompany(row);
@@ -586,12 +586,12 @@ export const PublicCompaniesTable = () => {
                               <Info className="w-4 h-4" />
                             </button>
                           </div>
-                          <span className="text-[#8b949e] text-[10px] md:text-xs uppercase truncate">{row.ticker} {formatExchange(row.exchange)}</span>
+                          <span className="text-[color:var(--cf-muted)] text-[10px] md:text-xs uppercase truncate">{row.ticker} {formatExchange(row.exchange)}</span>
                         </div>
                       </div>
                     </td>
                     <td className="px-2 md:px-4 py-3 md:py-4 text-center">
-                      <span className={row.mNav !== '-' && Number.parseFloat(row.mNav) < 1 ? 'text-red-400' : 'text-[#e6edf3]'}>
+                      <span className={row.mNav !== '-' && Number.parseFloat(row.mNav) < 1 ? 'text-red-400' : 'text-[color:var(--cf-text)]'}>
                         {row.mNav}
                       </span>
                     </td>
@@ -604,7 +604,7 @@ export const PublicCompaniesTable = () => {
                     <td className="px-2 md:px-4 py-3 md:py-4 text-center">
                       <CompactValueCell rawValue={row.holdingsAmount} />
                     </td>
-                    <td className="px-2 md:px-4 py-3 md:py-4 text-center text-white font-mono">{row.sharePrice}</td>
+                    <td className="px-2 md:px-4 py-3 md:py-4 text-center text-[color:var(--cf-text-strong)] font-mono">{row.sharePrice}</td>
                     <td className="px-2 md:px-4 py-3 md:py-4 text-center font-mono">{renderValueWithColor(row.change24h)}</td>
                     <td className="px-2 md:px-4 py-3 md:py-4 text-center font-mono">{renderValueWithColor(row.change1d)}</td>
                     <td className="px-2 md:px-4 py-3 md:py-4 text-center font-mono">{renderValueWithColor(row.change7d)}</td>
@@ -624,22 +624,22 @@ export const PublicCompaniesTable = () => {
         width="max-w-xl"
       >
         <div className="space-y-6">
-          <div className="flex gap-4 items-start pb-4 border-b border-[#30363d]">
+          <div className="flex gap-4 items-start pb-4 border-b border-[color:var(--cf-border)]">
             <div className="w-12 h-12 rounded-xl bg-white p-2 flex-none">
               <img src={selectedCompany?.logo} className="w-full h-full object-contain" alt="" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-xl font-bold text-white leading-tight truncate">{selectedCompany?.name}</h3>
+              <h3 className="text-xl font-bold text-[color:var(--cf-text-strong)] leading-tight truncate">{selectedCompany?.name}</h3>
               <div className="flex flex-wrap gap-3 mt-2">
-                <span className="text-xs text-[#8b949e]">{t('publicCompanies.modal.ticker')}: <span className="font-bold text-[#e6edf3]">{selectedCompany?.ticker}</span></span>
-                <span className="text-xs text-[#8b949e]">{t('publicCompanies.modal.exchange')}: <span className="font-bold text-[#e6edf3]">{selectedCompany ? formatExchange(selectedCompany.exchange) : ''}</span></span>
+                <span className="text-xs text-[color:var(--cf-muted)]">{t('publicCompanies.modal.ticker')}: <span className="font-bold text-[color:var(--cf-text)]">{selectedCompany?.ticker}</span></span>
+                <span className="text-xs text-[color:var(--cf-muted)]">{t('publicCompanies.modal.exchange')}: <span className="font-bold text-[color:var(--cf-text)]">{selectedCompany ? formatExchange(selectedCompany.exchange) : ''}</span></span>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-bold text-[#8b949e] uppercase tracking-wider">{t('publicCompanies.modal.sectionTitle')}</p>
-            <div className="text-sm leading-relaxed text-[#e6edf3] px-1">
+            <p className="text-sm font-bold text-[color:var(--cf-muted)] uppercase tracking-wider">{t('publicCompanies.modal.sectionTitle')}</p>
+            <div className="text-sm leading-relaxed text-[color:var(--cf-text)] px-1">
               {selectedCompanyInfoParagraphs.map((p, idx) => (
                 <React.Fragment key={idx}>
                   <p>{p}</p>

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 function ChartLoading() {
   const { t } = useTranslation();
   return (
-    <div className="w-full h-full min-h-[500px] flex items-center justify-center bg-[#0d1117] text-[#8b949e]">
+    <div className="w-full h-full min-h-[500px] flex items-center justify-center bg-[color:var(--cf-bg)] text-[color:var(--cf-muted)]">
       {t('chart.loadingEngine')}
     </div>
   );

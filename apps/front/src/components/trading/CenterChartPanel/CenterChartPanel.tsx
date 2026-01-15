@@ -97,26 +97,26 @@ export const CenterChartPanel = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0d1117] overflow-hidden min-h-0 relative w-full">
+    <div className="flex-1 flex flex-col bg-[color:var(--cf-bg)] overflow-hidden min-h-0 relative w-full">
       {/* Chart Toolbar */}
-      <div className={`${isCompact ? 'h-[36px] px-1' : 'h-[48px] px-2'} bg-[#161b22] border-b border-[#30363d] flex items-center justify-between z-20 flex-shrink-0`}>
+      <div className={`${isCompact ? 'h-[36px] px-1' : 'h-[48px] px-2'} bg-[color:var(--cf-surface)] border-b border-[color:var(--cf-border)] flex items-center justify-between z-20 flex-shrink-0`}>
         <div className="flex items-center gap-1 h-full overflow-x-auto no-scrollbar">
           {timeframes.map((tf) => (
             <button
               key={tf}
               type="button"
               onClick={() => setInterval(tf)}
-              className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} transition-colors hover:text-[#c9d1d9] ${
-                interval === tf ? 'bg-[#374151] text-[#c9d1d9] font-bold' : 'text-[#8b949e]'
+              className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} transition-colors hover:text-[color:var(--cf-text)] ${
+                interval === tf ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold' : 'text-[color:var(--cf-muted)]'
               }`}
             >
               {getTimeframeLabel(tf)}
             </button>
           ))}
-          <div className="h-4 w-[1px] bg-[#30363d] mx-1" />
+          <div className="h-4 w-[1px] bg-[color:var(--cf-border)] mx-1" />
           <button
             type="button"
-            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[#8b949e] flex items-center gap-1 hover:text-[#c9d1d9]`}
+            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[color:var(--cf-muted)] flex items-center gap-1 hover:text-[color:var(--cf-text)]`}
             onClick={() => setIsIndicatorModalOpen(true)}
           >
             <span>{t('chart.toolbar.indicators')}</span>
@@ -124,7 +124,7 @@ export const CenterChartPanel = ({
           </button>
           <button
             type="button"
-            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[#8b949e] flex items-center gap-1 hover:text-[#c9d1d9]`}
+            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[color:var(--cf-muted)] flex items-center gap-1 hover:text-[color:var(--cf-text)]`}
             onClick={() => setIsIndicatorModalOpen(true)}
           >
             <span>{t('chart.toolbar.dataIndicators')}</span>
@@ -144,7 +144,7 @@ export const CenterChartPanel = ({
                 }
               }}
               className={`relative inline-flex ${isCompact ? 'h-4 w-7' : 'h-5 w-9'} items-center rounded-full transition-colors ${
-                isAggregated ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff]' : 'bg-[#30363d]'
+                isAggregated ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff]' : 'bg-[color:var(--cf-border)]'
               }`}
             >
               <span
@@ -157,29 +157,29 @@ export const CenterChartPanel = ({
             
             {/* Aggregated Label or Exchange Selector */}
             {isAggregated ? (
-              <span className="text-[#c9d1d9] whitespace-nowrap">{t('chart.toolbar.aggregationOn')}</span>
+              <span className="text-[color:var(--cf-text)] whitespace-nowrap">{t('chart.toolbar.aggregationOn')}</span>
             ) : (
               <div className="relative" ref={exchangeMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsExchangeMenuOpen(!isExchangeMenuOpen)}
-                  className="bg-[#1f2937] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[#374151] transition-colors whitespace-nowrap"
+                  className="bg-[color:var(--cf-surface-2)] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[color:var(--cf-surface-hover)] transition-colors whitespace-nowrap"
                 >
-                  <span className="text-[#c9d1d9]">{t(`chart.toolbar.${selectedExchange}`)}</span>
-                  <ChevronDown className="w-3 h-3 text-[#8b949e]" />
+                  <span className="text-[color:var(--cf-text)]">{t(`chart.toolbar.${selectedExchange}`)}</span>
+                  <ChevronDown className="w-3 h-3 text-[color:var(--cf-muted)]" />
                 </button>
                 
                 {/* Exchange Dropdown Menu */}
                 {isExchangeMenuOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-[120px] bg-[#161b22] border border-[#30363d] rounded shadow-lg z-50 py-1">
+                  <div className="absolute top-full right-0 mt-1 w-[120px] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded shadow-lg z-50 py-1">
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedExchange('binance');
                         setIsExchangeMenuOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[#30363d] ${
-                        selectedExchange === 'binance' ? 'bg-[#1f2937]' : 'text-[#c9d1d9]'
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
+                        selectedExchange === 'binance' ? 'bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-text)]'
                       }`}
                     >
                       <span className={selectedExchange === 'binance' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
@@ -192,8 +192,8 @@ export const CenterChartPanel = ({
                         setSelectedExchange('okx');
                         setIsExchangeMenuOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[#30363d] ${
-                        selectedExchange === 'okx' ? 'bg-[#1f2937]' : 'text-[#c9d1d9]'
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
+                        selectedExchange === 'okx' ? 'bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-text)]'
                       }`}
                     >
                       <span className={selectedExchange === 'okx' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
@@ -205,14 +205,14 @@ export const CenterChartPanel = ({
               </div>
             )}
           </div>
-          <div className="h-4 w-[1px] bg-[#30363d]" />
-          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <div className="h-4 w-[1px] bg-[color:var(--cf-border)]" />
+          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
             <BarChart2 className="w-4 h-4" />
           </button>
-          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
             <Eye className="w-4 h-4" />
           </button>
-          <button type="button" className="p-1.5 text-[#8b949e] hover:text-[#c9d1d9]">
+          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
             <Settings className="w-4 h-4" />
           </button>
         </div>
@@ -241,26 +241,26 @@ export const CenterChartPanel = ({
       {/* Indicator Modal - using fixed positioning to escape container clipping in small widgets */}
       {isIndicatorModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className={`${isCompact ? 'w-[400px] h-[300px]' : 'w-[600px] h-[400px]'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl flex flex-col overflow-hidden`}>
+          <div className={`${isCompact ? 'w-[400px] h-[300px]' : 'w-[600px] h-[400px]'} bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl flex flex-col overflow-hidden`}>
             {/* Modal Header */}
-            <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[#30363d]`}>
-              <span className={`text-[#c9d1d9] font-bold ${isCompact ? 'text-xs' : 'text-sm'}`}>{t('chart.modal.featured')}</span>
-              <button type="button" onClick={() => setIsIndicatorModalOpen(false)} className="text-[#8b949e] hover:text-[#c9d1d9]">
+            <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[color:var(--cf-border)]`}>
+              <span className={`text-[color:var(--cf-text)] font-bold ${isCompact ? 'text-xs' : 'text-sm'}`}>{t('chart.modal.featured')}</span>
+              <button type="button" onClick={() => setIsIndicatorModalOpen(false)} className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="flex-1 flex overflow-hidden">
               {/* Sidebar */}
-              <div className={`${isCompact ? 'w-[120px]' : 'w-[180px]'} border-r border-[#30363d] p-2 flex flex-col gap-1 bg-[#0d1117]`}>
+              <div className={`${isCompact ? 'w-[120px]' : 'w-[180px]'} border-r border-[color:var(--cf-border)] p-2 flex flex-col gap-1 bg-[color:var(--cf-bg)]`}>
                 <div className="relative mb-2">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8b949e]" />
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[color:var(--cf-muted)]" />
                   <input 
                     type="text" 
                     placeholder={t('chart.modal.search')}
                     value={indicatorSearch}
                     onChange={(e) => setIndicatorSearch(e.target.value)}
-                    className="w-full bg-[#161b22] border border-[#30363d] rounded py-1 pl-7 pr-2 text-xs text-[#c9d1d9] focus:outline-none focus:border-[#58a6ff]"
+                    className="w-full bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded py-1 pl-7 pr-2 text-xs text-[color:var(--cf-text)] focus:outline-none focus:border-[#58a6ff]"
                   />
                 </div>
                 <button
@@ -268,8 +268,8 @@ export const CenterChartPanel = ({
                   onClick={() => setIndicatorTab('featured')}
                   className={`text-left px-3 py-2 text-xs rounded transition-colors ${
                     indicatorTab === 'featured'
-                      ? 'bg-[#374151] text-[#c9d1d9] font-bold'
-                      : 'text-[#8b949e] hover:bg-[#30363d]'
+                      ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold'
+                      : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
                   }`}
                 >
                   {t('chart.modal.featured')}
@@ -279,8 +279,8 @@ export const CenterChartPanel = ({
                   onClick={() => setIndicatorTab('options')}
                   className={`text-left px-3 py-2 text-xs rounded transition-colors ${
                     indicatorTab === 'options'
-                      ? 'bg-[#374151] text-[#c9d1d9] font-bold'
-                      : 'text-[#8b949e] hover:bg-[#30363d]'
+                      ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold'
+                      : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
                   }`}
                 >
                   {t('chart.modal.options')}
@@ -295,23 +295,23 @@ export const CenterChartPanel = ({
                     type="button"
                     onClick={() => toggleIndicator(ind.id)}
                     className={`flex items-center justify-between ${isCompact ? 'px-2 py-1.5' : 'px-3 py-2.5'} rounded group transition-colors text-left ${
-                      ind.isActive ? 'bg-[#1f2937]' : 'hover:bg-[#30363d]'
+                      ind.isActive ? 'bg-[color:var(--cf-surface-2)]' : 'hover:bg-[color:var(--cf-surface-hover)]'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <Star className={`w-3.5 h-3.5 ${ind.starred ? 'text-yellow-500 fill-yellow-500' : 'text-[#8b949e] group-hover:text-[#c9d1d9]'}`} />
-                      <span className={`text-xs truncate ${ind.isActive ? 'text-[#c9d1d9]' : 'text-[#8b949e] group-hover:text-[#c9d1d9]'}`}>
+                      <Star className={`w-3.5 h-3.5 ${ind.starred ? 'text-yellow-500 fill-yellow-500' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'}`} />
+                      <span className={`text-xs truncate ${ind.isActive ? 'text-[color:var(--cf-text)]' : 'text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)]'}`}>
                         {ind.name}
                       </span>
                     </div>
-                    <div className={`text-xs ${ind.isActive ? 'text-primary' : 'text-[#8b949e]'}`}>
+                    <div className={`text-xs ${ind.isActive ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`}>
                       {ind.isActive ? t('chart.indicator.added') : t('chart.indicator.add')}
                     </div>
                   </button>
                 ))}
 
                 {visibleIndicators.length === 0 && (
-                  <div className="px-3 py-6 text-center text-xs text-[#8b949e]">
+                  <div className="px-3 py-6 text-center text-xs text-[color:var(--cf-muted)]">
                     {t('chart.modal.noResults')}
                   </div>
                 )}

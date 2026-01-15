@@ -10,7 +10,7 @@ import { AggregatedOrderBookClient } from './AggregatedOrderBookClient';
 export default function AggregatedOrderBookPage() {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d1117] text-white">
+    <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
       <main className="flex-1 p-8">
         <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-10">
@@ -18,7 +18,7 @@ export default function AggregatedOrderBookPage() {
             <PageTitle>{t('aggregatedOrderbook.title')}</PageTitle>
             <BodyText>{t('aggregatedOrderbook.subtitle')}</BodyText>
           </div>
-          <Suspense fallback={<div className="h-96 flex items-center justify-center text-[#8b949e]">{t('common.loading')}</div>}>
+          <Suspense fallback={<div className="h-96 flex items-center justify-center text-[color:var(--cf-muted)]">{t('common.loading')}</div>}>
             <AggregatedOrderBookClient />
           </Suspense>
         </div>

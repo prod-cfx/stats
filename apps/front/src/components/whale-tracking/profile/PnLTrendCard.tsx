@@ -62,11 +62,11 @@ export const PnLTrendCard = () => {
   }, [timeRange, contractType, pnlType]);
 
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 flex flex-col gap-6 h-full">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-6 flex flex-col gap-6 h-full">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="space-y-1">
-          <div className="text-[#8b949e] text-sm font-medium">
+          <div className="text-[color:var(--cf-muted)] text-sm font-medium">
             {t('whaleTracking.profile.pnlTrend.header', {
               timeRange: t(`whaleTracking.profile.pnlTrend.timeRange.${timeRange}`),
               pnlType: t(`whaleTracking.profile.pnlTrend.pnlType.${pnlType}`),
@@ -82,19 +82,19 @@ export const PnLTrendCard = () => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'time' ? null : 'time'); }}
-              className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'time' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
+              className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'time' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.timeRange.${timeRange}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[#8b949e] group-hover:text-white transition-all ${dropdownOpen === 'time' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'time' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'time' && (
-              <div className="absolute right-0 mt-2 w-24 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-24 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['1d', '1w', '1m', 'all'] as const).map(opt => (
                   <button
                     type="button"
                     key={opt}
                     onClick={() => { setTimeRange(opt); setDropdownOpen(null); }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${timeRange === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--cf-surface-hover)] transition-colors ${timeRange === opt ? 'text-primary' : 'text-[color:var(--cf-text)]'}`}
                   >
                     {t(`whaleTracking.profile.pnlTrend.timeRange.${opt}`)}
                   </button>
@@ -108,19 +108,19 @@ export const PnLTrendCard = () => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'contract' ? null : 'contract'); }}
-              className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'contract' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
+              className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'contract' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.contractType.${contractType}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[#8b949e] group-hover:text-white transition-all ${dropdownOpen === 'contract' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'contract' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'contract' && (
-              <div className="absolute right-0 mt-2 w-36 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-36 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['all', 'perpOnly'] as const).map(opt => (
                   <button
                     type="button"
                     key={opt}
                     onClick={() => { setContractType(opt); setDropdownOpen(null); }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${contractType === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--cf-surface-hover)] transition-colors ${contractType === opt ? 'text-primary' : 'text-[color:var(--cf-text)]'}`}
                   >
                     {t(`whaleTracking.profile.pnlTrend.contractType.${opt}`)}
                   </button>
@@ -134,19 +134,19 @@ export const PnLTrendCard = () => {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDropdownOpen(dropdownOpen === 'pnl' ? null : 'pnl'); }}
-              className={`flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-[#e5e5e5] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'pnl' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
+              className={`flex items-center gap-2 px-3 py-1.5 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-text)] text-caption font-medium hover:border-transparent hover:bg-gradient-to-r hover:from-primary hover:to-secondary active:scale-95 transition-all group ${dropdownOpen === 'pnl' ? 'border-transparent bg-gradient-to-r from-primary to-secondary' : ''}`}
             >
               <span>{t(`whaleTracking.profile.pnlTrend.pnlType.${pnlType}`)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-[#8b949e] group-hover:text-white transition-all ${dropdownOpen === 'pnl' ? 'rotate-180 text-white' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 text-[color:var(--cf-muted)] group-hover:text-white transition-all ${dropdownOpen === 'pnl' ? 'rotate-180 text-white' : ''}`} />
             </button>
             {dropdownOpen === 'pnl' && (
-              <div className="absolute right-0 mt-2 w-28 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-28 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden">
                 {(['accountValue', 'totalPnl'] as const).map(opt => (
                   <button
                     type="button"
                     key={opt}
                     onClick={() => { setPnlType(opt); setDropdownOpen(null); }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[#30363d] transition-colors ${pnlType === opt ? 'text-primary' : 'text-[#c9d1d9]'}`}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--cf-surface-hover)] transition-colors ${pnlType === opt ? 'text-primary' : 'text-[color:var(--cf-text)]'}`}
                   >
                     {t(`whaleTracking.profile.pnlTrend.pnlType.${opt}`)}
                   </button>

@@ -59,15 +59,15 @@ export const Modal = ({
       
       {/* Content */}
       <div
-        className={`relative w-full ${width} max-h-[calc(100vh-2rem)] bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 z-10 min-h-0`}
+        className={`relative w-full ${width} max-h-[calc(100vh-2rem)] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-200 z-10 min-h-0`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#30363d]">
-          <h3 className="text-lg font-bold text-white">{title}</h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[color:var(--cf-border)]">
+          <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
           <button 
             type="button"
             onClick={onClose}
-            className="p-1 text-[#8b949e] hover:text-white transition-colors rounded-lg hover:bg-white/5"
+            className="p-1 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors rounded-lg hover:bg-[color:var(--cf-surface-hover)]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -76,10 +76,10 @@ export const Modal = ({
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0 relative">
           {loading && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#161b22]/80 backdrop-blur-[2px]">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-[color:var(--cf-surface)]/80 backdrop-blur-[2px]">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                <p className="text-sm text-[#8b949e]">{t('common.loading')}</p>
+                <p className="text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</p>
               </div>
             </div>
           )}
@@ -90,7 +90,7 @@ export const Modal = ({
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-[#30363d] bg-[#0d1117]/50">
+          <div className="px-6 py-4 border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70">
             {footer}
           </div>
         )}

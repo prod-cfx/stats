@@ -64,6 +64,31 @@
   --text-label-weight: 500;
 }
 
+/* App color tokens (themeable) */
+:root[data-theme='dark'] {
+  --cf-bg: #0d1117;
+  --cf-surface: #161b22;
+  --cf-surface-2: #21262d;
+  --cf-surface-hover: #1f2937;
+  --cf-border: #30363d;
+  --cf-text: #c9d1d9;
+  --cf-text-strong: #e6edf3;
+  --cf-muted: #8b949e;
+  --cf-text-secondary: var(--cf-text);
+}
+
+:root[data-theme='light'] {
+  --cf-bg: #f8fafc;
+  --cf-surface: #ffffff;
+  --cf-surface-2: #f1f5f9;
+  --cf-surface-hover: #e2e8f0;
+  --cf-border: #cbd5e1;
+  --cf-text: #0f172a;
+  --cf-text-strong: #020617;
+  --cf-muted: #475569;
+  --cf-text-secondary: #334155;
+}
+
 @layer utilities {
   .gradient-border-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -72,7 +97,7 @@
   .gradient-border-hover:hover {
     border-color: transparent;
     background:
-      linear-gradient(#161b22, #161b22) padding-box,
+      linear-gradient(var(--cf-surface), var(--cf-surface)) padding-box,
       linear-gradient(to bottom right, var(--color-primary), var(--color-secondary)) border-box;
     box-shadow: 0 10px 30px -10px rgba(57, 107, 255, 0.3);
     transform: translateY(-2px);
@@ -144,8 +169,8 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: #0f172a;
-  color: #f8fafc;
+  background: var(--cf-bg);
+  color: var(--cf-text);
   font-family: var(--font-sans);
   font-size: var(--text-body-size);
   line-height: var(--text-body-line);

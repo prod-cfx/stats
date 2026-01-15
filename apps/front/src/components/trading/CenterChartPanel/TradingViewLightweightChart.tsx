@@ -7,11 +7,37 @@ import { AreaSeries, CandlestickSeries, ColorType, createChart, CrosshairMode, H
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
+import { useTheme } from '@/components/providers/ThemeProvider'
 import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
 import { generateLiquidationMapMockData } from '@/lib/liquidation-map/mock-liquidation-map'
 import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market'
 
 // ---- Helper Components ----
+
+function getPalette(theme: 'light' | 'dark') {
+  if (theme === 'light') {
+    return {
+      bg: '#f8fafc',
+      surface: '#ffffff',
+      surface2: '#f1f5f9',
+      border: '#cbd5e1',
+      text: '#0f172a',
+      muted: '#475569',
+      crosshairLabelBg: '#e2e8f0',
+      grid: '#e2e8f0',
+    }
+  }
+  return {
+    bg: '#0d1117',
+    surface: '#161b22',
+    surface2: '#21262d',
+    border: '#30363d',
+    text: '#c9d1d9',
+    muted: '#8b949e',
+    crosshairLabelBg: '#1f2937',
+    grid: '#161b22',
+  }
+}
 
 const IndicatorPanelHeader = ({
   title,
@@ -24,8 +50,8 @@ const IndicatorPanelHeader = ({
   valueColor?: string
   valueParts?: Array<{ text: string; color?: string }>
 }) => (
-  <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 z-10 pointer-events-none bg-[#161b22] rounded-sm">
-    <span className="text-[10px] text-[#8b949e] font-roboto font-normal leading-4 tracking-tight truncate">
+  <div className="flex items-center gap-2 h-[16px] px-1 absolute top-[5px] left-1 z-10 pointer-events-none bg-[color:var(--cf-surface)] rounded-sm">
+    <span className="text-[10px] text-[color:var(--cf-muted)] font-roboto font-normal leading-4 tracking-tight truncate">
       {title}
     </span>
     {Array.isArray(valueParts) && valueParts.length > 0 ? (
@@ -79,6 +105,8 @@ const IndicatorChartPanel = ({
   priceFormatter,
 }: IndicatorChartProps) => {
   const { t } = useTranslation()
+  const { theme } = useTheme()
+  const palette = useMemo(() => getPalette(theme), [theme])
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<any> | null>(null)
@@ -106,16 +134,16 @@ const IndicatorChartPanel = ({
       height,
       ...(priceFormatter ? { localization: { priceFormatter } } : {}),
       layout: {
-        background: { type: ColorType.Solid, color: '#161b22' },
-        textColor: '#8b949e',
+        background: { type: ColorType.Solid, color: palette.surface },
+        textColor: palette.muted,
         fontSize: 10,
       },
       grid: {
         vertLines: { visible: false },
-        horzLines: { color: '#30363d', style: 2 },
+        horzLines: { color: palette.border, style: 2 },
       },
       rightPriceScale: {
-        borderColor: '#30363d',
+        borderColor: palette.border,
         visible: true,
         // Hide built-in ticks; we overlay our own fixed 3 labels
         ticksVisible: false,
@@ -130,7 +158,7 @@ const IndicatorChartPanel = ({
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { visible: true, labelVisible: false, color: '#30363d', style: 2 },
+        vertLine: { visible: true, labelVisible: false, color: palette.border, style: 2 },
         // Keep price label on the right (click/hover shows amount)
         horzLine: { visible: false, labelVisible: true },
       },
@@ -315,6 +343,27 @@ const IndicatorChartPanel = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Init once
 
+  // Update theme on existing chart without re-creating it.
+  useEffect(() => {
+    if (!chartRef.current) return
+    chartRef.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: palette.surface },
+        textColor: palette.muted,
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: palette.border, style: 2 },
+      },
+      rightPriceScale: {
+        borderColor: palette.border,
+      },
+      crosshair: {
+        vertLine: { color: palette.border, style: 2, visible: true, labelVisible: false },
+      },
+    })
+  }, [palette])
+
   // Update data when props change
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
@@ -411,14 +460,14 @@ const IndicatorChartPanel = ({
   return (
     <div className={`flex flex-col w-full flex-shrink-0 ${showTvLogo ? '' : 'cf-hide-tv-logo'}`}>
        {/* Separator_Top strictly matching Figma structure */}
-       <div className="h-[1px] w-full bg-[#30363d]" />
-       <div className="relative w-full bg-[#161b22]" style={{ height }}>
+       <div className="h-[1px] w-full bg-[color:var(--cf-border)]" />
+       <div className="relative w-full bg-[color:var(--cf-surface)]" style={{ height }}>
           {/* Close button: move into plot area (left of price scale) to avoid covering Y-axis labels */}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="absolute top-[5px] right-[80px] z-20 pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]"
+              className="absolute top-[5px] right-[80px] z-20 pointer-events-auto w-4 h-4 flex items-center justify-center rounded hover:bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]"
               aria-label="close"
               title={t('common.close')}
             >
@@ -443,15 +492,15 @@ const IndicatorChartPanel = ({
           <div ref={containerRef} className="w-full h-full" />
 
           {/* Dashed guide lines for the 3 fixed ticks (do not extend into price scale area) */}
-          <div className="pointer-events-none absolute left-0 right-[72px] top-[10px] border-t border-dashed border-[#30363d]/70" />
-          <div className="pointer-events-none absolute left-0 right-[72px] top-1/2 -translate-y-1/2 border-t border-dashed border-[#30363d]/70" />
-          <div className="pointer-events-none absolute left-0 right-[72px] bottom-[10px] border-t border-dashed border-[#30363d]/70" />
+          <div className="pointer-events-none absolute left-0 right-[72px] top-[10px] border-t border-dashed border-[color:var(--cf-border)]/70" />
+          <div className="pointer-events-none absolute left-0 right-[72px] top-1/2 -translate-y-1/2 border-t border-dashed border-[color:var(--cf-border)]/70" />
+          <div className="pointer-events-none absolute left-0 right-[72px] bottom-[10px] border-t border-dashed border-[color:var(--cf-border)]/70" />
 
           {/* Custom fixed 3-tick labels (left-aligned) over the hidden built-in ticks */}
-          <div className="pointer-events-none absolute top-0 right-0 bottom-0 w-[72px] border-l border-[#30363d]">
-            <div className="absolute top-1 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.top}</div>
-            <div className="absolute top-1/2 -translate-y-1/2 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.mid}</div>
-            <div className="absolute bottom-1 left-2 text-[10px] text-[#8b949e] tabular-nums">{axisLabels.bottom}</div>
+          <div className="pointer-events-none absolute top-0 right-0 bottom-0 w-[72px] border-l border-[color:var(--cf-border)]">
+            <div className="absolute top-1 left-2 text-[10px] text-[color:var(--cf-muted)] tabular-nums">{axisLabels.top}</div>
+            <div className="absolute top-1/2 -translate-y-1/2 left-2 text-[10px] text-[color:var(--cf-muted)] tabular-nums">{axisLabels.mid}</div>
+            <div className="absolute bottom-1 left-2 text-[10px] text-[color:var(--cf-muted)] tabular-nums">{axisLabels.bottom}</div>
           </div>
        </div>
     </div>
@@ -593,6 +642,8 @@ export const TradingViewLightweightChart = ({
   isDashboard?: boolean // Type def
 }) => {
   const { t } = useTranslation();
+  const { theme } = useTheme()
+  const palette = useMemo(() => getPalette(theme), [theme])
   const chartHostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartRef = useRef<any>(null);
@@ -707,36 +758,36 @@ export const TradingViewLightweightChart = ({
       width: container.clientWidth,
       height,
       layout: {
-        background: { type: ColorType.Solid, color: '#0d1117' },
-        textColor: '#8b949e',
+        background: { type: ColorType.Solid, color: palette.bg },
+        textColor: palette.muted,
         fontSize: 11,
       },
       // ... existing grid and other options
       autoSize: !isDashboard, // Only enable autosize for standalone pages
       grid: {
-        vertLines: { color: '#161b22' },
-        horzLines: { color: '#161b22' },
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          labelBackgroundColor: '#1f2937',
+          labelBackgroundColor: palette.crosshairLabelBg,
           // 禁止十字线在右侧生成第二个价格标签
           labelVisible: false,
         },
         horzLine: {
-          labelBackgroundColor: '#1f2937',
+          labelBackgroundColor: palette.crosshairLabelBg,
           // 禁止十字线在右侧生成第二个价格标签
           labelVisible: false,
         },
       },
       timeScale: {
-        borderColor: '#30363d',
+        borderColor: palette.border,
         timeVisible: true,
         secondsVisible: false,
       },
       rightPriceScale: {
-        borderColor: '#30363d',
+        borderColor: palette.border,
         visible: true,
         minimumWidth: 72,
       }
@@ -1053,8 +1104,37 @@ export const TradingViewLightweightChart = ({
       lockedPriceLineRef.current = null
       indicatorSeriesRef.current = {}
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only re-init on mount/symbol change
-  }, [isMounted, symbol]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-init on theme switch to guarantee chart background updates
+  }, [isMounted, symbol, theme]);
+
+  // Theme updates: apply options to existing chart + repaint overlay.
+  useEffect(() => {
+    const chartApi: any = chartRef.current
+    if (!chartApi) return
+    try {
+      chartApi.applyOptions({
+        layout: {
+          background: { type: ColorType.Solid, color: palette.bg },
+          textColor: palette.muted,
+          fontSize: 11,
+        },
+        grid: {
+          vertLines: { color: palette.grid },
+          horzLines: { color: palette.grid },
+        },
+        crosshair: {
+          mode: CrosshairMode.Normal,
+          vertLine: { labelBackgroundColor: palette.crosshairLabelBg, labelVisible: false },
+          horzLine: { labelBackgroundColor: palette.crosshairLabelBg, labelVisible: false },
+        },
+        timeScale: { borderColor: palette.border, timeVisible: true, secondsVisible: false },
+        rightPriceScale: { borderColor: palette.border, visible: true, minimumWidth: 72 },
+      })
+      overlayRef.current?.refresh()
+    } catch {
+      // ignore
+    }
+  }, [palette])
 
   const baseAsset = symbol.replace(/USDT|USD|PERP|SWAP|[-_]/gi, '').slice(0, 5) || 'BTC'
 
@@ -1233,7 +1313,7 @@ export const TradingViewLightweightChart = ({
 
   return (
     <div
-      className={`w-full h-full bg-[#0d1117] overflow-hidden flex flex-col ${isDashboard ? 'min-h-0' : 'min-h-[500px]'}`}
+      className={`w-full h-full bg-[color:var(--cf-bg)] overflow-hidden flex flex-col ${isDashboard ? 'min-h-0' : 'min-h-[500px]'}`}
     >
       {/* Main chart area (takes remaining height), panels are below */}
       <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -1245,11 +1325,11 @@ export const TradingViewLightweightChart = ({
                 key={ind.id}
                 type="button"
                 onClick={() => onRemoveIndicator?.(ind.id)}
-                className="pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#161b22]/90 border border-[#30363d] text-xs text-[#c9d1d9] hover:bg-[#21262d] transition-colors"
+                className="pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full bg-[color:var(--cf-surface)]/90 border border-[color:var(--cf-border)] text-xs text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-2)] transition-colors"
                 title={t('chart.indicator.remove', { name: ind.label })}
               >
                 <span className="truncate max-w-[180px]">{ind.label}</span>
-                <span className="text-[#8b949e] hover:text-white">×</span>
+                <span className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">×</span>
               </button>
             ))}
           </div>
@@ -1262,19 +1342,19 @@ export const TradingViewLightweightChart = ({
           {activeIndicators
             .filter((x) => x.kind === 'chartOverlay' && x.id !== 'liquidation-map')
             .map((x) => (
-              <div key={x.id} className="pointer-events-auto w-[320px] bg-[#161b22]/95 border border-[#30363d] rounded-xl p-3 shadow-xl">
+              <div key={x.id} className="pointer-events-auto w-[320px] bg-[color:var(--cf-surface)]/95 border border-[color:var(--cf-border)] rounded-xl p-3 shadow-xl">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-bold text-white truncate">{x.label}</div>
+                  <div className="text-sm font-bold text-[color:var(--cf-text-strong)] truncate">{x.label}</div>
                   <button
                     type="button"
                     onClick={() => onRemoveIndicator?.(x.id)}
-                    className="text-[#8b949e] hover:text-white transition-colors"
+                    className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
                     aria-label={t('chart.indicator.removeAria', { name: x.label })}
                   >
                     ×
                   </button>
                 </div>
-                <div className="mt-2 text-xs text-[#8b949e] leading-relaxed">
+                <div className="mt-2 text-xs text-[color:var(--cf-muted)] leading-relaxed">
                   {t('chart.indicator.overlayPlaceholder')}
                 </div>
                 {x.href && (
@@ -1291,23 +1371,23 @@ export const TradingViewLightweightChart = ({
           <div className="absolute top-3 left-3 z-10 pointer-events-none flex flex-col gap-1">
             <div className="flex items-center gap-2 text-[13px] font-medium">
               <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-[8px] text-white">₿</div>
-              <span className="text-[#c9d1d9]">{symbol} {t('chart.perpetual')} · {interval} · OKX</span>
+              <span className="text-[color:var(--cf-text)]">{symbol} {t('chart.perpetual')} · {interval} · OKX</span>
             </div>
             <div className="flex items-center gap-3 text-xs">
               <div className="flex gap-1">
-                <span className="text-[#8b949e]">{t('chart.ohlc.open')}=</span>
+                <span className="text-[color:var(--cf-muted)]">{t('chart.ohlc.open')}=</span>
                 <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.open.toFixed(2)}</span>
               </div>
               <div className="flex gap-1">
-                <span className="text-[#8b949e]">{t('chart.ohlc.high')}=</span>
+                <span className="text-[color:var(--cf-muted)]">{t('chart.ohlc.high')}=</span>
                 <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.high.toFixed(2)}</span>
               </div>
               <div className="flex gap-1">
-                <span className="text-[#8b949e]">{t('chart.ohlc.low')}=</span>
+                <span className="text-[color:var(--cf-muted)]">{t('chart.ohlc.low')}=</span>
                 <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.low.toFixed(2)}</span>
               </div>
               <div className="flex gap-1">
-                <span className="text-[#8b949e]">{t('chart.ohlc.close')}=</span>
+                <span className="text-[color:var(--cf-muted)]">{t('chart.ohlc.close')}=</span>
                 <span className={ohlc.close >= ohlc.open ? 'text-[#2ea043]' : 'text-[#da3633]'}>{ohlc.close.toFixed(2)}</span>
               </div>
               <div className="flex gap-1">
@@ -1318,7 +1398,7 @@ export const TradingViewLightweightChart = ({
             </div>
             <div className="flex items-center gap-3 text-xs mt-1">
               <div className="flex gap-1">
-                <span className="text-[#8b949e]">{t('chart.volume')}</span>
+                <span className="text-[color:var(--cf-muted)]">{t('chart.volume')}</span>
                 <span className="text-[#26a69a]">201.94</span>
               </div>
             </div>
@@ -1327,12 +1407,12 @@ export const TradingViewLightweightChart = ({
 
         {/* Floating Toolbar (standalone only). In dashboard, keep the chart clean & compact. */}
         {!isDashboard && (
-          <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[#161b22] border border-[#30363d] p-1 rounded">
+          <div className="absolute top-1/4 left-2 z-10 flex flex-col gap-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] p-1 rounded">
             {['+', '-', '✎', '⌗', '○', 'T'].map((tool, i) => (
               <button
                 type="button"
                 key={i}
-                className="w-7 h-7 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded transition-colors"
+                className="w-7 h-7 flex items-center justify-center text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] rounded transition-colors"
               >
                 {tool}
               </button>
@@ -1383,7 +1463,7 @@ export const TradingViewLightweightChart = ({
               top: clamp(liqSelected.y - 64, 8, (chartHostRef.current?.clientHeight ?? 520) - 170),
             }}
           >
-            <div className="bg-[#0d1117]/85 border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] backdrop-blur">
+            <div className="bg-[color:var(--cf-bg)]/85 border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-xs text-[color:var(--cf-text)] backdrop-blur">
               <div className="flex items-center justify-between">
                 <div className="font-bold">{t('common.price')}: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 0 : 2)}</div>
               </div>
@@ -1418,14 +1498,14 @@ export const TradingViewLightweightChart = ({
                 </div>
               </div>
               {/* Match full-page tooltip: show only the relevant cumulative side */}
-              <div className="mt-2 space-y-1 text-[#8b949e]">
+              <div className="mt-2 space-y-1 text-[color:var(--cf-muted)]">
                 {liqSelected.price <= liqCurrentPrice ? (
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
                       <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ff4d4d' }} />
                       <span>{t('liquidationMap.legend.cumLong')}</span>
                     </span>
-                    <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
+                    <span className="text-[color:var(--cf-text-strong)] font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-2">
@@ -1433,7 +1513,7 @@ export const TradingViewLightweightChart = ({
                       <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#00c076' }} />
                       <span>{t('liquidationMap.legend.cumShort')}</span>
                     </span>
-                    <span className="text-[#e6edf3] font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
+                    <span className="text-[color:var(--cf-text-strong)] font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
                   </div>
                 )}
               </div>
