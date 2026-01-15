@@ -193,7 +193,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="text-[11px] text-[#8b949e] border-b border-[#30363d]">
+                <tr className="text-[11px] text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.time')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.contract')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.type')}</th>
@@ -208,8 +208,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
               </thead>
               <tbody className="text-xs">
                 {mockOrders.map(order => (
-                  <tr key={order.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
-                    <td className="py-2.5 px-4 text-[#8b949e]">{order.time}</td>
+                  <tr key={order.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
+                    <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{order.time}</td>
                     <td className="py-2.5 px-4 font-medium">{order.symbol}</td>
                     <td className="py-2.5 px-4">{renderOrderType(order.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${order.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
@@ -235,7 +235,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="text-[11px] text-[#8b949e] border-b border-[#30363d]">
+                <tr className="text-[11px] text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.time')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.contract')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.type')}</th>
@@ -248,8 +248,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
               </thead>
               <tbody className="text-xs">
                 {mockHistory.map(item => (
-                  <tr key={item.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
-                    <td className="py-2.5 px-4 text-[#8b949e]">{item.time}</td>
+                  <tr key={item.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
+                    <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{item.time}</td>
                     <td className="py-2.5 px-4 font-medium">{item.symbol}</td>
                     <td className="py-2.5 px-4">{renderOrderType(item.type)}</td>
                     <td className={`py-2.5 px-4 font-bold ${item.side === 'buy' ? 'text-[#2ea043]' : 'text-[#da3633]'}`}>
@@ -258,7 +258,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     <td className="py-2.5 px-4">{item.price}</td>
                     <td className="py-2.5 px-4">{item.filled}</td>
                     <td className="py-2.5 px-4">{item.total}</td>
-                    <td className="py-2.5 px-4 text-[#8b949e]">{renderOrderStatus(item.status)}</td>
+                    <td className="py-2.5 px-4 text-[color:var(--cf-muted)]">{renderOrderStatus(item.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -271,7 +271,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="text-[11px] text-[#8b949e] border-b border-[#30363d]">
+                <tr className="text-[11px] text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.contract')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.positionSize')}</th>
                   <th className="py-2 px-4 font-normal">{t('bottomPanel.positionValue')}</th>
@@ -290,7 +290,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   const sideBar = pos.side === 'long' ? 'bg-[#2ea043]' : 'bg-[#da3633]';
                   const pnlText = `${pos.pnl >= 0 ? '+' : ''}${moneyFormatter.format(pos.pnl)} (${pos.roe >= 0 ? '+' : ''}${pos.roe.toFixed(2)}%)`;
                   return (
-                  <tr key={pos.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
+                  <tr key={pos.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                     <td className="py-2.5 px-4 font-medium flex items-center gap-1">
                       <div className={`w-1 h-4 rounded-sm ${sideBar}`} />
                       <span className="whitespace-nowrap">{pos.symbol}</span>
@@ -305,7 +305,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     <td className="py-2.5 px-4 whitespace-nowrap">{moneyFormatter.format(pos.margin)} ({pos.leverage}x)</td>
                     <td className={`py-2.5 px-4 font-medium whitespace-nowrap ${pnlColor}`}>{pnlText}</td>
                     <td className="py-2.5 px-4 text-right">
-                      <button type="button" className="bg-[#21262d] hover:bg-[#30363d] px-2 py-1 rounded text-[10px] border border-[#30363d] whitespace-nowrap">
+                      <button type="button" className="bg-[color:var(--cf-surface-2)] hover:bg-[color:var(--cf-surface-hover)] px-2 py-1 rounded text-[10px] border border-[color:var(--cf-border)] whitespace-nowrap">
                         {t('bottomPanel.close')}
                       </button>
                     </td>
@@ -321,14 +321,14 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
         return (
           <div className="w-full">
             {/* Toolbar */}
-            <div className="px-4 py-3 border-b border-[#30363d] flex items-center gap-3 flex-wrap bg-[#0d1117] sticky top-[48px] z-[5]">
+            <div className="px-4 py-3 border-b border-[color:var(--cf-border)] flex items-center gap-3 flex-wrap bg-[color:var(--cf-bg)] sticky top-[48px] z-[5]">
               <div className="flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('bottomPanel.searchPlaceholder')}
-                  className="bg-transparent text-xs text-[#c9d1d9] placeholder-[#8b949e] outline-none w-[220px]"
+                  className="bg-transparent text-xs text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none w-[220px]"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -339,8 +339,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     onClick={() => setPosSideFilter(k)}
                     className={`px-3 py-1.5 text-xs rounded border transition-colors ${
                       posSideFilter === k
-                        ? 'bg-[#21262d] border-[#58a6ff] text-[#c9d1d9]'
-                        : 'bg-[#0d1117] border-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]'
+                        ? 'bg-[color:var(--cf-surface-2)] border-[#58a6ff] text-[color:var(--cf-text)]'
+                        : 'bg-[color:var(--cf-bg)] border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
                     }`}
                   >
                     {k === 'all' ? t('common.all') : k === 'long' ? t('bottomPanel.long') : t('bottomPanel.short')}
@@ -352,7 +352,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
             <div className="w-full overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="text-[11px] text-[#8b949e] border-b border-[#30363d]">
+                  <tr className="text-[11px] text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                     <th className="py-2 px-4 font-normal">{t('bottomPanel.contract')}</th>
                     <th className="py-2 px-4 font-normal">{t('bottomPanel.side')}</th>
                     <th className="py-2 px-4 font-normal">{t('bottomPanel.positionSize')}</th>
@@ -367,7 +367,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   {filteredPositionHistory.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-10">
-                        <div className="flex flex-col items-center justify-center text-[#8b949e]">
+                        <div className="flex flex-col items-center justify-center text-[color:var(--cf-muted)]">
                           <FileSearch className="w-10 h-10 opacity-50" />
                           <span className="text-xs mt-2">{t('bottomPanel.noData')}</span>
                         </div>
@@ -379,15 +379,15 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                       const sideColor = p.side === 'long' ? 'text-[#2ea043]' : 'text-[#da3633]';
                       const pnlText = `${p.pnl >= 0 ? '+' : ''}${moneyFormatter.format(p.pnl)} (${p.roe >= 0 ? '+' : ''}${p.roe.toFixed(2)}%)`;
                       return (
-                        <tr key={p.id} className="border-b border-[#30363d] hover:bg-[#1c2128]">
+                        <tr key={p.id} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                           <td className="py-2.5 px-4 font-medium whitespace-nowrap">{p.symbol}</td>
                           <td className={`py-2.5 px-4 font-bold whitespace-nowrap ${sideColor}`}>{renderPositionSide(p.side)}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{moneyFormatter.format(p.size)} {baseAsset}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{priceFormatter.format(p.entry)}</td>
                           <td className="py-2.5 px-4 whitespace-nowrap">{priceFormatter.format(p.exit)}</td>
                           <td className={`py-2.5 px-4 font-medium whitespace-nowrap ${pnlColor}`}>{pnlText}</td>
-                          <td className="py-2.5 px-4 text-[#8b949e] whitespace-nowrap">{p.openTime}</td>
-                          <td className="py-2.5 px-4 text-[#8b949e] whitespace-nowrap">{p.closeTime}</td>
+                          <td className="py-2.5 px-4 text-[color:var(--cf-muted)] whitespace-nowrap">{p.openTime}</td>
+                          <td className="py-2.5 px-4 text-[color:var(--cf-muted)] whitespace-nowrap">{p.closeTime}</td>
                         </tr>
                       );
                     })
@@ -402,15 +402,15 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
         return (
           <div className="w-full">
             {/* Toolbar */}
-            <div className="px-4 py-3 border-b border-[#30363d] flex items-center justify-between gap-3 flex-wrap bg-[#0d1117] sticky top-[48px] z-[5]">
+            <div className="px-4 py-3 border-b border-[color:var(--cf-border)] flex items-center justify-between gap-3 flex-wrap bg-[color:var(--cf-bg)] sticky top-[48px] z-[5]">
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5">
+                <div className="flex items-center gap-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-3 py-1.5">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder={t('bottomPanel.searchAssetPlaceholder')}
-                    className="bg-transparent text-xs text-[#c9d1d9] placeholder-[#8b949e] outline-none w-[220px]"
+                    className="bg-transparent text-xs text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] outline-none w-[220px]"
                   />
                 </div>
                 <button
@@ -418,8 +418,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   onClick={() => setAssetHideSmall(v => !v)}
                   className={`px-3 py-1.5 text-xs rounded border transition-colors ${
                     assetHideSmall
-                      ? 'bg-[#21262d] border-[#58a6ff] text-[#c9d1d9]'
-                      : 'bg-[#0d1117] border-[#30363d] text-[#8b949e] hover:text-[#c9d1d9]'
+                      ? 'bg-[color:var(--cf-surface-2)] border-[#58a6ff] text-[color:var(--cf-text)]'
+                      : 'bg-[color:var(--cf-bg)] border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
                   }`}
                 >
                   {t('bottomPanel.hideSmallBalances')}
@@ -431,7 +431,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     key={k}
                     type="button"
                     onClick={() => console.log(`TODO: ${k}`)}
-                    className="px-3 py-1.5 text-xs rounded bg-[#21262d] border border-[#30363d] text-[#c9d1d9] hover:bg-[#30363d] transition-colors"
+                    className="px-3 py-1.5 text-xs rounded bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] transition-colors"
                   >
                     {t(`bottomPanel.actions_${k}`)}
                   </button>
@@ -447,8 +447,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                 { k: 'usedMargin', v: mockAssets.summary.usedMargin, color: 'text-orange-400' },
                 { k: 'unrealizedPnl', v: mockAssets.summary.unrealizedPnl, color: mockAssets.summary.unrealizedPnl >= 0 ? 'text-[#2ea043]' : 'text-[#da3633]' },
               ].map((it) => (
-                <div key={it.k} className="bg-[#0d1117] border border-[#30363d] rounded-lg p-3">
-                  <div className="text-[11px] text-[#8b949e]">{t(`bottomPanel.assetSummary.${it.k}`)}</div>
+                <div key={it.k} className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg p-3">
+                  <div className="text-[11px] text-[color:var(--cf-muted)]">{t(`bottomPanel.assetSummary.${it.k}`)}</div>
                   <div className={`mt-1 text-sm font-semibold ${it.color}`}>
                     {it.k === 'unrealizedPnl'
                       ? `${it.v >= 0 ? '+' : ''}${moneyFormatter.format(it.v)}`
@@ -462,7 +462,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
             <div className="w-full overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="text-[11px] text-[#8b949e] border-b border-[#30363d]">
+                  <tr className="text-[11px] text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                     <th className="py-2 px-4 font-normal">{t('bottomPanel.asset')}</th>
                     <th className="py-2 px-4 font-normal text-right">{t('bottomPanel.balance')}</th>
                     <th className="py-2 px-4 font-normal text-right">{t('bottomPanel.availableBalance')}</th>
@@ -474,7 +474,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                   {filteredAssets.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-10">
-                        <div className="flex flex-col items-center justify-center text-[#8b949e]">
+                        <div className="flex flex-col items-center justify-center text-[color:var(--cf-muted)]">
                           <FileSearch className="w-10 h-10 opacity-50" />
                           <span className="text-xs mt-2">{t('bottomPanel.noData')}</span>
                         </div>
@@ -484,7 +484,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
                     filteredAssets.map((a) => {
                       const chColor = a.change24h >= 0 ? 'text-[#2ea043]' : 'text-[#da3633]';
                       return (
-                        <tr key={a.asset} className="border-b border-[#30363d] hover:bg-[#1c2128]">
+                        <tr key={a.asset} className="border-b border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]">
                           <td className="py-2.5 px-4 font-medium whitespace-nowrap">{a.asset}</td>
                           <td className="py-2.5 px-4 text-right whitespace-nowrap">{moneyFormatter.format(a.balance)}</td>
                           <td className="py-2.5 px-4 text-right whitespace-nowrap">{moneyFormatter.format(a.available)}</td>
@@ -502,7 +502,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
 
       default:
         return (
-          <div className="flex-1 flex flex-col items-center justify-center text-[#8b949e] min-h-[150px]">
+          <div className="flex-1 flex flex-col items-center justify-center text-[color:var(--cf-muted)] min-h-[150px]">
             <div className="flex flex-col items-center gap-2 opacity-50">
               <FileSearch className="w-10 h-10" />
               <span className="text-xs">{t('bottomPanel.noData')}</span>
@@ -515,10 +515,10 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   return (
     <div
       suppressHydrationWarning
-      className="w-full bg-[#161b22] border-t border-[#30363d] flex flex-col text-[#c9d1d9] min-h-full"
+      className="w-full bg-[color:var(--cf-surface)] border-t border-[color:var(--cf-border)] flex flex-col text-[color:var(--cf-text)] min-h-full"
     >
       {/* Tabs */}
-      <div className="flex border-b border-[#30363d] bg-[#0d1117] sticky top-0 z-10">
+      <div className="flex border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] sticky top-0 z-10">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -526,8 +526,8 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
             onClick={() => setActiveTab(tab.id as any)}
             className={`px-6 py-3 text-sm font-medium transition-colors border-t-2 ${
               activeTab === tab.id
-                ? 'bg-[#21262d] border-orange-400 text-[#c9d1d9]'
-                : 'border-transparent text-[#8b949e] hover:text-[#c9d1d9]'
+                ? 'bg-[color:var(--cf-surface-2)] border-orange-400 text-[color:var(--cf-text)]'
+                : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
             }`}
           >
             {tab.label}
@@ -536,7 +536,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 bg-[#161b22]">
+      <div className="flex-1 bg-[color:var(--cf-surface)]">
         {renderContent()}
       </div>
     </div>

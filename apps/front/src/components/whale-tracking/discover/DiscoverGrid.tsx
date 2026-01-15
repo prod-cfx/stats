@@ -71,7 +71,7 @@ export const DiscoverGrid = () => {
 
   const renderSortIcon = (field: Exclude<typeof sortField, null>) => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-3 h-3 text-[#8b949e] opacity-30 group-hover:opacity-100 transition-opacity" />;
+      return <ArrowUpDown className="w-3 h-3 text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100 transition-opacity" />;
     }
     return sortOrder === 'desc' ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />;
   };
@@ -92,9 +92,9 @@ export const DiscoverGrid = () => {
       </LoadingState>
 
       {/* Filters Section */}
-      <div className="flex flex-wrap items-center justify-between border-y border-[#30363d] py-6">
+      <div className="flex flex-wrap items-center justify-between border-y border-[color:var(--cf-border)] py-6">
         <div className="flex items-center gap-4">
-          <span className="text-[#8b949e] text-sm font-medium">{t('whaleTracking.discover.sortBy')}:</span>
+          <span className="text-[color:var(--cf-muted)] text-sm font-medium">{t('whaleTracking.discover.sortBy')}:</span>
           {([
             { id: 'winRate', label: t('whaleTracking.discover.sortFields.winRate') },
             { id: 'totalValue', label: t('whaleTracking.discover.sortFields.totalValue') },
@@ -107,7 +107,7 @@ export const DiscoverGrid = () => {
                 handleSort(field.id as Exclude<typeof sortField, null>);
               }}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors group ${
-                sortField === field.id ? 'text-white bg-white/5' : 'text-[#8b949e] hover:text-white'
+                sortField === field.id ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
               }`}
             >
               <span className="uppercase">{field.label}</span>

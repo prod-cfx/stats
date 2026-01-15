@@ -39,14 +39,14 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
   const priceFormatter = useMemo(() => new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }), [locale])
 
   return (
-    <div className="w-full h-full bg-[#161b22] flex flex-col p-4 text-[#c9d1d9] overflow-y-auto no-scrollbar">
+    <div className="w-full h-full bg-[color:var(--cf-surface)] flex flex-col p-4 text-[color:var(--cf-text)] overflow-y-auto no-scrollbar">
       {/* Open/Close Tabs */}
-      <div className="flex bg-[#21262d] rounded-md p-1 mb-4 flex-none">
+      <div className="flex bg-[color:var(--cf-surface-2)] rounded-md p-1 mb-4 flex-none">
         <button
           type="button"
           onClick={() => setActiveTab('open')}
           className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${
-            activeTab === 'open' ? 'bg-[#2ea043] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
+            activeTab === 'open' ? 'bg-[#2ea043] text-white shadow-lg' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
           }`}
         >
           {t('tradePanel.openPosition')}
@@ -55,7 +55,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
           type="button"
           onClick={() => setActiveTab('close')}
           className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${
-            activeTab === 'close' ? 'bg-[#374151] text-white shadow-lg' : 'text-[#8b949e] hover:text-[#c9d1d9]'
+            activeTab === 'close' ? 'bg-[#374151] text-white shadow-lg' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
           }`}
         >
           {t('tradePanel.closePosition')}
@@ -64,18 +64,18 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
 
       {/* Margin Mode & Leverage */}
       <div className="flex gap-2 mb-4 flex-none">
-        <div className="flex-1 bg-[#21262d] border border-[#30363d] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[#30363d] transition-colors">
+        <div className="flex-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[color:var(--cf-surface-hover)] transition-colors">
           <span className="text-xs">{t('tradePanel.marginCross')}</span>
-          <span className="text-[10px] text-[#8b949e]">▼</span>
+          <span className="text-[10px] text-[color:var(--cf-muted)]">▼</span>
         </div>
-        <div className="flex-1 bg-[#21262d] border border-[#30363d] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[#30363d] transition-colors">
+        <div className="flex-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded px-3 py-1.5 flex justify-between items-center cursor-pointer hover:bg-[color:var(--cf-surface-hover)] transition-colors">
           <span className="text-xs font-bold">{leverage}x</span>
-          <span className="text-[10px] text-[#8b949e]">▼</span>
+          <span className="text-[10px] text-[color:var(--cf-muted)]">▼</span>
         </div>
       </div>
 
       {/* Order Type Tabs */}
-      <div className="flex border-b border-[#30363d] mb-4 flex-none">
+      <div className="flex border-b border-[color:var(--cf-border)] mb-4 flex-none">
         {['limit', 'market', 'stop'].map((type) => (
           <button
             key={type}
@@ -84,7 +84,7 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
             className={`flex-1 pb-2 text-xs transition-colors relative ${
               orderType === type
                 ? 'text-orange-400 font-bold'
-                : 'text-[#8b949e] hover:text-[#c9d1d9]'
+                : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'
             }`}
           >
             {type === 'limit'
@@ -102,27 +102,27 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
       {/* Inputs */}
       <div className="space-y-4 mb-6 flex-none">
         <div>
-          <label className="text-xs text-[#8b949e] mb-1.5 block">{t('tradePanel.priceLabel')}</label>
+          <label className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.priceLabel')}</label>
           <div className="relative">
             <input
               type="text"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
+              className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
             />
-            <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[#374151] px-1.5 py-0.5 rounded text-[#c9d1d9] hover:bg-[#48566a] transition-colors">
+            <button type="button" className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] bg-[color:var(--cf-surface-hover)] px-1.5 py-0.5 rounded text-[color:var(--cf-text)] hover:opacity-90 transition-colors">
               {t('tradePanel.bestPrice')}
             </button>
           </div>
         </div>
 
         <div>
-          <label className="text-xs text-[#8b949e] mb-1.5 block">{t('tradePanel.amountLabel')}</label>
+          <label className="text-xs text-[color:var(--cf-muted)] mb-1.5 block">{t('tradePanel.amountLabel')}</label>
           <input
             type="text"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
+            className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded px-3 py-2 text-right text-sm focus:outline-none focus:border-orange-400 transition-colors"
             placeholder="0.00"
           />
         </div>
@@ -136,14 +136,14 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
           max="100"
           value={percent}
           onChange={(e) => setPercent(Number.parseInt(e.target.value, 10))}
-          className="w-full h-1 bg-[#30363d] rounded-lg appearance-none cursor-pointer accent-orange-400 mb-3"
+          className="w-full h-1 bg-[color:var(--cf-border)] rounded-lg appearance-none cursor-pointer accent-orange-400 mb-3"
         />
-        <div className="flex justify-between text-[10px] text-[#8b949e]">
+        <div className="flex justify-between text-[10px] text-[color:var(--cf-muted)]">
           {percents.map((p) => (
             <span
               key={p}
               onClick={() => setPercent(p)}
-              className={`cursor-pointer transition-colors ${percent >= p ? 'text-orange-400 font-bold' : 'hover:text-[#c9d1d9]'}`}
+              className={`cursor-pointer transition-colors ${percent >= p ? 'text-orange-400 font-bold' : 'hover:text-[color:var(--cf-text)]'}`}
             >
               {p}%
             </span>
@@ -152,18 +152,18 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
       </div>
 
       {/* Stats */}
-      <div className="space-y-2 text-xs text-[#8b949e] mb-6 flex-none">
+      <div className="space-y-2 text-xs text-[color:var(--cf-muted)] mb-6 flex-none">
         <div className="flex justify-between items-center">
           <span>{t('tradePanel.available')}</span>
-          <span className="text-[#c9d1d9] font-medium">-- USDT</span>
+          <span className="text-[color:var(--cf-text)] font-medium">-- USDT</span>
         </div>
         <div className="flex justify-between items-center">
           <span>{t('tradePanel.maxLong')}</span>
-          <span className="text-[#c9d1d9] font-medium">{`-- ${baseAsset}`}</span>
+          <span className="text-[color:var(--cf-text)] font-medium">{`-- ${baseAsset}`}</span>
         </div>
         <div className="flex justify-between items-center">
           <span>{t('tradePanel.maxShort')}</span>
-          <span className="text-[#c9d1d9] font-medium">{`-- ${baseAsset}`}</span>
+          <span className="text-[color:var(--cf-text)] font-medium">{`-- ${baseAsset}`}</span>
         </div>
       </div>
 
@@ -186,18 +186,18 @@ export const LeftTradePanel = ({ symbol, isAggregated, selectedExchange }: LeftT
       </div>
 
       {/* Cost Info - Fixed below buttons */}
-      <div className="space-y-2 text-xs border-t border-[#30363d] pt-4 mt-4 flex-none">
+      <div className="space-y-2 text-xs border-t border-[color:var(--cf-border)] pt-4 mt-4 flex-none">
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">{t('tradePanel.cost')}</span>
-          <span className="text-[#c9d1d9]">0.00 USDT</span>
+          <span className="text-[color:var(--cf-muted)]">{t('tradePanel.cost')}</span>
+          <span className="text-[color:var(--cf-text)]">0.00 USDT</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">{t('tradePanel.maxBuy')}</span>
-          <span className="text-[#c9d1d9]">{priceFormatter.format(maxBuyPrice)} USDT</span>
+          <span className="text-[color:var(--cf-muted)]">{t('tradePanel.maxBuy')}</span>
+          <span className="text-[color:var(--cf-text)]">{priceFormatter.format(maxBuyPrice)} USDT</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-[#8b949e]">{t('tradePanel.minSell')}</span>
-          <span className="text-[#c9d1d9]">{priceFormatter.format(minSellPrice)} USDT</span>
+          <span className="text-[color:var(--cf-muted)]">{t('tradePanel.minSell')}</span>
+          <span className="text-[color:var(--cf-text)]">{priceFormatter.format(minSellPrice)} USDT</span>
         </div>
       </div>
     </div>

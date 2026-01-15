@@ -73,7 +73,7 @@ export const LiquidationMapHeader = ({
                 setTimeout(() => btn?.classList.remove('animate-spin'), 500);
                 onRefresh();
               }}
-              className="p-2 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] hover:border-[#8b949e] transition-all active:scale-95 group shadow-sm"
+              className="p-2 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] hover:border-[color:var(--cf-border)] transition-all active:scale-95 group shadow-sm"
             >
               <RefreshCcw className="w-4 h-4 md:w-5 md:h-5 transition-transform" />
             </button>

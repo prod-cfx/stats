@@ -267,14 +267,14 @@ export const RealtimeWhalesTable = () => {
         </div>
       </div>
 
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[600px] relative shadow-2xl">
+      <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden min-h-[600px] relative shadow-2xl">
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
         
         <div className="overflow-x-auto cf-scrollbar">
           <table className="w-full border-collapse min-w-[1000px]">
             <thead>
-              <tr className="text-[#8b949e] border-b border-[#30363d] bg-[#0d1117]/50">
-                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider sticky left-0 z-10 bg-[#0d1117]/95 border-r border-[#30363d]">{t('whaleTracking.realtime.table.address')}</th>
+              <tr className="text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/50">
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider sticky left-0 z-10 bg-[color:var(--cf-bg)]/95 border-r border-[color:var(--cf-border)]">{t('whaleTracking.realtime.table.address')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
@@ -292,24 +292,24 @@ export const RealtimeWhalesTable = () => {
                 <th className="px-3 md:px-6 py-4 text-center w-12 md:w-16">{t('whaleTracking.realtime.table.actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#30363d]">
+            <tbody className="divide-y divide-[color:var(--cf-border)]">
               {displayedTransactions.map((tx) => (
                 <tr
                   key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
-                  className="hover:bg-[#1f2937]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
+                  className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
                   onClick={() => handleShowStats(tx.address)}
                 >
-                  <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50">
+                  <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]/50">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">
                         <Link 
                           href={`/${lng}/whale-tracking/profile/?address=${tx.address}`}
-                          className="text-white text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
+                          className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {`${tx.address.slice(0, 4)}...${tx.address.slice(-4)}`}
                         </Link>
-                        <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
+                        <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
                           <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />
                         </button>
                       </div>
@@ -327,30 +327,30 @@ export const RealtimeWhalesTable = () => {
                         {tx.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-white text-[11px] md:text-body font-bold">{tx.asset}</span>
-                        <span className="text-[#8b949e] text-[8px] md:text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
+                        <span className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-bold">{tx.asset}</span>
+                        <span className="text-[color:var(--cf-muted)] text-[8px] md:text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 md:px-6 py-5">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-white text-[11px] md:text-body font-bold">{tx.positionValueUSD}</span>
-                      <span className="text-[#8b949e] text-[9px] md:text-xs">{tx.positionValueAsset}</span>
+                      <span className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-bold">{tx.positionValueUSD}</span>
+                      <span className="text-[color:var(--cf-muted)] text-[9px] md:text-xs">{tx.positionValueAsset}</span>
                     </div>
                   </td>
-                  <td className="px-3 md:px-6 py-5 text-white text-[11px] md:text-body font-mono">
+                  <td className="px-3 md:px-6 py-5 text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-mono">
                     {tx.entryPrice}
                   </td>
                   <td className="px-3 md:px-6 py-5 text-[#4ade80] text-[11px] md:text-body font-bold">
                     {tx.winRate}
                   </td>
-                  <td className="px-3 md:px-6 py-5 text-[#8b949e] text-[10px] md:text-caption text-right font-medium">
+                  <td className="px-3 md:px-6 py-5 text-[color:var(--cf-muted)] text-[10px] md:text-caption text-right font-medium">
                     {formatRelativeTime(tx.timestamp)}
                   </td>
                   <td className="px-3 md:px-6 py-5 text-center">
                     <button 
                       type="button"
-                      className="w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded md:rounded-xl text-[#8b949e] hover:text-white hover:border-primary/50 hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
+                      className="w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded md:rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:border-primary/50 hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleShowStats(tx.address);

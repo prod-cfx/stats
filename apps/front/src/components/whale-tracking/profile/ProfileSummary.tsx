@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react';
 import { Info } from 'lucide-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 // 后端 API 数据类型
 interface SnapshotPerpDto {
@@ -66,37 +67,37 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData }: Summar
   };
 
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 md:p-5 flex flex-col gap-3 md:gap-4 relative min-h-[140px] md:min-h-[160px]">
-      <div className="text-[#8b949e] text-xs md:text-label font-medium">{label}</div>
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 md:p-5 flex flex-col gap-3 md:gap-4 relative min-h-[140px] md:min-h-[160px]">
+      <div className="text-[color:var(--cf-muted)] text-xs md:text-label font-medium">{label}</div>
       {isPerformance ? (
         <div className="flex flex-col gap-3 md:gap-4 mt-auto">
           <div className="grid grid-cols-2 gap-4 md:gap-6">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.winRate')}</span>
-              <span className="text-white text-xl md:text-h2 font-bold">28.57 %</span>
+              <span className="text-[color:var(--cf-muted)] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.winRate')}</span>
+              <span className="text-[color:var(--cf-text-strong)] text-xl md:text-h2 font-bold">28.57 %</span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[#8b949e] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.maxDrawdown')}</span>
-              <span className="text-white text-xl md:text-h2 font-bold">59.03 %</span>
+              <span className="text-[color:var(--cf-muted)] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.maxDrawdown')}</span>
+              <span className="text-[color:var(--cf-text-strong)] text-xl md:text-h2 font-bold">59.03 %</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 md:gap-6">
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.filledOrders')}</span>
-              <span className="text-white text-sm md:text-body font-bold ml-auto">77</span>
+              <span className="text-[color:var(--cf-muted)] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.filledOrders')}</span>
+              <span className="text-[color:var(--cf-text-strong)] text-sm md:text-body font-bold ml-auto">77</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
-              <span className="text-[#8b949e] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.closes')}</span>
-              <span className="text-white text-sm md:text-body font-bold ml-auto">7</span>
+              <span className="text-[color:var(--cf-muted)] text-[10px] md:text-caption font-medium">{t('whaleTracking.profile.summary.closes')}</span>
+              <span className="text-[color:var(--cf-text-strong)] text-sm md:text-body font-bold ml-auto">7</span>
             </div>
           </div>
         </div>
       ) : (
         <div className="flex items-center justify-between mt-auto">
           <div className="flex flex-col gap-2 md:gap-2.5 flex-1 min-w-0">
-            <div className="text-white text-xl md:text-h2 font-bold tracking-tight truncate">{value}</div>
+            <div className="text-[color:var(--cf-text-strong)] text-xl md:text-h2 font-bold tracking-tight truncate">{value}</div>
             <div className="w-full">{subText}</div>
           </div>
           <div className="w-12 h-12 md:w-16 md:h-16 flex-none ml-2 md:ml-4">
@@ -110,6 +111,7 @@ const SummaryCard = ({ label, value, subText, isPerformance, chartData }: Summar
 
 export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
   const { t } = useTranslation();
+  const { theme } = useTheme()
 
   // 格式化金额
   const formatAmount = (value: number): string => {
@@ -131,6 +133,7 @@ export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
   const withdrawable = snapshot.perp.withdrawable;
   const marginUsagePercent = snapshot.perp.marginUsagePercent;
   const availablePercent = 100 - marginUsagePercent;
+  const availableSliceColor = theme === 'dark' ? '#3a3a3a' : '#e2e8f0'
 
   // 总持仓价值数据
   const totalPositionValue = snapshot.perp.totalPositionValue;
@@ -147,15 +150,15 @@ export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
         ]}
         subText={
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
+            <div className="flex items-center gap-2 text-[10px] md:text-caption text-[color:var(--cf-muted)]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#5470c6]" />
               <span className="truncate">{t('whaleTracking.profile.summary.perpetual')}</span>
-              <span className="text-[#e5e5e5] ml-auto">{formatAmount(perpAccountValue)}</span>
+              <span className="text-[color:var(--cf-text)] ml-auto">{formatAmount(perpAccountValue)}</span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
+            <div className="flex items-center gap-2 text-[10px] md:text-caption text-[color:var(--cf-muted)]">
               <div className="w-1.5 h-1.5 rounded-full bg-[#91cc75]" />
               <span className="truncate">{t('whaleTracking.profile.summary.spot')}</span>
-              <span className="text-[#e5e5e5] ml-auto">{formatAmount(spotAccountValue)}</span>
+              <span className="text-[color:var(--cf-text)] ml-auto">{formatAmount(spotAccountValue)}</span>
             </div>
           </div>
         }
@@ -165,13 +168,13 @@ export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
         value={formatAmount(withdrawable)}
         chartData={[
           { value: marginUsagePercent, name: t('whaleTracking.profile.summary.used'), itemStyle: { color: '#fac858' } },
-          { value: availablePercent, name: t('whaleTracking.profile.summary.available'), itemStyle: { color: '#3a3a3a' } }
+          { value: availablePercent, name: t('whaleTracking.profile.summary.available'), itemStyle: { color: availableSliceColor } }
         ]}
         subText={
-          <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
+          <div className="flex items-center gap-2 text-[10px] md:text-caption text-[color:var(--cf-muted)]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.withdrawable')}</span>
-            <span className="text-[#e5e5e5] ml-auto">{availablePercent.toFixed(2)} %</span>
+            <span className="text-[color:var(--cf-text)] ml-auto">{availablePercent.toFixed(2)} %</span>
           </div>
         }
       />
@@ -182,11 +185,11 @@ export const ProfileSummary = ({ snapshot }: ProfileSummaryProps) => {
           { value: 100, name: t('whaleTracking.profile.summary.shortExposure'), itemStyle: { color: '#fac858' } }
         ]}
         subText={
-          <div className="flex items-center gap-2 text-[10px] md:text-caption text-[#8b949e]">
+          <div className="flex items-center gap-2 text-[10px] md:text-caption text-[color:var(--cf-muted)]">
             <div className="w-1.5 h-1.5 rounded-full bg-[#fac858]" />
             <span className="truncate">{t('whaleTracking.profile.summary.leverageRatio')}</span>
-            <Info className="w-2.5 h-2.5 md:w-3 md:h-3 text-[#8b949e]" />
-            <span className="text-[#e5e5e5] ml-auto">{leverageRatio.toFixed(2)}x</span>
+            <Info className="w-2.5 h-2.5 md:w-3 md:h-3 text-[color:var(--cf-muted)]" />
+            <span className="text-[color:var(--cf-text)] ml-auto">{leverageRatio.toFixed(2)}x</span>
           </div>
         }
       />

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface OrderItem {
   price: string;
@@ -40,6 +41,7 @@ const OrderRow = ({
 }) => {
   const [isFlash, setIsFlash] = useState(false);
   const isCompact = variant === 'compact';
+  const { theme } = useTheme();
 
   // Lightweight "tick" effect when data changes (kept subtle, CoinGlass-like)
   React.useEffect(() => {
@@ -50,9 +52,16 @@ const OrderRow = ({
   }, [item.price, item.amount]);
 
   const isAsk = type === 'ask';
-  const barColor = isAsk ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)'; // red-500 / green-500 low opacity
+  const barColor = isAsk
+    ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.10)')
+    : (theme === 'dark' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.10)'); // red/green low opacity
   const rowTint = 'transparent';
-  const hoverTint = isAsk ? 'rgba(239, 68, 68, 0.08)' : 'rgba(34, 197, 94, 0.08)';
+  const hoverTint = isAsk
+    ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.045)')
+    : (theme === 'dark' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(34, 197, 94, 0.045)');
+  const selectedTint = isAsk
+    ? (theme === 'dark' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.06)')
+    : (theme === 'dark' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(34, 197, 94, 0.06)');
 
   return (
     <button
@@ -62,14 +71,14 @@ const OrderRow = ({
         relative group flex items-center px-1.5 ${isCompact ? 'py-[1px]' : 'py-[5px]'} transition-colors cursor-pointer text-left w-full
       `}
       style={{
-        background: selected ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)') : rowTint,
+        background: selected ? selectedTint : rowTint,
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background = hoverTint;
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.background = selected
-          ? (isAsk ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)')
+          ? selectedTint
           : rowTint;
       }}
     >
@@ -99,8 +108,8 @@ const OrderRow = ({
           ))}
         </div>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right font-bold ${isAsk ? 'text-red-400' : 'text-green-400'}`}>{item.price}</span>
-        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right text-[#e6edf3] pr-0.5`}>{item.amount}</span>
-        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right text-[#8b949e]`}>{item.total}</span>
+        <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right text-[color:var(--cf-text)] pr-0.5`}>{item.amount}</span>
+        <span className={`${isCompact ? 'w-[29%]' : 'w-[26%]'} text-right text-[color:var(--cf-muted)]`}>{item.total}</span>
       </div>
     </button>
   );
@@ -150,9 +159,9 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   }, [asks, bids, displayMode]);
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden select-none">
+    <div className="flex flex-col h-full bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] overflow-hidden select-none">
       {/* Table Header */}
-      <div className={`flex items-center px-3 border-b border-[#30363d] text-[#8b949e] ${isCompact ? 'text-[8.5px] h-[22px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[#0d1117] z-10`}>
+      <div className={`flex items-center px-3 border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)] ${isCompact ? 'text-[8.5px] h-[22px]' : 'text-[12px] h-[36px]'} font-semibold flex-none bg-[color:var(--cf-bg)] z-10`}>
         <span className={`${isCompact ? 'w-[15%]' : 'w-[22%]'}`}>{t('aggregatedOrderbook.table.exchange')}</span>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right`}>{t('aggregatedOrderbook.table.price')}</span>
         <span className={`${isCompact ? 'w-[28%]' : 'w-[26%]'} text-right pr-0.5`}>{t('aggregatedOrderbook.table.amount')}</span>
@@ -166,7 +175,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       >
         {rows.map((r, idx) => {
           if ((r as any)._type === 'gap') {
-             return <div key="gap" className="h-2 bg-[#0d1117]" />
+             return <div key="gap" className="h-2 bg-[color:var(--cf-bg)]" />
           }
           const key = `${r._type}-${r.price}-${idx}`;
           return (

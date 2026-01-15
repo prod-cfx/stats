@@ -286,7 +286,7 @@ export const WhalePositionsTable = () => {
         </div>
       </div>
 
-      <div className="bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden min-h-[400px] relative">
+      <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden min-h-[400px] relative">
         <LoadingState 
           isLoading={loading} 
           error={Boolean(error)} 
@@ -296,7 +296,7 @@ export const WhalePositionsTable = () => {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="text-[#8b949e] border-b border-[#30363d]">
+                <tr className="text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)]">
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.address')}</th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.asset')}</th>
                   <th className="px-6 py-4 text-left cursor-pointer group select-none" onClick={() => handleSort('positionValue')}>
@@ -337,20 +337,20 @@ export const WhalePositionsTable = () => {
                   <th className="px-6 py-4 text-center w-16">{t('whaleTracking.holdings.table.actions')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#30363d]">
+              <tbody className="divide-y divide-[color:var(--cf-border)]">
                 {sortedPositions.map((pos, idx) => (
-                  <tr key={idx} className="hover:bg-[#1f2937] transition-colors group cursor-pointer" onClick={() => handleShowStats(pos.address)}>
+                  <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors group cursor-pointer" onClick={() => handleShowStats(pos.address)}>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-2">
                           <Link 
                             href={`/${lng}/whale-tracking/profile/?address=${pos.address}`}
-                            className="text-white text-body font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
+                            className="text-[color:var(--cf-text-strong)] text-body font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {pos.address.substring(0, 6)}...{pos.address.substring(pos.address.length - 4)}
                           </Link>
-                          <button type="button" className="text-[#8b949e] hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(pos.address); }}>
+                          <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(pos.address); }}>
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -373,15 +373,15 @@ export const WhalePositionsTable = () => {
                           {pos.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-white text-body font-bold">{pos.asset}</span>
-                          <span className="text-[#8b949e] text-caption">{pos.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')} {pos.leverage}</span>
+                          <span className="text-[color:var(--cf-text-strong)] text-body font-bold">{pos.asset}</span>
+                          <span className="text-[color:var(--cf-muted)] text-caption">{pos.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')} {pos.leverage}</span>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-white text-body font-medium">{pos.positionValueUSD}</span>
-                        <span className="text-[#8b949e] text-caption">{pos.positionValueAsset}</span>
+                        <span className="text-[color:var(--cf-text-strong)] text-body font-medium">{pos.positionValueUSD}</span>
+                        <span className="text-[color:var(--cf-muted)] text-caption">{pos.positionValueAsset}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -394,30 +394,30 @@ export const WhalePositionsTable = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-white">
+                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
                       {pos.margin}
                     </td>
-                    <td className="px-6 py-4 text-white">
+                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
                       {pos.entryPrice}
                     </td>
-                    <td className="px-6 py-4 text-white">
+                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
                       {pos.liqPrice}
                     </td>
-                    <td className="px-6 py-4 text-white">
+                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
                       <span className={pos.winRate !== '--' && Number.parseInt(pos.winRate) > 70 ? 'text-[#4ade80]' : ''}>
                         {pos.winRate}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-[#8b949e]">
+                    <td className="px-6 py-4 text-[color:var(--cf-muted)]">
                       {formatRelativeMinutes(pos.createdMinutesAgo)}
                     </td>
-                    <td className="px-6 py-4 text-[#8b949e] text-caption max-w-[150px] truncate">
+                    <td className="px-6 py-4 text-[color:var(--cf-muted)] text-caption max-w-[150px] truncate">
                       {pos.remark}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button 
                         type="button"
-                        className="w-8 h-8 mx-auto flex items-center justify-center bg-[#0d1117] border border-[#30363d] rounded-lg text-[#8b949e] hover:text-white active:scale-95 transition-all"
+                        className="w-8 h-8 mx-auto flex items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] active:scale-95 transition-all"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleShowStats(pos.address);

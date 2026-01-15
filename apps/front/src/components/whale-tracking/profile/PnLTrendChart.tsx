@@ -2,6 +2,7 @@
 
 import * as echarts from 'echarts';
 import React, { useEffect, useRef } from 'react';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface DataPoint {
   ts: string;
@@ -15,6 +16,7 @@ interface PnLTrendChartProps {
 export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  const { theme } = useTheme()
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -27,25 +29,29 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
     const mainColor = isNegative ? '#ef4444' : '#22c55e';
     const areaColorTop = isNegative ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)';
     const areaColorBottom = isNegative ? 'rgba(239, 68, 68, 0)' : 'rgba(34, 197, 94, 0)';
+    const axisColor = theme === 'dark' ? '#30363d' : '#cbd5e1'
+    const labelColor = theme === 'dark' ? '#94a3b8' : '#475569'
+    const tooltipBg = theme === 'dark' ? '#161b22' : '#ffffff'
+    const tooltipText = theme === 'dark' ? '#ffffff' : '#0f172a'
 
     const option: echarts.EChartsOption = {
       backgroundColor: 'transparent',
       tooltip: {
         trigger: 'axis',
-        backgroundColor: '#161b22',
-        borderColor: '#30363d',
+        backgroundColor: tooltipBg,
+        borderColor: axisColor,
         textStyle: {
-          color: '#ffffff',
+          color: tooltipText,
           fontSize: 12,
         },
         axisPointer: {
           type: 'cross',
           lineStyle: {
-            color: '#30363d',
+            color: axisColor,
             type: 'dashed',
           },
           crossStyle: {
-            color: '#30363d',
+            color: axisColor,
             type: 'dashed',
           },
         },
@@ -55,7 +61,7 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
           const date = point.name;
           return `
             <div style="padding: 4px;">
-              <div style="color: #999999; margin-bottom: 4px;">${date}</div>
+              <div style="color: ${labelColor}; margin-bottom: 4px;">${date}</div>
               <div style="font-weight: bold; color: ${val >= 0 ? '#4ade80' : '#f87171'}">
                 $ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
@@ -75,14 +81,14 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
         data: data.map(d => d.ts),
         axisLine: {
           lineStyle: {
-            color: '#30363d',
+            color: axisColor,
           },
         },
         axisTick: {
           show: false,
         },
         axisLabel: {
-          color: '#999999',
+          color: labelColor,
           fontSize: 12,
           interval: (index) => {
             // Show labels for 00:00 or at regular intervals
@@ -102,12 +108,12 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
         position: 'right',
         splitLine: {
           lineStyle: {
-            color: '#30363d',
+            color: axisColor,
             type: 'dashed',
           },
         },
         axisLabel: {
-          color: '#999999',
+          color: labelColor,
           fontSize: 12,
           formatter: (value: number) => {
             if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -146,7 +152,7 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
             silent: true,
             symbol: 'none',
             label: { show: false },
-            data: [{ yAxis: 0, lineStyle: { color: '#30363d', type: 'solid' } }],
+            data: [{ yAxis: 0, lineStyle: { color: axisColor, type: 'solid' } }],
           },
         },
       ],
@@ -165,7 +171,7 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
       chartInstance.current?.dispose();
       chartInstance.current = null;
     };
-  }, [data]);
+  }, [data, theme]);
 
   return <div ref={chartRef} className="w-full h-full" />;
 };

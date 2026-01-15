@@ -103,7 +103,7 @@ export default function TradingPageClient() {
   }, [isAggregated, marketType, selectedSymbol])
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d1117] text-[#c9d1d9] overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] overflow-hidden">
       <div className="flex-none">
         <Navbar />
       </div>

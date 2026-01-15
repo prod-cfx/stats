@@ -163,7 +163,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   }, [marketType, selectedSymbol]);
 
   return (
-    <div className={`${isCompact ? 'h-[48px]' : 'h-[61px]'} bg-[#161b22] border-b border-[#30363d] flex items-center text-[#c9d1d9] w-full`}>
+    <div className={`${isCompact ? 'h-[48px]' : 'h-[61px]'} bg-[color:var(--cf-surface)] border-b border-[color:var(--cf-border)] flex items-center text-[color:var(--cf-text)] w-full`}>
       {/* Left Area: Removed Navigation */}
       
       {/* Center & Right Area: Full width now */}
@@ -172,7 +172,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         <div className="flex items-center gap-2 md:gap-4 flex-none relative" ref={menuRef}>
           <button
             type="button"
-            className={`flex items-center gap-2 cursor-pointer group hover:bg-[#1f2937] rounded transition-colors ${isCompact ? 'p-1' : 'p-1'}`}
+            className={`flex items-center gap-2 cursor-pointer group hover:bg-[color:var(--cf-surface-hover)] rounded transition-colors ${isCompact ? 'p-1' : 'p-1'}`}
             onClick={() => setIsSymbolMenuOpen(!isSymbolMenuOpen)}
           >
             <div className={`${isCompact ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'} bg-orange-500 rounded-full flex items-center justify-center font-bold text-black`}>
@@ -185,25 +185,25 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                   type: marketType === 'futures' ? t('trade.perpTag') : t('trade.market_type_spot'),
                 })}
               </span>
-              <ChevronDownIcon className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} text-[#8b949e] group-hover:text-[#c9d1d9] transition-transform ${isSymbolMenuOpen ? 'rotate-180' : ''}`} />
+              <ChevronDownIcon className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text)] transition-transform ${isSymbolMenuOpen ? 'rotate-180' : ''}`} />
             </div>
           </button>
 
           {/* Symbol Selector Dropdown */}
           {isSymbolMenuOpen && (
-            <div className={`absolute top-full left-0 mt-2 w-[90vw] md:w-[480px] max-w-[480px] bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}>
+            <div className={`absolute top-full left-0 mt-2 w-[90vw] md:w-[480px] max-w-[480px] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}>
               {/* Header / Tabs */}
-              <div className="flex items-center border-b border-[#30363d]">
+              <div className="flex items-center border-b border-[color:var(--cf-border)]">
                 <button
                   type="button"
-                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'futures' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
+                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'futures' ? 'text-[color:var(--cf-text)] bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                   onClick={() => setMarketType('futures')}
                 >
                   {t('trade.market_type_futures')}
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'spot' ? 'text-[#c9d1d9] bg-[#1f2937]' : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#1f2937]/50'}`}
+                  className={`flex-1 ${isCompact ? 'py-2 text-xs' : 'py-3 text-sm'} font-medium transition-colors ${marketType === 'spot' ? 'text-[color:var(--cf-text)] bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                   onClick={() => setMarketType('spot')}
                 >
                   {t('trade.market_type_spot')}
@@ -211,21 +211,21 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
               </div>
 
               {/* Search Bar */}
-              <div className={`${isCompact ? 'p-2' : 'p-3'} border-b border-[#30363d]`}>
+              <div className={`${isCompact ? 'p-2' : 'p-3'} border-b border-[color:var(--cf-border)]`}>
                 <div className="relative">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8b949e]" />
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--cf-muted)]" />
                   <input 
                     type="text" 
                     placeholder={t('chart.modal.search')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className={`w-full bg-[#0d1117] border border-[#30363d] rounded ${isCompact ? 'py-1 text-xs' : 'py-1.5 text-sm'} pl-9 pr-3 text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]`}
+                    className={`w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded ${isCompact ? 'py-1 text-xs' : 'py-1.5 text-sm'} pl-9 pr-3 text-[color:var(--cf-text)] placeholder-[color:var(--cf-muted)] focus:outline-none focus:border-[#58a6ff]`}
                   />
                 </div>
               </div>
 
               {/* List Header */}
-              <div className={`grid grid-cols-4 ${isCompact ? 'px-3 py-1.5' : 'px-4 py-2'} text-xs text-[#8b949e] bg-[#1c2128]`}>
+              <div className={`grid grid-cols-4 ${isCompact ? 'px-3 py-1.5' : 'px-4 py-2'} text-xs text-[color:var(--cf-muted)] bg-[color:var(--cf-surface-2)]`}>
                 <div className="text-left col-span-1">{t('trade.column_symbol')}</div>
                 <div className="text-right col-span-1">{t('trade.column_price')}</div>
                 <div className="text-right col-span-1">{t('trade.column_change')}</div>
@@ -240,8 +240,8 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                   <button
                     key={`${marketType}-${item.chartSymbol}`}
                     type="button"
-                    className={`w-full text-left grid grid-cols-4 ${isCompact ? 'px-3 py-2' : 'px-4 py-2.5'} text-xs cursor-pointer transition-colors border-b border-[#30363d]/50 last:border-0 ${
-                      isSelected ? 'bg-[#1f2937]' : 'hover:bg-[#1f2937]'
+                    className={`w-full text-left grid grid-cols-4 ${isCompact ? 'px-3 py-2' : 'px-4 py-2.5'} text-xs cursor-pointer transition-colors border-b border-[color:var(--cf-border)]/50 last:border-0 ${
+                      isSelected ? 'bg-[color:var(--cf-surface-2)]' : 'hover:bg-[color:var(--cf-surface-hover)]'
                     }`}
                     onClick={() => {
                       setSelectedSymbol(item.chartSymbol);
@@ -249,20 +249,20 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
                     }}
                   >
                     <div className="flex items-center gap-2 text-left col-span-1 min-w-0">
-                      <span className={`font-bold truncate ${isSelected ? 'text-white' : 'text-[#c9d1d9]'}`}>{item.displaySymbol}</span>
+                      <span className={`font-bold truncate ${isSelected ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)]'}`}>{item.displaySymbol}</span>
                       {marketType === 'futures' && !isCompact && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded border border-[#30363d] bg-[#0d1117] text-[10px] text-[#8b949e] whitespace-nowrap">
+                        <span className="ml-1 px-1.5 py-0.5 rounded border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[10px] text-[color:var(--cf-muted)] whitespace-nowrap">
                           {t('trade.perpTag')}
                         </span>
                       )}
                     </div>
-                    <div className="text-right text-[#c9d1d9] font-mono col-span-1">
+                    <div className="text-right text-[color:var(--cf-text)] font-mono col-span-1">
                       {priceFormatter.format(item.price)}
                     </div>
                     <div className={`text-right font-medium col-span-1 ${item.changePct >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
                       {formatPct(item.changePct)}
                     </div>
-                    <div className="text-right text-[#c9d1d9] col-span-1">
+                    <div className="text-right text-[color:var(--cf-text)] col-span-1">
                       {compactFormatter.format(item.volume)}
                     </div>
                   </button>
@@ -284,35 +284,35 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         {/* Market Stats - Flexible list with reduced gap for small screens */}
         <div className={`flex-1 flex items-center gap-3 md:gap-6 ${isCompact ? 'text-[10px]' : 'text-[11px]'} overflow-x-auto no-scrollbar`}>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.index_price')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd(indexPrice)}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.index_price')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{formatUsd(indexPrice)}</span>
           </div>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.mark_price')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd(markPrice)}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.mark_price')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{formatUsd(markPrice)}</span>
           </div>
           <div className="flex flex-col min-w-fit">
             <div className="flex items-center gap-1">
-              <span className="text-[#8b949e] whitespace-nowrap">{t('trade.funding_rate')}</span>
-              <InfoIcon className="w-3 h-3 text-[#8b949e]" />
+              <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.funding_rate')}</span>
+              <InfoIcon className="w-3 h-3 text-[color:var(--cf-muted)]" />
             </div>
             <span className="text-orange-400 whitespace-nowrap">{formatPct(fundingRatePct)}</span>
           </div>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.24h_low')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd2(low24h)}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.24h_low')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{formatUsd2(low24h)}</span>
           </div>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.24h_high')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{formatUsd(high24h)}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.24h_high')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{formatUsd(high24h)}</span>
           </div>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.open_interest')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(openInterest)} {selectedBase}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.open_interest')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{compactFormatter.format(openInterest)} {selectedBase}</span>
           </div>
           <div className="flex flex-col min-w-fit">
-            <span className="text-[#8b949e] whitespace-nowrap">{t('trade.24h_volume')}</span>
-            <span className="whitespace-nowrap text-[#c9d1d9]">{compactFormatter.format(volume24h)} {selectedBase}</span>
+            <span className="text-[color:var(--cf-muted)] whitespace-nowrap">{t('trade.24h_volume')}</span>
+            <span className="whitespace-nowrap text-[color:var(--cf-text)]">{compactFormatter.format(volume24h)} {selectedBase}</span>
           </div>
         </div>
       </div>

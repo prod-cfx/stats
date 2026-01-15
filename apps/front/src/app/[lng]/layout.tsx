@@ -62,6 +62,21 @@ export default async function LngLayout({
           // eslint-disable-next-line react-dom/no-dangerously-set-innerhtml
           dangerouslySetInnerHTML={{
             __html: `
+              // Theme init: apply before paint to avoid flicker
+              ;(() => {
+                try {
+                  const key = 'cf-theme'
+                  const stored = localStorage.getItem(key)
+                  const preferred =
+                    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                      ? 'dark'
+                      : 'light'
+                  const theme = stored === 'light' || stored === 'dark' ? stored : preferred
+                  document.documentElement.dataset.theme = theme
+                  document.documentElement.style.colorScheme = theme
+                } catch {}
+              })()
+
               // 拦截并忽略由插件引起的 ethereum 属性重定义错误
               window.addEventListener('error', (event) => {
                 if (event.message && (
@@ -75,14 +90,14 @@ export default async function LngLayout({
           }}
         />
         <noscript>
-          <div style={{padding: '20px', textAlign: 'center', backgroundColor: '#161b22', color: '#c9d1d9'}}>
+          <div style={{padding: '20px', textAlign: 'center', backgroundColor: 'var(--cf-surface)', color: 'var(--cf-text)'}}>
             {lng === 'zh' 
               ? '本应用需要启用 JavaScript 才能正常使用'
               : 'This application requires JavaScript to be enabled'}
           </div>
         </noscript>
       </head>
-      <body className="min-h-screen bg-[#0d1117] text-white antialiased selection:bg-primary/30" suppressHydrationWarning>
+      <body className="min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased selection:bg-primary/30" suppressHydrationWarning>
         <AppProviders lng={lng}>
           {children}
         </AppProviders>

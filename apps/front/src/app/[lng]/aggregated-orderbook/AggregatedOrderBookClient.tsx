@@ -13,7 +13,7 @@ export function AggregatedOrderBookClient() {
 
   return (
     <div className="flex flex-col w-full h-full p-4 md:p-8">
-      <div className="flex border-b border-[#30363d] w-full md:w-fit overflow-x-auto no-scrollbar">
+      <div className="flex border-b border-[color:var(--cf-border)] w-full md:w-fit overflow-x-auto no-scrollbar">
         {[
           { id: 'aggregated-orderbook', name: t('aggregatedOrderbook.tabs.orderbook') },
           { id: 'aggregated-oi', name: t('aggregatedOrderbook.tabs.openInterest') },
@@ -24,8 +24,8 @@ export function AggregatedOrderBookClient() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 md:flex-none whitespace-nowrap px-4 md:px-8 py-3 text-sm font-semibold transition-all relative ${activeTab === tab.id
-              ? 'text-white'
-              : 'text-[#8b949e] border-transparent hover:text-[#e6edf3]'}`}
+              ? 'text-[color:var(--cf-text-strong)]'
+              : 'text-[color:var(--cf-muted)] border-transparent hover:text-[color:var(--cf-text-strong)]'}`}
           >
             {tab.name}
             {activeTab === tab.id && (
@@ -46,8 +46,8 @@ export function AggregatedOrderBookClient() {
           ) : activeTab === 'aggregated-volume' ? (
             <AggregatedVolume />
           ) : (
-            <div className="flex-1 flex items-center justify-center bg-[#161b22] border border-[#30363d] rounded-xl min-h-[600px]">
-              <div className="flex flex-col items-center gap-4 text-[#8b949e]">
+            <div className="flex-1 flex items-center justify-center bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl min-h-[600px]">
+              <div className="flex flex-col items-center gap-4 text-[color:var(--cf-muted)]">
                 <LayoutGrid className="w-12 h-12 opacity-20" />
                 <p>{t('common.featureInProgress')}</p>
               </div>

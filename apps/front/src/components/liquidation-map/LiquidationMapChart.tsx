@@ -3,6 +3,7 @@
 import * as echarts from 'echarts';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface LiquidationMapChartProps {
   data: {
@@ -150,26 +151,35 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       overlayWidth = 260,
       overlayOpacity = 0.85,
       selectedPrice = null,
-      className,
-    },
-    ref,
-  ) => {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstanceRef = useRef<echarts.EChartsType | null>(null);
-  const { t } = useTranslation();
+    className,
+  },
+  ref,
+) => {
+const chartRef = useRef<HTMLDivElement>(null);
+const chartInstanceRef = useRef<echarts.EChartsType | null>(null);
+const { t } = useTranslation();
+const { theme } = useTheme();
 
-  const colors = useMemo(
-    () => ({
-      bybit: '#36b8c9',
-      okx: '#f7d05e',
-      binance: '#f08024',
-      dex: '#bf5af2',
-      cumLongLine: '#ff4d4d',
-      cumShortLine: '#00c076',
-      currentPrice: '#ff4d4d',
-    }),
-    [],
-  );
+const colors = useMemo(
+  () => ({
+    bybit: '#36b8c9',
+    okx: '#f7d05e',
+    binance: '#f08024',
+    dex: '#bf5af2',
+    cumLongLine: '#ff4d4d',
+    cumShortLine: '#00c076',
+    currentPrice: '#ff4d4d',
+    bg: theme === 'dark' ? '#0d1117' : '#f8fafc',
+    tooltipBg: theme === 'dark' ? 'rgba(22, 27, 34, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    tooltipBorder: theme === 'dark' ? '#30363d' : '#e2e8f0',
+    text: theme === 'dark' ? '#e6edf3' : '#0f172a',
+    muted: theme === 'dark' ? '#8b949e' : '#64748b',
+    border: theme === 'dark' ? '#30363d' : '#e2e8f0',
+    surface: theme === 'dark' ? '#161b22' : '#ffffff',
+    splitLine: theme === 'dark' ? '#1c2128' : '#e2e8f0',
+  }),
+  [theme],
+);
 
   // Init once; update many times (critical constraint)
   useEffect(() => {
@@ -230,15 +240,15 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
     const legendCumShort = t('liquidationMap.legend.cumShort');
 
     return {
-      backgroundColor: '#0d1117',
+      backgroundColor: 'transparent', // Let container background show
       tooltip: {
         trigger: 'axis',
         axisPointer: {
           type: 'none',
         },
-        backgroundColor: 'rgba(22, 27, 34, 0.95)',
-        borderColor: '#30363d',
-        textStyle: { color: '#e6edf3', fontSize: 12 },
+        backgroundColor: colors.tooltipBg,
+        borderColor: colors.tooltipBorder,
+        textStyle: { color: colors.text, fontSize: 12 },
         formatter: (params: any) => {
           let res = `<div style="font-weight: bold; margin-bottom: 4px;">${t(
             'liquidationMap.tooltip.price',
@@ -270,7 +280,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       legend: {
         data: [legendBybit, legendOkx, legendBinance, legendDex, legendCumLong, legendCumShort],
         top: 20,
-        textStyle: { color: '#8b949e', fontSize: 11 },
+        textStyle: { color: colors.muted, fontSize: 11 },
         icon: 'rect',
         itemWidth: 12,
         itemHeight: 8,
@@ -296,19 +306,19 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
           bottom: 10,
           height: 20,
           borderColor: 'transparent',
-          backgroundColor: '#161b22',
+          backgroundColor: colors.surface,
           fillerColor: 'rgba(59, 130, 246, 0.1)',
           handleIcon:
             'path://M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z',
           handleSize: '80%',
           handleStyle: {
-            color: '#30363d',
+            color: colors.border,
             shadowBlur: 3,
             shadowColor: 'rgba(0, 0, 0, 0.6)',
             shadowOffsetX: 2,
             shadowOffsetY: 2,
           },
-          textStyle: { color: '#8b949e' },
+          textStyle: { color: colors.muted },
           selectedDataBackground: {
             lineStyle: { color: '#3b82f6' },
             areaStyle: { color: '#3b82f6' },
@@ -319,17 +329,17 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       xAxis: {
         type: 'category',
         data: data.labels,
-        axisLine: { lineStyle: { color: '#30363d' } },
-        axisLabel: { color: '#8b949e', fontSize: 10, interval: 10 },
+        axisLine: { lineStyle: { color: colors.border } },
+        axisLabel: { color: colors.muted, fontSize: 10, interval: 10 },
         splitLine: { show: false },
       },
       yAxis: [
         {
           type: 'value',
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: '#1c2128', type: 'dashed' } },
+          splitLine: { lineStyle: { color: colors.splitLine, type: 'dashed' } },
           axisLabel: {
-            color: '#8b949e',
+            color: colors.muted,
             fontSize: 10,
             formatter: (value: number) => `$${value}M`,
           },
@@ -339,7 +349,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
           axisLine: { show: false },
           splitLine: { show: false },
           axisLabel: {
-            color: '#8b949e',
+            color: colors.muted,
             fontSize: 10,
             formatter: (value: number) => `$${value}B`,
           },
@@ -403,7 +413,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
               formatter: `{label|${t('liquidationMap.currentPrice')}: }{value|${currentPrice.toLocaleString()}}`,
               rich: {
                 label: {
-                  color: '#e6edf3',
+                  color: colors.text,
                   fontSize: 11,
                 },
                 value: {
@@ -412,8 +422,8 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
                   fontWeight: 'bold',
                 },
               },
-              backgroundColor: '#161b22',
-              borderColor: '#30363d',
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
               borderWidth: 1,
               borderRadius: 4,
               padding: [4, 8],
@@ -807,7 +817,7 @@ export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, Liquida
       className={
         className ??
         (mode === 'full'
-          ? 'relative w-full h-[600px] bg-[#0d1117] border border-[#30363d] rounded-lg p-2'
+          ? 'relative w-full h-[600px] bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-2'
           : 'relative w-full h-full')
       }
     >

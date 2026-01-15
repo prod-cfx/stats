@@ -19,32 +19,32 @@ const REFRESH_INTERVAL = 3000
 
 const BothIcon = ({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M2 4H14" stroke={active ? 'white' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
-    <path d="M2 7H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 10H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 13H14" stroke={active ? 'white' : '#22c55e'} strokeWidth="2" strokeLinecap="round" />
-    <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'white' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'white' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
+    <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 10H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 13H14" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="2" strokeLinecap="round" />
+    <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const BidsIcon = ({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M2 4H14" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 7H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 10H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 13H14" stroke={active ? 'white' : '#22c55e'} strokeWidth="2" strokeLinecap="round" />
-    <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'white' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 10H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 13H14" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="2" strokeLinecap="round" />
+    <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const AsksIcon = ({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M2 4H14" stroke={active ? 'white' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
-    <path d="M2 7H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 10H10" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M2 13H14" stroke={active ? 'white' : '#8b949e'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-    <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'white' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
+    <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 10H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M2 13H14" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
@@ -239,20 +239,20 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   }, [orderbook, selectedExchanges])
 
   return (
-    <div className={`bg-[#161b22] border border-[#30363d] rounded-xl flex flex-col ${isCompact ? '' : 'shadow-2xl'} min-h-[750px] overflow-hidden h-full`}>
+    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl flex flex-col ${isCompact ? '' : 'shadow-2xl'} min-h-[750px] overflow-hidden h-full`}>
       <LoadingState isLoading={loading} error={!!error} onRetry={fetchData}>
         {orderbook
           ? (
               <>
-                <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[#30363d] bg-[#0d1117]/30 flex-none`}>
+                <div className={`flex items-center justify-between ${isCompact ? 'p-2' : 'p-4'} border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70 flex-none`}>
                   <div className={`flex items-center ${isCompact ? 'gap-2' : 'gap-6'}`}>
-                    <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5">
+                    <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-0.5">
                       <button
                         type="button"
                         onClick={() => setMarketType('futures')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'futures'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                          : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
+                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
                       >
                         {t('aggregatedOrderbook.market.futures')}
                       </button>
@@ -261,18 +261,18 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         onClick={() => setMarketType('spot')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'spot'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                          : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
+                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
                       >
                         {t('aggregatedOrderbook.market.spot')}
                       </button>
                     </div>
-                    <div className="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5">
+                    <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-0.5">
                       <button
                         type="button"
                         onClick={() => setSymbol('BTC')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-4 py-1.5 text-sm'} rounded-md font-medium transition-all ${symbol === 'BTC'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md'
-                          : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
+                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
                       >
                         BTC
                       </button>
@@ -281,19 +281,19 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         onClick={() => setSymbol('ETH')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-4 py-1.5 text-sm'} rounded-md font-medium transition-all ${symbol === 'ETH'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-md'
-                          : 'text-[#8b949e] hover:text-[#c9d1d9]'}`}
+                          : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
                       >
                         ETH
                       </button>
                     </div>
                   </div>
                   {!isCompact && (
-                    <div className="flex items-center gap-4 text-xs text-[#8b949e]">
+                    <div className="flex items-center gap-4 text-xs text-[color:var(--cf-muted)]">
                       <span>
                         {t('aggregatedOrderbook.stats.volume24h')}
                         :
                         {' '}
-                        <span className="text-[#e6edf3]">
+                        <span className="text-[color:var(--cf-text)]">
                           {numberCompact.format(68200)}
                           {' '}
                           BTC
@@ -303,27 +303,27 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         {t('aggregatedOrderbook.stats.turnover24h')}
                         :
                         {' '}
-                        <span className="text-[#e6edf3]">{currencyCompact.format(71_590_000)}</span>
+                        <span className="text-[color:var(--cf-text)]">{currencyCompact.format(71_590_000)}</span>
                       </span>
                     </div>
                   )}
                 </div>
 
                 <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden overflow-y-auto md:overflow-y-hidden">
-                  <div className={`w-full md:${isCompact ? 'w-[58%]' : 'w-1/2'} flex flex-col border-b md:border-b-0 md:border-r border-[#30363d] min-h-[500px] md:min-h-0`}>
-                    <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
-                      <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[11px]' : 'text-sm md:text-lg'}`}>
+                  <div className={`w-full md:${isCompact ? 'w-[58%]' : 'w-1/2'} flex flex-col border-b md:border-b-0 md:border-r border-[color:var(--cf-border)] min-h-[500px] md:min-h-0`}>
+                    <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[color:var(--cf-border)] flex items-center justify-between bg-[color:var(--cf-surface-2)]/50 flex-none`}>
+                      <div className={`font-bold text-[color:var(--cf-text-strong)] tracking-tight ${isCompact ? 'text-[11px]' : 'text-sm md:text-lg'}`}>
                         {t('aggregatedOrderbook.sections.realtimeOrderbook', {
                           symbol: `${symbol}/USD`,
                           market: marketType === 'futures' ? t('aggregatedOrderbook.market.futures') : t('aggregatedOrderbook.market.spot'),
                         })}
                       </div>
                       <div className={`flex items-center ${isCompact ? 'gap-1' : 'gap-2 md:gap-4'}`}>
-                        <div className="flex bg-[#0d1117] border border-[#30363d] rounded-md overflow-hidden p-0.5 scale-[0.85] origin-right">
+                        <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-md overflow-hidden p-0.5 scale-[0.85] origin-right">
                           <button
                             type="button"
                             onClick={() => setDisplayMode('both')}
-                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'both' ? 'text-white' : 'hover:bg-white/5'}`}
+                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'both' ? 'text-white' : 'hover:bg-[color:var(--cf-surface-hover)]'}`}
                           >
                             {displayMode === 'both' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                             <div className="relative z-10">
@@ -333,7 +333,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setDisplayMode('bids')}
-                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'bids' ? 'text-white' : 'hover:bg-white/5'}`}
+                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'bids' ? 'text-white' : 'hover:bg-[color:var(--cf-surface-hover)]'}`}
                           >
                             {displayMode === 'bids' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                             <div className="relative z-10">
@@ -343,7 +343,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                           <button
                             type="button"
                             onClick={() => setDisplayMode('asks')}
-                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'asks' ? 'text-white' : 'hover:bg-white/5'}`}
+                            className={`${isCompact ? 'p-0.5' : 'p-2'} transition-all rounded relative ${displayMode === 'asks' ? 'text-white' : 'hover:bg-[color:var(--cf-surface-hover)]'}`}
                           >
                             {displayMode === 'asks' && <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary rounded" />}
                             <div className="relative z-10">
@@ -367,30 +367,30 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                             className={`${isCompact ? 'p-0.5' : 'p-2'} rounded-md transition-all active:scale-95 ${isSettingsOpen
                               ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
-                              : 'text-[#8b949e] hover:text-white hover:bg-[#30363d]'}`}
+                              : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]'}`}
                           >
                             <Settings className={isCompact ? 'w-3 h-3' : 'w-5 h-5'} />
                           </button>
 
                           {isSettingsOpen && (
-                            <div className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-32' : 'w-48'} bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-1.5`}>
-                              <p className="text-[9px] font-bold text-[#8b949e] uppercase tracking-wider px-2 py-1 mb-0.5">{t('aggregatedOrderbook.settings.exchangeSources')}</p>
+                            <div className={`absolute top-full right-0 mt-2 ${isCompact ? 'w-32' : 'w-48'} bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-1.5`}>
+                              <p className="text-[9px] font-bold text-[color:var(--cf-muted)] uppercase tracking-wider px-2 py-1 mb-0.5">{t('aggregatedOrderbook.settings.exchangeSources')}</p>
                               {(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES).map(ex => (
                                 <button
                                   key={ex}
                                   type="button"
                                   onClick={() => toggleExchange(ex)}
-                                  className="w-full flex items-center gap-2 px-2 py-1 rounded-md transition-colors hover:bg-white/5 group text-left"
+                                  className="w-full flex items-center gap-2 px-2 py-1 rounded-md transition-colors hover:bg-[color:var(--cf-surface-hover)] group text-left"
                                 >
                                   <div
                                     className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${selectedExchanges.includes(ex)
                                       ? 'bg-primary border-primary'
-                                      : 'border-[#30363d] group-hover:border-[#8b949e]'}`}
+                                      : 'border-[color:var(--cf-border)] group-hover:border-[color:var(--cf-muted)]'}`}
                                   >
                                     {selectedExchanges.includes(ex) && <Check className="w-2 h-2 text-white" />}
                                   </div>
                                   <span
-                                    className={`${isCompact ? 'text-[9px]' : 'text-sm'} capitalize ${selectedExchanges.includes(ex) ? 'text-white font-medium' : 'text-[#8b949e]'}`}
+                                    className={`${isCompact ? 'text-[9px]' : 'text-sm'} capitalize ${selectedExchanges.includes(ex) ? 'text-[color:var(--cf-text-strong)] font-medium' : 'text-[color:var(--cf-muted)]'}`}
                                   >
                                     {ex}
                                   </span>
@@ -414,8 +414,8 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                   </div>
 
                   <div className={`w-full md:${isCompact ? 'w-[42%]' : 'w-1/2'} flex flex-col min-h-[400px] md:min-h-0`}>
-                    <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[#30363d] flex items-center justify-between bg-[#0d1117]/20 flex-none`}>
-                      <div className={`font-bold text-white tracking-tight ${isCompact ? 'text-[11px]' : 'text-sm md:text-lg'}`}>{t('aggregatedOrderbook.sections.orderDepth')}</div>
+                    <div className={`${isCompact ? 'p-1.5' : 'p-4'} border-b border-[color:var(--cf-border)] flex items-center justify-between bg-[color:var(--cf-surface-2)]/50 flex-none`}>
+                      <div className={`font-bold text-[color:var(--cf-text-strong)] tracking-tight ${isCompact ? 'text-[11px]' : 'text-sm md:text-lg'}`}>{t('aggregatedOrderbook.sections.orderDepth')}</div>
                       {!isCompact && (
                         <div className="flex items-center gap-2 text-yellow-500 cursor-help hover:opacity-80 transition-all">
                           <Info className="w-4 h-4 hidden sm:block" />
@@ -428,7 +428,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                         <DepthChart bids={depthChartData.bids} asks={depthChartData.asks} />
                       </div>
                       {!isCompact && (
-                        <div className="flex items-center justify-between mt-4 text-xs text-[#8b949e] flex-none">
+                        <div className="flex items-center justify-between mt-4 text-xs text-[color:var(--cf-muted)] flex-none">
                           <div className="flex items-center gap-8">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 bg-green-500/50 rounded-sm" />

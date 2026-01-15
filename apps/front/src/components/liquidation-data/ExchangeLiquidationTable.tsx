@@ -246,13 +246,13 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
         </div>
       </div>
 
-      <div className={`bg-[#161b22] border border-[#30363d] rounded-xl overflow-hidden flex-1 min-h-0 relative ${isCompact ? '' : 'shadow-lg'} animate-in fade-in duration-500 flex flex-col`}>
+      <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden flex-1 min-h-0 relative ${isCompact ? '' : 'shadow-lg'} animate-in fade-in duration-500 flex flex-col`}>
         <LoadingState isLoading={loading} error={error} onRetry={reload} className="h-full">
           <div className="overflow-x-auto h-full cf-scrollbar">
             <table className="w-full border-collapse min-w-[600px] md:min-w-[800px]">
               <thead>
-                <tr className={`text-[#8b949e] ${headerTextSize} font-bold border-b border-[#30363d] bg-[#0d1117]/50`}>
-                  <th className={`${cellPadding} text-left sticky left-0 z-10 bg-[#0d1117]/95 border-r border-[#30363d]`}>{t('liquidationData.table.columns.exchange')}</th>
+                <tr className={`text-[color:var(--cf-muted)] ${headerTextSize} font-bold border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)]/70`}>
+                  <th className={`${cellPadding} text-left sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)]`}>{t('liquidationData.table.columns.exchange')}</th>
                   <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.total')}</th>
                   <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.long')}</th>
                   <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.short')}</th>
@@ -260,44 +260,44 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
                   <th className={`${cellPadding} text-right`}>{t('liquidationData.table.columns.longShort')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#30363d]">
+              <tbody className="divide-y divide-[color:var(--cf-border)]">
                 {tableData.map((row, index) => (
                   <tr
                     key={index}
-                    className={`transition-colors hover:bg-[#1f2937]/50 cursor-pointer ${
-                      row.isTotal ? 'bg-[#21262d]/50' : ''
+                    className={`transition-colors hover:bg-[color:var(--cf-surface-hover)] cursor-pointer ${
+                      row.isTotal ? 'bg-[color:var(--cf-surface-2)]/70' : ''
                     }`}
                     onClick={() => setSelectedExchange(tableDataRaw?.[index] ?? null)}
                   >
-                    <td className={`${cellPadding} sticky left-0 z-10 bg-[#161b22] border-r border-[#30363d] group-hover:bg-[#1f2937]/50`}>
+                    <td className={`${cellPadding} sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]`}>
                       <div className="flex items-center justify-start gap-2">
                         {!row.isTotal && (
                           <div className="flex-shrink-0">
                             <ExchangeLogo name={row.exchange} logoUrl={row.logo} size={isCompact ? 14 : 18} />
                           </div>
                         )}
-                        <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'} tracking-tight truncate`}>
+                        <span className={`${textSize} ${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)]'} tracking-tight truncate`}>
                           {row.exchange}
                         </span>
                       </div>
                     </td>
                     <td className={`${cellPadding} text-right`}>
-                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#e6edf3]'} tracking-tight`}>
+                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)]'} tracking-tight`}>
                         {row.amount}
                       </span>
                     </td>
                     <td className={`${cellPadding} text-right font-mono`}>
-                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#4ade80]'} tracking-tight`}>
+                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[#4ade80]'} tracking-tight`}>
                         {row.long}
                       </span>
                     </td>
                     <td className={`${cellPadding} text-right font-mono`}>
-                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#f87171]'} tracking-tight`}>
+                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[#f87171]'} tracking-tight`}>
                         {row.short}
                       </span>
                     </td>
                     <td className={`${cellPadding} text-right hidden sm:table-cell`}>
-                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-white' : 'text-[#8b949e]'} tracking-tight`}>
+                      <span className={`${textSize} ${row.isTotal ? 'font-bold text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-muted)]'} tracking-tight`}>
                         {row.ratio}
                       </span>
                     </td>
@@ -322,31 +322,31 @@ export const ExchangeLiquidationTable = ({ showTitle = true, variant = 'default'
       >
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
-              <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
-              <p className="text-xl font-bold text-white">
+            <div className="bg-[color:var(--cf-bg)] p-4 rounded-xl border border-[color:var(--cf-border)]">
+              <p className="text-xs text-[color:var(--cf-muted)] mb-1">{t('liquidationData.modal.primaryAsset')}</p>
+              <p className="text-xl font-bold text-[color:var(--cf-text-strong)]">
                 {selectedExchangeDisplay?.coin && selectedExchangeDisplay.coin !== 'ALL'
                   ? selectedExchangeDisplay.coin
                   : t('liquidationData.modal.multiAsset')}
               </p>
             </div>
-            <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
-              <p className="text-xs text-[#8b949e] mb-1">{t('liquidationData.modal.maxSingle')}</p>
+            <div className="bg-[color:var(--cf-bg)] p-4 rounded-xl border border-[color:var(--cf-border)]">
+              <p className="text-xs text-[color:var(--cf-muted)] mb-1">{t('liquidationData.modal.maxSingle')}</p>
               <p className="text-xl font-bold text-orange-400">{currencyFormatter.format(1.245e6)}</p>
             </div>
           </div>
           <div className="space-y-3">
-            <p className="text-sm font-bold text-[#e6edf3]">{t('liquidationData.modal.recent')}</p>
+            <p className="text-sm font-bold text-[color:var(--cf-text)]">{t('liquidationData.modal.recent')}</p>
             {[1, 2, 3].map(i => (
               <div
                 key={i}
-                className="flex justify-between items-center p-3 bg-[#0d1117]/50 rounded-lg text-sm border border-[#30363d]/30"
+                className="flex justify-between items-center p-3 bg-[color:var(--cf-surface-2)]/50 rounded-lg text-sm border border-[color:var(--cf-border)]/40"
               >
-                <span className="text-[#e6edf3]">0x{Math.random().toString(16).substring(2, 8)}...</span>
+                <span className="text-[color:var(--cf-text)]">0x{Math.random().toString(16).substring(2, 8)}...</span>
                 <span className="text-red-400">
                   -{currencyFormatter.format(4.2e5)} ({t('liquidationData.summary.short')})
                 </span>
-                <span className="text-[#8b949e] text-xs">
+                <span className="text-[color:var(--cf-muted)] text-xs">
                   {t('liquidationData.modal.minutesAgo', { minutes: 2 })}
                 </span>
               </div>

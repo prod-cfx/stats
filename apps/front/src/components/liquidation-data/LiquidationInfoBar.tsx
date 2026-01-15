@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next';
 export const LiquidationInfoBar = () => {
   const { t } = useTranslation();
   return (
-    <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 flex items-center">
-      <p className="text-[#8b949e] text-sm">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 flex items-center">
+      <p className="text-[color:var(--cf-muted)] text-sm">
         {t('liquidationData.infoBar.text', {
           count: '80,090',
           total: '$2.22B',

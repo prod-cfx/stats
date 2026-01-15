@@ -62,14 +62,14 @@ export function LanguageSwitcher() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#30363d] text-[#c9d1d9] transition-colors hover:bg-[#21262d] hover:text-[#e6edf3] focus:outline-none focus:ring-2 focus:ring-primary/50"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] focus:outline-none focus:ring-2 focus:ring-primary/50"
         aria-label="Switch Language"
       >
         <Globe className="h-4 w-4" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-32 origin-top-right overflow-hidden rounded-md border border-[#30363d] bg-[#161b22] shadow-xl ring-1 ring-black ring-opacity-5 focus:outline-none z-50 animate-in fade-in zoom-in duration-200">
+        <div className="absolute right-0 top-full mt-2 w-32 origin-top-right overflow-hidden rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl ring-1 ring-black/5 focus:outline-none z-50 animate-in fade-in zoom-in duration-200">
           <div className="py-1">
             {languages.map((lang) => (
               <button
@@ -79,7 +79,7 @@ export function LanguageSwitcher() {
                 className={`flex w-full items-center justify-between px-4 py-2 text-sm text-left ${
                   i18n.language === lang.code
                     ? 'bg-gradient-to-r from-primary/10 to-secondary/10 text-primary'
-                    : 'text-[#c9d1d9] hover:bg-[#21262d] hover:text-white'
+                    : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
                 }`}
               >
                 <span>{lang.label}</span>
