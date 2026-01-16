@@ -190,7 +190,11 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         >
           <Plus className="w-4 h-4 inline mr-1" />{t('dashboard.addWidget')}
         </button>
-        <button type="button" onClick={handleResetLayout} className="border border-[#30363d] text-[#8b949e] px-4 py-2 rounded text-sm hover:text-white transition-colors">
+        <button
+          type="button"
+          onClick={handleResetLayout}
+          className="border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] px-4 py-2 rounded text-sm hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] transition-colors"
+        >
           <LayoutIcon className="w-4 h-4 inline mr-1" />{t('dashboard.resetLayout')}
         </button>
       </div>
@@ -216,7 +220,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
             return (
               <div
                 key={l.i}
-                className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden shadow-sm relative group transition-all duration-300"
+                className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden shadow-sm relative group transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
                 <WidgetRenderer 

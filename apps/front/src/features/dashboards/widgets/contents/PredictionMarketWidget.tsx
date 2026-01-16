@@ -175,24 +175,24 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
   return (
     <div className="h-full flex flex-col gap-3">
       <div className="flex items-center justify-end flex-none">
-        <div className={`text-xs text-white/50`}>{items.length} markets</div>
+        <div className={`text-xs text-[color:var(--cf-muted)]`}>{items.length} markets</div>
       </div>
 
       <div className={`flex-1 overflow-y-auto min-h-0 grid grid-cols-1 ${gapSize} cf-scrollbar pr-1`}>
         {items.map((p) => (
           <div
             key={p.id}
-            className={`bg-[#161b22] border border-[#30363d] rounded-xl ${cardPadding} flex flex-col relative group hover:border-[#8b949e]/50 transition-colors`}
+            className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl ${cardPadding} flex flex-col relative group hover:border-primary/50 transition-colors`}
           >
             {/* Header */}
             <div className="flex justify-between items-start mb-3">
               <div className={`flex ${gapSize} items-start`}>
                 {p.icon && (
-                  <div className={`${iconBoxSize} rounded-lg flex items-center justify-center flex-shrink-0 ${p.iconBgColor || 'bg-[#374151]'} p-1.5`}>
+                  <div className={`${iconBoxSize} rounded-lg flex items-center justify-center flex-shrink-0 ${p.iconBgColor || 'bg-[color:var(--cf-surface-2)]'} p-1.5`}>
                     {p.icon}
                   </div>
                 )}
-                <h3 className={`${titleSize} font-bold text-white leading-snug line-clamp-2 pr-4`}>
+                <h3 className={`${titleSize} font-bold text-[color:var(--cf-text-strong)] leading-snug line-clamp-2 pr-4`}>
                   {p.title}
                 </h3>
               </div>
@@ -203,14 +203,14 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
               {p.options ? (
                 p.options.map((option, idx) => (
                   <div key={idx} className={`flex justify-between items-center ${optionTextSize}`}>
-                    <span className="text-[#e6edf3]">{option.label}</span>
-                    <span className="text-white font-medium">{option.probability}</span>
+                    <span className="text-[color:var(--cf-text)]">{option.label}</span>
+                    <span className="text-[color:var(--cf-text-strong)] font-medium">{option.probability}</span>
                   </div>
                 ))
               ) : p.probability ? (
                 <div className="flex flex-col items-center justify-center py-1">
-                  <span className={`text-white ${isLarge ? 'text-2xl' : 'text-xl'} font-bold`}>{p.probability}</span>
-                  <span className="text-[#8b949e] text-[9px] uppercase tracking-wider mt-0.5">probability</span>
+                  <span className={`text-[color:var(--cf-text-strong)] ${isLarge ? 'text-2xl' : 'text-xl'} font-bold`}>{p.probability}</span>
+                  <span className="text-[color:var(--cf-muted)] text-[9px] uppercase tracking-wider mt-0.5">probability</span>
                 </div>
               ) : null}
             </div>
@@ -225,10 +225,10 @@ export function PredictionMarketWidget(props: { config: Record<string, any> }) {
                   </div>
                 )}
                 {p.volume && (
-                  <span className={`text-[#8b949e] ${footerTextSize} font-medium`}>{p.volume} Vol.</span>
+                  <span className={`text-[color:var(--cf-muted)] ${footerTextSize} font-medium`}>{p.volume} Vol.</span>
                 )}
               </div>
-              <button type="button" className="text-[#8b949e] hover:text-white transition-colors">
+              <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors">
                 <MoreHorizontal className={`w-4 h-4`} />
               </button>
             </div>

@@ -7,7 +7,7 @@ import { WhaleProfileClientPage } from './WhaleProfileClientPage';
 export default function WhaleProfilePage() {
   const { t } = useTranslation();
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white">{t('common.loading')}</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[color:var(--cf-bg)] flex items-center justify-center text-[color:var(--cf-text-strong)]">{t('common.loading')}</div>}>
       <WhaleProfileClientPage />
     </Suspense>
   );

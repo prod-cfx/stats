@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { createNewDashboard, DASHBOARD_UPDATED_EVENT,  deleteDashboard, ensureDashboard, getDashboard, getMyDashboards, getSavedDashboards, publishDashboard } from '@/features/dashboards/store/dashboardStore';
+import { createNewDashboard, DASHBOARD_UPDATED_EVENT,  deleteDashboard, ensureDashboard, getDashboard, getMyDashboards, getSavedDashboards, publishDashboard, upsertDashboard } from '@/features/dashboards/store/dashboardStore';
 import { toast } from '@/lib/toast';
 
 interface DashboardEditorSidebarProps {
@@ -55,8 +55,13 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
 
   const validatePublish = () => {
     // 验证标题
-    const hasTitle = !!doc.name?.trim();
-    if (!hasTitle) {
+    const rawTitle = (doc.name ?? '').trim();
+    const isPlaceholderTitle =
+      rawTitle.length === 0 ||
+      rawTitle.toUpperCase() === 'UNTITLED' ||
+      rawTitle === t('dashboard.sidebar.untitled') ||
+      rawTitle === '未命名';
+    if (isPlaceholderTitle) {
       setError(t('dashboard.editor.validation.titleRequired'));
       toast.error({
         title: t('dashboard.editor.validation.publishFail'),
@@ -106,8 +111,33 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
       // 模拟异步发布过程（实际应该调用 API）
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      publishDashboard(dashboardId);
-      const updated = getDashboard(dashboardId) ?? (dashboardId === 'draft' ? ensureDashboard(dashboardId) : null);
+      let finalId = dashboardId;
+
+      // If we are publishing the 'draft' dashboard, we must clone it to a real UUID
+      // because 'draft' is filtered out of lists.
+      if (dashboardId === 'draft') {
+        const newId = crypto.randomUUID();
+        const newDoc: DashboardDoc = {
+          ...doc,
+          id: newId,
+          isPublished: true,
+          updatedAt: Date.now(),
+          createdAt: Date.now(), // Treat publish as creation for the real dash
+        };
+        upsertDashboard(newDoc);
+        
+        // Clean up the draft
+        // Optional: deleteDashboard('draft') or reset it. 
+        // Let's reset it to avoid confusion or just leave it. 
+        // Better to reset/delete so user starts fresh next time.
+        deleteDashboard('draft'); 
+        
+        finalId = newId;
+      } else {
+        publishDashboard(dashboardId);
+      }
+
+      const updated = getDashboard(finalId);
       if (!updated) {
         // If it was removed while publishing, fall back to list
         router.push(`/${lng}/dashboard/?tab=my`);
@@ -211,7 +241,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
   };
 
   return (
-    <aside className="w-64 flex-none border-r border-[#30363d] p-6 flex flex-col gap-10">
+    <aside className="w-64 flex-none border-r border-[color:var(--cf-border)] p-6 flex flex-col gap-10">
       <div className="flex flex-col gap-8 h-full">
         {/* Navigation Section */}
         <div className="space-y-6">
@@ -223,15 +253,15 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               className="w-full flex items-center justify-between group"
             >
             <div className="flex items-center gap-3">
-              <Layout className="w-4 h-4 text-[#c9d1d9]" />
-                <span className="text-[#c9d1d9] text-sm font-semibold">{t('dashboard.sidebar.myDashboards')}</span>
+              <Layout className="w-4 h-4 text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text-strong)] transition-colors" />
+                <span className="text-[color:var(--cf-muted)] text-sm font-semibold group-hover:text-[color:var(--cf-text-strong)] transition-colors">{t('dashboard.sidebar.myDashboards')}</span>
                 {myDashboards.length > 0 && (
                   <span className="ml-auto bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold">
                     {myDashboards.length}
                   </span>
                 )}
             </div>
-              <ChevronDown className={`w-3 h-3 text-[#8b949e] group-hover:text-white transition-all ${showMyDashboards ? '' : '-rotate-90'}`} />
+              <ChevronDown className={`w-3 h-3 text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text-strong)] transition-all ${showMyDashboards ? '' : '-rotate-90'}`} />
             </button>
             
             {/* My Dashboards List */}
@@ -242,7 +272,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     key={dash.id}
                     type="button"
                     onClick={() => router.push(`/${lng}/dashboard/view?id=${dash.id}`)}
-                    className="w-full text-left px-3 py-2 rounded text-xs text-[#8b949e] hover:bg-[#161b22] hover:text-white transition-colors truncate"
+                    className="w-full text-left px-3 py-2 rounded text-xs text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] transition-colors truncate"
                   >
                     {dash.name || t('dashboard.sidebar.untitled')}
                   </button>
@@ -259,7 +289,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
             </div>
             )}
             {showMyDashboards && myDashboards.length === 0 && (
-              <div className="pl-4 py-2 text-xs text-[#8b949e]">{t('dashboard.no_published')}</div>
+              <div className="pl-4 py-2 text-xs text-[color:var(--cf-muted)]">{t('dashboard.no_published')}</div>
             )}
           </div>
 
@@ -271,15 +301,15 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               className="w-full flex items-center justify-between group"
             >
             <div className="flex items-center gap-3">
-              <Bookmark className="w-4 h-4 text-[#c9d1d9]" />
-                <span className="text-[#c9d1d9] text-sm font-semibold">{t('dashboard.sidebar.savedDashboards')}</span>
+              <Bookmark className="w-4 h-4 text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text-strong)] transition-colors" />
+                <span className="text-[color:var(--cf-muted)] text-sm font-semibold group-hover:text-[color:var(--cf-text-strong)] transition-colors">{t('dashboard.sidebar.savedDashboards')}</span>
                 {savedDashboards.length > 0 && (
-                  <span className="ml-auto bg-[#30363d] text-[#8b949e] px-1.5 py-0.5 rounded text-[10px] font-bold">
+                  <span className="ml-auto bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] px-1.5 py-0.5 rounded text-[10px] font-bold">
                     {savedDashboards.length}
                   </span>
                 )}
             </div>
-              <ChevronDown className={`w-3 h-3 text-[#8b949e] group-hover:text-white transition-all ${showSavedDashboards ? '' : '-rotate-90'}`} />
+              <ChevronDown className={`w-3 h-3 text-[color:var(--cf-muted)] group-hover:text-[color:var(--cf-text-strong)] transition-all ${showSavedDashboards ? '' : '-rotate-90'}`} />
             </button>
             
             {/* Saved Dashboards List */}
@@ -293,7 +323,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     className={`w-full text-left px-3 py-2 rounded text-xs transition-colors truncate ${
                       dash.id === dashboardId
                         ? 'bg-primary/10 text-primary font-medium'
-                        : 'text-[#8b949e] hover:bg-[#161b22] hover:text-white'
+                        : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
                     }`}
                   >
                     {dash.name || t('dashboard.sidebar.untitled')}
@@ -311,12 +341,13 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
               </div>
             )}
             {showSavedDashboards && savedDashboards.length === 0 && (
-              <div className="pl-4 py-2 text-xs text-[#8b949e]">{t('dashboard.no_saved')}</div>
+              <div className="pl-4 py-2 text-xs text-[color:var(--cf-muted)]">{t('dashboard.no_saved')}</div>
             )}
+          </div>
         </div>
 
           {/* Action Buttons Section just below saved list */}
-          <div className="space-y-4 pt-4 border-t border-[#30363d]">
+          <div className="space-y-4 pt-4 border-t border-[color:var(--cf-border)]">
             <button 
               type="button" 
               onClick={handleCreateDashboard}
@@ -366,7 +397,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                   className={`w-full font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all relative group ${
                     deleteStatus === 'deleting'
                       ? 'bg-red-500/20 cursor-not-allowed text-red-400 scale-[0.98]'
-                      : 'bg-transparent hover:bg-red-500/10 text-[#8b949e] hover:text-red-500 active:scale-[0.98]'
+                      : 'bg-transparent hover:bg-red-500/10 text-[color:var(--cf-muted)] hover:text-red-500 active:scale-[0.98]'
                   }`}
                   title={deleteStatus === 'deleting' ? t('dashboard.editor.actions.deleting') : t('dashboard.actions.delete')}
                 >
@@ -389,7 +420,6 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
             ) : null}
           </div>
         </div>
-      </div>
 
       {/* Delete Confirmation Dialog */}
       {mode === 'edit' ? (
@@ -407,4 +437,3 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     </aside>
   );
 };
-

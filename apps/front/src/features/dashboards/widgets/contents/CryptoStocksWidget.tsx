@@ -92,7 +92,7 @@ function renderValueWithColor(val: string) {
   const isPositive = val.startsWith('+');
   const isNegative = val.startsWith('-');
   return (
-    <span className={isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-[#e6edf3]'}>
+    <span className={isPositive ? 'text-green-500 dark:text-green-400' : isNegative ? 'text-red-500 dark:text-red-400' : 'text-[color:var(--cf-text-strong)]'}>
       {val}
     </span>
   );
@@ -100,9 +100,9 @@ function renderValueWithColor(val: string) {
 
 // Extract SortHeader component to avoid nesting
 const SortHeader = ({ label, iconSize }: { label: string; iconSize: string }) => (
-  <div className="flex items-center justify-center gap-1 cursor-pointer group hover:text-white transition-colors">
+  <div className="flex items-center justify-center gap-1 cursor-pointer group hover:text-[color:var(--cf-text-strong)] transition-colors">
     {label}
-    <ArrowUpDown className={`${iconSize} text-[#8b949e] opacity-30 group-hover:opacity-100`} />
+    <ArrowUpDown className={`${iconSize} text-[color:var(--cf-muted)] opacity-30 group-hover:opacity-100`} />
   </div>
 )
 
@@ -125,12 +125,12 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
 
   return (
     <div className="h-full flex flex-col gap-3">
-      <div className="flex-1 min-h-0 rounded-xl border border-white/10 bg-[#0d1117]/60 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] flex flex-col overflow-hidden">
         {/* Scrollable Content (Both X and Y) */}
         <div className="flex-1 overflow-auto cf-scrollbar">
           <table className="w-full border-collapse min-w-[900px]">
             <thead>
-              <tr className={`text-[#8b949e] ${headerSize} font-bold border-b border-white/10 bg-[#0d1117]/50 sticky top-0 z-10`}>
+              <tr className={`text-[color:var(--cf-muted)] ${headerSize} font-bold border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] sticky top-0 z-10`}>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.asset')}</th>
                 <th className={`${paddingX} ${paddingY} text-left whitespace-nowrap`}>{t('publicCompanies.columns.company')}</th>
                 <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label="mNAV" iconSize={sortIconSize} /></th>
@@ -143,9 +143,9 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                 <th className={`${paddingX} ${paddingY} text-center whitespace-nowrap`}><SortHeader label={t('publicCompanies.columns.change7d')} iconSize={sortIconSize} /></th>
               </tr>
             </thead>
-            <tbody className={`text-white ${textSize} divide-y divide-white/10`}>
+            <tbody className={`text-[color:var(--cf-text-strong)] ${textSize} divide-y divide-[color:var(--cf-border)]`}>
               {rows.map((row, index) => (
-                <tr key={index} className="transition-colors hover:bg-white/5">
+                <tr key={index} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
                   <td className={`${paddingX} ${paddingY}`}>
                     <div className="flex items-center gap-2">
                       <img src={row.assetLogo} alt={row.asset} className={`${iconSize} rounded-full object-contain bg-white rounded-full`} />
@@ -159,12 +159,12 @@ export function CryptoStocksWidget(props: { config: Record<string, any> }) {
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="font-semibold truncate max-w-[120px]">{row.name}</span>
-                        <span className="text-[#8b949e] opacity-70 truncate max-w-[120px]">{row.ticker} {row.exchange}</span>
+                        <span className="text-[color:var(--cf-muted)] opacity-70 truncate max-w-[120px]">{row.ticker} {row.exchange}</span>
                       </div>
                     </div>
                   </td>
                   <td className={`${paddingX} ${paddingY} text-center`}>
-                     <span className={row.mNav !== '-' && Number.parseFloat(row.mNav) < 1 ? 'text-red-400' : 'text-[#e6edf3]'}>
+                     <span className={row.mNav !== '-' && Number.parseFloat(row.mNav) < 1 ? 'text-red-500 dark:text-red-400' : 'text-[color:var(--cf-text-strong)]'}>
                       {row.mNav}
                     </span>
                   </td>

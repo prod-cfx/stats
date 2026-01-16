@@ -28,6 +28,29 @@ export interface TraderCardProps {
   onShowStats?: (address: string) => void;
 }
 
+const TAG_STYLES: Record<string, { colorClass: string, bgClass: string }> = {
+  bullWarGod: {
+    colorClass: 'text-blue-500 dark:text-blue-300',
+    bgClass: 'bg-blue-100 dark:bg-blue-900/30'
+  },
+  swingKing: {
+    colorClass: 'text-purple-500 dark:text-purple-300',
+    bgClass: 'bg-purple-100 dark:bg-purple-900/30'
+  },
+  smartTrader: {
+    colorClass: 'text-yellow-600 dark:text-yellow-300',
+    bgClass: 'bg-yellow-100 dark:bg-yellow-900/30'
+  },
+  treasuryKeeper: {
+    colorClass: 'text-amber-600 dark:text-amber-300',
+    bgClass: 'bg-amber-100 dark:bg-amber-900/30'
+  },
+  twitterKol: {
+    colorClass: 'text-sky-500 dark:text-sky-300',
+    bgClass: 'bg-sky-100 dark:bg-sky-900/30'
+  }
+};
+
 export const TraderCard = ({
   variant,
   address,
@@ -193,22 +216,24 @@ export const TraderCard = ({
       {aiTags && (
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-tighter">{t('whaleTracking.discover.labels.aiTags')}:</span>
-          {aiTags.map((tag, i) => (
-            <div key={i} className="relative group/tag">
-              <span 
-                className="px-2.5 py-1 rounded-md text-caption font-extrabold uppercase tracking-tight flex items-center gap-1 cursor-help"
-                style={{ color: tag.color, backgroundColor: tag.bgColor }}
-              >
-                {resolveAiTagLabel(tag.key)}
-                <Info className="w-3 h-3 opacity-50" />
-              </span>
-              {/* Simple CSS Tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl text-[10px] text-[color:var(--cf-text)] whitespace-nowrap opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none">
-                {resolveAiTagDescription(tag.key, tag.descriptionKey)}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--cf-border)]" />
+          {aiTags.map((tag, i) => {
+            const styles = TAG_STYLES[tag.key] || { colorClass: 'text-[color:var(--cf-text-strong)]', bgClass: 'bg-[color:var(--cf-surface-2)]' };
+            return (
+              <div key={i} className="relative group/tag">
+                <span 
+                  className={`px-2.5 py-1 rounded-md text-caption font-extrabold uppercase tracking-tight flex items-center gap-1 cursor-help ${styles.colorClass} ${styles.bgClass}`}
+                >
+                  {resolveAiTagLabel(tag.key)}
+                  <Info className="w-3 h-3 opacity-50" />
+                </span>
+                {/* Simple CSS Tooltip */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl text-[10px] text-[color:var(--cf-text)] whitespace-nowrap opacity-0 invisible group-hover/tag:opacity-100 group-hover/tag:visible transition-all z-20 pointer-events-none">
+                  {resolveAiTagDescription(tag.key, tag.descriptionKey)}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-[color:var(--cf-border)]" />
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

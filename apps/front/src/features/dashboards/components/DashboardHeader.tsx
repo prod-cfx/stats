@@ -2,10 +2,11 @@
 
 import type { DashboardDoc } from '../store/dashboardStore'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
-import { updateDashboardMeta } from '../store/dashboardStore'
+import { deleteDashboard, updateDashboardMeta, upsertDashboard } from '../store/dashboardStore'
 
 interface DashboardHeaderProps {
   dashboard: DashboardDoc
@@ -19,6 +20,9 @@ type SavePublishStatus = 'idle' | 'saving' | 'success' | 'error'
 
 export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) {
   const { t } = useTranslation()
+  const router = useRouter()
+  const params = useParams()
+  const lng = (params as any)?.lng || 'zh'
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState(dashboard.name)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
@@ -114,6 +118,19 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
     setSavePublishStatus('saving')
     
     try {
+      // If we're still on the internal placeholder `draft`, materialize it into a real dashboard id
+      // so it can appear under "Saved Dashboards" (lists intentionally filter out `draft`).
+      if (dashboard.id === 'draft') {
+        const nextId = crypto.randomUUID()
+        upsertDashboard({
+          ...dashboard,
+          id: nextId,
+          isPublished: false,
+        })
+        deleteDashboard('draft')
+        router.replace(`/${lng}/dashboard/editor?id=${nextId}`)
+      }
+
       // 模拟保存延迟
       await new Promise(resolve => setTimeout(resolve, 600))
       
@@ -153,7 +170,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
       <div className="flex items-center gap-3">
         {/* Thumbnail Preview */}
         {dashboard.thumbnail && (
-          <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-primary/30 flex-shrink-0">
+          <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-[color:var(--cf-border)] flex-shrink-0">
             <img
               src={dashboard.thumbnail}
               alt="Dashboard thumbnail"
@@ -176,15 +193,15 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               }
             }}
             autoFocus
-            className="bg-transparent border-b border-primary text-4xl font-bold text-white focus:outline-none px-2"
+            className="bg-transparent border-b border-[color:var(--cf-border)] text-4xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none px-2"
           />
         ) : (
-          <h1 className="text-4xl font-bold text-white">{dashboard.name}</h1>
+          <h1 className="text-4xl font-bold text-[color:var(--cf-text-strong)]">{dashboard.name}</h1>
         )}
         <button
           type="button"
           onClick={() => setIsEditingTitle(!isEditingTitle)}
-          className="text-[#8b949e] hover:text-white transition-colors p-2"
+          className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors p-2"
           title={t('dashboard.editor.actions.editTitle')}
         >
           <Edit2 className="w-4 h-4" />
@@ -247,10 +264,13 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         />
 
         {/* Save Button - Only shows "保存" or "未保存" states */}
+        {(() => {
+          const canSave = hasUnsavedChanges || dashboard.id === 'draft'
+          return (
         <button
           type="button"
           onClick={handleSaveChanges}
-          disabled={savePublishStatus === 'saving' || savePublishStatus === 'success' || !hasUnsavedChanges}
+          disabled={savePublishStatus === 'saving' || savePublishStatus === 'success' || !canSave}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-lg active:scale-95 ${
             savePublishStatus === 'saving'
               ? 'bg-gray-600 cursor-not-allowed text-white'
@@ -258,8 +278,8 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
                 ? 'bg-green-600 text-white'
                 : savePublishStatus === 'error'
                   ? 'bg-red-600 text-white'
-                  : !hasUnsavedChanges
-                    ? 'bg-[#21262d] text-[#8b949e] cursor-not-allowed'
+                  : !canSave
+                    ? 'bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] cursor-not-allowed'
                     : 'bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-primary/20'
           }`}
           title={
@@ -267,11 +287,11 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               ? t('dashboard.editor.actions.saving')
               : savePublishStatus === 'success'
                 ? t('dashboard.editor.validation.saveSuccess')
-                : savePublishStatus === 'error'
-                  ? t('dashboard.editor.validation.saveFail')
-                  : !hasUnsavedChanges
-                    ? t('dashboard.editor.actions.noChanges')
-                    : t('dashboard.editor.actions.saveChanges')
+              : savePublishStatus === 'error'
+                ? t('dashboard.editor.validation.saveFail')
+                : !canSave
+                  ? t('dashboard.editor.actions.noChanges')
+                  : t('dashboard.editor.actions.saveChanges')
           }
         >
           {savePublishStatus === 'saving' ? (
@@ -292,10 +312,12 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
           ) : (
             <>
               <Save className="w-4 h-4" />
-              {hasUnsavedChanges ? t('dashboard.editor.actions.save') : t('dashboard.editor.actions.unsaved')}
+              {canSave ? t('dashboard.editor.actions.save') : t('dashboard.editor.actions.saved')}
             </>
           )}
         </button>
+          )
+        })()}
       </div>
     </div>
   )

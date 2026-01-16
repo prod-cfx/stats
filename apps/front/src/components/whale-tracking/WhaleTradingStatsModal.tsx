@@ -29,21 +29,21 @@ interface StatCardProps {
   subStats: { label: string; value: string; color: string }[];
 }
 
-const StatCard = ({ label, value, valueColor = 'text-white', unit, value2, unit2, subStats }: StatCardProps) => (
-  <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-4 flex flex-col justify-between gap-3 h-full">
+const StatCard = ({ label, value, valueColor = 'text-[color:var(--cf-text-strong)]', unit, value2, unit2, subStats }: StatCardProps) => (
+  <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 flex flex-col justify-between gap-3 h-full">
     <div className="flex flex-col gap-1">
-      <span className="text-[#8b949e] text-caption font-medium">{label}</span>
+      <span className="text-[color:var(--cf-muted)] text-caption font-medium">{label}</span>
       <div className="flex items-baseline gap-1">
         <span className={`text-h2 font-bold ${valueColor}`}>{value}</span>
-        {unit && <span className="text-caption text-white font-medium">{unit}</span>}
-        {value2 && <span className="text-h2 font-bold text-white ml-2">{value2}</span>}
-        {unit2 && <span className="text-caption text-white font-medium">{unit2}</span>}
+        {unit && <span className="text-caption text-[color:var(--cf-text-strong)] font-medium">{unit}</span>}
+        {value2 && <span className="text-h2 font-bold text-[color:var(--cf-text-strong)] ml-2">{value2}</span>}
+        {unit2 && <span className="text-caption text-[color:var(--cf-text-strong)] font-medium">{unit2}</span>}
       </div>
     </div>
     <div className="space-y-1">
       {subStats.map((stat, idx) => (
         <div key={idx} className="flex justify-between items-center text-caption">
-          <span className="text-[#8b949e] font-medium">{stat.label}</span>
+          <span className="text-[color:var(--cf-muted)] font-medium">{stat.label}</span>
           <span className={`font-semibold ${stat.color}`}>{stat.value}</span>
         </div>
       ))}
@@ -63,26 +63,26 @@ interface TradeCardProps {
 const TradeCard = ({ asset, side, time, pnl, duration, icon }: TradeCardProps) => {
   const { t } = useTranslation();
   return (
-    <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all group h-full">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col gap-4 hover:border-primary/50 transition-all group h-full">
       <div className="flex justify-between items-center gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
             <img src={icon} alt={asset} className="w-full h-full object-contain" />
           </div>
-          <span className="text-white font-bold text-body truncate">{asset}</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+          <span className="text-[color:var(--cf-text-strong)] font-bold text-body truncate">{asset}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${side === 'Long' ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}>
             {side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
           </span>
         </div>
-        <span className="text-[#8b949e] text-caption font-medium whitespace-nowrap flex-shrink-0">{time}</span>
+        <span className="text-[color:var(--cf-muted)] text-caption font-medium whitespace-nowrap flex-shrink-0">{time}</span>
       </div>
       <div className="flex flex-col">
-        <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider mb-1">{t('whaleTracking.modal.realizedPnl')}</span>
-        <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
+        <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider mb-1">{t('whaleTracking.modal.realizedPnl')}</span>
+        <span className={`${pnl.includes('+') ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'} font-bold text-h2`}>{pnl}</span>
       </div>
-      <div className="flex justify-between items-center text-caption pt-2 border-t border-[#30363d]/50 mt-auto">
-        <span className="text-[#8b949e] font-medium">{t('whaleTracking.modal.duration')}</span>
-        <span className="text-white font-semibold">{duration}</span>
+      <div className="flex justify-between items-center text-caption pt-2 border-t border-[color:var(--cf-border)] mt-auto">
+        <span className="text-[color:var(--cf-muted)] font-medium">{t('whaleTracking.modal.duration')}</span>
+        <span className="text-[color:var(--cf-text-strong)] font-semibold">{duration}</span>
       </div>
     </div>
   );
@@ -100,28 +100,28 @@ interface PerformanceCardProps {
 const PerformanceCard = ({ asset, trades, pnl, netPnl, fees, icon }: PerformanceCardProps) => {
   const { t } = useTranslation();
   return (
-    <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all h-full">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col gap-4 hover:border-primary/50 transition-all h-full">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 flex items-center justify-center">
             <img src={icon} alt={asset} className="w-full h-full object-contain" />
           </div>
-          <span className="text-white font-bold text-body">{asset}</span>
+          <span className="text-[color:var(--cf-text-strong)] font-bold text-body">{asset}</span>
         </div>
-        <span className="text-[#8b949e] text-caption font-bold bg-[#161b22] px-2 py-1 rounded">{t('whaleTracking.modal.tradesCount', { count: trades })}</span>
+        <span className="text-[color:var(--cf-muted)] text-caption font-bold bg-[color:var(--cf-bg)] px-2 py-1 rounded">{t('whaleTracking.modal.tradesCount', { count: trades })}</span>
       </div>
       <div className="flex flex-col">
-        <span className="text-[#8b949e] text-caption font-bold uppercase tracking-wider mb-1">{t('whaleTracking.modal.realizedPnl')}</span>
-        <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2`}>{pnl}</span>
+        <span className="text-[color:var(--cf-muted)] text-caption font-bold uppercase tracking-wider mb-1">{t('whaleTracking.modal.realizedPnl')}</span>
+        <span className={`${pnl.includes('+') ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'} font-bold text-h2`}>{pnl}</span>
       </div>
-      <div className="space-y-2 pt-2 border-t border-[#30363d]/50">
+      <div className="space-y-2 pt-2 border-t border-[color:var(--cf-border)]">
         <div className="flex justify-between items-center text-caption font-medium">
-          <span className="text-[#8b949e]">{t('whaleTracking.modal.netPnl')}</span>
-          <span className={`font-bold ${netPnl.includes('+') ? 'text-green-400' : 'text-red-400'}`}>{netPnl}</span>
+          <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.netPnl')}</span>
+          <span className={`font-bold ${netPnl.includes('+') ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{netPnl}</span>
         </div>
         <div className="flex justify-between items-center text-caption font-medium">
-          <span className="text-[#8b949e]">{t('whaleTracking.modal.fees')}</span>
-          <span className="text-white font-bold">{fees}</span>
+          <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.fees')}</span>
+          <span className="text-[color:var(--cf-text-strong)] font-bold">{fees}</span>
         </div>
       </div>
     </div>
@@ -141,30 +141,30 @@ interface PositionCardProps {
 const PositionCard = ({ asset, side, time, pnl, size, fees, icon }: PositionCardProps) => {
   const { t } = useTranslation();
   return (
-    <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-5 flex flex-col gap-4 hover:border-[#3b82f6]/50 transition-all h-full">
+    <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-5 flex flex-col gap-4 hover:border-primary/50 transition-all h-full">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 flex items-center justify-center">
             <img src={icon} alt={asset} className="w-full h-full object-contain" />
           </div>
-          <span className="text-white font-bold text-body">{asset}</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${side === 'Long' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+          <span className="text-[color:var(--cf-text-strong)] font-bold text-body">{asset}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${side === 'Long' ? 'bg-green-500/20 text-green-500 dark:text-green-400' : 'bg-red-500/20 text-red-500 dark:text-red-400'}`}>
             {side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
           </span>
         </div>
-        <span className="text-[#8b949e] text-caption font-medium">{time}</span>
+        <span className="text-[color:var(--cf-muted)] text-caption font-medium">{time}</span>
       </div>
       <div className="flex flex-col py-1">
-        <span className={`${pnl.includes('+') ? 'text-green-400' : 'text-red-400'} font-bold text-h2 tracking-tight`}>{pnl}</span>
+        <span className={`${pnl.includes('+') ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'} font-bold text-h2 tracking-tight`}>{pnl}</span>
       </div>
-      <div className="space-y-2 pt-2 border-t border-[#30363d]/50 mt-auto">
+      <div className="space-y-2 pt-2 border-t border-[color:var(--cf-border)] mt-auto">
         <div className="flex justify-between items-center text-caption font-medium">
-          <span className="text-[#8b949e]">{t('whaleTracking.modal.size')}</span>
-          <span className="text-white font-bold">{size}</span>
+          <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.size')}</span>
+          <span className="text-[color:var(--cf-text-strong)] font-bold">{size}</span>
         </div>
         <div className="flex justify-between items-center text-caption font-medium">
-          <span className="text-[#8b949e]">{t('whaleTracking.modal.fees')}</span>
-          <span className="text-white font-bold">{fees}</span>
+          <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.fees')}</span>
+          <span className="text-[color:var(--cf-text-strong)] font-bold">{fees}</span>
         </div>
       </div>
     </div>
@@ -398,6 +398,9 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
         pnl: formatCurrency(tradePnls[tr._index]),
         size: `${tr.positionSize.toLocaleString(undefined, {
           maximumFractionDigits: 2,
+          window: {
+            maximumFractionDigits: 2,
+          } as any, // fix ts error
         })} ${tr.symbol}`,
         fees: feesValue,
         icon: pickIcon(tr.symbol),
@@ -442,7 +445,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
           formatter: () => totalTrades.toString(),
           fontSize: 18,
           fontWeight: 'bold',
-          color: '#ffffff'
+          color: 'var(--cf-text-strong)'
         },
         emphasis: {
           scale: false
@@ -471,9 +474,9 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
       <div className="flex flex-col gap-8">
         {/* Header Extra Info */}
         <div className="flex items-center justify-between -mt-4 mb-0">
-          <div className="px-4 py-2 bg-[#0d1117] border border-[#30363d] rounded-xl flex items-center gap-3">
+          <div className="px-4 py-2 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl flex items-center gap-3">
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600" />
-            <span className="text-[#cccccc] text-base font-semibold">{formatAddress(address)}</span>
+            <span className="text-[color:var(--cf-text-strong)] text-base font-semibold">{formatAddress(address)}</span>
           </div>
           <div className="relative">
             <button
@@ -482,14 +485,14 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
                 e.stopPropagation();
                 setTimeRangeOpen(v => !v);
               }}
-              className="flex items-center gap-3 px-4 py-2 bg-[#161b22] border border-[#30363d] rounded-xl text-[#c9d1d9] text-sm font-bold hover:border-[#3b82f6]/50 transition-all"
+              className="flex items-center gap-3 px-4 py-2 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl text-[color:var(--cf-text)] text-sm font-bold hover:border-primary/50 transition-all"
             >
               {t(`whaleTracking.modal.timeRange.${timeRange}`)}
               <ChevronDown className={`w-4 h-4 transition-transform ${timeRangeOpen ? 'rotate-180' : ''}`} />
             </button>
             {timeRangeOpen && (
               <div
-                className="absolute right-0 mt-2 w-[120px] bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden z-30"
+                className="absolute right-0 mt-2 w-[120px] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl shadow-2xl overflow-hidden z-30"
                 onPointerDown={(e) => e.stopPropagation()}
               >
                 {(['1w', '1m', 'all'] as const).map((opt) => (
@@ -501,7 +504,7 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
                       setTimeRangeOpen(false);
                     }}
                     className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors ${
-                      timeRange === opt ? 'bg-white/5 text-white' : 'text-[#c9d1d9] hover:bg-white/5 hover:text-white'
+                      timeRange === opt ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
                     }`}
                   >
                     {t(`whaleTracking.modal.timeRange.${opt}`)}
@@ -518,12 +521,12 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
             label={t('whaleTracking.modal.winRate')}
             value={winRate}
             subStats={[
-              { label: t('whaleTracking.modal.closedPnlBeforeFees'), value: pnl, color: 'text-green-400' },
-              { label: t('whaleTracking.modal.feesDeducted'), value: fees, color: 'text-white' }
+              { label: t('whaleTracking.modal.closedPnlBeforeFees'), value: pnl, color: 'text-green-500 dark:text-green-400' },
+              { label: t('whaleTracking.modal.feesDeducted'), value: fees, color: 'text-[color:var(--cf-text-strong)]' }
             ]}
           />
-          <div className="bg-[#0d1117]/50 border border-[#30363d] rounded-xl p-4 flex flex-col justify-between gap-3 relative overflow-hidden h-full">
-            <span className="text-[#8b949e] text-caption font-medium z-10">{t('whaleTracking.modal.tradeCount')}</span>
+          <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 flex flex-col justify-between gap-3 relative overflow-hidden h-full">
+            <span className="text-[color:var(--cf-muted)] text-caption font-medium z-10">{t('whaleTracking.modal.tradeCount')}</span>
             
             <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[80px] h-[80px]">
               <ReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
@@ -531,12 +534,12 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
             <div className="flex flex-col gap-1 z-10 mt-auto">
               <div className="flex items-center gap-2 text-caption font-medium">
-                <span className="text-[#8b949e]">{t('whaleTracking.modal.profit')}</span>
-                <span className="text-green-400 font-bold">{profitTrades}</span>
+                <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.profit')}</span>
+                <span className="text-green-500 dark:text-green-400 font-bold">{profitTrades}</span>
               </div>
               <div className="flex items-center gap-2 text-caption font-medium">
-                <span className="text-[#8b949e]">{t('whaleTracking.modal.loss')}</span>
-                <span className="text-red-400 font-bold">{lossTrades}</span>
+                <span className="text-[color:var(--cf-muted)]">{t('whaleTracking.modal.loss')}</span>
+                <span className="text-red-500 dark:text-red-400 font-bold">{lossTrades}</span>
               </div>
             </div>
           </div>
@@ -554,18 +557,18 @@ export const WhaleTradingStatsModal = ({ isOpen, onClose, address }: WhaleTradin
 
         {/* Performance Tabs */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-8 border-b border-[#30363d]">
+          <div className="flex items-center gap-8 border-b border-[color:var(--cf-border)]">
             <button
               type="button"
               onClick={() => setActiveTab('asset')}
-              className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
+              className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'asset' ? 'text-[color:var(--cf-text-strong)] border-primary' : 'text-[color:var(--cf-muted)] border-transparent hover:text-[color:var(--cf-text-strong)]'}`}
             >
               {t('whaleTracking.modal.byAsset')}
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('position')}
-              className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'position' ? 'text-white border-[#3b82f6]' : 'text-[#8b949e] border-transparent hover:text-white'}`}
+              className={`px-4 py-4 text-base font-bold transition-all border-b-2 -mb-[2px] ${activeTab === 'position' ? 'text-[color:var(--cf-text-strong)] border-primary' : 'text-[color:var(--cf-muted)] border-transparent hover:text-[color:var(--cf-text-strong)]'}`}
             >
               {t('whaleTracking.modal.byPosition')}
             </button>

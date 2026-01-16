@@ -37,9 +37,14 @@ function loadSharedEnvironment() {
 loadSharedEnvironment()
 
 /** @type {import('next').NextConfig} */
+const isDev = process.env.NODE_ENV !== 'production'
+
 const nextConfig = {
   // 设置构建输出目录
-  distDir: '../../dist/front',
+  // 生产构建产物需要输出到 dist/front（用于部署/打包）
+  // 但开发模式下使用 distDir=dist/front 会导致缓存/文件缺失问题（vendor-chunks、manifest 等）
+  // 因此开发模式回退到默认 .next，确保 `next dev` 稳定运行。
+  distDir: isDev ? '.next' : '../../dist/front',
 
   images: {
     unoptimized: true, // 静态导出下禁用 Next.js 内置图片优化，改用懒加载与占位符

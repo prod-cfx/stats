@@ -37,6 +37,46 @@ interface VolumeComparisonCardProps {
 
 const TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'];
 
+const MOCK_EXCHANGES = [
+  'Binance',
+  'OKX',
+  'Bybit',
+  'Hyperliquid',
+  'Gate',
+  'Bitget',
+  'KuCoin',
+  'Coinbase',
+  'Kraken',
+  'Deribit',
+  'CME',
+  'MEXC',
+  'HTX',
+  'dYdX',
+  'Aster',
+  'Lighter',
+] as const
+
+function hashStringToSeed(input: string) {
+  // Simple deterministic hash -> uint32
+  let h = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a |= 0
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symbol, items, onSymbolChange, isCompact }) => {
   const { t } = useTranslation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -56,7 +96,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
   }, []);
 
   return (
-    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl ${isCompact ? 'p-4 gap-4' : 'p-6 gap-6'} flex flex-col shadow-xl h-full relative`}>
+    <div className={`bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl ${isCompact ? 'p-4 gap-4' : 'p-6 gap-6'} flex flex-col shadow-xl h-full min-h-0 relative`}>
       {/* Card Header ... */}
       <div className="flex items-center justify-between">
         <SubTitle className={isCompact ? '!text-sm' : ''}>{title}</SubTitle>
@@ -101,7 +141,7 @@ const VolumeComparisonCard: React.FC<VolumeComparisonCardProps> = ({ title, symb
       </div>
 
       {/* Rows List */}
-      <div className={`flex flex-col ${isCompact ? 'gap-2' : 'gap-4'} relative`}>
+      <div className={`flex-1 min-h-0 overflow-auto cf-scrollbar pr-1 flex flex-col ${isCompact ? 'gap-2' : 'gap-4'} relative`}>
         {items.map((item, idx) => (
           <div 
             key={idx} 
@@ -182,11 +222,42 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
     '#10b981', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316'
   ];
 
+  const buildMockVolume = useCallback((symbol: string) => {
+    const rand = mulberry32(hashStringToSeed(`agg-vol:${symbol}`))
+    // Generate per-exchange volumes in billions (B)
+    const exchangeVolumes = MOCK_EXCHANGES.map((ex) => {
+      // heavier tail to look more realistic
+      const r = rand()
+      const b = 0.2 + Math.pow(r, 0.35) * 6.5 // ~0.2B .. ~6.7B
+      return { exchange: ex, volumeB: b }
+    })
+      .sort((a, b) => b.volumeB - a.volumeB)
+      .slice(0, 12)
+
+    const totalB = exchangeVolumes.reduce((s, x) => s + x.volumeB, 0)
+    const items: VolumeItem[] = [
+      {
+        name: 'TOTAL',
+        amount: `$${totalB.toFixed(2)}B`,
+        percent: 100,
+        color: EXCHANGE_COLORS[0],
+      },
+      ...exchangeVolumes.map((x, idx) => ({
+        name: x.exchange,
+        amount: `$${x.volumeB.toFixed(2)}B`,
+        percent: totalB > 0 ? (x.volumeB / totalB) * 100 : 0,
+        color: EXCHANGE_COLORS[(idx + 1) % EXCHANGE_COLORS.length],
+      })),
+    ]
+
+    return items
+  }, [EXCHANGE_COLORS])
+
   // Fetch aggregated volume data from backend
   const fetchVolumeData = useCallback(async (symbol: string) => {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/markets/volume/aggregated?symbol=${symbol}&instrumentType=PERPETUAL&page=1&limit=20`,
+        `${API_BASE_URL}/markets/volume/aggregated?symbol=${symbol}&instrumentType=PERPETUAL&page=1&limit=50`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
@@ -201,36 +272,53 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
       const response = body && typeof body === 'object' && 'data' in body ? body : { data: body };
 
       if (response.data && response.data.items) {
-        const items = response.data.items;
+        const apiItems: AggregatedVolumeItem[] = response.data.items;
 
-        // Calculate total volume for percentage calculation
-        const totalVolume = items.find((item: AggregatedVolumeItem) => item.exchange === 'All')?.volumeUsd
-          ? Number.parseFloat(items.find((item: AggregatedVolumeItem) => item.exchange === 'All')!.volumeUsd)
-          : 0;
+        const totalRow = apiItems.find((item) => item.exchange === 'All')
+        const exchangeRows = apiItems.filter((item) => item.exchange !== 'All')
+        const sorted = [...exchangeRows].sort((a, b) => Number.parseFloat(b.volumeUsd) - Number.parseFloat(a.volumeUsd))
 
-        // Convert API data to VolumeItem format
-        const volumeItems: VolumeItem[] = items.map((item: AggregatedVolumeItem, idx: number) => {
-          const volumeUsd = Number.parseFloat(item.volumeUsd);
-          const percent = totalVolume > 0 ? (volumeUsd / totalVolume) * 100 : 0;
-          const amountB = volumeUsd / 1_000_000_000;
+        const totalUsdFromAll = totalRow?.volumeUsd ? Number.parseFloat(totalRow.volumeUsd) : 0
+        const totalUsd = totalUsdFromAll > 0 ? totalUsdFromAll : sorted.reduce((s, it) => s + Number.parseFloat(it.volumeUsd || '0'), 0)
 
-          return {
-            name: item.exchange === 'All' ? 'TOTAL' : item.exchange,
-            amount: `$${amountB.toFixed(2)}B`,
-            percent,
-            color: EXCHANGE_COLORS[idx % EXCHANGE_COLORS.length],
-          };
-        });
+        // If backend returns empty/zero in dev, use mock so UI is demonstrable.
+        if (!Number.isFinite(totalUsd) || totalUsd <= 0) {
+          if (process.env.NODE_ENV !== 'production') return buildMockVolume(symbol)
+          return []
+        }
 
-        return volumeItems;
+        const totalB = totalUsd / 1_000_000_000
+        const volumeItems: VolumeItem[] = [
+          {
+            name: 'TOTAL',
+            amount: `$${totalB.toFixed(2)}B`,
+            percent: 100,
+            color: EXCHANGE_COLORS[0],
+          },
+          ...sorted.map((item, idx) => {
+            const volumeUsd = Number.parseFloat(item.volumeUsd || '0')
+            const percent = totalUsd > 0 ? (volumeUsd / totalUsd) * 100 : 0
+            const amountB = volumeUsd / 1_000_000_000
+            return {
+              name: item.exchange,
+              amount: `$${amountB.toFixed(2)}B`,
+              percent,
+              color: EXCHANGE_COLORS[(idx + 1) % EXCHANGE_COLORS.length],
+            }
+          }),
+        ]
+
+        return volumeItems
       }
 
+      if (process.env.NODE_ENV !== 'production') return buildMockVolume(symbol)
       return [];
     } catch (error) {
       console.error(`Failed to fetch volume data for ${symbol}:`, error);
+      if (process.env.NODE_ENV !== 'production') return buildMockVolume(symbol)
       return [];
     }
-  }, []);
+  }, [EXCHANGE_COLORS, buildMockVolume]);
 
   // Fetch left symbol data
   useEffect(() => {
@@ -280,8 +368,8 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   }, [rightSymbol, fetchVolumeData, isCompact]);
 
   return (
-    <div className={`flex flex-col ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>
-      <div className={`grid grid-cols-1 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-8'} items-stretch`}>
+    <div className={`flex flex-col min-h-0 ${isCompact ? 'gap-2 pb-0 h-full' : 'gap-8 pb-12'}`}>
+      <div className={`grid grid-cols-1 min-h-0 ${isCompact ? 'h-full' : 'xl:grid-cols-2'} ${isCompact ? 'gap-0' : 'gap-8'} items-stretch`}>
         <VolumeComparisonCard 
           title={t('aggregatedOrderbook.volume.title', { symbol: leftSymbol })} 
           symbol={leftSymbol} 

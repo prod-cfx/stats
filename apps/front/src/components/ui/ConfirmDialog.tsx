@@ -60,7 +60,7 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
         <div
-          className="bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl max-w-md w-full p-6 pointer-events-auto animate-in zoom-in-95 fade-in duration-200"
+          className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl shadow-2xl max-w-md w-full p-6 pointer-events-auto animate-in zoom-in-95 fade-in duration-200"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Icon */}
@@ -70,8 +70,8 @@ export function ConfirmDialog({
 
           {/* Content */}
           <div className="space-y-3 mb-6">
-            <h3 className="text-xl font-bold text-white">{title}</h3>
-            <p className="text-[#8b949e] text-sm leading-relaxed whitespace-pre-line">
+            <h3 className="text-xl font-bold text-[color:var(--cf-text-strong)]">{title}</h3>
+            <p className="text-[color:var(--cf-muted)] text-sm leading-relaxed whitespace-pre-line">
               {description}
             </p>
           </div>
@@ -81,7 +81,7 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2.5 bg-[#21262d] hover:bg-[#30363d] text-white rounded-lg transition-colors text-sm font-medium"
+              className="flex-1 px-4 py-2.5 bg-[color:var(--cf-surface-2)] hover:bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text-strong)] rounded-lg transition-colors text-sm font-medium"
             >
               {cancelText}
             </button>

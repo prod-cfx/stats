@@ -98,10 +98,12 @@ export class WhaleTrackingService {
     })
 
     if (!grouped.length) {
-      return {
-        recommended: [],
-        details: [],
-      }
+      // 本地/新环境下数据库可能尚未同步 whale alert 数据：
+      // 按需求：有后端数据则返回真实数据；无数据则返回 mock，保证前端可正常渲染。
+      this.logger.warn(
+        '[WhaleTracking] No HyperliquidWhaleAlert data found in DB, returning mock discover whales',
+      )
+      return this.buildMockDiscoverWhales()
     }
 
     const addresses = grouped.map((g: (typeof grouped)[number]) => g.userAddress)
@@ -201,6 +203,107 @@ export class WhaleTrackingService {
       recommended,
       details,
     }
+  }
+
+  private buildMockDiscoverWhales(): WhaleDiscoverResponseDto {
+    const mockStats: AggregatedWhaleStats[] = [
+      {
+        address: '0x8ba1f109551bd432803012645ac136ddd64dba72',
+        totalValueUsd: 128_500_000,
+        trades: 42,
+        positions: 9,
+        longCount: 31,
+        shortCount: 11,
+      },
+      {
+        address: '0x742d35cc6634c0532925a3b844bc454e4438f44e',
+        totalValueUsd: 86_750_000,
+        trades: 28,
+        positions: 7,
+        longCount: 18,
+        shortCount: 10,
+      },
+      {
+        address: '0x66f820a414680b5bcda5eeca5dea238543f42054',
+        totalValueUsd: 54_200_000,
+        trades: 19,
+        positions: 6,
+        longCount: 9,
+        shortCount: 10,
+      },
+      {
+        address: '0x281055afc982d96fab65b3a49cac8b878184cb16',
+        totalValueUsd: 32_400_000,
+        trades: 15,
+        positions: 5,
+        longCount: 11,
+        shortCount: 4,
+      },
+      {
+        address: '0x53d284357ec70ce289d6d64134dfac8e511c8a3d',
+        totalValueUsd: 21_050_000,
+        trades: 12,
+        positions: 5,
+        longCount: 7,
+        shortCount: 5,
+      },
+      {
+        address: '0xfe9e8709d3215310075d67e3ed32a380ccf451c8',
+        totalValueUsd: 15_800_000,
+        trades: 10,
+        positions: 4,
+        longCount: 6,
+        shortCount: 4,
+      },
+      {
+        address: '0xbe0eb53f46cd790cd13851d5eff43d12404d33e8',
+        totalValueUsd: 11_250_000,
+        trades: 9,
+        positions: 4,
+        longCount: 5,
+        shortCount: 4,
+      },
+      {
+        address: '0x267be1c1d684f78cb4f6a176c4911b741e4ffdc0',
+        totalValueUsd: 8_900_000,
+        trades: 8,
+        positions: 3,
+        longCount: 3,
+        shortCount: 5,
+      },
+      {
+        address: '0x1151314c646ce4e0efd76d1af4760ae66a9fe30f',
+        totalValueUsd: 6_750_000,
+        trades: 7,
+        positions: 3,
+        longCount: 4,
+        shortCount: 3,
+      },
+      {
+        address: '0xd551234ae421e3bcba99a0da6d736074f22192ff',
+        totalValueUsd: 4_250_000,
+        trades: 6,
+        positions: 2,
+        longCount: 4,
+        shortCount: 2,
+      },
+    ]
+
+    const traders: WhaleDiscoverTraderDto[] = mockStats.map((stats, index) =>
+      this.toTraderDto(stats, index),
+    )
+
+    const recommended = traders.slice(0, 3).map(t => ({
+      ...t,
+      variant: 'recommended' as const,
+    }))
+
+    const details = traders.map(t => ({
+      ...t,
+      variant: 'detail' as const,
+    }))
+
+    return { recommended, details }
   }
 
   async getTraderPerformance(

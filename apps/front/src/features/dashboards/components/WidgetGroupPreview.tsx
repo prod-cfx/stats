@@ -18,15 +18,15 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
       <button
         type="button"
         onClick={onBack}
-        className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors"
+        className="flex items-center gap-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
         <span className="text-sm">{t('widget.config.back')}</span>
       </button>
 
       <div>
-        <h2 className="text-white font-bold text-2xl mb-2">{t(group.title)}</h2>
-        <p className="text-[#8b949e] text-sm mb-1">{t(group.subtitle)}</p>
+        <h2 className="text-[color:var(--cf-text-strong)] font-bold text-2xl mb-2">{t(group.title)}</h2>
+        <p className="text-[color:var(--cf-muted)] text-sm mb-1">{t(group.subtitle)}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -35,23 +35,23 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
             type="button"
             key={item.type}
             onClick={() => onSelectWidget(item)}
-            className="bg-[#161b22] border border-[#30363d] rounded-xl p-4 hover:bg-[#21262d] hover:border-primary/50 transition-all group text-left overflow-hidden"
+            className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-4 hover:bg-[color:var(--cf-surface-hover)] hover:border-primary/50 transition-all group text-left overflow-hidden"
           >
             <div className="flex items-start justify-between mb-3">
-              <h3 className="text-white font-bold text-base group-hover:text-primary transition-colors">
+              <h3 className="text-[color:var(--cf-text-strong)] font-bold text-base group-hover:text-primary transition-colors">
                 {t(item.title)}
               </h3>
-              <span className="text-[#8b949e] text-xs bg-[#21262d] px-2 py-1 rounded">
+              <span className="text-[color:var(--cf-muted)] text-xs bg-[color:var(--cf-surface-2)] px-2 py-1 rounded">
                 {item.defaultLayout.w}×{item.defaultLayout.h}
               </span>
             </div>
             
-            <p className="text-[#8b949e] text-xs mb-4 line-clamp-2">
+            <p className="text-[color:var(--cf-muted)] text-xs mb-4 line-clamp-2">
               {t(item.description)}
             </p>
 
             {/* Mock Preview Thumbnail */}
-            <div className="bg-[#0d1117] border border-[#30363d]/50 rounded-lg h-32 flex items-center justify-center relative overflow-hidden">
+            <div className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg h-32 flex items-center justify-center relative overflow-hidden">
               {/* Simplified visual preview based on type */}
               {item.type.includes('kline') && (
                 <div className="w-full h-full flex items-end justify-around px-4 pb-4">
@@ -69,8 +69,8 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary/60" />
-                      <div className="flex-1 h-2 bg-[#30363d] rounded" />
-                      <div className="w-8 h-2 bg-[#30363d] rounded" />
+                      <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
+                      <div className="w-8 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                     </div>
                   ))}
                 </div>
@@ -80,7 +80,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                   {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded bg-primary/20" />
-                      <div className="flex-1 h-2 bg-[#30363d] rounded" />
+                      <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-10 h-2 bg-primary/40 rounded" />
                     </div>
                   ))}
@@ -95,7 +95,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                   <div className="space-y-1.5">
                     {[1, 2, 3].map((i) => (
                       <div key={i} className="flex gap-2">
-                        <div className="w-12 h-2 bg-[#30363d] rounded" />
+                        <div className="w-12 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                         <div className="flex-1 h-2 bg-green-500/20 rounded" />
                         <div className="flex-1 h-2 bg-red-500/20 rounded" />
                       </div>
@@ -146,7 +146,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                   {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-red-500/40" />
-                      <div className="flex-1 h-2 bg-[#30363d] rounded" />
+                      <div className="flex-1 h-2 bg-[color:var(--cf-surface-2)] rounded" />
                       <div className="w-12 h-2 bg-red-500/30 rounded" />
                     </div>
                   ))}
@@ -162,7 +162,7 @@ export function WidgetGroupPreview({ group, onBack, onSelectWidget }: WidgetGrou
                !item.type.includes('liquidation') &&
                !item.type.includes('open_interest') &&
                !item.type.includes('volume') && (
-                <div className="text-[#8b949e] text-xs">
+                <div className="text-[color:var(--cf-muted)] text-xs">
                   {t(item.title)}
                 </div>
               )}
