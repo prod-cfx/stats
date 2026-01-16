@@ -130,6 +130,19 @@ const nextConfig = {
   turbopack: {},
 
   // 重定向配置：处理废弃路由
+  async rewrites() {
+    // Proxy API calls in dev to local backend (avoid CORS + 404 from Next).
+    // When backend is not available or returns empty data, front-end components
+    // should fall back to mock data in development.
+    const apiServer = (process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${apiServer}/api/v1/:path*`,
+      },
+    ]
+  },
+
   async redirects() {
     return [
       {

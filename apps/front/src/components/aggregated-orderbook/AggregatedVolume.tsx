@@ -70,7 +70,7 @@ function mulberry32(seed: number) {
   let a = seed >>> 0
   return () => {
     a |= 0
-    a = (a + 0x6D2B79F5) | 0
+    a = (a + 0x6d2b79f5) | 0
     let t = Math.imul(a ^ (a >>> 15), 1 | a)
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
@@ -228,7 +228,7 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
     const exchangeVolumes = MOCK_EXCHANGES.map((ex) => {
       // heavier tail to look more realistic
       const r = rand()
-      const b = 0.2 + Math.pow(r, 0.35) * 6.5 // ~0.2B .. ~6.7B
+      const b = 0.2 + r**0.35 * 6.5 // ~0.2B .. ~6.7B
       return { exchange: ex, volumeB: b }
     })
       .sort((a, b) => b.volumeB - a.volumeB)

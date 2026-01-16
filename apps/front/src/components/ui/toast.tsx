@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, use, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Toast {
@@ -43,10 +43,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ toasts, showToast, removeToast }), [toasts, showToast, removeToast])
 
   return (
-    <ToastContext.Provider value={value}>
+    <ToastContext value={value}>
       {children}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-    </ToastContext.Provider>
+    </ToastContext>
   )
 }
 
@@ -140,7 +140,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
-  const context = useContext(ToastContext)
+  const context = use(ToastContext)
   if (!context) {
     throw new Error('useToast must be used within ToastProvider')
   }

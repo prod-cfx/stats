@@ -132,4 +132,48 @@ export const FALLBACK_MARKET_DATA_CATALOG: MarketDataCatalogItem[] = [
       color: '#10B981',
     },
   },
+  
+  // Navigation Items (ensure IDs match Navbar.tsx dataNavOrder)
+  {
+    id: 'nav-liquidation-map',
+    kind: 'nav',
+    labelKey: 'nav.liquidation_map',
+    href: '/liquidation-map',
+    category: 'liquidation',
+  },
+  {
+    id: 'nav-long-short-ratio',
+    kind: 'nav',
+    labelKey: 'nav.long_short_ratio',
+    href: '/long-short-ratio',
+    category: 'derivatives',
+  },
+  {
+    id: 'nav-aggregated-orderbook',
+    kind: 'nav',
+    labelKey: 'nav.aggregated_orderbook',
+    href: '/aggregated-orderbook',
+    category: 'derivatives',
+  },
+  {
+    id: 'nav-liquidation-data',
+    kind: 'nav',
+    labelKey: 'nav.liquidation_data',
+    href: '/liquidation-data',
+    category: 'liquidation',
+  },
+  {
+    id: 'nav-prediction-market',
+    kind: 'nav',
+    labelKey: 'nav.prediction_market',
+    href: '/prediction-market',
+    category: 'market_data',
+  },
+  {
+    id: 'nav-public-companies',
+    kind: 'nav',
+    labelKey: 'nav.public_companies',
+    href: '/public-companies',
+    category: 'market_data',
+  },
 ]

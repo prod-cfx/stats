@@ -7,8 +7,8 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { Modal } from '@/components/ui/Modal'
 import { LoadingState } from '@/components/ui/loading'
+import { Modal } from '@/components/ui/Modal'
 import {
   createNewDashboard,
   DASHBOARD_UPDATED_EVENT,

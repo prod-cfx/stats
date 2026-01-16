@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CoinfluxMark } from '@/components/ui/CoinfluxMark';
 import { toast } from '@/lib/toast';
 
 export const Footer = () => {
@@ -32,9 +33,11 @@ export const Footer = () => {
     <footer className="bg-[color:var(--cf-bg)] border-t border-[color:var(--cf-border)] py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex flex-col items-center md:items-start gap-2">
-          <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
-            <span className="text-[color:var(--cf-text-strong)] font-bold text-lg md:text-xl leading-tight">Coinflux</span>
+          <Link href={withLng('/')} className="flex flex-col items-center md:items-start no-underline">
+            <div className="flex items-center">
+              <CoinfluxMark className="w-7 h-7 md:w-10 md:h-10" />
+              <span className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-2xl leading-none tracking-tight -ml-1.5">oinflux</span>
+            </div>
           </Link>
           <p className="text-[color:var(--cf-muted)] text-sm text-center md:text-left">
             {t('footer.tagline') || 'Your one-stop shop for crypto data aggregation.'}

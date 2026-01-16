@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, use, useCallback, useEffect, useMemo, useState } from 'react'
 
 export type AppTheme = 'light' | 'dark'
 
@@ -54,7 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         applyTheme(stored)
         // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydration sync
         setThemeState(stored)
-        return
+        
       }
     } catch {
       // ignore
@@ -77,11 +77,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(() => ({ theme, setTheme, toggleTheme }), [setTheme, theme, toggleTheme])
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  return <ThemeContext value={value}>{children}</ThemeContext>
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeContext)
+  const ctx = use(ThemeContext)
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
   return ctx
 }
