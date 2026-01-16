@@ -61,7 +61,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             updateDashboard(dashboardId, (d) => ({ ...d, name: next }))
             setDoc(getDashboard(dashboardId))
           }}
-          className="w-full bg-transparent border-none text-white text-h1 font-bold focus:outline-none placeholder:text-[#8b949e] placeholder:opacity-50"
+          className="w-full bg-transparent border-none text-[color:var(--cf-text-strong)] text-h1 font-bold focus:outline-none placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50"
         />
 
         <div className="flex items-center gap-4">
@@ -74,11 +74,11 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             <span>{t('dashboard.editor.addWidgetTitle')}</span>
           </button>
 
-          <div className="h-6 w-px bg-[#30363d]" />
+          <div className="h-6 w-px bg-[color:var(--cf-border)]" />
 
           <button
             type="button"
-            className="flex items-center gap-2 px-3 py-1.5 text-[#8b949e] hover:text-white transition-colors text-xs font-medium"
+            className="flex items-center gap-2 px-3 py-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors text-xs font-medium"
           >
             <LayoutIcon className="w-3.5 h-3.5" />
             <span>{t('dashboard.resetLayout')}</span>
@@ -86,9 +86,9 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
         </div>
       </div>
 
-      <div className="min-h-[600px] bg-[#0d1117] rounded-xl border border-[#30363d] p-4 relative bg-grid-pattern">
+      <div className="min-h-[600px] bg-[color:var(--cf-bg)] rounded-xl border border-[color:var(--cf-border)] p-4 relative bg-grid-pattern">
         {doc ? <DashboardCanvas dashboardId={dashboardId} /> : (
-          <div className="text-center text-[#8b949e] py-20">{t('dashboard.notFound')}</div>
+          <div className="text-center text-[color:var(--cf-muted)] py-20">{t('dashboard.notFound')}</div>
         )}
       </div>
 
@@ -96,7 +96,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
 
       <style jsx global>{`
         .bg-grid-pattern {
-          background-image: radial-gradient(#30363d 1px, transparent 1px);
+          background-image: radial-gradient(var(--cf-border) 1px, transparent 1px);
           background-size: 20px 20px;
         }
         .react-grid-item.react-grid-placeholder {

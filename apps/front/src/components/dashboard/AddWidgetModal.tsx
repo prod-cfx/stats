@@ -102,7 +102,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
       <div className="max-h-[80vh] overflow-y-auto">
         {step === 'groups' && (
           <div className="space-y-6 p-2">
-            <p className="text-[#8b949e] text-xs font-medium tracking-wide">
+            <p className="text-[color:var(--cf-muted)] text-xs font-medium tracking-wide">
               {t('dashboard.editor.addWidgetHint')}
             </p>
             
@@ -116,7 +116,7 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                     type="button"
                     key={group.id}
                     onClick={() => handleSelectGroup(group)}
-                    className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 hover:bg-[#21262d] hover:border-primary/50 transition-all group text-left"
+                    className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-6 hover:bg-[color:var(--cf-surface-hover)] hover:border-primary/50 transition-all group text-left"
                   >
                     <div 
                       className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
@@ -125,16 +125,16 @@ export const AddWidgetModal = ({ isOpen, onClose, dashboardId }: AddWidgetModalP
                       <Icon className="w-6 h-6" />
                     </div>
                     
-                    <h3 className="text-white font-bold text-lg mb-2 group-hover:text-primary transition-colors">
+                    <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-2 group-hover:text-primary transition-colors">
                       {t(group.title)}
                     </h3>
                     
-                    <p className="text-[#8b949e] text-xs mb-3 line-clamp-2">
+                    <p className="text-[color:var(--cf-muted)] text-xs mb-3 line-clamp-2">
                       {t(group.subtitle)}
                     </p>
                     
                     <div className="flex items-center justify-between">
-                      <span className="text-[#8b949e] text-xs">
+                      <span className="text-[color:var(--cf-muted)] text-xs">
                         {t('dashboard.editor.componentsCount', { count: group.items.length })}
                       </span>
                       <span className="text-primary text-xs opacity-0 group-hover:opacity-100 transition-opacity">

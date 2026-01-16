@@ -134,30 +134,30 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
   return (
     <div className="flex h-full min-h-[70vh] max-h-[80vh]">
       {/* Left: Configuration */}
-      <div className="w-1/3 border-r border-[#30363d] p-6 overflow-y-auto">
+      <div className="w-1/3 border-r border-[color:var(--cf-border)] p-6 overflow-y-auto">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-2 text-[#8b949e] hover:text-white mb-6 transition-colors"
+          className="flex items-center gap-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] mb-6 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
           <span className="text-sm">{t('widget.config.back')}</span>
         </button>
 
-        <h3 className="text-white font-bold text-lg mb-1">{t(item.title)}</h3>
-        <p className="text-[#8b949e] text-xs mb-6">{t(item.description)}</p>
+        <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1">{t(item.title)}</h3>
+        <p className="text-[color:var(--cf-muted)] text-xs mb-6">{t(item.description)}</p>
 
         <div className="space-y-4">
           {configFields.map((field) => (
             <div key={field.key}>
-              <label className="block text-[#8b949e] text-xs font-medium mb-2 uppercase tracking-wide">
+              <label className="block text-[color:var(--cf-muted)] text-xs font-medium mb-2 uppercase tracking-wide">
                 {field.label}
               </label>
               {field.type === 'select' && field.options ? (
                 <select
                   value={config[field.key] || ''}
                   onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none"
+                  className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-[color:var(--cf-text-strong)] text-sm focus:border-primary focus:outline-none"
                 >
                   {field.options.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -170,7 +170,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                   type={field.type === 'number' ? 'number' : 'text'}
                   value={config[field.key] || ''}
                   onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white text-sm focus:border-primary focus:outline-none"
+                  className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-[color:var(--cf-text-strong)] text-sm focus:border-primary focus:outline-none"
                 />
               )}
             </div>
@@ -181,8 +181,8 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
       {/* Right: Size & Preview */}
       <div className="flex-1 flex flex-col">
         {/* Size Selection */}
-        <div className="border-b border-[#30363d] p-6">
-          <label className="block text-[#8b949e] text-xs font-medium mb-3 uppercase tracking-wide">
+        <div className="border-b border-[color:var(--cf-border)] p-6">
+          <label className="block text-[color:var(--cf-muted)] text-xs font-medium mb-3 uppercase tracking-wide">
             {t('widget.config.size')}
           </label>
           <div className="flex gap-2">
@@ -194,14 +194,14 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   selectedSize === size
                     ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                    : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+                    : 'bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
                 }`}
               >
                 {sizePresets[size].label}
               </button>
             ))}
           </div>
-          <div className="mt-2 text-xs text-[#8b949e]">
+          <div className="mt-2 text-xs text-[color:var(--cf-muted)]">
             {t('widget.config.gridSize')}: {layout.w} × {layout.h}
           </div>
         </div>
@@ -209,12 +209,12 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         {/* Preview */}
         <div className="flex-1 p-6 overflow-auto">
           <div className="mb-3">
-            <div className="text-[#8b949e] text-xs font-medium uppercase tracking-wide mb-2">
+            <div className="text-[color:var(--cf-muted)] text-xs font-medium uppercase tracking-wide mb-2">
               {t('widget.config.preview')}
             </div>
           </div>
           <div
-            className="bg-[#0d1117] border border-[#30363d] rounded-xl overflow-hidden relative"
+            className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden relative"
             style={{
               height: '360px', // Strict fixed height as requested
               width: '100%',
@@ -233,7 +233,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         </div>
 
         {/* Save Button */}
-        <div className="border-t border-[#30363d] p-6">
+        <div className="border-t border-[color:var(--cf-border)] p-6">
           <button
             type="button"
             onClick={() => onSave({ ...config, size: selectedSize }, layout)}

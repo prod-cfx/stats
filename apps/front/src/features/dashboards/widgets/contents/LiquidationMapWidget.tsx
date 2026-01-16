@@ -36,8 +36,8 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
   return (
     <div className="h-full flex flex-col gap-3">
       {/* Header with Filters */}
-      <div className="flex items-center justify-between text-xs text-white/50 flex-shrink-0">
-        <div className="text-white font-bold text-sm tracking-tight truncate">
+      <div className="flex items-center justify-between text-xs text-[color:var(--cf-muted)] flex-shrink-0">
+        <div className="text-[color:var(--cf-text-strong)] font-bold text-sm tracking-tight truncate">
           {t('liquidationMap.title', { symbol: t(`symbols.${symbol}`, { defaultValue: symbol }) })}
         </div>
         <div className="flex items-center gap-2">
@@ -75,17 +75,17 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
               setTimeout(() => btn?.classList.remove('animate-spin'), 500);
               onRefresh();
             }}
-            className="p-1 bg-[#21262d] border border-[#30363d] rounded-md text-[#e6edf3] hover:bg-[#30363d] hover:border-[#8b949e] transition-all active:scale-95 group shadow-sm h-[26px] w-[26px] flex items-center justify-center"
+            className="p-1 bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] hover:border-[color:var(--cf-text-muted)] transition-all active:scale-95 group shadow-sm h-[26px] w-[26px] flex items-center justify-center"
           >
             <RefreshCcw className="w-3.5 h-3.5 transition-transform" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 max-h-full rounded-xl border border-white/10 bg-[#0d1117]/60 overflow-hidden relative">
+      <div className="flex-1 min-h-0 max-h-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] overflow-hidden relative">
         <div className={`absolute ${isCompact ? 'top-[44px]' : 'top-2'} right-2 z-10 text-right pointer-events-none transition-all duration-300`}>
-          <div className="text-[10px] text-white/50">{t('liquidationMap.current')}</div>
-          <div className="font-mono text-xs text-white/90 font-bold bg-[#161b22]/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/5">
+          <div className="text-[10px] text-[color:var(--cf-muted)]">{t('liquidationMap.current')}</div>
+          <div className="font-mono text-xs text-[color:var(--cf-text-strong)] font-bold bg-[color:var(--cf-surface)]/80 px-1.5 py-0.5 rounded backdrop-blur-sm border border-[color:var(--cf-border)]">
             ${currentPrice.toLocaleString()}
           </div>
         </div>
@@ -98,14 +98,14 @@ export function LiquidationMapWidget(props: { config: Record<string, any> }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg border border-white/10 bg-white/5 p-2 flex items-center justify-between">
-          <div className="text-white/50">{t('liquidationMap.above')}</div>
+        <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] p-2 flex items-center justify-between">
+          <div className="text-[color:var(--cf-muted)]">{t('liquidationMap.above')}</div>
           <div className="font-mono text-[#ef4444] font-medium">
             ${(data.cumulativeShort?.[data.cumulativeShort.length - 1] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-2 flex items-center justify-between">
-          <div className="text-white/50">{t('liquidationMap.below')}</div>
+        <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] p-2 flex items-center justify-between">
+          <div className="text-[color:var(--cf-muted)]">{t('liquidationMap.below')}</div>
           <div className="font-mono text-[#22c55e] font-medium">
             ${(data.cumulativeLong?.[0] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>

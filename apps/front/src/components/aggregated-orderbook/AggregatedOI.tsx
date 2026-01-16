@@ -26,6 +26,46 @@ interface OIData {
 type SortField = 'oiAsset' | 'oiUsd' | 'ratioPct' | 'change1hPct' | 'change4hPct' | 'change24hPct' | null
 type SortDirection = 'asc' | 'desc' | null
 
+const MOCK_EXCHANGES = [
+  'Binance',
+  'OKX',
+  'Bybit',
+  'Hyperliquid',
+  'Gate',
+  'Bitget',
+  'KuCoin',
+  'Coinbase',
+  'Kraken',
+  'Deribit',
+  'CME',
+  'MEXC',
+  'HTX',
+  'dYdX',
+  'Aster',
+  'Lighter',
+] as const
+
+function hashStringToSeed(input: string) {
+  // Simple deterministic hash -> uint32
+  let h = 2166136261
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a |= 0
+    a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 // Prefer consistent brand logos, but be resilient: many public logo/CDN domains can be blocked/slow.
 // We therefore try multiple sources in order and fall back to an inline SVG if all fail.
 const EXCHANGE_LOGO_SOURCES: Record<string, string[]> = {
@@ -180,6 +220,66 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
 
   const isCompact = variant === 'compact'
 
+  const buildMockOi = useCallback((symbol: string): OIData[] => {
+    const rand = mulberry32(hashStringToSeed(`agg-oi:${symbol}`))
+    const exchangeRows = MOCK_EXCHANGES.map((ex) => {
+      // USD OI in billions: ~0.3B .. ~22B (heavy tail)
+      const r = rand()
+      const oiUsdB = 0.3 + Math.pow(r, 0.28) * 21.7
+      // asset OI roughly proportional (purely illustrative)
+      const oiAsset = Math.max(0, oiUsdB * (2500 + rand() * 1800))
+      const change1h = (rand() - 0.5) * 2.4
+      const change4h = (rand() - 0.5) * 5.0
+      const change24h = (rand() - 0.5) * 12.0
+      return {
+        exchange: ex,
+        oiUsd: oiUsdB * 1_000_000_000,
+        oiAsset,
+        change1hPct: change1h,
+        change4hPct: change4h,
+        change24hPct: change24h,
+      }
+    })
+      .sort((a, b) => b.oiUsd - a.oiUsd)
+      .slice(0, 12)
+
+    const totalOiUsd = exchangeRows.reduce((s, r) => s + r.oiUsd, 0)
+    const totalOiAsset = exchangeRows.reduce((s, r) => s + r.oiAsset, 0)
+
+    const out: OIData[] = [
+      {
+        id: 'total',
+        rank: '',
+        exchange: 'ALL',
+        logo: '',
+        oiAsset: totalOiAsset,
+        oiUsd: totalOiUsd,
+        ratioPct: 100,
+        change1hPct: exchangeRows.reduce((s, r) => s + r.change1hPct, 0) / Math.max(1, exchangeRows.length),
+        change4hPct: exchangeRows.reduce((s, r) => s + r.change4hPct, 0) / Math.max(1, exchangeRows.length),
+        change24hPct: exchangeRows.reduce((s, r) => s + r.change24hPct, 0) / Math.max(1, exchangeRows.length),
+        oiVolRatio: 0,
+        isTotal: true,
+      },
+      ...exchangeRows.map((r, idx) => ({
+        id: `${r.exchange}-${idx}`,
+        rank: idx + 1,
+        exchange: r.exchange,
+        logo: '',
+        oiAsset: r.oiAsset,
+        oiUsd: r.oiUsd,
+        ratioPct: totalOiUsd > 0 ? (r.oiUsd / totalOiUsd) * 100 : 0,
+        change1hPct: r.change1hPct,
+        change4hPct: r.change4hPct,
+        change24hPct: r.change24hPct,
+        oiVolRatio: 0,
+        isTotal: false,
+      })),
+    ]
+
+    return out
+  }, [])
+
   const loadData = useCallback(async (symbol: string) => {
     setLoading(true)
     setError(null)
@@ -188,19 +288,28 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     try {
       const apiData = await fetchAggregatedOpenInterest({ symbol })
       const transformed = transformApiData(apiData)
-      setData(transformed)
-    } catch (err) {
-      if (err instanceof AuthenticationError) {
-        setNeedsAuth(true)
-        setError(t('aggregatedOrderbook.openInterest.authRequired'))
+      if (transformed.length === 0 && process.env.NODE_ENV !== 'production') {
+        setData(buildMockOi(symbol))
       } else {
-        setError(t('aggregatedOrderbook.openInterest.loadError'))
+        setData(transformed)
       }
-      setData([])
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'production') {
+        // Dev fallback so the UI is demonstrable even when API/auth isn't ready.
+        setData(buildMockOi(symbol))
+      } else {
+        if (err instanceof AuthenticationError) {
+          setNeedsAuth(true)
+          setError(t('aggregatedOrderbook.openInterest.authRequired'))
+        } else {
+          setError(t('aggregatedOrderbook.openInterest.loadError'))
+        }
+        setData([])
+      }
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [buildMockOi, t])
 
   useEffect(() => {
     loadData(activeSymbol)

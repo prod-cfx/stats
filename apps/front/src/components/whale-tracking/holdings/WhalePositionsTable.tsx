@@ -268,7 +268,7 @@ export const WhalePositionsTable = () => {
           <FilterButton 
             value={sideFilter} 
             options={[
-              { value: 'ALL', label: '所有方向' },
+              { value: 'ALL', label: t('whaleTracking.holdings.filters.allSides') },
               { value: 'Long', label: t('whaleTracking.side.long') },
               { value: 'Short', label: t('whaleTracking.side.short') },
             ]} 
@@ -277,9 +277,9 @@ export const WhalePositionsTable = () => {
           <FilterButton
             value={pnlFilter}
             options={[
-              { value: 'ALL', label: '所有未实现盈亏' },
-              { value: 'PROFIT', label: '盈利' },
-              { value: 'LOSS', label: '亏损' },
+              { value: 'ALL', label: t('whaleTracking.holdings.filters.allUnrealizedPnl') },
+              { value: 'PROFIT', label: t('whaleTracking.holdings.filters.profit') },
+              { value: 'LOSS', label: t('whaleTracking.holdings.filters.loss') },
             ]}
             onChange={setPnlFilter}
           />
