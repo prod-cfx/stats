@@ -109,10 +109,10 @@
 /* REMOVED for compliance, but re-added specifically for sub-charts per user request */
 .cf-hide-tv-logo .tv-logo,
 .cf-hide-tv-logo .tv-watermark,
-.cf-hide-tv-logo [class*="tv-logo"],
-.cf-hide-tv-logo [class*="tv-watermark"],
-.cf-hide-tv-logo a[href*="tradingview.com"],
-.cf-hide-tv-logo a[title*="TradingView"] {
+.cf-hide-tv-logo [class*='tv-logo'],
+.cf-hide-tv-logo [class*='tv-watermark'],
+.cf-hide-tv-logo a[href*='tradingview.com'],
+.cf-hide-tv-logo a[title*='TradingView'] {
   display: none !important;
 }
 

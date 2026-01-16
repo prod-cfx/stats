@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Modal } from '@/components/ui/Modal';
 import {
   DASHBOARD_UPDATED_EVENT,
   deleteDashboard,
@@ -13,8 +15,6 @@ import {
   getSavedDashboards,
   updateDashboardMeta,
 } from '@/features/dashboards/store/dashboardStore';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/lib/toast';
 
 interface DashboardSidebarProps {

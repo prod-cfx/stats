@@ -59,7 +59,7 @@ function mulberry32(seed: number) {
   let a = seed >>> 0
   return () => {
     a |= 0
-    a = (a + 0x6D2B79F5) | 0
+    a = (a + 0x6d2b79f5) | 0
     let t = Math.imul(a ^ (a >>> 15), 1 | a)
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
@@ -225,7 +225,7 @@ export function AggregatedOI({ variant = 'default' }: { variant?: 'default' | 'c
     const exchangeRows = MOCK_EXCHANGES.map((ex) => {
       // USD OI in billions: ~0.3B .. ~22B (heavy tail)
       const r = rand()
-      const oiUsdB = 0.3 + Math.pow(r, 0.28) * 21.7
+      const oiUsdB = 0.3 + r**0.28 * 21.7
       // asset OI roughly proportional (purely illustrative)
       const oiAsset = Math.max(0, oiUsdB * (2500 + rand() * 1800))
       const change1h = (rand() - 0.5) * 2.4

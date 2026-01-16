@@ -2,8 +2,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { ExchangeLogo } from '@/components/ui/ExchangeLogo';
 
 interface OrderItem {
   price: string;

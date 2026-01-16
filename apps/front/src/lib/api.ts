@@ -20,6 +20,35 @@ type PasswordResetRequestPayload = Infer<typeof schemas.PasswordResetRequestDto>
 type VerifyResetPayload = Infer<typeof schemas.VerifyPasswordResetRequestDto>
 type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequestDto>
 
+const IS_NON_PROD = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
+
+function shouldFallbackToMock(error: unknown): boolean {
+  if (!IS_NON_PROD) return false
+  // Auth errors should continue to bubble for UI to handle (e.g. show login prompt)
+  if (error instanceof AuthenticationError) return false
+  return true
+}
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function hashStringToSeed(input: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
 export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAccountDto>
 export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
 export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
@@ -176,15 +205,45 @@ export interface FetchWhaleHoldingsQuery {
 export async function fetchWhaleHoldings(
   query: FetchWhaleHoldingsQuery = {},
 ): Promise<WhaleHoldingApiItem[]> {
-  return apiCall(async () => {
-    const response = await client.WhaleHoldingsController_getWhaleHoldings({
-      // 持仓接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
-      headers: optionalAuthHeaders(),
-      queries: query,
-    })
+  try {
+    return await apiCall(async () => {
+      const response = await client.WhaleHoldingsController_getWhaleHoldings({
+        // 持仓接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+        headers: optionalAuthHeaders(),
+        queries: query,
+      })
 
-    return unwrapResponse(response) as WhaleHoldingApiItem[]
-  }, 'FETCH_WHALE_HOLDINGS')
+      return unwrapResponse(response) as WhaleHoldingApiItem[]
+    }, 'FETCH_WHALE_HOLDINGS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const symbol = query.symbol || 'BTC'
+    const rand = mulberry32(hashStringToSeed(`whale-holdings:${symbol}`))
+    const sides = ['LONG', 'SHORT'] as const
+    const items = Array.from({ length: query.limit ?? 50 }).map((_, idx) => {
+      const side = sides[Math.floor(rand() * sides.length)]
+      const positionValueUsd = 800_000 + rand() * 12_000_000
+      const entryPrice = symbol === 'BTC'
+        ? 40_000 + rand() * 40_000
+        : symbol === 'ETH'
+          ? 1_500 + rand() * 2_500
+          : 50 + rand() * 200
+      const positionSize = positionValueUsd / entryPrice
+      const liquidationPrice = entryPrice * (side === 'LONG' ? (0.75 + rand() * 0.15) : (1.15 + rand() * 0.25))
+      const createdAt = new Date(Date.now() - Math.floor(rand() * 24 * 60) * 60_000).toISOString()
+      return {
+        userAddress: `0x${Math.floor(rand() * 1e16).toString(16).padStart(16, '0')}${idx.toString(16).padStart(4, '0')}`,
+        symbol,
+        side,
+        positionValueUsd,
+        positionSize,
+        entryPrice,
+        liquidationPrice,
+        createTime: createdAt,
+      } as any as WhaleHoldingApiItem
+    })
+    return items
+  }
 }
 
 // ===== 鲸鱼地址维度历史交易 / 绩效 API =====
@@ -519,15 +578,45 @@ export interface FetchExchangeLongShortRatioQuery {
 export async function fetchExchangeLongShortRatio(
   query: FetchExchangeLongShortRatioQuery,
 ): Promise<ExchangeLongShortRatioApiItem[]> {
-  return apiCall(async () => {
-    const response = await client.MarketsController_getExchangeLongShortRatio({
-      // 多空比接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
-      headers: optionalAuthHeaders(),
-      queries: query,
-    })
+  try {
+    return await apiCall(async () => {
+      const response = await client.MarketsController_getExchangeLongShortRatio({
+        // 多空比接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+        headers: optionalAuthHeaders(),
+        queries: query,
+      })
 
-    return unwrapResponse(response) as ExchangeLongShortRatioApiItem[]
-  }, 'FETCH_EXCHANGE_LONG_SHORT_RATIO')
+      return unwrapResponse(response) as ExchangeLongShortRatioApiItem[]
+    }, 'FETCH_EXCHANGE_LONG_SHORT_RATIO')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const seed = hashStringToSeed(`lsr:${query.symbol}:${query.timeRange}`)
+    const rand = mulberry32(seed)
+    const exchanges = [
+      { name: 'Binance', logoUrl: 'https://static.aicoinstorge.com/exchange/binance.png' },
+      { name: 'OKX', logoUrl: 'https://static.aicoinstorge.com/exchange/okx.png' },
+      { name: 'Bybit', logoUrl: 'https://static.aicoinstorge.com/exchange/bybit.png' },
+      { name: 'Bitget', logoUrl: 'https://static.aicoinstorge.com/exchange/bitget.png' },
+      { name: 'Deribit', logoUrl: 'https://static.aicoinstorge.com/exchange/deribit.png' },
+    ]
+
+    return exchanges.map((ex, idx) => {
+      const longPct = 45 + rand() * 15
+      const shortPct = 100 - longPct
+      const totalUsd = 2.5e9 + rand() ** 0.25 * 18e9
+      const longAmountUsd = totalUsd * (longPct / 100)
+      const shortAmountUsd = totalUsd - longAmountUsd
+      return {
+        rank: idx + 1,
+        name: ex.name,
+        logoUrl: ex.logoUrl,
+        longPercent: longPct,
+        shortPercent: shortPct,
+        longAmountUsd,
+        shortAmountUsd,
+      } as any as ExchangeLongShortRatioApiItem
+    })
+  }
 }
 
 
@@ -704,26 +793,66 @@ export interface ExchangeLiquidationResponse {
 export async function fetchAggregatedLiquidationSummary(
   symbol: string,
 ): Promise<AggregatedLiquidationSummary> {
-  return apiCall(async () => {
-    const response = await client.AggregatedLiquidationController_getSummary({
-      headers: optionalAuthHeaders(),
-      queries: { symbol },
+  try {
+    return await apiCall(async () => {
+      const response = await client.AggregatedLiquidationController_getSummary({
+        headers: optionalAuthHeaders(),
+        queries: { symbol },
+      })
+      return unwrapResponse(response) as AggregatedLiquidationSummary
+    }, 'FETCH_LIQUIDATION_SUMMARY')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const rand = mulberry32(hashStringToSeed(`liq-summary:${symbol}`))
+    const items: LiquidationSummaryItem[] = (['1h', '4h', '12h', '24h'] as const).map((tf) => {
+      const totalUsd = 3e6 + rand() ** 0.35 * 85e6
+      const longShare = 0.35 + rand() * 0.3
+      const longUsd = totalUsd * longShare
+      const shortUsd = totalUsd - longUsd
+      return { timeframe: tf, totalUsd, longUsd, shortUsd }
     })
-    return unwrapResponse(response) as AggregatedLiquidationSummary
-  }, 'FETCH_LIQUIDATION_SUMMARY')
+    return { symbol, items }
+  }
 }
 
 export async function fetchExchangeLiquidation(
   symbol: string,
   timeframe: '1h' | '4h' | '12h' | '24h',
 ): Promise<ExchangeLiquidationResponse> {
-  return apiCall(async () => {
-    const response = await client.AggregatedLiquidationController_getExchanges({
-      headers: optionalAuthHeaders(),
-      queries: { symbol, timeframe },
+  try {
+    return await apiCall(async () => {
+      const response = await client.AggregatedLiquidationController_getExchanges({
+        headers: optionalAuthHeaders(),
+        queries: { symbol, timeframe },
+      })
+      return unwrapResponse(response) as ExchangeLiquidationResponse
+    }, 'FETCH_LIQUIDATION_EXCHANGES')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const rand = mulberry32(hashStringToSeed(`liq-ex:${symbol}:${timeframe}`))
+    const venues = ['Binance', 'OKX', 'Bybit', 'Bitget', 'Deribit']
+    const rows: ExchangeLiquidationRow[] = venues.map((ex) => {
+      const amountUsd = 0.6e6 + rand() ** 0.4 * 22e6
+      const longShare = 0.35 + rand() * 0.3
+      const longUsd = amountUsd * longShare
+      const shortUsd = amountUsd - longUsd
+      return { exchange: ex, symbol, timeframe, amountUsd, longUsd, shortUsd, longShare }
     })
-    return unwrapResponse(response) as ExchangeLiquidationResponse
-  }, 'FETCH_LIQUIDATION_EXCHANGES')
+    const totalAmount = rows.reduce((s, r) => s + r.amountUsd, 0)
+    const totalLong = rows.reduce((s, r) => s + r.longUsd, 0)
+    const totalShort = rows.reduce((s, r) => s + r.shortUsd, 0)
+    rows.unshift({
+      exchange: 'Total',
+      symbol,
+      timeframe,
+      amountUsd: totalAmount,
+      longUsd: totalLong,
+      shortUsd: totalShort,
+      longShare: totalAmount > 0 ? totalLong / totalAmount : undefined,
+      isTotal: true,
+    })
+    return { symbol, timeframe, rows }
+  }
 }
 
 // === 公共市场数据：加密股票报价（币股页面） ===
@@ -779,6 +908,36 @@ export async function fetchCryptoStockQuotesLatest(params?: {
     // 方便公共页面用统一逻辑回退到静态示例数据。
     if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
       throw new AuthenticationError('TOKEN_EXPIRED')
+    }
+    if (shouldFallbackToMock(error)) {
+      // Minimal mock payload to keep public pages functional when backend is unavailable.
+      const rand = mulberry32(hashStringToSeed('crypto-stocks:latest'))
+      const rows = [
+        { symbol: 'PYPL', assetSymbol: 'PYUSD', exchange: 'NASDAQ', name: 'PayPal Holdings, Inc.' },
+        { symbol: 'MSTR', assetSymbol: 'BTC', exchange: 'NASDAQ', name: 'MicroStrategy Incorporated' },
+        { symbol: 'CRCL', assetSymbol: 'USDC', exchange: 'NYSE', name: 'Circle Internet Group' },
+        { symbol: 'BMNR', assetSymbol: 'ETH', exchange: 'NYSE', name: 'BitMine Immersion' },
+        { symbol: 'BTDR', assetSymbol: 'BCH', exchange: 'NASDAQ', name: 'Bitdeer Technologies Group' },
+      ]
+      return rows.map((r) => {
+        const basePrice = 10 + rand() * 300
+        const pct = (rand() - 0.5) * 2
+        const marketCap = (1e9 + rand() ** 0.25 * 80e9).toFixed(2)
+        return {
+          symbol: r.symbol,
+          name: r.name,
+          exchange: r.exchange,
+          price: basePrice.toFixed(2),
+          priceChangePercent: (pct * 100).toFixed(2),
+          marketCap,
+          assetSymbol: r.assetSymbol,
+          assetLogoUrl: '/images/icon-default.svg',
+          companyLogoUrl: '/images/icon-default.svg',
+          mNav: (rand() * 1.2).toFixed(2),
+          holdingsValue: '-',
+          holdingsAmount: '-',
+        } as any as CryptoStockQuoteLatest
+      })
     }
     throw error
   }
@@ -1123,22 +1282,50 @@ export interface FetchPredictionMarketsParams {
 export async function fetchPredictionMarkets(
   params: FetchPredictionMarketsParams = {},
 ): Promise<PredictionMarketCardResponse[]> {
-  return apiCall(async () => {
-    const page = params.page ?? 1
-    const limit = params.limit ?? 48
+  try {
+    return await apiCall(async () => {
+      const page = params.page ?? 1
+      const limit = params.limit ?? 48
 
-    const response = await client.PolymarketController_listMarkets({
-      headers: optionalAuthHeaders(),
-      queries: {
-        ...(params.category && { category: params.category }),
-        ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
-        page,
-        limit,
-      },
+      const response = await client.PolymarketController_listMarkets({
+        headers: optionalAuthHeaders(),
+        queries: {
+          ...(params.category && { category: params.category }),
+          ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
+          page,
+          limit,
+        },
+      })
+
+      return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
+    }, 'FETCH_PREDICTION_MARKETS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const rand = mulberry32(hashStringToSeed(`pm:${params.category ?? 'all'}:${params.onlyActive ? '1' : '0'}`))
+    const count = params.limit ?? 48
+    return Array.from({ length: Math.min(count, 24) }).map((_, idx) => {
+      const probA = 0.1 + rand() * 0.8
+      const probB = 1 - probA
+      return {
+        id: `mock-${idx}`,
+        title: idx % 2 === 0 ? 'What price will Bitcoin hit in 2026?' : 'Will the Fed cut rates this year?',
+        status: 'LIVE',
+        probability: (0.2 + rand() * 0.7).toFixed(2),
+        volume24h: Math.floor(1e6 + rand() ** 0.25 * 45e6),
+        options: [
+          { label: 'Yes', probability: probA.toFixed(2) },
+          { label: 'No', probability: probB.toFixed(2) },
+        ],
+        rules: {
+          paragraphs: [
+            'This is mock data shown when the backend is unavailable.',
+            'The market resolves based on publicly available sources.',
+          ],
+          createdAt: new Date(Date.now() - 7 * 24 * 3600_000).toISOString(),
+        },
+      } as any as PredictionMarketCardResponse
     })
-
-    return unwrapResponse<PredictionMarketCardResponse[]>(response as any)
-  }, 'FETCH_PREDICTION_MARKETS')
+  }
 }
 
 // ===== 聚合订单簿 API =====
@@ -1179,18 +1366,49 @@ export interface FetchAggregatedOrderbookParams {
 export async function fetchAggregatedOrderbook(
   params: FetchAggregatedOrderbookParams,
 ): Promise<AggregatedOrderbookResponse> {
-  return apiCall(async () => {
-    const response = await client.AggregatedOrderbookController_getAggregatedOrderbook({
-      queries: {
-        base: params.base,
-        type: params.type,
-        ...(params.venues && { venues: params.venues }),
-        ...(params.depth && { depth: params.depth }),
-        ...(params.tickSize && { tickSize: params.tickSize }),
-      },
-    })
-    return unwrapResponse<AggregatedOrderbookResponse>(response as any)
-  }, 'FETCH_AGGREGATED_ORDERBOOK')
+  try {
+    return await apiCall(async () => {
+      const response = await client.AggregatedOrderbookController_getAggregatedOrderbook({
+        queries: {
+          base: params.base,
+          type: params.type,
+          ...(params.venues && { venues: params.venues }),
+          ...(params.depth && { depth: params.depth }),
+          ...(params.tickSize && { tickSize: params.tickSize }),
+        },
+      })
+      return unwrapResponse<AggregatedOrderbookResponse>(response as any)
+    }, 'FETCH_AGGREGATED_ORDERBOOK')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const depth = params.depth ?? 100
+    const seed = hashStringToSeed(`ob:${params.base}:${params.type}:${params.venues ?? ''}:${params.tickSize ?? ''}`)
+    const rand = mulberry32(seed)
+    const mid = params.base === 'BTC' ? 65_000 + rand() * 8_000 : 2_500 + rand() * 300
+    const tick = params.tickSize ?? (params.base === 'BTC' ? 1 : 0.5)
+    const venues = (params.venues ? params.venues.split(',') : ['binance', 'bybit', 'okx']).slice(0, 5)
+
+    const buildSide = (dir: 'ask' | 'bid'): AggregatedOrderbookLevel[] => {
+      return Array.from({ length: Math.min(depth, 80) }).map((_, i) => {
+        const price = dir === 'ask' ? mid + tick * (i + 1) : mid - tick * (i + 1)
+        const sizeTotal = 0.15 + rand() ** 0.4 * 18
+        const details = venues.map((v) => ({ venueId: v, size: sizeTotal * (0.15 + rand() * 0.5) }))
+        return { price: Number(price.toFixed(2)), sizeTotal: Number(sizeTotal.toFixed(4)), details }
+      })
+    }
+
+    return {
+      marketKey: `${params.base}-${params.type}`,
+      base: params.base,
+      type: params.type,
+      asks: buildSide('ask'),
+      bids: buildSide('bid'),
+      midPrice: Number(mid.toFixed(2)),
+      updatedAt: Date.now(),
+      venues,
+      mergedQuotes: [],
+    }
+  }
 }
 
 // ===== 聚合持仓量（Open Interest）API =====

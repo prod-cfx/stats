@@ -5,9 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
-import { API_BASE_URL } from '@/lib/api-client'
-import { getToken } from '@/lib/auth-storage'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -78,405 +77,134 @@ export const Navbar = () => {
     .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
     .map((x) => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
 
+  const whaleChildren = [
+    { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
+    { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
+    { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
+  ]
+
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
     { 
       name: t('nav.data'), 
-      href: withLng('/liquidation-map'),
-      children: dataChildren.length
-        ? dataChildren
-        : [
-        { name: t('nav.liquidation_map'), href: withLng('/liquidation-map') },
-        { name: t('nav.long_short_ratio'), href: withLng('/long-short-ratio') },
-        { name: t('nav.aggregated_orderbook'), href: withLng('/aggregated-orderbook') },
-        { name: t('nav.liquidation_data'), href: withLng('/liquidation-data') },
-        { name: t('nav.prediction_market'), href: withLng('/prediction-market') },
-        { name: t('nav.public_companies'), href: withLng('/public-companies') },
-      ],
+      href: '#',
+      children: dataChildren
     },
-    { 
-      name: t('nav.whales'), 
-      href: withLng('/whale-tracking/discover'),
-      children: [
-        { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
-        { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
-        { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
-      ]
+    {
+      name: t('nav.whales'),
+      href: '#',
+      children: whaleChildren
     },
     { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ];
 
-  const searchItems = useMemo(() => {
-    const items: Array<{ label: string; href: string; group: string }> = []
-
-    // Flatten navbar items (including children)
-    for (const link of navLinks) {
-      items.push({ label: link.name, href: link.href, group: t('nav.home') })
-      if (link.children?.length) {
-        for (const child of link.children) {
-          items.push({ label: child.name, href: child.href, group: link.name })
-        }
-      }
-    }
-
-    // Also include catalog nav items (in case navLinks fallback differs)
-    for (const x of catalogItems) {
-      if (x.kind !== 'nav' || !x.href) continue
-      const href = normalizeHref(x.href)
-      items.push({ label: t(x.labelKey), href, group: t('nav.data') })
-    }
-
-    // De-dup by href
-    const seen = new Set<string>()
-    return items.filter((it) => {
-      if (seen.has(it.href)) return false
-      seen.add(it.href)
-      return true
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- normalizeHref depends on currentLng
-  }, [catalogItems, currentLng, t])
-
-  const _filteredSearchItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return searchItems.slice(0, 8)
-    const hits = searchItems
-      .filter((it) => it.label.toLowerCase().includes(q) || it.href.toLowerCase().includes(q))
-      .slice(0, 12)
-    return hits
-  }, [searchItems, searchQuery])
-
-  const indicatorEntries = useMemo(() => {
-    // Use catalog chartSeries/chartOverlay. Prefer href (full page) when present; otherwise route to trade as a fallback.
-    const entries: SearchEntry[] = []
-    for (const x of catalogItems) {
-      if (x.kind !== 'chartSeries' && x.kind !== 'chartOverlay') continue
-      const label = t(x.labelKey)
-      const href = x.href ? normalizeHref(x.href) : withLng('/trade')
-      entries.push({
-        id: `indicator:${x.id}`,
-        type: 'indicator',
-        label,
-        subtitle: x.href ? t('chart.indicator.openFull') : t('nav.trade') ?? '行情',
-        href,
-        keywords: [x.id, x.group || '', x.kind],
-      })
-    }
-    return entries
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- normalizeHref depends on currentLng
-  }, [catalogItems, currentLng, t])
-
-  const hotCoins = useMemo(() => {
-    // Reuse the same market list used by TopBar, so search + top bar stay consistent.
-    const futuresAgg = getMockMarketList({ marketType: 'futures', isAggregated: true, selectedExchange: 'binance' })
-    const spotAgg = getMockMarketList({ marketType: 'spot', isAggregated: true, selectedExchange: 'binance' })
-
-    // Merge by base
-    const spotByBase = new Map(spotAgg.map((x) => [x.base, x]))
-    return futuresAgg.slice(0, 10).map((f) => {
-      const s = spotByBase.get(f.base)
-      const name = f.base // No coin metadata yet; keep symbol as name for now.
-      const price = f.price
-      const changePct = f.changePct
-      const perpTurnoverUsd = f.volume
-      const spotTurnoverUsd = s?.volume ?? f.volume * 0.6
-      // rough: market cap placeholder based on turnover (until real backend wired)
-      const marketCapUsd = Math.max(perpTurnoverUsd, spotTurnoverUsd) * 20
-      return {
-        name,
-        symbol: f.base,
-        marketCapUsd,
-        perpTurnoverUsd,
-        spotTurnoverUsd,
-        price,
-        changePct,
-      }
-    })
-  }, [])
-
-  // Optional backend merge: if user has token, enrich the searchable universe with backend trading pairs bases.
-  // This endpoint is RequireAuth, so without user system it will just be skipped.
+  // Close mobile menu when route changes
   useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    if (!searchOpen) return
-    const token = getToken()
-    if (!token) return
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
-    let cancelled = false
+  // 获取热门搜索建议（示例）
+  // 实际场景：可以基于 extraBases 或 mock market list 动态生成
+  const searchResults: SearchEntry[] = useMemo(() => {
+    if (!searchQuery) return []
+    
+    const q = searchQuery.toLowerCase()
+    const results: SearchEntry[] = []
 
-    ;(async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/markets/pairs`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+    // 1. Pages
+    if ('dashboard'.includes(q) || '看板'.includes(q)) {
+      results.push({ id: 'p-dash', type: 'page', label: t('nav.dashboard'), href: withLng('/dashboard') })
+    }
+    if ('liquidation'.includes(q) || 'map'.includes(q) || '清算'.includes(q)) {
+      results.push({ id: 'p-liq', type: 'page', label: t('nav.liquidation_map'), href: withLng('/liquidation-map') })
+    }
+
+    // 2. Coins (Mock data + extraBases)
+    const mockList = getMockMarketList() // { base, quote, ... }
+    // 简单去重
+    const seen = new Set<string>()
+    
+    // extraBases first
+    extraBases.forEach(base => {
+      if (base.toLowerCase().includes(q) && !seen.has(base)) {
+        seen.add(base)
+        results.push({
+          id: `c-${base}`,
+          type: 'coin',
+          label: base,
+          subtitle: 'Perpetual', // 假设
+          href: withLng(`/market/${base}-USDT`),
         })
-
-        if (!res.ok) return
-        const data = (await res.json()) as Array<{ baseAsset?: string; quoteAsset?: string; enabled?: boolean }>
-        if (!Array.isArray(data)) return
-
-        const bases = Array.from(
-          new Set(
-            data
-              .filter((x) => (x?.enabled ?? true) !== false)
-              .filter((x) => !x.quoteAsset || x.quoteAsset === 'USDT')
-              .map((x) => (x.baseAsset ? String(x.baseAsset).toUpperCase() : ''))
-              .filter(Boolean),
-          ),
-        ).slice(0, 200)
-
-        if (!cancelled) setExtraBases(bases)
-      } catch {
-        // ignore
       }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [ENABLE_GLOBAL_SEARCH, searchOpen])
-
-  const featureShortcuts = useMemo(() => {
-    // Use existing routes (no user system required).
-    return [
-      { label: 'Hyperliquid鲸鱼实时监控', href: withLng('/whale-tracking/realtime') },
-      { label: '资金费率', href: withLng('/trade') }, // placeholder route (trade page has funding UI)
-      { label: '牛市逃顶信号清单', href: withLng('/dashboard') }, // placeholder
-      { label: '爆仓数据', href: withLng('/liquidation-data') },
-      { label: '潜力币筛选器', href: withLng('/dashboard') }, // placeholder
-    ]
-  }, [withLng])
-
-  const addressCandidate = useMemo(() => {
-    const q = searchQuery.trim()
-    if (/^0x[a-fA-F0-9]{6,}$/.test(q)) return q
-    return null
-  }, [searchQuery])
-
-  const toTradeHref = (base: string) => {
-    const symbol = `${base.toUpperCase()}USDT`
-    return withLng(`/trade?symbol=${encodeURIComponent(symbol)}&marketType=futures`)
-  }
-
-  const baseEntries = useMemo(() => {
-    const entries: SearchEntry[] = []
-
-    // Coins
-    const hotSymbols = new Set(hotCoins.map((c) => c.symbol))
-    for (const c of hotCoins) {
-      entries.push({
-        id: `coin:${c.symbol}`,
-        type: 'coin',
-        label: `${c.name} (${c.symbol})`,
-        subtitle: `行情 · ${c.symbol}USDT`,
-        href: toTradeHref(c.symbol),
-        keywords: [c.name, c.symbol, `${c.symbol}USDT`, 'coin', 'ticker'],
-      })
-    }
-    // Add extra bases from backend (if any) that are not in the hot list.
-    for (const base of extraBases) {
-      if (hotSymbols.has(base)) continue
-      entries.push({
-        id: `coin:${base}`,
-        type: 'coin',
-        label: `${base}`,
-        subtitle: `行情 · ${base}USDT`,
-        href: toTradeHref(base),
-        keywords: [base, `${base}USDT`, 'coin', 'pair'],
-      })
-    }
-
-    // Features
-    for (const x of featureShortcuts) {
-      entries.push({
-        id: `feature:${x.href}`,
-        type: 'feature',
-        label: x.label,
-        subtitle: '功能',
-        href: x.href,
-        keywords: [x.label],
-      })
-    }
-
-    // Pages (nav items)
-    for (const it of searchItems) {
-      entries.push({
-        id: `page:${it.href}`,
-        type: 'page',
-        label: it.label,
-        subtitle: it.group,
-        href: it.href,
-        keywords: [it.label, it.group, it.href],
-      })
-    }
-
-    // Indicators
-    for (const ind of indicatorEntries) {
-      entries.push(ind)
-    }
-
-    // De-dup by href+label+type
-    const seen = new Set<string>()
-    return entries.filter((e) => {
-      const k = `${e.type}:${e.href}:${e.label}`
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
     })
-  }, [featureShortcuts, hotCoins, indicatorEntries, searchItems, toTradeHref])
 
-  const addressEntries = useMemo(() => {
-    if (!addressCandidate) return []
-    const a = addressCandidate
-    return [
-      {
-        id: `address:${a}`,
-        type: 'address',
-        label: a,
-        subtitle: '钱包 / 合约地址 · 查看画像',
-        href: withLng(`/whale-tracking/profile?address=${encodeURIComponent(a)}`),
-      } satisfies SearchEntry,
-    ]
-  }, [addressCandidate, withLng])
-
-  const filteredEntries = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) {
-      // Default view: show grouped sections even without query.
-      const coins = baseEntries.filter((e) => e.type === 'coin').slice(0, 12)
-      const features = baseEntries.filter((e) => e.type === 'feature').slice(0, 8)
-      const indicators = baseEntries.filter((e) => e.type === 'indicator').slice(0, 8)
-      const pages = baseEntries.filter((e) => e.type === 'page').slice(0, 8)
-      return [...addressEntries, ...coins, ...features, ...indicators, ...pages]
-    }
-
-    function scoreEntry(e: SearchEntry): number {
-      const hay = [e.label, e.subtitle ?? '', ...(e.keywords ?? [])].join(' ').toLowerCase()
-      if (!hay.includes(q)) return -1
-      // simple scoring: startsWith > includes; shorter is better
-      let s = 0
-      if (e.label.toLowerCase().startsWith(q)) s += 50
-      if ((e.keywords ?? []).some((k) => String(k).toLowerCase().startsWith(q))) s += 30
-      s += Math.max(0, 20 - e.label.length / 5)
-      return s
-    }
-
-    const hits = baseEntries
-      .map((e) => ({ e, s: scoreEntry(e) }))
-      .filter((x) => x.s >= 0)
-      .sort((a, b) => b.s - a.s)
-      .slice(0, 30)
-      .map((x) => x.e)
-
-    return [...addressEntries, ...hits]
-  }, [addressEntries, baseEntries, searchQuery])
-
-  // Use a single active index across ALL selectable entries.
-  useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    setActiveIndex(0)
-  }, [ENABLE_GLOBAL_SEARCH, searchQuery, searchOpen])
-
-  // Keep activeIndex within bounds when list changes.
-  useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    if (activeIndex < 0) {
-      setActiveIndex(0)
-      return
-    }
-    if (filteredEntries.length === 0) {
-      if (activeIndex !== 0) setActiveIndex(0)
-      return
-    }
-    if (activeIndex > filteredEntries.length - 1) {
-      setActiveIndex(filteredEntries.length - 1)
-    }
-  }, [ENABLE_GLOBAL_SEARCH, activeIndex, filteredEntries.length])
-
-  useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    // Global hotkey: "/" to focus search
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      const isTyping =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          (target as any).isContentEditable)
-
-      if (!isTyping && e.key === '/') {
-        e.preventDefault()
-        setSearchOpen(true)
-        setTimeout(() => searchInputRef.current?.focus(), 0)
+    // mock list
+    mockList.forEach(m => {
+      if ((m.base.toLowerCase().includes(q) || m.symbol.toLowerCase().includes(q)) && !seen.has(m.base)) {
+        seen.add(m.base)
+        results.push({
+          id: `c-${m.base}`,
+          type: 'coin',
+          label: m.base,
+          subtitle: 'Perpetual',
+          href: withLng(`/market/${m.base}-USDT`), // 假设路由
+        })
       }
+    })
 
-      if (searchOpen && e.key === 'Escape') {
-        setSearchOpen(false)
-        setActiveIndex(0)
-        searchInputRef.current?.blur()
-      }
+    return results.slice(0, 8)
+  }, [searchQuery, extraBases, t, withLng])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchResults.length > 0) {
+      router.push(searchResults[activeIndex].href)
+      setSearchOpen(false)
+    } else {
+      // 默认搜索跳转
+      // router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
+  };
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [ENABLE_GLOBAL_SEARCH, searchOpen])
-
-  useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    // Close on click outside
-    const onDown = (e: MouseEvent) => {
-      if (!searchWrapRef.current) return
-      if (!searchWrapRef.current.contains(e.target as Node)) {
-        setSearchOpen(false)
-        setActiveIndex(0)
-      }
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex(prev => (prev + 1) % searchResults.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex(prev => (prev - 1 + searchResults.length) % searchResults.length)
+    } else if (e.key === 'Escape') {
+      setSearchOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [ENABLE_GLOBAL_SEARCH])
+  }
 
+  // 点击外部关闭搜索
   useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    // Close on route change
-    setSearchOpen(false)
-    setMobileMenuOpen(false)
-    setActiveIndex(0)
-  }, [ENABLE_GLOBAL_SEARCH, pathname])
-
-  useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    // Prevent body scroll when modal is open
-    if (!searchOpen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.body.style.overflow = prev
-    }
-  }, [ENABLE_GLOBAL_SEARCH, searchOpen])
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
+  // 快捷键 / (Focus search)
   useEffect(() => {
-    if (!ENABLE_GLOBAL_SEARCH) return
-    // Reset active index when query changes
-    setActiveIndex(0)
-  }, [ENABLE_GLOBAL_SEARCH, searchQuery])
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !searchOpen && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchOpen]);
 
-  const handleSelectSearchItem = (href: string) => {
-    setSearchOpen(false)
-    setSearchQuery('')
-    setActiveIndex(0)
-    router.push(href)
-  }
-
-  const formatCompactZh = (n: number) => {
-    // minimal zh compact formatting: 亿/万亿 (fallback)
-    if (!Number.isFinite(n)) return '0'
-    if (n >= 1e12) return `${(n / 1e12).toFixed(2)}万亿`
-    if (n >= 1e8) return `${(n / 1e8).toFixed(2)}亿`
-    return `${Math.round(n)}`
-  }
-
+  // 高亮匹配文字
   const highlight = (label: string) => {
     const q = searchQuery.trim()
     if (!q) return label
@@ -516,12 +244,12 @@ export const Navbar = () => {
             <Menu className="w-6 h-6" />
           </button>
           
-          <Link href={withLng('/')} className="flex items-center gap-3 no-underline">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20" />
-            <div className="flex flex-col">
-              <span className="text-[color:var(--cf-text-strong)] font-bold text-lg md:text-xl leading-tight">Coinflux</span>
-              <span className="hidden md:block text-[color:var(--cf-muted)] text-xs">Crypto Data Aggregation</span>
+          <Link href={withLng('/')} className="flex flex-col no-underline">
+            <div className="flex items-center">
+              <CoinfluxMark className="w-7 h-7 md:w-10 md:h-10" />
+              <span className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-2xl leading-none tracking-tight -ml-1.5">oinflux</span>
             </div>
+            <span className="hidden md:block text-[color:var(--cf-muted)] text-[10px] md:text-xs tracking-wider pl-0.5">Crypto Data Aggregation</span>
           </Link>
         </div>
         
@@ -570,14 +298,14 @@ export const Navbar = () => {
             }
 
             return (
-              <Link 
-                key={link.name} 
-                href={link.href} 
-                className={`font-medium transition-colors no-underline flex items-center h-full transition-all relative ${
-                  isActive 
-                    ? 'text-[color:var(--cf-text-strong)]' 
+              <Link
+                key={link.name}
+                href={link.href}
+                className={`font-medium transition-colors h-full flex items-center relative ${
+                  isActive
+                    ? 'text-[color:var(--cf-text-strong)]'
                     : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
-                } text-body`}
+                }`}
               >
                 {link.name}
                 {isActive && (
@@ -590,312 +318,176 @@ export const Navbar = () => {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Global Search - Phase 1 Hidden */}
         {ENABLE_GLOBAL_SEARCH && (
-          <div className="relative group" ref={searchWrapRef}>
-          {/* Mobile Search Icon Only */}
-          <button 
-             className="md:hidden text-[color:var(--cf-muted)] p-2"
-             onClick={() => {
-               setSearchOpen(true)
-               setTimeout(() => searchInputRef.current?.focus(), 0)
-             }}
-          >
-            <Search className="w-5 h-5" />
-          </button>
-
-          {/* Desktop Search Bar */}
-          <div className="hidden md:block relative group">
-          <svg width="0" height="0" className="absolute">
-            <defs>
-              <linearGradient id="search_icon_gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="var(--color-primary)" />
-                <stop offset="100%" stopColor="var(--color-secondary)" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <Search 
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--cf-muted)] group-focus-within:text-primary transition-colors z-10" 
-            style={{ 
-                stroke: 'url(#search_icon_gradient)',
-            }}
-          />
-            <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-md opacity-0 group-focus-within:opacity-100 transition-opacity p-[1.5px] pointer-events-none">
-            <div className="w-full h-full bg-[color:var(--cf-bg)] rounded-[5px]" />
-            </div>
-            <button
-              type="button"
-              className="bg-[color:var(--cf-surface-2)] border border-[color:var(--cf-border)] rounded-md pl-10 pr-4 py-2 text-caption text-[color:var(--cf-text-strong)] transition-all w-64 relative z-0 text-left"
-              onClick={() => {
-                setSearchOpen(true)
-                setTimeout(() => searchInputRef.current?.focus(), 0)
-              }}
-              aria-label={t('nav.search')}
+          <div className="relative" ref={searchWrapRef}>
+            <div 
+              className={`flex items-center transition-all duration-300 ${
+                searchOpen ? 'w-full md:w-80 bg-[color:var(--cf-surface-2)]' : 'w-8 md:w-10 bg-transparent'
+              } h-8 md:h-10 rounded-full overflow-hidden`}
             >
-              <span className="text-[color:var(--cf-muted)]">{t('nav.search')}</span>
-              <span className="ml-2 text-[11px] text-[color:var(--cf-muted)] opacity-70">/</span>
-            </button>
+              <button 
+                onClick={() => {
+                  setSearchOpen(!searchOpen)
+                  if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
+                }}
+                className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] flex-shrink-0"
+              >
+                <Search className="w-4 h-4 md:w-5 md:h-5" />
+              </button>
+              
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={t('nav.search') || 'Search...'}
+                className={`w-full h-full bg-transparent border-none outline-none text-sm text-[color:var(--cf-text)] px-2 ${
+                  searchOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              />
+              
+              {searchOpen && searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="mr-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
+
+            {/* Search Results Dropdown */}
+            {searchOpen && searchQuery && (
+              <div className="absolute top-full right-0 mt-2 w-[calc(100vw-32px)] md:w-96 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                {searchResults.length > 0 ? (
+                  <div className="py-2">
+                    {searchResults.map((result, idx) => (
+                      <Link
+                        key={result.id}
+                        href={result.href}
+                        onClick={() => setSearchOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 hover:bg-[color:var(--cf-surface-hover)] transition-colors ${
+                          idx === activeIndex ? 'bg-[color:var(--cf-surface-hover)]' : ''
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                          result.type === 'coin' ? 'bg-primary/10 text-primary' : 
+                          result.type === 'page' ? 'bg-purple-500/10 text-purple-500' :
+                          'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)]'
+                        }`}>
+                          {result.type === 'coin' ? 'C' : result.type === 'page' ? 'P' : '#'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-[color:var(--cf-text-strong)] truncate">
+                            {highlight(result.label)}
+                          </div>
+                          {result.subtitle && (
+                            <div className="text-xs text-[color:var(--cf-muted)] truncate">{result.subtitle}</div>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-[color:var(--cf-muted)] text-sm">
+                    {t('modal.noResults') || 'No results found'}
+                  </div>
+                )}
+                <div className="px-4 py-2 bg-[color:var(--cf-surface-2)] border-t border-[color:var(--cf-border)] flex justify-between text-[10px] text-[color:var(--cf-muted)]">
+                  <span>Select <kbd className="font-sans bg-[color:var(--cf-surface)] px-1 rounded">↑↓</kbd></span>
+                  <span>Open <kbd className="font-sans bg-[color:var(--cf-surface)] px-1 rounded">Enter</kbd></span>
+                </div>
+              </div>
+            )}
           </div>
         )}
+
+        <div className="hidden md:block w-[1px] h-6 bg-[color:var(--cf-border)] mx-1" />
+        
+        <LanguageSwitcher />
+        <ThemeToggle />
+        
+        {/* User System - Phase 1 Hidden */}
         {ENABLE_USER_SYSTEM && (
-          <>
-        <button 
-          type="button" 
-          className="px-4 py-2 text-label font-medium text-[color:var(--cf-text-strong)] hover:text-[color:var(--cf-text)] transition-colors"
-          onClick={() => info('Coming Soon')}
-        >
-          {t('nav.login')}
-        </button>
-        <button 
-          type="button" 
-          className="px-6 py-2 text-label font-medium bg-gradient-to-r from-primary to-secondary rounded-md text-white shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
-          onClick={() => info('Coming Soon')}
-        >
-          {t('nav.register')}
-        </button>
-          </>
+          <button className="hidden md:flex px-4 py-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95">
+            {t('nav.login')}
+          </button>
         )}
-        <div className="hidden md:block">
-          <LanguageSwitcher />
-        </div>
-        <div className="hidden md:block">
-          <ThemeToggle />
-        </div>
-        <div className="md:hidden">
-            {/* Mobile Language Switcher could go here or in the drawer */}
-        </div>
       </div>
 
-      {/* Mobile Menu Drawer */}
+      {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] md:hidden">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[80vw] max-w-sm bg-[color:var(--cf-bg)] border-r border-[color:var(--cf-border)] p-6 overflow-y-auto">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary" />
-                <span className="text-[color:var(--cf-text-strong)] font-bold text-lg">Coinflux</span>
+        <div className="fixed inset-0 z-[60] bg-[color:var(--cf-bg)] md:hidden flex flex-col animate-in slide-in-from-top-10 duration-200">
+          <div className="h-16 px-4 flex items-center justify-between border-b border-[color:var(--cf-border)]">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20 flex items-center justify-center">
+                <CoinfluxMark className="w-5 h-5 text-white" />
               </div>
-              <button 
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <span className="text-[color:var(--cf-text-strong)] font-bold text-lg">Coinflux</span>
             </div>
-
-            <div className="space-y-4">
-              {navLinks.map((link) => (
-                <div key={link.name} className="border-b border-[color:var(--cf-border)] last:border-0 pb-2">
-                  {link.children ? (
-                    <div>
-                      <button 
-                        onClick={() => toggleMobileSubmenu(link.name)}
-                        className="w-full flex items-center justify-between py-2 text-[color:var(--cf-text-strong)] font-medium"
-                      >
-                        {link.name}
-                        <ChevronDown 
-                          className={`w-4 h-4 transition-transform ${
-                            expandedMobileMenus.includes(link.name) ? 'rotate-180' : ''
-                          }`} 
-                        />
-                      </button>
-                      
-                      {expandedMobileMenus.includes(link.name) && (
-                        <div className="pl-4 py-2 space-y-2 bg-[color:var(--cf-surface)]/50 rounded-lg mt-1">
-                          {link.children.map((child) => (
-                            <Link 
-                              key={child.name}
-                              href={child.href}
-                              className={`block py-2 text-sm ${
-                                pathname === child.href 
-                                  ? 'text-primary font-medium' 
-                                  : 'text-[color:var(--cf-muted)]'
-                              }`}
-                            >
-                              {child.name}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <Link 
-                      href={link.href}
-                      className={`block py-2 text-[color:var(--cf-text-strong)] font-medium ${
-                        pathname === link.href ? 'text-primary' : ''
-                      }`}
+            <button 
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+            {navLinks.map((link) => {
+              const hasChildren = link.children && link.children.length > 0;
+              const isExpanded = expandedMobileMenus.includes(link.name);
+              
+              if (hasChildren) {
+                return (
+                  <div key={link.name} className="flex flex-col">
+                    <button 
+                      onClick={() => toggleMobileSubmenu(link.name)}
+                      className="flex items-center justify-between py-3 px-2 text-lg font-medium text-[color:var(--cf-text-strong)]"
                     >
                       {link.name}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 pt-8 border-t border-[color:var(--cf-border)]">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-[color:var(--cf-muted)]">Language</span>
-                  <LanguageSwitcher />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-[color:var(--cf-muted)]">Theme</span>
-                  <ThemeToggle />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Global Search Modal (Coinglass-style) */}
-      {ENABLE_GLOBAL_SEARCH && searchOpen && (
-        <div className="fixed inset-0 z-[100]">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => {
-              setSearchOpen(false)
-              setSearchQuery('')
-              setActiveIndex(0)
-            }}
-          />
-          <div className="relative mx-auto mt-20 w-[920px] max-w-[92vw]">
-            <div className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-2xl shadow-2xl overflow-hidden">
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-[color:var(--cf-border)] flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="relative flex-1">
-                    <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-xl opacity-100 p-[1.5px]">
-                      <div className="w-full h-full bg-[color:var(--cf-bg)] rounded-[11px]" />
-                    </div>
-                    <div className="relative flex items-center">
-                      <Search
-                        className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5"
-                        style={{ stroke: 'url(#search_icon_gradient)' }}
-                      />
-                      <input
-                        ref={searchInputRef}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="搜索币种、指标、合约地址"
-                        className="w-full bg-transparent pl-12 pr-12 py-3 text-sm text-[color:var(--cf-text-strong)] placeholder-[color:var(--cf-muted)] focus:outline-none"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
-                            e.preventDefault()
-                            setSearchOpen(false)
-                            setSearchQuery('')
-                            setActiveIndex(0)
-                            return
-                          }
-                          if (e.key === 'ArrowDown') {
-                            e.preventDefault()
-                            setActiveIndex((i) => Math.min(i + 1, Math.max(0, filteredEntries.length - 1)))
-                          } else if (e.key === 'ArrowUp') {
-                            e.preventDefault()
-                            setActiveIndex((i) => Math.max(0, i - 1))
-                          } else if (e.key === 'Enter') {
-                            e.preventDefault()
-                            const item = filteredEntries[activeIndex]
-                            if (item) handleSelectSearchItem(item.href)
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)] transition-colors text-xl"
-                        onClick={() => {
-                          setSearchOpen(false)
-                          setSearchQuery('')
-                          setActiveIndex(0)
-                        }}
-                        aria-label="close"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Body */}
-              <div className="px-6 py-5 max-h-[70vh] overflow-y-auto cf-scrollbar">
-                {/* Grouped UI (币种 / 指标 / 地址 / 功能 / 页面), but still one global index for keyboard navigation */}
-                {filteredEntries.length === 0 ? (
-                  <div className="px-2 py-6 text-sm text-[color:var(--cf-muted)]">未找到匹配项</div>
-                ) : (
-                  (() => {
-                    const groupOrder: Array<{ type: SearchEntryType; title: string }> = [
-                      { type: 'address', title: '地址' },
-                      { type: 'coin', title: '币种' },
-                      { type: 'indicator', title: '指标' },
-                      { type: 'feature', title: '功能' },
-                      { type: 'page', title: '页面' },
-                    ]
-
-                    let globalIdx = 0
-                    const sections = groupOrder
-                      .map((g) => ({
-                        ...g,
-                        items: filteredEntries.filter((e) => e.type === g.type),
-                      }))
-                      .filter((s) => s.items.length > 0)
-
-                    return (
-                      <div className="space-y-6">
-                        {sections.map((section) => {
-                          return (
-                            <div key={section.type}>
-                              <div className="text-xs text-[color:var(--cf-muted)] mb-2 flex items-center justify-between">
-                                <span>{section.title}</span>
-                                {section.type === 'coin' && extraBases.length > 0 && (
-                                  <span className="text-[11px] text-[color:var(--cf-muted)] opacity-70">
-                                    已合并后端交易对：{extraBases.length}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="space-y-2">
-                                {section.items.map((entry) => {
-                                  const idx = globalIdx++
-                                  const isActive = idx === activeIndex
-
-                                  return (
-                                    <button
-                                      key={entry.id}
-                                      type="button"
-                                      onMouseEnter={() => setActiveIndex(idx)}
-                                      onClick={() => handleSelectSearchItem(entry.href)}
-                                      className={`w-full text-left px-4 py-3 rounded-xl border transition-colors flex items-center justify-between gap-4 ${
-                                        isActive
-                                          ? 'bg-[color:var(--cf-surface-hover)] border-[color:var(--cf-border)]'
-                                          : 'bg-[color:var(--cf-surface)] border-[color:var(--cf-border)] hover:bg-[color:var(--cf-surface-hover)]'
-                                      }`}
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="text-sm text-[color:var(--cf-text-strong)] truncate">
-                                          {highlight(entry.label)}
-                                        </div>
-                                        <div className="text-[11px] text-[color:var(--cf-muted)] truncate">
-                                          {entry.subtitle ?? section.title}
-                                        </div>
-                                      </div>
-                                      <div className="text-[11px] text-[color:var(--cf-muted)] flex-none">↵</div>
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })}
+                      <ChevronDown className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="flex flex-col bg-[color:var(--cf-surface)] rounded-lg overflow-hidden border border-[color:var(--cf-border)] mb-2">
+                        {link.children!.map((child) => (
+                          <Link
+                            key={child.name}
+                            href={child.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="py-3 px-4 text-base text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] border-b border-[color:var(--cf-border)] last:border-0"
+                          >
+                            {child.name}
+                          </Link>
+                        ))}
                       </div>
-                    )
-                  })()
-                )}
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="py-3 px-2 text-lg font-medium text-[color:var(--cf-text-strong)] border-b border-[color:var(--cf-border)] last:border-0"
+                >
+                  {link.name}
+                </Link>
+              );
+            })}
+            
+            {ENABLE_USER_SYSTEM && (
+              <div className="mt-6">
+                <button className="w-full py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/20">
+                  {t('nav.login')}
+                </button>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

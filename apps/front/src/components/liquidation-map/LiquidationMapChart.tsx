@@ -1,7 +1,7 @@
 'use client';
 
 import * as echarts from 'echarts';
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/components/providers/ThemeProvider';
 
@@ -141,19 +141,8 @@ function _stripInitialMove(pathData: string): string {
   return pathData.replace(/^M\s*[-\d.]+\s*[-\d.]+\s*/i, '')
 }
 
-export const LiquidationMapChart = forwardRef<LiquidationMapChartHandle, LiquidationMapChartProps>(
-  (
-    {
-      data,
-      currentPrice,
-      mode = 'full',
-      getPriceToY,
-      overlayWidth = 260,
-      overlayOpacity = 0.85,
-      selectedPrice = null,
-    className,
-  },
-  ref,
+export const LiquidationMapChart = (
+    { ref, data, currentPrice, mode = 'full', getPriceToY, overlayWidth = 260, overlayOpacity = 0.85, selectedPrice = null, className }: LiquidationMapChartProps & { ref?: React.RefObject<LiquidationMapChartHandle | null> },
 ) => {
 const chartRef = useRef<HTMLDivElement>(null);
 const chartInstanceRef = useRef<echarts.EChartsType | null>(null);
@@ -824,5 +813,4 @@ const colors = useMemo(
       <div ref={chartRef} className="w-full h-full" />
     </div>
   );
-},
-);
+};

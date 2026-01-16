@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AppProviders } from '@/components/providers/AppProviders';
 import '../globals.css';
 
-/* eslint-disable react-refresh/only-export-components */
+ 
 
 export type AppLocale = 'zh' | 'en';
 
