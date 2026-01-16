@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpDown, ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -468,7 +468,6 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
                     className="flex items-center gap-1.5 hover:text-[color:var(--cf-text-strong)] transition-colors group"
                   >
                     <span>{t('whaleTracking.profile.columns.asset')}</span>
-                    <Filter className={`w-3 h-3 ${assetFilter ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`} />
                   </button>
                   {isFilterOpen && (
                     <div className="absolute left-0 mt-2 w-48 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl z-30 p-2" onClick={e => e.stopPropagation()}>

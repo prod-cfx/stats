@@ -529,6 +529,8 @@
       "title": "鲸鱼持仓",
       "subtitle": "追踪大额持仓者的最新动态",
       "filters": {
+        "allSides": "所有方向",
+        "allUnrealizedPnl": "所有未实现盈亏",
         "profit": "盈利",
         "loss": "亏损"
       },

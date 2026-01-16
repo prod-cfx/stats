@@ -518,6 +518,8 @@
       "title": "Whale Holdings",
       "subtitle": "Track the latest positions from large holders",
       "filters": {
+        "allSides": "All directions",
+        "allUnrealizedPnl": "All unrealized PnL",
         "profit": "Profit",
         "loss": "Loss"
       },
