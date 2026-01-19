@@ -83,6 +83,8 @@ export const Footer = () => {
       <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-[color:var(--cf-border)]/50 flex flex-col md:flex-row items-center justify-center gap-4 text-[color:var(--cf-muted)] text-xs">
         <p className="text-center">
           {t('footer.copyrightLine', { year })}
+          <br />
+          {t('footer.ownership')}
         </p>
       </div>
     </footer>

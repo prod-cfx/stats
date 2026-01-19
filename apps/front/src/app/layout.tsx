@@ -2,17 +2,20 @@ import type { ReactNode } from 'react'
 import { cookies, headers } from 'next/headers'
 import './globals.css'
 
-function inferHtmlLang() {
-  const cookieLng = cookies().get('i18next')?.value?.toLowerCase()
+async function inferHtmlLang() {
+  const cookieStore = await cookies()
+  const headerStore = await headers()
+
+  const cookieLng = cookieStore.get('i18next')?.value?.toLowerCase()
   if (cookieLng?.startsWith('zh')) return 'zh-CN'
   if (cookieLng?.startsWith('en')) return 'en'
 
-  const accept = headers().get('accept-language')?.toLowerCase() ?? ''
+  const accept = headerStore.get('accept-language')?.toLowerCase() ?? ''
   return accept.startsWith('zh') ? 'zh-CN' : 'en'
 }
 
-export default function RootLayout({ children }: { children: ReactNode }) {
-  const htmlLang = inferHtmlLang()
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const htmlLang = await inferHtmlLang()
 
   return (
     <html lang={htmlLang} suppressHydrationWarning>
