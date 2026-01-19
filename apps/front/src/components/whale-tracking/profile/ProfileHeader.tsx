@@ -59,15 +59,22 @@ export const ProfileHeader = ({ address }: ProfileHeaderProps) => {
             <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${address}`} alt="avatar" className="w-full h-full" />
           </div>
           <div className="flex items-center gap-3">
-            <PageTitle className="text-xl md:text-2xl">{formatAddress(address)}</PageTitle>
-          <button 
-            type="button" 
-            onClick={handleCopyAddress}
-            className={`transition-colors ${isCopied ? 'text-green-400' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
-            title={t('whaleTracking.profile.header.copyAddress')}
-          >
-            {isCopied ? <Check className="w-4 h-4 md:w-4.5 md:h-4.5" /> : <Copy className="w-4 h-4 md:w-4.5 md:h-4.5" />}
-          </button>
+            <div className="relative group/address">
+              <PageTitle className="text-xl md:text-2xl cursor-default">{formatAddress(address)}</PageTitle>
+              {/* Hover-to-reveal full address tooltip */}
+              <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+                {address}
+                <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+              </div>
+            </div>
+            <button 
+              type="button" 
+              onClick={handleCopyAddress}
+              className={`transition-colors ${isCopied ? 'text-green-400' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+              title={t('whaleTracking.profile.header.copyAddress')}
+            >
+              {isCopied ? <Check className="w-4 h-4 md:w-4.5 md:h-4.5" /> : <Copy className="w-4 h-4 md:w-4.5 md:h-4.5" />}
+            </button>
           </div>
         </div>
         

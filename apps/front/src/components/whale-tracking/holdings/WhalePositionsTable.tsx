@@ -1,7 +1,7 @@
 'use client';
 
 import type { WhaleHoldingApiItem } from '@/lib/api';
-import { ArrowUpDown, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
+import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -37,6 +37,7 @@ export const WhalePositionsTable = () => {
   const params = useParams();
   const lng = (params as any)?.lng ?? 'zh';
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [assetFilter, setAssetFilter] = useState<'ALL' | 'BTC' | 'ETH' | 'SOL'>('ALL');
   const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL');
@@ -244,6 +245,17 @@ export const WhalePositionsTable = () => {
     setIsModalOpen(true);
   };
 
+  const handleCopy = async (address: string) => {
+    if (copiedAddress === address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (err) {
+      console.error('Copy failed', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -342,7 +354,7 @@ export const WhalePositionsTable = () => {
                   <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors group cursor-pointer" onClick={() => handleShowStats(pos.address)}>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 relative group/address">
                           <Link 
                             href={`/${lng}/whale-tracking/profile/?address=${pos.address}`}
                             className="text-[color:var(--cf-text-strong)] text-body font-medium hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
@@ -350,8 +362,17 @@ export const WhalePositionsTable = () => {
                           >
                             {pos.address.substring(0, 6)}...{pos.address.substring(pos.address.length - 4)}
                           </Link>
-                          <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(pos.address); }}>
-                            <Copy className="w-3.5 h-3.5" />
+                          {/* Hover-to-reveal full address tooltip */}
+                          <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+                            {pos.address}
+                            <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+                          </div>
+                          <button 
+                            type="button" 
+                            className={`transition-colors ${copiedAddress === pos.address ? 'text-green-500' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+                            onClick={(e) => { e.stopPropagation(); handleCopy(pos.address); }}
+                          >
+                            {copiedAddress === pos.address ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                         <div className="flex gap-1">

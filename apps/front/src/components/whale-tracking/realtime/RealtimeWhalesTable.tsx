@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpDown, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
+import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,6 +38,7 @@ export const RealtimeWhalesTable = () => {
   const [transactions, setTransactions] = useState<WhaleTransaction[]>(initialTransactions);
   const [_loading, setLoading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>(null);
@@ -214,9 +215,16 @@ export const RealtimeWhalesTable = () => {
     setIsModalOpen(true);
   };
 
-  const handleCopy = (address: string) => {
-    navigator.clipboard.writeText(address);
-    success(t('whaleTracking.realtime.toast.copied'));
+  const handleCopy = async (address: string) => {
+    if (copiedAddress === address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      success(t('whaleTracking.realtime.toast.copied'));
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (err) {
+      console.error('Copy failed', err);
+    }
   };
 
   const handleSortWinRate = () => {
@@ -300,7 +308,7 @@ export const RealtimeWhalesTable = () => {
                 >
                   <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]/50">
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 relative group/address">
                         <Link 
                           href={`/${lng}/whale-tracking/profile/?address=${tx.address}`}
                           className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
@@ -308,8 +316,17 @@ export const RealtimeWhalesTable = () => {
                         >
                           {`${tx.address.slice(0, 4)}...${tx.address.slice(-4)}`}
                         </Link>
-                        <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
-                          <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                        {/* Hover-to-reveal full address tooltip */}
+                        <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+                          {tx.address}
+                          <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+                        </div>
+                        <button 
+                          type="button" 
+                          className={`transition-colors ${copiedAddress === tx.address ? 'text-green-500' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+                          onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}
+                        >
+                          {copiedAddress === tx.address ? <Check className="w-3 h-3 md:w-3.5 md:h-3.5" /> : <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />}
                         </button>
                       </div>
                       <span 

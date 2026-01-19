@@ -1,9 +1,9 @@
 'use client';
 
-import { Copy, Info, TrendingUp } from 'lucide-react';
+import { Check, Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/toast';
 
@@ -80,6 +80,8 @@ export const TraderCard = ({
     return v
   }
 
+  const [hasCopied, setHasCopied] = useState(false)
+
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
     return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
@@ -113,6 +115,8 @@ export const TraderCard = ({
     e.stopPropagation();
     e.preventDefault();
 
+    if (hasCopied) return;
+
     const tryClipboard = async () => {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(address)
@@ -145,6 +149,8 @@ export const TraderCard = ({
         const fallbackOk = fallbackCopy()
         if (!fallbackOk) throw new Error('copy_failed')
       }
+      setHasCopied(true)
+      setTimeout(() => setHasCopied(false), 2000)
       toast.success({ title: tr('common.copied', '已复制', 'Copied'), description: address, duration: 2000 })
     } catch {
       toast.error({ title: tr('common.error', '复制失败', 'Copy failed'), description: tr('common.tryAgain', '请重试', 'Please try again'), duration: 2500 })
@@ -178,7 +184,7 @@ export const TraderCard = ({
                 <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
               </div>
               <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
-                <Copy className="w-4 h-4" />
+                {hasCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
             {tag && <span className="text-[color:var(--cf-muted)] text-caption font-medium uppercase truncate">{tag}</span>}
@@ -234,7 +240,7 @@ export const TraderCard = ({
             <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
           </div>
           <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={copyAddress}>
-            <Copy className="w-4.5 h-4.5" />
+            {hasCopied ? <Check className="w-4.5 h-4.5 text-green-500" /> : <Copy className="w-4.5 h-4.5" />}
           </button>
           {handle && <span className="text-[color:var(--cf-muted)] text-body font-medium ml-2">{handle}</span>}
         </div>
