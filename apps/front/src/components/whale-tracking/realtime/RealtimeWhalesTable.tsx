@@ -36,7 +36,7 @@ export const RealtimeWhalesTable = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [transactions, setTransactions] = useState<WhaleTransaction[]>(initialTransactions);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -81,7 +81,6 @@ export const RealtimeWhalesTable = () => {
 
     // 使用递增的请求 ID，避免并发请求导致旧数据覆盖新数据
     const requestId = ++lastRequestIdRef.current;
-    const startedAt = Date.now();
 
     try {
       setLoading(true);

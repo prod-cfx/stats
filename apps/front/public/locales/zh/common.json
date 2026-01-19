@@ -139,7 +139,9 @@
   "footer": {
     "tagline": "专业的加密资产数据聚合与多维行情分析终端",
     "terms": "服务条款",
-    "privacy": "隐私政策"
+    "privacy": "隐私政策",
+    "ownership": "coinflux.ai 由 Node Global 所有并运营。",
+    "copyrightLine": "© {{year}} Coinflux. All rights reserved. Operated by Node Global Ltd."
   },
   "rightPanel": {
     "exchangeBinance": "币安",

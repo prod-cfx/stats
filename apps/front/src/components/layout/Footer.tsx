@@ -11,6 +11,7 @@ import { toast } from '@/lib/toast';
 export const Footer = () => {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const year = new Date().getFullYear()
 
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {
@@ -79,8 +80,10 @@ export const Footer = () => {
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-[color:var(--cf-border)]/50 flex flex-col md:flex-row items-center justify-between gap-4 text-[color:var(--cf-muted)] text-xs">
-        <p>© {new Date().getFullYear()} Coinflux. All rights reserved.</p>
+      <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-[color:var(--cf-border)]/50 flex flex-col md:flex-row items-center justify-center gap-4 text-[color:var(--cf-muted)] text-xs">
+        <p className="text-center">
+          {t('footer.copyrightLine', { year })}
+        </p>
       </div>
     </footer>
   );

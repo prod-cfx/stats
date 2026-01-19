@@ -319,8 +319,6 @@ export async function fetchWhaleAddressPerformance(
 
 // ===== 鲸鱼 Discover 聚合数据（whale-tracking/discover）相关 API =====
 
-export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
-
 export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
   return apiCall(async () => {
     const response = await client.WhaleTrackingController_getDiscover({
@@ -485,8 +483,6 @@ export async function fetchTraderOpenOrders(
 }
 
 // ===== Hyperliquid Whale Alert 实时数据 API =====
-
-export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 
 export interface FetchRealtimeWhaleAlertsParams {
   symbol?: string
