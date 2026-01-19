@@ -3,7 +3,7 @@
 import { Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/toast';
 
@@ -80,15 +80,6 @@ export const TraderCard = ({
     return v
   }
 
-  const [showFullAddress, setShowFullAddress] = useState(false)
-  const hideTimerRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
-    }
-  }, [])
-
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
     return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
@@ -123,7 +114,6 @@ export const TraderCard = ({
     e.preventDefault();
 
     const tryClipboard = async () => {
-      if (showFullAddress) setShowFullAddress(false)
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(address)
         return true
@@ -162,18 +152,8 @@ export const TraderCard = ({
   };
 
   const handleAddressClick = (e: React.MouseEvent) => {
-    // If user intends to open in new tab/window, do not intercept navigation.
+    // Prevent card click event but allow navigation
     e.stopPropagation()
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-    // First click: show the full address tooltip instead of navigating away.
-    if (!showFullAddress) {
-      e.preventDefault()
-      setShowFullAddress(true)
-      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
-      hideTimerRef.current = window.setTimeout(() => setShowFullAddress(false), 2500)
-      return
-    }
-    // Second click: allow navigation.
   }
 
   const content = variant === 'recommended' ? (
@@ -184,22 +164,19 @@ export const TraderCard = ({
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-2 min-w-0 relative">
+            <div className="flex items-center gap-2 min-w-0 relative group/address">
               <Link 
                 href={`/${lng}/whale-tracking/profile/?address=${address}`}
                 className="text-[color:var(--cf-text-strong)] font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all truncate"
-                title={address}
                 onClick={handleAddressClick}
               >
                 {address.length > 12 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
               </Link>
-              {/* Click-to-reveal full address tooltip */}
-              {showFullAddress && (
-                <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none">
-                  {address}
-                  <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
-                </div>
-              )}
+              {/* Hover-to-reveal full address tooltip */}
+              <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+                {address}
+                <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+              </div>
               <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
                 <Copy className="w-4 h-4" />
               </button>
@@ -243,21 +220,19 @@ export const TraderCard = ({
   ) : (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-2 relative group/address">
           <Link 
             href={`/${lng}/whale-tracking/profile/?address=${address}`}
             className="text-[color:var(--cf-text-strong)] font-bold text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
-            title={address}
             onClick={handleAddressClick}
           >
             {address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
           </Link>
-          {showFullAddress && (
-            <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none">
-              {address}
-              <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
-            </div>
-          )}
+          {/* Hover-to-reveal full address tooltip */}
+          <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+            {address}
+            <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+          </div>
           <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={copyAddress}>
             <Copy className="w-4.5 h-4.5" />
           </button>
