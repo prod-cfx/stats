@@ -54,7 +54,6 @@ interface ProfileDataTabsProps {
 // 前端显示类型
 interface SpotPosition {
   asset: string;
-  assetLogo: string;
   share: string;
   value: string;
   amount: string;
@@ -169,7 +168,6 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
 
       return {
         asset: spot.coin,
-        assetLogo: `https://api.dicebear.com/7.x/identicon/svg?seed=${spot.coin.toLowerCase()}`,
         share: `${sharePercent} %`,
         value: `$ ${spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         amount: `${spot.total} ${spot.coin}`,
@@ -694,10 +692,7 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
             {activeTab === 'spot' ? filteredSpotData.map((pos, idx) => (
               <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors">
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full overflow-hidden bg-[color:var(--cf-surface-2)] flex-shrink-0">
-                      <img src={pos.assetLogo} alt={pos.asset} className="w-full h-full object-contain" />
-                    </div>
+                  <div className="flex items-center gap-2">
                     <span className="text-[color:var(--cf-text-strong)] text-sm font-bold uppercase">{pos.asset}</span>
                   </div>
                 </td>
@@ -716,8 +711,7 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
             )) : activeTab === 'perpetual' ? filteredPerpData.map((pos, idx) => (
               <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors">
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    {renderSideBadge(pos.side)}
+                  <div className="flex items-center">
                     <div className="flex flex-col">
                       <span className="text-[color:var(--cf-text-strong)] text-sm font-bold">{pos.asset}</span>
                       <span className="text-[color:var(--cf-muted)] text-[10px] font-medium uppercase">

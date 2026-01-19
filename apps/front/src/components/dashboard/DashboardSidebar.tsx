@@ -34,6 +34,19 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
     return v;
   };
 
+  const resolveDashboardName = (name?: string) => {
+    const raw = (name ?? '').trim()
+    if (!raw || raw === 'UNTITLED')
+      return t('dashboard.sidebar.untitled')
+
+    // Treat the default "Market" dashboard name as a localized label.
+    // This keeps older/localStorage-created dashboards consistent across language switches.
+    if (raw === '行情' || raw.toLowerCase() === 'market')
+      return t('nav.home')
+
+    return raw
+  }
+
   const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>([]);
   const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([]);
   const [showMyDashboards, setShowMyDashboards] = useState(true);
@@ -115,7 +128,7 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
                         <Grid3x3 className="w-2.5 h-2.5 text-primary" />
                       </div>
                     )}
-                    {dash.name || t('dashboard.sidebar.untitled')}
+                    {resolveDashboardName(dash.name)}
                   </button>
 
                   <div className="relative pr-2">
@@ -208,7 +221,7 @@ export const DashboardSidebar = ({ activeTab: _activeTab, onDashboardClick }: Da
                         <Grid3x3 className="w-2.5 h-2.5 text-[color:var(--cf-muted)]" />
                       </div>
                     )}
-                    {dash.name || t('dashboard.sidebar.untitled')}
+                    {resolveDashboardName(dash.name)}
                   </button>
 
                   <div className="relative pr-2">
