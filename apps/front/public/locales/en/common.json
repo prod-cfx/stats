@@ -141,7 +141,8 @@
     "terms": "Terms of Service",
     "privacy": "Privacy Policy",
     "ownership": "coinflux.ai is owned and operated by Node Global.",
-    "copyrightLine": "© {{year}} Coinflux. All rights reserved. Operated by Node Global Ltd."
+    "copyrightLine": "© {{year}} Coinflux. All rights reserved.",
+    "ownership": "coinflux.ai is owned and operated by Node Global Ltd."
   },
   "rightPanel": {
     "exchangeBinance": "Binance",
