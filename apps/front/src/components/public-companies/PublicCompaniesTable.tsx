@@ -33,22 +33,31 @@ interface CompanyData {
 const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: string }) => {
   if (!rawValue || rawValue === '-') return <span className="text-[color:var(--cf-muted)]">-</span>;
 
-  // Try to parse out the number and the suffix
+  // Parse out the number and suffix without regex (avoid super-linear backtracking).
   // Handles formats like "55.07 B", "$58.14B", "671.27 K BTC"
-  const cleanValue = rawValue.replace('$', '').trim();
-  
-  // Regex to match: [number] [optional suffix B/M/K] [optional anything else like BTC]
-  const match = cleanValue.match(/^([\d,.]+)\s*([BMK]?)(.*)$/i);
+  const cleanValue = rawValue.replace('$', '').trim()
+  let i = 0
+  while (i < cleanValue.length) {
+    const ch = cleanValue[i]
+    if ((ch >= '0' && ch <= '9') || ch === ',' || ch === '.') {
+      i++
+      continue
+    }
+    break
+  }
+  const num = cleanValue.slice(0, i)
+  let rest = cleanValue.slice(i).trim()
+  const suffixMatch = rest[0]?.toUpperCase()
+  const suffix = suffixMatch && (suffixMatch === 'B' || suffixMatch === 'M' || suffixMatch === 'K') ? suffixMatch : ''
+  if (suffix) rest = rest.slice(1).trim()
+  const finalSubText = subText || rest
 
-  if (match) {
-    const [_, num, suffix, rest] = match;
-    const finalSubText = subText || rest.trim();
-    
+  if (num) {
     return (
       <div className="flex flex-col items-center leading-tight">
         <div className="flex items-baseline gap-0.5">
           <span className="text-[color:var(--cf-text-strong)] font-mono font-medium">{num}</span>
-          {suffix && <span className="text-[color:var(--cf-text-strong)] font-mono font-medium ml-0.5">{suffix.toUpperCase()}</span>}
+          {suffix && <span className="text-[color:var(--cf-text-strong)] font-mono font-medium ml-0.5">{suffix}</span>}
         </div>
         {finalSubText && (
           <span className="text-[color:var(--cf-muted)] text-[10px] font-sans uppercase mt-0.5">
@@ -56,7 +65,7 @@ const CompactValueCell = ({ rawValue, subText }: { rawValue: string; subText?: s
           </span>
         )}
       </div>
-    );
+    )
   }
 
   return <span className="text-[color:var(--cf-text-strong)] font-mono">{rawValue}</span>;

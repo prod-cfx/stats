@@ -28,13 +28,13 @@ export const Navbar = () => {
   const pathname = usePathname();
   const router = useRouter()
   const { t } = useTranslation();
-  const { info } = useToast();
+  const { info: _info } = useToast();
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
-  const [extraBases, setExtraBases] = useState<string[]>([])
+  const [extraBases, _setExtraBases] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
 
@@ -155,7 +155,7 @@ export const Navbar = () => {
     return results.slice(0, 8)
   }, [searchQuery, extraBases, t, withLng])
 
-  const handleSearch = (e: React.FormEvent) => {
+  const _handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchResults.length > 0) {
       router.push(searchResults[activeIndex].href)
