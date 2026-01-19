@@ -1,4 +1,9 @@
 {
+  "common": {
+    "copied": "已复制",
+    "error": "错误",
+    "tryAgain": "请重试"
+  },
   "app": {
     "title": "Coinflux - 高级加密数据聚合器",
     "description": "专业的加密资产数据聚合与多维行情分析终端"

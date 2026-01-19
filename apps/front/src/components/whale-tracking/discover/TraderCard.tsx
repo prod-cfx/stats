@@ -3,8 +3,9 @@
 import { Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from '@/lib/toast';
 
 export interface TraderCardProps {
   variant: 'recommended' | 'detail';
@@ -71,6 +72,22 @@ export const TraderCard = ({
   const params = useParams();
   const lng = (params as any)?.lng ?? (i18n.language?.startsWith('zh') ? 'zh' : 'en');
   const isPnlPositive = pnlUsd >= 0;
+  const isZh = String(lng).startsWith('zh')
+
+  const tr = (key: string, fallbackZh: string, fallbackEn: string) => {
+    const v = t(key)
+    if (!v || v === key) return isZh ? fallbackZh : fallbackEn
+    return v
+  }
+
+  const [showFullAddress, setShowFullAddress] = useState(false)
+  const hideTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+    }
+  }, [])
 
   const currencyCompact = useMemo(() => {
     const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
@@ -101,28 +118,88 @@ export const TraderCard = ({
     return t('whaleTracking.discover.labels.aiTagFallback', { label: resolveAiTagLabel(key) })
   };
 
-  const copyAddress = (e: React.MouseEvent) => {
+  const copyAddress = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    navigator.clipboard.writeText(address);
+
+    const tryClipboard = async () => {
+      if (showFullAddress) setShowFullAddress(false)
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(address)
+        return true
+      }
+      return false
+    }
+
+    const fallbackCopy = () => {
+      try {
+        const el = document.createElement('textarea')
+        el.value = address
+        el.setAttribute('readonly', '')
+        el.style.position = 'fixed'
+        el.style.left = '-9999px'
+        el.style.top = '0'
+        document.body.appendChild(el)
+        el.select()
+        const ok = document.execCommand('copy')
+        el.remove()
+        return ok
+      } catch {
+        return false
+      }
+    }
+
+    try {
+      const ok = await tryClipboard()
+      if (!ok) {
+        const fallbackOk = fallbackCopy()
+        if (!fallbackOk) throw new Error('copy_failed')
+      }
+      toast.success({ title: tr('common.copied', '已复制', 'Copied'), description: address, duration: 2000 })
+    } catch {
+      toast.error({ title: tr('common.error', '复制失败', 'Copy failed'), description: tr('common.tryAgain', '请重试', 'Please try again'), duration: 2500 })
+    }
   };
+
+  const handleAddressClick = (e: React.MouseEvent) => {
+    // If user intends to open in new tab/window, do not intercept navigation.
+    e.stopPropagation()
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    // First click: show the full address tooltip instead of navigating away.
+    if (!showFullAddress) {
+      e.preventDefault()
+      setShowFullAddress(true)
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = window.setTimeout(() => setShowFullAddress(false), 2500)
+      return
+    }
+    // Second click: allow navigation.
+  }
 
   const content = variant === 'recommended' ? (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start">
-        <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
+        <div className="flex items-center gap-3 md:gap-4 overflow-visible">
           <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 relative">
               <Link 
                 href={`/${lng}/whale-tracking/profile/?address=${address}`}
                 className="text-[color:var(--cf-text-strong)] font-bold text-h3 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all truncate"
-                onClick={(e) => e.stopPropagation()}
+                title={address}
+                onClick={handleAddressClick}
               >
                 {address.length > 12 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
               </Link>
+              {/* Click-to-reveal full address tooltip */}
+              {showFullAddress && (
+                <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none">
+                  {address}
+                  <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+                </div>
+              )}
               <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors flex-shrink-0" onClick={copyAddress}>
                 <Copy className="w-4 h-4" />
               </button>
@@ -166,14 +243,21 @@ export const TraderCard = ({
   ) : (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           <Link 
             href={`/${lng}/whale-tracking/profile/?address=${address}`}
             className="text-[color:var(--cf-text-strong)] font-bold text-h2 hover:underline decoration-[#3b82f6] decoration-2 underline-offset-4 transition-all"
-            onClick={(e) => e.stopPropagation()}
+            title={address}
+            onClick={handleAddressClick}
           >
             {address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address}
           </Link>
+          {showFullAddress && (
+            <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none">
+              {address}
+              <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+            </div>
+          )}
           <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={copyAddress}>
             <Copy className="w-4.5 h-4.5" />
           </button>
