@@ -1,6 +1,13 @@
 'use client';
 
-import type {TraderOpenOrdersResponse, TraderPositionsResponse, TraderSnapshotResponse} from '@/lib/api';
+import type {
+  TraderFullDataResponse,
+  TraderOpenOrdersResponse,
+  TraderPositionsResponse,
+  TraderSnapshotResponse,
+  UserFillsResponse,
+  UserPortfolioResponse,
+} from '@/lib/api';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Footer } from '@/components/layout/Footer';
@@ -11,24 +18,20 @@ import { PositionProfile } from '@/components/whale-tracking/profile/PositionPro
 import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs';
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader';
 import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary';
-import {
-  fetchTraderOpenOrders,
-  fetchTraderPositions,
-  fetchTraderSnapshot
-  
-  
-  
-} from '@/lib/api';
+import { fetchTraderFullData } from '@/lib/api';
 
 export function ProfileClient({ address }: { address: string }) {
   const { t } = useTranslation();
-  const isValidAddress = address && address.startsWith('0x');
+  // 完整的以太坊地址校验：0x 前缀 + 40 位十六进制
+  const isValidAddress = address && /^0x[a-fA-F0-9]{40}$/.test(address);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [snapshotData, setSnapshotData] = useState<TraderSnapshotResponse | null>(null);
   const [positionsData, setPositionsData] = useState<TraderPositionsResponse | null>(null);
   const [ordersData, setOrdersData] = useState<TraderOpenOrdersResponse | null>(null);
+  const [portfolioData, setPortfolioData] = useState<UserPortfolioResponse | null>(null);
+  const [fillsData, setFillsData] = useState<UserFillsResponse | null>(null);
 
   const loadData = useCallback(async () => {
     if (!isValidAddress) {
@@ -40,15 +43,13 @@ export function ProfileClient({ address }: { address: string }) {
     setError(null);
 
     try {
-      const [snapshot, positions, orders] = await Promise.all([
-        fetchTraderSnapshot(address),
-        fetchTraderPositions(address, { type: 'all' }),
-        fetchTraderOpenOrders(address),
-      ]);
+      const fullData: TraderFullDataResponse = await fetchTraderFullData(address);
 
-      setSnapshotData(snapshot);
-      setPositionsData(positions);
-      setOrdersData(orders);
+      setSnapshotData(fullData.snapshot);
+      setPositionsData(fullData.positions);
+      setOrdersData(fullData.orders);
+      setPortfolioData(fullData.portfolio);
+      setFillsData(fullData.fills);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to load data'));
     } finally {
@@ -68,7 +69,7 @@ export function ProfileClient({ address }: { address: string }) {
         <div className="max-w-[1440px] mx-auto w-full">
           <LoadingState
             isLoading={loading}
-            error={error}
+            error={!!error}
             isEmpty={!loading && (!isValidAddress || !snapshotData)}
             onRetry={loadData}
           >
@@ -77,7 +78,9 @@ export function ProfileClient({ address }: { address: string }) {
               <ProfileHeader address={address} />
 
               {/* Summary Stats */}
-              {snapshotData && <ProfileSummary snapshot={snapshotData} />}
+              {snapshotData && fillsData && portfolioData && (
+                <ProfileSummary snapshot={snapshotData} fills={fillsData} portfolio={portfolioData} />
+              )}
 
               {/* Middle Section: Position Profile + PnL Trend */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -85,7 +88,7 @@ export function ProfileClient({ address }: { address: string }) {
                   <PositionProfile />
                 </div>
                 <div className="lg:col-span-8">
-                  <PnLTrendCard />
+                  {portfolioData && <PnLTrendCard portfolio={portfolioData} />}
                 </div>
               </div>
 

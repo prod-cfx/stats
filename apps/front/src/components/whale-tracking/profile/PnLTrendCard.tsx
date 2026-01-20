@@ -3,9 +3,14 @@
 import { ChevronDown } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { UserPortfolioResponse } from '@/lib/api';
 import { PnLTrendChart } from './PnLTrendChart';
 
-export const PnLTrendCard = () => {
+interface PnLTrendCardProps {
+  portfolio: UserPortfolioResponse;
+}
+
+export const PnLTrendCard = ({ portfolio }: PnLTrendCardProps) => {
   const { t } = useTranslation();
   const [timeRange, setTimeRange] = useState<'1d' | '1w' | '1m' | 'all'>('1w');
   const [contractType, setContractType] = useState<'all' | 'perpOnly'>('perpOnly');
@@ -21,45 +26,49 @@ export const PnLTrendCard = () => {
     return () => document.removeEventListener('click', handleDocClick);
   }, [dropdownOpen]);
 
-  // Generate mock data for the selected filters
-  const mockData = useMemo(() => {
-    const data = [];
-    const now = new Date();
-    
-    let days = 7;
-    if (timeRange === '1d') days = 1;
-    if (timeRange === '1m') days = 30;
-    if (timeRange === 'all') days = 90;
+  const chartData = useMemo(() => {
+    const periodData = (() => {
+      if (contractType === 'perpOnly') {
+        if (timeRange === '1d') return portfolio.perpDay;
+        if (timeRange === '1w') return portfolio.perpWeek;
+        if (timeRange === '1m') return portfolio.perpMonth;
+        return portfolio.perpAllTime;
+      }
+      if (timeRange === '1d') return portfolio.day;
+      if (timeRange === '1w') return portfolio.week;
+      if (timeRange === '1m') return portfolio.month;
+      return portfolio.allTime;
+    })();
 
-    const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-    
-    let currentValue = -200000;
-    const intervals = days * 12; // 2 hour intervals
-    
-    for (let i = 0; i <= intervals; i++) {
-      const date = new Date(startTime.getTime() + i * 2 * 60 * 60 * 1000);
-      const yyyy = date.getFullYear();
-      const mm = (date.getMonth() + 1).toString().padStart(2, '0');
-      const dd = date.getDate().toString().padStart(2, '0');
-      const hh = date.getHours().toString().padStart(2, '0');
-      const ts = `${yyyy}-${mm}-${dd} ${hh}:00`;
-      
-      // Seed based on filter values to keep data consistent for the same filter combo
-      const seedValue = (timeRange.length + contractType.length + pnlType.length + i) * 12345;
-      const pseudoRandom = (Math.sin(seedValue) + 1) / 2; // Value between 0 and 1
-      
-      const change = (pseudoRandom - 0.6) * 50000; 
-      currentValue += change;
-      
-      data.push({ ts, value: currentValue });
+    const history = pnlType === 'accountValue'
+      ? periodData.accountValueHistory
+      : periodData.pnlHistory;
+
+    return history.map(({ timestamp, value }) => ({
+      date: new Date(timestamp).toLocaleDateString(),
+      value,
+    }));
+  }, [contractType, pnlType, portfolio, timeRange]);
+
+  // 计算头部显示的总值（根据选择的时间范围和类型动态计算）
+  const headerValue = useMemo(() => {
+    if (chartData.length === 0) return '--';
+    const lastValue = chartData[chartData.length - 1]?.value ?? 0;
+    const prefix = lastValue >= 0 ? '+' : '';
+    if (Math.abs(lastValue) >= 1_000_000) {
+      return `$ ${prefix}${(lastValue / 1_000_000).toFixed(2)}M`;
     }
-    
-    // Ensure final value is close to Figma design if 1 week
-    if (timeRange === '1w') {
-      data[data.length - 1].value = -414743.38;
+    if (Math.abs(lastValue) >= 1_000) {
+      return `$ ${prefix}${(lastValue / 1_000).toFixed(2)}K`;
     }
-    return data;
-  }, [timeRange, contractType, pnlType]);
+    return `$ ${prefix}${lastValue.toFixed(2)}`;
+  }, [chartData]);
+
+  const headerColor = useMemo(() => {
+    if (chartData.length === 0) return 'text-[color:var(--cf-muted)]';
+    const lastValue = chartData[chartData.length - 1]?.value ?? 0;
+    return lastValue >= 0 ? 'text-[#4ade80]' : 'text-[#f87171]';
+  }, [chartData]);
 
   return (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl p-6 flex flex-col gap-6 h-full">
@@ -73,7 +82,7 @@ export const PnLTrendCard = () => {
               contractType: t(`whaleTracking.profile.pnlTrend.contractType.${contractType}`),
             })}
           </div>
-          <div className="text-[#4ade80] text-h2 font-bold tracking-tight">$ +1,978,371.60</div>
+          <div className={`${headerColor} text-h2 font-bold tracking-tight`}>{headerValue}</div>
         </div>
         
         <div className="flex items-center gap-2">
@@ -159,10 +168,9 @@ export const PnLTrendCard = () => {
 
       {/* Chart Container */}
       <div className="flex-1 min-h-[300px] w-full">
-        <PnLTrendChart data={mockData} />
+        <PnLTrendChart data={chartData.map(({ date, value }) => ({ ts: date, value }))} />
       </div>
     </div>
   );
 };
-
 

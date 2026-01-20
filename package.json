@@ -29,6 +29,7 @@
     "i18next-http-backend": "^3.0.2",
     "nestjs-cls": "^5.4.3",
     "openapi-zod-client": "1.18.1",
+    "p-limit": "^4.0.0",
     "react-i18next": "^15.6.1"
   },
   "devDependencies": {

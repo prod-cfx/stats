@@ -54,7 +54,6 @@ interface ProfileDataTabsProps {
 // 前端显示类型
 interface SpotPosition {
   asset: string;
-  assetLogo: string;
   share: string;
   value: string;
   amount: string;
@@ -165,15 +164,38 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
 
     return spots.map(spot => {
       const sharePercent = totalValue > 0 ? (spot.value / totalValue * 100).toFixed(2) : '0.00';
-      const price = spot.total > 0 ? (spot.value / spot.total).toFixed(2) : '0';
+      const rawPrice = spot.total > 0 ? spot.value / spot.total : 0;
+
+      // 动态小数位数：价格越小，显示越多小数位
+      let priceStr: string;
+      if (rawPrice === 0) {
+        priceStr = '0';
+      } else if (rawPrice < 0.000001) {
+        priceStr = rawPrice.toFixed(8); // 非常小的价格显示 8 位小数
+      } else if (rawPrice < 0.0001) {
+        priceStr = rawPrice.toFixed(6); // 小价格显示 6 位小数
+      } else if (rawPrice < 0.01) {
+        priceStr = rawPrice.toFixed(4); // 中等价格显示 4 位小数
+      } else {
+        priceStr = rawPrice.toFixed(2); // 正常价格显示 2 位小数
+      }
+
+      // 价值也使用动态小数位数
+      let valueStr: string;
+      if (spot.value === 0) {
+        valueStr = '0.00';
+      } else if (spot.value < 0.01) {
+        valueStr = spot.value.toFixed(4); // 小额价值显示 4 位小数
+      } else {
+        valueStr = spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
 
       return {
         asset: spot.coin,
-        assetLogo: `https://api.dicebear.com/7.x/identicon/svg?seed=${spot.coin.toLowerCase()}`,
         share: `${sharePercent} %`,
-        value: `$ ${spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        value: `$ ${valueStr}`,
         amount: `${spot.total} ${spot.coin}`,
-        price: `$ ${price}`,
+        price: `$ ${priceStr}`,
       };
     });
   };
@@ -694,10 +716,7 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
             {activeTab === 'spot' ? filteredSpotData.map((pos, idx) => (
               <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors">
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full overflow-hidden bg-[color:var(--cf-surface-2)] flex-shrink-0">
-                      <img src={pos.assetLogo} alt={pos.asset} className="w-full h-full object-contain" />
-                    </div>
+                  <div className="flex items-center gap-2">
                     <span className="text-[color:var(--cf-text-strong)] text-sm font-bold uppercase">{pos.asset}</span>
                   </div>
                 </td>
@@ -716,8 +735,7 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
             )) : activeTab === 'perpetual' ? filteredPerpData.map((pos, idx) => (
               <tr key={idx} className="hover:bg-[color:var(--cf-surface-hover)] transition-colors">
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    {renderSideBadge(pos.side)}
+                  <div className="flex items-center">
                     <div className="flex flex-col">
                       <span className="text-[color:var(--cf-text-strong)] text-sm font-bold">{pos.asset}</span>
                       <span className="text-[color:var(--cf-muted)] text-[10px] font-medium uppercase">

@@ -182,12 +182,15 @@ export class CoinglassPairsMarketsJob implements DataPullJob {
         }),
       )
 
-      for (const result of results) {
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j]
         if (result.status === 'fulfilled') {
           upsertedCount += 1
         } else {
           failedCount += 1
+          const failedPoint = batch[j]
           this.logger.warn(`Failed to upsert pairs-market record: ${result.reason}`)
+          this.logger.warn(`Failed data point: ${JSON.stringify(failedPoint)}`)
         }
       }
     }

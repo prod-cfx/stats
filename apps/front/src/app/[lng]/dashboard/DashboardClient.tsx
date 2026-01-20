@@ -52,6 +52,15 @@ export function DashboardClient() {
     return v
   }
 
+  const resolveDashboardName = (name?: string) => {
+    const raw = (name ?? '').trim()
+    if (!raw || raw === 'UNTITLED')
+      return t('dashboard.sidebar.untitled')
+    if (raw === '行情' || raw.toLowerCase() === 'market')
+      return t('nav.home')
+    return raw
+  }
+
   useEffect(() => {
     const refresh = () => {
       setMyDashboards(getMyDashboards())
@@ -199,7 +208,7 @@ export function DashboardClient() {
 
                           <div className="absolute inset-0 p-4 flex flex-col justify-end">
                             <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors drop-shadow-md">
-                              {dash.name || t('dashboard.sidebar.untitled')}
+                              {resolveDashboardName(dash.name)}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
@@ -295,7 +304,7 @@ export function DashboardClient() {
 
                           <div className="absolute inset-0 p-4 flex flex-col justify-end">
                             <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors drop-shadow-md">
-                              {dash.name || t('dashboard.sidebar.untitled')}
+                              {resolveDashboardName(dash.name)}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
@@ -377,7 +386,7 @@ export function DashboardClient() {
             title={t('dashboard.actions.delete') || '删除'}
             description={
               deleteTarget
-                ? `${t('dashboard.editor.dialog.deleteDesc', { name: deleteTarget.name || t('dashboard.sidebar.untitled') })}`
+                ? `${t('dashboard.editor.dialog.deleteDesc', { name: resolveDashboardName(deleteTarget.name) })}`
                 : ''
             }
             confirmText={t('dashboard.actions.delete') || '删除'}

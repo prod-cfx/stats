@@ -1,7 +1,8 @@
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
 
-import { CacheKeys, clearCache, invalidateCache } from './api-cache'
+import type {TraderFullDataResponse} from './hyperliquid-api';
+import { cachedRequest, CacheKeys, CacheTTL, clearCache, invalidateCache } from './api-cache'
 import {
   API_BASE_URL,
   client,
@@ -11,6 +12,18 @@ import {
 } from './api-client'
 import { getToken } from './auth-storage'
 import { ApiError, AuthenticationError, logError } from './errors'
+import {
+  fetchTraderFullData as fetchTraderFullDataFromHyperliquid,
+  fetchTraderOpenOrdersFromHyperliquid,
+  fetchTraderPositionsFromHyperliquid,
+  fetchTraderSnapshotFromHyperliquid,
+  fetchUserFillsFromHyperliquid,
+  fetchUserPortfolioFromHyperliquid
+  
+} from './hyperliquid-api'
+
+// Re-export types for external use
+export type { TraderFullDataResponse, UserFillsResponse, UserPortfolioResponse } from './hyperliquid-api'
 
 type Infer<T extends ZodTypeAny> = T['_output']
 
@@ -400,37 +413,16 @@ export async function fetchTraderSnapshot(
 ): Promise<TraderSnapshotResponse> {
   try {
     return await apiCall(async () => {
-      const params = new URLSearchParams()
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
       if (query.skipCache) {
-        params.set('skipCache', 'true')
+        return fetchTraderSnapshotFromHyperliquid(address)
       }
 
-      const search = params.toString()
-      const fallbackUrl = search.length > 0
-        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot?${search}`
-        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot`
-
-      return safeApiCall(
-        () =>
-          client.WhaleTrackingController_getTraderSnapshot({
-            headers: optionalAuthHeaders(),
-            params: { address },
-            queries: query,
-          }),
-        {
-          url: fallbackUrl,
-          options: {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              ...optionalAuthHeaders(),
-            },
-          },
-          validateResponse: data =>
-            unwrapResponse<TraderSnapshotResponse>(
-              data as TraderSnapshotResponse | BaseResponse<TraderSnapshotResponse>,
-            ),
-        },
+      // 使用缓存包装器（30 秒缓存）
+      return cachedRequest(
+        `trader-snapshot:${address}`,
+        () => fetchTraderSnapshotFromHyperliquid(address),
+        CacheTTL.MEDIUM,
       )
     }, 'FETCH_TRADER_SNAPSHOT')
   } catch (error) {
@@ -508,40 +500,18 @@ export async function fetchTraderPositions(
 ): Promise<TraderPositionsResponse> {
   try {
     return await apiCall(async () => {
-      const params = new URLSearchParams()
-      if (query.type) {
-        params.set('type', query.type)
-      }
-      if (query.skipCache) {
-        params.set('skipCache', 'true')
+      const { type = 'all', skipCache = false } = query
+
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchTraderPositionsFromHyperliquid(address, { type })
       }
 
-      const search = params.toString()
-      const fallbackUrl = search.length > 0
-        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions?${search}`
-        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions`
-
-      return safeApiCall(
-        () =>
-          client.WhaleTrackingController_getTraderPositions({
-            headers: optionalAuthHeaders(),
-            params: { address },
-            queries: query,
-          }),
-        {
-          url: fallbackUrl,
-          options: {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              ...optionalAuthHeaders(),
-            },
-          },
-          validateResponse: data =>
-            unwrapResponse<TraderPositionsResponse>(
-              data as TraderPositionsResponse | BaseResponse<TraderPositionsResponse>,
-            ),
-        },
+      // 使用缓存包装器（30 秒缓存）
+      return cachedRequest(
+        `trader-positions:${address}:${type}`,
+        () => fetchTraderPositionsFromHyperliquid(address, { type }),
+        CacheTTL.MEDIUM,
       )
     }, 'FETCH_TRADER_POSITIONS')
   } catch (error) {
@@ -607,10 +577,10 @@ export async function fetchTraderPositions(
 
     const perp = type === 'spot'
       ? []
-      : perpCoins.slice(0, 3).map((coin, idx) => makePerp(coin, idx)) as any[]
+      : (perpCoins.slice(0, 3).map((coin, idx) => makePerp(coin, idx)) as any[])
     const spot = type === 'perp'
       ? []
-      : spotCoins.map(coin => makeSpot(coin)) as any[]
+      : (spotCoins.map(coin => makeSpot(coin)) as any[])
 
     return {
       perp,
@@ -634,40 +604,19 @@ export async function fetchTraderOpenOrders(
 ): Promise<TraderOpenOrdersResponse> {
   try {
     return await apiCall(async () => {
-      const params = new URLSearchParams()
-      if (query.coin) {
-        params.set('coin', query.coin)
-      }
-      if (query.skipCache) {
-        params.set('skipCache', 'true')
+      const { coin, skipCache = false } = query
+
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchTraderOpenOrdersFromHyperliquid(address, { coin })
       }
 
-      const search = params.toString()
-      const fallbackUrl = search.length > 0
-        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders?${search}`
-        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/open-orders`
-
-      return safeApiCall(
-        () =>
-          client.WhaleTrackingController_getTraderOpenOrders({
-            headers: optionalAuthHeaders(),
-            params: { address },
-            queries: query,
-          }),
-        {
-          url: fallbackUrl,
-          options: {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              ...optionalAuthHeaders(),
-            },
-          },
-          validateResponse: data =>
-            unwrapResponse<TraderOpenOrdersResponse>(
-              data as TraderOpenOrdersResponse | BaseResponse<TraderOpenOrdersResponse>,
-            ),
-        },
+      // 使用缓存包装器（30 秒缓存）
+      const cacheKey = coin ? `trader-open-orders:${address}:${coin}` : `trader-open-orders:${address}`
+      return cachedRequest(
+        cacheKey,
+        () => fetchTraderOpenOrdersFromHyperliquid(address, { coin }),
+        CacheTTL.MEDIUM,
       )
     }, 'FETCH_TRADER_OPEN_ORDERS')
   } catch (error) {
@@ -679,29 +628,31 @@ export async function fetchTraderOpenOrders(
     const coins = ['BTC', 'ETH', 'SOL', 'XRP']
     const now = Date.now()
 
-    const orders = Array.from({ length: 16 }).map((_, idx) => {
-      const coin = coins[Math.floor(rand() * coins.length)]
-      const side = rand() > 0.5 ? 'BUY' : 'SELL'
-      const price = basePrices[coin] * (0.92 + rand() * 0.16)
-      const origSize = Number((0.05 + rand() * 2.5).toFixed(4))
-      const size = Number((origSize * (0.4 + rand() * 0.6)).toFixed(4))
-      const value = price * size
-      const triggerPrice = rand() > 0.75 ? Number((price * (0.98 + rand() * 0.04)).toFixed(2)) : null
-      const timestamp = new Date(now - idx * 7 * 60_000).toISOString()
+    const orders = Array.from({ length: 16 })
+      .map((_, idx) => {
+        const coin = coins[Math.floor(rand() * coins.length)]
+        const side = rand() > 0.5 ? 'BUY' : 'SELL'
+        const price = basePrices[coin] * (0.92 + rand() * 0.16)
+        const origSize = Number((0.05 + rand() * 2.5).toFixed(4))
+        const size = Number((origSize * (0.4 + rand() * 0.6)).toFixed(4))
+        const value = price * size
+        const triggerPrice = rand() > 0.75 ? Number((price * (0.98 + rand() * 0.04)).toFixed(2)) : null
+        const timestamp = new Date(now - idx * 7 * 60_000).toISOString()
 
-      return {
-        orderId: 10_000 + idx,
-        coin,
-        side,
-        type: triggerPrice ? 'STOP_LIMIT' : 'LIMIT',
-        price: Number(price.toFixed(2)),
-        size,
-        origSize,
-        value: Number(value.toFixed(2)),
-        timestamp,
-        triggerPrice,
-      }
-    }).filter(o => !coinFilter || o.coin === coinFilter)
+        return {
+          orderId: 10_000 + idx,
+          coin,
+          side,
+          type: triggerPrice ? 'STOP_LIMIT' : 'LIMIT',
+          price: Number(price.toFixed(2)),
+          size,
+          origSize,
+          value: Number(value.toFixed(2)),
+          timestamp,
+          triggerPrice,
+        }
+      })
+      .filter(o => !coinFilter || o.coin === coinFilter)
 
     return {
       orders,
@@ -1696,4 +1647,89 @@ export async function fetchAggregatedOpenInterest(
     const result = unwrapResponse(response) as { items?: OpenInterestApiItem[] }
     return result.items ?? []
   }, 'FETCH_AGGREGATED_OPEN_INTEREST')
+}
+
+// ===== 用户历史数据（Portfolio + Fills）API =====
+
+export interface FetchUserPortfolioQuery {
+  skipCache?: boolean
+}
+
+/**
+ * 获取用户投资组合历史数据（账户价值曲线、盈亏曲线）
+ */
+export async function fetchUserPortfolio(
+  address: string,
+  query: FetchUserPortfolioQuery = {},
+): Promise<UserPortfolioResponse> {
+  return apiCall(async () => {
+    // 如果需要跳过缓存，直接调用 Hyperliquid API
+    if (query.skipCache) {
+      return fetchUserPortfolioFromHyperliquid(address)
+    }
+
+    // 使用缓存包装器（5 分钟缓存，历史数据更新较慢）
+    return cachedRequest(
+      `user-portfolio:${address}`,
+      () => fetchUserPortfolioFromHyperliquid(address),
+      CacheTTL.LONG
+    )
+  }, 'FETCH_USER_PORTFOLIO')
+}
+
+export interface FetchUserFillsQuery {
+  aggregateByTime?: boolean
+  skipCache?: boolean
+}
+
+/**
+ * 获取用户成交记录（用于计算胜率、平仓次数等统计指标）
+ */
+export async function fetchUserFills(
+  address: string,
+  query: FetchUserFillsQuery = {},
+): Promise<UserFillsResponse> {
+  return apiCall(async () => {
+    const { aggregateByTime = false, skipCache = false } = query
+
+    // 如果需要跳过缓存，直接调用 Hyperliquid API
+    if (skipCache) {
+      return fetchUserFillsFromHyperliquid(address, { aggregateByTime })
+    }
+
+    // 使用缓存包装器（1 分钟缓存）
+    const cacheKey = `user-fills:${address}:${aggregateByTime ? 'agg' : 'raw'}`
+    return cachedRequest(
+      cacheKey,
+      () => fetchUserFillsFromHyperliquid(address, { aggregateByTime }),
+      CacheTTL.MEDIUM
+    )
+  }, 'FETCH_USER_FILLS')
+}
+
+export interface FetchTraderFullDataQuery {
+  aggregateByTime?: boolean
+  skipCache?: boolean
+}
+
+export async function fetchTraderFullData(
+  address: string,
+  query: FetchTraderFullDataQuery = {},
+): Promise<TraderFullDataResponse> {
+  return apiCall(async () => {
+    const { aggregateByTime = false, skipCache = false } = query
+    const cacheKey = `trader-full-data:${address}:${aggregateByTime ? 'agg' : 'raw'}`
+
+    // 如果需要跳过缓存，直接调用 Hyperliquid API
+    if (skipCache) {
+      return fetchTraderFullDataFromHyperliquid(address, { aggregateByTime })
+    }
+
+    // 使用缓存包装器（cachedRequest 内置去重逻辑，无需额外 pendingRequests）
+    return cachedRequest(
+      cacheKey,
+      () => fetchTraderFullDataFromHyperliquid(address, { aggregateByTime }),
+      CacheTTL.SHORT
+    )
+  }, 'FETCH_TRADER_FULL_DATA')
 }

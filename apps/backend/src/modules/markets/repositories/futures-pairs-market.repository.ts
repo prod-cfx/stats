@@ -20,9 +20,22 @@ interface GroupByItem {
   }
 }
 
+interface GroupByOpenInterestItem {
+  exchangeName: string
+  _sum: {
+    openInterestUsd: Prisma.Decimal | null
+  }
+}
+
 @Injectable()
 export class FuturesPairsMarketRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  private toNumber(value: Prisma.Decimal | number | string): number {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string') return Number(value)
+    return value.toNumber()
+  }
 
   /**
    * 查询指定币种的各交易所聚合交易量
@@ -83,5 +96,45 @@ export class FuturesPairsMarketRepository {
       data,
       total: totalCount.length,
     }
+  }
+
+  /**
+   * 按交易所聚合持仓量（open interest）
+   */
+  async aggregateOIByExchange(params: {
+    symbol: string
+  }): Promise<Array<{
+    exchange: string
+    openInterestUsd: number
+  }>> {
+    const { symbol } = params
+    const client = this.prisma.getClient()
+
+    const where: Prisma.FuturesPairsMarketWhereInput = {
+      symbol: {
+        contains: symbol,
+        mode: 'insensitive',
+      },
+    }
+
+    const groupedData = await client.futuresPairsMarket.groupBy({
+      by: ['exchangeName'],
+      where,
+      _sum: {
+        openInterestUsd: true,
+      },
+      orderBy: {
+        _sum: {
+          openInterestUsd: 'desc',
+        },
+      },
+    })
+
+    return (groupedData as GroupByOpenInterestItem[])
+      .filter(item => item._sum.openInterestUsd != null)
+      .map(item => ({
+        exchange: item.exchangeName,
+        openInterestUsd: this.toNumber(item._sum.openInterestUsd!),
+      }))
   }
 }
