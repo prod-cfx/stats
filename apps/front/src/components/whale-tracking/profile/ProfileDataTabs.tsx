@@ -165,15 +165,39 @@ export const ProfileDataTabs = ({ spotPositions, perpPositions, openOrders }: Pr
 
     return spots.map(spot => {
       const sharePercent = totalValue > 0 ? (spot.value / totalValue * 100).toFixed(2) : '0.00';
-      const price = spot.total > 0 ? (spot.value / spot.total).toFixed(2) : '0';
+      const rawPrice = spot.total > 0 ? spot.value / spot.total : 0;
+
+      // 动态小数位数：价格越小，显示越多小数位
+      let priceStr: string;
+      if (rawPrice === 0) {
+        priceStr = '0';
+      } else if (rawPrice < 0.000001) {
+        priceStr = rawPrice.toFixed(8); // 非常小的价格显示 8 位小数
+      } else if (rawPrice < 0.0001) {
+        priceStr = rawPrice.toFixed(6); // 小价格显示 6 位小数
+      } else if (rawPrice < 0.01) {
+        priceStr = rawPrice.toFixed(4); // 中等价格显示 4 位小数
+      } else {
+        priceStr = rawPrice.toFixed(2); // 正常价格显示 2 位小数
+      }
+
+      // 价值也使用动态小数位数
+      let valueStr: string;
+      if (spot.value === 0) {
+        valueStr = '0.00';
+      } else if (spot.value < 0.01) {
+        valueStr = spot.value.toFixed(4); // 小额价值显示 4 位小数
+      } else {
+        valueStr = spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
 
       return {
         asset: spot.coin,
         assetLogo: `https://api.dicebear.com/7.x/identicon/svg?seed=${spot.coin.toLowerCase()}`,
         share: `${sharePercent} %`,
-        value: `$ ${spot.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        value: `$ ${valueStr}`,
         amount: `${spot.total} ${spot.coin}`,
-        price: `$ ${price}`,
+        price: `$ ${priceStr}`,
       };
     });
   };
