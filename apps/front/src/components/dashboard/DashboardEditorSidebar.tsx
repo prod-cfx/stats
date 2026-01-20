@@ -31,6 +31,18 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
   const [showAllMyDashboards, setShowAllMyDashboards] = useState(false);
   const [showAllSavedDashboards, setShowAllSavedDashboards] = useState(false);
 
+  const resolveDashboardName = (name?: string) => {
+    const raw = (name ?? '').trim()
+    if (!raw || raw.toUpperCase() === 'UNTITLED')
+      return t('dashboard.sidebar.untitled')
+
+    // Treat the default "Market" dashboard name as a localized label.
+    if (raw === '行情' || raw.toLowerCase() === 'market')
+      return t('nav.home')
+
+    return raw
+  }
+
   useEffect(() => {
     const refresh = () => {
       // IMPORTANT: do not recreate deleted dashboards implicitly
@@ -181,7 +193,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
     setDeleteStatus('deleting');
     setError(null);
 
-    const dashboardName = doc.name || t('dashboard.sidebar.untitled');
+    const dashboardName = resolveDashboardName(doc.name);
     const deletedId = dashboardId;
 
     try {
@@ -274,7 +286,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                     onClick={() => router.push(`/${lng}/dashboard/view?id=${dash.id}`)}
                     className="w-full text-left px-3 py-2 rounded text-xs text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)] transition-colors truncate"
                   >
-                    {dash.name || t('dashboard.sidebar.untitled')}
+                    {resolveDashboardName(dash.name)}
                   </button>
                 ))}
                 {myDashboards.length > 5 && (
@@ -326,7 +338,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
                         : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]'
                     }`}
                   >
-                    {dash.name || t('dashboard.sidebar.untitled')}
+                    {resolveDashboardName(dash.name)}
                   </button>
                 ))}
                 {savedDashboards.length > 5 && (
@@ -426,7 +438,7 @@ export const DashboardEditorSidebar = ({ dashboardId = 'draft', mode = 'edit' }:
         <ConfirmDialog
           isOpen={showDeleteConfirm}
           title={t('dashboard.editor.dialog.deleteTitle')}
-          description={t('dashboard.editor.dialog.deleteDesc', { name: doc.name || t('dashboard.sidebar.untitled') })}
+          description={t('dashboard.editor.dialog.deleteDesc', { name: resolveDashboardName(doc.name) })}
           confirmText={t('dashboard.editor.dialog.deleteConfirm')}
           cancelText={t('dashboard.editor.dialog.deleteCancel')}
           confirmVariant="danger"
