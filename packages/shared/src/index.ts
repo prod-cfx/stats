@@ -14,6 +14,7 @@ export const buildHealthPayload = (service: string, status: HealthStatus = 'ok')
 
 export * from './constants/error-codes'
 export * from './constants/trading-pairs'
+export * from './constants/trading-symbols'
 // NOTE: script-engine is Node-only and should not be imported in browser environments
 // Use direct import: import { createScriptEngine } from '@ai/shared/script-engine'
 // export * from './script-engine'

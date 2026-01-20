@@ -1,12 +1,12 @@
 import type { MarketId, VenueOrderBook } from '@ai/shared'
-import { toMarketKey } from '@ai/shared'
 import type { OrderbookPairConfig } from '@prisma/client'
-import WebSocket from 'ws'
+import type { Redis } from 'ioredis'
+import type { OrderbookAdapterKey, OrderbookWsAdapter } from '../../orderbook-ws-adapter'
+import { inspect } from 'node:util'
+import { toMarketKey } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import type { Redis } from 'ioredis'
-import { inspect } from 'node:util'
-import type { OrderbookAdapterKey, OrderbookWsAdapter } from '../../orderbook-ws-adapter'
+import WebSocket from 'ws'
 import { RedisService } from '@/common/services/redis.service'
 
 /**

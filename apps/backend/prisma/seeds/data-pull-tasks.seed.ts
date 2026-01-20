@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
+import { OI_SYMBOLS } from '@ai/shared/constants/trading-symbols'
 
 /**
  * 数据拉取任务种子数据
@@ -10,19 +11,21 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
   console.log('🌱 Seeding data-pull tasks...')
 
   const tasks = [
-    {
-      key: 'open-interest-sync',
-      name: 'Coinglass 持仓量同步',
+    // Open Interest Sync - 各币种独立任务
+    // 使用 @ai/shared 统一维护的币种列表，并错开执行时间避免 API 速率限制
+    ...OI_SYMBOLS.map((symbol, index) => ({
+      key: `open-interest-sync:${symbol}`,
+      name: `Coinglass 持仓量同步 - ${symbol}`,
       source: 'coinglass',
       type: 'open-interest',
-      // 每 5 分钟同步一次
-      intervalSeconds: 300,
-      enabled: false,
+      // 基准 5 分钟 + 每个币种错开 10 秒，避免并发触发 API 速率限制
+      intervalSeconds: 300 + index * 10,
+      enabled: true,
       cursor: JSON.stringify({
-        symbol: 'BTC',
+        symbol,
         exchange: 'All',
       } satisfies { symbol: string; exchange: string }),
-    },
+    })),
     {
       key: 'coinglass-hyperliquid-whale-alert',
       name: 'Hyperliquid 鲸鱼持仓预警',

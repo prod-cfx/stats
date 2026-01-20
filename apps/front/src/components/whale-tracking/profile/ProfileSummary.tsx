@@ -1,10 +1,11 @@
 'use client';
 
+import type { ReactNode } from 'react';
+import type { UserFillsResponse, UserPortfolioResponse } from '@/lib/api';
 import ReactECharts from 'echarts-for-react';
 import { Info } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { UserFillsResponse, UserPortfolioResponse } from '@/lib/api';
 import { useTheme } from '@/components/providers/ThemeProvider';
 
 // 后端 API 数据类型
