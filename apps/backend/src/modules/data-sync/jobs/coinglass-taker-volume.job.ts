@@ -1,8 +1,9 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import type { TakerBuySellVolumeRepository } from '@/modules/markets/repositories/taker-buy-sell-volume.repository'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TakerBuySellVolumeRepository } from '@/modules/markets/repositories/taker-buy-sell-volume.repository'
 
 interface TakerVolumeCursor {
   /**

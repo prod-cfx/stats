@@ -1,6 +1,6 @@
 import type { TakerBuySellVolume } from '@prisma/client'
-import type { PrismaService } from '@/prisma/prisma.service'
 import { Injectable } from '@nestjs/common'
+import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class TakerBuySellVolumeRepository {
@@ -115,7 +115,7 @@ export class TakerBuySellVolumeRepository {
       where: {
         symbol: params.symbol,
         range: params.range,
-        OR: latestTimestamp.map(item => ({
+        OR: latestTimestamp.map((item): { exchange: string, timestamp: Date } => ({
           exchange: item.exchange,
           timestamp: item._max.timestamp!,
         })),
