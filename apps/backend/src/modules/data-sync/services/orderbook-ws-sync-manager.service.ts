@@ -71,6 +71,22 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
     return Math.max(1_000, Math.floor(ms))
   }
 
+  /**
+   * 检查特定 adapter 是否通过环境变量启用
+   * 环境变量命名规则: ORDERBOOK_{VENUE}_ENABLED
+   * 例如: ORDERBOOK_BITMAX_ENABLED, ORDERBOOK_BINANCE_ENABLED
+   * 未配置时默认启用
+   */
+  private isAdapterEnabled(key: OrderbookAdapterKey): boolean {
+    // 从 key 中提取 venue 名称 (格式: VENUE.VENUE_TYPE.INSTRUMENT_TYPE)
+    const venue = key.split('.')[0]
+    const envKey = `ORDERBOOK_${venue}_ENABLED`
+    const raw = this.configService.get<string>(envKey)
+    // 未配置时默认为 true
+    if (raw === undefined || raw === null) return true
+    return typeof raw === 'string' ? raw.toLowerCase() === 'true' : Boolean(raw)
+  }
+
   private async tick(): Promise<void> {
     if (this.isRunning) return
     this.isRunning = true
@@ -85,8 +101,17 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
       // - 无目标配置且之前也没有 → 不做任何操作，避免无意义连接
       for (const adapter of this.adapters) {
         const target = grouped.get(adapter.key) ?? []
-        const hasTarget = target.length > 0
         const wasActive = this.activeAdapters.get(adapter.key) === true
+        // 检查 per-adapter 环境变量开关
+        if (!this.isAdapterEnabled(adapter.key)) {
+          if (wasActive) {
+            await adapter.syncTargetConfigs([])
+            await adapter.shutdown()
+            this.activeAdapters.set(adapter.key, false)
+          }
+          continue
+        }
+        const hasTarget = target.length > 0
 
         try {
           if (hasTarget) {
@@ -121,4 +146,3 @@ export class OrderbookWsSyncManager implements OnModuleInit, OnApplicationShutdo
     return map
   }
 }
-

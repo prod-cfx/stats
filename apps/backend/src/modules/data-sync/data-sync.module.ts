@@ -43,6 +43,9 @@ import { BinanceCexPerpetualOrderbookWsAdapter } from './services/adapters/binan
 import { BinanceCexPerpetualTradesWsAdapter } from './services/adapters/binance-cex-perpetual-trades-ws.adapter'
 import { BinanceCexSpotOrderbookWsAdapter } from './services/adapters/binance-cex-spot-orderbook-ws.adapter'
 import { BinanceCexSpotTradesWsAdapter } from './services/adapters/binance-cex-spot-trades-ws.adapter'
+import { BitmaxCexFutureOrderbookWsAdapter } from './services/adapters/bitmax-cex-future-orderbook-ws.adapter'
+import { BitmaxCexPerpetualOrderbookWsAdapter } from './services/adapters/bitmax-cex-perpetual-orderbook-ws.adapter'
+import { BitmaxCexSpotOrderbookWsAdapter } from './services/adapters/bitmax-cex-spot-orderbook-ws.adapter'
 import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
 import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
 import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
@@ -178,6 +181,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     BinanceCexSpotOrderbookWsAdapter,
     BinanceCexPerpetualOrderbookWsAdapter,
     BinanceCexFutureOrderbookWsAdapter,
+    BitmaxCexSpotOrderbookWsAdapter,
+    BitmaxCexPerpetualOrderbookWsAdapter,
+    BitmaxCexFutureOrderbookWsAdapter,
     BybitCexSpotOrderbookWsAdapter,
     BybitCexPerpetualOrderbookWsAdapter,
     BybitCexFutureOrderbookWsAdapter,
@@ -192,6 +198,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter: BinanceCexFutureOrderbookWsAdapter,
+        bitmaxCexSpotOrderbookWsAdapter: BitmaxCexSpotOrderbookWsAdapter,
+        bitmaxCexPerpetualOrderbookWsAdapter: BitmaxCexPerpetualOrderbookWsAdapter,
+        bitmaxCexFutureOrderbookWsAdapter: BitmaxCexFutureOrderbookWsAdapter,
         bybitCexSpotOrderbookWsAdapter: BybitCexSpotOrderbookWsAdapter,
         bybitCexPerpetualOrderbookWsAdapter: BybitCexPerpetualOrderbookWsAdapter,
         bybitCexFutureOrderbookWsAdapter: BybitCexFutureOrderbookWsAdapter,
@@ -204,6 +213,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         binanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter,
         binanceCexFutureOrderbookWsAdapter,
+        bitmaxCexSpotOrderbookWsAdapter,
+        bitmaxCexPerpetualOrderbookWsAdapter,
+        bitmaxCexFutureOrderbookWsAdapter,
         bybitCexSpotOrderbookWsAdapter,
         bybitCexPerpetualOrderbookWsAdapter,
         bybitCexFutureOrderbookWsAdapter,
@@ -217,6 +229,9 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         BinanceCexSpotOrderbookWsAdapter,
         BinanceCexPerpetualOrderbookWsAdapter,
         BinanceCexFutureOrderbookWsAdapter,
+        BitmaxCexSpotOrderbookWsAdapter,
+        BitmaxCexPerpetualOrderbookWsAdapter,
+        BitmaxCexFutureOrderbookWsAdapter,
         BybitCexSpotOrderbookWsAdapter,
         BybitCexPerpetualOrderbookWsAdapter,
         BybitCexFutureOrderbookWsAdapter,

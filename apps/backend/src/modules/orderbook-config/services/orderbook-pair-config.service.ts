@@ -4,7 +4,8 @@ import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 import { ErrorCode, toMarketKey } from '@ai/shared'
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
@@ -60,10 +61,10 @@ export class OrderbookPairConfigService {
     try {
       return await this.repository.create(dto)
     }
-    catch (error: any) {
+    catch (error: unknown) {
       // 捕获 Prisma 唯一约束冲突（并发情况下可能通过前置检查）
-      if (error?.code === 'P2002') {
-        const target = error?.meta?.target
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta as { target?: unknown })?.target
         if (Array.isArray(target) && target.includes('symbol')) {
           throw new DomainException(
             `该市场配置已存在：${dto.symbol} @ ${dto.venue} (${dto.instrumentType})`,
@@ -121,7 +122,10 @@ export class OrderbookPairConfigService {
     const config = await this.findById(id)
 
     if (!config.enabled) {
-      throw new NotFoundException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启')
+      throw new DomainException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+      })
     }
 
     const marketKey = this.buildMarketKeyFromConfig(config)
@@ -131,7 +135,10 @@ export class OrderbookPairConfigService {
     const raw = await client.get(redisKey)
 
     if (!raw) {
-      throw new NotFoundException('订单薄数据已过期或不存在')
+      throw new DomainException('订单薄数据已过期或不存在', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+      })
     }
 
     let book: VenueOrderBook
@@ -139,7 +146,10 @@ export class OrderbookPairConfigService {
       book = JSON.parse(raw) as VenueOrderBook
     }
     catch {
-      throw new NotFoundException('订单薄数据格式不正确')
+      throw new DomainException('订单薄数据格式不正确', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+      })
     }
 
     const dto = new VenueOrderBookDto()
@@ -188,6 +198,11 @@ export class OrderbookPairConfigService {
         if (instrumentType === 'SPOT') return 'binance-spot'
         if (instrumentType === 'PERPETUAL') return 'binance-perp'
         if (instrumentType === 'FUTURE') return 'binance-future'
+      }
+      if (venue === 'BITMAX') {
+        if (instrumentType === 'SPOT') return 'bitmax-spot'
+        if (instrumentType === 'PERPETUAL') return 'bitmax-perp'
+        if (instrumentType === 'FUTURE') return 'bitmax-future'
       }
       if (venue === 'BYBIT') {
         if (instrumentType === 'SPOT') return 'bybit-spot'
