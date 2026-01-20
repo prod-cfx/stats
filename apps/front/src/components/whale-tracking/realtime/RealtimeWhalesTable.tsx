@@ -4,9 +4,9 @@ import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp
 import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '@/lib/toast';
 import { PageTitle } from '@/components/ui/Typography';
 import { fetchRealtimeWhaleAlerts } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
 interface WhaleTransaction {
@@ -170,7 +170,7 @@ export const RealtimeWhalesTable = () => {
   // 首次挂载时立即拉取一次最新数据（避免 fetchNewData identity 变化导致重复拉取）
   useEffect(() => {
     void fetchNewDataRef.current?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {

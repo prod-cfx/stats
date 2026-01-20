@@ -187,6 +187,35 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       pullIntervalSeconds: 3,
       description: 'Ethereum/USDT perpetual contract on Bybit',
     },
+    // Bybit 期货（反向合约）
+    {
+      pairId: 'BTCUSD.BYBIT.FUTURE',
+      venue: 'BYBIT',
+      symbol: 'BTCUSD',
+      baseAsset: 'BTC',
+      quoteAsset: 'USD',
+      venueType: VenueType.CEX,
+      instrumentType: InstrumentType.FUTURE,
+      enabled: true,
+      priority: 76,
+      depthLevels: 200,
+      pullIntervalSeconds: 3,
+      description: 'Bitcoin/USD inverse futures contract on Bybit',
+    },
+    {
+      pairId: 'ETHUSD.BYBIT.FUTURE',
+      venue: 'BYBIT',
+      symbol: 'ETHUSD',
+      baseAsset: 'ETH',
+      quoteAsset: 'USD',
+      venueType: VenueType.CEX,
+      instrumentType: InstrumentType.FUTURE,
+      enabled: true,
+      priority: 86,
+      depthLevels: 200,
+      pullIntervalSeconds: 3,
+      description: 'Ethereum/USD inverse futures contract on Bybit',
+    },
     // ========== Bitmax/AscendEX ==========
     // Bitmax 现货 (symbol 格式: BTC/USDT)
     {
