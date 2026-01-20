@@ -56,6 +56,13 @@ const MOCK_EXCHANGES = [
   'Lighter',
 ] as const
 
+// Color palette for exchanges - moved outside component to prevent reference changes
+const EXCHANGE_COLORS = [
+  '#3b82f6', '#a855f7', '#f43f5e', '#eab308', '#22c55e',
+  '#06b6d4', '#6366f1', '#8b5cf6', '#ef4444', '#f59e0b',
+  '#10b981', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316',
+]
+
 function hashStringToSeed(input: string) {
   // Simple deterministic hash -> uint32
   let h = 2166136261
@@ -215,13 +222,6 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
 
   const isCompact = variant === 'compact';
 
-  // Color palette for exchanges
-  const EXCHANGE_COLORS = [
-    '#3b82f6', '#a855f7', '#f43f5e', '#eab308', '#22c55e',
-    '#06b6d4', '#6366f1', '#8b5cf6', '#ef4444', '#f59e0b',
-    '#10b981', '#0ea5e9', '#ec4899', '#14b8a6', '#f97316'
-  ];
-
   const buildMockVolume = useCallback((symbol: string) => {
     const rand = mulberry32(hashStringToSeed(`agg-vol:${symbol}`))
     // Generate per-exchange volumes in billions (B)
@@ -251,7 +251,7 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
     ]
 
     return items
-  }, [EXCHANGE_COLORS])
+  }, [])
 
   // Fetch aggregated volume data from backend
   const fetchVolumeData = useCallback(async (symbol: string) => {
@@ -318,7 +318,7 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
       if (process.env.NODE_ENV !== 'production') return buildMockVolume(symbol)
       return [];
     }
-  }, [EXCHANGE_COLORS, buildMockVolume]);
+  }, [buildMockVolume]);
 
   // Fetch left symbol data
   useEffect(() => {
