@@ -303,7 +303,7 @@ export const RealtimeWhalesTable = () => {
               {displayedTransactions.map((tx) => (
                 <tr
                   key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
-                  className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
+                  className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer"
                   onClick={() => handleShowStats(tx.address)}
                 >
                   <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]/50">
