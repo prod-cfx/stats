@@ -466,13 +466,19 @@ model FuturesPairsMarket {
   shortVolumeUsd Decimal? @map("short_volume_usd") @db.Decimal(30, 10)
 
   /// 多头成交量（数量）
-  longVolumeQuantity Decimal? @map("long_volume_quantity") @db.Decimal(30, 10)
+  /// 注：使用 Decimal(40,10) 支持低价币（如 PEPE $0.0000001）的大数量值
+  /// 低价币数量可达数十万亿（16位整数），例如：1M USD ÷ $0.0000001 = 10^16
+  longVolumeQuantity Decimal? @map("long_volume_quantity") @db.Decimal(40, 10)
 
   /// 空头成交量（数量）
-  shortVolumeQuantity Decimal? @map("short_volume_quantity") @db.Decimal(30, 10)
+  /// 注：使用 Decimal(40,10) 支持低价币（如 PEPE $0.0000001）的大数量值
+  /// 低价币数量可达数十万亿（16位整数），例如：1M USD ÷ $0.0000001 = 10^16
+  shortVolumeQuantity Decimal? @map("short_volume_quantity") @db.Decimal(40, 10)
 
   /// 持仓量（数量）
-  openInterestQuantity Decimal? @map("open_interest_quantity") @db.Decimal(30, 10)
+  /// 注：使用 Decimal(40,10) 支持低价币（如 PEPE $0.0000001）的大数量值
+  /// 低价币数量可达数十万亿（16位整数），例如：1M USD ÷ $0.0000001 = 10^16
+  openInterestQuantity Decimal? @map("open_interest_quantity") @db.Decimal(40, 10)
 
   /// 持仓量（USD）
   openInterestUsd Decimal? @map("open_interest_usd") @db.Decimal(30, 10)
