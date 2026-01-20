@@ -333,14 +333,70 @@ export async function fetchWhaleAddressPerformance(
 // ===== 鲸鱼 Discover 聚合数据（whale-tracking/discover）相关 API =====
 
 export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverResponse> {
-  return apiCall(async () => {
-    const response = await client.WhaleTrackingController_getDiscover({
-      // Discover 接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
-      headers: optionalAuthHeaders(),
-    })
+  try {
+    return await apiCall(async () => {
+      const response = await client.WhaleTrackingController_getDiscover({
+        // Discover 接口支持游客访问：存在 token 时带上认证头，否则按 VISITOR 角色访问
+        headers: optionalAuthHeaders(),
+      })
 
-    return unwrapResponse(response) as WhaleDiscoverResponse
-  }, 'FETCH_WHALE_TRACKING_DISCOVER')
+      return unwrapResponse(response) as WhaleDiscoverResponse
+    }, 'FETCH_WHALE_TRACKING_DISCOVER')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    // Mock payload: keep Whale Discover page functional when backend is unavailable.
+    const rand = mulberry32(hashStringToSeed('whale-discover'))
+
+    const makeAddress = (idx: number) => {
+      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      return `0x${a}${idx.toString(16).padStart(4, '0')}`
+    }
+
+    const palette = ['#60a5fa', '#c084fc', '#34d399', '#fbbf24', '#fb7185']
+    const tagKeys = ['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol'] as const
+
+    const makeTrader = (variant: 'recommended' | 'detail', idx: number) => {
+      const totalValueUsd = Math.floor(500_000 + rand() ** 0.35 * 50_000_000)
+      const pnlUsd = Math.floor((rand() - 0.45) * 8_000_000)
+      const winRatePct = Math.floor(45 + rand() * 45)
+      const address = makeAddress(idx)
+      const aiTagsCount = variant === 'recommended' ? 2 : 1
+      const aiTags = Array.from({ length: aiTagsCount }).map((_, k) => {
+        const key = tagKeys[Math.floor(rand() * tagKeys.length)]
+        const color = palette[Math.floor(rand() * palette.length)]
+        return {
+          key,
+          color,
+          bgColor: `${color}22`,
+          descriptionKey: key,
+        }
+      })
+
+      return {
+        variant,
+        address,
+        handle: variant === 'recommended' ? `@trader_${idx}` : null,
+        tag: null,
+        totalValueUsd,
+        pnlUsd,
+        pnlLabelKey: 'realizedPnl',
+        trades: Math.floor(20 + rand() * 480),
+        positions: Math.floor(1 + rand() * 14),
+        winRatePct,
+        winRateLabelKey: 'winRate',
+        avatarColor: palette[idx % palette.length],
+        aiTags,
+      }
+    }
+
+    const recommended = Array.from({ length: 3 }).map((_, i) => makeTrader('recommended', i))
+    const details = Array.from({ length: 18 }).map((_, i) => makeTrader('detail', i + 10))
+
+    return {
+      recommended,
+      details,
+    } as any as WhaleDiscoverResponse
+  }
 }
 
 // ===== 鲸鱼交易者账户快照 API =====
@@ -355,19 +411,78 @@ export async function fetchTraderSnapshot(
   address: string,
   query: FetchTraderSnapshotQuery = {},
 ): Promise<TraderSnapshotResponse> {
-  return apiCall(async () => {
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (query.skipCache) {
-      return fetchTraderSnapshotFromHyperliquid(address)
-    }
+  try {
+    return await apiCall(async () => {
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (query.skipCache) {
+        return fetchTraderSnapshotFromHyperliquid(address)
+      }
 
-    // 使用缓存包装器（30 秒缓存）
-    return cachedRequest(
-      `trader-snapshot:${address}`,
-      () => fetchTraderSnapshotFromHyperliquid(address),
-      CacheTTL.MEDIUM
-    )
-  }, 'FETCH_TRADER_SNAPSHOT')
+      // 使用缓存包装器（30 秒缓存）
+      return cachedRequest(
+        `trader-snapshot:${address}`,
+        () => fetchTraderSnapshotFromHyperliquid(address),
+        CacheTTL.MEDIUM,
+      )
+    }, 'FETCH_TRADER_SNAPSHOT')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+
+    const rand = mulberry32(hashStringToSeed(`trader-snapshot:${address}`))
+    const totalAccountValue = Math.floor(3_000_000 + rand() ** 0.35 * 120_000_000)
+    const perpPercent = 0.35 + rand() * 0.55
+    const spotPercent = 1 - perpPercent
+    const perpAccountValue = totalAccountValue * perpPercent
+    const spotAccountValue = totalAccountValue * spotPercent
+
+    const marginUsagePercent = 25 + rand() * 60
+    const withdrawable = perpAccountValue * (1 - marginUsagePercent / 100) * (0.55 + rand() * 0.35)
+    const leverageRatio = 1 + rand() * 8
+    const totalPositionValue = perpAccountValue * leverageRatio
+    const totalMarginUsed = perpAccountValue * (marginUsagePercent / 100)
+    const unrealizedPnl = (rand() - 0.5) * perpAccountValue * 0.18
+    const roi = (unrealizedPnl / Math.max(1, totalMarginUsed)) * 100
+
+    const spotCoins = ['USDC', 'BTC', 'ETH', 'SOL']
+    const weights = spotCoins.map(() => 0.2 + rand() * 1.2)
+    const weightSum = weights.reduce((a, b) => a + b, 0)
+    const balances = spotCoins.map((coin, idx) => {
+      const share = weights[idx] / weightSum
+      const value = spotAccountValue * share
+      const price = coin === 'BTC' ? 65_000 : coin === 'ETH' ? 3_200 : coin === 'SOL' ? 130 : 1
+      const total = value / price
+      const hold = total * (rand() * 0.15)
+      return {
+        coin,
+        total,
+        hold,
+        value,
+        sharePercent: share * 100,
+      }
+    })
+
+    return {
+      perp: {
+        accountValue: perpAccountValue,
+        totalMarginUsed,
+        totalPositionValue,
+        withdrawable,
+        marginUsagePercent,
+        leverageRatio,
+        unrealizedPnl,
+        roi,
+      },
+      spot: {
+        totalValue: spotAccountValue,
+        balances,
+      },
+      total: {
+        accountValue: totalAccountValue,
+        perpPercent: perpPercent * 100,
+        spotPercent: spotPercent * 100,
+      },
+    } as any as TraderSnapshotResponse
+  }
 }
 
 // ===== 鲸鱼交易者持仓详情 API =====
@@ -383,21 +498,95 @@ export async function fetchTraderPositions(
   address: string,
   query: FetchTraderPositionsQuery = {},
 ): Promise<TraderPositionsResponse> {
-  return apiCall(async () => {
-    const { type = 'all', skipCache = false } = query
+  try {
+    return await apiCall(async () => {
+      const { type = 'all', skipCache = false } = query
 
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (skipCache) {
-      return fetchTraderPositionsFromHyperliquid(address, { type })
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchTraderPositionsFromHyperliquid(address, { type })
+      }
+
+      // 使用缓存包装器（30 秒缓存）
+      return cachedRequest(
+        `trader-positions:${address}:${type}`,
+        () => fetchTraderPositionsFromHyperliquid(address, { type }),
+        CacheTTL.MEDIUM,
+      )
+    }, 'FETCH_TRADER_POSITIONS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+
+    const type = query.type ?? 'all'
+    const rand = mulberry32(hashStringToSeed(`trader-positions:${address}:${type}`))
+
+    const basePrices: Record<string, number> = { BTC: 65_000, ETH: 3_200, SOL: 130, XRP: 0.62 }
+    const perpCoins = ['BTC', 'ETH', 'SOL', 'XRP']
+    const spotCoins = ['USDC', 'BTC', 'ETH', 'SOL']
+    const now = Date.now()
+
+    const makePerp = (coin: string, idx: number) => {
+      const side = rand() > 0.52 ? 'LONG' : 'SHORT'
+      const entryPrice = basePrices[coin] * (0.9 + rand() * 0.2)
+      const markPrice = entryPrice * (0.92 + rand() * 0.16)
+      const leverageValue = 2 + Math.floor(rand() * 10)
+      const marginUsed = Math.floor(30_000 + rand() ** 0.4 * 1_500_000)
+      const positionValue = marginUsed * leverageValue * (side === 'SHORT' ? -1 : 1)
+      const sizeAbs = Math.abs(positionValue) / markPrice
+      const size = Number((sizeAbs * (side === 'SHORT' ? -1 : 1)).toFixed(6))
+      const liquidationPrice = side === 'LONG'
+        ? entryPrice * (0.68 + rand() * 0.12)
+        : entryPrice * (1.12 + rand() * 0.22)
+      const unrealizedPnl = (markPrice - entryPrice) * sizeAbs * (side === 'LONG' ? 1 : -1)
+      const unrealizedPnlPercent = (unrealizedPnl / Math.max(1, marginUsed)) * 100
+      const fundingRate = (rand() - 0.5) * 25
+      const roi = (unrealizedPnl / Math.max(1, marginUsed)) * 100
+
+      return {
+        coin,
+        side,
+        size,
+        entryPrice,
+        markPrice,
+        liquidationPrice,
+        positionValue,
+        marginUsed,
+        leverage: { type: rand() > 0.5 ? 'cross' : 'isolated', value: leverageValue },
+        unrealizedPnl,
+        unrealizedPnlPercent,
+        fundingRate,
+        roi,
+        // Some backends include timestamp-like fields; harmless if ignored by UI.
+        updatedAt: new Date(now - idx * 6 * 60_000).toISOString(),
+      }
     }
 
-    // 使用缓存包装器（30 秒缓存）
-    return cachedRequest(
-      `trader-positions:${address}:${type}`,
-      () => fetchTraderPositionsFromHyperliquid(address, { type }),
-      CacheTTL.MEDIUM
-    )
-  }, 'FETCH_TRADER_POSITIONS')
+    const makeSpot = (coin: string) => {
+      const price = basePrices[coin] ?? 1
+      const value = Math.floor(10_000 + rand() ** 0.5 * 2_500_000)
+      const total = value / price
+      const hold = total * (rand() * 0.12)
+      return {
+        coin,
+        total,
+        hold,
+        available: Math.max(0, total - hold),
+        value,
+      }
+    }
+
+    const perp = type === 'spot'
+      ? []
+      : (perpCoins.slice(0, 3).map((coin, idx) => makePerp(coin, idx)) as any[])
+    const spot = type === 'perp'
+      ? []
+      : (spotCoins.map(coin => makeSpot(coin)) as any[])
+
+    return {
+      perp,
+      spot,
+    } as any as TraderPositionsResponse
+  }
 }
 
 // ===== 鲸鱼交易者挂单列表 API =====
@@ -413,22 +602,62 @@ export async function fetchTraderOpenOrders(
   address: string,
   query: FetchTraderOpenOrdersQuery = {},
 ): Promise<TraderOpenOrdersResponse> {
-  return apiCall(async () => {
-    const { coin, skipCache = false } = query
+  try {
+    return await apiCall(async () => {
+      const { coin, skipCache = false } = query
 
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (skipCache) {
-      return fetchTraderOpenOrdersFromHyperliquid(address, { coin })
-    }
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchTraderOpenOrdersFromHyperliquid(address, { coin })
+      }
 
-    // 使用缓存包装器（30 秒缓存）
-    const cacheKey = coin ? `trader-open-orders:${address}:${coin}` : `trader-open-orders:${address}`
-    return cachedRequest(
-      cacheKey,
-      () => fetchTraderOpenOrdersFromHyperliquid(address, { coin }),
-      CacheTTL.MEDIUM
-    )
-  }, 'FETCH_TRADER_OPEN_ORDERS')
+      // 使用缓存包装器（30 秒缓存）
+      const cacheKey = coin ? `trader-open-orders:${address}:${coin}` : `trader-open-orders:${address}`
+      return cachedRequest(
+        cacheKey,
+        () => fetchTraderOpenOrdersFromHyperliquid(address, { coin }),
+        CacheTTL.MEDIUM,
+      )
+    }, 'FETCH_TRADER_OPEN_ORDERS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+
+    const coinFilter = query.coin?.toUpperCase()
+    const rand = mulberry32(hashStringToSeed(`trader-open-orders:${address}:${coinFilter ?? 'all'}`))
+    const basePrices: Record<string, number> = { BTC: 65_000, ETH: 3_200, SOL: 130, XRP: 0.62 }
+    const coins = ['BTC', 'ETH', 'SOL', 'XRP']
+    const now = Date.now()
+
+    const orders = Array.from({ length: 16 })
+      .map((_, idx) => {
+        const coin = coins[Math.floor(rand() * coins.length)]
+        const side = rand() > 0.5 ? 'BUY' : 'SELL'
+        const price = basePrices[coin] * (0.92 + rand() * 0.16)
+        const origSize = Number((0.05 + rand() * 2.5).toFixed(4))
+        const size = Number((origSize * (0.4 + rand() * 0.6)).toFixed(4))
+        const value = price * size
+        const triggerPrice = rand() > 0.75 ? Number((price * (0.98 + rand() * 0.04)).toFixed(2)) : null
+        const timestamp = new Date(now - idx * 7 * 60_000).toISOString()
+
+        return {
+          orderId: 10_000 + idx,
+          coin,
+          side,
+          type: triggerPrice ? 'STOP_LIMIT' : 'LIMIT',
+          price: Number(price.toFixed(2)),
+          size,
+          origSize,
+          value: Number(value.toFixed(2)),
+          timestamp,
+          triggerPrice,
+        }
+      })
+      .filter(o => !coinFilter || o.coin === coinFilter)
+
+    return {
+      orders,
+    } as any as TraderOpenOrdersResponse
+  }
 }
 
 // ===== Hyperliquid Whale Alert 实时数据 API =====
@@ -443,61 +672,97 @@ export interface FetchRealtimeWhaleAlertsParams {
 export async function fetchRealtimeWhaleAlerts(
   params: FetchRealtimeWhaleAlertsParams = {},
 ): Promise<RealtimeWhaleAlertItem[]> {
-  return apiCall(async () => {
-    const queries: Record<string, unknown> = {}
+  try {
+    return await apiCall(async () => {
+      const queries: Record<string, unknown> = {}
 
-    if (params.symbol) {
-      queries.symbol = params.symbol
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      queries.min_position_value_usd = params.minPositionValueUsd
-    }
-    if (typeof params.limit === 'number') {
-      queries.limit = params.limit
-    }
-    if (params.since) {
-      queries.since = params.since
-    }
+      if (params.symbol) {
+        queries.symbol = params.symbol
+      }
+      if (typeof params.minPositionValueUsd === 'number') {
+        queries.min_position_value_usd = params.minPositionValueUsd
+      }
+      if (typeof params.limit === 'number') {
+        queries.limit = params.limit
+      }
+      if (params.since) {
+        queries.since = params.since
+      }
 
-    // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
-    const searchParams = new URLSearchParams()
-    if (params.symbol) {
-      searchParams.set('symbol', params.symbol)
-    }
-    if (typeof params.minPositionValueUsd === 'number') {
-      searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
-    }
-    if (typeof params.limit === 'number') {
-      searchParams.set('limit', String(params.limit))
-    }
-    if (params.since) {
-      searchParams.set('since', params.since)
-    }
-    const queryString = searchParams.toString()
-    const fallbackUrl =
-      queryString.length > 0
-        ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
-        : `${API_BASE_URL}/whale-alerts/realtime`
+      // 为 fallback 构造 querystring，确保退回 fetch 时过滤条件不丢失
+      const searchParams = new URLSearchParams()
+      if (params.symbol) {
+        searchParams.set('symbol', params.symbol)
+      }
+      if (typeof params.minPositionValueUsd === 'number') {
+        searchParams.set('min_position_value_usd', String(params.minPositionValueUsd))
+      }
+      if (typeof params.limit === 'number') {
+        searchParams.set('limit', String(params.limit))
+      }
+      if (params.since) {
+        searchParams.set('since', params.since)
+      }
+      const queryString = searchParams.toString()
+      const fallbackUrl =
+        queryString.length > 0
+          ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
+          : `${API_BASE_URL}/whale-alerts/realtime`
 
-    return safeApiCall(
-      () =>
-        client.WhaleAlertController_getRealtime({
-          headers: optionalAuthHeaders(),
-          queries,
-        }),
-      {
-        url: fallbackUrl,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...optionalAuthHeaders(),
+      return safeApiCall(
+        () =>
+          client.WhaleAlertController_getRealtime({
+            headers: optionalAuthHeaders(),
+            queries,
+          }),
+        {
+          url: fallbackUrl,
+          options: {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...optionalAuthHeaders(),
+            },
           },
+          validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
         },
-        validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
-      },
-    )
-  }, 'FETCH_REALTIME_WHALE_ALERTS')
+      )
+    }, 'FETCH_REALTIME_WHALE_ALERTS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+
+    const symbol = params.symbol || 'BTC'
+    const limit = params.limit ?? 50
+    const rand = mulberry32(hashStringToSeed(`whale-realtime:${symbol}:${params.minPositionValueUsd ?? ''}`))
+    const sides = ['Long', 'Short'] as const
+    const now = Date.now()
+
+    const makeAddress = (idx: number) => {
+      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      return `0x${a}${idx.toString(16).padStart(4, '0')}`
+    }
+
+    const items = Array.from({ length: Math.min(limit, 80) }).map((_, idx) => {
+      const side = sides[Math.floor(rand() * sides.length)]
+      const basePrice = symbol === 'BTC' ? 65_000 : symbol === 'ETH' ? 3_200 : 120
+      const entryPrice = basePrice * (0.92 + rand() * 0.16)
+      const positionValueUsd = Math.floor((params.minPositionValueUsd ?? 1_000_000) * (1 + rand() * 12))
+      const positionSize = positionValueUsd / entryPrice * (side === 'Short' ? -1 : 1)
+      const minutesAgo = Math.floor(rand() * 60)
+      return {
+        user_address: makeAddress(idx),
+        symbol,
+        side,
+        position_action: rand() > 0.5 ? 1 : 2,
+        position_value_usd: String(positionValueUsd),
+        position_size: Number(positionSize.toFixed(6)),
+        entry_price: String(entryPrice.toFixed(2)),
+        create_time: new Date(now - minutesAgo * 60_000).toISOString(),
+      } as any as RealtimeWhaleAlertItem
+    })
+
+    return items
+  }
 }
 
 // ===== 多空比（markets/long-short-ratio/exchanges）相关 API =====

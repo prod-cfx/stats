@@ -1,4 +1,9 @@
 {
+  "common": {
+    "copied": "Copied",
+    "error": "Error",
+    "tryAgain": "Please try again"
+  },
   "app": {
     "title": "Coinflux - Advanced Crypto Data Aggregator",
     "description": "Professional crypto asset data aggregation and multi-dimensional market analysis terminal"

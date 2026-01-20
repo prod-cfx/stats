@@ -1,11 +1,10 @@
 'use client';
 
-import { ArrowUpDown, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useToast } from '@/components/ui/toast';
+import { toast } from '@/lib/toast';
 import { PageTitle } from '@/components/ui/Typography';
 import { fetchRealtimeWhaleAlerts } from '@/lib/api';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
@@ -33,11 +32,13 @@ export const RealtimeWhalesTable = () => {
   const { t } = useTranslation();
   const params = useParams();
   const lng = (params as any)?.lng ?? 'zh';
+  const router = useRouter();
   const [isPaused, setIsPaused] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [transactions, setTransactions] = useState<WhaleTransaction[]>(initialTransactions);
   const [_loading, setLoading] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>(null);
@@ -46,7 +47,6 @@ export const RealtimeWhalesTable = () => {
   const lastRequestIdRef = useRef(0);
   const inFlightRef = useRef(false);
   const fetchNewDataRef = useRef<(() => Promise<void>) | null>(null);
-  const { success, error } = useToast();
 
   const seededNumber = (input: string): number => {
     // simple non-cryptographic hash → [0, 1)
@@ -153,7 +153,7 @@ export const RealtimeWhalesTable = () => {
       // 加载失败时保留当前列表，并给出提示，仅对最新请求弹 toast，避免并发时旧请求误报
       console.error('Failed to fetch realtime whale alerts', e);
       if (requestId === lastRequestIdRef.current) {
-        error(t('whaleTracking.realtime.toast.loadFailed'));
+        toast.error({ title: t('whaleTracking.realtime.toast.loadFailed') });
       }
     } finally {
       if (requestId === lastRequestIdRef.current) {
@@ -161,16 +161,17 @@ export const RealtimeWhalesTable = () => {
       }
       inFlightRef.current = false;
     }
-  }, [error, t]);
+  }, [t]);
 
   useEffect(() => {
     fetchNewDataRef.current = fetchNewData;
   }, [fetchNewData]);
 
-  // 首次挂载时立即拉取一次最新数据
+  // 首次挂载时立即拉取一次最新数据（避免 fetchNewData identity 变化导致重复拉取）
   useEffect(() => {
-    void fetchNewData();
-  }, [fetchNewData]);
+    void fetchNewDataRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // 保险：每次 effect 触发前都清理一次旧 interval，防止 ref 被覆盖导致遗留定时器
@@ -214,9 +215,35 @@ export const RealtimeWhalesTable = () => {
     setIsModalOpen(true);
   };
 
-  const handleCopy = (address: string) => {
-    navigator.clipboard.writeText(address);
-    success(t('whaleTracking.realtime.toast.copied'));
+  const handleCopy = async (address: string) => {
+    if (copiedAddress === address) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(address);
+      } else {
+        const el = document.createElement('textarea');
+        el.value = address;
+        el.setAttribute('readonly', '');
+        el.style.position = 'fixed';
+        el.style.left = '-9999px';
+        el.style.top = '0';
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand('copy');
+        el.remove();
+        if (!ok) throw new Error('copy_failed');
+      }
+      setCopiedAddress(address);
+      toast.success({ title: t('whaleTracking.realtime.toast.copied'), description: address, duration: 2000 });
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (err) {
+      console.error('Copy failed', err);
+      toast.error({ title: t('common.error'), description: t('common.tryAgain'), duration: 2500 });
+    }
+  };
+
+  const handleGoProfile = (address: string) => {
+    router.push(`/${lng}/whale-tracking/profile?address=${encodeURIComponent(address)}`);
   };
 
   const handleSortWinRate = () => {
@@ -295,21 +322,33 @@ export const RealtimeWhalesTable = () => {
               {displayedTransactions.map((tx) => (
                 <tr
                   key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
-                  className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer animate-in slide-in-from-left-2 duration-300"
+                  className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer"
                   onClick={() => handleShowStats(tx.address)}
                 >
                   <td className="px-3 md:px-6 py-5 sticky left-0 z-10 bg-[color:var(--cf-surface)] border-r border-[color:var(--cf-border)] group-hover:bg-[color:var(--cf-surface-hover)]/50">
                     <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2">
-                        <Link 
-                          href={`/${lng}/whale-tracking/profile/?address=${tx.address}`}
-                          className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
-                          onClick={(e) => e.stopPropagation()}
+                      <div className="flex items-center gap-2 relative group/address z-20">
+                        <button
+                          type="button"
+                          className="text-left text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-medium hover:underline decoration-primary decoration-2 underline-offset-4 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGoProfile(tx.address);
+                          }}
                         >
                           {`${tx.address.slice(0, 4)}...${tx.address.slice(-4)}`}
-                        </Link>
-                        <button type="button" className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors" onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}>
-                          <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                        </button>
+                        {/* Hover-to-reveal full address tooltip */}
+                        <div className="absolute left-0 top-0 -translate-y-[120%] z-30 px-3 py-2 rounded-lg shadow-2xl text-xs font-mono whitespace-nowrap bg-black/90 text-white dark:bg-white/90 dark:text-black border border-black/10 dark:border-white/10 pointer-events-none opacity-0 invisible group-hover/address:opacity-100 group-hover/address:visible transition-all duration-200">
+                          {tx.address}
+                          <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
+                        </div>
+                        <button 
+                          type="button" 
+                          className={`transition-colors ${copiedAddress === tx.address ? 'text-green-500' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
+                          onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}
+                        >
+                          {copiedAddress === tx.address ? <Check className="w-3 h-3 md:w-3.5 md:h-3.5" /> : <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />}
                         </button>
                       </div>
                       <span 
