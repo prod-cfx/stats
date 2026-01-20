@@ -7,6 +7,7 @@ import { MarketsService } from './markets.service'
 import { FuturesPairsMarketRepository } from './repositories/futures-pairs-market.repository'
 import { LongShortRatioRepository } from './repositories/long-short-ratio.repository'
 import { MarketTradesRepository } from './repositories/market-trades.repository'
+import { TakerBuySellVolumeRepository } from './repositories/taker-buy-sell-volume.repository'
 
 @Module({
   imports: [PrismaModule, AuthModule],
@@ -15,10 +16,11 @@ import { MarketTradesRepository } from './repositories/market-trades.repository'
     LongShortRatioRepository,
     MarketTradesRepository,
     FuturesPairsMarketRepository,
+    TakerBuySellVolumeRepository,
     CleanupOldTradesJob,
   ],
   controllers: [MarketsController],
+  exports: [TakerBuySellVolumeRepository],
 })
 export class MarketsModule {}
-
 

@@ -4,6 +4,7 @@ import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarke
 import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
+import { MarketsModule } from '@/modules/markets/markets.module'
 // MarketsVolumeSyncJob 已移除：数据拉取由其他系统负责
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
@@ -24,6 +25,7 @@ import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.job'
 import { CoinglassPairsMarketsJob } from './jobs/coinglass-pairs-markets.job'
+import { CoinglassTakerVolumeJob } from './jobs/coinglass-taker-volume.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
@@ -74,6 +76,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     CryptoStockQuotesModule,
     TradesConfigModule,
     WhaleTrackingModule,
+    MarketsModule,
   ],
   controllers: [AdminDataPullTaskController],
   providers: [
@@ -91,6 +94,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     CoinglassAggregatedLiquidationJob,
     CoinglassLongShortRatioJob,
     CoinglassPairsMarketsJob,
+    CoinglassTakerVolumeJob,
     BbxCryptoStockQuotesJob,
     BbxCryptoStockScraperJob,
     PolymarketMarketsJob,
@@ -115,6 +119,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob: CoinglassLongShortRatioJob,
         coinglassPairsMarketsJob: CoinglassPairsMarketsJob,
+        coinglassTakerVolumeJob: CoinglassTakerVolumeJob,
         bbxCryptoStockQuotesJob: BbxCryptoStockQuotesJob,
         bbxCryptoStockScraperJob: BbxCryptoStockScraperJob,
         polymarketMarketsJob: PolymarketMarketsJob,
@@ -133,6 +138,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob,
         coinglassPairsMarketsJob,
+        coinglassTakerVolumeJob,
         bbxCryptoStockQuotesJob,
         bbxCryptoStockScraperJob,
         polymarketMarketsJob,
@@ -152,6 +158,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         CoinglassAggregatedLiquidationJob,
         CoinglassLongShortRatioJob,
         CoinglassPairsMarketsJob,
+        CoinglassTakerVolumeJob,
         BbxCryptoStockQuotesJob,
         BbxCryptoStockScraperJob,
         PolymarketMarketsJob,

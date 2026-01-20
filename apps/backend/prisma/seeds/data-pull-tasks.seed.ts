@@ -104,7 +104,8 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
         waitTimeout: 10000,
       },
     },
-// Coinglass Pairs Markets - 各币种独立任务（使用冒号前缀匹配）
+    // Coinglass Pairs Markets - 各币种独立任务
+    // 使用冒号前缀匹配，手动维护币种列表
     ...['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].map(symbol => ({
       key: `coinglass-pairs-markets:${symbol}`,
       name: `Coinglass Pairs Markets - ${symbol}`,
@@ -114,6 +115,18 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       enabled: true,
       cursor: JSON.stringify({ symbol }),
       meta: { symbol },
+    })),
+    // Coinglass Taker Buy/Sell Volume - 各币种主动买卖成交量
+    // 一次 API 调用返回所有交易所的数据
+    ...['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].map(symbol => ({
+      key: `coinglass-taker-volume:${symbol}`,
+      name: `Coinglass Taker Volume - ${symbol}`,
+      source: 'COINGLASS',
+      type: 'taker-volume',
+      intervalSeconds: 300, // 每5分钟
+      enabled: true,
+      cursor: JSON.stringify({ symbol, range: '24h' }),
+      meta: { symbol, range: '24h' },
     })),
     {
       key: 'hyperliquid-user-fills-sync',
@@ -174,7 +187,15 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       await prisma.dataPullTask.upsert({
         where: { key: task.key },
         update: {
-          // 仅更新 meta，保留用户已配置的 enabled 和 lastRunAt
+          // 更新任务配置，保留 lastRunAt 让用户控制
+          name: task.name,
+          source: task.source,
+          type: task.type,
+          intervalSeconds: task.intervalSeconds,
+          cursor: task.cursor,
+          // 仅当 seed 中标记为 disabled 时强制禁用（系统级禁用，由 API 支持情况决定）
+          // 这样可以确保新发现不支持的交易所会被自动禁用，同时不会重新启用用户手动禁用的任务
+          ...(task.enabled === false ? { enabled: false } : {}),
           ...('meta' in task ? { meta: task.meta } : {}),
         },
         create: {
@@ -204,4 +225,3 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     `✅ Data-pull tasks seeded: ${createdCount} created, ${skippedCount} skipped`,
   )
 }
-

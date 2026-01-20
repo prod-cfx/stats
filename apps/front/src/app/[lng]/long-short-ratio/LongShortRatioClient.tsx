@@ -175,7 +175,7 @@ export function LongShortRatioClient() {
           <BodyText className="text-xs md:text-sm">{t('longShort.subtitle')}</BodyText>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-2 md:pb-0">
+        <div className="flex items-center gap-2 md:gap-3 pb-2 md:pb-0">
           <div className="flex gap-1 flex-shrink-0">
             <FilterButton value={symbol} options={['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'DOGE', 'BNB']} onChange={setSymbol} minWidth="70px" size="sm" />
             <FilterButton
@@ -189,7 +189,7 @@ export function LongShortRatioClient() {
                 { value: '12h', label: t('longShort.timeRanges.12h') },
                 { value: '24h', label: t('longShort.timeRanges.24h') },
               ]}
-              onChange={(v) => setTimeRange(v as any)}
+              onChange={(v) => setTimeRange(v as ExchangeLongShortTimeRange)}
               minWidth="80px"
               size="sm"
             />
