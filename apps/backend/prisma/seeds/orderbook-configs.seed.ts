@@ -187,6 +187,83 @@ export async function seedOrderbookConfigs(prisma: PrismaClient) {
       pullIntervalSeconds: 3,
       description: 'Ethereum/USDT perpetual contract on Bybit',
     },
+    // ========== Hyperliquid ==========
+    // Hyperliquid 是 DEX，最大支持 100 档深度，每 ~0.5s 推送完整快照
+    // 永续合约
+    {
+      pairId: 'BTCUSDT.HYPERLIQUID.PERPETUAL',
+      venue: 'HYPERLIQUID',
+      symbol: 'BTCUSDT',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      venueType: VenueType.DEX,
+      instrumentType: InstrumentType.PERPETUAL,
+      enabled: true,
+      priority: 90,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: 'Bitcoin/USDT perpetual contract on Hyperliquid DEX',
+    },
+    {
+      pairId: 'ETHUSDT.HYPERLIQUID.PERPETUAL',
+      venue: 'HYPERLIQUID',
+      symbol: 'ETHUSDT',
+      baseAsset: 'ETH',
+      quoteAsset: 'USDT',
+      venueType: VenueType.DEX,
+      instrumentType: InstrumentType.PERPETUAL,
+      enabled: true,
+      priority: 95,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: 'Ethereum/USDT perpetual contract on Hyperliquid DEX',
+    },
+    {
+      pairId: 'SOLUSDT.HYPERLIQUID.PERPETUAL',
+      venue: 'HYPERLIQUID',
+      symbol: 'SOLUSDT',
+      baseAsset: 'SOL',
+      quoteAsset: 'USDT',
+      venueType: VenueType.DEX,
+      instrumentType: InstrumentType.PERPETUAL,
+      enabled: true,
+      priority: 100,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: 'Solana/USDT perpetual contract on Hyperliquid DEX',
+    },
+    // Hyperliquid 现货
+    // 注意：PURR/USDC 使用 "PURR/USDC" 格式，其他币种需要使用 @{index} 格式
+    // 参考: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/spot
+    {
+      pairId: 'HYPE/USDC.HYPERLIQUID.SPOT',
+      venue: 'HYPERLIQUID',
+      symbol: 'HYPE/USDC',
+      baseAsset: 'HYPE',
+      quoteAsset: 'USDC',
+      venueType: VenueType.DEX,
+      instrumentType: InstrumentType.SPOT,
+      enabled: true,
+      priority: 105,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: 'HYPE/USDC spot trading pair on Hyperliquid DEX',
+      metadata: { spotIndex: 107 }, // HYPE 在 Hyperliquid spotMeta 中的 index
+    },
+    {
+      pairId: 'PURR/USDC.HYPERLIQUID.SPOT',
+      venue: 'HYPERLIQUID',
+      symbol: 'PURR/USDC',
+      baseAsset: 'PURR',
+      quoteAsset: 'USDC',
+      venueType: VenueType.DEX,
+      instrumentType: InstrumentType.SPOT,
+      enabled: false, // 暂时禁用，流动性较低
+      priority: 110,
+      depthLevels: 100,
+      pullIntervalSeconds: 1,
+      description: 'PURR/USDC spot trading pair on Hyperliquid DEX',
+    },
   ]
 
   let createdCount = 0

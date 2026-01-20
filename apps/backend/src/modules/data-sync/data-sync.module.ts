@@ -44,6 +44,8 @@ import { BinanceCexSpotTradesWsAdapter } from './services/adapters/binance-cex-s
 import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-future-orderbook-ws.adapter'
 import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
 import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
+import { HyperliquidDexPerpetualOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-orderbook-ws.adapter'
+import { HyperliquidDexSpotOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-spot-orderbook-ws.adapter'
 import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
 import { OkxCexFutureTradesWsAdapter } from './services/adapters/okx-cex-future-trades-ws.adapter'
 import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-perpetual-orderbook-ws.adapter'
@@ -102,7 +104,6 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
-      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         exampleKlineJob: ExampleKlineJob,
         exampleNewsJob: ExampleNewsJob,
@@ -176,9 +177,10 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OkxCexSpotOrderbookWsAdapter,
     OkxCexPerpetualOrderbookWsAdapter,
     OkxCexFutureOrderbookWsAdapter,
+    HyperliquidDexPerpetualOrderbookWsAdapter,
+    HyperliquidDexSpotOrderbookWsAdapter,
     {
       provide: ORDERBOOK_WS_ADAPTER_REGISTRY,
-      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         binanceCexSpotOrderbookWsAdapter: BinanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter: BinanceCexPerpetualOrderbookWsAdapter,
@@ -189,6 +191,8 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         okxCexSpotOrderbookWsAdapter: OkxCexSpotOrderbookWsAdapter,
         okxCexPerpetualOrderbookWsAdapter: OkxCexPerpetualOrderbookWsAdapter,
         okxCexFutureOrderbookWsAdapter: OkxCexFutureOrderbookWsAdapter,
+        hyperliquidDexPerpetualOrderbookWsAdapter: HyperliquidDexPerpetualOrderbookWsAdapter,
+        hyperliquidDexSpotOrderbookWsAdapter: HyperliquidDexSpotOrderbookWsAdapter,
       ) => [
         binanceCexSpotOrderbookWsAdapter,
         binanceCexPerpetualOrderbookWsAdapter,
@@ -199,6 +203,8 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         okxCexSpotOrderbookWsAdapter,
         okxCexPerpetualOrderbookWsAdapter,
         okxCexFutureOrderbookWsAdapter,
+        hyperliquidDexPerpetualOrderbookWsAdapter,
+        hyperliquidDexSpotOrderbookWsAdapter,
       ],
       inject: [
         BinanceCexSpotOrderbookWsAdapter,
@@ -210,6 +216,8 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         OkxCexSpotOrderbookWsAdapter,
         OkxCexPerpetualOrderbookWsAdapter,
         OkxCexFutureOrderbookWsAdapter,
+        HyperliquidDexPerpetualOrderbookWsAdapter,
+        HyperliquidDexSpotOrderbookWsAdapter,
       ],
     },
     OrderbookWsSyncManager,
@@ -223,7 +231,6 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OkxCexFutureTradesWsAdapter,
     {
       provide: TRADES_WS_ADAPTER_REGISTRY,
-      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
       useFactory: (
         binanceCexSpotTradesWsAdapter: BinanceCexSpotTradesWsAdapter,
         binanceCexPerpetualTradesWsAdapter: BinanceCexPerpetualTradesWsAdapter,
