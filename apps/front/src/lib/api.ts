@@ -361,7 +361,7 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
       const winRatePct = Math.floor(45 + rand() * 45)
       const address = makeAddress(idx)
       const aiTagsCount = variant === 'recommended' ? 2 : 1
-      const aiTags = Array.from({ length: aiTagsCount }).map((_, k) => {
+      const aiTags = Array.from({ length: aiTagsCount }).map((_, _k) => {
         const key = tagKeys[Math.floor(rand() * tagKeys.length)]
         const color = palette[Math.floor(rand() * palette.length)]
         return {

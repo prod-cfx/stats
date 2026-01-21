@@ -1,11 +1,13 @@
 import type { TakerBuySellVolume } from '@prisma/client'
-import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports
+import { Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class TakerBuySellVolumeRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
+  ) {}
 
   /**
    * 批量创建或更新 Taker Buy/Sell Volume 数据
