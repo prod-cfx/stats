@@ -6,6 +6,23 @@ import { Injectable } from '@nestjs/common'
 import { CryptoStockQuotesRepository } from './crypto-stock-quotes.repository'
 import { PUBLIC_COMPANY_CONFIG } from './public-companies.config'
 
+/**
+ * BBX Scraper rawData 结构
+ */
+interface BbxScraperRawData {
+  holdingCoin?: string | null
+  symbol?: string
+  name?: string
+  exchange?: string
+  companyType?: string
+  mNav?: number
+  marketCap?: number
+  holdingValue?: number
+  holdingQuantity?: number
+  price?: number
+  priceChangePercent?: number
+}
+
 @Injectable()
 export class CryptoStockQuotesService {
   constructor(private readonly repo: CryptoStockQuotesRepository) {}
@@ -30,12 +47,47 @@ export class CryptoStockQuotesService {
   }
 
   /**
+   * 格式化数值为紧凑格式（如 64.53B, 673.78K）
+   */
+  private formatCompact(value: number): string {
+    if (!Number.isFinite(value) || value < 0) {
+      return '0'
+    }
+    if (value >= 1e9) {
+      return `${(value / 1e9).toFixed(2)}B`
+    }
+    if (value >= 1e6) {
+      return `${(value / 1e6).toFixed(2)}M`
+    }
+    if (value >= 1e3) {
+      return `${(value / 1e3).toFixed(2)}K`
+    }
+    return value.toString()
+  }
+
+  /**
    * 将 Prisma 实体映射为对外响应 DTO
    *
    * - 所有数值字段统一转为字符串，避免前后端小数精度问题
    */
   private toResponseDto(entity: CryptoStockQuote): CryptoStockQuoteResponseDto {
     const config = PUBLIC_COMPANY_CONFIG[entity.symbol]
+    const holdingValueNum = entity.holdingValue != null ? Number(entity.holdingValue) : null
+    const holdingQuantityNum =
+      entity.holdingQuantity != null ? Number(entity.holdingQuantity) : null
+
+    const rawData = entity.rawData as BbxScraperRawData | null
+    const holdingCoin = rawData?.holdingCoin?.toUpperCase() ?? null
+
+    const computedHoldingsValue =
+      holdingValueNum != null ? `$${this.formatCompact(holdingValueNum)}` : null
+
+    const computedHoldingsAmount =
+      holdingQuantityNum != null && holdingCoin
+        ? `${this.formatCompact(holdingQuantityNum)} ${holdingCoin}`
+        : holdingQuantityNum != null
+          ? this.formatCompact(holdingQuantityNum)
+          : null
 
     return {
       id: entity.id,
@@ -64,8 +116,8 @@ export class CryptoStockQuotesService {
       assetSymbol: config?.assetSymbol ?? null,
       assetLogoUrl: config?.assetLogoUrl ?? null,
       companyLogoUrl: config?.companyLogoUrl ?? null,
-      holdingsValue: config?.holdingsValue ?? null,
-      holdingsAmount: config?.holdingsAmount ?? null,
+      holdingsValue: computedHoldingsValue ?? config?.holdingsValue ?? null,
+      holdingsAmount: computedHoldingsAmount ?? config?.holdingsAmount ?? null,
       infoParagraphs: config?.infoParagraphs,
       source: entity.source,
       quoteTimestamp: entity.quoteTimestamp,
@@ -74,9 +126,5 @@ export class CryptoStockQuotesService {
     }
   }
 }
-
-
-
-
 
 

@@ -54,7 +54,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     const client = prisma.getClient()
     await client.cryptoStockQuote.deleteMany({
       where: {
-        symbol: { in: ['MSTR', 'COIN'] },
+        symbol: { in: ['MSTR'] },
       },
     })
   })
@@ -90,7 +90,8 @@ describe('BBX crypto stock quotes job (E2E)', () => {
           turnover: 100_000_000,
           change: 2,
           changePercent: 2,
-          marketCap: 1_000_000_000,
+          marketCap: 50_000_000_000, // 50B
+          holdingValue: 63_900_000_000, // 63.9B (≥1B，会被保留)
           peRatio: 30,
           high52w: 120,
           low52w: 60,
@@ -101,6 +102,8 @@ describe('BBX crypto stock quotes job (E2E)', () => {
           name: 'Coinbase Global Inc.',
           exchange: 'NASDAQ',
           price: 200,
+          marketCap: 30_000_000_000, // 30B
+          holdingValue: 500_000_000, // 500M (<1B，会被过滤)
           timestamp: quoteTime,
         },
       ],
@@ -133,7 +136,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     )
 
     expect(fetchCallCount).toBe(1)
-    expect(result.fetchedCount).toBe(2)
+    expect(result.fetchedCount).toBe(1) // 只有MSTR符合holdingValue≥1B的条件
     expect(result.newCursor).toBeDefined()
 
     const cursor = JSON.parse(result.newCursor as string) as {
@@ -143,28 +146,22 @@ describe('BBX crypto stock quotes job (E2E)', () => {
 
     const rows = await client.cryptoStockQuote.findMany({
       where: {
-        symbol: { in: ['MSTR', 'COIN'] },
+        symbol: { in: ['MSTR'] },
       },
       orderBy: {
         quoteTimestamp: 'asc',
       },
     })
 
-    expect(rows.length).toBe(2)
+    expect(rows.length).toBe(1)
 
     const mstr = rows.find(r => r.symbol === 'MSTR')
-    const coin = rows.find(r => r.symbol === 'COIN')
 
     expect(mstr).toBeDefined()
-    expect(coin).toBeDefined()
-
     expect(mstr?.quoteTimestamp.getTime()).toBe(quoteTime)
     expect(mstr?.price.toString()).toBe('100')
-    expect(mstr?.source).toBe('BBX')
-
-    expect(coin?.quoteTimestamp.getTime()).toBe(quoteTime)
-    expect(coin?.price.toString()).toBe('200')
-    expect(coin?.source).toBe('BBX')
+    expect(mstr?.source).toBe('BBX_SCRAPER')
+    expect(mstr?.holdingValue?.toString()).toBe('63900000000')
   })
 })
 

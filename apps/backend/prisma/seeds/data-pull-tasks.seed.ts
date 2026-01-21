@@ -103,7 +103,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       enabled: false,
       cursor: null,
       meta: {
-        url: 'https://bbx.com/zh-Hans/traditional-finance',
+        url: 'https://bbx.com/zh-Hans',
         waitTimeout: 10000,
       },
     },

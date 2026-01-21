@@ -16,6 +16,7 @@ interface BbxScrapedQuote {
   marketCap?: number
   holdingValue?: number
   holdingQuantity?: number
+  holdingCoin?: string
   price: number
   priceChangePercent?: number
 }
@@ -55,14 +56,14 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
   readonly key = 'bbx-crypto-stock-scraper'
   readonly name = 'BBX 币股数据页面抓取'
   readonly metaSchema: JobMetaSchema = {
-    description: '从 BBX 传统金融页面抓取币股报价数据',
+    description: '从 BBX 加密概念股页面抓取币股报价数据（仅保留持币价值≥1B的记录）',
     fields: [
       {
         name: 'url',
         type: 'string',
         required: false,
         description: '目标页面 URL',
-        defaultValue: 'https://bbx.com/zh-Hans/traditional-finance',
+        defaultValue: 'https://bbx.com/zh-Hans',
       },
       {
         name: 'waitTimeout',
@@ -73,28 +74,32 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       },
     ],
     example: {
-      url: 'https://bbx.com/zh-Hans/traditional-finance',
+      url: 'https://bbx.com/zh-Hans',
       waitTimeout: 10000,
     },
   }
   private readonly logger = new Logger(BbxCryptoStockScraperJob.name)
 
+  // ========== 业务规则常量 ==========
+
+  /** 持币价值最小阈值（USD），仅保留≥此值的记录 */
+  private static readonly MIN_HOLDING_VALUE_THRESHOLD = 1e9
+
   // ========== 正则表达式常量 ==========
 
-  /** 股票代码和交易所：匹配 "MSTR • 美股-NASDAQ" 或 "dMSTR • 美股-NYSE"，允许 2-6 位字母前缀 */
-  // eslint-disable-next-line regexp/no-dupe-characters-character-class
-  private static readonly STOCK_INFO_REGEX = /([a-zA-Z]{2,6})\s*•\s*美股-(NASDAQ|NYSE|OTCMARKETS)/i
+  /** 股票代码和交易所：匹配 "MSTR美股-NASDAQ" 或 "dMSTR美股-NYSE"，允许 2-6 位字母前缀 */
+  private static readonly STOCK_INFO_REGEX = /([A-Z]{2,6})美股-(NASDAQ|NYSE|OTCMARKETS)/i
 
   /** 从带前缀的符号中提取纯大写股票代码：如 dMSTR -> MSTR */
   private static readonly SYMBOL_EXTRACT_REGEX = /([A-Z]{2,5})$/
 
   /** 公司名称：匹配以常见公司后缀结尾的英文名称 */
-  // eslint-disable-next-line regexp/no-dupe-characters-character-class, regexp/no-super-linear-backtracking
-  private static readonly COMPANY_NAME_REGEX = /([A-Za-z][A-Za-z\s.,'&()/-]+?(?:Inc\.?|Corp\.?|Ltd\.?|Group|Company|Solutions|Holdings|Technologies|Immersion|industries)?)\s*(?=[A-Z]{2,5}\s*•)/i
+  // eslint-disable-next-line regexp/no-dupe-characters-character-class
+  private static readonly COMPANY_NAME_REGEX = /([A-Za-z][A-Za-z\s.,'&()/-]+?(?:Inc\.?|Corp\.?|Ltd\.?|Group|Company|Solutions|Holdings|Technologies|Immersion|Industries)?)(?=[A-Z]{2,6}美股)/i
 
   /** 公司类型：在交易所信息后、价格前的文本 */
   // eslint-disable-next-line regexp/no-dupe-characters-character-class, regexp/no-useless-lazy
-  private static readonly COMPANY_TYPE_REGEX = /美股-(?:NASDAQ|NYSE|OTCMARKETS)\s*([A-Za-z][A-Za-z\s/]+?)(?=\$)/i
+  private static readonly COMPANY_TYPE_REGEX = /美股-(?:NASDAQ|NYSE|OTCMARKETS)\s*([A-Za-z][A-Za-z\s/]*?)(?=\d)/i
 
   /** mNAV：交易所信息后的 4 位小数格式（如 0.8120） */
   // eslint-disable-next-line regexp/prefer-d
@@ -104,11 +109,11 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
   // eslint-disable-next-line regexp/no-super-linear-backtracking
   private static readonly MARKET_CAP_REGEX = /\d\.\d{4}(\d+\.?\d*)\s*([BMK])USD/i
 
-  /** 持仓金额：持仓数据后的美元金额（如 $61.98B） */
-  private static readonly HOLDING_VALUE_REGEX = /持仓数据\s*\$([\d,.]+)([BMK])?/i
+  /** 持仓金额：$+数字+B/M/K后缀，排除市值（紧跟USD）（如 $61.98B） */
+  private static readonly HOLDING_VALUE_REGEX = /\$([\d,.]+)([BMK])(?!USD)/i
 
-  /** 持仓数量：持仓金额后的数量 */
-  private static readonly HOLDING_QTY_REGEX = /持仓数据\s*\$[\d,.]+[BMK]?\s*([\d,.]+)([KMB])?/i
+  /** 持仓数量：持仓金额后的 数字+单位(可选)+币种，如 64.50BUSDC 或 49940BTC */
+  private static readonly HOLDING_QTY_REGEX = /([0-9,.]+)(?:([BMK])([A-Z]{3,5})|([A-Z]{2,5}))(?=\$)/i
 
   /** 涨跌幅：价格后的百分比（如 +0.00% 或 -1.23%） */
   // eslint-disable-next-line regexp/no-super-linear-backtracking
@@ -118,7 +123,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
 
   async run(ctx: DataPullJobContext<BbxScraperMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
-    const url = ctx.meta?.url ?? 'https://bbx.com/zh-Hans/traditional-finance'
+    const url = ctx.meta?.url ?? 'https://bbx.com/zh-Hans'
     const waitTimeout = ctx.meta?.waitTimeout ?? 10000
 
     this.logger.log(`Starting BBX page scrape from: ${url}`)
@@ -151,9 +156,48 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
 
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 })
 
+
+      // 点击"全部"按钮展开完整列表
+      try {
+        const allButtons = await page.locator('text="全部"').all()
+        if (allButtons.length > 0) {
+          await allButtons[0].click()
+          this.logger.log('Clicked "全部" button')
+
+          // 等待table元素出现（最多10秒）
+          await page.waitForSelector('table tbody tr', { timeout: 10000 })
+          this.logger.log('Table rows appeared after clicking "全部"')
+
+          // 额外等待2秒确保数据完全加载
+          await page.waitForTimeout(2000)
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to click "全部" button or wait for table: ${error instanceof Error ? error.message : String(error)}`)
+      }
+
+      // 点击"持币价值"列头2次（降序排序）
+      try {
+        const holdingValueHeader = page.locator('text="持币价值"').first()
+
+        // 先等待元素可见（最多10秒）
+        await holdingValueHeader.waitFor({ state: 'visible', timeout: 10000 })
+
+        await holdingValueHeader.click()
+        this.logger.log('Clicked "持币价值" header (1st time - ascending)')
+        await page.waitForTimeout(2000)
+
+        await holdingValueHeader.click()
+        this.logger.log('Clicked "持币价值" header (2nd time - descending)')
+        await page.waitForTimeout(3000)
+      } catch (error) {
+        this.logger.warn(`Failed to click "持币价值" header: ${error instanceof Error ? error.message : String(error)}`)
+        // 点击失败不影响继续执行，直接提取当前可见数据
+        this.logger.log('Continuing without sorting, will extract visible data')
+      }
+
       // 等待数据表格加载：优先等待元素出现，失败后 fallback 到固定等待
       try {
-        await page.waitForSelector('.crypto-row', { timeout: waitTimeout })
+        await page.waitForSelector('table tbody tr', { timeout: waitTimeout })
       } catch {
         this.logger.warn('waitForSelector timeout, falling back to fixed wait')
         await page.waitForTimeout(waitTimeout)
@@ -162,7 +206,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         const pageContent = await page.content()
         const hasErrorIndicator = pageContent.includes('error') || pageContent.includes('失败') || pageContent.includes('网络异常')
         const hasNoDataIndicator = pageContent.includes('暂无数据') || pageContent.includes('no data')
-        const rowsAfterWait = await page.$$('.crypto-row')
+        const rowsAfterWait = await page.$$('table tbody tr')
 
         if (rowsAfterWait.length === 0) {
           if (hasErrorIndicator) {
@@ -173,7 +217,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
             this.logger.warn(`Page state unclear: no .crypto-row found after fallback wait. URL: ${url}`)
           }
         } else {
-          this.logger.log(`Found ${rowsAfterWait.length} .crypto-row elements after fallback wait`)
+          this.logger.log(`Found ${rowsAfterWait.length} table rows after fallback wait`)
         }
       }
 
@@ -240,18 +284,20 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
 
   /**
    * 从页面提取币股数据
-   * 使用 .crypto-row 选择器获取数据行，从行文本中正则提取各字段
+   * 使用表格行选择器获取数据行，从行文本中正则提取各字段
    */
   private async extractQuotes(page: import('playwright').Page): Promise<BbxScrapedQuote[]> {
     const quotes: BbxScrapedQuote[] = []
 
     // 使用 .crypto-row 选择器获取所有数据行
-    const rows = await page.$$('.crypto-row')
-    this.logger.log(`Found ${rows.length} .crypto-row elements`)
+    const rows = await page.$$('table tbody tr, .ant-table-tbody tr')
+    this.logger.log(`Found ${rows.length} table rows`)
 
-    for (let i = 0; i < rows.length; i++) {
+    const texts = await Promise.all(rows.map(row => row.textContent()))
+
+    for (let i = 0; i < texts.length; i++) {
       try {
-        const text = await rows[i].textContent()
+        const text = texts[i]
         if (!text) continue
 
         const stockInfoMatch = text.match(BbxCryptoStockScraperJob.STOCK_INFO_REGEX)
@@ -294,7 +340,10 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
           mNav: mNavStr ? this.parseNumber(mNavStr) : undefined,
           marketCap: marketCapMatch ? this.parseMarketCap(`${marketCapMatch[1]}${marketCapMatch[2]}`) : undefined,
           holdingValue: holdingMatch ? this.parseMarketCap(`${holdingMatch[1]}${holdingMatch[2] ?? ''}`) : undefined,
-          holdingQuantity: holdingQtyMatch ? this.parseMarketCap(`${holdingQtyMatch[1]}${holdingQtyMatch[2] ?? ''}`) : undefined,
+          holdingQuantity: holdingQtyMatch
+            ? this.parseMarketCap(`${holdingQtyMatch[1]}${holdingQtyMatch[2] ?? ''}`)
+            : undefined,
+          holdingCoin: holdingQtyMatch?.[3] || holdingQtyMatch?.[4],
           price: stockPrice ?? 0,
           priceChangePercent: changeMatch ? this.parseNumber(changeMatch[1]) : undefined,
         }
@@ -308,7 +357,24 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       }
     }
 
-    return quotes
+    // 只保留持币价值≥1B的记录
+    const filtered = quotes.filter(
+      q => (q.holdingValue ?? 0) >= BbxCryptoStockScraperJob.MIN_HOLDING_VALUE_THRESHOLD,
+    )
+    this.logger.log(
+      `Filtered ${quotes.length} quotes to ${filtered.length} with holdingValue ≥ ${BbxCryptoStockScraperJob.MIN_HOLDING_VALUE_THRESHOLD / 1e9}B`,
+    )
+
+    // 调试：输出前5个被过滤的原因
+    if (filtered.length === 0 && quotes.length > 0) {
+      const samples = quotes.slice(0, 5)
+      this.logger.warn(`Sample filtered quotes:`)
+      samples.forEach(q => {
+        this.logger.warn(`  ${q.symbol}: holdingValue=${q.holdingValue ?? 'undefined'}`)
+      })
+    }
+
+    return filtered
   }
 
   /**

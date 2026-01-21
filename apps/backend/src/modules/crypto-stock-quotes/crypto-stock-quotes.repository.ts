@@ -1,5 +1,6 @@
 import type { CryptoStockQuote, Prisma } from '@prisma/client'
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { SourceConsistencyException } from '@/common/exceptions/source-consistency.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 
 type Decimal = Prisma.Decimal
@@ -40,10 +41,15 @@ export interface QueryCryptoStockQuotesInput {
 
 @Injectable()
 export class CryptoStockQuotesRepository {
+  private readonly logger: Logger
+
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
-  ) {}
+    @Optional() @Inject(Logger) logger?: Logger,
+  ) {
+    this.logger = logger ?? new Logger(CryptoStockQuotesRepository.name)
+  }
 
   private getClient() {
     return this.prisma.getClient()
@@ -76,7 +82,7 @@ export class CryptoStockQuotesRepository {
       companyType: input.companyType ?? null,
       source: input.source ?? 'BBX',
       quoteTimestamp: input.quoteTimestamp,
-      rawData: input.rawData as any,
+      rawData: input.rawData as Prisma.InputJsonValue,
     }
   }
 
@@ -104,7 +110,7 @@ export class CryptoStockQuotesRepository {
       holdingValue: input.holdingValue ?? null,
       holdingQuantity: input.holdingQuantity ?? null,
       companyType: input.companyType ?? null,
-      rawData: input.rawData as any,
+      rawData: input.rawData as Prisma.InputJsonValue,
     }
   }
 
@@ -129,27 +135,49 @@ export class CryptoStockQuotesRepository {
   }
 
   /**
-   * 批量创建或更新加密股票报价
+   * 批量创建或更新加密股票报价（快照模式）
+   *
+   * ⚠️ 警告：此方法会删除该source的所有旧记录，只保留本次抓取的快照数据。
+   * 这是全量替换操作，不是增量更新。
+   *
+   * 每次调用会删除该source的所有旧记录，只保留本次抓取的快照数据。
+   * 适用于BBX_SCRAPER等不需要历史数据累积的场景。
    */
   async upsertQuotes(inputs: CreateCryptoStockQuoteInput[]): Promise<number> {
+    if (inputs.length === 0) {
+      return 0
+    }
+
     return this.prisma.runInTransaction(async tx => {
-      let count = 0
-      for (const input of inputs) {
-        const source = input.source ?? 'BBX'
-        await tx.cryptoStockQuote.upsert({
-          where: {
-            symbol_source_quoteTimestamp: {
-              symbol: input.symbol,
-              source,
-              quoteTimestamp: input.quoteTimestamp,
-            },
-          },
-          create: this.buildCreateData(input),
-          update: this.buildUpdateData(input),
+      const source = inputs[0]?.source ?? 'BBX'
+
+      const inconsistentSource = inputs.find(input => (input.source ?? 'BBX') !== source)
+      if (inconsistentSource) {
+        throw new SourceConsistencyException({
+          expected: source,
+          got: inconsistentSource.source ?? 'BBX',
         })
-        count += 1
       }
-      return count
+
+      const deleteCount = await tx.cryptoStockQuote.count({ where: { source } })
+      if (deleteCount > 0) {
+        this.logger.log(
+          `Snapshot mode: deleting ${deleteCount} existing records for source: ${source}`,
+        )
+      }
+
+      await tx.cryptoStockQuote.deleteMany({
+        where: {
+          source,
+        },
+      })
+
+      const createData = inputs.map(input => this.buildCreateData(input))
+      await tx.cryptoStockQuote.createMany({
+        data: createData,
+      })
+
+      return inputs.length
     })
   }
 
@@ -255,4 +283,3 @@ export class CryptoStockQuotesRepository {
     })
   }
 }
-
