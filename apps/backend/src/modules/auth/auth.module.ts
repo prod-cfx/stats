@@ -28,7 +28,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     PassportModule.register({ defaultStrategy: 'jwt', property: 'user', session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
+       
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('jwt.secret'),
         signOptions: {
@@ -38,7 +38,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     }),
     ThrottlerModule.forRootAsync({
       inject: [RedisService],
-      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
+       
       useFactory: (redisService: RedisService) => ({
         throttlers: [
           {

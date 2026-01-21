@@ -1,5 +1,6 @@
 'use client';
 
+import type { TradingViewChartRef } from '@/components/tradingview/TradingViewChart'
 import type { DataSource } from '@/types/trading';
 import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -34,7 +35,8 @@ export const CenterChartPanel = ({
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
   const [indicatorTab, setIndicatorTab] = useState<'featured' | 'options'>('featured')
   const [indicatorSearch, setIndicatorSearch] = useState('')
-  // Removed local state: isAggregated, selectedExchange
+  
+  const tvChartRef = useRef<TradingViewChartRef | null>(null)
   const [isExchangeMenuOpen, setIsExchangeMenuOpen] = useState(false);
   const exchangeMenuRef = useRef<HTMLDivElement>(null);
   const timeframes = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
@@ -81,11 +83,49 @@ export const CenterChartPanel = ({
     })
 
   const toggleIndicator = (id: string) => {
+    // TradingView Charting Library：集成逻辑
+    if (id === 'tv:rsi') {
+      tvChartRef.current?.addStudy('Relative Strength Index')
+      return
+    }
+    if (id === 'tv:macd') {
+      tvChartRef.current?.addStudy('MACD')
+      return
+    }
+    if (id === 'tv:ma') {
+      tvChartRef.current?.addStudy('Moving Average')
+      return
+    }
+
+    // Coinflux 自定义“精选指标”：用 Charting Library 的 custom studies 融合进 TV
+    if (id === 'long-short-ratio' || id === 'aggregated-open-interest' || id === 'aggregated-volume' || id === 'liquidation-data') {
+      const enabled = !activeIds.includes(id)
+      if (enabled) tvChartRef.current?.ensureCustomIndicator(id as any)
+      else tvChartRef.current?.removeCustomIndicator(id as any)
+      setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+      return
+    }
+
     setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  // 同步 activeIds 到 TV custom studies
+  useEffect(() => {
+    const chart = tvChartRef.current
+    if (!chart) return
+    const ids: Array<'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data'> = [
+      'long-short-ratio',
+      'aggregated-open-interest',
+      'aggregated-volume',
+      'liquidation-data',
+    ]
+    ids.forEach((id) => {
+      if (activeIds.includes(id)) chart.ensureCustomIndicator(id)
+      else chart.removeCustomIndicator(id)
+    })
+  }, [activeIds])
+
   const getTimeframeLabel = (tf: string) => {
-    // Keep English compact codes; Chinese uses localized units.
     if (tf === '1s') return t('chart.timeframes.1s');
     if (tf === '1m') return t('chart.timeframes.1m');
     if (tf === '5m') return t('chart.timeframes.5m');
@@ -134,7 +174,6 @@ export const CenterChartPanel = ({
 
         <div className={`flex items-center gap-2 ${isCompact ? 'pr-1' : 'pr-2'} shrink-0`}>
           <div className={`flex items-center gap-2 ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
-            {/* Toggle Switch */}
             <button
               type="button"
               onClick={() => {
@@ -151,11 +190,10 @@ export const CenterChartPanel = ({
                 className={`inline-block ${isCompact ? 'h-3 w-3 translate-x-3.5' : 'h-4 w-4 translate-x-4'} transform rounded-full bg-white transition-transform ${
                   !isAggregated && (isCompact ? 'translate-x-0.5' : 'translate-x-0.5')
                 }`}
-                style={{ transform: !isAggregated ? 'translateX(2px)' : undefined }} // Simple override
+                style={{ transform: !isAggregated ? 'translateX(2px)' : undefined }}
               />
             </button>
             
-            {/* Aggregated Label or Exchange Selector */}
             {isAggregated ? (
               <span className="text-[color:var(--cf-text)] whitespace-nowrap">{t('chart.toolbar.aggregationOn')}</span>
             ) : (
@@ -169,7 +207,6 @@ export const CenterChartPanel = ({
                   <ChevronDown className="w-3 h-3 text-[color:var(--cf-muted)]" />
                 </button>
                 
-                {/* Exchange Dropdown Menu */}
                 {isExchangeMenuOpen && (
                   <div className="absolute top-full right-0 mt-1 w-[120px] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded shadow-lg z-50 py-1">
                     <button
@@ -221,11 +258,24 @@ export const CenterChartPanel = ({
       {/* Main Chart Area */}
       <div className="flex-1 relative overflow-hidden w-full">
         <TradingViewChart
+          ref={tvChartRef}
           symbol={symbol}
           interval={interval}
           isAggregated={isAggregated}
           selectedExchange={selectedExchange}
           marketType={marketType}
+          onSelectExchange={(exchange) => {
+            setSelectedExchange(exchange)
+          }}
+          onToggleAggregate={() => {
+            setIsAggregated(!isAggregated)
+          }}
+          onOpenIndicator={() => {
+            setIsIndicatorModalOpen(true)
+          }}
+          onOpenDataIndicator={() => {
+            setIsIndicatorModalOpen(true)
+          }}
           activeIndicators={chartIndicatorItems
             .filter((x) => x.isActive)
             .map((x) => ({
@@ -238,7 +288,7 @@ export const CenterChartPanel = ({
         />
       </div>
 
-      {/* Indicator Modal - using fixed positioning to escape container clipping in small widgets */}
+      {/* Indicator Modal */}
       {isIndicatorModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className={`${isCompact ? 'w-[400px] h-[300px]' : 'w-[600px] h-[400px]'} bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-2xl flex flex-col overflow-hidden`}>

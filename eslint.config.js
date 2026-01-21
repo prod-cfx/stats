@@ -16,6 +16,9 @@ export default antfu(
       'apps/admin-front/dist/**',
       'apps/admin-front/.next/**',
       'apps/admin-front/build/**',
+      // TradingView Charting Library（第三方压缩产物，不参与 lint）
+      'apps/front/public/tradingview/**',
+      'apps/front/vendor/**',
       'apps/sdk/src/**',
       'packages/api-contracts/src/generated/**',
       '**/*.md',
@@ -63,6 +66,8 @@ export default antfu(
     rules: {
       'react/no-forward-ref': 'off',
       'react/no-useless-forward-ref': 'off',
+      // backend (NestJS) 会大量使用 `useFactory` 作为 provider 配置字段，不应触发 hooks 前缀规则
+      'react-hooks-extra/no-unnecessary-use-prefix': 'off',
       'unicorn/no-useless-spread': 'off',
       'unicorn/no-useless-undefined': 'off',
       'unicorn/no-useless-promise-resolve-reject': 'off',

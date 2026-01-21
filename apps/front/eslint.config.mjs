@@ -3,6 +3,15 @@
 export default [
   {
     name: 'workspace/ignores',
-    ignores: ['node_modules', '.next', 'dist', 'build', '*.config.*']
+    ignores: [
+      'node_modules',
+      '.next',
+      'dist',
+      'build',
+      '*.config.*',
+      // TradingView Charting Library（第三方压缩产物，不参与 lint）
+      'public/tradingview',
+      'public/tradingview/**',
+    ]
   }
 ]
