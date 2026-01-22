@@ -1,0 +1,61 @@
+name: Sync main to prodcf/stats
+on:
+  push:
+    branches: [ main ]        # 仅当 A/main 有变更时触发
+  workflow_dispatch:           # 允许手动触发
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-to-b
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1) 检出 A 仓库的 main（源）
+      - name: Checkout A (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      # 2) 检出 B 仓库（目标），使用你的 PAT
+      - name: Checkout B repo (target)
+        uses: actions/checkout@v4
+        with:
+          repository: prodcf/stats
+          token: ${{ secrets.TARGET_REPO_TOKEN }}   # 你已在 A 仓库设置好的 Secret
+          path: b-repo
+          fetch-depth: 0
+          # 不指定 ref：若 B/main 不存在也能正常检出默认分支，后续我们会创建/更新 main
+
+      # 3) 同步文件到 B（排除 .github；删除其他多余文件）
+      - name: Sync files to B (exclude .github)
+        run: |
+          set -euo pipefail
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='b-repo/**' \
+            --exclude='.github/**' \
+            ./ ./b-repo/
+
+      # 4) 提交并推送到 B/main（仅当有变化）
+      - name: Commit & push to B/main
+        working-directory: b-repo
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 切到/创建 main 分支
+          git checkout -B main
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Sync from A/main (exclude .github)"
+            git push origin main
+          else
+            echo "No changes to sync."
+          fi
