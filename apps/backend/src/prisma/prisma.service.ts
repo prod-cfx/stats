@@ -45,9 +45,13 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     // 使用静态 defaultEnvAccessor（因为 super() 必须在访问 this 之前调用）
     const appEnv = defaultEnvAccessor.appEnv()
     const isTestOrE2E = appEnv === 'test' || appEnv === 'e2e'
+    const isProd = appEnv === 'production'
 
     // SKIP_PRISMA_CONNECT: 用于 Swagger/Contracts 生成等离线场景，跳过数据库连接
-    const skipConnect = defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)
+    // USE_MOCK_DATA: 本地/演示模式下允许无数据库启动（仓库层会自行回退到 mock）
+    const skipConnect =
+      defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) ||
+      defaultEnvAccessor.bool('USE_MOCK_DATA', false)
 
     const logConfig: PrismaLogDefinition[] = [
       // query 事件统一通过 setupQueryLogging 走 Nest Logger
@@ -70,12 +74,20 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     let connectionString = ''
     if (!skipConnect) {
       const dbUrl = defaultEnvAccessor.str('DATABASE_URL')
-      if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
-        throw new Error(
-          'DATABASE_URL 未配置或仍为占位符。请在 .env.*.local 中设置有效的数据库连接字符串。',
-        )
+      const isPlaceholder = !dbUrl || dbUrl === '__SET_IN_env.local__'
+      if (isPlaceholder) {
+        // 非生产环境：允许无数据库启动（自动进入 mock/offline 模式）
+        if (!isProd && !isTestOrE2E) {
+          process.env.USE_MOCK_DATA = 'true'
+          connectionString = ''
+        } else {
+          throw new Error(
+            'DATABASE_URL 未配置或仍为占位符。请在 .env.*.local 中设置有效的数据库连接字符串。',
+          )
+        }
+      } else {
+        connectionString = dbUrl
       }
-      connectionString = dbUrl
     }
     const pool = new Pool({ connectionString })
     const adapter = new PrismaPg(pool)
@@ -91,8 +103,8 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
 
   async onModuleInit() {
     // SKIP_PRISMA_CONNECT: 用于 Swagger/Contracts 生成等离线场景，跳过数据库连接
-    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)) {
-      this.logger.log('SKIP_PRISMA_CONNECT=true, skipping database connection')
+    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) || defaultEnvAccessor.bool('USE_MOCK_DATA', false)) {
+      this.logger.log('SKIP_PRISMA_CONNECT or USE_MOCK_DATA is true, skipping database connection')
       this.applyShortIdExtension()
       return
     }
@@ -100,6 +112,11 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     try {
       await this.$connect()
     } catch (error) {
+      const appEnv = defaultEnvAccessor.appEnv()
+      const isTestOrE2E = appEnv === 'test' || appEnv === 'e2e'
+      const isProd = appEnv === 'production'
+      const allowFallback = !isProd && !isTestOrE2E
+
       const dbUrl = this.envService.getString('DATABASE_URL') || ''
       let masked = '(未设置)'
       if (dbUrl) {
@@ -119,7 +136,13 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
           `- 如在本地，请确认 Docker/Postgres 是否在运行；如在云端，请检查网络与安全组。\n` +
           `原始错误：${(error as Error)?.message}`,
       )
-      throw error
+      if (allowFallback) {
+        // 非生产环境：不阻塞启动，让上层 Repository 自行兜底到 mock
+        process.env.USE_MOCK_DATA = 'true'
+        this.logger.warn('Non-prod DB connection failed; falling back to USE_MOCK_DATA=true for this run.')
+      } else {
+        throw error
+      }
     }
 
     this.applyShortIdExtension()
@@ -127,9 +150,12 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
   }
 
   async onModuleDestroy() {
-    // SKIP_PRISMA_CONNECT: 离线模式下跳过 Prisma 断开，但仍需清理 pool
-    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)) {
-      this.logger.log('SKIP_PRISMA_CONNECT=true, skipping database disconnect')
+    // SKIP_PRISMA_CONNECT/USE_MOCK_DATA: 离线/Mock 模式下跳过 Prisma 断开，但仍需清理 pool
+    if (
+      defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false) ||
+      defaultEnvAccessor.bool('USE_MOCK_DATA', false)
+    ) {
+      this.logger.log('SKIP_PRISMA_CONNECT or USE_MOCK_DATA is true, skipping database disconnect')
       // 仍然尝试关闭 pool（即使是空连接字符串创建的）
       if (this.pool) {
         try {

@@ -15,17 +15,61 @@ export class SettingsRepository {
   }
 
   async findAll(): Promise<SystemSetting[]> {
-    const client = this.getClient()
-    return client.systemSetting.findMany({
-      orderBy: { category: 'asc' },
-    })
+    if (process.env.USE_MOCK_DATA === 'true') {
+      return this.generateMockSettings()
+    }
+    try {
+      const client = this.getClient()
+      return await client.systemSetting.findMany({
+        orderBy: { category: 'asc' },
+      })
+    } catch (error) {
+      console.error('Database error in findAll settings, falling back to mock data', error)
+      return this.generateMockSettings()
+    }
+  }
+
+  private generateMockSettings(): SystemSetting[] {
+    const now = new Date()
+    return [
+      {
+        id: '1',
+        key: 'app.name',
+        value: 'Coinflux Mock',
+        type: 'string',
+        category: 'general',
+        description: 'Application Name',
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: '2',
+        key: 'market.pairs',
+        value: '["BTCUSDT", "ETHUSDT"]',
+        type: 'json',
+        category: 'market',
+        description: 'Available market pairs',
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+      }
+    ]
   }
 
   async findByKey(key: string): Promise<SystemSetting | null> {
-    const client = this.getClient()
-    return client.systemSetting.findUnique({
-      where: { key },
-    })
+    if (process.env.USE_MOCK_DATA === 'true') {
+      return this.generateMockSettings().find(s => s.key === key) || null
+    }
+    try {
+      const client = this.getClient()
+      return await client.systemSetting.findUnique({
+        where: { key },
+      })
+    } catch (error) {
+      console.error('Database error in findByKey setting, falling back to mock data', error)
+      return this.generateMockSettings().find(s => s.key === key) || null
+    }
   }
 
   async findByCategory(category: string): Promise<SystemSetting[]> {
