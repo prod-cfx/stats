@@ -163,62 +163,57 @@ export const mockDatafeed = {
     }
 
     try {
-      // TODO(backend): 替换为真实后端 K 线接口
-      // 例如：
-      // const url = `/api/market/kline?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${periodParams.from}&to=${periodParams.to}`
-      // const resp = await fetch(url)
-      // const data = await resp.json()
-      // const bars = data.map(mapToTradingViewBars)
-      // onResult(bars, { noData: bars.length === 0 })
+      // TradingView Charting Library 期望异步返回结果，即使是同步数据也建议 wrap setTimeout
+      setTimeout(() => {
+        const symbol = String((symbolInfo as any)?.ticker || (symbolInfo as any)?.name || 'BTCUSDT')
+        const rng = createRng(hashString(`${symbol}|${resolution}`))
 
-      const symbol = String((symbolInfo as any)?.ticker || (symbolInfo as any)?.name || 'BTCUSDT')
-      const rng = createRng(hashString(`${symbol}|${resolution}`))
+        const toMs = Number.isFinite(periodParams?.to) ? periodParams.to * 1000 : Date.now()
+        const alignedToMs = Math.floor(toMs / stepMs) * stepMs
+        const count = 200
+        const startMs = alignedToMs - stepMs * (count - 1)
 
-      const toMs = Number.isFinite(periodParams?.to) ? periodParams.to * 1000 : Date.now()
-      const alignedToMs = Math.floor(toMs / stepMs) * stepMs
-      const count = 200
-      const startMs = alignedToMs - stepMs * (count - 1)
+        // 从一个“合理”的基准价开始
+        let lastClose = 50000 + Math.floor(rng() * 5000)
+        const baseVol = resolutionToBaseVolume(resolution)
 
-      // 从一个“合理”的基准价开始
-      let lastClose = 50000 + Math.floor(rng() * 5000)
-      const baseVol = resolutionToBaseVolume(resolution)
+        const bars: TvBar[] = []
+        for (let i = 0; i < count; i++) {
+          const time = startMs + i * stepMs
 
-      const bars: TvBar[] = []
-      for (let i = 0; i < count; i++) {
-        const time = startMs + i * stepMs
+          // 生成一个小波动的 OHLC
+          const drift = (rng() - 0.5) * 80
+          const open = lastClose
+          const close = Math.max(1, open + drift)
+          const high = Math.max(open, close) + rng() * 50
+          const low = Math.max(1, Math.min(open, close) - rng() * 50)
 
-        // 生成一个小波动的 OHLC
-        const drift = (rng() - 0.5) * 80
-        const open = lastClose
-        const close = Math.max(1, open + drift)
-        const high = Math.max(open, close) + rng() * 50
-        const low = Math.max(1, Math.min(open, close) - rng() * 50)
+          // 生成更“像成交量”的 volume：有日内节律 + 与价格波动相关 + 少量噪声
+          // 目标（15m）：大致 1k~5k，方便显示为 K 且柱高明显不同
+          const move = Math.abs(close - open)
+          const season = 1 + Math.sin(i / 14) * 0.35 + Math.sin(i / 5) * 0.12
+          const noise = (rng() - 0.5) * baseVol * 0.25
+          const vol = Math.max(1, baseVol * season + move * (baseVol / 40) + noise)
+          const volume = Math.round(vol * 100) / 100
 
-        // 生成更“像成交量”的 volume：有日内节律 + 与价格波动相关 + 少量噪声
-        // 目标（15m）：大致 1k~5k，方便显示为 K 且柱高明显不同
-        const move = Math.abs(close - open)
-        const season = 1 + Math.sin(i / 14) * 0.35 + Math.sin(i / 5) * 0.12
-        const noise = (rng() - 0.5) * baseVol * 0.25
-        const vol = Math.max(1, baseVol * season + move * (baseVol / 40) + noise)
-        const volume = Math.round(vol * 100) / 100
+          bars.push({
+            time, // 毫秒
+            open: Math.round(open * 100) / 100,
+            high: Math.round(high * 100) / 100,
+            low: Math.round(low * 100) / 100,
+            close: Math.round(close * 100) / 100,
+            volume,
+          })
 
-        bars.push({
-          time, // 毫秒
-          open: Math.round(open * 100) / 100,
-          high: Math.round(high * 100) / 100,
-          low: Math.round(low * 100) / 100,
-          close: Math.round(close * 100) / 100,
-          volume,
-        })
+          lastClose = close
+        }
 
-        lastClose = close
-      }
+        // 如果 periodParams.from/to 很窄，过滤到范围内（同时保证至少返回一些数据）
+        const fromMs = Number.isFinite(periodParams?.from) ? periodParams.from * 1000 : startMs
+        const filtered = bars.filter(b => b.time >= fromMs && b.time <= alignedToMs)
 
-      // 如果 periodParams.from/to 很窄，过滤到范围内（同时保证至少返回一些数据）
-      const fromMs = Number.isFinite(periodParams?.from) ? periodParams.from * 1000 : startMs
-      const filtered = bars.filter(b => b.time >= fromMs && b.time <= alignedToMs)
-
-      onResult(filtered.length ? filtered : bars, { noData: false })
+        onResult(filtered.length ? filtered : bars, { noData: false })
+      }, 0)
     } catch (e) {
       onError((e as Error)?.message || 'getBars failed')
     }

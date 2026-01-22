@@ -96,7 +96,10 @@
     "METRICS_REMOTE_WRITE_PASSWORD",
     "METRICS_REMOTE_WRITE_INTERVAL_MS",
     "METRICS_SERVICE_NAME",
-    "METRICS_SERVICE_VERSION"
+    "METRICS_SERVICE_VERSION",
+    // Mock Mode
+    "USE_MOCK_DATA",
+    "SKIP_PRISMA_CONNECT"
     // 注意：游客清理配置已迁移到 system_settings 表，不再使用环境变量
   ]
 }

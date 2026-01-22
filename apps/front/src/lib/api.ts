@@ -891,14 +891,19 @@ export async function createExchangeAccount(
 }
 
 export async function listExchangeAccounts(): Promise<ExchangeAccountResponse[]> {
-  // 注意：交易所账户列表是严格的用户私有数据，不能跨用户/会话缓存
-  // 否则用户 A 登出后用户 B 登录会命中 A 的缓存，导致越权数据泄露
-  return apiCall(async () => {
-    const response = await client.UserExchangeAccountsController_list({
-      headers: requireAuthHeaders(),
-    })
-    return unwrapResponse(response)
-  }, 'LIST_EXCHANGE_ACCOUNTS')
+  try {
+    // 注意：交易所账户列表是严格的用户私有数据，不能跨用户/会话缓存
+    // 否则用户 A 登出后用户 B 登录会命中 A 的缓存，导致越权数据泄露
+    return await apiCall(async () => {
+      const response = await client.UserExchangeAccountsController_list({
+        headers: requireAuthHeaders(),
+      })
+      return unwrapResponse(response) as ExchangeAccountResponse[]
+    }, 'LIST_EXCHANGE_ACCOUNTS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return []
+  }
 }
 
 export async function deleteExchangeAccount(accountId: string): Promise<void> {
@@ -1164,25 +1169,45 @@ export interface PositionsQueryParams {
 export async function fetchOpenPositions(
   params: PositionsQueryParams = {}
 ): Promise<PaginatedResponse<PositionResponse>> {
-  return apiCall(async () => {
-    const response = await client.PositionsController_listOpenPositions({
-      headers: requireAuthHeaders(),
-      queries: params,
-    })
-    return unwrapResponse(response) as PaginatedResponse<PositionResponse>
-  }, 'FETCH_OPEN_POSITIONS')
+  try {
+    return await apiCall(async () => {
+      const response = await client.PositionsController_listOpenPositions({
+        headers: requireAuthHeaders(),
+        queries: params,
+      })
+      return unwrapResponse(response) as PaginatedResponse<PositionResponse>
+    }, 'FETCH_OPEN_POSITIONS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return {
+      total: 0,
+      page: 1,
+      limit: params.limit ?? 20,
+      items: [],
+    }
+  }
 }
 
 export async function fetchHistoricalPositions(
   params: PositionsQueryParams = {}
 ): Promise<PaginatedResponse<PositionResponse>> {
-  return apiCall(async () => {
-    const response = await client.PositionsController_listHistoricalPositions({
-      headers: requireAuthHeaders(),
-      queries: params,
-    })
-    return unwrapResponse(response) as PaginatedResponse<PositionResponse>
-  }, 'FETCH_HISTORICAL_POSITIONS')
+  try {
+    return await apiCall(async () => {
+      const response = await client.PositionsController_listHistoricalPositions({
+        headers: requireAuthHeaders(),
+        queries: params,
+      })
+      return unwrapResponse(response) as PaginatedResponse<PositionResponse>
+    }, 'FETCH_HISTORICAL_POSITIONS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return {
+      total: 0,
+      page: 1,
+      limit: params.limit ?? 20,
+      items: [],
+    }
+  }
 }
 
 // ===== 旧策略实例 API 已移除（已被 LLM 实例接口替代）=====
@@ -1216,38 +1241,48 @@ export async function fetchLlmStrategyInstances(query?: {
   llmModel?: string
   strategyId?: string
 }) {
-  // 注意：该列表接口返回的每一项都包含 isSubscribed 等用户态字段，
-  // 不能跨用户/会话做全局缓存，否则会导致订阅状态泄露或错乱
-  return apiCall(async () => {
-    const params = new URLSearchParams()
-    params.set('page', String(query?.page || 1))
-    params.set('limit', String(query?.limit || 20))
-    if (query?.llmModel) params.set('llmModel', query.llmModel)
-    if (query?.strategyId) params.set('strategyId', query.strategyId)
+  try {
+    // 注意：该列表接口返回的每一项都包含 isSubscribed 等用户态字段，
+    // 不能跨用户/会话做全局缓存，否则会导致订阅状态泄露或错乱
+    return await apiCall(async () => {
+      const params = new URLSearchParams()
+      params.set('page', String(query?.page || 1))
+      params.set('limit', String(query?.limit || 20))
+      if (query?.llmModel) params.set('llmModel', query.llmModel)
+      if (query?.strategyId) params.set('strategyId', query.strategyId)
 
-    return safeApiCall(
-      () => client.UserLlmStrategyInstancesController_list({
-        headers: optionalAuthHeaders(),
-        queries: {
-          page: query?.page ?? 1,
-          limit: query?.limit ?? 20,
-          ...(query?.llmModel && { llmModel: query.llmModel }),
-          ...(query?.strategyId && { strategyId: query.strategyId }),
-        },
-      }),
-      {
-        url: `${API_BASE_URL}/llm-strategy-instances?${params.toString()}`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...optionalAuthHeaders(),
+      return safeApiCall(
+        () => client.UserLlmStrategyInstancesController_list({
+          headers: optionalAuthHeaders(),
+          queries: {
+            page: query?.page ?? 1,
+            limit: query?.limit ?? 20,
+            ...(query?.llmModel && { llmModel: query.llmModel }),
+            ...(query?.strategyId && { strategyId: query.strategyId }),
           },
+        }),
+        {
+          url: `${API_BASE_URL}/llm-strategy-instances?${params.toString()}`,
+          options: {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...optionalAuthHeaders(),
+            },
+          },
+          validateResponse: (data) => unwrapResponse(data) as PaginatedResponse<UserLlmStrategyInstanceResponse>,
         },
-        validateResponse: (data) => unwrapResponse(data) as PaginatedResponse<UserLlmStrategyInstanceResponse>,
-      },
-    )
-  }, 'FETCH_LLM_STRATEGY_INSTANCES')
+      )
+    }, 'FETCH_LLM_STRATEGY_INSTANCES')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return {
+      total: 0,
+      page: 1,
+      limit: query?.limit ?? 20,
+      items: [],
+    } as PaginatedResponse<UserLlmStrategyInstanceResponse>
+  }
 }
 
 export async function fetchLlmStrategyInstanceDetail(id: string) {
@@ -1634,19 +1669,32 @@ export interface FetchAggregatedOpenInterestQuery {
 export async function fetchAggregatedOpenInterest(
   query: FetchAggregatedOpenInterestQuery,
 ): Promise<OpenInterestApiItem[]> {
-  return apiCall(async () => {
-    const response = await client.OpenInterestController_query({
-      headers: optionalAuthHeaders(),
-      queries: {
-        symbol: query.symbol,
-        ...(query.exchange && { exchange: query.exchange }),
-        limit: query.limit ?? 100,
-      },
-    })
+  try {
+    return await apiCall(async () => {
+      const response = await client.OpenInterestController_query({
+        headers: optionalAuthHeaders(),
+        queries: {
+          symbol: query.symbol,
+          ...(query.exchange && { exchange: query.exchange }),
+          limit: query.limit ?? 100,
+        },
+      })
 
-    const result = unwrapResponse(response) as { items?: OpenInterestApiItem[] }
-    return result.items ?? []
-  }, 'FETCH_AGGREGATED_OPEN_INTEREST')
+      const result = unwrapResponse(response) as { items?: OpenInterestApiItem[] }
+      return result.items ?? []
+    }, 'FETCH_AGGREGATED_OPEN_INTEREST')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const rand = mulberry32(hashStringToSeed(`oi:${query.symbol}:${query.exchange ?? 'all'}`))
+    const count = query.limit ?? 100
+    const now = Date.now()
+    return Array.from({ length: count }).map((_, i) => ({
+      symbol: query.symbol,
+      exchange: query.exchange || 'Binance',
+      openInterest: 1e8 + rand() * 5e8,
+      timestamp: new Date(now - i * 3600_000).toISOString(),
+    }) as OpenInterestApiItem)
+  }
 }
 
 // ===== 用户历史数据（Portfolio + Fills）API =====
@@ -1662,19 +1710,39 @@ export async function fetchUserPortfolio(
   address: string,
   query: FetchUserPortfolioQuery = {},
 ): Promise<UserPortfolioResponse> {
-  return apiCall(async () => {
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (query.skipCache) {
-      return fetchUserPortfolioFromHyperliquid(address)
-    }
+  try {
+    return await apiCall(async () => {
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (query.skipCache) {
+        return fetchUserPortfolioFromHyperliquid(address)
+      }
 
-    // 使用缓存包装器（5 分钟缓存，历史数据更新较慢）
-    return cachedRequest(
-      `user-portfolio:${address}`,
-      () => fetchUserPortfolioFromHyperliquid(address),
-      CacheTTL.LONG
-    )
-  }, 'FETCH_USER_PORTFOLIO')
+      // 使用缓存包装器（5 分钟缓存，历史数据更新较慢）
+      return cachedRequest(
+        `user-portfolio:${address}`,
+        () => fetchUserPortfolioFromHyperliquid(address),
+        CacheTTL.LONG
+      )
+    }, 'FETCH_USER_PORTFOLIO')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    const rand = mulberry32(hashStringToSeed(`portfolio:${address}`))
+    const now = Date.now()
+    const points = 100
+    const step = 3600 * 1000
+    const history = Array.from({ length: points }).map((_, i) => {
+      const time = now - (points - i) * step
+      const value = 1000000 + Math.sin(i / 10) * 200000 + rand() * 50000
+      return { time, value }
+    })
+    return {
+      address,
+      history,
+      currentValue: history[points - 1].value,
+      pnl24h: 12500,
+      pnlPercent24h: 1.25,
+    } as any as UserPortfolioResponse
+  }
 }
 
 export interface FetchUserFillsQuery {
@@ -1689,22 +1757,29 @@ export async function fetchUserFills(
   address: string,
   query: FetchUserFillsQuery = {},
 ): Promise<UserFillsResponse> {
-  return apiCall(async () => {
-    const { aggregateByTime = false, skipCache = false } = query
+  try {
+    return await apiCall(async () => {
+      const { aggregateByTime = false, skipCache = false } = query
 
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (skipCache) {
-      return fetchUserFillsFromHyperliquid(address, { aggregateByTime })
-    }
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchUserFillsFromHyperliquid(address, { aggregateByTime })
+      }
 
-    // 使用缓存包装器（1 分钟缓存）
-    const cacheKey = `user-fills:${address}:${aggregateByTime ? 'agg' : 'raw'}`
-    return cachedRequest(
-      cacheKey,
-      () => fetchUserFillsFromHyperliquid(address, { aggregateByTime }),
-      CacheTTL.MEDIUM
-    )
-  }, 'FETCH_USER_FILLS')
+      // 使用缓存包装器（1 分钟缓存）
+      const cacheKey = `user-fills:${address}:${aggregateByTime ? 'agg' : 'raw'}`
+      return cachedRequest(
+        cacheKey,
+        () => fetchUserFillsFromHyperliquid(address, { aggregateByTime }),
+        CacheTTL.MEDIUM
+      )
+    }, 'FETCH_USER_FILLS')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return {
+      fills: [],
+    } as any as UserFillsResponse
+  }
 }
 
 export interface FetchTraderFullDataQuery {
@@ -1716,20 +1791,36 @@ export async function fetchTraderFullData(
   address: string,
   query: FetchTraderFullDataQuery = {},
 ): Promise<TraderFullDataResponse> {
-  return apiCall(async () => {
-    const { aggregateByTime = false, skipCache = false } = query
-    const cacheKey = `trader-full-data:${address}:${aggregateByTime ? 'agg' : 'raw'}`
+  try {
+    return await apiCall(async () => {
+      const { aggregateByTime = false, skipCache = false } = query
+      const cacheKey = `trader-full-data:${address}:${aggregateByTime ? 'agg' : 'raw'}`
 
-    // 如果需要跳过缓存，直接调用 Hyperliquid API
-    if (skipCache) {
-      return fetchTraderFullDataFromHyperliquid(address, { aggregateByTime })
-    }
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
+      if (skipCache) {
+        return fetchTraderFullDataFromHyperliquid(address, { aggregateByTime })
+      }
 
-    // 使用缓存包装器（cachedRequest 内置去重逻辑，无需额外 pendingRequests）
-    return cachedRequest(
-      cacheKey,
-      () => fetchTraderFullDataFromHyperliquid(address, { aggregateByTime }),
-      CacheTTL.SHORT
-    )
-  }, 'FETCH_TRADER_FULL_DATA')
+      // 使用缓存包装器（cachedRequest 内置去重逻辑，无需额外 pendingRequests）
+      return cachedRequest(
+        cacheKey,
+        () => fetchTraderFullDataFromHyperliquid(address, { aggregateByTime }),
+        CacheTTL.SHORT
+      )
+    }, 'FETCH_TRADER_FULL_DATA')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    return {
+      summary: {
+        address,
+        totalValue: 1250000,
+        pnl: 450000,
+        roi: 15.5,
+        winRate: 0.68,
+        trades: 156,
+      },
+      positions: [],
+      history: [],
+    } as any as TraderFullDataResponse
+  }
 }

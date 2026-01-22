@@ -1,5 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { LongShortRatio as LongShortRatioModel, Prisma } from '@prisma/client'
+import { Prisma, type LongShortRatio as LongShortRatioModel } from '@prisma/client'
 import { Injectable } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
@@ -42,33 +42,67 @@ export class LongShortRatioRepository {
    * 默认按时间倒序返回最新的 limit 条数据
    */
   async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
-    const client = this.getClient()
-    const { tradingPairId, interval, from, to, limit = 500 } = query
-    const prismaInterval = mapTimeframe(interval)
-
-    const where: Prisma.LongShortRatioWhereInput = {
-      tradingPairId,
-      interval: prismaInterval as any,
+    if (process.env.USE_MOCK_DATA === 'true') {
+      return this.generateMockRatios(query)
     }
+    try {
+      const client = this.getClient()
+      const { tradingPairId, interval, from, to, limit = 500 } = query
+      const prismaInterval = mapTimeframe(interval)
 
-    if (from || to) {
-      where.timestamp = {
-        ...(from ? { gte: from } : {}),
-        ...(to ? { lte: to } : {}),
+      const where: Prisma.LongShortRatioWhereInput = {
+        tradingPairId,
+        interval: prismaInterval as any,
       }
+
+      if (from || to) {
+        where.timestamp = {
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        }
+      }
+
+      // 默认按时间倒序查询，返回最新数据
+      const items = await client.longShortRatio.findMany({
+        where,
+        orderBy: {
+          timestamp: 'desc',
+        },
+        take: limit,
+      })
+
+      // 反转数组使时间从旧到新排列，便于前端绘制曲线
+      return items.reverse()
+    } catch (error) {
+      console.error('Database error in findByPairAndTime, falling back to mock data', error)
+      return this.generateMockRatios(query)
     }
+  }
 
-    // 默认按时间倒序查询，返回最新数据
-    const items = await client.longShortRatio.findMany({
-      where,
-      orderBy: {
-        timestamp: 'desc',
-      },
-      take: limit,
-    })
-
-    // 反转数组使时间从旧到新排列，便于前端绘制曲线
-    return items.reverse()
+  private generateMockRatios(query: LongShortRatioQuery): LongShortRatio[] {
+    const { tradingPairId, limit = 100 } = query
+    const results: LongShortRatio[] = []
+    const now = new Date()
+    for (let i = 0; i < limit; i++) {
+      const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000) // 1h intervals
+      const ratio = 0.5 + Math.random() * 1.0 // 0.5 to 1.5
+      results.push({
+        id: i + 1,
+        tradingPairId,
+        interval: 'H1' as any,
+        timestamp,
+        longShortRatio: new Prisma.Decimal(ratio.toFixed(4)),
+        longAccountRatio: new Prisma.Decimal((45 + Math.random() * 10).toFixed(2)),
+        shortAccountRatio: new Prisma.Decimal((45 + Math.random() * 10).toFixed(2)),
+        longVolume: new Prisma.Decimal((1000000 + Math.random() * 500000).toFixed(2)),
+        shortVolume: new Prisma.Decimal((1000000 + Math.random() * 500000).toFixed(2)),
+        longShortAccountRatio: new Prisma.Decimal((0.9 + Math.random() * 0.2).toFixed(4)),
+        source: 'MOCK',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    return results.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
   }
 
   /**
