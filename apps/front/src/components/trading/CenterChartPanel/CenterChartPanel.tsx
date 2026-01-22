@@ -33,7 +33,6 @@ export const CenterChartPanel = ({
   const { t } = useTranslation();
   const [interval, setInterval] = useState('15m');
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
-  const [indicatorTab, setIndicatorTab] = useState<'featured' | 'options'>('featured')
   const [indicatorSearch, setIndicatorSearch] = useState('')
   
   const tvChartRef = useRef<TradingViewChartRef | null>(null)
@@ -58,8 +57,7 @@ export const CenterChartPanel = ({
     }))
 
   const featuredIndicators = chartIndicatorItems.filter((x) => x.group === 'featured')
-  const optionIndicators = chartIndicatorItems.filter((x) => x.group === 'options')
-  const visibleIndicators = (indicatorTab === 'featured' ? featuredIndicators : optionIndicators)
+  const visibleIndicators = featuredIndicators
     .filter((x) => {
       const q = indicatorSearch.trim().toLowerCase()
       if (!q) return true
@@ -172,44 +170,23 @@ export const CenterChartPanel = ({
             </div>
             
             <div className="flex-1 flex overflow-hidden">
-              {/* Sidebar */}
-              <div className={`${isCompact ? 'w-[120px]' : 'w-[180px]'} border-r border-[color:var(--cf-border)] p-2 flex flex-col gap-1 bg-[color:var(--cf-bg)]`}>
-                <div className="relative mb-2">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[color:var(--cf-muted)]" />
-                  <input 
-                    type="text" 
-                    placeholder={t('chart.modal.search')}
-                    value={indicatorSearch}
-                    onChange={(e) => setIndicatorSearch(e.target.value)}
-                    className="w-full bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded py-1 pl-7 pr-2 text-xs text-[color:var(--cf-text)] focus:outline-none focus:border-[#58a6ff]"
-                  />
+              {/* Main List (sidebar removed) */}
+              <div className="flex-1 overflow-hidden p-2 flex flex-col gap-2">
+                {/* Search */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[color:var(--cf-muted)]" />
+                    <input
+                      type="text"
+                      placeholder={t('chart.modal.search')}
+                      value={indicatorSearch}
+                      onChange={(e) => setIndicatorSearch(e.target.value)}
+                      className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded py-1 pl-7 pr-2 text-xs text-[color:var(--cf-text)] focus:outline-none focus:border-[#58a6ff]"
+                    />
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIndicatorTab('featured')}
-                  className={`text-left px-3 py-2 text-xs rounded transition-colors ${
-                    indicatorTab === 'featured'
-                      ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold'
-                      : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
-                  }`}
-                >
-                  {t('chart.modal.featured')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIndicatorTab('options')}
-                  className={`text-left px-3 py-2 text-xs rounded transition-colors ${
-                    indicatorTab === 'options'
-                      ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold'
-                      : 'text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
-                  }`}
-                >
-                  {t('chart.modal.options')}
-                </button>
-              </div>
 
-              {/* Main List */}
-              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5 cf-scrollbar">
+                <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 cf-scrollbar">
                 {visibleIndicators.map((ind) => (
                   <button
                     key={ind.id}
@@ -236,6 +213,7 @@ export const CenterChartPanel = ({
                     {t('chart.modal.noResults')}
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </div>
