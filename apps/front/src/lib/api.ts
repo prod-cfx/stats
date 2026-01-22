@@ -66,6 +66,7 @@ export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAc
 export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
 export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
 export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
+export type WhaleTradeDto = Infer<typeof schemas.WhaleTradeDto>
 export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
 
 interface BaseResponse<T> {
@@ -762,6 +763,106 @@ export async function fetchRealtimeWhaleAlerts(
     })
 
     return items
+  }
+}
+
+export interface FetchWhaleTradesRealtimeParams {
+  symbol?: string
+  minTradeValueUsd?: number
+  limit?: number
+  since?: string
+}
+
+export async function fetchWhaleTradesRealtime(
+  params: FetchWhaleTradesRealtimeParams = {},
+): Promise<WhaleTradeDto[]> {
+  try {
+    return await apiCall(async () => {
+      const queries: Record<string, unknown> = {}
+
+      if (params.symbol) {
+        queries.symbol = params.symbol
+      }
+      if (typeof params.minTradeValueUsd === 'number') {
+        queries.min_trade_value_usd = params.minTradeValueUsd
+      }
+      if (typeof params.limit === 'number') {
+        queries.limit = params.limit
+      }
+      if (params.since) {
+        queries.since = params.since
+      }
+
+      const searchParams = new URLSearchParams()
+      if (params.symbol) {
+        searchParams.set('symbol', params.symbol)
+      }
+      if (typeof params.minTradeValueUsd === 'number') {
+        searchParams.set('min_trade_value_usd', String(params.minTradeValueUsd))
+      }
+      if (typeof params.limit === 'number') {
+        searchParams.set('limit', String(params.limit))
+      }
+      if (params.since) {
+        searchParams.set('since', params.since)
+      }
+      const queryString = searchParams.toString()
+      const fallbackUrl =
+        queryString.length > 0
+          ? `${API_BASE_URL}/whale-alerts/trades?${queryString}`
+          : `${API_BASE_URL}/whale-alerts/trades`
+
+      return safeApiCall(
+        () =>
+          client.WhaleAlertController_getWhaleTrades({
+            headers: optionalAuthHeaders(),
+            queries,
+          }),
+        {
+          url: fallbackUrl,
+          options: {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              ...optionalAuthHeaders(),
+            },
+          },
+          validateResponse: data => unwrapApiResponse<WhaleTradeDto[]>(data),
+        },
+      )
+    }, 'FETCH_WHALE_TRADES_REALTIME')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+
+    const symbol = params.symbol || 'BTC'
+    const limit = params.limit ?? 50
+    const rand = mulberry32(hashStringToSeed(`whale-trades:${symbol}:${params.minTradeValueUsd ?? ''}`))
+    const sides = ['Long', 'Short'] as const
+    const now = Date.now()
+
+    const makeAddress = (idx: number) => {
+      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      return `0x${a}${idx.toString(16).padStart(4, '0')}`
+    }
+
+    return Array.from({ length: Math.min(limit, 80) }).map((_, idx) => {
+      const side = sides[Math.floor(rand() * sides.length)]
+      const basePrice = symbol === 'BTC' ? 65_000 : symbol === 'ETH' ? 3_200 : 120
+      const price = basePrice * (0.92 + rand() * 0.16)
+      const tradeValueUsd = Math.floor((params.minTradeValueUsd ?? 1_000_000) * (1 + rand() * 10))
+      const tradeSize = tradeValueUsd / price * (side === 'Short' ? -1 : 1)
+      const minutesAgo = Math.floor(rand() * 60)
+
+      return {
+        user_address: makeAddress(idx),
+        symbol,
+        side,
+        trade_size: Number(tradeSize.toFixed(6)),
+        price: Number(price.toFixed(2)),
+        trade_value_usd: Number(tradeValueUsd.toFixed(2)),
+        trade_time: new Date(now - minutesAgo * 60_000).toISOString(),
+      }
+    })
   }
 }
 

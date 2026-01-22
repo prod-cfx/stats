@@ -10,6 +10,7 @@ export type TradesAdapterKey =
   | 'binance-spot-trades'
   | 'binance-perp-trades'
   | 'binance-future-trades'
+  | 'hyperliquid-perp-trades'
 
 export interface TradesConfig {
   exchange: string
@@ -40,5 +41,4 @@ export interface TradesWsAdapter {
    */
   shutdown: () => Promise<void>
 }
-
 

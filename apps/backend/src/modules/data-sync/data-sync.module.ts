@@ -50,6 +50,7 @@ import { BybitCexFutureOrderbookWsAdapter } from './services/adapters/bybit-cex-
 import { BybitCexPerpetualOrderbookWsAdapter } from './services/adapters/bybit-cex-perpetual-orderbook-ws.adapter'
 import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-spot-orderbook-ws.adapter'
 import { HyperliquidDexPerpetualOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-orderbook-ws.adapter'
+import { HyperliquidDexPerpetualTradesWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { HyperliquidDexSpotOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-spot-orderbook-ws.adapter'
 import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
 import { OkxCexFutureTradesWsAdapter } from './services/adapters/okx-cex-future-trades-ws.adapter'
@@ -251,6 +252,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OkxCexSpotTradesWsAdapter,
     OkxCexPerpetualTradesWsAdapter,
     OkxCexFutureTradesWsAdapter,
+    HyperliquidDexPerpetualTradesWsAdapter,
     {
       provide: TRADES_WS_ADAPTER_REGISTRY,
       useFactory: (
@@ -260,6 +262,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         okxCexSpotTradesWsAdapter: OkxCexSpotTradesWsAdapter,
         okxCexPerpetualTradesWsAdapter: OkxCexPerpetualTradesWsAdapter,
         okxCexFutureTradesWsAdapter: OkxCexFutureTradesWsAdapter,
+        hyperliquidDexPerpetualTradesWsAdapter: HyperliquidDexPerpetualTradesWsAdapter,
       ) => [
         binanceCexSpotTradesWsAdapter,
         binanceCexPerpetualTradesWsAdapter,
@@ -267,6 +270,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         okxCexSpotTradesWsAdapter,
         okxCexPerpetualTradesWsAdapter,
         okxCexFutureTradesWsAdapter,
+        hyperliquidDexPerpetualTradesWsAdapter,
       ],
       inject: [
         BinanceCexSpotTradesWsAdapter,
@@ -275,9 +279,11 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         OkxCexSpotTradesWsAdapter,
         OkxCexPerpetualTradesWsAdapter,
         OkxCexFutureTradesWsAdapter,
+        HyperliquidDexPerpetualTradesWsAdapter,
       ],
     },
     TradesWsSyncManager,
   ],
+  exports: [HyperliquidDexPerpetualTradesWsAdapter, TRADES_WS_ADAPTER_REGISTRY],
 })
 export class DataSyncModule {}

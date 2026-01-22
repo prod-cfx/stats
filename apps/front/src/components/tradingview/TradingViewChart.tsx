@@ -254,7 +254,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
       },
       // IMPORTANT: Charting Library will do `new indicator.constructor()`
       // Object method shorthand `constructor () {}` is NOT constructible in JS.
-      constructor: function () {
+      constructor () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -363,7 +363,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
         inputs: [],
         format: { type: 'volume', precision: 0 },
       },
-      constructor: function () {
+      constructor () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -425,7 +425,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
         { plot_0: { title: tFunc('chart.indicators.aggregatedVolume'), histogramBase: 0, joinPoints: false } },
         { type: 'volume', precision: 0 },
       ),
-      constructor: function () {
+      constructor () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -472,7 +472,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
         },
         { type: 'volume', precision: 0 },
       ),
-      constructor: function () {
+      constructor () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -535,7 +535,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
         is_custom_indicator: true,
         is_hidden_study: false,
       },
-      constructor: function () {
+      constructor () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -711,7 +711,7 @@ export const TradingViewChart = forwardRef((
 
   // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
   const reactId = useId()
-  const containerId = useMemo(() => `tv_chart_${reactId.replace(/[:]/g, '')}`, [reactId])
+  const containerId = useMemo(() => `tv_chart_${reactId.replace(/:/g, '')}`, [reactId])
   const containerRef = useRef<HTMLDivElement | null>(null)
   // ---- 清算地图 overlay（Coinglass-style）----
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
@@ -1037,7 +1037,7 @@ export const TradingViewChart = forwardRef((
         let containerEl = containerRef.current
         // 兜底：最多等 ~10 帧
         for (let i = 0; i < 10 && !containerEl && !cancelled; i += 1) {
-          // eslint-disable-next-line no-await-in-loop
+           
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
           containerEl = containerRef.current
         }

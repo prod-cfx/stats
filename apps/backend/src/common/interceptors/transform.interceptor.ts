@@ -38,6 +38,12 @@ export class TransformInterceptor<T>
     const httpContext = context.switchToHttp()
     const response = httpContext.getResponse()
 
+    // 跳过 SSE (Server-Sent Events) 响应
+    const contentType = response.getHeader?.('Content-Type') || response.get?.('Content-Type')
+    if (contentType && typeof contentType === 'string' && contentType.includes('text/event-stream')) {
+      return next.handle()
+    }
+
     return next.handle().pipe(
       map(data => {
         if (!response || typeof response.statusCode !== 'number') return data as any

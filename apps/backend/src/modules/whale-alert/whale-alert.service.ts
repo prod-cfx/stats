@@ -1,10 +1,12 @@
 import type { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
+import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
+import { TradeSide } from './dto/whale-trade.dto'
 
 @Injectable()
 export class WhaleAlertService {
@@ -13,9 +15,9 @@ export class WhaleAlertService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 获取 Hyperliquid 鲸鱼持仓预警的“实时”列表
+   * 获取 Hyperliquid 鲸鱼持仓预警的"实时"列表
    *
-   * - 默认返回最近 24 小时、名义价值 >= 100 万 USD 的记录
+   * - 默认返回最近 24 小时、名义价值 >= 1000 USD 的记录
    * - 支持按 symbol 过滤
    * - 结果按 create_time 倒序排列
    */
@@ -27,7 +29,7 @@ export class WhaleAlertService {
     }
 
     const minValueUsd =
-      typeof query.min_position_value_usd === 'number' ? query.min_position_value_usd : 1_000_000
+      typeof query.min_position_value_usd === 'number' ? query.min_position_value_usd : 1_000
 
     if (minValueUsd > 0) {
       where.positionValueUsd = {
@@ -94,8 +96,85 @@ export class WhaleAlertService {
       return dto
     })
   }
-}
 
+  /**
+   * 获取 Hyperliquid 鲸鱼交易记录
+   *
+   * - 默认返回最近 24 小时、交易价值 >= 1000 USD 的记录
+   * - 支持按 symbol 过滤
+   * - 结果按 trade_time 倒序排列
+   */
+  async getWhaleTrades(query: QueryWhaleTradeDto): Promise<WhaleTradeDto[]> {
+    const where: Prisma.HyperliquidWhaleTradeWhereInput = {}
+
+    if (query.symbol) {
+      where.symbol = query.symbol
+    }
+
+    const minValueUsd =
+      typeof query.min_trade_value_usd === 'number' ? query.min_trade_value_usd : 1_000
+
+    if (minValueUsd > 0) {
+      where.tradeValueUsd = {
+        gte: new Prisma.Decimal(minValueUsd),
+      }
+    }
+
+    const sinceRaw =
+      query.since != null
+        ? new Date(query.since)
+        : new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    let sinceForQuery: Date | null = null
+    if (!Number.isNaN(sinceRaw.getTime())) {
+      sinceForQuery = sinceRaw
+      where.tradeTime = {
+        gte: sinceRaw,
+      }
+    }
+
+    const limit = Math.min(query.limit ?? 50, 200)
+
+    this.logger.debug(
+      `Fetching whale trades with criteria: ${JSON.stringify({
+        symbol: query.symbol,
+        minValueUsd,
+        since: sinceForQuery ? sinceForQuery.toISOString() : null,
+        limit,
+      })}`,
+    )
+
+    const rows = await this.prisma.hyperliquidWhaleTrade.findMany({
+      where,
+      orderBy: {
+        tradeTime: 'desc',
+      },
+      take: limit,
+    })
+
+    return rows.map(row => {
+      const tradeSize = Number(row.tradeSize)
+      const price = Number(row.price)
+      const tradeValueUsd = Number(row.tradeValueUsd)
+      const side: TradeSide = row.side === TradeSide.Short ? TradeSide.Short : TradeSide.Long
+
+      const dto: WhaleTradeDto = {
+        user_address: row.userAddress,
+        symbol: row.symbol,
+        side,
+        trade_size: tradeSize,
+        price,
+        trade_value_usd: tradeValueUsd,
+        trade_time:
+          row.tradeTime instanceof Date
+            ? row.tradeTime.toISOString()
+            : new Date(row.tradeTime as unknown as string).toISOString(),
+      }
+
+      return dto
+    })
+  }
+}
 
 
 

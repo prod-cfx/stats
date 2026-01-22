@@ -80,8 +80,8 @@ export class QueryRealtimeWhaleAlertDto {
   symbol?: string
 
   @ApiPropertyOptional({
-    description: '筛选最小名义价值（USD），默认 1_000_000',
-    example: 1_000_000,
+    description: '筛选最小名义价值（USD），默认 1_000',
+    example: 1_000,
   })
   @IsNumber()
   @IsOptional()

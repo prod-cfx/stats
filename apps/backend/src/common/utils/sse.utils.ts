@@ -7,6 +7,6 @@ export function createHeartbeatStream(
   label = 'heartbeat',
 ): Observable<MessageEvent> {
   return interval(intervalMs).pipe(
-    map(() => ({ data: `: ${label}` } as MessageEvent)),
+    map(() => ({ type: label } as MessageEvent)),
   )
 }

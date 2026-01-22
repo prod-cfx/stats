@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageTitle } from '@/components/ui/Typography';
-import { fetchRealtimeWhaleAlerts } from '@/lib/api';
+import { fetchWhaleTradesRealtime } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 
@@ -15,7 +15,6 @@ interface WhaleTransaction {
   tagColor: string;
   tagBg: string;
   asset: string;
-  positionAction: number;
   side: 'Long' | 'Short';
   marginType: 'Cross' | 'Isolated';
   positionValueUSD: string;
@@ -84,21 +83,21 @@ export const RealtimeWhalesTable = () => {
 
     try {
       setLoading(true);
-      const alerts = await fetchRealtimeWhaleAlerts({
+      const alerts = await fetchWhaleTradesRealtime({
         // 默认展示名义价值 >= 100 万 USD 的最新 50 条记录
-        minPositionValueUsd: 1_000_000,
+        minTradeValueUsd: 1_000_000,
         limit: 50,
       });
 
       const mapped: WhaleTransaction[] = alerts.map(alert => {
         const side = alert.side;
-        const tagKey: WhaleTransaction['tagKey'] = alert.position_action === 1 ? 'swing' : 'trend';
+        const tagKey: WhaleTransaction['tagKey'] = side === 'Long' ? 'trend' : 'swing';
         const tagStyle =
           tagKey === 'swing'
             ? { tagColor: '#60a5fa', tagBg: '#3b82f633' }
             : { tagColor: '#c084fc', tagBg: '#a855f733' };
 
-        const positionValueNumber = Number(alert.position_value_usd);
+        const positionValueNumber = Number(alert.trade_value_usd);
         const positionValueUSD =
           Number.isFinite(positionValueNumber)
             ? `$${positionValueNumber.toLocaleString('en-US', {
@@ -106,13 +105,14 @@ export const RealtimeWhalesTable = () => {
               })}`
             : '$-';
 
-        const absSize = Math.abs(alert.position_size);
+        const sizeNumber = Number(alert.trade_size);
         const sizeText =
-          absSize >= 1 ? absSize.toFixed(4) : absSize.toPrecision(4);
-        const signedQty = side === 'Short' ? `-${sizeText}` : sizeText;
-        const positionValueAsset = `${signedQty} ${alert.symbol}`;
+          Number.isFinite(sizeNumber)
+            ? `${sizeNumber >= 1 ? sizeNumber.toFixed(4) : sizeNumber.toPrecision(4)}`
+            : '-';
+        const positionValueAsset = `${sizeText} ${alert.symbol}`;
 
-        const entryPriceNumber = Number(alert.entry_price);
+        const entryPriceNumber = Number(alert.price);
         const entryPrice =
           Number.isFinite(entryPriceNumber)
             ? `$${entryPriceNumber.toLocaleString('en-US', {
@@ -120,7 +120,7 @@ export const RealtimeWhalesTable = () => {
               })}`
             : '$-';
 
-        const timestamp = new Date(alert.create_time).getTime();
+        const timestamp = new Date(alert.trade_time).getTime();
 
         // 后端暂未提供胜率：先用“稳定伪随机”生成展示值（基于 address+symbol，不会抖动）
         const seedBase = `${alert.user_address}-${alert.symbol}`;
@@ -132,7 +132,6 @@ export const RealtimeWhalesTable = () => {
           tagColor: tagStyle.tagColor,
           tagBg: tagStyle.tagBg,
           asset: alert.symbol,
-          positionAction: alert.position_action,
           side,
           // Hyperliquid / Coinglass 不暴露保证金类型，这里统一展示为 Cross
           marginType: 'Cross',
@@ -321,7 +320,7 @@ export const RealtimeWhalesTable = () => {
             <tbody className="divide-y divide-[color:var(--cf-border)]">
               {displayedTransactions.map((tx) => (
                 <tr
-                  key={`${tx.address}-${tx.asset}-${tx.positionAction}-${tx.timestamp}`}
+                  key={`${tx.address}-${tx.asset}-${tx.side}-${tx.timestamp}`}
                   className="hover:bg-[color:var(--cf-surface-hover)]/50 transition-colors group cursor-pointer"
                   onClick={() => handleShowStats(tx.address)}
                 >

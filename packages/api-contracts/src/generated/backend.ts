@@ -926,6 +926,17 @@ const RealtimeWhaleAlertDto = z
     side: WhaleAlertSide,
   })
   .passthrough();
+const WhaleTradeDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    side: z.enum(["Long", "Short"]),
+    trade_size: z.number(),
+    price: z.number(),
+    trade_value_usd: z.number(),
+    trade_time: z.string(),
+  })
+  .passthrough();
 const WhaleHoldingDto = z
   .object({
     userAddress: z.string(),
@@ -1024,6 +1035,7 @@ export const schemas = {
   PredictionMarketCardDto,
   WhaleAlertSide,
   RealtimeWhaleAlertDto,
+  WhaleTradeDto,
   WhaleHoldingDto,
 };
 
@@ -3112,6 +3124,42 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(RealtimeWhaleAlertDto),
+  },
+  {
+    method: "get",
+    path: "/whale-alerts/realtime-stream",
+    alias: "WhaleAlertStreamController_getRealtimeStream",
+    requestFormat: "json",
+    response: z.void(),
+  },
+  {
+    method: "get",
+    path: "/whale-alerts/trades",
+    alias: "WhaleAlertController_getWhaleTrades",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+      {
+        name: "min_trade_value_usd",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "limit",
+        type: "Query",
+        schema: z.number().optional(),
+      },
+      {
+        name: "since",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.array(WhaleTradeDto),
   },
   {
     method: "get",

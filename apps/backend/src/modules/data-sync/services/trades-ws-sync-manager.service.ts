@@ -210,6 +210,10 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       if (instrument === 'FUTURE') return 'binance-future-trades'
     }
 
+    if (exchange === 'HYPERLIQUID') {
+      if (instrument === 'PERPETUAL') return 'hyperliquid-perp-trades'
+    }
+
     return null
   }
 
@@ -246,5 +250,4 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
       .digest('hex')
   }
 }
-
 

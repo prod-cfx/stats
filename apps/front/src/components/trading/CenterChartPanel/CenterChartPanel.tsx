@@ -2,7 +2,7 @@
 
 import type { TradingViewChartRef } from '@/components/tradingview/TradingViewChart'
 import type { DataSource } from '@/types/trading';
-import { ChevronDown, Search, Star, X } from 'lucide-react';
+import { Search, Star, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
