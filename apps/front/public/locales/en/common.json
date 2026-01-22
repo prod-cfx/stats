@@ -193,6 +193,9 @@
     "toolbar": {
       "indicators": "Indicators",
       "dataIndicators": "Data",
+      "featuredIndicators": "Featured",
+      "aggregate": "Aggregate",
+      "exchange": "Exchange",
       "dataSource": "Source",
       "aggregationOn": "Aggregate",
       "aggregationOff": "Single Exchange",
@@ -210,7 +213,11 @@
       "aggregatedOrderbook": "Aggregated Orderbook",
       "aggregatedOpenInterest": "Aggregated Open Interest",
       "aggregatedVolume": "Aggregated Volume",
-      "liquidationData": "Liquidation Data"
+      "liquidationData": "Liquidation Data",
+      "price": "Price",
+      "locked": "Locked",
+      "cumulativeLong": "Cum Long",
+      "cumulativeShort": "Cum Short"
     }
   },
   "longShort": {

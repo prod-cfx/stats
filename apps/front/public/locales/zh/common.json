@@ -192,6 +192,9 @@
     "toolbar": {
       "indicators": "指标",
       "dataIndicators": "数据指标",
+      "featuredIndicators": "精选指标",
+      "aggregate": "聚合",
+      "exchange": "交易所",
       "dataSource": "数据源",
       "aggregationOn": "聚合",
       "aggregationOff": "单交易所",
@@ -212,7 +215,11 @@
       "aggregatedVolume": "聚合成交量",
       "liquidationData": "聚合爆仓",
       "marketOverview": "市场综合数据",
-      "optionsIv": "期权隐含波动率(IV)"
+      "optionsIv": "期权隐含波动率(IV)",
+      "price": "价格",
+      "locked": "已锁定",
+      "cumulativeLong": "累计多单",
+      "cumulativeShort": "累计空单"
     },
     "indicator": {
       "add": "添加",

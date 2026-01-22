@@ -3,7 +3,8 @@
 import type { Ref } from 'react'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
@@ -19,8 +20,45 @@ type TradingViewWidget = any
 
 const SCRIPT_SRC = '/tradingview/charting_library/charting_library.js'
 const LIBRARY_PATH = '/tradingview/charting_library/'
-const CONTAINER_ID = 'tv_chart_container'
 const SCRIPT_ID = 'tv-charting-library-script'
+const PENDING_STUDY_ID = '__pending__'
+
+function resolveMaybePromiseId(maybe: any, onResolved: (id: string) => void) {
+  if (!maybe) return
+  if (typeof maybe?.then === 'function') {
+    void (maybe as Promise<any>)
+      .then((id) => {
+        if (id) onResolved(String(id))
+      })
+      .catch(() => {
+        // ignore
+      })
+    return
+  }
+  onResolved(String(maybe))
+}
+
+function findAndDedupeStudyByName(chart: any, studyName: string): string | null {
+  try {
+    const studies = chart?.getAllStudies?.() as Array<{ id: any; name: string }> | undefined
+    if (!Array.isArray(studies) || studies.length === 0) return null
+    const matches = studies.filter((s) => s?.name === studyName)
+    if (matches.length === 0) return null
+    const keep = matches[0]
+    // Remove duplicates beyond the first one.
+    for (let i = 1; i < matches.length; i++) {
+      const s = matches[i]
+      try {
+        chart?.removeEntity?.(s.id)
+      } catch {
+        // ignore
+      }
+    }
+    return keep?.id ? String(keep.id) : null
+  } catch {
+    return null
+  }
+}
 
 function loadTradingViewScript(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve()
@@ -88,19 +126,20 @@ export interface TradingViewChartRef {
 
 type CustomIndicatorId = 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data'
 
+// IMPORTANT:
+// - study name 必须稳定（不能随语言变化），否则 createStudy(name) 会找不到对应的指标 -> “聚合多空比不显示”
+// - 可翻译的内容放在 metainfo.shortDescription / plot title 里即可
 const CUSTOM_STUDY_NAME_BY_ID: Record<CustomIndicatorId, string> = {
-  'long-short-ratio': 'Coinflux: 聚合多空比',
-  'aggregated-open-interest': 'Coinflux: 聚合持仓量',
-  'aggregated-volume': 'Coinflux: 聚合成交量',
-  'liquidation-data': 'Coinflux: 聚合爆仓',
+  'long-short-ratio': 'Coinflux: Long/Short Ratio',
+  'aggregated-open-interest': 'Coinflux: Aggregated Open Interest',
+  'aggregated-volume': 'Coinflux: Aggregated Volume',
+  'liquidation-data': 'Coinflux: Liquidation Data',
 }
 
-// 清算地图：当前以 overlay（ECharts）叠加到主图（价格坐标）实现。
-// NOTE: “像 TV 指标一样的原生 X 删除按钮”后续再以稳定方式接入（避免引入 Charting Library 崩溃）。
-const LIQ_MAP_DRAWING_LABEL = 'Coinflux: 清算地图'
+const LIQ_MAP_DRAWING_LABEL = 'Coinflux: Liquidation Map'
 // Legend 需要一个 study 条目才会显示 eye / X 按钮；drawings 不会出现在指标 legend。
 // 这里用一个“占位 study”（visible=false，不绘制）来提供原生 legend 操作入口。
-const LIQ_MAP_STUDY_NAME = LIQ_MAP_DRAWING_LABEL
+const LIQ_MAP_STUDY_NAME = 'Coinflux: Liquidation Map'
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
@@ -145,10 +184,12 @@ function formatUsdCompactFromMillions(valueM: number): string {
   return `$${Math.round(v)}M`
 }
 
-function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
+function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any }) {
   // Charting Library custom studies: register indicator definitions at widget init time.
   return function custom_indicators_getter(PineJS: any) {
     const theme = opts?.theme ?? 'Light'
+    const tFunc = opts?.t ?? ((k: string) => k)
+    const names = CUSTOM_STUDY_NAME_BY_ID
     const mkBaseMeta = (id: string, name: string, shortDescription: string, plots: any[], defaults: any, styles: any, format: any) => ({
       _metainfoVersion: 51,
       id,
@@ -167,18 +208,18 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
     })
 
     const IND_LS = {
-      name: CUSTOM_STUDY_NAME_BY_ID['long-short-ratio'],
+      name: names['long-short-ratio'],
       metainfo: {
         _metainfoVersion: 51,
         id: 'Coinflux_LS@tv-basicstudies-1',
         scriptIdPart: '',
-        name: CUSTOM_STUDY_NAME_BY_ID['long-short-ratio'],
-        description: CUSTOM_STUDY_NAME_BY_ID['long-short-ratio'],
-        shortDescription: '聚合多空比',
+        name: names['long-short-ratio'],
+        description: names['long-short-ratio'],
+        shortDescription: tFunc('chart.indicators.longShortRatio'),
         is_custom_indicator: true,
         is_hidden_study: false,
         is_price_study: false,
-        // 关键：单条连续线 + colorer(palette) 按点变色 => 不会出现“空格断线”
+        // ✅ 对齐“之前效果”：单条连续线 + palette colorer 按点变色（红/绿分段）
         plots: [
           { id: 'plot_0', type: 'line' },
           { id: 'plot_1', type: 'colorer', palette: 'palette_0', target: 'plot_0' },
@@ -205,11 +246,15 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
           },
           inputs: {},
         },
-        styles: { plot_0: { title: '聚合多空比', histogramBase: 0, joinPoints: true, zorder: 1 } },
+        styles: {
+          plot_0: { title: tFunc('chart.indicators.longShortRatio'), histogramBase: 0, joinPoints: true, zorder: 1 },
+        },
         inputs: [],
         format: { type: 'price', precision: 4 },
       },
-      constructor () {
+      // IMPORTANT: Charting Library will do `new indicator.constructor()`
+      // Object method shorthand `constructor () {}` is NOT constructible in JS.
+      constructor: function () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -222,8 +267,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
           const v = 1 + Math.sin(close / 2500) * 0.25 + Math.sin(close / 700) * 0.06
           const val = Math.max(0.4, Math.min(1.6, v))
 
-          // 红绿线连续变色：用 palette colorer 指定每个点的颜色（0=绿,1=红）
-          // 规则：本 bar 相比上一 bar 上升 => 绿；下降/持平 => 红（如需改规则告诉我）
+          // 颜色分段：上升 => 绿；下降/持平 => 红（贴近你“红绿交替”的老效果）
           const prev = this._prev
           this._prev = val
           const isGreen = typeof prev === 'number' ? val > prev : true
@@ -236,14 +280,14 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
     const oiGradientBottom = theme === 'Dark' ? '#0b1220' : '#ffffff'
 
     const IND_OI = {
-      name: CUSTOM_STUDY_NAME_BY_ID['aggregated-open-interest'],
+      name: names['aggregated-open-interest'],
       metainfo: {
         _metainfoVersion: 51,
         id: 'Coinflux_OI@tv-basicstudies-1',
         scriptIdPart: '',
-        name: CUSTOM_STUDY_NAME_BY_ID['aggregated-open-interest'],
-        description: CUSTOM_STUDY_NAME_BY_ID['aggregated-open-interest'],
-        shortDescription: '聚合持仓量',
+        name: names['aggregated-open-interest'],
+        description: names['aggregated-open-interest'],
+        shortDescription: tFunc('chart.indicators.aggregatedOpenInterest'),
         is_custom_indicator: true,
         is_hidden_study: false,
         is_price_study: false,
@@ -312,14 +356,14 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
           inputs: {},
         },
         styles: {
-          plot_0: { title: '聚合持仓量', histogramBase: 0, joinPoints: true, zorder: 1 },
+          plot_0: { title: tFunc('chart.indicators.aggregatedOpenInterest'), histogramBase: 0, joinPoints: true, zorder: 1 },
           plot_baseline: { title: 'Baseline', histogramBase: 0, joinPoints: true, zorder: 0 },
         },
         palettes: {},
         inputs: [],
         format: { type: 'volume', precision: 0 },
       },
-      constructor () {
+      constructor: function () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -351,33 +395,37 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
     }
 
     const IND_VOL = {
-      name: CUSTOM_STUDY_NAME_BY_ID['aggregated-volume'],
+      name: names['aggregated-volume'],
       metainfo: mkBaseMeta(
         'Coinflux_VOL@tv-basicstudies-1',
-        CUSTOM_STUDY_NAME_BY_ID['aggregated-volume'],
-        '聚合成交量',
+        names['aggregated-volume'],
+        tFunc('chart.indicators.aggregatedVolume'),
         // 注意：StudyPlotType 没有 histogram；柱状/直方图是通过 line plot + plottype 来实现的
         [{ id: 'plot_0', type: 'line' }],
         {
-          precision: 0,
           styles: {
             // 目标：和截图一致的纯绿色柱状成交量（更接近 TV 原生 Volume 观感）
             plot_0: {
-              // 兼容当前 Charting Library：使用数字枚举（此前已验证 5 能渲染为柱状/直方图）
-              // 备注：我们仍保持 plots.type='line'，避免 schema mismatch（因为 StudyPlotType 没有 histogram）
+              // Charting Library 类型：LineStudyPlotStyleName
+              // IMPORTANT:
+              // - 我们这个 build 的运行时用的是数字枚举（内置 Volume 就是 plottype: 5）
+              // - 写字符串会被忽略，从而退回普通折线
               plottype: 5,
               color: '#22c55e',
+              linestyle: 0,
               linewidth: 1,
               transparency: 0,
               trackPrice: false,
               histogramBase: 0,
+              visible: true,
             },
           },
+          inputs: {},
         },
-        { plot_0: { title: '聚合成交量', histogramBase: 0 } },
+        { plot_0: { title: tFunc('chart.indicators.aggregatedVolume'), histogramBase: 0, joinPoints: false } },
         { type: 'volume', precision: 0 },
       ),
-      constructor () {
+      constructor: function () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -392,30 +440,39 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
     }
 
     const IND_LIQ = {
-      name: CUSTOM_STUDY_NAME_BY_ID['liquidation-data'],
+      name: names['liquidation-data'],
       metainfo: mkBaseMeta(
         'Coinflux_LIQ@tv-basicstudies-1',
-        CUSTOM_STUDY_NAME_BY_ID['liquidation-data'],
-        '聚合爆仓',
+        names['liquidation-data'],
+        tFunc('chart.indicators.liquidationData'),
         [
-          { id: 'plot_0', type: 'line' }, // S (+)
-          { id: 'plot_1', type: 'line' }, // L (-)
+          // ✅ 对齐“之前效果”：上下双向直方图 + 图例显示 L/S/T
+          { id: 'plot_s', type: 'line' }, // S (+) histogram
+          { id: 'plot_l', type: 'line' }, // L (-) histogram
+          { id: 'plot_t', type: 'line' }, // Total (legend only, hidden)
         ],
         {
-          precision: 0,
           styles: {
             // 目标：像你第 2 张图那样，同一时间点同时显示 L/S 两组爆仓量：
             // - S（空单爆仓）绿色，显示在 0 轴上方
             // - L（多单爆仓）红色，显示在 0 轴下方（用负值）
-            plot_0: { plottype: 5, color: '#22c55e', trackPrice: false, histogramBase: 0 },
-            plot_1: { plottype: 5, color: '#ef4444', trackPrice: false, histogramBase: 0 },
+            // 同上：使用运行时数字枚举（与内置 Volume 一致）
+            plot_s: { plottype: 5, color: '#22c55e', trackPrice: false, histogramBase: 0, visible: true, linestyle: 0, linewidth: 1, transparency: 0 },
+            plot_l: { plottype: 5, color: '#ef4444', trackPrice: false, histogramBase: 0, visible: true, linestyle: 0, linewidth: 1, transparency: 0 },
+            // Total: 不画出来，但用于 legend 数值
+            plot_t: { plottype: 0, color: '#94a3b8', trackPrice: false, visible: false, transparency: 100, linewidth: 1, linestyle: 0 },
           },
+          inputs: {},
         },
         // 图例顺序 & 文案：L(红) / S(绿)
-        { plot_0: { title: 'S', histogramBase: 0 }, plot_1: { title: 'L', histogramBase: 0 } },
+        {
+          plot_l: { title: 'L', histogramBase: 0, joinPoints: false },
+          plot_s: { title: 'S', histogramBase: 0, joinPoints: false },
+          plot_t: { title: 'T', histogramBase: 0, joinPoints: false },
+        },
         { type: 'volume', precision: 0 },
       ),
-      constructor () {
+      constructor: function () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -442,7 +499,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
           const shortS = total * (1 - ratio)
 
           // 约定：S 画在上方（正值），L 画在下方（负值）
-          return [shortS, -longL]
+          return [shortS, -longL, total]
         }
       },
     }
@@ -453,7 +510,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
         ...mkBaseMeta(
           'Coinflux_LIQMAP@tv-basicstudies-1',
           LIQ_MAP_STUDY_NAME,
-          '清算地图',
+          tFunc('chart.indicators.liquidationMap'),
           [{ id: 'plot_0', type: 'line' }],
           {
             styles: {
@@ -470,7 +527,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
             },
             inputs: {},
           },
-          { plot_0: { title: '清算地图', histogramBase: 0, joinPoints: false } },
+          { plot_0: { title: tFunc('chart.indicators.liquidationMap'), histogramBase: 0, joinPoints: false } },
           { type: 'price', precision: 2 },
         ),
         // 关键：挂在主图（价格坐标），不创建新的 pane
@@ -478,7 +535,7 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light' }) {
         is_custom_indicator: true,
         is_hidden_study: false,
       },
-      constructor () {
+      constructor: function () {
         this.init = function (context: any, inputCallback: any) {
           this._context = context
           this._input = inputCallback
@@ -552,23 +609,29 @@ function moveButtonsToHeaderRight(widget: any, buttons: HTMLElement[]) {
     const win =
       (typeof widget?._innerWindow === 'function' ? widget._innerWindow() : undefined) ||
       (widget?._iFrame?.contentWindow as Window | undefined) ||
-      (widget?._iframe?.contentWindow as Window | undefined)
+      (widget?._iframe?.contentWindow as Window | undefined) ||
+      (widget?.activeChart?.()?.contentWindow as Window | undefined)
     const doc = win?.document
     if (!doc) return
 
-    // 尽量找到 header 根节点（不同版本 class 可能不同，所以用多策略）
-    // 注意：不要用整个 body 直接选“最右按钮”，否则可能误命中底部控制栏。
+    // 尽量找到 header 根节点
     const headerRoot =
       doc.querySelector('.header-chart-panel') ||
       doc.querySelector('[class*="header-chart-panel"]') ||
+      doc.querySelector('.tradingview-widget-header') ||
       doc.body
     if (!headerRoot) return
 
-    // 只在“顶部区域”内找 header 按钮（避免命中底部 control bar）
+    // 只在“顶部区域”内找 header 按钮
     const allButtons = Array.from(headerRoot.querySelectorAll('button'))
       .map((b) => ({ b, rect: b.getBoundingClientRect() }))
-      .filter((x) => x.rect.width > 6 && x.rect.height > 6 && x.rect.top >= 0 && x.rect.top < 120)
-    if (allButtons.length === 0) return
+      .filter((x) => x.rect.width > 2 && x.rect.height > 2 && x.rect.top >= 0 && x.rect.top < 150)
+    
+    if (allButtons.length === 0) {
+      // 兜底：如果找不到任何按钮，尝试直接 append 到 headerRoot
+      buttons.forEach(btn => headerRoot.appendChild(btn))
+      return
+    }
 
     allButtons.sort((a, b) => b.rect.right - a.rect.right)
     const rightmostBtn = allButtons[0].b
@@ -576,23 +639,28 @@ function moveButtonsToHeaderRight(widget: any, buttons: HTMLElement[]) {
     let group: HTMLElement | null = rightmostBtn.closest('div')
     while (group) {
       const cs = win.getComputedStyle(group)
-      if (cs.display === 'flex' && group.querySelectorAll('button').length >= 2) break
+      if (cs.display === 'flex' && group.querySelectorAll('button').length >= 1) break
       group = group.parentElement
     }
     if (!group) group = rightmostBtn.parentElement as HTMLElement | null
     if (!group) return
 
-    // 把按钮插到“最右侧图标”的左边：既保证在右侧，又避免 append 后被挤出可视区域
     const groupButtons = Array.from(group.querySelectorAll('button'))
       .map((b) => ({ b, rect: b.getBoundingClientRect() }))
-      .filter((x) => x.rect.width > 6 && x.rect.height > 6)
+      .filter((x) => x.rect.width > 2 && x.rect.height > 2)
     groupButtons.sort((a, b) => b.rect.right - a.rect.right)
     const anchor = groupButtons[0]?.b || null
 
+    // 放到最右侧：插入到 group 的最后一个按钮之后
     buttons.forEach((btn) => {
       try {
-        if (anchor && anchor.parentElement === group) group.insertBefore(btn, anchor)
-        else group.appendChild(btn)
+        if (anchor && anchor.parentElement === group) {
+          const next = anchor.nextSibling
+          if (next) group.insertBefore(btn, next)
+          else group.appendChild(btn)
+        } else {
+          group.appendChild(btn)
+        }
       } catch {
         // ignore
       }
@@ -634,11 +702,17 @@ export const TradingViewChart = forwardRef((
   }: TradingViewChartProps,
   ref: Ref<TradingViewChartRef>,
 ) => {
+  const { t, i18n } = useTranslation()
   const widgetRef = useRef<TradingViewWidget | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [isChartReady, setIsChartReady] = useState(false)
   const chartReadyRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
+  const reactId = useId()
+  const containerId = useMemo(() => `tv_chart_${reactId.replace(/[:]/g, '')}`, [reactId])
+  const containerRef = useRef<HTMLDivElement | null>(null)
   // ---- 清算地图 overlay（Coinglass-style）----
   const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
   const chartAdapterRef = useRef<ChartAdapter | null>(null)
@@ -717,7 +791,7 @@ export const TradingViewChart = forwardRef((
   const pendingEnsuresRef = useRef<Set<CustomIndicatorId>>(new Set())
   const pendingRemovesRef = useRef<Set<CustomIndicatorId>>(new Set())
 
-  const stableInputs = useMemo(() => ({ symbol, interval, theme }), [symbol, interval, theme])
+  const stableInputs = useMemo(() => ({ symbol, interval, theme, language: i18n.language }), [symbol, interval, theme, i18n.language])
 
   // 这些回调/状态会频繁变化，不能放进 init effect 依赖，否则会导致 widget 被重建。
   const callbacksRef = useRef({
@@ -788,7 +862,19 @@ export const TradingViewChart = forwardRef((
 
     // 聚合=关：同一个控件直接显示交易所下拉（不再额外渲染交易所按钮）
     if (els.aggLabel) {
-      els.aggLabel.textContent = agg ? '聚合' : `交易所：${ex === 'okx' ? 'OKX' : 'Binance'} ▾`
+      const exLabel = ex === 'okx' ? 'OKX' : 'Binance'
+      const labelText = agg ? t('chart.toolbar.aggregate') : `${t('chart.toolbar.exchange')}: ${exLabel} ▾`
+      if (els.aggLabel.textContent !== labelText) {
+        els.aggLabel.textContent = labelText
+      }
+    }
+
+    // 精选指标文案
+    if (els.indicatorBtn) {
+      const indicatorLabel = t('chart.toolbar.featuredIndicators')
+      if (els.indicatorBtn.textContent !== indicatorLabel) {
+        els.indicatorBtn.textContent = indicatorLabel
+      }
     }
   }
 
@@ -797,12 +883,14 @@ export const TradingViewChart = forwardRef((
     () => ({
       addStudy(studyName: string) {
         const widget = widgetRef.current
-        if (!widget) return
+        if (!widget || !chartReadyRef.current) return
         const chart = widget?.activeChart?.() || widget?.chart?.()
         try {
           if (chart?.createStudy) {
             // Passing inputs as array is deprecated; use object.
-            chart.createStudy(studyName, false, false, {})
+            resolveMaybePromiseId(chart.createStudy(studyName, false, false, {}), () => {
+              // ignore id for built-in studies
+            })
             return
           }
         } catch {
@@ -813,7 +901,7 @@ export const TradingViewChart = forwardRef((
       },
       ensureCustomIndicator(id: CustomIndicatorId) {
         const widget = widgetRef.current
-        if (!widget) {
+        if (!widget || !chartReadyRef.current) {
           pendingRemovesRef.current.delete(id)
           pendingEnsuresRef.current.add(id)
           return
@@ -821,17 +909,29 @@ export const TradingViewChart = forwardRef((
         const chart = widget?.activeChart?.() || widget?.chart?.()
         const name = CUSTOM_STUDY_NAME_BY_ID[id]
         if (!name) return
+        // Prevent duplicate createStudy calls (toggle + sync effect, or rapid clicks).
         if (customStudyIdsRef.current[id]) return
+        // If the study already exists (e.g. from earlier buggy double-creates), reuse the first one and
+        // delete the duplicates to restore the expected “only one pane per indicator” behavior.
+        const existingId = findAndDedupeStudyByName(chart, name)
+        if (existingId) {
+          customStudyIdsRef.current[id] = existingId
+          return
+        }
         try {
-          const createdId = chart?.createStudy?.(name, false, false, {})
-          if (createdId) customStudyIdsRef.current[id] = String(createdId)
+          customStudyIdsRef.current[id] = PENDING_STUDY_ID
+          const maybe = chart?.createStudy?.(name, false, false, {})
+          resolveMaybePromiseId(maybe, (sid) => {
+            customStudyIdsRef.current[id] = sid
+          })
         } catch {
           // ignore
+          customStudyIdsRef.current[id] = null
         }
       },
       removeCustomIndicator(id: CustomIndicatorId) {
         const widget = widgetRef.current
-        if (!widget) {
+        if (!widget || !chartReadyRef.current) {
           pendingEnsuresRef.current.delete(id)
           pendingRemovesRef.current.add(id)
           customStudyIdsRef.current[id] = null
@@ -839,7 +939,27 @@ export const TradingViewChart = forwardRef((
         }
         const chart = widget?.activeChart?.() || widget?.chart?.()
         const studyId = customStudyIdsRef.current[id]
-        if (!studyId) return
+        if (!studyId) {
+          // fallback: remove by name in case local ref was lost
+          const name = CUSTOM_STUDY_NAME_BY_ID[id]
+          if (!name) return
+          const existingId = findAndDedupeStudyByName(chart, name)
+          if (existingId) {
+            try {
+              chart?.removeEntity?.(existingId)
+            } catch {
+              // ignore
+            }
+          }
+          return
+        }
+        if (studyId === PENDING_STUDY_ID) {
+          // Study is being created; schedule removal and clear local marker.
+          pendingEnsuresRef.current.delete(id)
+          pendingRemovesRef.current.add(id)
+          customStudyIdsRef.current[id] = null
+          return
+        }
         try {
           chart?.removeEntity?.(studyId)
         } catch {
@@ -849,7 +969,7 @@ export const TradingViewChart = forwardRef((
       },
       removeAllStudies() {
         const widget = widgetRef.current
-        if (!widget) return
+        if (!widget || !chartReadyRef.current) return
         const chart = widget?.activeChart?.() || widget?.chart?.()
         try {
           if (chart?.removeAllStudies) {
@@ -895,6 +1015,10 @@ export const TradingViewChart = forwardRef((
     let readyTimer: ReturnType<typeof setTimeout> | null = null
 
     async function init() {
+      // 延迟一帧执行，确保 DOM 已经挂载
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      if (cancelled) return
+
       try {
         setError(null)
         setIsReady(false)
@@ -909,10 +1033,17 @@ export const TradingViewChart = forwardRef((
           throw new Error('TradingView.widget is not available. 请检查 library_path 是否正确。')
         }
 
-        const containerEl = document.getElementById(CONTAINER_ID)
-        if (!containerEl) {
-          throw new Error(`Chart container not found: #${CONTAINER_ID}`)
+        // 使用 ref 获取容器，避免 dev StrictMode / 异步初始化导致的时序问题
+        let containerEl = containerRef.current
+        // 兜底：最多等 ~10 帧
+        for (let i = 0; i < 10 && !containerEl && !cancelled; i += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          containerEl = containerRef.current
         }
+        if (cancelled) return
+        if (!containerEl) throw new Error(`Chart container not found: #${containerId}`)
+
         // 在销毁/重建场景下，确保容器是干净的，避免残留 iframe/节点影响初始化
         containerEl.innerHTML = ''
 
@@ -925,11 +1056,12 @@ export const TradingViewChart = forwardRef((
         // - 但当前 charting_library.js 内部实现读取的是 options.container
         // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
         const widget = new TradingView.widget({
-          container_id: CONTAINER_ID,
-          container: CONTAINER_ID,
+          container_id: containerId,
+          // 用真实 DOM 节点更稳（避免内部 query 时机差）
+          container: containerEl,
 
           library_path: LIBRARY_PATH, // 必须严格使用 '/tradingview/charting_library/'
-          locale: 'zh',
+          locale: i18n.language.startsWith('zh') ? 'zh' : 'en',
           timezone: 'Etc/UTC',
           autosize: true,
           theme,
@@ -938,7 +1070,7 @@ export const TradingViewChart = forwardRef((
           interval,
 
           datafeed: mockDatafeed,
-          custom_indicators_getter: createCustomIndicatorsGetter({ theme }),
+          custom_indicators_getter: createCustomIndicatorsGetter({ theme, t }),
           // Ensure legend action buttons (eye/delete) are functional.
           // NOTE: This build gates legend actions behind these feature flags.
           // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
@@ -976,7 +1108,7 @@ export const TradingViewChart = forwardRef((
           // removals first
           for (const id of pendingRemovesRef.current) {
             const sid = customStudyIdsRef.current[id]
-            if (sid) {
+            if (sid && sid !== PENDING_STUDY_ID) {
               try {
                 chart?.removeEntity?.(sid)
               } catch {
@@ -992,10 +1124,19 @@ export const TradingViewChart = forwardRef((
             if (!name) continue
             if (customStudyIdsRef.current[id]) continue
             try {
-              const createdId = chart?.createStudy?.(name, false, false, {})
-              if (createdId) customStudyIdsRef.current[id] = String(createdId)
+              const existingId = findAndDedupeStudyByName(chart, name)
+              if (existingId) {
+                customStudyIdsRef.current[id] = existingId
+                continue
+              }
+              customStudyIdsRef.current[id] = PENDING_STUDY_ID
+              const maybe = chart?.createStudy?.(name, false, false, {})
+              resolveMaybePromiseId(maybe, (sid) => {
+                customStudyIdsRef.current[id] = sid
+              })
             } catch {
               // ignore
+              customStudyIdsRef.current[id] = null
             }
           }
           pendingEnsuresRef.current.clear()
@@ -1019,7 +1160,7 @@ export const TradingViewChart = forwardRef((
             aggBtn.style.padding = '0 10px'
 
             const aggLabel = document.createElement('span')
-            aggLabel.textContent = '聚合'
+            aggLabel.textContent = t('chart.toolbar.aggregate')
             aggLabel.style.fontSize = '12px'
             aggLabel.style.fontWeight = '700'
             aggLabel.style.cursor = 'pointer'
@@ -1109,7 +1250,8 @@ export const TradingViewChart = forwardRef((
             // 精选指标（打开你们原来的弹窗）
             const indicatorBtn = widget.createButton()
             indicatorBtn.classList.add('tv-custom-btn')
-            indicatorBtn.textContent = '精选指标'
+            const indicatorLabel = t('chart.toolbar.featuredIndicators')
+            indicatorBtn.textContent = indicatorLabel
             indicatorBtn.addEventListener('click', (e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -1181,7 +1323,7 @@ export const TradingViewChart = forwardRef((
       const chart = widget?.activeChart?.() || widget?.chart?.()
       if (!chart) return
 
-      const containerEl = document.getElementById(CONTAINER_ID)
+      const containerEl = document.getElementById(containerId)
       if (!containerEl) return
 
       const computeMainPaneHeight = () => {
@@ -1565,16 +1707,18 @@ export const TradingViewChart = forwardRef((
               const title = (el as HTMLElement).getAttribute('title') || ''
               const aria = (el as HTMLElement).getAttribute('aria-label') || ''
               const combined = `${title} ${aria}`.toLowerCase()
-              return keywords.some((k) => combined.includes(k))
+              // 增加英文关键字匹配
+              const enKeywords = ['remove', 'close', 'hide', 'show', 'visibility', 'eye']
+              return keywords.concat(enKeywords).some((k) => combined.includes(k.toLowerCase()))
             }
             const isRemoveEl = (el: Element | null) =>
-              isActionEl(el, ['remove', '删除', '移除', 'close', 'x'].map((x) => x.toLowerCase()))
+              isActionEl(el, ['删除', '移除', 'x'])
             const isVisibilityEl = (el: Element | null) =>
-              isActionEl(el, ['hide', 'show', '隐藏', '显示', 'visibility', 'eye'].map((x) => x.toLowerCase()))
+              isActionEl(el, ['隐藏', '显示'])
 
             // ✅ 事件驱动的 legend 行定位：从用户点击目标向上找包含“清算地图”的那一行
             const findRowFromTarget = (target: Element): HTMLElement | null => {
-              const nameCandidates = ['清算地图', LIQ_MAP_STUDY_NAME, LIQ_MAP_DRAWING_LABEL].filter(Boolean)
+              const nameCandidates = ['清算地图', t('chart.indicators.liquidationMap'), 'Liquidation Map'].filter(Boolean)
               let cur: HTMLElement | null = target as any
               for (let i = 0; i < 16 && cur; i += 1) {
                 try {
@@ -1598,13 +1742,16 @@ export const TradingViewChart = forwardRef((
             const findLiqLegendRow = () => {
               try {
                 const sid = liqLegendStudyIdRef.current
-                const nameCandidates = ['清算地图', LIQ_MAP_STUDY_NAME, LIQ_MAP_DRAWING_LABEL].filter(Boolean)
+                const nameCandidates = ['清算地图', t('chart.indicators.liquidationMap'), 'Liquidation Map'].filter(Boolean)
 
                 // Strategy 1: textContent XPath (may be 0 on some builds)
                 let node: HTMLElement | null = null
                 try {
+                  // 转义单引号以防万一
+                  const escapedName = t('chart.indicators.liquidationMap').replace(/'/g, "\\'")
+                  const xpath = `//*[contains(normalize-space(string(.)), "清算地图")] | //*[contains(normalize-space(string(.)), "${escapedName}")] | //*[contains(normalize-space(string(.)), "Liquidation Map")]`
                   const res = doc.evaluate(
-                    `//*[contains(normalize-space(string(.)), "清算地图")]`,
+                    xpath,
                     doc.body,
                     null,
                     XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
@@ -1620,8 +1767,8 @@ export const TradingViewChart = forwardRef((
                   const elems = Array.from(doc.querySelectorAll('[title],[aria-label]')) as HTMLElement[]
                   node =
                     elems.find((el) => {
-                      const t = `${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`
-                      return nameCandidates.some((k) => t.includes(k))
+                      const tAttr = `${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`
+                      return nameCandidates.some((k) => tAttr.includes(k))
                     }) ?? null
                 }
 
@@ -2223,7 +2370,7 @@ export const TradingViewChart = forwardRef((
 
   return (
     <div className="relative h-full w-full">
-      <div id={CONTAINER_ID} className="h-full w-full" />
+      <div ref={containerRef} id={containerId} className="h-full w-full" />
 
       {/* 清算地图 overlay（右侧堆叠条/累积曲线，对齐价格轴） */}
       {/* Fallback：
@@ -2271,14 +2418,14 @@ export const TradingViewChart = forwardRef((
               8,
               (typeof mainPaneHeight === 'number' && Number.isFinite(mainPaneHeight) && mainPaneHeight > 0
                 ? mainPaneHeight
-                : (document.getElementById(CONTAINER_ID)?.clientHeight ?? 520)) - 170,
+                : (document.getElementById(containerId)?.clientHeight ?? 520)) - 170,
             ),
           }}
         >
           <div className="bg-[color:var(--cf-bg)]/85 border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-xs text-[color:var(--cf-text)] backdrop-blur">
             <div className="flex items-center justify-between">
-              <div className="font-bold">价格: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 2 : 4)}</div>
-              {liqSelected.locked && <div className="text-[10px] text-[color:var(--cf-text-muted)]">已锁定</div>}
+              <div className="font-bold">{t('chart.indicators.price')}: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 2 : 4)}</div>
+              {liqSelected.locked && <div className="text-[10px] text-[color:var(--cf-text-muted)]">{t('chart.indicators.locked')}</div>}
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
               <div className="flex items-center justify-between gap-2">
@@ -2315,14 +2462,14 @@ export const TradingViewChart = forwardRef((
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
-                  <span>累计多单</span>
+                  <span>{t('chart.indicators.cumulativeLong')}</span>
                 </div>
                 <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#22c55e' }} />
-                  <span>累计空单</span>
+                  <span>{t('chart.indicators.cumulativeShort')}</span>
                 </div>
                 <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
               </div>

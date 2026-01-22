@@ -2,7 +2,7 @@
 
 import type { TradingViewChartRef } from '@/components/tradingview/TradingViewChart'
 import type { DataSource } from '@/types/trading';
-import { BarChart2, ChevronDown, Eye, Search, Settings, Star, X } from 'lucide-react';
+import { ChevronDown, Search, Star, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
@@ -37,25 +37,9 @@ export const CenterChartPanel = ({
   const [indicatorSearch, setIndicatorSearch] = useState('')
   
   const tvChartRef = useRef<TradingViewChartRef | null>(null)
-  const [isExchangeMenuOpen, setIsExchangeMenuOpen] = useState(false);
-  const exchangeMenuRef = useRef<HTMLDivElement>(null);
-  const timeframes = ['1s', '1m', '5m', '15m', '1h', '4h', '1d'];
+  // timeframes: toolbar 已迁移到 TradingView header；保留 interval state 用于驱动 chart
 
   const isCompact = variant === 'compact';
-
-  // Close exchange menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (exchangeMenuRef.current && !exchangeMenuRef.current.contains(event.target as Node)) {
-        setIsExchangeMenuOpen(false);
-      }
-    };
-
-    if (isExchangeMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isExchangeMenuOpen]);
 
   const { items: catalogItems } = useMarketDataCatalog()
 
@@ -99,9 +83,9 @@ export const CenterChartPanel = ({
 
     // Coinflux 自定义“精选指标”：用 Charting Library 的 custom studies 融合进 TV
     if (id === 'long-short-ratio' || id === 'aggregated-open-interest' || id === 'aggregated-volume' || id === 'liquidation-data') {
-      const enabled = !activeIds.includes(id)
-      if (enabled) tvChartRef.current?.ensureCustomIndicator(id as any)
-      else tvChartRef.current?.removeCustomIndicator(id as any)
+      // IMPORTANT:
+      // - 不要在这里直接 ensure/remove，否则会与下面的 useEffect 同步逻辑“双触发”
+      //   => 造成同一个指标被 createStudy 两次（你看到的“点一次出现两条/两个 pane”）
       setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
       return
     }
@@ -138,122 +122,9 @@ export const CenterChartPanel = ({
 
   return (
     <div className="flex-1 flex flex-col bg-[color:var(--cf-bg)] overflow-hidden min-h-0 relative w-full">
-      {/* Chart Toolbar */}
-      <div className={`${isCompact ? 'h-[36px] px-1' : 'h-[48px] px-2'} bg-[color:var(--cf-surface)] border-b border-[color:var(--cf-border)] flex items-center justify-between z-20 flex-shrink-0`}>
-        <div className="flex items-center gap-1 h-full overflow-x-auto no-scrollbar">
-          {timeframes.map((tf) => (
-            <button
-              key={tf}
-              type="button"
-              onClick={() => setInterval(tf)}
-              className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} transition-colors hover:text-[color:var(--cf-text)] ${
-                interval === tf ? 'bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text)] font-bold' : 'text-[color:var(--cf-muted)]'
-              }`}
-            >
-              {getTimeframeLabel(tf)}
-            </button>
-          ))}
-          <div className="h-4 w-[1px] bg-[color:var(--cf-border)] mx-1" />
-          <button
-            type="button"
-            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[color:var(--cf-muted)] flex items-center gap-1 hover:text-[color:var(--cf-text)]`}
-            onClick={() => setIsIndicatorModalOpen(true)}
-          >
-            <span>{t('chart.toolbar.indicators')}</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          <button
-            type="button"
-            className={`px-3 h-full ${isCompact ? 'text-[10px]' : 'text-xs'} text-[color:var(--cf-muted)] flex items-center gap-1 hover:text-[color:var(--cf-text)]`}
-            onClick={() => setIsIndicatorModalOpen(true)}
-          >
-            <span>{t('chart.toolbar.dataIndicators')}</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
-        </div>
-
-        <div className={`flex items-center gap-2 ${isCompact ? 'pr-1' : 'pr-2'} shrink-0`}>
-          <div className={`flex items-center gap-2 ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAggregated(!isAggregated);
-                if (!isAggregated) {
-                  setIsExchangeMenuOpen(false);
-                }
-              }}
-              className={`relative inline-flex ${isCompact ? 'h-4 w-7' : 'h-5 w-9'} items-center rounded-full transition-colors ${
-                isAggregated ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff]' : 'bg-[color:var(--cf-border)]'
-              }`}
-            >
-              <span
-                className={`inline-block ${isCompact ? 'h-3 w-3 translate-x-3.5' : 'h-4 w-4 translate-x-4'} transform rounded-full bg-white transition-transform ${
-                  !isAggregated && (isCompact ? 'translate-x-0.5' : 'translate-x-0.5')
-                }`}
-                style={{ transform: !isAggregated ? 'translateX(2px)' : undefined }}
-              />
-            </button>
-            
-            {isAggregated ? (
-              <span className="text-[color:var(--cf-text)] whitespace-nowrap">{t('chart.toolbar.aggregationOn')}</span>
-            ) : (
-              <div className="relative" ref={exchangeMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsExchangeMenuOpen(!isExchangeMenuOpen)}
-                  className="bg-[color:var(--cf-surface-2)] px-2 py-0.5 rounded flex items-center gap-1 hover:bg-[color:var(--cf-surface-hover)] transition-colors whitespace-nowrap"
-                >
-                  <span className="text-[color:var(--cf-text)]">{t(`chart.toolbar.${selectedExchange}`)}</span>
-                  <ChevronDown className="w-3 h-3 text-[color:var(--cf-muted)]" />
-                </button>
-                
-                {isExchangeMenuOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-[120px] bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded shadow-lg z-50 py-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedExchange('binance');
-                        setIsExchangeMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
-                        selectedExchange === 'binance' ? 'bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-text)]'
-                      }`}
-                    >
-                      <span className={selectedExchange === 'binance' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
-                        {t('chart.toolbar.binance')}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedExchange('okx');
-                        setIsExchangeMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
-                        selectedExchange === 'okx' ? 'bg-[color:var(--cf-surface-2)]' : 'text-[color:var(--cf-text)]'
-                      }`}
-                    >
-                      <span className={selectedExchange === 'okx' ? 'bg-gradient-to-r from-[#396bff] to-[#8b5cff] bg-clip-text text-transparent font-bold' : ''}>
-                        {t('chart.toolbar.okx')}
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="h-4 w-[1px] bg-[color:var(--cf-border)]" />
-          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
-            <BarChart2 className="w-4 h-4" />
-          </button>
-          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
-            <Eye className="w-4 h-4" />
-          </button>
-          <button type="button" className="p-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]">
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      {/* Chart Toolbar
+          NOTE: 已迁移到 TradingView Charting Library header（避免时间周期/指标/聚合控件重复显示）。
+          这里保留空位（不渲染），以免影响整体布局/间距。 */}
 
       {/* Main Chart Area */}
       <div className="flex-1 relative overflow-hidden w-full">
