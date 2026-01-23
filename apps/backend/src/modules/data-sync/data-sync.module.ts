@@ -21,6 +21,7 @@ import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY, TRADES_WS_ADAPTE
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { BbxCryptoStockScraperJob } from './jobs/bbx-crypto-stock-scraper.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
+import { CoinglassCoinsPriceChangeJob } from './jobs/coinglass-coins-price-change.job'
 import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
 import { CoinglassHeatmapJob } from './jobs/coinglass-heatmap.job'
 import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.job'
@@ -92,6 +93,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     ExampleNewsJob,
     CoinglassHeatmapJob,
     CoinglassWhaleAlertJob,
+    CoinglassCoinsPriceChangeJob,
     CoinglassFuturesPriceHistoryJob,
     ExampleOrderbookJob,
     OpenInterestSyncJob,
@@ -117,6 +119,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
+        coinglassCoinsPriceChangeJob: CoinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob: CoinglassFuturesPriceHistoryJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
@@ -136,6 +139,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         exampleNewsJob,
         coinglassHeatmapJob,
         coinglassWhaleAlertJob,
+        coinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob,
         exampleOrderbookJob,
         openInterestSyncJob,
@@ -156,6 +160,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         ExampleNewsJob,
         CoinglassHeatmapJob,
         CoinglassWhaleAlertJob,
+        CoinglassCoinsPriceChangeJob,
         CoinglassFuturesPriceHistoryJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,

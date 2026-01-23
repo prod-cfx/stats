@@ -735,7 +735,6 @@ model TakerBuySellVolume {
   @@map("taker_buy_sell_volumes")
 }
 
-
 /// Hyperliquid 鲸鱼交易记录（Whale Trades）
 ///
 /// 设计说明：
@@ -778,4 +777,79 @@ model HyperliquidWhaleTrade {
   @@index([tradeTime], map: "idx_whale_trade_time")
   @@index([tradeValueUsd], map: "idx_whale_trade_value")
   @@map("hyperliquid_whale_trades")
+}
+
+/// 币种价格变化数据（Coinglass Coins Price Change）
+///
+/// 参考文档：
+/// https://open-api-v4.coinglass.com/api/futures/coins-price-change
+///
+/// 设计说明：
+/// - 快照模式（snapshot-only），使用 upsert 更新现有记录
+/// - 包含多个时间范围的价格涨跌幅和振幅数据
+/// - 唯一键：(symbol, source)
+model CoinsPriceChange {
+  id Int @id @default(autoincrement())
+
+  /// 币种符号，如 BTC, ETH
+  symbol String
+
+  /// 当前价格
+  currentPrice Decimal @map("current_price") @db.Decimal(30, 10)
+
+  /// 5分钟价格涨跌幅 (%)
+  priceChangePercent5m Decimal? @map("price_change_percent_5m") @db.Decimal(10, 4)
+
+  /// 15分钟价格涨跌幅 (%)
+  priceChangePercent15m Decimal? @map("price_change_percent_15m") @db.Decimal(10, 4)
+
+  /// 30分钟价格涨跌幅 (%)
+  priceChangePercent30m Decimal? @map("price_change_percent_30m") @db.Decimal(10, 4)
+
+  /// 1小时价格涨跌幅 (%)
+  priceChangePercent1h Decimal? @map("price_change_percent_1h") @db.Decimal(10, 4)
+
+  /// 4小时价格涨跌幅 (%)
+  priceChangePercent4h Decimal? @map("price_change_percent_4h") @db.Decimal(10, 4)
+
+  /// 12小时价格涨跌幅 (%)
+  priceChangePercent12h Decimal? @map("price_change_percent_12h") @db.Decimal(10, 4)
+
+  /// 24小时价格涨跌幅 (%)
+  priceChangePercent24h Decimal? @map("price_change_percent_24h") @db.Decimal(10, 4)
+
+  /// 5分钟价格振幅 (%)
+  priceAmplitudePercent5m Decimal? @map("price_amplitude_percent_5m") @db.Decimal(10, 4)
+
+  /// 15分钟价格振幅 (%)
+  priceAmplitudePercent15m Decimal? @map("price_amplitude_percent_15m") @db.Decimal(10, 4)
+
+  /// 30分钟价格振幅 (%)
+  priceAmplitudePercent30m Decimal? @map("price_amplitude_percent_30m") @db.Decimal(10, 4)
+
+  /// 1小时价格振幅 (%)
+  priceAmplitudePercent1h Decimal? @map("price_amplitude_percent_1h") @db.Decimal(10, 4)
+
+  /// 4小时价格振幅 (%)
+  priceAmplitudePercent4h Decimal? @map("price_amplitude_percent_4h") @db.Decimal(10, 4)
+
+  /// 12小时价格振幅 (%)
+  priceAmplitudePercent12h Decimal? @map("price_amplitude_percent_12h") @db.Decimal(10, 4)
+
+  /// 24小时价格振幅 (%)
+  priceAmplitudePercent24h Decimal? @map("price_amplitude_percent_24h") @db.Decimal(10, 4)
+
+  /// 数据来源
+  source String @default("COINGLASS")
+
+  /// 数据快照时间
+  dataTimestamp DateTime @map("data_timestamp")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, source], map: "uniq_coins_price_change_symbol_source")
+  @@index([symbol], map: "idx_coins_price_change_symbol")
+  @@index([dataTimestamp], map: "idx_coins_price_change_timestamp")
+  @@map("coins_price_change")
 }
