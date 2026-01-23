@@ -850,6 +850,16 @@ const AggregatedOrderbookResponseDto = z
     mergedQuotes: z.array(z.string()),
   })
   .passthrough();
+const KlineBarDto = z
+  .object({
+    time: z.number(),
+    open: z.number(),
+    high: z.number(),
+    low: z.number(),
+    close: z.number(),
+    volume: z.number(),
+  })
+  .passthrough();
 const ExchangeConfigResponseDto = z
   .object({
     id: z.string(),
@@ -1027,6 +1037,7 @@ export const schemas = {
   VenueDetailDto,
   AggregatedLevelDto,
   AggregatedOrderbookResponseDto,
+  KlineBarDto,
   ExchangeConfigResponseDto,
   CreateExchangeConfigDto,
   UpdateExchangeConfigDto,
@@ -2565,6 +2576,41 @@ const endpoints = makeApi([
       })
       .partial()
       .passthrough(),
+  },
+  {
+    method: "get",
+    path: "/kline",
+    alias: "KlineController_getKlineBars",
+    description: `查询期货价格历史 OHLC 数据，支持单交易所或聚合模式`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "interval",
+        type: "Query",
+        schema: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+      },
+      {
+        name: "from",
+        type: "Query",
+        schema: z.number(),
+      },
+      {
+        name: "to",
+        type: "Query",
+        schema: z.number(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.array(KlineBarDto),
   },
   {
     method: "get",

@@ -3,8 +3,11 @@
 import WebSocket from 'ws'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
 import { PrismaService } from '@/prisma/prisma.service'
+import type { TradeEvent } from '@/modules/kline/interfaces/trade-event.interface'
+import { TRADE_RECEIVED_EVENT } from '@/modules/kline/interfaces/trade-event.interface'
 
 interface BinanceTradeEvent {
   e: 'trade'
@@ -56,6 +59,8 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     protected readonly configService: ConfigService,
     @Inject(PrismaService)
     protected readonly prismaService: PrismaService,
+    @Inject(EventEmitter2)
+    protected readonly eventEmitter: EventEmitter2,
   ) {}
 
   async ensureConnected(): Promise<void> {
@@ -299,6 +304,28 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       if (state.lastSeenTradeId === tradeId) continue
       state.buffer.push(trade)
       state.lastSeenTradeId = tradeId
+
+      // 发射交易事件给 K线聚合器
+      try {
+        const tradeEvent: TradeEvent = {
+          exchange: this.exchange,
+          instrumentType: this.instrumentType,
+          symbol: trade.s.toUpperCase(),
+          price: Number.parseFloat(trade.p),
+          size: Number.parseFloat(trade.q),
+          side: trade.m ? 'sell' : 'buy',
+          timestamp: trade.T,
+        }
+        this.eventEmitter.emit(TRADE_RECEIVED_EVENT, tradeEvent)
+      } catch (error) {
+        // 事件发射失败不应影响数据入库,仅记录日志
+        this.logger.warn({
+          message: 'Failed to emit trade event',
+          symbol: trade.s,
+          tradeId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     const now = Date.now()

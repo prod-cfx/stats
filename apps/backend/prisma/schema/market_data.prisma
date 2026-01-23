@@ -88,20 +88,20 @@ model FuturesPriceHistory {
   /// 该时间粒度对应的时间点（通常为区间起始时间），来自响应中的 time 字段
   timestamp DateTime
 
-  /// 开盘价
-  open Decimal @db.Decimal(30, 10)
+  /// 开盘价（加密货币标准精度：18位总长度，8位小数）
+  open Decimal @db.Decimal(18, 8)
 
   /// 最高价
-  high Decimal @db.Decimal(30, 10)
+  high Decimal @db.Decimal(18, 8)
 
   /// 最低价
-  low Decimal @db.Decimal(30, 10)
+  low Decimal @db.Decimal(18, 8)
 
   /// 收盘价
-  close Decimal @db.Decimal(30, 10)
+  close Decimal @db.Decimal(18, 8)
 
-  /// 成交量（USD 名义价值），对应 volume_usd 字段
-  volumeUsd Decimal? @map("volume_usd") @db.Decimal(30, 10)
+  /// 成交量（USD 名义价值），对应 volume_usd 字段（20位总长度，2位小数足够）
+  volumeUsd Decimal? @map("volume_usd") @db.Decimal(20, 2)
 
   /// 数据来源，例如：'COINGLASS'
   source String @default("COINGLASS")

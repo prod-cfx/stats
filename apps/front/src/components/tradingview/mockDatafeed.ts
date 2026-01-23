@@ -11,6 +11,10 @@
  * - 不要 import charting_library 代码（它是静态资源，通过 <script> 加载到 window.TradingView）
  */
 
+import type { Socket } from 'socket.io-client';
+import { io } from 'socket.io-client'
+import { fetchKlineData } from '@/lib/api'
+
 export type TvResolution = '1' | '5' | '15' | '60' | '240' | '1D'
 
 export interface TvBar {
@@ -45,7 +49,62 @@ interface PeriodParams {
   countBack?: number
 }
 
+interface SubscribeCallback {
+  (bar: TvBar): void
+}
+
+// 订阅管理
+interface Subscription {
+  symbolInfo: Record<string, unknown>
+  resolution: string
+  onRealtimeCallback: SubscribeCallback
+  subscribeUID: string
+  lastBar: TvBar | null
+  socket: Socket | null // Socket.IO 连接
+}
+
 const SUPPORTED_RESOLUTIONS: TvResolution[] = ['1', '5', '15', '60', '240', '1D']
+
+// 订阅管理器
+const subscriptions = new Map<string, Subscription>()
+
+/**
+ * 根据时间粒度计算轮询间隔（毫秒）
+ * 注意：WebSocket 实时推送后，此函数仅用于兜底
+ */
+function getUpdateInterval(resolution: string): number {
+  switch (resolution) {
+    case '1':
+      return 5000
+    case '5':
+      return 10000
+    case '15':
+      return 15000
+    case '60':
+      return 30000
+    case '240':
+      return 60000
+    case '1D':
+      return 120000
+    default:
+      return 30000
+  }
+}
+
+/**
+ * 映射 TradingView resolution 到后端 interval
+ */
+function resolutionToInterval(resolution: string): string {
+  const map: Record<string, string> = {
+    '1': '1m',
+    '5': '5m',
+    '15': '15m',
+    '60': '1h',
+    '240': '4h',
+    '1D': '1d',
+  }
+  return map[resolution] || '15m'
+}
 
 function resolutionToMs(resolution: string): number | null {
   if (resolution === '1D') return 24 * 60 * 60 * 1000
@@ -91,6 +150,33 @@ function hashString(input: string): number {
     h = Math.imul(h, 16777619)
   }
   return h >>> 0
+}
+
+function getTickerFromSymbolInfo(symbolInfo: Record<string, unknown>, fallback = 'BTCUSDT'): string {
+  if (typeof symbolInfo.ticker === 'string' && symbolInfo.ticker.length > 0) {
+    return symbolInfo.ticker
+  }
+  if (typeof symbolInfo.name === 'string' && symbolInfo.name.length > 0) {
+    return symbolInfo.name
+  }
+  return fallback
+}
+
+/**
+ * 标准化交易对符号格式
+ * @param ticker 原始 ticker（可能包含分隔符，如 "BTC/USDT" 或 "BTC-USDT"）
+ * @returns 标准化后的 ticker（如 "BTCUSDT"）
+ */
+function normalizeSymbol(ticker: string): string {
+  // 移除常见分隔符
+  const normalized = ticker.replace(/[/\-_]/g, '').toUpperCase()
+
+  // 验证格式（必须以 USDT 或 USDC 结尾）
+  if (!normalized.endsWith('USDT') && !normalized.endsWith('USDC')) {
+    console.warn(`Symbol format may be invalid: ${ticker} -> ${normalized}`)
+  }
+
+  return normalized
 }
 
 export const mockDatafeed = {
@@ -149,7 +235,7 @@ export const mockDatafeed = {
     }
   },
 
-  getBars(
+  async getBars(
     symbolInfo: Record<string, unknown>,
     resolution: string,
     periodParams: PeriodParams,
@@ -162,69 +248,234 @@ export const mockDatafeed = {
       return
     }
 
+    // 尝试获取真实数据
     try {
-      // TradingView Charting Library 期望异步返回结果，即使是同步数据也建议 wrap setTimeout
-      setTimeout(() => {
-        const symbol = String((symbolInfo as any)?.ticker || (symbolInfo as any)?.name || 'BTCUSDT')
-        const rng = createRng(hashString(`${symbol}|${resolution}`))
+      // 映射 TradingView resolution -> 后端 interval
+      const intervalMap: Record<string, string> = {
+        '1': '1m',
+        '5': '5m',
+        '15': '15m',
+        '60': '1h',
+        '240': '4h',
+        '1D': '1d',
+      }
+      const interval = intervalMap[resolution]
+      if (!interval) {
+        throw new Error(`Unsupported resolution: ${resolution}`)
+      }
 
-        const toMs = Number.isFinite(periodParams?.to) ? periodParams.to * 1000 : Date.now()
-        const alignedToMs = Math.floor(toMs / stepMs) * stepMs
-        const count = 200
-        const startMs = alignedToMs - stepMs * (count - 1)
+      // 提取 symbol（使用完整的 ticker，如 BTCUSDT）
+      const ticker = getTickerFromSymbolInfo(symbolInfo)
+      const symbol = normalizeSymbol(ticker) // 标准化格式，移除分隔符
 
-        // 从一个“合理”的基准价开始
-        let lastClose = 50000 + Math.floor(rng() * 5000)
-        const baseVol = resolutionToBaseVolume(resolution)
+      // 调用真实 API
+      const bars = await fetchKlineData({
+        symbol,
+        interval,
+        from: periodParams.from,
+        to: periodParams.to,
+        exchange: 'BINANCE', // 默认使用 Binance 数据
+      })
 
-        const bars: TvBar[] = []
-        for (let i = 0; i < count; i++) {
-          const time = startMs + i * stepMs
+      // 成功获取数据
+      if (bars.length > 0) {
+        onResult(bars, { noData: false })
+        return
+      }
 
-          // 生成一个小波动的 OHLC
-          const drift = (rng() - 0.5) * 80
-          const open = lastClose
-          const close = Math.max(1, open + drift)
-          const high = Math.max(open, close) + rng() * 50
-          const low = Math.max(1, Math.min(open, close) - rng() * 50)
-
-          // 生成更“像成交量”的 volume：有日内节律 + 与价格波动相关 + 少量噪声
-          // 目标（15m）：大致 1k~5k，方便显示为 K 且柱高明显不同
-          const move = Math.abs(close - open)
-          const season = 1 + Math.sin(i / 14) * 0.35 + Math.sin(i / 5) * 0.12
-          const noise = (rng() - 0.5) * baseVol * 0.25
-          const vol = Math.max(1, baseVol * season + move * (baseVol / 40) + noise)
-          const volume = Math.round(vol * 100) / 100
-
-          bars.push({
-            time, // 毫秒
-            open: Math.round(open * 100) / 100,
-            high: Math.round(high * 100) / 100,
-            low: Math.round(low * 100) / 100,
-            close: Math.round(close * 100) / 100,
-            volume,
-          })
-
-          lastClose = close
-        }
-
-        // 如果 periodParams.from/to 很窄，过滤到范围内（同时保证至少返回一些数据）
-        const fromMs = Number.isFinite(periodParams?.from) ? periodParams.from * 1000 : startMs
-        const filtered = bars.filter(b => b.time >= fromMs && b.time <= alignedToMs)
-
-        onResult(filtered.length ? filtered : bars, { noData: false })
-      }, 0)
+      // 后端返回空数据，降级到 mock
+      console.warn(`后端返回空数据 (symbol: ${symbol}, interval: ${interval})，降级到 mock`)
     } catch (e) {
-      onError((e as Error)?.message || 'getBars failed')
+      // API 调用失败，降级到 mock
+      console.warn('K线数据获取失败，降级到 mock:', e)
+    }
+
+    // 降级到 mock 数据：生成模拟 K线
+    this.generateMockBars(symbolInfo, resolution, periodParams, stepMs, onResult)
+  },
+
+  /**
+   * 生成模拟 K线数据（用于 API 失败或空数据时的降级）
+   */
+  generateMockBars(
+    symbolInfo: Record<string, unknown>,
+    resolution: string,
+    periodParams: PeriodParams,
+    stepMs: number,
+    onResult: BarsCallback,
+  ) {
+    setTimeout(() => {
+      const ticker = getTickerFromSymbolInfo(symbolInfo)
+      const rng = createRng(hashString(`${ticker}|${resolution}`))
+
+      const toMs = Number.isFinite(periodParams?.to) ? periodParams.to * 1000 : Date.now()
+      const alignedToMs = Math.floor(toMs / stepMs) * stepMs
+      const count = 200
+      const startMs = alignedToMs - stepMs * (count - 1)
+
+      let lastClose = 50000 + Math.floor(rng() * 5000)
+      const baseVol = resolutionToBaseVolume(resolution)
+
+      const bars: TvBar[] = []
+      for (let i = 0; i < count; i++) {
+        const time = startMs + i * stepMs
+
+        const drift = (rng() - 0.5) * 80
+        const open = lastClose
+        const close = Math.max(1, open + drift)
+        const high = Math.max(open, close) + rng() * 50
+        const low = Math.max(1, Math.min(open, close) - rng() * 50)
+
+        const move = Math.abs(close - open)
+        const season = 1 + Math.sin(i / 14) * 0.35 + Math.sin(i / 5) * 0.12
+        const noise = (rng() - 0.5) * baseVol * 0.25
+        const vol = Math.max(1, baseVol * season + move * (baseVol / 40) + noise)
+        const volume = Math.round(vol * 100) / 100
+
+        bars.push({
+          time,
+          open: Math.round(open * 100) / 100,
+          high: Math.round(high * 100) / 100,
+          low: Math.round(low * 100) / 100,
+          close: Math.round(close * 100) / 100,
+          volume,
+        })
+
+        lastClose = close
+      }
+
+      const fromMs = Number.isFinite(periodParams?.from) ? periodParams.from * 1000 : startMs
+      const filtered = bars.filter(b => b.time >= fromMs && b.time <= alignedToMs)
+
+      onResult(filtered.length ? filtered : bars, { noData: false })
+    }, 0)
+  },
+
+  subscribeBars(
+    symbolInfo: Record<string, unknown>,
+    resolution: string,
+    onRealtimeCallback: SubscribeCallback,
+    subscribeUID: string,
+    _onResetCacheNeededCallback?: () => void,
+  ) {
+    console.log(`[subscribeBars] ${subscribeUID}`, { symbolInfo, resolution })
+
+    // 映射 resolution 到后端 interval
+    const interval = resolutionToInterval(resolution)
+    if (!interval) {
+      console.error(`[subscribeBars] Unsupported resolution: ${resolution}`)
+      return
+    }
+
+    // 提取 symbol
+    const ticker = getTickerFromSymbolInfo(symbolInfo)
+    const symbol = normalizeSymbol(ticker)
+
+    // 获取 WebSocket URL（从环境变量或使用默认值）
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+
+    // 创建 Socket.IO 连接
+    const socket = io(`${wsUrl}/kline`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+    })
+
+    // 创建订阅
+    const subscription: Subscription = {
+      symbolInfo,
+      resolution,
+      onRealtimeCallback,
+      subscribeUID,
+      lastBar: null,
+      socket,
+    }
+
+    // 监听连接事件
+    socket.on('connect', () => {
+      console.log(`[subscribeBars] Socket.IO connected, subscribing to ${symbol}:${interval}`)
+
+      // 发送订阅请求
+      socket.emit('subscribe', {
+        symbol,
+        interval,
+      })
+    })
+
+    // 监听订阅确认
+    socket.on('subscribed', (data: { symbol: string; interval: string; subscriptionKey: string }) => {
+      console.log(`[subscribeBars] Subscribed:`, data)
+    })
+
+    // 监听实时 K线数据
+    socket.on('kline', (data: { symbol: string; interval: string; bar: TvBar }) => {
+      const { bar } = data
+
+      // 如果是第一次获取或者时间戳不同，说明是新的 K线
+      if (!subscription.lastBar || subscription.lastBar.time !== bar.time) {
+        subscription.lastBar = bar
+        onRealtimeCallback(bar)
+        console.log(`[subscribeBars] New bar:`, bar)
+      } else if (subscription.lastBar) {
+        // 同一根 K线，检查是否有更新
+        const hasUpdate =
+          subscription.lastBar.close !== bar.close ||
+          subscription.lastBar.high !== bar.high ||
+          subscription.lastBar.low !== bar.low ||
+          subscription.lastBar.volume !== bar.volume
+
+        if (hasUpdate) {
+          subscription.lastBar = bar
+          onRealtimeCallback(bar)
+          console.log(`[subscribeBars] Updated bar:`, bar)
+        }
+      }
+    })
+
+    // 监听取消订阅确认
+    socket.on('unsubscribed', (data: { symbol: string; interval: string; subscriptionKey: string }) => {
+      console.log(`[subscribeBars] Unsubscribed:`, data)
+    })
+
+    // 监听连接错误
+    socket.on('connect_error', (error) => {
+      console.error(`[subscribeBars] Socket.IO connection error:`, error)
+    })
+
+    // 监听断开连接
+    socket.on('disconnect', (reason) => {
+      console.warn(`[subscribeBars] Socket.IO disconnected:`, reason)
+    })
+
+    // 保存订阅
+    subscriptions.set(subscribeUID, subscription)
+
+    console.log(`[subscribeBars] Subscribed successfully`)
+  },
+
+  unsubscribeBars(subscribeUID: string) {
+    console.log(`[unsubscribeBars] ${subscribeUID}`)
+
+    const subscription = subscriptions.get(subscribeUID)
+    if (subscription) {
+      if (subscription.socket) {
+        // 提取 symbol 和 interval
+        const ticker = getTickerFromSymbolInfo(subscription.symbolInfo)
+        const symbol = normalizeSymbol(ticker)
+        const interval = resolutionToInterval(subscription.resolution)
+
+        // 发送取消订阅请求
+        subscription.socket.emit('unsubscribe', {
+          symbol,
+          interval,
+        })
+
+        // 断开连接
+        subscription.socket.disconnect()
+      }
+      subscriptions.delete(subscribeUID)
+      console.log(`[unsubscribeBars] Unsubscribed successfully`)
     }
   },
-
-  subscribeBars() {
-    // mock：暂不推实时数据
-  },
-
-  unsubscribeBars() {
-    // mock：暂不推实时数据
-  },
 }
-

@@ -72,11 +72,16 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
-    // 期货价格 K 线使用固定的 v4 公共接口路径，不再通过独立环境变量覆盖
-    const endpoint = 'https://open-api-v4.coinglass.com/api/futures/price/history'
+
+    // 根据 contractType 动态选择 endpoint
+    // contractType 为 null 时使用现货 API，否则使用期货 API
+    const isSpot = cursor.contractType === null || cursor.contractType === undefined
+    const endpoint = isSpot
+      ? 'https://open-api-v4.coinglass.com/api/spot/price/history'
+      : 'https://open-api-v4.coinglass.com/api/futures/price/history'
 
     if (!apiKey) {
-      // 不应“默默成功”，否则后台无法感知配置缺失
+      // 不应"默默成功"，否则后台无法感知配置缺失
       throw new Error('COINGLASS_API_KEY is not configured')
     }
 
@@ -90,7 +95,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     if (cursor.exchangeCode) {
       url.searchParams.set('exchange', cursor.exchangeCode)
     }
-    if (cursor.contractType ?? this.defaultContractType) {
+    // 仅在期货模式下设置 contractType 参数
+    if (!isSpot && (cursor.contractType ?? this.defaultContractType)) {
       url.searchParams.set('contractType', cursor.contractType ?? this.defaultContractType!)
     }
     if (typeof lastTimestampMs === 'number') {

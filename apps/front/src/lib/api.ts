@@ -1925,3 +1925,41 @@ export async function fetchTraderFullData(
     } as any as TraderFullDataResponse
   }
 }
+
+// ============================================================================
+// K 线数据 API
+// ============================================================================
+
+export interface FetchKlineDataParams {
+  symbol: string
+  interval: string
+  from: number // 秒
+  to: number // 秒
+  exchange?: string
+}
+
+export interface KlineBar {
+  time: number // 毫秒时间戳
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export async function fetchKlineData(
+  params: FetchKlineDataParams
+): Promise<KlineBar[]> {
+  try {
+    return await apiCall(async () => {
+      const response = await client.KlineController_getKlineBars({
+        queries: params,
+      })
+      return unwrapResponse(response) as KlineBar[]
+    }, 'FETCH_KLINE_DATA')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    // 降级到 mock（由 mockDatafeed 处理）
+    return []
+  }
+}

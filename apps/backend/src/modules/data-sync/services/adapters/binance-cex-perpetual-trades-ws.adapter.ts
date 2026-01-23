@@ -3,6 +3,7 @@
 import type { TradesAdapterKey } from '../trades-ws-adapter'
 import type { ConfigService } from '@nestjs/config'
 import { Injectable } from '@nestjs/common'
+import type { EventEmitter2 } from '@nestjs/event-emitter'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { BinanceTradesWsAdapterBase } from './binance/binance-trades-ws.base'
 
@@ -15,8 +16,9 @@ export class BinanceCexPerpetualTradesWsAdapter extends BinanceTradesWsAdapterBa
   constructor(
     configService: ConfigService,
     prismaService: PrismaService,
+    eventEmitter: EventEmitter2,
   ) {
-    super(configService, prismaService)
+    super(configService, prismaService, eventEmitter)
   }
 
   protected getWsBaseUrl(): string {

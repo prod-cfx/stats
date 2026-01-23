@@ -25,6 +25,7 @@ import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quot
 import { DataSyncModule } from './data-sync/data-sync.module'
 import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
 import { HealthModule } from './health/health.module'
+import { KlineModule } from './kline/kline.module'
 import { LiquidationHeatmapModule } from './liquidation-heatmap/liquidation-heatmap.module'
 import { MarketsModule } from './markets/markets.module'
 import { OpenInterestModule } from './open-interest/open-interest.module'
@@ -97,6 +98,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     AggregatedLiquidationModule,
     OrderbookConfigModule,
     AggregatedOrderbookModule,
+    KlineModule,
     TradesConfigModule,
     ExchangeConfigModule,
     OpenInterestModule,
@@ -126,4 +128,3 @@ const currentEnv = defaultEnvAccessor.appEnv()
   ],
 })
 export class AppModule {}
-
