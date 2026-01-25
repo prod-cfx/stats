@@ -143,7 +143,7 @@ export class MarketTradesRepository {
         tradeId: `T${now - i * 100}`,
         price: new Prisma.Decimal(60000 + Math.random() * 1000),
         size: new Prisma.Decimal(0.001 + Math.random() * 0.1),
-        side: Math.random() > 0.5 ? 'BUY' : 'SELL',
+        side: Math.random() > 0.5 ? 'buy' : 'sell',
         tradeTimestamp: BigInt(now - i * 100),
         createdAt: new Date(),
         updatedAt: new Date(),

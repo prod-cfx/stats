@@ -1,19 +1,63 @@
 'use client';
 
+import type { Socket } from 'socket.io-client';
 import type { DataSource, MarketType } from '@/types/trading';
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { io } from 'socket.io-client';
 import { Spinner } from '@/components/ui/loading';
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
 
-function formatHmsUtc(ts: number) {
+// 常量定义
+const AUTH_TOKEN_KEY = 'token';
+
+// 交易所名称映射
+const EXCHANGE_MAP: Record<DataSource, string> = {
+  binance: 'BINANCE',
+  okx: 'OKX',
+  bybit: 'BYBIT',
+};
+
+// WebSocket 事件数据类型定义
+interface TradesSubscribedData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  minValue?: number;
+  subscriptionKey: string;
+}
+
+interface TradesUnsubscribedData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  minValue?: number;
+  subscriptionKey: string;
+}
+
+interface TradeData {
+  id: number;
+  price: string;
+  size: string;
+  side: string;
+  tradeTimestamp: string;
+}
+
+interface TradesEventData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  trades: TradeData[];
+}
+
+function formatHmsLocal(ts: number) {
   const d = new Date(ts);
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  const ss = String(d.getUTCSeconds()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
 }
 
@@ -119,7 +163,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     const trades = Array.from({ length: 60 }, (_, i) => {
       const price = roundToStep(basePrice + priceOffset + (rand() - 0.5) * tick * 2).toFixed(fractionDigits);
       const amount = (rand() * 0.05 * volumeMultiplier).toFixed(5);
-      const time = formatHmsUtc(baseTs - i * 1000);
+      const time = formatHmsLocal(baseTs - i * 1000);
       const type = rand() > 0.5 ? 'buy' : 'sell';
       return { id: baseTs - i * 1000, price, amount, time, type };
     });
@@ -141,7 +185,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   ]);
 
   const [orderbook, setOrderbook] = useState(() => createDeterministicMock.initialOrderbook);
-  const [trades, setTrades] = useState(() => createDeterministicMock.initialTrades);
+  const [trades, setTrades] = useState<Array<{ id: number; price: string; amount: string; time: string; type: 'buy' | 'sell' }>>([]);
 
   // Close decimal menu when clicking outside
   useEffect(() => {
@@ -160,13 +204,11 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     // When source / symbol / precision changes, sync deterministic initial data immediately (no blank SSR/CSR)
     /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
     setOrderbook(createDeterministicMock.initialOrderbook);
-    setTrades(createDeterministicMock.initialTrades);
     setLoading(false);
     /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
 
-    const interval = setInterval(() => {
-      const { basePrice, tick, priceOffset, volumeMultiplier } = createDeterministicMock.meta;
-
+    // Orderbook mock 数据更新（保持原有逻辑）
+    const orderbookInterval = setInterval(() => {
       setOrderbook(prev => ({
         sells: prev.sells.map(s => ({
           ...s,
@@ -179,21 +221,112 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           depth: Math.min(100, Math.max(5, b.depth + (Math.random() - 0.5) * 10))
         }))
       }));
-
-      const newTrade = {
-        id: Date.now(),
-        price: (basePrice + priceOffset + (Math.random() - 0.5) * tick * 3).toFixed(fractionDigits),
-        amount: (Math.random() * 0.05 * volumeMultiplier).toFixed(5),
-        time: formatHmsUtc(Date.now()),
-        type: Math.random() > 0.5 ? 'buy' : 'sell'
-      };
-      setTrades(prev => [newTrade, ...prev.slice(0, 59)]);
     }, 1000);
 
     return () => {
-      clearInterval(interval);
+      clearInterval(orderbookInterval);
     };
-  }, [createDeterministicMock, fractionDigits, locale]); // Re-run when source/format changes
+  }, [createDeterministicMock, locale]); // Re-run when source/format changes
+
+  // WebSocket 连接管理 - Trades 实时数据
+  useEffect(() => {
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+    let socket: Socket | null = null;
+
+    const connectWebSocket = () => {
+      // 获取 token（从 localStorage）
+      const token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+
+      // 创建 Socket.IO 连接
+      socket = io(`${wsUrl}/kline`, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        auth: { token },
+      });
+
+      // 监听连接事件
+      socket.on('connect', () => {
+        console.log('[RightPanel] Socket.IO connected, subscribing to trades');
+
+        const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE';
+        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL';
+
+        // 发送订阅请求
+        const minValue = tradeTab === 'large' ? 100000 : undefined;
+        socket?.emit('subscribeTrades', {
+          exchange,
+          instrumentType,
+          symbol: symbol.toUpperCase(),
+          minValue,
+          limit: 50,
+        });
+      });
+
+      // 监听订阅确认
+      socket.on('tradesSubscribed', (data: TradesSubscribedData) => {
+        console.log('[RightPanel] Trades subscribed:', data);
+      });
+
+      // 监听实时 trades 数据
+      socket.on('trades', (data: TradesEventData) => {
+        const { trades: receivedTrades } = data;
+
+        if (receivedTrades && Array.isArray(receivedTrades)) {
+          // 格式化 trades 数据
+          const formattedTrades = receivedTrades.map((trade: TradeData) => {
+            const side = trade.side?.toLowerCase();
+            return {
+              id: trade.id, // 使用数据库主键作为唯一标识
+              price: Number(trade.price).toFixed(fractionDigits),
+              amount: Number(trade.size).toFixed(5),
+              time: formatHmsLocal(Number(trade.tradeTimestamp)),
+              type: (side === 'buy' || side === 'sell' ? side : 'buy') as 'buy' | 'sell',
+            };
+          });
+
+          setTrades(formattedTrades);
+        }
+      });
+
+      // 监听取消订阅确认
+      socket.on('tradesUnsubscribed', (data: TradesUnsubscribedData) => {
+        console.log('[RightPanel] Trades unsubscribed:', data);
+      });
+
+      // 监听连接错误
+      socket.on('connect_error', (error) => {
+        console.error('[RightPanel] Socket.IO connection error:', error);
+      });
+
+      // 监听断开连接
+      socket.on('disconnect', (reason) => {
+        console.warn('[RightPanel] Socket.IO disconnected:', reason);
+      });
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (socket) {
+        const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE';
+        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL';
+        const minValue = tradeTab === 'large' ? 100000 : undefined;
+
+        // 发送取消订阅请求
+        socket.emit('unsubscribeTrades', {
+          exchange,
+          instrumentType,
+          symbol: symbol.toUpperCase(),
+          minValue,
+        });
+
+        // 断开连接
+        socket.disconnect();
+      }
+    };
+  }, [symbol, selectedExchange, marketType, tradeTab, fractionDigits]); // 依赖项：symbol/exchange/marketType/tab 变化时重新订阅
 
   useEffect(() => {
     if (!loading && sellsRef.current) {
@@ -355,7 +488,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
       </div>
 
       {/* --- MODULE 3: Trades --- */}
-      <div className="h-[260px] flex flex-col border-t-4 border-[color:var(--cf-bg)] flex-none">
+      <div className="h-[420px] flex flex-col border-t-4 border-[color:var(--cf-bg)] flex-none">
         <div className="flex items-center justify-between px-2 bg-[color:var(--cf-surface)] border-b border-[color:var(--cf-border)]">
           <div className="flex gap-4">
             {['latest', 'large'].map(id => (

@@ -1,8 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiOperation, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
 // KlineBarDto 需要运行时类构造函数，用于 Swagger 推导，保留值导入
- 
-import { RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+
 import { KlineBarDto } from './dto/kline-bar.dto'
 // QueryKlineDto 需要运行时类构造函数，用于 class-validator 校验和 Swagger 推导，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -13,7 +12,6 @@ import { KlineService } from './kline.service'
 
 @ApiTags('kline')
 @Controller('kline')
-@RequireAuth()
 @ApiExtraModels(KlineBarDto)
 export class KlineController {
   constructor(private readonly service: KlineService) {}

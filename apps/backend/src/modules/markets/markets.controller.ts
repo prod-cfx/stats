@@ -194,7 +194,7 @@ export class MarketsController {
   }
 
   @Get('trades/latest')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取最新成交记录' })
   @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
@@ -220,7 +220,7 @@ export class MarketsController {
   }
 
   @Get('trades/large')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取大额成交记录' })
   @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
@@ -246,7 +246,7 @@ export class MarketsController {
   }
 
   @Get('trades')
-  @RequireAuth()
+  @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '查询交易记录（分页）' })
   @ApiOkResponse({

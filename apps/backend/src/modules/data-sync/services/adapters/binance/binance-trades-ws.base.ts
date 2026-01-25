@@ -307,12 +307,30 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
 
       // 发射交易事件给 K线聚合器
       try {
+        // 解析并验证价格和数量
+        const price = Number.parseFloat(trade.p)
+        const size = Number.parseFloat(trade.q)
+
+        // 验证数据有效性，过滤无效数据
+        if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(size) || size <= 0) {
+          this.logger.debug({
+            message: 'Invalid Binance trade data, skipping event emission',
+            symbol: trade.s,
+            rawPrice: trade.p,
+            rawSize: trade.q,
+            parsedPrice: price,
+            parsedSize: size,
+            tradeId,
+          })
+          continue
+        }
+
         const tradeEvent: TradeEvent = {
           exchange: this.exchange,
           instrumentType: this.instrumentType,
           symbol: trade.s.toUpperCase(),
-          price: Number.parseFloat(trade.p),
-          size: Number.parseFloat(trade.q),
+          price,
+          size,
           side: trade.m ? 'sell' : 'buy',
           timestamp: trade.T,
         }
