@@ -35,6 +35,11 @@ type BinanceCombinedStreamMessage =
   | { result: null; id: number }
   | { error: { code: number; msg: string }; id: number }
 
+interface SnapshotRetryState {
+  failCount: number
+  nextRetryAt: number
+}
+
 interface BookState {
   cfg: OrderbookPairConfig
   marketKey: string
@@ -43,6 +48,7 @@ interface BookState {
   lastUpdateId: number
   buffer: BinanceDepthUpdateEvent[]
   isReady: boolean
+  isStale: boolean
   lastPublishTs: number
 }
 
@@ -56,6 +62,14 @@ const binanceRestApiRateLimiter = new TokenBucketRateLimiter(
   100,    // maxTokens: 允许 100 次突发请求（应对冷启动）
   33.33,  // refillRate: 每秒补充 33.33 个令牌（约 2000/min）
 )
+
+/**
+ * 指数退避失败次数上限
+ * 防止 2^n 计算溢出（2^10 = 1024，已足够大）
+ * 当 retryBaseMs=60000 时，2^9 * 60000 = 30720000ms (约 8.5 小时)
+ * 实际退避时间受 retryMaxMs 限制（默认 10 分钟）
+ */
+const MAX_FAIL_COUNT_FOR_BACKOFF = 10
 
 /**
  * Binance 订单薄 WS 同步通用基类：
@@ -80,6 +94,10 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
   private readonly states = new Map<string, BookState>() // symbol -> state
   // 降噪：记录每个 symbol 最近一次深度断档告警时间，避免日志刷屏
   private readonly lastGapWarnAt = new Map<string, number>()
+  // 失败重试状态：用于 snapshot 初始化的指数退避
+  private readonly retryStates = new Map<string, SnapshotRetryState>()
+  // 深度断档重同步防抖：避免短时间内反复触发 REST resync
+  private readonly lastResyncAt = new Map<string, number>()
   private redis: Redis | null = null
 
   constructor(
@@ -112,11 +130,12 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       if (!targetSymbols.has(symbol)) {
         const state = this.states.get(symbol)
         this.states.delete(symbol)
+        this.retryStates.delete(symbol)
+        this.lastResyncAt.delete(symbol)
+        this.lastGapWarnAt.delete(symbol)
         await this.deleteRedisSnapshot(symbol, state)
       }
     }
-
-    const newSymbols: string[] = []
 
     // 新增或更新
     for (const [symbol, cfg] of targetSymbols.entries()) {
@@ -130,10 +149,10 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
           lastUpdateId: 0,
           buffer: [],
           isReady: false,
+          isStale: false,
           lastPublishTs: 0,
         }
         this.states.set(symbol, created)
-        newSymbols.push(symbol)
       } else {
         state.cfg = cfg
       }
@@ -143,12 +162,30 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     await this.reconcileSubscriptions([...targetSymbols.keys()])
 
     // 2) 再初始化 snapshot
-    for (const symbol of newSymbols) {
+    const maxInitPerTick =
+      this.configService.get<number>('ORDERBOOK_WS_MAX_INIT_PER_TICK') ?? 10
+    const now = Date.now()
+    const initQueue: string[] = []
+    for (const cfg of targets) {
+      const symbol = cfg.symbol.toUpperCase()
       const state = this.states.get(symbol)
-      if (state) {
-        await this.initSnapshot(symbol, state)
+      if (!state || state.isReady) continue
+      const retryState = this.retryStates.get(symbol)
+      // 退避窗口内直接跳过，避免失败重试爆发
+      if (retryState && now < retryState.nextRetryAt) {
+        continue
       }
+      initQueue.push(symbol)
     }
+
+    // 冷启动分批初始化，防止一次性拉取大量 snapshot
+    const initBatch = initQueue.slice(0, Math.max(1, maxInitPerTick))
+    // 并发初始化，提升冷启动性能
+    const initPromises = initBatch.map(symbol => {
+      const state = this.states.get(symbol)
+      return state ? this.initSnapshot(symbol, state) : Promise.resolve()
+    })
+    await Promise.allSettled(initPromises)
   }
 
   async shutdown(): Promise<void> {
@@ -157,6 +194,9 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     }
     this.connections.length = 0
     this.states.clear()
+    this.retryStates.clear()
+    this.lastResyncAt.clear()
+    this.lastGapWarnAt.clear()
     this.redis = null
   }
 
@@ -243,6 +283,10 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     const restBaseUrl = this.getRestBaseUrl()
     const timeoutMs = this.configService.get<number>('marketData.restTimeoutMs') ?? 10_000
     const limit = cfg.depthLevels ?? 100
+    const retryBaseMs =
+      this.configService.get<number>('ORDERBOOK_WS_SNAPSHOT_RETRY_BASE_MS') ?? 60_000
+    const retryMaxMs =
+      this.configService.get<number>('ORDERBOOK_WS_SNAPSHOT_RETRY_MAX_MS') ?? 600_000
 
     try {
       const snapshot = await this.fetchSnapshot(restBaseUrl, symbol, timeoutMs, limit)
@@ -250,6 +294,8 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       state.asks = this.levelsToMap(snapshot.asks)
       state.lastUpdateId = snapshot.lastUpdateId
       state.isReady = true
+      state.isStale = false
+      this.retryStates.delete(symbol)
 
       if (state.buffer.length) {
         const buffered = state.buffer
@@ -266,11 +312,18 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       await this.publish(symbol, state, Date.now())
     } catch (error) {
       state.isReady = false
-      // 移除该 symbol 的 state，让下次 syncTargetConfigs 重新尝试 snapshot 初始化
-      this.states.delete(symbol)
       await this.deleteRedisSnapshot(symbol, state)
+      const prev = this.retryStates.get(symbol)
+      const failCount = (prev?.failCount ?? 0) + 1
+      // 指数退避：1m, 2m, 4m... 上限 10m（可通过环境变量覆盖）
+      // 限制 failCount 上限防止数值溢出
+      const safeFailCount = Math.min(failCount, MAX_FAIL_COUNT_FOR_BACKOFF)
+      const backoffMs = Math.min(retryBaseMs * 2 ** (safeFailCount - 1), retryMaxMs)
+      const nextRetryAt = Date.now() + backoffMs
+      this.retryStates.set(symbol, { failCount, nextRetryAt })
+      // 失败后保持 state，等待下次 syncTargetConfigs 按退避重试
       this.logger.error(
-        `Failed to init snapshot for ${symbol}, state removed and will retry on next sync: ${
+        `Failed to init snapshot for ${symbol}, retry in ${backoffMs}ms (failCount=${failCount}): ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
@@ -284,14 +337,36 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       const now = Date.now()
       const intervalMs =
         this.configService.get<number>('ORDERBOOK_WS_GAP_WARN_INTERVAL_MS') ?? 10_000
+      const resyncDebounceMs =
+        this.configService.get<number>('ORDERBOOK_WS_RESYNC_DEBOUNCE_MS') ?? 30_000
+      const lastResync = this.lastResyncAt.get(symbol) ?? 0
+      // 断档 resync 防抖：短时间内只允许触发一次 REST 重同步
+      if (now - lastResync < resyncDebounceMs) {
+        // 防抖期间跳过 resync，降噪日志避免刷屏
+        const lastWarn = this.lastGapWarnAt.get(symbol) ?? 0
+        if (now - lastWarn >= intervalMs) {
+          this.lastGapWarnAt.set(symbol, now)
+          this.logger.warn(
+            `Depth gap resync skipped for ${symbol}: debounce ${resyncDebounceMs}ms not elapsed (last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u})`,
+          )
+        }
+        state.isStale = true
+        return
+      }
+
+      // 触发 resync 前记录断档信息
       const lastWarn = this.lastGapWarnAt.get(symbol) ?? 0
       if (now - lastWarn >= intervalMs) {
         this.lastGapWarnAt.set(symbol, now)
         this.logger.warn(
-          `Depth sequence gap for ${symbol}: last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u}, resync`,
+          `Depth sequence gap for ${symbol}: last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u}, triggering resync`,
         )
       }
+
+      // 断档后触发 resync，但增加防抖避免短时间内反复请求 REST
+      this.lastResyncAt.set(symbol, now)
       state.isReady = false
+      state.isStale = true
       state.buffer = [evt]
       await this.initSnapshot(symbol, state)
       return
@@ -311,6 +386,13 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
 
   private async publish(_symbol: string, state: BookState, exchangeTs: number): Promise<void> {
     if (!this.redis) return
+
+    if (state.isStale) {
+      this.logger.debug(
+        `Skipping publish for ${_symbol}: orderbook marked as stale, waiting for resync`,
+      )
+      return
+    }
 
     const depthLevels = state.cfg.depthLevels ?? 100
     this.trimMap(state.bids, 'bids', depthLevels)
@@ -647,4 +729,3 @@ class BinanceWsConnection {
     } catch {}
   }
 }
-
