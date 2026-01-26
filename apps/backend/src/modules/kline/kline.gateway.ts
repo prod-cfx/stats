@@ -1,4 +1,5 @@
 import type { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets'
+import type { MarketTrade } from '@prisma/client'
 import type { Server, Socket } from 'socket.io'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { KlineSubscriptionDto } from './dto/kline-subscription.dto'
@@ -7,6 +8,7 @@ import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
 import { Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { JwtService } from '@nestjs/jwt'
+import { Interval } from '@nestjs/schedule'
 import {
   ConnectedSocket,
   MessageBody,
@@ -24,24 +26,37 @@ import { KlineAggregatorService } from './kline-aggregator.service'
 
 
 // 单个客户端最大订阅数限制
-const MAX_SUBSCRIPTIONS_PER_CLIENT = 10
+const MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT = 20
+const MAX_KLINE_SUBSCRIPTIONS_PER_CLIENT = 10
+const MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT = 10
+const SOCKET_PING_INTERVAL_MS = 25000
+const SOCKET_PING_TIMEOUT_MS = 5000
+const STALE_CONNECTION_THRESHOLD_MS = 120000
 
 // 允许的 CORS origin 正则模式
 const ALLOWED_ORIGIN_PATTERNS = [
-  /^https?:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/[\w-]+\.coinflux\.com$/,
+  ...(process.env.NODE_ENV === 'development'
+    ? [
+        /^http:\/\/localhost(:\d+)?$/,
+        /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+      ]
+    : []),
+  /^https:\/\/(www|app|admin)\.coinflux\.com$/,
 ]
 
 /**
  * 验证 CORS origin 是否合法
  */
-function isValidOrigin(origin: string): boolean {
+function isValidOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return false
+  }
   // 检查是否为有效 URL 格式
   try {
     const url = new URL(origin)
-    // 确保 URL 被使用，避免 lint 警告
-    if (!url.protocol) return false
+    if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+      return false
+    }
   } catch {
     return false
   }
@@ -57,7 +72,10 @@ function parseAllowedOrigins(): string[] {
 
   // 如果没有有效的 origin，使用默认值
   if (validOrigins.length === 0) {
-    return ['http://localhost:3001']
+    if (process.env.NODE_ENV === 'development') {
+      return ['http://localhost:3001']
+    }
+    return ['https://app.coinflux.com']
   }
   return validOrigins
 }
@@ -83,6 +101,8 @@ interface TradesSubscriptionInfo {
     credentials: true,
   },
   namespace: '/kline',
+  pingInterval: SOCKET_PING_INTERVAL_MS,
+  pingTimeout: SOCKET_PING_TIMEOUT_MS,
 })
 export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -110,6 +130,8 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   handleConnection(client: Socket): void {
+    this.updateClientActivity(client)
+
     // 从握手中获取 token (支持 query 和 headers 两种方式)
     const token =
       client.handshake.auth?.token ||
@@ -194,6 +216,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: KlineSubscriptionDto,
     @ConnectedSocket() client: Socket,
   ): void {
+    this.updateClientActivity(client)
     const { symbol, interval } = data
 
     // 默认使用 BINANCE PERPETUAL (可以从配置或请求参数获取)
@@ -212,11 +235,47 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       subscriptionKey,
     })
 
-    // 记录客户端订阅
-    const clientSubs = this.clientSubscriptions.get(client.id)
-    if (clientSubs) {
-      clientSubs.add(subscriptionKey)
+    const clientSubs = this.clientSubscriptions.get(client.id) ?? new Set<string>()
+    if (!this.clientSubscriptions.has(client.id)) {
+      this.clientSubscriptions.set(client.id, clientSubs)
     }
+
+    const isNewSubscription = !clientSubs.has(subscriptionKey)
+    const tradesSubs = this.clientTradesSubscriptions.get(client.id)?.size ?? 0
+
+    // 检查总订阅数
+    if (isNewSubscription && clientSubs.size + tradesSubs >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        code: 'MAX_SUBSCRIPTIONS_EXCEEDED',
+      })
+      this.logger.warn({
+        message: 'Client exceeded total subscription limit',
+        clientId: client.id,
+        klineSubs: clientSubs.size,
+        tradesSubs,
+        limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      return
+    }
+
+    // 检查 Kline 订阅数
+    if (isNewSubscription && clientSubs.size >= MAX_KLINE_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum kline subscriptions (${MAX_KLINE_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        code: 'MAX_KLINE_SUBSCRIPTIONS_EXCEEDED',
+      })
+      this.logger.warn({
+        message: 'Client exceeded kline subscription limit',
+        clientId: client.id,
+        klineSubs: clientSubs.size,
+        limit: MAX_KLINE_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      return
+    }
+
+    // 记录客户端订阅
+    clientSubs.add(subscriptionKey)
 
     // 创建回调函数
     const callback = (bar: KlineBarDto) => {
@@ -274,6 +333,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: KlineSubscriptionDto,
     @ConnectedSocket() client: Socket,
   ): void {
+    this.updateClientActivity(client)
     const { symbol, interval } = data
 
     // 默认使用 BINANCE PERPETUAL
@@ -323,6 +383,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: TradesSubscriptionDto,
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
+    this.updateClientActivity(client)
     const { exchange, instrumentType, symbol, minValue, limit = 50 } = data
 
     const subscriptionKey = this.getTradesSubscriptionKey(exchange, instrumentType, symbol, minValue)
@@ -334,18 +395,44 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.clientTradesSubscriptions.set(client.id, clientSubs)
     }
 
-    // 如果客户端已经订阅了该 key，不计入新订阅
-    if (!clientSubs.has(subscriptionKey) && clientSubs.size >= MAX_SUBSCRIPTIONS_PER_CLIENT) {
-      this.logger.warn({
-        message: 'Client exceeded maximum subscriptions limit',
-        clientId: client.id,
-        currentSubscriptions: clientSubs.size,
-        limit: MAX_SUBSCRIPTIONS_PER_CLIENT,
-      })
+    const isNewSubscription = !clientSubs.has(subscriptionKey)
+    const klineSubs = this.clientSubscriptions.get(client.id)?.size ?? 0
 
+    // 检查总订阅数
+    if (isNewSubscription && klineSubs + clientSubs.size >= MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        code: 'MAX_SUBSCRIPTIONS_EXCEEDED',
+      })
       client.emit('tradesSubscriptionError', {
-        message: 'Maximum subscriptions limit reached',
-        limit: MAX_SUBSCRIPTIONS_PER_CLIENT,
+        message: `Maximum total subscriptions (${MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      this.logger.warn({
+        message: 'Client exceeded total subscription limit',
+        clientId: client.id,
+        klineSubs,
+        tradesSubs: clientSubs.size,
+        limit: MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      return
+    }
+
+    // 检查 Trades 订阅数
+    if (isNewSubscription && clientSubs.size >= MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum trades subscriptions (${MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        code: 'MAX_TRADES_SUBSCRIPTIONS_EXCEEDED',
+      })
+      client.emit('tradesSubscriptionError', {
+        message: `Maximum trades subscriptions (${MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+        limit: MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT,
+      })
+      this.logger.warn({
+        message: 'Client exceeded trades subscription limit',
+        clientId: client.id,
+        tradesSubs: clientSubs.size,
+        limit: MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT,
       })
       return
     }
@@ -386,7 +473,17 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await client.join(roomName)
 
       // 立即推送一次数据
-      await this.broadcastTrades(subscriptionKey, roomName, params)
+      try {
+        await this.broadcastTrades(subscriptionKey, roomName, params)
+      } catch (error) {
+        this.logger.error({
+          message: 'Failed to broadcast trades data on subscribe',
+          subscriptionKey,
+          params,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        })
+      }
 
       // 使用 setTimeout 链式调用防止任务堆积
       const subscriptionInfo: TradesSubscriptionInfo = {
@@ -406,13 +503,37 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
           // 防止任务堆积：如果上一次还在运行，跳过本次
           if (subscriptionInfo.isRunning) {
+            this.logger.warn({
+              message: 'Previous trades polling still running, skipping',
+              subscriptionKey,
+              params: subscriptionInfo.params,
+            })
             scheduleNext()
             return
           }
 
-          subscriptionInfo.isRunning = true
           try {
+            subscriptionInfo.isRunning = true
+
+            const clientCount = subscriptionInfo.clients.size
+            if (clientCount === 0) {
+              this.logger.log({
+                message: 'No clients subscribed, stopping trades polling',
+                subscriptionKey,
+              })
+              this.cleanupTradesSubscription(subscriptionKey)
+              return
+            }
+
             await this.broadcastTrades(subscriptionKey, roomName, params)
+          } catch (error) {
+            this.logger.error({
+              message: 'Failed to poll trades data',
+              subscriptionKey,
+              params: subscriptionInfo.params,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            })
           } finally {
             subscriptionInfo.isRunning = false
             // 只有订阅仍存在时才调度下一次
@@ -448,6 +569,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: TradesSubscriptionDto,
     @ConnectedSocket() client: Socket,
   ): void {
+    this.updateClientActivity(client)
     const { exchange, instrumentType, symbol, minValue } = data
 
     const subscriptionKey = this.getTradesSubscriptionKey(exchange, instrumentType, symbol, minValue)
@@ -492,28 +614,72 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<void> {
     const { exchange, instrumentType, symbol, minValue, limit } = params
 
-    try {
-      // 任务3: Redis 缓存层
-      const cacheKey = `trades:${exchange}:${instrumentType}:${symbol}:${minValue ?? 'all'}`
+    // 任务3: Redis 缓存层
+    const cacheKey = `trades:${exchange}:${instrumentType}:${symbol}:${minValue ?? 'all'}`
 
-      // 先尝试从缓存获取
-      let trades = await this.cacheService.get<Awaited<ReturnType<typeof this.marketsService.getLatestTrades>>>(cacheKey)
+    // 定义格式化后的交易数据类型
+    interface FormattedTrade {
+      id: string
+      exchange: string
+      instrumentType: string
+      symbol: string
+      baseAsset: string
+      quoteAsset: string
+      tradeId: string
+      price: string
+      size: string
+      side: string
+      tradeTimestamp: string
+      createdAt: string
+    }
 
-      if (!trades) {
-        // 缓存未命中，查询数据库
+    const queryTimeoutMs = 5000
+    const withTimeout = async <T>(promise: Promise<T>): Promise<T> => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), queryTimeoutMs)
+
+      try {
+        const result = await Promise.race([
+          promise,
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener('abort', () => {
+              reject(new Error('Database query timeout'))
+            })
+          }),
+        ])
+        return result
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    }
+
+    // 先尝试从缓存获取格式化后的数据
+    let formattedTrades = await this.cacheService.get<FormattedTrade[]>(cacheKey)
+
+    if (!formattedTrades) {
+      // 缓存未命中，查询数据库（添加超时控制）
+      let rawTrades: MarketTrade[]
+      try {
         if (minValue !== undefined && minValue > 0) {
-          trades = await this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit)
+          rawTrades = await withTimeout(
+            this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit),
+          )
         } else {
-          trades = await this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit)
+          rawTrades = await withTimeout(this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit))
         }
-
-        // 写入缓存，TTL 1秒
-        await this.cacheService.set(cacheKey, trades, 1)
+      } catch (error) {
+        this.logger.error({
+          message: 'Failed to fetch trades data',
+          subscriptionKey,
+          params: { exchange, instrumentType, symbol, minValue, limit },
+          error: error instanceof Error ? error.message : String(error),
+        })
+        throw error
       }
 
-      // 格式化数据
-      const formattedTrades = trades.map((trade) => ({
-        id: trade.id,
+      // 立即格式化数据（将 BigInt 转为 string）
+      formattedTrades = rawTrades.map((trade: MarketTrade) => ({
+        id: trade.id.toString(),
         exchange: trade.exchange,
         instrumentType: trade.instrumentType,
         symbol: trade.symbol,
@@ -527,24 +693,18 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         createdAt: trade.createdAt.toISOString(),
       }))
 
-      // 使用 Socket.IO room 机制一次性广播给所有订阅客户端
-      // 比循环遍历 clients 更高效，Socket.IO 内部会优化批量发送
-      this.server.to(roomName).emit('trades', {
-        exchange,
-        instrumentType,
-        symbol,
-        trades: formattedTrades,
-      })
-    } catch (error) {
-      this.logger.error({
-        message: 'Failed to broadcast trades data',
-        subscriptionKey,
-        exchange,
-        instrumentType,
-        symbol,
-        error: error instanceof Error ? error.message : String(error),
-      })
+      // 写入缓存格式化后的数据，TTL 1秒
+      await this.cacheService.set(cacheKey, formattedTrades, 1)
     }
+
+    // 使用 Socket.IO room 机制一次性广播给所有订阅客户端
+    // 比循环遍历 clients 更高效，Socket.IO 内部会优化批量发送
+    this.server.to(roomName).emit('trades', {
+      exchange,
+      instrumentType,
+      symbol,
+      trades: formattedTrades,
+    })
   }
 
   /**
@@ -556,9 +716,12 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       subscription.clients.delete(clientId)
 
       // 让客户端离开 room（如果 socket 仍然连接）
-      const socket = this.server.sockets.sockets.get(clientId)
-      if (socket) {
-        socket.leave(subscription.roomName)
+      // 添加空值检查以防止运行时错误
+      if (this.server?.sockets?.sockets) {
+        const socket = this.server.sockets.sockets.get(clientId)
+        if (socket) {
+          socket.leave(subscription.roomName)
+        }
       }
 
       this.logger.log({
@@ -597,5 +760,49 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): string {
     const minValueStr = minValue !== undefined ? `:${minValue}` : ''
     return `trades:${exchange}:${instrumentType}:${symbol.toUpperCase()}${minValueStr}`
+  }
+
+  @Interval(60000)
+  cleanupStaleConnections(): void {
+    const now = Date.now()
+
+    this.server.sockets.sockets.forEach((socket) => {
+      try {
+        const lastActivity = this.getLastActivity(socket)
+        if (now - lastActivity > STALE_CONNECTION_THRESHOLD_MS) {
+          this.logger.warn({
+            message: 'Disconnecting stale connection',
+            clientId: socket.id,
+            inactiveDuration: now - lastActivity,
+          })
+          socket.disconnect(true)
+        }
+      } catch (error) {
+        this.logger.error({
+          message: 'Error during stale connection cleanup',
+          clientId: socket.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+  }
+
+  private updateClientActivity(client: Socket): void {
+    client.data.lastActivity = Date.now()
+  }
+
+  private getLastActivity(client: Socket): number {
+    const lastActivity = client.data.lastActivity
+    if (typeof lastActivity === 'number' && Number.isFinite(lastActivity)) {
+      return lastActivity
+    }
+
+    const handshakeTime = client.handshake.time
+    const parsedTime = typeof handshakeTime === 'string' ? Date.parse(handshakeTime) : Number.NaN
+    if (Number.isFinite(parsedTime)) {
+      return parsedTime
+    }
+
+    return Date.now()
   }
 }

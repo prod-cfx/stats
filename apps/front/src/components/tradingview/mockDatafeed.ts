@@ -14,6 +14,7 @@
 import type { Socket } from 'socket.io-client';
 import { io } from 'socket.io-client'
 import { fetchKlineData } from '@/lib/api'
+import { logger } from '@/utils/logger'
 
 export type TvResolution = '1' | '5' | '15' | '60' | '240' | '1D'
 
@@ -24,6 +25,46 @@ export interface TvBar {
   low: number
   close: number
   volume: number
+}
+
+/**
+ * WebSocket 事件数据类型定义
+ */
+
+// K线事件数据
+interface KlineEventData {
+  symbol: string
+  interval: string
+  bar: TvBar
+  timestamp?: number
+}
+
+// 订阅确认事件数据
+interface SubscriptionConfirmData {
+  symbol: string
+  interval: string
+  subscriptionKey: string
+}
+
+// Trades 事件数据（如果需要）
+interface TradesEventData {
+  exchange: string
+  instrumentType: string
+  symbol: string
+  trades: Array<{
+    id: string
+    exchange: string
+    instrumentType: string
+    symbol: string
+    baseAsset: string
+    quoteAsset: string
+    tradeId: string
+    price: string
+    size: string
+    side: string
+    tradeTimestamp: string
+    createdAt: string
+  }>
 }
 
 interface OnReadyCallback {
@@ -60,6 +101,8 @@ interface Subscription {
   onRealtimeCallback: SubscribeCallback
   subscribeUID: string
   lastBar: TvBar | null
+  isInitialized: boolean
+  pendingBars: TvBar[]
   socket: Socket | null // Socket.IO 连接
 }
 
@@ -113,45 +156,6 @@ function resolutionToMs(resolution: string): number | null {
   return minutes * 60 * 1000
 }
 
-function resolutionToBaseVolume(resolution: string): number {
-  // 让不同周期的量级更合理（mock 用），避免“全都一样高 / 数额太小”
-  switch (resolution) {
-    case '1':
-      return 220
-    case '5':
-      return 650
-    case '15':
-      return 1800
-    case '60':
-      return 7000
-    case '240':
-      return 22000
-    case '1D':
-      return 90000
-    default:
-      return 1800
-  }
-}
-
-// 简单 deterministic RNG（避免每次刷新完全不一样，便于调试）
-function createRng(seed: number) {
-  let s = seed >>> 0
-  return () => {
-    // LCG
-    s = (1664525 * s + 1013904223) >>> 0
-    return s / 0x100000000
-  }
-}
-
-function hashString(input: string): number {
-  let h = 2166136261
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
 function getTickerFromSymbolInfo(symbolInfo: Record<string, unknown>, fallback = 'BTCUSDT'): string {
   if (typeof symbolInfo.ticker === 'string' && symbolInfo.ticker.length > 0) {
     return symbolInfo.ticker
@@ -173,7 +177,7 @@ function normalizeSymbol(ticker: string): string {
 
   // 验证格式（必须以 USDT 或 USDC 结尾）
   if (!normalized.endsWith('USDT') && !normalized.endsWith('USDC')) {
-    console.warn(`Symbol format may be invalid: ${ticker} -> ${normalized}`)
+    logger.warn(`Symbol format may be invalid: ${ticker} -> ${normalized}`)
   }
 
   return normalized
@@ -283,72 +287,13 @@ export const mockDatafeed = {
         return
       }
 
-      // 后端返回空数据，降级到 mock
-      console.warn(`后端返回空数据 (symbol: ${symbol}, interval: ${interval})，降级到 mock`)
+      onResult([], { noData: true })
+      return
     } catch (e) {
-      // API 调用失败，降级到 mock
-      console.warn('K线数据获取失败，降级到 mock:', e)
+      const message = (e as Error)?.message || 'K线数据获取失败'
+      onError(message)
+      return
     }
-
-    // 降级到 mock 数据：生成模拟 K线
-    this.generateMockBars(symbolInfo, resolution, periodParams, stepMs, onResult)
-  },
-
-  /**
-   * 生成模拟 K线数据（用于 API 失败或空数据时的降级）
-   */
-  generateMockBars(
-    symbolInfo: Record<string, unknown>,
-    resolution: string,
-    periodParams: PeriodParams,
-    stepMs: number,
-    onResult: BarsCallback,
-  ) {
-    setTimeout(() => {
-      const ticker = getTickerFromSymbolInfo(symbolInfo)
-      const rng = createRng(hashString(`${ticker}|${resolution}`))
-
-      const toMs = Number.isFinite(periodParams?.to) ? periodParams.to * 1000 : Date.now()
-      const alignedToMs = Math.floor(toMs / stepMs) * stepMs
-      const count = 200
-      const startMs = alignedToMs - stepMs * (count - 1)
-
-      let lastClose = 50000 + Math.floor(rng() * 5000)
-      const baseVol = resolutionToBaseVolume(resolution)
-
-      const bars: TvBar[] = []
-      for (let i = 0; i < count; i++) {
-        const time = startMs + i * stepMs
-
-        const drift = (rng() - 0.5) * 80
-        const open = lastClose
-        const close = Math.max(1, open + drift)
-        const high = Math.max(open, close) + rng() * 50
-        const low = Math.max(1, Math.min(open, close) - rng() * 50)
-
-        const move = Math.abs(close - open)
-        const season = 1 + Math.sin(i / 14) * 0.35 + Math.sin(i / 5) * 0.12
-        const noise = (rng() - 0.5) * baseVol * 0.25
-        const vol = Math.max(1, baseVol * season + move * (baseVol / 40) + noise)
-        const volume = Math.round(vol * 100) / 100
-
-        bars.push({
-          time,
-          open: Math.round(open * 100) / 100,
-          high: Math.round(high * 100) / 100,
-          low: Math.round(low * 100) / 100,
-          close: Math.round(close * 100) / 100,
-          volume,
-        })
-
-        lastClose = close
-      }
-
-      const fromMs = Number.isFinite(periodParams?.from) ? periodParams.from * 1000 : startMs
-      const filtered = bars.filter(b => b.time >= fromMs && b.time <= alignedToMs)
-
-      onResult(filtered.length ? filtered : bars, { noData: false })
-    }, 0)
   },
 
   subscribeBars(
@@ -358,12 +303,12 @@ export const mockDatafeed = {
     subscribeUID: string,
     _onResetCacheNeededCallback?: () => void,
   ) {
-    console.log(`[subscribeBars] ${subscribeUID}`, { symbolInfo, resolution })
+    logger.debug(`[subscribeBars] ${subscribeUID}`, { symbolInfo, resolution })
 
     // 映射 resolution 到后端 interval
     const interval = resolutionToInterval(resolution)
     if (!interval) {
-      console.error(`[subscribeBars] Unsupported resolution: ${resolution}`)
+      logger.error(`[subscribeBars] Unsupported resolution: ${resolution}`)
       return
     }
 
@@ -389,35 +334,36 @@ export const mockDatafeed = {
       onRealtimeCallback,
       subscribeUID,
       lastBar: null,
+      isInitialized: false,
+      pendingBars: [],
       socket,
     }
 
-    // 监听连接事件
-    socket.on('connect', () => {
-      console.log(`[subscribeBars] Socket.IO connected, subscribing to ${symbol}:${interval}`)
-
-      // 发送订阅请求
-      socket.emit('subscribe', {
-        symbol,
-        interval,
-      })
-    })
-
-    // 监听订阅确认
-    socket.on('subscribed', (data: { symbol: string; interval: string; subscriptionKey: string }) => {
-      console.log(`[subscribeBars] Subscribed:`, data)
-    })
-
-    // 监听实时 K线数据
-    socket.on('kline', (data: { symbol: string; interval: string; bar: TvBar }) => {
-      const { bar } = data
-
-      // 如果是第一次获取或者时间戳不同，说明是新的 K线
-      if (!subscription.lastBar || subscription.lastBar.time !== bar.time) {
+    const handleRealtimeBar = (bar: TvBar) => {
+      // 如果是第一次获取，直接推送
+      if (!subscription.lastBar) {
         subscription.lastBar = bar
         onRealtimeCallback(bar)
-        console.log(`[subscribeBars] New bar:`, bar)
-      } else if (subscription.lastBar) {
+        logger.debug(`[subscribeBars] New bar:`, bar)
+        return
+      }
+
+      if (bar.time < subscription.lastBar.time) {
+        logger.warn(
+          `[subscribeBars] Out-of-order bar ignored:`,
+          bar.time,
+          'previous:',
+          subscription.lastBar.time,
+        )
+        return
+      }
+
+      // 时间戳递增，说明是新的 K线
+      if (bar.time > subscription.lastBar.time) {
+        subscription.lastBar = bar
+        onRealtimeCallback(bar)
+        logger.debug(`[subscribeBars] New bar:`, bar)
+      } else {
         // 同一根 K线，检查是否有更新
         const hasUpdate =
           subscription.lastBar.close !== bar.close ||
@@ -428,34 +374,96 @@ export const mockDatafeed = {
         if (hasUpdate) {
           subscription.lastBar = bar
           onRealtimeCallback(bar)
-          console.log(`[subscribeBars] Updated bar:`, bar)
+          logger.debug(`[subscribeBars] Updated bar:`, bar)
         }
       }
+    }
+
+    // 监听连接事件
+    socket.on('connect', async () => {
+      logger.debug(`[subscribeBars] Socket.IO connected, preparing to subscribe ${symbol}:${interval}`)
+
+      try {
+        const nowSec = Math.floor(Date.now() / 1000)
+        const bars = await fetchKlineData({
+          symbol,
+          interval,
+          from: nowSec - 120,
+          to: nowSec,
+          exchange: 'BINANCE',
+        })
+
+        if (bars.length > 0) {
+          // 按时间排序，取时间最大的 K 线作为 lastBar
+          const sortedBars = [...bars].sort((a, b) => a.time - b.time)
+          subscription.lastBar = sortedBars[sortedBars.length - 1] ?? null
+        } else {
+          logger.warn(`[subscribeBars] No latest bars returned, subscribing without lastBar`)
+        }
+      } catch (error) {
+        logger.warn(`[subscribeBars] Failed to prefetch latest bars, subscribing without lastBar:`, error)
+      } finally {
+        subscription.isInitialized = true
+        if (subscription.pendingBars.length > 0) {
+          const sortedPendingBars = [...subscription.pendingBars].sort((a, b) => a.time - b.time)
+          if (!subscription.lastBar && sortedPendingBars.length > 0) {
+            subscription.lastBar = sortedPendingBars[0]
+            logger.debug(`[subscribeBars] Using first pending bar as lastBar:`, subscription.lastBar)
+            sortedPendingBars.slice(1).forEach(handleRealtimeBar)
+          } else {
+            sortedPendingBars.forEach(handleRealtimeBar)
+          }
+          subscription.pendingBars = []
+        }
+      }
+
+      // 发送订阅请求
+      socket.emit('subscribe', {
+        symbol,
+        interval,
+      })
+    })
+
+    // 监听订阅确认
+    socket.on('subscribed', (data: SubscriptionConfirmData) => {
+      logger.debug(`[subscribeBars] Subscribed:`, data)
+    })
+
+    // 监听实时 K线数据
+    socket.on('kline', (data: KlineEventData) => {
+      const { bar } = data
+
+      if (!subscription.isInitialized) {
+        subscription.pendingBars.push(bar)
+        return
+      }
+
+      handleRealtimeBar(bar)
     })
 
     // 监听取消订阅确认
-    socket.on('unsubscribed', (data: { symbol: string; interval: string; subscriptionKey: string }) => {
-      console.log(`[subscribeBars] Unsubscribed:`, data)
+    socket.on('unsubscribed', (data: SubscriptionConfirmData) => {
+      logger.debug(`[subscribeBars] Unsubscribed:`, data)
     })
 
     // 监听连接错误
     socket.on('connect_error', (error) => {
-      console.error(`[subscribeBars] Socket.IO connection error:`, error)
+      logger.error(`[subscribeBars] Socket.IO connection error:`, error)
     })
 
     // 监听断开连接
     socket.on('disconnect', (reason) => {
-      console.warn(`[subscribeBars] Socket.IO disconnected:`, reason)
+      logger.warn(`[subscribeBars] Socket.IO disconnected:`, reason)
     })
 
     // 保存订阅
     subscriptions.set(subscribeUID, subscription)
 
-    console.log(`[subscribeBars] Subscribed successfully`)
+    logger.debug(`[subscribeBars] Subscribed successfully`)
   },
 
   unsubscribeBars(subscribeUID: string) {
-    console.log(`[unsubscribeBars] ${subscribeUID}`)
+    logger.debug(`[unsubscribeBars] ${subscribeUID}`)
 
     const subscription = subscriptions.get(subscribeUID)
     if (subscription) {
@@ -475,7 +483,7 @@ export const mockDatafeed = {
         subscription.socket.disconnect()
       }
       subscriptions.delete(subscribeUID)
-      console.log(`[unsubscribeBars] Unsubscribed successfully`)
+      logger.debug(`[unsubscribeBars] Unsubscribed successfully`)
     }
   },
 }

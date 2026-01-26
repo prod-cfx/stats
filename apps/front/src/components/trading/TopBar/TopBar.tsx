@@ -1,10 +1,14 @@
 'use client';
 
+import type {TickerData} from '@/lib/api';
 import type { DataSource, MarketType } from '@/types/trading';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { io, type Socket } from 'socket.io-client'
+import { fetchKlineData, fetchTicker  } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
+import { logger } from '@/utils/logger'
 
 interface TopBarProps {
   isAggregated: boolean;
@@ -25,11 +29,82 @@ interface MarketItem {
   volume: number;
 }
 
+type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
+/**
+ * 从 ticker 数据计算涨跌幅
+ */
+export function calculateFromTicker(tickerData: TickerData, lastPrice: number) {
+  const changePct = Number.parseFloat(tickerData.priceChangePercent24h);
+  return {
+    changePct,
+    changeAbs: lastPrice * (changePct / 100),
+  };
+}
+
+/**
+ * 计算价格涨跌幅和涨跌额
+ * 优先级：实时 K线 + ticker 24h 前价格 > ticker 数据 > mock 数据
+ */
+export function calculatePriceChange(
+  tickerData: TickerData | null,
+  klineClosePrice: number | null,
+  lastPrice: number,
+  fallbackPct: number,
+): { changePct: number; changeAbs: number } {
+  // 优先：实时 K线 + ticker 24h 前价格
+  if (tickerData?.priceChangePercent24h && klineClosePrice !== null) {
+    const tickerChangePct = Number.parseFloat(tickerData.priceChangePercent24h);
+    const currentPrice = Number.parseFloat(tickerData.currentPrice);
+
+    // 数值校验
+    if (!Number.isFinite(tickerChangePct) || !Number.isFinite(currentPrice)) {
+      return calculateFromTicker(tickerData, lastPrice);
+    }
+
+    // 计算 24h 前价格
+    const pctFactor = 1 + tickerChangePct / 100;
+    if (pctFactor === 0) {
+      return calculateFromTicker(tickerData, lastPrice);
+    }
+
+    const price24hAgo = currentPrice / pctFactor;
+    if (!Number.isFinite(price24hAgo) || price24hAgo === 0) {
+      return calculateFromTicker(tickerData, lastPrice);
+    }
+
+    // 基于实时价格重算涨跌幅
+    const changeAbs = klineClosePrice - price24hAgo;
+    return {
+      changePct: (changeAbs / price24hAgo) * 100,
+      changeAbs,
+    };
+  }
+
+  // 降级：仅使用 ticker 数据
+  if (tickerData?.priceChangePercent24h) {
+    return calculateFromTicker(tickerData, lastPrice);
+  }
+
+  // 最终降级：使用 mock 数据
+  return {
+    changePct: fallbackPct,
+    changeAbs: lastPrice * (fallbackPct / 100),
+  };
+}
+
 export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketType, selectedSymbol, setSelectedSymbol, variant = 'default' }: TopBarProps) => {
   const { t, i18n } = useTranslation('common');
   const [isSymbolMenuOpen, setIsSymbolMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tickerData, setTickerData] = useState<TickerData | null>(null);
+  const [klineClosePrice, setKlineClosePrice] = useState<number | null>(null);
+  const [wsConnectionStatus, setWsConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const menuRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const prevSymbolRef = useRef<string | null>(null);
+  const lastKlineUpdateTimeRef = useRef<number>(0);
+  const THROTTLE_INTERVAL = 1000;
 
   const isCompact = variant === 'compact';
 
@@ -68,6 +143,153 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     return selectedSymbol
   }, [selectedSymbol])
 
+  // Fetch ticker data from API
+  useEffect(() => {
+    if (!selectedBase) return;
+
+    const fetchData = async () => {
+      try {
+        const exchange = isAggregated ? undefined : selectedExchange;
+        const data = await fetchTicker(selectedBase, exchange);
+        setTickerData(data);
+      } catch (error) {
+        logger.error('Failed to fetch ticker data:', error);
+        setTickerData(null);
+      }
+    };
+
+    fetchData();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [selectedBase, isAggregated, selectedExchange]);
+
+  // Fetch latest kline close price from API
+  useEffect(() => {
+    if (!selectedSymbol) return;
+
+    const fetchLatestKline = async () => {
+      try {
+        const exchange = isAggregated ? undefined : selectedExchange;
+        const to = Math.floor(Date.now() / 1000);
+        const from = to - 60;
+        const bars = await fetchKlineData({
+          symbol: selectedSymbol,
+          interval: '1m',
+          from,
+          to,
+          exchange,
+        });
+        const latestClose = bars.at(-1)?.close;
+        setKlineClosePrice(Number.isFinite(latestClose) ? latestClose : null);
+      } catch (error) {
+        logger.error('Failed to fetch kline data:', error);
+        setKlineClosePrice(null);
+      }
+    };
+
+    fetchLatestKline();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchLatestKline, 10000);
+    return () => clearInterval(interval);
+  }, [selectedSymbol, isAggregated, selectedExchange]);
+
+  // WebSocket real-time kline updates
+  useEffect(() => {
+    if (!selectedSymbol) return;
+
+    if (!socketRef.current) {
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+      setWsConnectionStatus('connecting');
+      socketRef.current = io(`${wsUrl}/kline`, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        pingInterval: 25000,
+        pingTimeout: 5000,
+      });
+
+      const socket = socketRef.current;
+
+      socket.on('connect', () => {
+        logger.debug('[TopBar] WebSocket connected');
+        setWsConnectionStatus('connected');
+        const currentSymbol = prevSymbolRef.current;
+        if (currentSymbol) {
+          socket.emit('subscribe', { symbol: currentSymbol, interval: '1m' });
+        }
+      });
+
+      socket.on('kline', (data: { symbol: string; interval: string; bar: { close: number } }) => {
+        const { bar } = data;
+        if (Number.isFinite(bar.close)) {
+          const now = Date.now();
+          if (now - lastKlineUpdateTimeRef.current >= THROTTLE_INTERVAL) {
+            setKlineClosePrice(bar.close);
+            lastKlineUpdateTimeRef.current = now;
+            logger.debug(`[TopBar] Real-time price update: ${bar.close}`);
+          }
+        }
+      });
+
+      socket.on('ping', () => {
+        logger.debug('[TopBar] Ping sent');
+      });
+
+      socket.on('pong', (latency: number) => {
+        logger.debug(`[TopBar] Pong received, latency: ${latency}ms`);
+      });
+
+      socket.on('disconnect', () => {
+        logger.debug('[TopBar] WebSocket disconnected');
+        setWsConnectionStatus('disconnected');
+      });
+
+      socket.on('connect_error', (error) => {
+        logger.error('[TopBar] WebSocket connection error:', error);
+        setWsConnectionStatus('error');
+      });
+
+      socket.on('error', (error) => {
+        logger.error('[TopBar] WebSocket error:', error);
+        setWsConnectionStatus('error');
+      });
+    }
+
+    const socket = socketRef.current;
+    const prevSymbol = prevSymbolRef.current;
+
+    if (prevSymbol && prevSymbol !== selectedSymbol) {
+      socket.emit('unsubscribe', { symbol: prevSymbol, interval: '1m' });
+    }
+
+    prevSymbolRef.current = selectedSymbol;
+    lastKlineUpdateTimeRef.current = 0;
+
+    if (socket.connected) {
+      socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' });
+    } else {
+      setWsConnectionStatus('connecting');
+    }
+
+    return () => {};
+  }, [selectedSymbol]);
+
+  useEffect(() => {
+    return () => {
+      if (!socketRef.current) return;
+      if (prevSymbolRef.current) {
+        socketRef.current.emit('unsubscribe', {
+          symbol: prevSymbolRef.current,
+          interval: '1m',
+        });
+      }
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
   // Mock raw values (keep as numbers so locale switching works)
   const basePriceByAsset: Record<string, number> = {
     BTC: 87010.0,
@@ -82,13 +304,15 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     DOT: 8.4,
   };
 
+  // Use API data if available, otherwise fallback to mock
   const basePrice = basePriceByAsset[selectedBase] ?? 100;
-  const lastPrice =
-    isAggregated
-      ? basePrice // Aggregated uses "largest volume exchange" (simulated as base)
+  const lastPrice = klineClosePrice ?? (tickerData
+    ? Number.parseFloat(tickerData.currentPrice)
+    : isAggregated
+      ? basePrice
       : selectedExchange === 'binance'
         ? basePrice * 1.0001
-        : basePrice * 0.9999;
+        : basePrice * 0.9999);
 
   const changePctByAsset: Record<string, number> = {
     BTC: -0.45,
@@ -102,11 +326,25 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     LINK: 0.5,
     DOT: -0.9,
   };
-  const changePct = changePctByAsset[selectedBase] ?? 0.5;
-  const changeAbs = lastPrice * (changePct / 100);
-  const indexPrice = lastPrice * 1.0005;
-  const markPrice = lastPrice * 0.9999;
-  const fundingRatePct = 0.004;
+  const { changePct, changeAbs } = calculatePriceChange(
+    tickerData,
+    klineClosePrice,
+    lastPrice,
+    changePctByAsset[selectedBase] ?? 0.5,
+  );
+
+  // Index price and mark price
+  const indexPrice = tickerData && tickerData.indexPrice
+    ? Number.parseFloat(tickerData.indexPrice)
+    : lastPrice * 1.0005;
+  const markPrice = lastPrice; // Use currentPrice as mark price
+
+  // Funding rate
+  const fundingRatePct = tickerData && tickerData.fundingRate
+    ? Number.parseFloat(tickerData.fundingRate) * 100
+    : 0.004;
+
+  // 24h high/low - fallback to mock calculation
   const low24h = lastPrice * 0.994;
   const high24h = lastPrice * 1.012;
 
@@ -140,8 +378,15 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   const volBase = volume24hByAsset[selectedBase] ?? 50_000
 
   const exchangeMultiplier = isAggregated ? 1 : selectedExchange === 'binance' ? 0.6 : 0.4
-  const openInterest = oiBase * exchangeMultiplier
-  const volume24h = volBase * exchangeMultiplier
+
+  // Use API data if available, otherwise fallback to mock
+  const openInterest = tickerData && tickerData.openInterestUsd
+    ? Number.parseFloat(tickerData.openInterestUsd) / lastPrice // Convert USD to base asset quantity
+    : oiBase * exchangeMultiplier
+
+  const volume24h = tickerData && tickerData.volumeUsd
+    ? Number.parseFloat(tickerData.volumeUsd) / lastPrice // Convert USD to base asset quantity
+    : volBase * exchangeMultiplier
 
   // Mock Market Data
   const marketList = useMemo(() => {
@@ -168,6 +413,23 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
       
       {/* Center & Right Area: Full width now */}
       <div className="flex-1 flex items-center gap-2 md:gap-6 px-2 md:px-4 h-full relative min-w-0">
+        {wsConnectionStatus === 'error' && (
+          <div className="absolute top-0 right-0 mt-2 mr-2">
+            <div className="flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-500">
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+              <span>实时数据连接失败</span>
+            </div>
+          </div>
+        )}
+
+        {wsConnectionStatus === 'connecting' && (
+          <div className="absolute top-0 right-0 mt-2 mr-2">
+            <div className="flex items-center gap-1 rounded bg-yellow-500/10 px-2 py-1 text-xs text-yellow-500">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-yellow-500" />
+              <span>连接中...</span>
+            </div>
+          </div>
+        )}
         {/* Symbol and Main Price */}
         <div className="flex items-center gap-2 md:gap-4 flex-none relative" ref={menuRef}>
           <button

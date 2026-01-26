@@ -15,6 +15,8 @@ import {
 } from './dto/requests/get-market-trades.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import {
@@ -36,6 +38,7 @@ import { LongShortRatioPointResponseDto } from './dto/responses/long-short-ratio
 import { TradingPairConfigResponseDto } from './dto/responses/trading-pair.response.dto'
 import { MarketTradeResponseDto } from './dto/responses/market-trade.response.dto'
 import { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
+import { TickerResponseDto } from './dto/responses/ticker.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from './markets.service'
 
@@ -65,6 +68,7 @@ const baseArrayResponseSchema = (itemDto: unknown) => ({
   BasePaginationResponseDto,
   MarketTradeResponseDto,
   AggregatedVolumeResponseDto,
+  TickerResponseDto,
 )
 @Controller('markets')
 export class MarketsController {
@@ -312,5 +316,32 @@ export class MarketsController {
     @Query() query: GetAggregatedVolumeRequestDto,
   ): Promise<BasePaginationResponseDto<AggregatedVolumeResponseDto>> {
     return this.marketsService.getAggregatedVolumes(query)
+  }
+
+  @Get('ticker')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiOperation({ summary: '获取币种市场行情数据（Ticker）' })
+  @ApiOkResponse({ type: TickerResponseDto })
+  async getTicker(@Query() query: GetTickerRequestDto): Promise<TickerResponseDto | null> {
+    const { symbol, exchange } = query
+
+    const ticker = await this.marketsService.getTicker(symbol, exchange)
+
+    if (!ticker) {
+      return null
+    }
+
+    return {
+      symbol: ticker.symbol,
+      exchange: ticker.exchange,
+      currentPrice: ticker.currentPrice.toString(),
+      indexPrice: ticker.indexPrice?.toString(),
+      priceChangePercent24h: ticker.priceChangePercent24h?.toString(),
+      volumeUsd: ticker.volumeUsd.toString(),
+      openInterestUsd: ticker.openInterestUsd?.toString(),
+      fundingRate: ticker.fundingRate?.toString(),
+      nextFundingTime: ticker.nextFundingTime?.toString(),
+    }
   }
 }

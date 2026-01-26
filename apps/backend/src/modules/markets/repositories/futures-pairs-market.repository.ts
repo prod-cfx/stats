@@ -1,5 +1,6 @@
-import type { Prisma } from '@prisma/client'
+import type { FuturesPairsMarket } from '@prisma/client'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -61,7 +62,7 @@ export class FuturesPairsMarketRepository {
       // 构建 where 条件
       const where: Prisma.FuturesPairsMarketWhereInput = {
         symbol: {
-          contains: symbol,
+          startsWith: symbol,
           mode: 'insensitive',
         },
       }
@@ -140,7 +141,7 @@ export class FuturesPairsMarketRepository {
 
       const where: Prisma.FuturesPairsMarketWhereInput = {
         symbol: {
-          contains: symbol,
+          startsWith: symbol,
           mode: 'insensitive',
         },
       }
@@ -182,5 +183,123 @@ export class FuturesPairsMarketRepository {
       exchange,
       openInterestUsd: 500000000 + Math.random() * 500000000,
     }))
+  }
+
+  /**
+   * 查询币种的市场行情数据（Ticker）
+   *
+   * @param params - 查询参数
+   * @param params.symbol - 币种符号（如 BTC、ETH）
+   * @param params.exchange - 交易所名称（可选，不传则返回聚合数据）
+   * @returns 市场行情数据
+   */
+  async findTicker(params: {
+    symbol: string
+    exchange?: string
+  }): Promise<{
+    symbol: string
+    exchange?: string
+    currentPrice: Prisma.Decimal
+    indexPrice?: Prisma.Decimal
+    priceChangePercent24h?: Prisma.Decimal
+    volumeUsd: Prisma.Decimal
+    openInterestUsd?: Prisma.Decimal
+    fundingRate?: Prisma.Decimal
+    nextFundingTime?: bigint
+  } | null> {
+    const { symbol, exchange } = params
+    const client = this.prisma.getClient()
+
+    // 构建查询条件
+    const where: Prisma.FuturesPairsMarketWhereInput = {
+      symbol: {
+        contains: symbol,
+        mode: 'insensitive',
+      },
+    }
+
+    if (exchange) {
+      // 查询指定交易所的数据
+      where.exchangeName = {
+        equals: exchange,
+        mode: 'insensitive',
+      }
+
+      const record = await client.futuresPairsMarket.findFirst({
+        where,
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      })
+
+      if (!record) return null
+
+      return {
+        symbol: record.symbol,
+        exchange: record.exchangeName,
+        currentPrice: record.currentPrice,
+        indexPrice: record.indexPrice ?? undefined,
+        priceChangePercent24h: record.priceChangePercent24h ?? undefined,
+        volumeUsd: record.volumeUsd,
+        openInterestUsd: record.openInterestUsd ?? undefined,
+        fundingRate: record.fundingRate ?? undefined,
+        nextFundingTime: record.nextFundingTime ?? undefined,
+      }
+    } else {
+      // 聚合所有交易所的数据（限制最多 100 条防止内存溢出）
+      const records = await client.futuresPairsMarket.findMany({
+        where,
+        take: 100,
+      })
+
+      if (records.length === 0) return null
+
+      // 聚合逻辑：
+      // - currentPrice: 取成交量最大的交易所的价格
+      // - indexPrice: 取平均值
+      // - priceChangePercent24h: 取平均值
+      // - volumeUsd: 求和
+      // - openInterestUsd: 求和
+      // - fundingRate: 取平均值
+      const maxVolumeRecord = records.reduce((max: FuturesPairsMarket, record: FuturesPairsMarket) =>
+        record.volumeUsd.gt(max.volumeUsd) ? record : max
+      )
+
+      const totalVolumeUsd = records.reduce(
+        (sum: Prisma.Decimal, record: FuturesPairsMarket) => sum.add(record.volumeUsd),
+        new Prisma.Decimal(0)
+      )
+
+      const totalOpenInterestUsd = records.reduce(
+        (sum: Prisma.Decimal, record: FuturesPairsMarket) => sum.add(record.openInterestUsd ?? 0),
+        new Prisma.Decimal(0)
+      )
+
+      const avgIndexPrice = records
+        .filter((r: FuturesPairsMarket) => r.indexPrice != null)
+        .reduce((sum: Prisma.Decimal, record: FuturesPairsMarket) => sum.add(record.indexPrice!), new Prisma.Decimal(0))
+        .div(records.filter((r: FuturesPairsMarket) => r.indexPrice != null).length || 1)
+
+      const avgPriceChangePercent24h = records
+        .filter((r: FuturesPairsMarket) => r.priceChangePercent24h != null)
+        .reduce((sum: Prisma.Decimal, record: FuturesPairsMarket) => sum.add(record.priceChangePercent24h!), new Prisma.Decimal(0))
+        .div(records.filter((r: FuturesPairsMarket) => r.priceChangePercent24h != null).length || 1)
+
+      const avgFundingRate = records
+        .filter((r: FuturesPairsMarket) => r.fundingRate != null)
+        .reduce((sum: Prisma.Decimal, record: FuturesPairsMarket) => sum.add(record.fundingRate!), new Prisma.Decimal(0))
+        .div(records.filter((r: FuturesPairsMarket) => r.fundingRate != null).length || 1)
+
+      return {
+        symbol: maxVolumeRecord.symbol,
+        currentPrice: maxVolumeRecord.currentPrice,
+        indexPrice: avgIndexPrice,
+        priceChangePercent24h: avgPriceChangePercent24h,
+        volumeUsd: totalVolumeUsd,
+        openInterestUsd: totalOpenInterestUsd,
+        fundingRate: avgFundingRate,
+        nextFundingTime: maxVolumeRecord.nextFundingTime ?? undefined,
+      }
+    }
   }
 }

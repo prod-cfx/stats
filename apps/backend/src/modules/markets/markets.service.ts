@@ -353,6 +353,20 @@ export class MarketsService {
     return new BasePaginationResponseDto(total, page, limit, items)
   }
 
+  /**
+   * 获取币种的市场行情数据（Ticker）
+   *
+   * @param symbol - 币种符号（如 BTC、ETH）
+   * @param exchange - 交易所名称（可选，不传则返回聚合数据）
+   * @returns 市场行情数据
+   */
+  async getTicker(symbol: string, exchange?: string) {
+    return this.futuresPairsMarketRepository.findTicker({
+      symbol,
+      exchange,
+    })
+  }
+
   private mapTimeRangeToInterval(timeRange: ExchangeLongShortTimeRange): MarketTimeframe {
     switch (timeRange) {
       case '5m':

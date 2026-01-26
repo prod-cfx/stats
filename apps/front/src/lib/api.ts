@@ -1963,3 +1963,37 @@ export async function fetchKlineData(
     return []
   }
 }
+
+// ============================================================================
+// 市场行情数据 API (Ticker)
+// ============================================================================
+
+export interface TickerData {
+  symbol: string
+  exchange?: string
+  currentPrice: string
+  indexPrice?: string
+  priceChangePercent24h?: string
+  volumeUsd: string
+  openInterestUsd?: string
+  fundingRate?: string
+  nextFundingTime?: string
+}
+
+export async function fetchTicker(
+  symbol: string,
+  exchange?: string
+): Promise<TickerData | null> {
+  try {
+    return await apiCall(async () => {
+      const response = await client.MarketsController_getTicker({
+        queries: { symbol, exchange },
+      })
+      return unwrapResponse(response) as TickerData | null
+    }, 'FETCH_TICKER')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    // 降级到 null，前端使用 mock 数据
+    return null
+  }
+}

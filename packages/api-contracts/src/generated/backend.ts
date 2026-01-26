@@ -797,6 +797,19 @@ const AggregatedVolumeResponseDto = z
     updatedAt: z.string(),
   })
   .passthrough();
+const TickerResponseDto = z
+  .object({
+    symbol: z.string(),
+    exchange: z.string().optional(),
+    currentPrice: z.string(),
+    indexPrice: z.string().optional(),
+    priceChangePercent24h: z.string().optional(),
+    volumeUsd: z.string(),
+    openInterestUsd: z.string().optional(),
+    fundingRate: z.string().optional(),
+    nextFundingTime: z.string().optional(),
+  })
+  .passthrough();
 const LiquidationSummaryItemDto = z
   .object({
     timeframe: z.enum(["1h", "4h", "12h", "24h"]),
@@ -1030,6 +1043,7 @@ export const schemas = {
   ExchangeLongShortRatioResponseDto,
   MarketTradeResponseDto,
   AggregatedVolumeResponseDto,
+  TickerResponseDto,
   LiquidationSummaryItemDto,
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationRowDto,
@@ -2743,6 +2757,25 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/markets/ticker",
+    alias: "MarketsController_getTicker",
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
+    response: TickerResponseDto,
+  },
+  {
+    method: "get",
     path: "/markets/trades",
     alias: "MarketsController_getTrades",
     requestFormat: "json",
@@ -3185,24 +3218,24 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "symbol",
+        name: "since",
         type: "Query",
-        schema: z.string().optional(),
-      },
-      {
-        name: "min_trade_value_usd",
-        type: "Query",
-        schema: z.number().optional(),
+        schema: z.unknown().optional(),
       },
       {
         name: "limit",
         type: "Query",
-        schema: z.number().optional(),
+        schema: z.unknown().optional(),
       },
       {
-        name: "since",
+        name: "min_trade_value_usd",
         type: "Query",
-        schema: z.string().optional(),
+        schema: z.unknown().optional(),
+      },
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.unknown().optional(),
       },
     ],
     response: z.array(WhaleTradeDto),
