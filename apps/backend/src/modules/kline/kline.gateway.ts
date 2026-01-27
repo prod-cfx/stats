@@ -1,8 +1,10 @@
+import type { OrderBookLevel, VenueOrderBook } from '@ai/shared'
 import type { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets'
 import type { MarketTrade } from '@prisma/client'
 import type { Server, Socket } from 'socket.io'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { KlineSubscriptionDto } from './dto/kline-subscription.dto'
+import type { OrderbookSubscriptionDto } from './dto/orderbook-subscription.dto'
 import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
 
 import { Logger } from '@nestjs/common'
@@ -20,15 +22,19 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
 // eslint-disable-next-line ts/consistent-type-imports
+import { RedisService } from '@/common/services/redis.service'
+// eslint-disable-next-line ts/consistent-type-imports
+import { AggregatedOrderbookService } from '../aggregated-orderbook/aggregated-orderbook.service'
+// eslint-disable-next-line ts/consistent-type-imports
 import { MarketsService } from '../markets/markets.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { KlineAggregatorService } from './kline-aggregator.service'
-
 
 // 单个客户端最大订阅数限制
 const MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT = 20
 const MAX_KLINE_SUBSCRIPTIONS_PER_CLIENT = 10
 const MAX_TRADES_SUBSCRIPTIONS_PER_CLIENT = 10
+const MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT = 10
 const SOCKET_PING_INTERVAL_MS = 25000
 const SOCKET_PING_TIMEOUT_MS = 5000
 const STALE_CONNECTION_THRESHOLD_MS = 120000
@@ -95,6 +101,33 @@ interface TradesSubscriptionInfo {
   }
 }
 
+// Order Book 订阅信息接口
+interface OrderbookSubscriptionInfo {
+  timer: NodeJS.Timeout
+  clients: Set<string>
+  roomName: string // Socket.IO room 名称
+  isRunning: boolean // 防止任务堆积的标志
+  params: {
+    exchange: string
+    instrumentType: string
+    symbol: string
+    isAggregated: boolean
+    depth: number
+  }
+}
+
+type AggregatedOrderbookResult = Awaited<ReturnType<AggregatedOrderbookService['getAggregatedOrderbook']>>
+
+interface VenueOrderbookSnapshot {
+  bids: OrderBookLevel[]
+  asks: OrderBookLevel[]
+  venueId: string
+  marketKey: string
+  updatedAt: number
+}
+
+type OrderbookPayload = AggregatedOrderbookResult | VenueOrderbookSnapshot
+
 @WebSocketGateway({
   cors: {
     origin: parseAllowedOrigins(),
@@ -122,11 +155,19 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Trades 定时器管理：tradesSubscriptionKey -> TradesSubscriptionInfo
   private readonly tradesIntervals = new Map<string, TradesSubscriptionInfo>()
 
+  // Order Book 订阅管理：clientId -> Set<orderbookSubscriptionKey>
+  private readonly clientOrderbookSubscriptions = new Map<string, Set<string>>()
+
+  // Order Book 定时器管理：orderbookSubscriptionKey -> OrderbookSubscriptionInfo
+  private readonly orderbookIntervals = new Map<string, OrderbookSubscriptionInfo>()
+
   constructor(
     private readonly klineAggregatorService: KlineAggregatorService,
     private readonly jwtService: JwtService,
     private readonly marketsService: MarketsService,
     private readonly cacheService: CacheService,
+    private readonly redisService: RedisService,
+    private readonly aggregatedOrderbookService: AggregatedOrderbookService,
   ) {}
 
   handleConnection(client: Socket): void {
@@ -208,6 +249,22 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.removeClientFromTradesSubscription(client.id, key)
       }
       this.clientTradesSubscriptions.delete(client.id)
+    }
+
+    // 清理该客户端的所有 Order Book 订阅
+    const orderbookSubs = this.clientOrderbookSubscriptions.get(client.id)
+    if (orderbookSubs) {
+      for (const key of orderbookSubs) {
+        const subInfo = this.orderbookIntervals.get(key)
+        if (subInfo) {
+          subInfo.clients.delete(client.id)
+          if (subInfo.clients.size === 0) {
+            clearTimeout(subInfo.timer)
+            this.orderbookIntervals.delete(key)
+          }
+        }
+      }
+      this.clientOrderbookSubscriptions.delete(client.id)
     }
   }
 
@@ -603,6 +660,190 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
   }
 
+  @SubscribeMessage('subscribeOrderbook')
+  async handleSubscribeOrderbook(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: OrderbookSubscriptionDto,
+  ): Promise<void> {
+    this.updateClientActivity(client)
+
+    const { exchange, instrumentType, symbol, isAggregated = false, depth = 60 } = dto
+
+    // 检查订阅数限制
+    const currentSubs = this.clientOrderbookSubscriptions.get(client.id) || new Set()
+    if (currentSubs.size >= MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT) {
+      client.emit('error', {
+        message: `Maximum orderbook subscriptions (${MAX_ORDERBOOK_SUBSCRIPTIONS_PER_CLIENT}) reached`,
+      })
+      return
+    }
+
+    // 生成订阅键
+    const subscriptionKey = `${exchange}:${instrumentType}:${symbol}:${isAggregated ? 'agg' : 'single'}:${depth}`
+    const roomName = `orderbook:${subscriptionKey}`
+
+    // 将客户端加入 Room
+    await client.join(roomName)
+
+    // 记录客户端订阅
+    if (!this.clientOrderbookSubscriptions.has(client.id)) {
+      this.clientOrderbookSubscriptions.set(client.id, new Set())
+    }
+    this.clientOrderbookSubscriptions.get(client.id)!.add(subscriptionKey)
+
+    // 检查是否已存在共享订阅
+    let subInfo = this.orderbookIntervals.get(subscriptionKey)
+
+    if (!subInfo) {
+      // 创建新的共享订阅 - 使用 setTimeout 链式调用防止任务堆积
+      const clients = new Set<string>([client.id])
+      const params = { exchange, instrumentType, symbol, isAggregated, depth }
+
+      const subscriptionInfo: OrderbookSubscriptionInfo = {
+        timer: null as unknown as NodeJS.Timeout,
+        clients,
+        roomName,
+        isRunning: false,
+        params,
+      }
+
+      const scheduleNext = () => {
+        subscriptionInfo.timer = setTimeout(async () => {
+          // 检查订阅是否仍然存在
+          if (!this.orderbookIntervals.has(subscriptionKey)) {
+            return
+          }
+
+          // 防止任务堆积：如果上一次还在运行，跳过本次
+          if (subscriptionInfo.isRunning) {
+            this.logger.warn({
+              message: 'Previous orderbook polling still running, skipping',
+              subscriptionKey,
+              params: subscriptionInfo.params,
+            })
+            scheduleNext()
+            return
+          }
+
+          try {
+            subscriptionInfo.isRunning = true
+
+            const clientCount = subscriptionInfo.clients.size
+            if (clientCount === 0) {
+              this.logger.log({
+                message: 'No clients subscribed, stopping orderbook polling',
+                subscriptionKey,
+              })
+              this.cleanupOrderbookSubscription(subscriptionKey)
+              return
+            }
+
+            await this.broadcastOrderbook(subscriptionKey, roomName, params)
+          } catch (error) {
+            this.logger.error({
+              message: 'Failed to poll orderbook data',
+              subscriptionKey,
+              params: subscriptionInfo.params,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            })
+          } finally {
+            subscriptionInfo.isRunning = false
+            // 只有订阅仍存在时才调度下一次
+            if (this.orderbookIntervals.has(subscriptionKey)) {
+              scheduleNext()
+            }
+          }
+        }, 1000) // 1 秒推送一次
+      }
+
+      this.orderbookIntervals.set(subscriptionKey, subscriptionInfo)
+      subInfo = subscriptionInfo
+
+      // 立即推送一次
+      this.broadcastOrderbook(subscriptionKey, roomName, params).catch((error) => {
+        this.logger.error({
+          message: 'Failed to broadcast initial orderbook',
+          subscriptionKey,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+
+      // 启动定时轮询
+      scheduleNext()
+
+      this.logger.log({
+        message: 'Created new orderbook subscription',
+        subscriptionKey,
+        clientId: client.id,
+      })
+    } else {
+      // 加入现有订阅
+      subInfo.clients.add(client.id)
+      this.logger.log({
+        message: 'Joined existing orderbook subscription',
+        subscriptionKey,
+        clientId: client.id,
+        totalClients: subInfo.clients.size,
+      })
+    }
+
+    // 发送订阅确认
+    client.emit('orderbookSubscribed', {
+      exchange,
+      instrumentType,
+      symbol,
+      isAggregated,
+      depth,
+      subscriptionKey,
+    })
+  }
+
+  @SubscribeMessage('unsubscribeOrderbook')
+  async handleUnsubscribeOrderbook(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() dto: OrderbookSubscriptionDto,
+  ): Promise<void> {
+    this.updateClientActivity(client)
+    const { exchange, instrumentType, symbol, isAggregated = false, depth = 60 } = dto
+
+    const subscriptionKey = `${exchange}:${instrumentType}:${symbol}:${isAggregated ? 'agg' : 'single'}:${depth}`
+    const roomName = `orderbook:${subscriptionKey}`
+
+    // 从 Room 移除
+    await client.leave(roomName)
+
+    // 移除客户端订阅记录
+    const clientSubs = this.clientOrderbookSubscriptions.get(client.id)
+    if (clientSubs) {
+      clientSubs.delete(subscriptionKey)
+    }
+
+    // 检查共享订阅
+    const subInfo = this.orderbookIntervals.get(subscriptionKey)
+    if (subInfo) {
+      subInfo.clients.delete(client.id)
+
+      // 如果没有客户端订阅了，清理定时器
+      if (subInfo.clients.size === 0) {
+        clearTimeout(subInfo.timer)
+        this.orderbookIntervals.delete(subscriptionKey)
+        this.logger.log({
+          message: 'Cleared orderbook subscription (no clients)',
+          subscriptionKey,
+        })
+      }
+    }
+
+    client.emit('orderbookUnsubscribed', {
+      exchange,
+      instrumentType,
+      symbol,
+      isAggregated,
+      subscriptionKey,
+    })
+  }
+
   /**
    * 任务2 & 任务3: 广播 Trades 数据给所有订阅客户端（带 Redis 缓存）
    * 使用 Socket.IO room 机制实现高效广播
@@ -707,6 +948,156 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
   }
 
+  private async broadcastOrderbook(
+    subscriptionKey: string,
+    roomName: string,
+    params: {
+      exchange: string
+      instrumentType: string
+      symbol: string
+      isAggregated: boolean
+      depth: number
+    },
+  ): Promise<void> {
+    const subInfo = this.orderbookIntervals.get(subscriptionKey)
+    if (!subInfo) return
+
+    // 防止任务堆积
+    if (subInfo.isRunning) {
+      this.logger.warn({
+        message: 'Previous orderbook broadcast still running, skipping',
+        subscriptionKey,
+      })
+      return
+    }
+
+    subInfo.isRunning = true
+
+    try {
+      const { exchange, instrumentType, symbol, isAggregated, depth } = params
+
+      // 尝试从缓存获取
+      const cacheKey = `orderbook:${exchange}:${instrumentType}:${symbol}:${isAggregated ? 'agg' : 'single'}:${depth}`
+      let orderbookData = await this.cacheService.get<OrderbookPayload>(cacheKey)
+
+      if (!orderbookData) {
+        if (isAggregated) {
+          // 聚合模式：调用 AggregatedOrderbookService
+          // 从 symbol 中提取 base（移除 USDT/USDC 后缀）
+          const base = symbol.replace(/USD[TC]$/i, '')
+          const type = instrumentType === 'SPOT' ? 'spot' : 'perp'
+
+          this.logger.debug({
+            message: 'Fetching aggregated orderbook',
+            symbol,
+            base,
+            type,
+            depth,
+          })
+
+          orderbookData = await this.aggregatedOrderbookService.getAggregatedOrderbook({
+            base,
+            type,
+            venues: undefined, // 所有交易所
+            depth,
+            tickSize: undefined, // 使用默认值
+          })
+        } else {
+          // 单交易所模式：从 Redis 读取
+          // 构建 venueId: binance-spot, binance-perp, okx-spot, etc.
+          const venueType = instrumentType === 'SPOT' ? 'spot' : 'perp'
+          const venueId = `${exchange.toLowerCase()}-${venueType}`
+
+          // 从 symbol 中提取 base（移除 USDT/USDC 后缀）
+          // 例如: BTCUSDT -> BTC, ETHUSDC -> ETH
+          const base = symbol.replace(/USD[TC]$/i, '')
+
+          // 构建 marketKey: BTC-USDT:spot, ETH-USDT:perp
+          // 注意：Redis 中存储的是 USDT 计价的订单簿
+          const marketKey = `${base}-USDT:${venueType}`
+          const redisKey = `orderbook:${venueId}:${marketKey}`
+
+          this.logger.debug({
+            message: 'Fetching single venue orderbook from Redis',
+            symbol,
+            base,
+            venueId,
+            marketKey,
+            redisKey,
+          })
+
+          const rawData = await this.redisService.getClient().get(redisKey)
+          if (rawData) {
+            try {
+              const parsed = JSON.parse(rawData) as VenueOrderBook
+              // 截取前 depth 档
+              orderbookData = {
+                bids: parsed.bids.slice(0, depth),
+                asks: parsed.asks.slice(0, depth),
+                venueId,
+                marketKey,
+                updatedAt: parsed.receivedTs || Date.now(),
+              }
+
+              this.logger.debug({
+                message: 'Orderbook data fetched from Redis',
+                redisKey,
+                bidsCount: parsed.bids.length,
+                asksCount: parsed.asks.length,
+                bestBid: parsed.bids[0]?.price,
+                bestAsk: parsed.asks[0]?.price,
+              })
+            } catch (error) {
+              this.logger.warn({
+                message: 'Failed to parse orderbook snapshot',
+                redisKey,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            }
+          } else {
+            this.logger.warn({
+              message: 'No orderbook data found in Redis',
+              redisKey,
+              exchange,
+              instrumentType,
+              symbol,
+            })
+          }
+        }
+
+        // 写入缓存（TTL 1 秒）
+        if (orderbookData) {
+          await this.cacheService.set(cacheKey, orderbookData, 1)
+        }
+      }
+
+      if (orderbookData) {
+        // 广播到 Room
+        this.server.to(roomName).emit('orderbook', {
+          exchange,
+          instrumentType,
+          symbol,
+          isAggregated,
+          orderbook: orderbookData,
+        })
+      } else {
+        this.logger.warn({
+          message: 'No orderbook data to broadcast',
+          subscriptionKey,
+          params,
+        })
+      }
+    } catch (error) {
+      this.logger.error({
+        message: 'Error broadcasting orderbook',
+        subscriptionKey,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      subInfo.isRunning = false
+    }
+  }
+
   /**
    * 从共享订阅中移除客户端
    */
@@ -747,6 +1138,20 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       this.logger.log({
         message: 'Cleaned up trades subscription timer',
+        subscriptionKey,
+      })
+    }
+  }
+
+  private cleanupOrderbookSubscription(subscriptionKey: string): void {
+    const subscription = this.orderbookIntervals.get(subscriptionKey)
+    if (subscription) {
+      // 使用 clearTimeout 因为我们改用了 setTimeout 链式调用
+      clearTimeout(subscription.timer)
+      this.orderbookIntervals.delete(subscriptionKey)
+
+      this.logger.log({
+        message: 'Cleaned up orderbook subscription timer',
         subscriptionKey,
       })
     }

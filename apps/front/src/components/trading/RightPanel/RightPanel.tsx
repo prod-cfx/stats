@@ -1,12 +1,16 @@
 'use client';
 
+import type { OrderBookLevel as SharedOrderBookLevel, AggregatedLevel } from '@ai/shared';
 import type { Socket } from 'socket.io-client';
 import type { DataSource, MarketType } from '@/types/trading';
+import type { TickerData } from '@/lib/api';
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { io } from 'socket.io-client';
 import { Spinner } from '@/components/ui/loading';
+import { fetchTicker } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
@@ -51,6 +55,47 @@ interface TradesEventData {
   instrumentType: string;
   symbol: string;
   trades: TradeData[];
+}
+
+// Order Book WebSocket 事件数据类型定义
+interface OrderbookSubscribedData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  isAggregated: boolean;
+  depth: number;
+  subscriptionKey: string;
+}
+
+interface OrderbookUnsubscribedData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  isAggregated: boolean;
+  subscriptionKey: string;
+}
+
+// 使用 @ai/shared 的类型，本地仅定义 WebSocket 事件特有的接口
+interface SingleVenueOrderbook {
+  bids: SharedOrderBookLevel[];
+  asks: SharedOrderBookLevel[];
+  venueId: string;
+  marketKey: string;
+  updatedAt: number;
+}
+
+interface AggregatedOrderbook {
+  bids: AggregatedLevel[];
+  asks: AggregatedLevel[];
+  updatedAt: number;
+}
+
+interface OrderbookEventData {
+  exchange: string;
+  instrumentType: string;
+  symbol: string;
+  isAggregated: boolean;
+  orderbook: SingleVenueOrderbook | AggregatedOrderbook;
 }
 
 function formatHmsLocal(ts: number) {
@@ -106,6 +151,12 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   const sellsRef = useRef<HTMLDivElement>(null);
   const decimalMenuRef = useRef<HTMLDivElement>(null);
   const tabLoadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // NOTE: Work around a ReactNode type mismatch (multiple @types/react copies) that can make lucide icons fail JSX typing.
+  const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<any>;
+  const CopyIcon = Copy as unknown as React.ComponentType<any>;
+  const RotateCcwIcon = RotateCcw as unknown as React.ComponentType<any>;
+  const AlignJustifyIcon = AlignJustify as unknown as React.ComponentType<any>;
+  const ArrowDownUpIcon = ArrowDownUp as unknown as React.ComponentType<any>;
 
   useEffect(() => {
     return () => {
@@ -186,6 +237,37 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
   const [orderbook, setOrderbook] = useState(() => createDeterministicMock.initialOrderbook);
   const [trades, setTrades] = useState<Array<{ id: number; price: string; amount: string; time: string; type: 'buy' | 'sell' }>>([]);
+  const [lastPrice, setLastPrice] = useState<number | null>(null); // 最新成交价
+  const [tickerData, setTickerData] = useState<TickerData | null>(null); // 24h 统计数据
+
+  // Fetch ticker data for 24h statistics
+  useEffect(() => {
+    let isMounted = true;
+    const selectedBase = symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol;
+
+    const fetchData = async () => {
+      try {
+        const exchange = isAggregated ? undefined : selectedExchange;
+        const data = await fetchTicker(selectedBase, exchange);
+        if (isMounted) {
+          setTickerData(data);
+        }
+      } catch (error) {
+        logger.error('[RightPanel] Failed to fetch ticker data:', error);
+        if (isMounted) {
+          setTickerData(null);
+        }
+      }
+    };
+
+    fetchData();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [symbol, isAggregated, selectedExchange]);
 
   // Close decimal menu when clicking outside
   useEffect(() => {
@@ -206,26 +288,6 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
     setOrderbook(createDeterministicMock.initialOrderbook);
     setLoading(false);
     /* eslint-enable react-hooks-extra/no-direct-set-state-in-use-effect */
-
-    // Orderbook mock 数据更新（保持原有逻辑）
-    const orderbookInterval = setInterval(() => {
-      setOrderbook(prev => ({
-        sells: prev.sells.map(s => ({
-          ...s,
-          amount: (Number.parseFloat(s.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
-          depth: Math.min(100, Math.max(5, s.depth + (Math.random() - 0.5) * 10))
-        })),
-        buys: prev.buys.map(b => ({
-          ...b,
-          amount: (Number.parseFloat(b.amount) + (Math.random() - 0.5) * 0.001).toFixed(5),
-          depth: Math.min(100, Math.max(5, b.depth + (Math.random() - 0.5) * 10))
-        }))
-      }));
-    }, 1000);
-
-    return () => {
-      clearInterval(orderbookInterval);
-    };
   }, [createDeterministicMock, locale]); // Re-run when source/format changes
 
   // WebSocket 连接管理 - Trades 实时数据
@@ -248,7 +310,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
       // 监听连接事件
       socket.on('connect', () => {
-        console.log('[RightPanel] Socket.IO connected, subscribing to trades');
+        logger.debug('[RightPanel] Socket.IO connected, subscribing to trades');
 
         const exchange = EXCHANGE_MAP[selectedExchange] || 'BINANCE';
         const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL';
@@ -262,11 +324,26 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           minValue,
           limit: 50,
         });
+
+        // 发送 Order Book 订阅请求
+        socket?.emit('subscribeOrderbook', {
+          exchange,
+          instrumentType,
+          symbol: symbol.toUpperCase(),
+          isAggregated,
+          depth: 60,
+        });
       });
 
       // 监听订阅确认
       socket.on('tradesSubscribed', (data: TradesSubscribedData) => {
-        console.log('[RightPanel] Trades subscribed:', data);
+        logger.debug('[RightPanel] Trades subscribed:', data);
+      });
+
+      // 监听 Order Book 订阅确认
+      socket.on('orderbookSubscribed', (data: OrderbookSubscribedData) => {
+        logger.debug('[RightPanel] Orderbook subscribed:', data);
+        setLoading(false);
       });
 
       // 监听实时 trades 数据
@@ -287,22 +364,107 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           });
 
           setTrades(formattedTrades);
+
+          // 更新最新成交价（Last Price）- 业内标准做法
+          if (receivedTrades.length > 0) {
+            const latestTrade = receivedTrades[0]; // trades 数组按时间倒序，第一个是最新的
+            const price = Number(latestTrade.price);
+            if (Number.isFinite(price)) {
+              setLastPrice(price);
+            }
+          }
+        }
+      });
+
+      // 监听实时 orderbook 数据
+      socket.on('orderbook', (data: OrderbookEventData) => {
+        logger.debug('[RightPanel] Orderbook data received:', {
+          exchange: data.exchange,
+          instrumentType: data.instrumentType,
+          symbol: data.symbol,
+          isAggregated: data.isAggregated,
+          bidsCount: data.orderbook?.bids?.length ?? 0,
+          asksCount: data.orderbook?.asks?.length ?? 0,
+          bestBid: data.orderbook?.bids?.[0],
+          bestAsk: data.orderbook?.asks?.[0],
+        });
+
+        const { orderbook } = data;
+
+        if (orderbook && orderbook.bids?.length > 0 && orderbook.asks?.length > 0) {
+          // 计算累计量用于深度百分比
+          const bidsSlice = (orderbook.bids || []).slice(0, 60);
+          const asksSlice = (orderbook.asks || []).slice(0, 60);
+
+          // 计算买卖双方的最大累计量
+          let bidsCumulative = 0;
+          const bidsWithCumulative = bidsSlice.map((level) => {
+            const size = 'size' in level ? level.size : ('sizeTotal' in level ? level.sizeTotal : 0);
+            bidsCumulative += size;
+            return { level, cumulative: bidsCumulative };
+          });
+
+          let asksCumulative = 0;
+          const asksWithCumulative = asksSlice.map((level) => {
+            const size = 'size' in level ? level.size : ('sizeTotal' in level ? level.sizeTotal : 0);
+            asksCumulative += size;
+            return { level, cumulative: asksCumulative };
+          });
+
+          const maxCumulative = Math.max(bidsCumulative, asksCumulative);
+
+          const formatLevel = (item: { level: SharedOrderBookLevel | AggregatedLevel; cumulative: number }) => {
+            const { level, cumulative } = item;
+            const price = 'price' in level ? level.price : 0;
+            const size = 'size' in level ? level.size : ('sizeTotal' in level ? level.sizeTotal : 0);
+            // 基于累计量计算深度百分比
+            const depth = maxCumulative > 0 ? (cumulative / maxCumulative) * 100 : 0;
+            return {
+              price: price.toFixed(fractionDigits),
+              amount: size.toFixed(5),
+              total: (price * size).toFixed(2),
+              depth,
+            };
+          };
+
+          const formattedOrderbook = {
+            sells: asksWithCumulative.map(formatLevel).reverse(),
+            buys: bidsWithCumulative.map(formatLevel),
+          };
+
+          logger.debug('[RightPanel] Formatted orderbook:', {
+            sellsCount: formattedOrderbook.sells.length,
+            buysCount: formattedOrderbook.buys.length,
+            topSell: formattedOrderbook.sells[formattedOrderbook.sells.length - 1],
+            topBuy: formattedOrderbook.buys[0],
+          });
+
+          setOrderbook(formattedOrderbook);
+        } else {
+          logger.warn('[RightPanel] Orderbook data is empty or invalid, keeping mock data');
         }
       });
 
       // 监听取消订阅确认
       socket.on('tradesUnsubscribed', (data: TradesUnsubscribedData) => {
-        console.log('[RightPanel] Trades unsubscribed:', data);
+        logger.debug('[RightPanel] Trades unsubscribed:', data);
+      });
+
+      // 监听 Order Book 取消订阅确认
+      socket.on('orderbookUnsubscribed', (data: OrderbookUnsubscribedData) => {
+        logger.debug('[RightPanel] Orderbook unsubscribed:', data);
       });
 
       // 监听连接错误
       socket.on('connect_error', (error) => {
-        console.error('[RightPanel] Socket.IO connection error:', error);
+        logger.error('[RightPanel] Socket.IO connection error:', error);
+        setLoading(true);
       });
 
       // 监听断开连接
       socket.on('disconnect', (reason) => {
-        console.warn('[RightPanel] Socket.IO disconnected:', reason);
+        logger.warn('[RightPanel] Socket.IO disconnected:', reason);
+        setLoading(true);
       });
     };
 
@@ -322,11 +484,20 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
           minValue,
         });
 
+        // 发送 Order Book 取消订阅请求
+        socket.emit('unsubscribeOrderbook', {
+          exchange,
+          instrumentType,
+          symbol: symbol.toUpperCase(),
+          isAggregated,
+          depth: 60,
+        });
+
         // 断开连接
         socket.disconnect();
       }
     };
-  }, [symbol, selectedExchange, marketType, tradeTab, fractionDigits]); // 依赖项：symbol/exchange/marketType/tab 变化时重新订阅
+  }, [symbol, selectedExchange, marketType, isAggregated, tradeTab, fractionDigits]); // 依赖项：symbol/exchange/marketType/tab 变化时重新订阅
 
   useEffect(() => {
     if (!loading && sellsRef.current) {
@@ -354,9 +525,47 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
   const netInflowVal = Math.round((isAggregated ? -0.05 : selectedExchange === 'binance' ? -0.03 : -0.02) * turnoverVal);
   const highVal = basePriceForStats * (isAggregated ? 1.01 : selectedExchange === 'binance' ? 1.008 : 1.006);
   const lowVal = basePriceForStats * (isAggregated ? 0.99 : selectedExchange === 'binance' ? 0.992 : 0.994);
-  const midPrice = basePriceForStats * (isAggregated ? 1.0000 : selectedExchange === 'binance' ? 1.0008 : 0.9992);
-  const midChangePct = isAggregated ? 0.15 : selectedExchange === 'binance' ? 0.12 : 0.1;
-  const midChangeAbs = midPrice * (midChangePct / 100);
+
+  // Calculate mid price from real-time data
+  // 业内标准：优先使用 Last Price（最新成交价），降级到 Mid Price
+  const midPrice = (() => {
+    // 优先级 1: Last Price（最新成交价）- 业内标准
+    if (lastPrice !== null && Number.isFinite(lastPrice)) {
+      return lastPrice;
+    }
+
+    // 优先级 2: Mid Price（买卖中间价）- 无成交时的备选
+    const bestBid = orderbook.buys[0]?.price ? Number.parseFloat(orderbook.buys[0].price) : null;
+    const bestAsk = orderbook.sells.length > 0 && orderbook.sells[orderbook.sells.length - 1]?.price
+      ? Number.parseFloat(orderbook.sells[orderbook.sells.length - 1].price)
+      : null;
+
+    if (bestBid && bestAsk && Number.isFinite(bestBid) && Number.isFinite(bestAsk)) {
+      return (bestBid + bestAsk) / 2;
+    }
+
+    // 优先级 3: Fallback to mock data
+    return basePriceForStats * (isAggregated ? 1.0000 : selectedExchange === 'binance' ? 1.0008 : 0.9992);
+  })();
+
+  // Calculate 24h price change from ticker data
+  const { midChangePct, midChangeAbs } = (() => {
+    // 优先使用 ticker 数据的 24h 涨跌幅
+    if (tickerData?.priceChangePercent24h) {
+      const changePct = Number.parseFloat(tickerData.priceChangePercent24h);
+      if (Number.isFinite(changePct)) {
+        const changeAbs = midPrice * (changePct / 100);
+        return { midChangePct: changePct, midChangeAbs: changeAbs };
+      }
+    }
+
+    // Fallback to mock data
+    const mockChangePct = isAggregated ? 0.15 : selectedExchange === 'binance' ? 0.12 : 0.1;
+    return {
+      midChangePct: mockChangePct,
+      midChangeAbs: midPrice * (mockChangePct / 100),
+    };
+  })();
 
   const precisionLabel =
     pricePrecision >= 0
@@ -378,7 +587,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         <div className="px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm">{displaySymbol}</span>
-            <Copy className="w-3 h-3 text-[color:var(--cf-muted)] cursor-pointer" />
+            <CopyIcon className="w-3 h-3 text-[color:var(--cf-muted)] cursor-pointer" />
           </div>
           <div className="flex items-center gap-1 text-xs">
             <span className="bg-gradient-to-br from-primary to-secondary text-transparent bg-clip-text">
@@ -418,9 +627,9 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
         <div className="flex-none">
           <div className="px-2 py-1.5 flex items-center justify-between text-[color:var(--cf-muted)] relative">
             <div className="flex items-center gap-3">
-              <RotateCcw className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <AlignJustify className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
-              <ArrowDownUp className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <RotateCcwIcon className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <AlignJustifyIcon className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
+              <ArrowDownUpIcon className="w-3.5 h-3.5 cursor-pointer hover:text-[color:var(--cf-text)]" />
             </div>
             <div className="flex items-center gap-2" ref={decimalMenuRef}>
               <button
@@ -429,7 +638,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
                 className="flex items-center gap-1 text-[10px] hover:text-[color:var(--cf-text)] whitespace-nowrap"
               >
                 <span>{precisionLabel}</span>
-                <ChevronDown className="w-3 h-3" />
+                <ChevronDownIcon className="w-3 h-3" />
               </button>
 
               {isDecimalMenuOpen && (
@@ -474,8 +683,12 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
               <span className="text-[10px] text-[color:var(--cf-muted)]">{formatUsd(midPrice)}</span>
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-xs text-green-400 font-semibold">{`+${midChangePct.toFixed(2)}%`}</span>
-              <span className="text-[10px] text-green-400 font-medium">{`+${priceFormatter.format(midChangeAbs)}`}</span>
+              <span className={`text-xs ${midChangePct >= 0 ? 'text-green-400' : 'text-red-400'} font-semibold`}>
+                {`${midChangePct >= 0 ? '+' : ''}${midChangePct.toFixed(2)}%`}
+              </span>
+              <span className={`text-[10px] ${midChangePct >= 0 ? 'text-green-400' : 'text-red-400'} font-medium`}>
+                {`${midChangePct >= 0 ? '+' : ''}${priceFormatter.format(midChangeAbs)}`}
+              </span>
             </div>
           </div>
 
@@ -503,7 +716,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <ArrowDownUp className="w-3.5 h-3.5 text-[color:var(--cf-muted)] cursor-pointer hover:text-[color:var(--cf-text-strong)]" />
+            <ArrowDownUpIcon className="w-3.5 h-3.5 text-[color:var(--cf-muted)] cursor-pointer hover:text-[color:var(--cf-text-strong)]" />
           </div>
         </div>
 

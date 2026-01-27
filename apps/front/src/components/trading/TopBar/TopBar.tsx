@@ -36,7 +36,7 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
  * 从 ticker 数据计算涨跌幅
  */
 export function calculateFromTicker(tickerData: TickerData, lastPrice: number) {
-  const changePct = Number.parseFloat(tickerData.priceChangePercent24h);
+  const changePct = Number.parseFloat(tickerData.priceChangePercent24h || '0');
   return {
     changePct,
     changeAbs: lastPrice * (changePct / 100),
@@ -104,8 +104,14 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   const menuRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const prevSymbolRef = useRef<string | null>(null);
+  const selectedSymbolRef = useRef<string>(selectedSymbol);
   const lastKlineUpdateTimeRef = useRef<number>(0);
   const THROTTLE_INTERVAL = 1000;
+
+  // Sync selectedSymbolRef with selectedSymbol state
+  useEffect(() => {
+    selectedSymbolRef.current = selectedSymbol;
+  }, [selectedSymbol]);
 
   const isCompact = variant === 'compact';
 
@@ -165,9 +171,11 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     return () => clearInterval(interval);
   }, [selectedBase, isAggregated, selectedExchange]);
 
-  // Fetch latest kline close price from API
+  // Fetch latest kline close price from API (fallback when WebSocket is not connected)
   useEffect(() => {
     if (!selectedSymbol) return;
+    // 只在 WebSocket 未连接时才使用 API 轮询
+    if (wsConnectionStatus === 'connected') return;
 
     const fetchLatestKline = async () => {
       try {
@@ -182,7 +190,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
           exchange,
         });
         const latestClose = bars.at(-1)?.close;
-        setKlineClosePrice(Number.isFinite(latestClose) ? latestClose : null);
+        setKlineClosePrice(latestClose !== undefined && Number.isFinite(latestClose) ? latestClose : null);
       } catch (error) {
         logger.error('Failed to fetch kline data:', error);
         setKlineClosePrice(null);
@@ -193,7 +201,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     // Refresh every 10 seconds
     const interval = setInterval(fetchLatestKline, 10000);
     return () => clearInterval(interval);
-  }, [selectedSymbol, isAggregated, selectedExchange]);
+  }, [selectedSymbol, isAggregated, selectedExchange, wsConnectionStatus]);
 
   // WebSocket real-time kline updates
   useEffect(() => {
@@ -207,30 +215,48 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionAttempts: 5,
-        pingInterval: 25000,
-        pingTimeout: 5000,
       });
 
       const socket = socketRef.current;
 
       socket.on('connect', () => {
         logger.debug('[TopBar] WebSocket connected');
+        logger.debug(`[TopBar] Current selectedSymbol: ${selectedSymbol}`);
+        logger.debug(`[TopBar] Current selectedSymbolRef: ${selectedSymbolRef.current}`);
         setWsConnectionStatus('connected');
-        const currentSymbol = prevSymbolRef.current;
-        if (currentSymbol) {
-          socket.emit('subscribe', { symbol: currentSymbol, interval: '1m' });
+        // 使用闭包中的 selectedSymbol，因为 prevSymbolRef.current 在首次连接时还未设置
+        if (selectedSymbol) {
+          socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' });
+          logger.debug(`[TopBar] Subscribed to kline: ${selectedSymbol}`);
         }
       });
 
       socket.on('kline', (data: { symbol: string; interval: string; bar: { close: number } }) => {
-        const { bar } = data;
+        logger.debug(`[TopBar] Received kline data:`, data);
+        const { symbol, bar } = data;
+
+        logger.debug(`[TopBar] Comparing symbols - received: ${symbol}, current: ${selectedSymbolRef.current}`);
+
+        // Validate symbol matches current subscription
+        if (symbol !== selectedSymbolRef.current) {
+          logger.debug(`[TopBar] Ignoring kline for ${symbol}, current: ${selectedSymbolRef.current}`);
+          return;
+        }
+
+        logger.debug(`[TopBar] Symbol matched! Processing bar.close: ${bar.close}`);
+
         if (Number.isFinite(bar.close)) {
           const now = Date.now();
           if (now - lastKlineUpdateTimeRef.current >= THROTTLE_INTERVAL) {
+            logger.debug(`[TopBar] Updating klineClosePrice from ${klineClosePrice} to ${bar.close}`);
             setKlineClosePrice(bar.close);
             lastKlineUpdateTimeRef.current = now;
-            logger.debug(`[TopBar] Real-time price update: ${bar.close}`);
+            logger.debug(`[TopBar] Real-time price update: ${bar.close} for ${symbol}`);
+          } else {
+            logger.debug(`[TopBar] Throttled - skipping update (${now - lastKlineUpdateTimeRef.current}ms since last)`);
           }
+        } else {
+          logger.warn(`[TopBar] Invalid bar.close value: ${bar.close}`);
         }
       });
 
