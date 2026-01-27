@@ -95,6 +95,53 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
 
       return tasks
     })(),
+    // Coinglass Long/Short Ratio - 多空比历史数据（聚合多空比指标）
+    // 为主流交易对 + 时间粒度创建独立任务，支持 TradingView 指标展示
+    ...(() => {
+      const pairs = [
+        { tradingPairId: 'BTCUSDT.BINANCE.PERP', symbol: 'BTCUSDT' },
+        { tradingPairId: 'ETHUSDT.BINANCE.PERP', symbol: 'ETHUSDT' },
+        { tradingPairId: 'SOLUSDT.BINANCE.PERP', symbol: 'SOLUSDT' },
+      ] as const
+      const intervals = [
+        { interval: '1h' as const, syncSeconds: 1800 },
+        { interval: '4h' as const, syncSeconds: 3600 },
+        { interval: '1d' as const, syncSeconds: 7200 },
+      ] as const
+
+      const tasks: Array<{
+        key: string
+        name: string
+        source: string
+        type: string
+        intervalSeconds: number
+        enabled: boolean
+        cursor: string
+      }> = []
+
+      let delayOffset = 0
+      for (const pair of pairs) {
+        for (const { interval, syncSeconds } of intervals) {
+          tasks.push({
+            key: `coinglass-long-short-ratio:${pair.tradingPairId}:${interval}`,
+            name: `Coinglass 多空比 - ${pair.symbol} ${interval}`,
+            source: 'coinglass',
+            type: 'long-short-ratio',
+            intervalSeconds: syncSeconds + delayOffset,
+            enabled: true,
+            cursor: JSON.stringify({
+              tradingPairId: pair.tradingPairId,
+              symbol: pair.symbol,
+              interval,
+              exchange: 'Binance',
+            }),
+          })
+          delayOffset = (delayOffset + 10) % 120 // 错开 10 秒，120 秒循环
+        }
+      }
+
+      return tasks
+    })(),
     // Binance Kline History - 主流币种多时间粒度 K线同步（免费 API，无需 API Key）
     // 为每个币种和时间粒度创建独立任务，避免单个任务过载
     ...(() => {

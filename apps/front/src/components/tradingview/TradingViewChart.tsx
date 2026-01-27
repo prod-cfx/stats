@@ -1,14 +1,21 @@
 'use client'
 
-import type { Ref } from 'react'
+import type { MutableRefObject, Ref } from 'react'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
-import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
+import { fetchLongShortRatio } from '@/lib/api'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
+import { logger } from '@/utils/logger'
 import { mockDatafeed } from './mockDatafeed'
+
+// Constants for long-short ratio data fetching
+const LONG_SHORT_RATIO_FETCH_LIMIT = 500
+const LONG_SHORT_RATIO_REFRESH_INTERVAL_MS = 30000
+const LONG_SHORT_RATIO_MAX_TIME_DIFF_MS = 3600000
 
 declare global {
   interface Window {
@@ -106,6 +113,7 @@ export interface TradingViewChartProps {
   onToggleAggregate?: () => void
   onOpenIndicator?: () => void
   onOpenDataIndicator?: () => void
+  onIntervalChanged?: (interval: string) => void
 
   /** CenterChartPanel 传入：用于 chartOverlay（例如：清算地图） */
   activeIndicators?: Array<{
@@ -184,12 +192,134 @@ function formatUsdCompactFromMillions(valueM: number): string {
   return `$${Math.round(v)}M`
 }
 
-function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any }) {
+const LONG_SHORT_RATIO_SUPPORTED_INTERVALS = new Set([
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '1w',
+])
+
+const LONG_SHORT_RATIO_INTERVAL_MAP: Record<string, string> = {
+  '1': '1m',
+  '3': '3m',
+  '5': '5m',
+  '15': '15m',
+  '30': '30m',
+  '60': '1h',
+  '240': '4h',
+  '360': '6h',
+  '480': '8h',
+  '720': '12h',
+  '1d': '1d',
+  '1w': '1w',
+  '1D': '1d',
+  '1W': '1w',
+}
+
+function resolveLongShortRatioInterval(interval: string): string | null {
+  const raw = interval.trim()
+  const mapped = LONG_SHORT_RATIO_INTERVAL_MAP[raw] ?? LONG_SHORT_RATIO_INTERVAL_MAP[raw.toLowerCase()] ?? raw
+  const normalized = mapped.toLowerCase()
+  if (!LONG_SHORT_RATIO_SUPPORTED_INTERVALS.has(normalized)) return null
+  return normalized
+}
+
+function useLongShortRatioData(pairSymbol: string, tvInterval: string) {
+  const dataRef = useRef<Map<number, number>>(new Map())
+  // Sorted timestamps for binary search
+  const sortedTimestampsRef = useRef<number[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const apiInterval = resolveLongShortRatioInterval(tvInterval)
+
+      if (!apiInterval) {
+        dataRef.current.clear()
+        sortedTimestampsRef.current = []
+        return
+      }
+
+      const normalizedSymbol = pairSymbol.toUpperCase().endsWith('USDT')
+        ? pairSymbol.toUpperCase()
+        : `${pairSymbol.toUpperCase()}USDT`
+      const tradingPairId = `${normalizedSymbol}.BINANCE.PERP`
+
+      const data = await fetchLongShortRatio({
+        tradingPairId,
+        interval: apiInterval,
+        limit: LONG_SHORT_RATIO_FETCH_LIMIT,
+      })
+
+      const map = new Map<number, number>()
+      const timestamps: number[] = []
+      data.forEach((item) => {
+        const ts = new Date(item.timestamp).getTime()
+        const ratio = Number.parseFloat(item.longShortRatio)
+        if (!Number.isNaN(ratio)) {
+          map.set(ts, ratio)
+          timestamps.push(ts)
+        }
+      })
+
+      // Sort timestamps for binary search
+      timestamps.sort((a, b) => a - b)
+      dataRef.current = map
+      sortedTimestampsRef.current = timestamps
+    } catch (error) {
+      logger.error('[useLongShortRatioData] Failed to fetch long-short ratio data', error)
+      dataRef.current.clear()
+      sortedTimestampsRef.current = []
+    }
+  }, [pairSymbol, tvInterval])
+
+  useEffect(() => {
+    void fetchData()
+    timerRef.current = setInterval(() => {
+      void fetchData()
+    }, LONG_SHORT_RATIO_REFRESH_INTERVAL_MS)
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [fetchData])
+
+  return { dataRef, sortedTimestampsRef }
+}
+
+function createCustomIndicatorsGetter(opts?: {
+  theme?: 'Dark' | 'Light'
+  t: (key: string) => string
+  lsDataRef?: MutableRefObject<Map<number, number>>
+  lsSortedTimestampsRef?: MutableRefObject<number[]>
+}) {
   // Charting Library custom studies: register indicator definitions at widget init time.
   return function custom_indicators_getter(PineJS: any) {
     const theme = opts?.theme ?? 'Light'
     const tFunc = opts?.t ?? ((k: string) => k)
     const names = CUSTOM_STUDY_NAME_BY_ID
+    const lsDataRef = opts?.lsDataRef
+    const lsSortedTimestampsRef = opts?.lsSortedTimestampsRef
+    type LongShortRatioIndicatorContext = {
+      _context?: unknown
+      _input?: unknown
+      _dataRef?: MutableRefObject<Map<number, number>>
+      _sortedTimestampsRef?: MutableRefObject<number[]>
+      _prev?: number | null
+      init?: (context: unknown, inputCallback: unknown) => void
+      main?: (context: unknown) => [number, number]
+    }
     const mkBaseMeta = (id: string, name: string, shortDescription: string, plots: any[], defaults: any, styles: any, format: any) => ({
       _metainfoVersion: 51,
       id,
@@ -254,25 +384,75 @@ function createCustomIndicatorsGetter(opts?: { theme?: 'Dark' | 'Light'; t: any 
       },
       // IMPORTANT: Charting Library will do `new indicator.constructor()`
       // Object method shorthand `constructor () {}` is NOT constructible in JS.
-      constructor () {
-        this.init = function (context: any, inputCallback: any) {
+      constructor: function (this: LongShortRatioIndicatorContext) {
+        this.init = function (context: unknown, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
+          this._dataRef = lsDataRef
+          this._sortedTimestampsRef = lsSortedTimestampsRef
           this._prev = null
         }
-        this.main = function (context: any) {
+        this.main = function (context: unknown) {
           this._context = context
-          const close = PineJS.Std.close(context)
-          // mock: ratio around 1.0 (0.6~1.6)
-          const v = 1 + Math.sin(close / 2500) * 0.25 + Math.sin(close / 700) * 0.06
-          const val = Math.max(0.4, Math.min(1.6, v))
+          const time = PineJS.Std.time(context)
+          const dataMap: Map<number, number> | undefined = this._dataRef?.current
+          const sortedTimestamps: number[] | undefined = this._sortedTimestampsRef?.current
 
-          // 颜色分段：上升 => 绿；下降/持平 => 红（贴近你“红绿交替”的老效果）
-          const prev = this._prev
-          this._prev = val
-          const isGreen = typeof prev === 'number' ? val > prev : true
+          if (!dataMap || dataMap.size === 0 || !sortedTimestamps || sortedTimestamps.length === 0) {
+            return [Number.NaN, 0]
+          }
 
-          return [val, isGreen ? 0 : 1]
+          // Binary search to find the closest timestamp
+          let left = 0
+          let right = sortedTimestamps.length - 1
+          let closestIdx = 0
+
+          while (left <= right) {
+            const mid = Math.floor((left + right) / 2)
+            const midTs = sortedTimestamps[mid]
+            if (midTs === time) {
+              closestIdx = mid
+              break
+            } else if (midTs < time) {
+              left = mid + 1
+            } else {
+              right = mid - 1
+            }
+            // Track closest so far
+            if (Math.abs(sortedTimestamps[closestIdx] - time) > Math.abs(midTs - time)) {
+              closestIdx = mid
+            }
+          }
+
+          // Check neighbors for the actual closest
+          const candidates = [closestIdx]
+          if (closestIdx > 0) candidates.push(closestIdx - 1)
+          if (closestIdx < sortedTimestamps.length - 1) candidates.push(closestIdx + 1)
+
+          let bestTs = sortedTimestamps[closestIdx]
+          let minDiff = Math.abs(bestTs - time)
+          for (const idx of candidates) {
+            const ts = sortedTimestamps[idx]
+            const diff = Math.abs(ts - time)
+            if (diff < minDiff) {
+              minDiff = diff
+              bestTs = ts
+            }
+          }
+
+          if (minDiff > LONG_SHORT_RATIO_MAX_TIME_DIFF_MS) {
+            return [Number.NaN, 0]
+          }
+
+          const ratio = dataMap.get(bestTs)
+          if (ratio == null) {
+            return [Number.NaN, 0]
+          }
+
+          const isGreen = ratio >= 1.0
+          this._prev = ratio
+
+          return [ratio, isGreen ? 0 : 1]
         }
       },
     }
@@ -697,6 +877,7 @@ export const TradingViewChart = forwardRef((
     onToggleAggregate,
     onOpenIndicator,
     onOpenDataIndicator,
+    onIntervalChanged,
     onRemoveIndicator,
     activeIndicators = [],
   }: TradingViewChartProps,
@@ -708,6 +889,7 @@ export const TradingViewChart = forwardRef((
   const [isChartReady, setIsChartReady] = useState(false)
   const chartReadyRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentInterval, setCurrentInterval] = useState(interval)
 
   // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
   const reactId = useId()
@@ -782,6 +964,13 @@ export const TradingViewChart = forwardRef((
   useEffect(() => {
     liqHiddenRef.current = liqHidden
   }, [liqHidden])
+
+  // Sync currentInterval with interval prop (for external control)
+  useEffect(() => {
+    setCurrentInterval(interval)
+  }, [interval])
+
+  const { dataRef: lsDataRef, sortedTimestampsRef: lsSortedTimestampsRef } = useLongShortRatioData(symbol, currentInterval)
   const customStudyIdsRef = useRef<Record<CustomIndicatorId, string | null>>({
     'long-short-ratio': null,
     'aggregated-open-interest': null,
@@ -1070,7 +1259,7 @@ export const TradingViewChart = forwardRef((
           interval,
 
           datafeed: mockDatafeed,
-          custom_indicators_getter: createCustomIndicatorsGetter({ theme, t }),
+          custom_indicators_getter: createCustomIndicatorsGetter({ theme, t, lsDataRef, lsSortedTimestampsRef }),
           // Ensure legend action buttons (eye/delete) are functional.
           // NOTE: This build gates legend actions behind these feature flags.
           // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
@@ -1098,6 +1287,19 @@ export const TradingViewChart = forwardRef((
           })
           // Fallback 2: last resort time-based (guarded + overlay effect has try/catch)
           readyTimer = setTimeout(() => markReady(), 1500)
+
+          // Listen for interval changes
+          widget.onChartReady(() => {
+            try {
+              const chart = widget?.activeChart?.() || widget?.chart?.()
+              chart?.onIntervalChanged?.().subscribe(null, (newInterval: string) => {
+                setCurrentInterval(newInterval)
+                onIntervalChanged?.(newInterval)
+              })
+            } catch (error) {
+              void error
+            }
+          })
         } catch {
           // ignore
         }
@@ -2492,4 +2694,3 @@ export const TradingViewChart = forwardRef((
     </div>
   )
 })
-

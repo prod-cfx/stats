@@ -322,12 +322,6 @@ export async function fetchWhaleAddressPerformance(
           ),
       },
     )
-
-    return unwrapResponse<WhaleAddressPerformanceResponse>(
-      result as
-        | WhaleAddressPerformanceResponse
-        | BaseResponse<WhaleAddressPerformanceResponse>,
-    )
   }, 'FETCH_WHALE_ADDRESS_PERFORMANCE')
 }
 
@@ -884,6 +878,39 @@ export type ExchangeLongShortTimeRange =
 export interface FetchExchangeLongShortRatioQuery {
   symbol: string
   timeRange: ExchangeLongShortTimeRange
+}
+
+type LongShortRatioQuery = {
+  tradingPairId: string
+  interval: string
+  from?: string
+  to?: string
+  limit?: number
+}
+
+type LongShortRatioPoint = {
+  tradingPairId: string
+  interval: string
+  timestamp: string
+  longShortRatio: string
+  longAccountRatio?: string | null
+  shortAccountRatio?: string | null
+  longVolume?: string | null
+  shortVolume?: string | null
+  longShortAccountRatio?: string | null
+  source: string
+}
+
+export async function fetchLongShortRatio(
+  query: LongShortRatioQuery,
+): Promise<LongShortRatioPoint[]> {
+  return apiCall(async () => {
+    const response = await client.MarketsController_getLongShortRatio({
+      headers: optionalAuthHeaders(),
+      queries: query,
+    })
+    return unwrapResponse(response)
+  }, 'FETCH_LONG_SHORT_RATIO')
 }
 
 export async function fetchExchangeLongShortRatio(

@@ -15,6 +15,10 @@ interface LongShortRatioCursor {
    */
   tradingPairId: string
   /**
+   * 交易所名称（Coinglass 需要）
+   */
+  exchange?: string
+  /**
    * Coinglass 接口使用的基础资产或交易对符号
    * 例如：BTC 或 BTCUSDT
    */
@@ -61,6 +65,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
 
   // 默认配置：BTCUSDT.BINANCE.PERP & 4h 粒度
   private readonly defaultTradingPairId = 'BTCUSDT.BINANCE.PERP'
+  private readonly defaultExchange = 'Binance'
   private readonly defaultSymbol = 'BTCUSDT'
   private readonly defaultInterval: MarketTimeframe = '4h'
   private readonly defaultLimit = 1000
@@ -77,7 +82,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     const endpoint =
       this.configService.get<string>('COINGLASS_LONG_SHORT_RATIO_ENDPOINT') ??
       // 参考 Coinglass 文档：全局多空账户比历史
-      'https://open-api-v4.coinglass.com/api/futures/global-long-short-account-ratio-history'
+      'https://open-api-v4.coinglass.com/api/futures/global-long-short-account-ratio/history'
 
     if (!apiKey) {
       // 不应“默默成功”，否则后台无法感知配置缺失
@@ -85,11 +90,13 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     }
 
     const interval = cursor.interval ?? this.defaultInterval
+    const exchange = cursor.exchange ?? this.defaultExchange
     const lastTimestampMs = cursor.lastTimestamp ?? null
 
     const url = new URL(endpoint)
+    url.searchParams.set('exchange', exchange)
     url.searchParams.set('symbol', cursor.symbol)
-    url.searchParams.set('interval', interval)
+    url.searchParams.set('interval', this.convertIntervalToCoinglassFormat(interval))
     url.searchParams.set('limit', this.defaultLimit.toString())
 
     this.logger.log(
@@ -112,6 +119,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
         newCursor: JSON.stringify(cursor),
         meta: {
           tradingPairId: cursor.tradingPairId,
+          exchange,
           symbol: cursor.symbol,
           interval,
           note: 'No long/short ratio data returned from API',
@@ -180,6 +188,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
 
     const newCursor: LongShortRatioCursor = {
       tradingPairId: cursor.tradingPairId,
+      exchange,
       symbol: cursor.symbol,
       interval,
       lastTimestamp: latestTimestampMs,
@@ -190,6 +199,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       newCursor: JSON.stringify(newCursor),
       meta: {
         tradingPairId: cursor.tradingPairId,
+        exchange,
         symbol: cursor.symbol,
         interval,
         latestTime: latestTimestampMs ? new Date(latestTimestampMs).toISOString() : null,
@@ -299,6 +309,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     if (!currentCursor) {
       return {
         tradingPairId: this.defaultTradingPairId,
+        exchange: this.defaultExchange,
         symbol: this.defaultSymbol,
         interval: this.defaultInterval,
         lastTimestamp: undefined,
@@ -309,6 +320,9 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       const parsed = JSON.parse(currentCursor) as Partial<LongShortRatioCursor>
       if (!parsed.tradingPairId) {
         parsed.tradingPairId = this.defaultTradingPairId
+      }
+      if (!parsed.exchange) {
+        parsed.exchange = this.defaultExchange
       }
       if (!parsed.symbol) {
         parsed.symbol = this.defaultSymbol
@@ -324,12 +338,25 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
       return {
         tradingPairId: this.defaultTradingPairId,
+        exchange: this.defaultExchange,
         symbol: this.defaultSymbol,
         interval: this.defaultInterval,
         lastTimestamp: undefined,
       }
     }
   }
-}
 
+  private convertIntervalToCoinglassFormat(interval: MarketTimeframe): string {
+    switch (interval) {
+      case '1h':
+        return 'h1'
+      case '4h':
+        return 'h4'
+      case '1d':
+        return 'd1'
+      default:
+        return interval
+    }
+  }
+}
 
