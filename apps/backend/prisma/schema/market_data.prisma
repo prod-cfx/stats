@@ -853,3 +853,47 @@ model CoinsPriceChange {
   @@index([dataTimestamp], map: "idx_coins_price_change_timestamp")
   @@map("coins_price_change")
 }
+
+/// 持仓量 OHLC 历史数据（Coinglass OI OHLC Aggregated History）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/oi-ohlc-aggregated-history
+///
+/// 设计说明：
+/// - 聚合多个交易所的持仓量（Open Interest）K 线数据
+/// - OHLC 值代表持仓量金额（USD），而非价格
+/// - interval 复用 MarketTimeframe 枚举
+model OpenInterestOhlcHistory {
+  id Int @id @default(autoincrement())
+
+  /// 币种符号，如 BTC / ETH
+  symbol String
+
+  /// 时间粒度（如 1h / 4h），使用枚举统一管理
+  interval MarketTimeframe
+
+  /// 该时间粒度对应的时间点（K 线开始时间），来自响应中的 t 字段
+  timestamp DateTime
+
+  /// 开盘持仓量（USD）
+  open Decimal @db.Decimal(30, 10)
+
+  /// 最高持仓量（USD）
+  high Decimal @db.Decimal(30, 10)
+
+  /// 最低持仓量（USD）
+  low Decimal @db.Decimal(30, 10)
+
+  /// 收盘持仓量（USD）
+  close Decimal @db.Decimal(30, 10)
+
+  /// 数据来源，默认 'COINGLASS'
+  source String @default("COINGLASS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([symbol, interval, timestamp], map: "uniq_oi_ohlc_symbol_interval_time")
+  @@index([symbol, timestamp], map: "idx_oi_ohlc_symbol_time")
+  @@map("open_interest_ohlc_history")
+}

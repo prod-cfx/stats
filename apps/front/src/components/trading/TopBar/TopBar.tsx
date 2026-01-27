@@ -1,11 +1,12 @@
 'use client';
 
+import type {Socket} from 'socket.io-client';
 import type {TickerData} from '@/lib/api';
 import type { DataSource, MarketType } from '@/types/trading';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { io, type Socket } from 'socket.io-client'
+import { io  } from 'socket.io-client'
 import { fetchKlineData, fetchTicker  } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { logger } from '@/utils/logger'

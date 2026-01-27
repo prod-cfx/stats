@@ -1,4 +1,5 @@
 export * from './dto/open-interest.dto'
+export * from './jobs/oi-ohlc-aggregated.job'
 export * from './jobs/open-interest-sync.job'
 export * from './open-interest.controller'
 export * from './open-interest.module'

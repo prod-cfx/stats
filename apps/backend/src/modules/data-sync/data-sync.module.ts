@@ -5,6 +5,7 @@ import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
 import { LiquidationHeatmapModule } from '@/modules/liquidation-heatmap/liquidation-heatmap.module'
 import { MarketsModule } from '@/modules/markets/markets.module'
+import { CoinglassOiOhlcAggregatedJob } from '@/modules/open-interest/jobs/oi-ohlc-aggregated.job'
 // MarketsVolumeSyncJob 已移除：数据拉取由其他系统负责
 import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-sync.job'
 import { OpenInterestModule } from '@/modules/open-interest/open-interest.module'
@@ -97,6 +98,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     CoinglassFuturesPriceHistoryJob,
     ExampleOrderbookJob,
     OpenInterestSyncJob,
+    CoinglassOiOhlcAggregatedJob,
     CoinglassAggregatedLiquidationJob,
     CoinglassLongShortRatioJob,
     CoinglassPairsMarketsJob,
@@ -123,6 +125,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassFuturesPriceHistoryJob: CoinglassFuturesPriceHistoryJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
+        coinglassOiOhlcAggregatedJob: CoinglassOiOhlcAggregatedJob,
         coinglassAggregatedLiquidationJob: CoinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob: CoinglassLongShortRatioJob,
         coinglassPairsMarketsJob: CoinglassPairsMarketsJob,
@@ -143,6 +146,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassFuturesPriceHistoryJob,
         exampleOrderbookJob,
         openInterestSyncJob,
+        coinglassOiOhlcAggregatedJob,
         coinglassAggregatedLiquidationJob,
         coinglassLongShortRatioJob,
         coinglassPairsMarketsJob,
@@ -164,6 +168,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         CoinglassFuturesPriceHistoryJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,
+        CoinglassOiOhlcAggregatedJob,
         CoinglassAggregatedLiquidationJob,
         CoinglassLongShortRatioJob,
         CoinglassPairsMarketsJob,

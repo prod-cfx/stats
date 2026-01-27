@@ -170,6 +170,49 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       cursor: JSON.stringify({ symbol, range: '24h' }),
       meta: { symbol, range: '24h' },
     })),
+    // Coinglass OI OHLC Aggregated History - 聚合持仓量 K 线数据
+    // 为每个币种和时间粒度创建独立任务
+    ...(() => {
+      const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'DOT', 'MATIC'] as const
+      const intervals = [
+        { interval: '1h' as const, syncSeconds: 900, priority: 1 },  // 1小时粒度，每15分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 900, priority: 1 },  // 4小时粒度，每15分钟同步（高优先级）
+      ] as const
+
+      const tasks: Array<{
+        key: string
+        name: string
+        source: string
+        type: string
+        intervalSeconds: number
+        enabled: boolean
+        cursor: string | null
+        meta: { symbol: string; interval: string }
+      }> = []
+
+      let delayOffset = 0
+      for (const symbol of symbols) {
+        for (const { interval, syncSeconds } of intervals) {
+          // 每个任务错开 10 秒执行，避免并发触发 API 速率限制
+          tasks.push({
+            key: `coinglass-oi-ohlc-aggregated:${symbol}-${interval}`,
+            name: `Coinglass OI OHLC - ${symbol} ${interval}`,
+            source: 'coinglass',
+            type: 'oi-ohlc-aggregated',
+            intervalSeconds: syncSeconds + delayOffset,
+            enabled: true,
+            cursor: null, // 首次运行时会自动回溯 30 天
+            meta: {
+              symbol,
+              interval,
+            },
+          })
+          delayOffset = (delayOffset + 10) % 120 // 错开 10 秒，120 秒循环
+        }
+      }
+
+      return tasks
+    })(),
     {
       key: 'hyperliquid-user-fills-sync',
       name: 'Hyperliquid 用户成交历史同步',

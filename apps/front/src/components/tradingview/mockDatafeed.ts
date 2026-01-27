@@ -288,11 +288,11 @@ export const mockDatafeed = {
       }
 
       onResult([], { noData: true })
-      return
+      
     } catch (e) {
       const message = (e as Error)?.message || 'K线数据获取失败'
       onError(message)
-      return
+      
     }
   },
 

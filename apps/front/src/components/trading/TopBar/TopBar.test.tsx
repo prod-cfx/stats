@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
 import type { TickerData } from '@/lib/api';
+import { describe, expect, it } from '@jest/globals';
 
 import { calculateFromTicker, calculatePriceChange } from './TopBar';
 
