@@ -21,6 +21,7 @@ import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
 import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY, TRADES_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { BbxCryptoStockScraperJob } from './jobs/bbx-crypto-stock-scraper.job'
+import { BinanceKlineHistoryJob } from './jobs/binance-kline-history.job'
 import { CoinglassAggregatedLiquidationJob } from './jobs/coinglass-aggregated-liquidation.job'
 import { CoinglassCoinsPriceChangeJob } from './jobs/coinglass-coins-price-change.job'
 import { CoinglassFuturesPriceHistoryJob } from './jobs/coinglass-futures-price-history.job'
@@ -105,6 +106,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     CoinglassTakerVolumeJob,
     BbxCryptoStockQuotesJob,
     BbxCryptoStockScraperJob,
+    BinanceKlineHistoryJob,
     PolymarketMarketsJob,
     PolymarketOrderbookJob,
     HyperliquidUserFillsSyncJob,
@@ -123,6 +125,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
         coinglassCoinsPriceChangeJob: CoinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob: CoinglassFuturesPriceHistoryJob,
+        binanceKlineHistoryJob: BinanceKlineHistoryJob,
         exampleOrderbookJob: ExampleOrderbookJob,
         openInterestSyncJob: OpenInterestSyncJob,
         coinglassOiOhlcAggregatedJob: CoinglassOiOhlcAggregatedJob,
@@ -144,6 +147,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         coinglassWhaleAlertJob,
         coinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob,
+        binanceKlineHistoryJob,
         exampleOrderbookJob,
         openInterestSyncJob,
         coinglassOiOhlcAggregatedJob,
@@ -166,6 +170,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         CoinglassWhaleAlertJob,
         CoinglassCoinsPriceChangeJob,
         CoinglassFuturesPriceHistoryJob,
+        BinanceKlineHistoryJob,
         ExampleOrderbookJob,
         OpenInterestSyncJob,
         CoinglassOiOhlcAggregatedJob,

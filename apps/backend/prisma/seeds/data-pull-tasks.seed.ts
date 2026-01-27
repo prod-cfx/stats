@@ -43,7 +43,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'BNBUSDT', 'HYPEUSDT'] as const
       const intervals = [
         { interval: '1m' as const, syncSeconds: 120, priority: 3 },   // 1分钟粒度，每2分钟同步（低优先级）
-        { interval: '5m' as const, syncSeconds: 300, priority: 2 },   // 5分钟粒度，每5分钟同步（中优先级）
+        { interval: '5m' as const, syncSeconds: 300, priority: 1 },   // 5分钟粒度，每5分钟同步（高优先级）✅
         { interval: '15m' as const, syncSeconds: 600, priority: 1 },  // 15分钟粒度，每10分钟同步（高优先级）
         { interval: '30m' as const, syncSeconds: 900, priority: 2 },  // 30分钟粒度，每15分钟同步（中优先级）
         { interval: '1h' as const, syncSeconds: 1800, priority: 1 },  // 1小时粒度，每30分钟同步（高优先级）
@@ -89,6 +89,63 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
               }),
             })
             delayOffset = (delayOffset + 10) % 120 // 错开 10 秒，120 秒循环
+          }
+        }
+      }
+
+      return tasks
+    })(),
+    // Binance Kline History - 主流币种多时间粒度 K线同步（免费 API，无需 API Key）
+    // 为每个币种和时间粒度创建独立任务，避免单个任务过载
+    ...(() => {
+      // Binance 交易对格式：BTCUSDT, ETHUSDT 等
+      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'BNBUSDT'] as const
+      const intervals = [
+        { interval: '1m' as const, syncSeconds: 120, priority: 3 },   // 1分钟粒度，每2分钟同步（低优先级）
+        { interval: '5m' as const, syncSeconds: 300, priority: 1 },   // 5分钟粒度，每5分钟同步（高优先级）✅
+        { interval: '15m' as const, syncSeconds: 600, priority: 1 },  // 15分钟粒度，每10分钟同步（高优先级）
+        { interval: '30m' as const, syncSeconds: 900, priority: 2 },  // 30分钟粒度，每15分钟同步（中优先级）
+        { interval: '1h' as const, syncSeconds: 1800, priority: 1 },  // 1小时粒度，每30分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 3600, priority: 1 },  // 4小时粒度，每1小时同步（高优先级）
+        { interval: '1d' as const, syncSeconds: 7200, priority: 1 },  // 1天粒度，每2小时同步（高优先级）
+      ] as const
+
+      const marketTypes = [
+        { type: 'PERPETUAL' as const, label: '永续', priority: 1 },  // 高优先级
+        { type: 'SPOT' as const, label: '现货', priority: 2 },       // 低优先级
+      ] as const
+
+      const tasks: Array<{
+        key: string
+        name: string
+        source: string
+        type: string
+        intervalSeconds: number
+        enabled: boolean
+        cursor: string
+      }> = []
+
+      let delayOffset = 0
+      for (const symbol of symbols) {
+        for (const { type: marketType, label, priority: typePriority } of marketTypes) {
+          for (const { interval, syncSeconds, priority: intervalPriority } of intervals) {
+            // 只启用高优先级任务（永续合约 + 5m/15m/1h/4h/1d）
+            const enabled = intervalPriority === 1 && typePriority === 1
+            tasks.push({
+              key: `binance-kline-history:${symbol}:${marketType}:${interval}`,
+              name: `Binance K线 - ${symbol} ${label} ${interval}`,
+              source: 'binance',
+              type: 'kline-history',
+              // 使用标准同步间隔，任务错开由调度器的 jitter 机制处理
+              intervalSeconds: syncSeconds,
+              enabled,
+              cursor: JSON.stringify({
+                symbol,
+                marketType,
+                interval,
+              }),
+            })
+            delayOffset = (delayOffset + 10) % 120 // 保留变量以维持循环结构
           }
         }
       }
