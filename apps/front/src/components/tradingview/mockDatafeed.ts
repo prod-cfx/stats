@@ -47,7 +47,7 @@ interface SubscriptionConfirmData {
 }
 
 // Trades 事件数据（如果需要）
-interface TradesEventData {
+interface _TradesEventData {
   exchange: string
   instrumentType: string
   symbol: string
@@ -115,7 +115,7 @@ const subscriptions = new Map<string, Subscription>()
  * 根据时间粒度计算轮询间隔（毫秒）
  * 注意：WebSocket 实时推送后，此函数仅用于兜底
  */
-function getUpdateInterval(resolution: string): number {
+function _getUpdateInterval(resolution: string): number {
   switch (resolution) {
     case '1':
       return 5000
@@ -272,13 +272,13 @@ export const mockDatafeed = {
       const ticker = getTickerFromSymbolInfo(symbolInfo)
       const symbol = normalizeSymbol(ticker) // 标准化格式，移除分隔符
 
-      // 调用真实 API
+      // 调用真实 API（K 线图表使用单交易所数据）
       const bars = await fetchKlineData({
         symbol,
         interval,
         from: periodParams.from,
         to: periodParams.to,
-        exchange: 'BINANCE', // 默认使用 Binance 数据
+        exchange: 'BINANCE', // K 线图表使用 Binance 单交易所数据
       })
 
       // 成功获取数据

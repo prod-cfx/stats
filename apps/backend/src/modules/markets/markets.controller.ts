@@ -15,8 +15,7 @@ import {
 } from './dto/requests/get-market-trades.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
-// eslint-disable-next-line ts/consistent-type-imports
-import { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
+import type { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import {

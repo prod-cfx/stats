@@ -7,28 +7,119 @@ import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
+import { useAggregatedVolumeData } from '@/hooks/useAggregatedVolumeData'
 import { fetchAggregatedOpenInterest, fetchLongShortRatio } from '@/lib/api'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
 import { mockDatafeed } from './mockDatafeed'
 
+// P2-6: TradingView 最小类型定义，替代 any
+// 这些类型基于 TradingView Charting Library 的实际 API，但由于库未提供完整类型，
+// 我们定义最小接口以满足类型安全需求
+
+/** TradingView PineJS 标准函数接口 */
+interface PineJSStd {
+  close: (context: PineContext) => number
+  open: (context: PineContext) => number
+  high: (context: PineContext) => number
+  low: (context: PineContext) => number
+  volume: (context: PineContext) => number
+  time: (context: PineContext) => number
+}
+
+/** TradingView PineJS 接口 */
+interface PineJS {
+  Std: PineJSStd
+}
+
+/** TradingView 指标上下文 */
+interface PineContext {
+  symbol: { tickerid: string }
+  new_var: (value: unknown) => unknown
+}
+
+/** TradingView 指标构造函数 this 上下文 */
+interface IndicatorThis {
+  _context: PineContext
+  _input: unknown
+  _prev?: number | null
+  init: (context: PineContext, inputCallback: unknown) => void
+  main: (context: PineContext) => number[]
+}
+
+interface LongShortRatioIndicatorThis extends IndicatorThis {
+  _dataRef?: MutableRefObject<Map<number, number>>
+  _sortedTimestampsRef?: MutableRefObject<number[]>
+}
+
+/** TradingView Study Plot 定义 */
+interface StudyPlot {
+  id: string
+  type: string
+  palette?: string
+  target?: string
+}
+
+/** TradingView Study 样式定义 */
+interface StudyStyle {
+  linestyle?: number
+  linewidth?: number
+  plottype?: number | string
+  trackPrice?: boolean
+  transparency?: number
+  visible?: boolean
+  color?: string
+  histogramBase?: number
+}
+
+/** TradingView Study 元信息 */
+interface StudyMetaInfo {
+  _metainfoVersion: number
+  id: string
+  scriptIdPart: string
+  name: string
+  description: string
+  shortDescription: string
+  is_custom_indicator: boolean
+  is_hidden_study: boolean
+  is_price_study: boolean
+  plots: StudyPlot[]
+  defaults: {
+    styles: Record<string, StudyStyle>
+    palettes?: Record<string, unknown>
+    inputs?: Record<string, unknown>
+  }
+  styles: Record<string, { title?: string; histogramBase?: number; joinPoints?: boolean; zorder?: number }>
+  inputs: unknown[]
+  format?: { type: string; precision: number }
+  palettes?: Record<string, unknown>
+  filledAreasStyle?: Record<string, unknown>
+  filledAreas?: unknown[]
+}
+
+/** TradingView 自定义指标定义 */
+interface CustomIndicator {
+  name: string
+  metainfo: StudyMetaInfo
+  constructor: (this: IndicatorThis) => void
+}
 // 日志控制：仅在开发环境或显式启用时输出调试日志
 const isDevelopment = process.env.NODE_ENV === 'development'
 const enableOIDebugLogs = isDevelopment || process.env.NEXT_PUBLIC_ENABLE_OI_DEBUG === 'true'
 
 // 持仓量数据日志辅助函数
 const oiLogger = {
-  debug: (...args: any[]) => {
+  debug: (...args: unknown[]) => {
     if (enableOIDebugLogs) {
       console.log('[OI]', ...args)
     }
   },
-  warn: (...args: any[]) => {
+  warn: (...args: unknown[]) => {
     if (enableOIDebugLogs) {
       console.warn('[OI]', ...args)
     }
   },
-  error: (...args: any[]) => {
+  error: (...args: unknown[]) => {
     // 错误日志始终输出
     console.error('[OI]', ...args)
   },
@@ -41,11 +132,61 @@ const LONG_SHORT_RATIO_MAX_TIME_DIFF_MS = 3600000
 
 declare global {
   interface Window {
-    TradingView?: any
+    TradingView?: {
+      widget: new (config: TradingViewWidgetConfig) => TradingViewWidgetInstance
+    }
   }
 }
 
-type TradingViewWidget = any
+/** TradingView Widget 配置 */
+interface TradingViewWidgetConfig {
+  container_id: string
+  symbol: string
+  interval: string
+  datafeed: unknown
+  library_path: string
+  locale: string
+  theme: 'Dark' | 'Light'
+  custom_indicators_getter?: (PineJS: PineJS) => CustomIndicator[]
+  enabled_features?: string[]
+  disabled_features?: string[]
+  [key: string]: unknown
+}
+
+/** TradingView Widget 实例 */
+interface TradingViewWidgetInstance {
+  onChartReady: (callback: () => void) => void
+  activeChart: () => TradingViewChart
+  chart: () => TradingViewChart
+  remove: () => void
+  headerReady: () => Promise<void>
+  createButton: (options: { align: string }) => HTMLElement
+  [key: string]: unknown
+}
+
+/** TradingView Chart 接口 */
+interface TradingViewChart {
+  createStudy: (name: string, forceOverlay?: boolean, lock?: boolean, inputs?: unknown[], callback?: (id: string) => void, priceScale?: unknown, options?: unknown) => string | Promise<string>
+  removeEntity: (id: string) => void
+  getAllStudies: () => Array<{ id: string; name: string }>
+  setSymbol: (symbol: string, callback?: () => void) => void
+  setResolution: (resolution: string, callback?: () => void) => void
+  createMultipointShape: (points: unknown[], options: unknown) => string
+  removeAllShapes: () => void
+  getVisibleRange: () => { from: number; to: number }
+  getVisiblePriceRange: () => { from: number; to: number } | null
+  getPanes: () => TradingViewPane[]
+  [key: string]: unknown
+}
+
+/** TradingView Pane 接口 */
+interface TradingViewPane {
+  getHeight: () => number
+  setHeight: (height: number) => void
+  getMainSourcePriceScale: () => { getMode: () => number } | null
+}
+
+type TradingViewWidget = TradingViewWidgetInstance
 
 const SCRIPT_SRC = '/tradingview/charting_library/charting_library.js'
 const LIBRARY_PATH = '/tradingview/charting_library/'
@@ -166,10 +307,37 @@ const CUSTOM_STUDY_NAME_BY_ID: Record<CustomIndicatorId, string> = {
   'liquidation-data': 'Coinflux: Liquidation Data',
 }
 
+// 模块级别 Map，用于存储各组件实例的聚合成交量数据引用
+// P1-2: 使用 Map<containerId, ref> 替代单一全局变量，避免多实例状态污染
+// QUAL-001: HMR 场景下清理旧实例引用，防止内存泄漏
+const aggregatedVolumeMapByInstance = new Map<string, React.MutableRefObject<Map<number, number>>>()
+
+// HMR 清理：模块热替换时清空 Map，避免累积旧实例引用
+if (typeof module !== 'undefined' && (module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot) {
+  (module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot?.dispose(() => {
+    aggregatedVolumeMapByInstance.clear()
+  })
+}
+
 const LIQ_MAP_DRAWING_LABEL = 'Coinflux: Liquidation Map'
 // Legend 需要一个 study 条目才会显示 eye / X 按钮；drawings 不会出现在指标 legend。
-// 这里用一个“占位 study”（visible=false，不绘制）来提供原生 legend 操作入口。
+// 这里用一个"占位 study"（visible=false，不绘制）来提供原生 legend 操作入口。
 const LIQ_MAP_STUDY_NAME = 'Coinflux: Liquidation Map'
+
+/**
+ * 映射 TradingView resolution 到后端 interval
+ */
+function resolutionToInterval(resolution: string): string {
+  const map: Record<string, string> = {
+    '1': '1m',
+    '5': '5m',
+    '15': '15m',
+    '60': '1h',
+    '240': '4h',
+    '1D': '1d',
+  }
+  return map[resolution] || '15m'
+}
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
@@ -346,6 +514,7 @@ function useLongShortRatioData(pairSymbol: string, tvInterval: string) {
 function createCustomIndicatorsGetter(opts?: {
   theme?: 'Dark' | 'Light'
   t: (key: string) => string
+  containerId?: string
   lsDataRef?: MutableRefObject<Map<number, number>>
   lsSortedTimestampsRef?: MutableRefObject<number[]>
   openInterestDataRef?: MutableRefObject<{
@@ -355,24 +524,25 @@ function createCustomIndicatorsGetter(opts?: {
   interval?: string
 }) {
   // Charting Library custom studies: register indicator definitions at widget init time.
-  return function custom_indicators_getter(PineJS: any) {
+  return function custom_indicators_getter(PineJS: PineJS): CustomIndicator[] {
     const theme = opts?.theme ?? 'Light'
-    const tFunc = opts?.t ?? ((k: string) => k)
+    const tFunc = (opts?.t ?? ((k: string) => k)) as (key: string) => string
+    const instanceId = opts?.containerId
     const oiDataRef = opts?.openInterestDataRef
     const intervalMs = parseResolutionToMs(opts?.interval)
     const names = CUSTOM_STUDY_NAME_BY_ID
     const lsDataRef = opts?.lsDataRef
     const lsSortedTimestampsRef = opts?.lsSortedTimestampsRef
-    type LongShortRatioIndicatorContext = {
-      _context?: unknown
-      _input?: unknown
-      _dataRef?: MutableRefObject<Map<number, number>>
-      _sortedTimestampsRef?: MutableRefObject<number[]>
-      _prev?: number | null
-      init?: (context: unknown, inputCallback: unknown) => void
-      main?: (context: unknown) => [number, number]
-    }
-    const mkBaseMeta = (id: string, name: string, shortDescription: string, plots: any[], defaults: any, styles: any, format: any) => ({
+    // P2-6: 使用类型化的参数替代 any
+    const mkBaseMeta = (
+      id: string,
+      name: string,
+      shortDescription: string,
+      plots: StudyPlot[],
+      defaults: { styles: Record<string, StudyStyle>; inputs?: Record<string, unknown> },
+      styles: Record<string, { title?: string; histogramBase?: number; joinPoints?: boolean }>,
+      format: { type: string; precision: number },
+    ): StudyMetaInfo => ({
       _metainfoVersion: 51,
       id,
       scriptIdPart: '',
@@ -474,15 +644,15 @@ function createCustomIndicatorsGetter(opts?: {
       },
       // IMPORTANT: Charting Library will do `new indicator.constructor()`
       // Object method shorthand `constructor () {}` is NOT constructible in JS.
-      constructor: function (this: LongShortRatioIndicatorContext) {
-        this.init = function (context: unknown, inputCallback: unknown) {
+      constructor: function (this: LongShortRatioIndicatorThis) {
+        this.init = function (context: PineContext, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
           this._dataRef = lsDataRef
           this._sortedTimestampsRef = lsSortedTimestampsRef
           this._prev = null
         }
-        this.main = function (context: unknown) {
+        this.main = function (context: PineContext) {
           this._context = context
           const time = PineJS.Std.time(context)
           const dataMap: Map<number, number> | undefined = this._dataRef?.current
@@ -633,12 +803,12 @@ function createCustomIndicatorsGetter(opts?: {
         inputs: [],
         format: { type: 'volume', precision: 0 },
       },
-      constructor () {
-        this.init = function (context: any, inputCallback: any) {
+      constructor: function (this: IndicatorThis) {
+        this.init = function (context: PineContext, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
         }
-        this.main = function (context: any) {
+        this.main = function (context: PineContext) {
           this._context = context
           const time = PineJS.Std.time(context)
 
@@ -703,16 +873,24 @@ function createCustomIndicatorsGetter(opts?: {
         { plot_0: { title: tFunc('chart.indicators.aggregatedVolume'), histogramBase: 0, joinPoints: false } },
         { type: 'volume', precision: 0 },
       ),
-      constructor () {
-        this.init = function (context: any, inputCallback: any) {
+      constructor: function (this: IndicatorThis) {
+        this.init = function (context: PineContext, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
         }
-        this.main = function (context: any) {
+        this.main = function (context: PineContext) {
           this._context = context
-          const vRaw = PineJS.Std.volume(context)
-          const v = typeof vRaw === 'number' && Number.isFinite(vRaw) ? vRaw : 0
-          return [Math.max(0, v)]
+          const time = PineJS.Std.time(context)
+
+          // 从实例 Map 获取聚合成交量数据源（独立于 K 线数据）
+          const volumeMap = instanceId ? aggregatedVolumeMapByInstance.get(instanceId)?.current : undefined
+          if (volumeMap && volumeMap.size > 0) {
+            const volume = volumeMap.get(time) ?? 0
+            return [typeof volume === 'number' && Number.isFinite(volume) ? volume : 0]
+          }
+
+          // 数据缺失时返回 0（不使用 mock 数据）
+          return [0]
         }
       },
     }
@@ -724,7 +902,7 @@ function createCustomIndicatorsGetter(opts?: {
         names['liquidation-data'],
         tFunc('chart.indicators.liquidationData'),
         [
-          // ✅ 对齐“之前效果”：上下双向直方图 + 图例显示 L/S/T
+          // ✅ 对齐"之前效果"：上下双向直方图 + 图例显示 L/S/T
           { id: 'plot_s', type: 'line' }, // S (+) histogram
           { id: 'plot_l', type: 'line' }, // L (-) histogram
           { id: 'plot_t', type: 'line' }, // Total (legend only, hidden)
@@ -750,15 +928,15 @@ function createCustomIndicatorsGetter(opts?: {
         },
         { type: 'volume', precision: 0 },
       ),
-      constructor () {
-        this.init = function (context: any, inputCallback: any) {
+      constructor: function (this: IndicatorThis) {
+        this.init = function (context: PineContext, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
         }
-        this.main = function (context: any) {
+        this.main = function (context: PineContext) {
           this._context = context
           // ✅ 正确语义：同一时间点同时有多单爆仓(L)和空单爆仓(S)的量
-          // mock：用成交量/价格组合出一个“百万级”爆仓量，并用 time 做一个平滑的占比分配
+          // mock：用成交量/价格组合出一个"百万级"爆仓量，并用 time 做一个平滑的占比分配
           const closeRaw = PineJS.Std.close(context)
           const volRaw = PineJS.Std.volume(context)
           const timeRaw = PineJS.Std.time(context)
@@ -793,7 +971,7 @@ function createCustomIndicatorsGetter(opts?: {
           {
             styles: {
               plot_0: {
-                // 不绘制（但保留“原生 legend eye/X 按钮”入口）
+                // 不绘制（但保留"原生 legend eye/X 按钮"入口）
                 linestyle: 0,
                 linewidth: 1,
                 plottype: 'line',
@@ -813,12 +991,12 @@ function createCustomIndicatorsGetter(opts?: {
         is_custom_indicator: true,
         is_hidden_study: false,
       },
-      constructor () {
-        this.init = function (context: any, inputCallback: any) {
+      constructor: function (this: IndicatorThis) {
+        this.init = function (context: PineContext, inputCallback: unknown) {
           this._context = context
           this._input = inputCallback
         }
-        this.main = function (context: any) {
+        this.main = function (context: PineContext) {
           this._context = context
           // 返回 close，但 visible=false；仅用于出现在 legend 并拥有 eye/X
           const c = PineJS.Std.close(context)
@@ -1148,6 +1326,22 @@ export const TradingViewChart = forwardRef((
     liqHiddenRef.current = liqHidden
   }, [liqHidden])
 
+  // ---- 聚合成交量数据（独立数据源）----
+  const showAggregatedVolume = activeIndicators.some((x) => x.id === 'aggregated-volume')
+  const { dataMapRef: aggregatedVolumeMapRef } = useAggregatedVolumeData({
+    symbol,
+    interval: resolutionToInterval(interval),
+    enabled: showAggregatedVolume,
+  })
+
+  // 设置实例 Map，供 TradingView 指标使用
+  useEffect(() => {
+    aggregatedVolumeMapByInstance.set(containerId, aggregatedVolumeMapRef)
+    return () => {
+      aggregatedVolumeMapByInstance.delete(containerId)
+    }
+  }, [containerId, aggregatedVolumeMapRef])
+
   useEffect(() => {
     if (!symbol) return
     let cancelled = false
@@ -1418,9 +1612,10 @@ export const TradingViewChart = forwardRef((
         // 使用 ref 获取容器，避免 dev StrictMode / 异步初始化导致的时序问题
         let containerEl = containerRef.current
         // 兜底：最多等 ~10 帧
-        for (let i = 0; i < 10 && !containerEl && !cancelled; i += 1) {
-           
+        for (let i = 0; i < 10 && !containerEl; i += 1) {
+          if (cancelled) break
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          if (cancelled) break
           containerEl = containerRef.current
         }
         if (cancelled) return
@@ -1455,6 +1650,7 @@ export const TradingViewChart = forwardRef((
           custom_indicators_getter: createCustomIndicatorsGetter({
             theme,
             t,
+            containerId,
             openInterestDataRef,
             interval,
             lsDataRef,
@@ -1699,7 +1895,6 @@ export const TradingViewChart = forwardRef((
   // state 变化只更新 header 文案/可见性，不重建 widget
   useEffect(() => {
     updateHeaderUi()
-     
   }, [isAggregated, selectedExchange])
 
   // === 清算地图 overlay：挂接适配器 + 生成数据 + hover/click 交互 ===

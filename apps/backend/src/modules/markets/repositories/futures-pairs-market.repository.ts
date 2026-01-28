@@ -292,6 +292,8 @@ export class FuturesPairsMarketRepository {
 
       return {
         symbol: maxVolumeRecord.symbol,
+        // P2-5: 聚合模式明确标记为 'All'，与单交易所模式保持一致的数据结构
+        exchange: 'All',
         currentPrice: maxVolumeRecord.currentPrice,
         indexPrice: avgIndexPrice,
         priceChangePercent24h: avgPriceChangePercent24h,

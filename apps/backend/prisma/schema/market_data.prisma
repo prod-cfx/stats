@@ -111,6 +111,7 @@ model FuturesPriceHistory {
 
   @@unique([symbol, exchangeCode, contractType, interval, timestamp], map: "uniq_futures_price_symbol_exchange_contract_interval_time")
   @@index([symbol, exchangeCode, interval, timestamp], map: "idx_futures_price_symbol_exchange_interval_time")
+  @@index([symbol, interval, timestamp], map: "idx_futures_price_symbol_interval_time")
   @@map("futures_price_history")
 }
 

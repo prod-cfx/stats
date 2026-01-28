@@ -15,12 +15,11 @@ import { TRADING_PAIRS } from '@ai/shared'
 import { Prisma } from '@prisma/client'
 import type { MarketTrade } from '@prisma/client'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports
-import { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
-// eslint-disable-next-line ts/consistent-type-imports
-import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
+import type { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
+import type { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 import type { ExchangeLongShortTimeRange } from './dto/requests/get-exchange-long-short-ratio.request.dto'
 import type { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
 import type { AggregatedVolumeResponseDto } from './dto/responses/aggregated-volume.response.dto'
