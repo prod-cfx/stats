@@ -1059,11 +1059,11 @@ export const TradingViewChart = forwardRef((
       if (shouldCancel?.()) return
       oiLogger.debug('Fetching data for:', baseSymbol)
 
-      // 获取最近 1000 条数据（覆盖多个时间粒度）
+      // 获取最近 100 条数据（符合 API 限制）
       const data = await fetchAggregatedOpenInterest({
         symbol: baseSymbol,
         exchange: 'All',
-        limit: 1000,
+        limit: 100,
       })
       if (shouldCancel?.()) return
       oiLogger.debug('Received data points:', data.length)
