@@ -17,7 +17,6 @@ jobs:
           HOST: ${{ secrets.AWS_SSH_HOST }}
           PORT: ${{ secrets.AWS_SSH_PORT }}
           USER: ${{ secrets.AWS_SSH_USER }}
-          DEST_PATH: ${{ secrets.AWS_SERVER_UAT_PATH }}
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -p $PORT -H $HOST >> ~/.ssh/known_hosts
