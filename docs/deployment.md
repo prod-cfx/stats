@@ -26,12 +26,12 @@
 
 ### 2.1 环境要求
 
-| 组件 | 版本要求 | 说明 |
-|------|---------|------|
-| Node.js | >= 20.x | 推荐使用 LTS 版本 |
-| pnpm | >= 9.x | 包管理器 |
-| PostgreSQL | >= 15.x | 主数据库 |
-| Redis | >= 7.x | 缓存数据库 |
+| 组件       | 版本要求 | 说明              |
+| ---------- | -------- | ----------------- |
+| Node.js    | >= 20.x  | 推荐使用 LTS 版本 |
+| pnpm       | >= 9.x   | 包管理器          |
+| PostgreSQL | >= 15.x  | 主数据库          |
+| Redis      | >= 7.x   | 缓存数据库        |
 
 ### 2.2 首次部署流程
 
@@ -100,16 +100,17 @@ openssl rand -hex 32
 
 ```bash
 # 1. 生成 Prisma Client（必须先执行）
-./scripts/dx db generate
+dx db generate
 
 # 2. 构建后端（编译 TypeScript → JavaScript）
-./scripts/dx build backend --prod
+dx build backend --prod
 
 # 3. 生成 API Contracts（SDK）
-./scripts/dx build contracts
+dx build contracts --prod
 ```
 
 **说明**：
+
 - `db generate` 生成 Prisma Client，后端代码依赖此步骤
 - `build backend` 编译 TypeScript 代码到 `dist/` 目录，并生成 OpenAPI 规范
 - `build contracts` 基于 OpenAPI 生成 Zod 模型和 HTTP 客户端，供前端使用
@@ -119,13 +120,14 @@ openssl rand -hex 32
 
 ```bash
 # 应用数据库迁移
-./scripts/dx db deploy --prod
+dx db deploy --prod
 
 # 初始化种子数据（仅首次部署）
-./scripts/dx db seed --prod
+dx db seed --prod
 ```
 
 **⚠️ 注意**：
+
 - `db seed` 会创建默认管理员账号（用户名：admin，密码：admin123）
 - 生产环境建议通过环境变量覆盖默认账号：
 
@@ -144,7 +146,7 @@ SEED_ADMIN_EMAIL=admin@yourdomain.com
 npm install -g pm2
 
 # 启动服务
-pm2 start ./scripts/dx --name "backend" -- start backend --prod
+pm2 start dx --name "backend" -- start backend --prod
 
 # 保存 PM2 配置
 pm2 save
@@ -156,7 +158,7 @@ pm2 startup
 **临时测试可使用前台启动**：
 
 ```bash
-./scripts/dx start backend --prod
+dx start backend --prod
 ```
 
 **⚠️ 注意**：前台启动会占用终端，关闭终端后服务停止，仅适合临时测试。
@@ -165,7 +167,7 @@ pm2 startup
 
 ```bash
 # 检查服务状态
-curl http://localhost:3000/health
+curl http://localhost:3000/api/v1/health
 
 # 预期返回
 {
@@ -187,13 +189,13 @@ git pull origin main
 pnpm install
 
 # 3. 构建后端
-./scripts/dx build backend --prod
+dx build backend --prod
 
 # 4. 构建 API Contracts（如后端 API 有变更）
-./scripts/dx build contracts
+dx build contracts --prod
 
 # 5. 应用数据库迁移（如有）
-./scripts/dx db deploy --prod
+dx db deploy --prod
 
 # 6. 重启服务
 pm2 restart backend
@@ -203,17 +205,18 @@ curl http://localhost:3000/health
 ```
 
 **说明**：
+
 - 如果仅修改了后端业务逻辑，无 API 变更，可跳过步骤 4
 - 如果有新增/修改 API 接口或 DTO，必须执行步骤 4 重新生成 SDK
 
 ### 2.4 常见问题排查
 
-| 问题 | 排查方法 |
-|------|---------|
-| 服务启动失败 | 检查 `DATABASE_URL` 和 `REDIS_URL` 是否正确 |
-| 数据库连接失败 | 确认 PostgreSQL 服务运行中，防火墙允许连接 |
-| Redis 连接失败 | 确认 Redis 服务运行中，密码正确 |
-| 迁移失败 | 检查数据库用户权限，查看错误日志 |
+| 问题           | 排查方法                                    |
+| -------------- | ------------------------------------------- |
+| 服务启动失败   | 检查 `DATABASE_URL` 和 `REDIS_URL` 是否正确 |
+| 数据库连接失败 | 确认 PostgreSQL 服务运行中，防火墙允许连接  |
+| Redis 连接失败 | 确认 Redis 服务运行中，密码正确             |
+| 迁移失败       | 检查数据库用户权限，查看错误日志            |
 
 **查看日志**：
 
@@ -238,10 +241,11 @@ tail -f logs/app.log
 **Build Command**:
 
 ```bash
-cd ../.. && ./scripts/dx build backend --prod && ./scripts/dx build contracts && ./scripts/dx build front --prod
+cd ../.. && dx build backend --prod && dx build contracts --prod && dx build front --prod
 ```
 
 **说明**：
+
 - 必须先构建 backend 生成 OpenAPI 规范
 - 然后构建 contracts 生成 SDK（`@ai/api-contracts`）
 - 最后构建 front（依赖 SDK）
@@ -278,10 +282,11 @@ NEXT_PUBLIC_HYPERLIQUID_API_URL=https://api.hyperliquid.xyz
 **Build Command**:
 
 ```bash
-cd ../.. && ./scripts/dx build backend --prod && ./scripts/dx build contracts && ./scripts/dx build admin --prod
+cd ../.. && dx build backend --prod && dx build contracts --prod && dx build admin --prod
 ```
 
 **说明**：
+
 - 必须先构建 backend 生成 OpenAPI 规范
 - 然后构建 contracts 生成 SDK（`@ai/api-contracts`）
 - 最后构建 admin（依赖 SDK）
@@ -341,10 +346,10 @@ vercel --prod
 - [ ] 克隆代码并安装依赖
 - [ ] 配置 `.env.production.local`（所有必填项）
 - [ ] 生成强随机密钥（APP_SECRET、JWT_SECRET、EXCHANGE_ACCOUNT_CRYPTO_KEY）
-- [ ] 构建后端（`./scripts/dx build backend --prod`）
-- [ ] 构建 API Contracts（`./scripts/dx build contracts`）
-- [ ] 应用数据库迁移（`./scripts/dx db deploy --prod`）
-- [ ] 初始化种子数据（`./scripts/dx db seed --prod`）
+- [ ] 构建后端（`dx build backend --prod`）
+- [ ] 构建 API Contracts（`dx build contracts --prod`）
+- [ ] 应用数据库迁移（`dx db deploy --prod`）
+- [ ] 初始化种子数据（`dx db seed --prod`）
 - [ ] 启动服务并配置 PM2
 - [ ] 验证健康检查接口（`/health`）
 - [ ] 修改默认管理员密码
@@ -353,8 +358,8 @@ vercel --prod
 
 - [ ] 拉取最新代码
 - [ ] 安装新依赖（如有）
-- [ ] 构建后端（`./scripts/dx build backend --prod`）
-- [ ] 构建 API Contracts（如后端 API 有变更：`./scripts/dx build contracts`）
+- [ ] 构建后端（`dx build backend --prod`）
+- [ ] 构建 API Contracts（如后端 API 有变更：`dx build contracts --prod`）
 - [ ] 应用数据库迁移（如有）
 - [ ] 重启服务
 - [ ] 验证健康检查接口
@@ -401,10 +406,10 @@ vercel --prod
 git checkout <previous-stable-tag>
 
 # 2. 重新构建
-./scripts/dx build backend --prod
+dx build backend --prod
 
 # 3. 重新生成 SDK（如 API 有变化）
-./scripts/dx build contracts
+dx build contracts --prod
 
 # 4. 回滚数据库迁移（如需要，谨慎操作）
 # 手动执行回滚 SQL 或恢复数据库备份
@@ -416,6 +421,7 @@ pm2 restart backend
 ### Vercel 回滚
 
 在 Vercel 控制台：
+
 1. 进入 Deployments 页面
 2. 找到上一个稳定部署
 3. 点击 "Promote to Production"
@@ -425,5 +431,5 @@ pm2 restart backend
 ## 七、联系与支持
 
 - **技术文档**：`ruler/` 目录下的开发规范
-- **命令参考**：`scripts/README-CLI.md`
+- **命令参考**：`dx/config/commands.json`
 - **问题反馈**：提交 GitHub Issue

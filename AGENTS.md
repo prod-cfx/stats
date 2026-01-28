@@ -3,3 +3,4 @@
 @ruler/conventions.md
 @ruler/git-workflow.md
 @ruler/linus-thinking.md
+@ruler/parallel-execution.md

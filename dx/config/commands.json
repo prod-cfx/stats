@@ -25,6 +25,12 @@
       "interactive": true
     }
   },
+
+  "install": {
+    "command": "pnpm install --frozen-lockfile",
+    "description": "安装依赖"
+  },
+
   "build": {
     "backend": {
       "dev": {
@@ -74,11 +80,7 @@
       },
       "prod": {
         "sequential": true,
-        "commands": [
-          "build.backend.prod",
-          "build.contracts",
-          "build.parallelWeb.prod"
-        ],
+        "commands": ["build.backend.prod", "build.contracts", "build.parallelWeb.prod"],
         "description": "构建所有应用(生产环境，Web并行)"
       }
     },
@@ -105,10 +107,12 @@
       }
     },
     "contracts": {
-      "command": "node ./scripts/dx contracts generate",
+      "command": "set -euo pipefail; npx nx run backend:swagger; pnpm exec openapi-zod-client dist/openapi/backend.json --output packages/api-contracts/src/generated/backend.ts --api-client-name aiBackendClient --base-url \"${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000/api/v1}\" --with-alias --with-docs --with-deprecated --export-schemas --prettier prettier.config.js",
+      "app": "backend",
       "description": "生成 API 合约 (packages/api-contracts)"
     }
   },
+
   "db": {
     "generate": {
       "command": "pnpm --filter @net/backend run prisma:generate",
@@ -119,18 +123,30 @@
       "dev": {
         "command": "pnpm --filter @net/backend run prisma:migrate:dev",
         "app": "backend",
-        "description": "执行数据库迁移(开发环境)"
+        "description": "创建数据库迁移(开发环境)"
+      }
+    },
+    "deploy": {
+      "dev": {
+        "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
+        "app": "backend",
+        "description": "应用数据库迁移(开发环境)"
+      },
+      "test": {
+        "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
+        "app": "backend",
+        "description": "应用数据库迁移(测试环境)"
       },
       "e2e": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
-        "description": "执行数据库迁移(E2E环境，使用 deploy)"
+        "description": "应用数据库迁移(E2E环境)"
       },
       "prod": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
         "dangerous": true,
-        "description": "执行数据库迁移(生产环境)"
+        "description": "应用数据库迁移(生产/预发环境)"
       }
     },
     "reset": {
@@ -194,29 +210,7 @@
       }
     }
   },
-  "deploy": {
-    "dev": {
-      "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
-      "app": "backend",
-      "description": "应用数据库迁移(开发环境)"
-    },
-    "test": {
-      "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
-      "app": "backend",
-      "description": "应用数据库迁移(测试环境)"
-    },
-    "e2e": {
-      "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
-      "app": "backend",
-      "description": "应用数据库迁移(E2E环境)"
-    },
-    "prod": {
-      "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
-      "app": "backend",
-      "dangerous": true,
-      "description": "应用数据库迁移(生产/预发环境)"
-    }
-  },
+
   "test": {
     "e2e": {
       "backend": {
@@ -238,11 +232,13 @@
       }
     }
   },
+
   "lint": {
     "command": "npx nx run-many -t lint",
     "description": "运行代码检查",
     "skipEnvValidation": true
   },
+
   "start": {
     "backend": {
       "dev": {
@@ -256,8 +252,41 @@
         "description": "启动后端生产服务"
       }
     },
+    "front": {
+      "dev": {
+        "command": "npx nx dev front",
+        "app": "front",
+        "ports": [3001],
+        "description": "启动前端开发服务"
+      },
+      "prod": {
+        "command": "npx nx start front",
+        "app": "front",
+        "description": "启动前端生产服务"
+      }
+    },
+    "admin": {
+      "dev": {
+        "command": "npx nx dev admin-front",
+        "app": "admin-front",
+        "ports": [3500],
+        "description": "启动管理后台开发服务"
+      },
+      "prod": {
+        "command": "npx nx start admin-front",
+        "app": "admin-front",
+        "description": "启动管理后台生产服务"
+      }
+    },
+    "all": {
+      "concurrent": true,
+      "commands": ["start.backend.dev", "start.front.dev", "start.admin.dev"],
+      "description": "同时启动所有服务",
+      "interactive": true
+    },
     "dev": {
-      "command": "node scripts/lib/start-dev.js",
+      "internal": "start-dev",
+      "args": [],
       "description": "启动完整开发环境（集成start-dev.sh功能）",
       "interactive": true
     },
@@ -278,6 +307,7 @@
       "description": "启动前端开发服务(Mock后端)"
     }
   },
+
   "clean": {
     "all": {
       "command": "npx nx run-many -t clean",
@@ -289,6 +319,7 @@
       "dangerous": true
     }
   },
+
   "cache": {
     "clear": {
       "command": "set -e; npx nx reset; pnpm store prune || true; STORE_PATH=$(pnpm store path 2>/dev/null || echo ''); if [ -n \"$STORE_PATH\" ] && [ -d \"$STORE_PATH\" ]; then echo \"移除 PNPM store: $STORE_PATH\"; rm -rf \"$STORE_PATH\"; fi; rm -rf .nx/cache node_modules/.cache ~/.pnpm-store || true; echo 'Nx 与依赖缓存已清理'",
@@ -296,5 +327,6 @@
       "dangerous": true
     }
   },
+
   "demo": {}
 }

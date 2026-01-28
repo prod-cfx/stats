@@ -23,11 +23,7 @@
                         "status": {
                           "type": "string",
                           "example": "ok",
-                          "enum": [
-                            "ok",
-                            "degraded",
-                            "down"
-                          ]
+                          "enum": ["ok", "degraded", "down"]
                         },
                         "timestamp": {
                           "type": "string",
@@ -46,9 +42,7 @@
           }
         },
         "summary": "健康检查",
-        "tags": [
-          "Health"
-        ]
+        "tags": ["Health"]
       }
     },
     "/admin/settings": {
@@ -95,9 +89,7 @@
           }
         ],
         "summary": "获取所有配置（管理员）",
-        "tags": [
-          "admin-settings"
-        ]
+        "tags": ["admin-settings"]
       },
       "post": {
         "operationId": "AdminSettingsController_createSetting",
@@ -139,9 +131,7 @@
           }
         ],
         "summary": "创建配置（管理员）",
-        "tags": [
-          "admin-settings"
-        ]
+        "tags": ["admin-settings"]
       }
     },
     "/admin/settings/{key}": {
@@ -194,9 +184,7 @@
           }
         ],
         "summary": "更新配置（管理员）",
-        "tags": [
-          "admin-settings"
-        ]
+        "tags": ["admin-settings"]
       }
     },
     "/admin/settings/reload": {
@@ -236,9 +224,7 @@
           }
         ],
         "summary": "重新加载所有配置（管理员）",
-        "tags": [
-          "admin-settings"
-        ]
+        "tags": ["admin-settings"]
       }
     },
     "/auth/send-verification-code": {
@@ -261,9 +247,7 @@
           }
         },
         "summary": "发送验证码（注册/密码重置）",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/register": {
@@ -287,9 +271,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "data"
-                  ],
+                  "required": ["data"],
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/AuthResponseDto"
@@ -305,9 +287,7 @@
           }
         },
         "summary": "用户注册",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/login": {
@@ -331,9 +311,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "data"
-                  ],
+                  "required": ["data"],
                   "properties": {
                     "data": {
                       "$ref": "#/components/schemas/AuthResponseDto"
@@ -349,9 +327,7 @@
           }
         },
         "summary": "用户登录",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/password-reset": {
@@ -374,9 +350,7 @@
           }
         },
         "summary": "申请重置密码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/password-reset/verify": {
@@ -399,9 +373,7 @@
           }
         },
         "summary": "验证重置密码验证码并更新密码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/verify-email": {
@@ -424,9 +396,7 @@
           }
         },
         "summary": "验证邮箱验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/auth/resend-verification": {
@@ -449,9 +419,7 @@
           }
         },
         "summary": "重新发送邮箱验证码",
-        "tags": [
-          "auth"
-        ]
+        "tags": ["auth"]
       }
     },
     "/users/me": {
@@ -475,9 +443,7 @@
             "bearer": []
           }
         ],
-        "tags": [
-          "users"
-        ]
+        "tags": ["users"]
       }
     },
     "/admin/auth/login": {
@@ -507,9 +473,7 @@
           }
         },
         "summary": "管理员登录",
-        "tags": [
-          "admin-auth"
-        ]
+        "tags": ["admin-auth"]
       }
     },
     "/admin/auth/refresh": {
@@ -539,9 +503,7 @@
           }
         },
         "summary": "刷新管理员访问令牌",
-        "tags": [
-          "admin-auth"
-        ]
+        "tags": ["admin-auth"]
       }
     },
     "/admin/auth/register": {
@@ -571,9 +533,7 @@
           }
         },
         "summary": "注册首个管理员账号",
-        "tags": [
-          "admin-auth"
-        ]
+        "tags": ["admin-auth"]
       }
     },
     "/admin/auth/me": {
@@ -598,9 +558,7 @@
           }
         ],
         "summary": "获取当前管理员资料",
-        "tags": [
-          "admin-auth"
-        ]
+        "tags": ["admin-auth"]
       }
     },
     "/admin/user/login": {
@@ -649,9 +607,7 @@
           }
         ],
         "summary": "管理员登录",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/users/login": {
@@ -700,9 +656,7 @@
           }
         ],
         "summary": "管理员登录",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/user/refresh": {
@@ -751,9 +705,7 @@
           }
         ],
         "summary": "刷新管理员访问令牌",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/users/refresh": {
@@ -802,9 +754,7 @@
           }
         ],
         "summary": "刷新管理员访问令牌",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/user/info": {
@@ -829,9 +779,7 @@
           }
         ],
         "summary": "获取当前登录管理员信息",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/users/info": {
@@ -856,9 +804,7 @@
           }
         ],
         "summary": "获取当前登录管理员信息",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/user": {
@@ -927,9 +873,7 @@
           }
         ],
         "summary": "获取管理员列表（分页）",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "post": {
         "operationId": "AdminUserController_create[0]",
@@ -962,9 +906,7 @@
           }
         ],
         "summary": "创建管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/users": {
@@ -1033,9 +975,7 @@
           }
         ],
         "summary": "获取管理员列表（分页）",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "post": {
         "operationId": "AdminUserController_create[1]",
@@ -1068,9 +1008,7 @@
           }
         ],
         "summary": "创建管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/user/{id}": {
@@ -1104,9 +1042,7 @@
           }
         ],
         "summary": "根据 ID 获取管理员详情",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "put": {
         "operationId": "AdminUserController_update[0]",
@@ -1148,9 +1084,7 @@
           }
         ],
         "summary": "更新管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "delete": {
         "operationId": "AdminUserController_delete[0]",
@@ -1175,9 +1109,7 @@
           }
         ],
         "summary": "删除管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/users/{id}": {
@@ -1211,9 +1143,7 @@
           }
         ],
         "summary": "根据 ID 获取管理员详情",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "put": {
         "operationId": "AdminUserController_update[1]",
@@ -1255,9 +1185,7 @@
           }
         ],
         "summary": "更新管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       },
       "delete": {
         "operationId": "AdminUserController_delete[1]",
@@ -1282,9 +1210,7 @@
           }
         ],
         "summary": "删除管理员账号",
-        "tags": [
-          "admin-user"
-        ]
+        "tags": ["admin-user"]
       }
     },
     "/admin/role": {
@@ -1403,9 +1329,7 @@
           }
         ],
         "summary": "获取角色列表（分页）",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "post": {
         "operationId": "AdminRoleController_create[0]",
@@ -1431,9 +1355,7 @@
           }
         ],
         "summary": "创建角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       }
     },
     "/admin/roles": {
@@ -1552,9 +1474,7 @@
           }
         ],
         "summary": "获取角色列表（分页）",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "post": {
         "operationId": "AdminRoleController_create[1]",
@@ -1580,9 +1500,7 @@
           }
         ],
         "summary": "创建角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       }
     },
     "/admin/role/{id}": {
@@ -1609,9 +1527,7 @@
           }
         ],
         "summary": "获取角色详情",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "put": {
         "operationId": "AdminRoleController_update[0]",
@@ -1646,9 +1562,7 @@
           }
         ],
         "summary": "更新角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "delete": {
         "operationId": "AdminRoleController_delete[0]",
@@ -1673,9 +1587,7 @@
           }
         ],
         "summary": "删除角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       }
     },
     "/admin/roles/{id}": {
@@ -1702,9 +1614,7 @@
           }
         ],
         "summary": "获取角色详情",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "put": {
         "operationId": "AdminRoleController_update[1]",
@@ -1739,9 +1649,7 @@
           }
         ],
         "summary": "更新角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       },
       "delete": {
         "operationId": "AdminRoleController_delete[1]",
@@ -1766,9 +1674,7 @@
           }
         ],
         "summary": "删除角色",
-        "tags": [
-          "admin-role"
-        ]
+        "tags": ["admin-role"]
       }
     },
     "/admin/menu": {
@@ -1786,9 +1692,7 @@
           }
         ],
         "summary": "获取菜单树",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "post": {
         "operationId": "AdminMenuController_create[0]",
@@ -1814,9 +1718,7 @@
           }
         ],
         "summary": "创建菜单",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menus": {
@@ -1834,9 +1736,7 @@
           }
         ],
         "summary": "获取菜单树",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "post": {
         "operationId": "AdminMenuController_create[1]",
@@ -1862,9 +1762,7 @@
           }
         ],
         "summary": "创建菜单",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menu/flat": {
@@ -1882,9 +1780,7 @@
           }
         ],
         "summary": "获取菜单扁平化列表",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menus/flat": {
@@ -1902,9 +1798,7 @@
           }
         ],
         "summary": "获取菜单扁平化列表",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menu/permission": {
@@ -1922,9 +1816,7 @@
           }
         ],
         "summary": "获取当前管理员有权限的菜单和按钮列表",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menus/permission": {
@@ -1942,9 +1834,7 @@
           }
         ],
         "summary": "获取当前管理员有权限的菜单和按钮列表",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menu/{id}": {
@@ -1971,9 +1861,7 @@
           }
         ],
         "summary": "根据 ID 获取菜单详情",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "put": {
         "operationId": "AdminMenuController_update[0]",
@@ -2008,9 +1896,7 @@
           }
         ],
         "summary": "更新菜单",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "delete": {
         "operationId": "AdminMenuController_delete[0]",
@@ -2035,9 +1921,7 @@
           }
         ],
         "summary": "删除菜单（包含直接子菜单）",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/menus/{id}": {
@@ -2064,9 +1948,7 @@
           }
         ],
         "summary": "根据 ID 获取菜单详情",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "put": {
         "operationId": "AdminMenuController_update[1]",
@@ -2101,9 +1983,7 @@
           }
         ],
         "summary": "更新菜单",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       },
       "delete": {
         "operationId": "AdminMenuController_delete[1]",
@@ -2128,9 +2008,7 @@
           }
         ],
         "summary": "删除菜单（包含直接子菜单）",
-        "tags": [
-          "admin-menu"
-        ]
+        "tags": ["admin-menu"]
       }
     },
     "/admin/data-pull-tasks": {
@@ -2220,9 +2098,7 @@
           }
         ],
         "summary": "分页获取数据拉取任务列表",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       },
       "post": {
         "operationId": "AdminDataPullTaskController_create",
@@ -2255,9 +2131,7 @@
           }
         ],
         "summary": "创建数据拉取任务",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/admin/data-pull-tasks/registered-keys": {
@@ -2277,11 +2151,7 @@
                       "items": {
                         "type": "string"
                       },
-                      "example": [
-                        "example-kline-1m",
-                        "example-news-latest",
-                        "coinglass-heatmap"
-                      ]
+                      "example": ["example-kline-1m", "example-news-latest", "coinglass-heatmap"]
                     }
                   }
                 }
@@ -2295,9 +2165,7 @@
           }
         ],
         "summary": "获取所有已注册的 Job key 列表",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/admin/data-pull-tasks/registered-jobs": {
@@ -2355,9 +2223,7 @@
           }
         ],
         "summary": "获取所有已注册的 Job 详细信息（包含 meta 配置格式说明）",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/admin/data-pull-tasks/{id}/executions": {
@@ -2425,9 +2291,7 @@
           }
         ],
         "summary": "分页获取指定任务的执行历史",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/admin/data-pull-tasks/{id}": {
@@ -2461,9 +2325,7 @@
           }
         ],
         "summary": "根据 ID 获取任务详情",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       },
       "put": {
         "operationId": "AdminDataPullTaskController_update",
@@ -2505,9 +2367,7 @@
           }
         ],
         "summary": "更新数据拉取任务",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       },
       "delete": {
         "operationId": "AdminDataPullTaskController_delete",
@@ -2532,9 +2392,7 @@
           }
         ],
         "summary": "删除数据拉取任务",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/admin/data-pull-tasks/{id}/trigger": {
@@ -2569,9 +2427,7 @@
           }
         ],
         "summary": "手动触发一次数据拉取任务执行（用于测试）",
-        "tags": [
-          "admin-data-pull-tasks"
-        ]
+        "tags": ["admin-data-pull-tasks"]
       }
     },
     "/liquidation-heatmap/latest": {
@@ -2625,11 +2481,7 @@
             "in": "query",
             "description": "Coinglass 热力图模型类型",
             "schema": {
-              "enum": [
-                "MODEL1",
-                "MODEL2",
-                "MODEL3"
-              ],
+              "enum": ["MODEL1", "MODEL2", "MODEL3"],
               "type": "string"
             }
           }
@@ -2652,9 +2504,7 @@
           }
         ],
         "summary": "获取最新的清算热力图快照（单交易对）",
-        "tags": [
-          "liquidation-heatmap"
-        ]
+        "tags": ["liquidation-heatmap"]
       }
     },
     "/open-interest": {
@@ -2703,9 +2553,7 @@
           }
         ],
         "summary": "创建或更新持仓量数据",
-        "tags": [
-          "持仓量数据"
-        ]
+        "tags": ["持仓量数据"]
       },
       "get": {
         "operationId": "OpenInterestController_query",
@@ -2809,9 +2657,7 @@
           }
         ],
         "summary": "查询持仓量数据",
-        "tags": [
-          "持仓量数据"
-        ]
+        "tags": ["持仓量数据"]
       }
     },
     "/open-interest/batch": {
@@ -2866,9 +2712,7 @@
           }
         ],
         "summary": "批量创建或更新持仓量数据",
-        "tags": [
-          "持仓量数据"
-        ]
+        "tags": ["持仓量数据"]
       }
     },
     "/open-interest/latest/{exchange}/{symbol}": {
@@ -2928,9 +2772,7 @@
           }
         ],
         "summary": "获取最新的持仓量数据",
-        "tags": [
-          "持仓量数据"
-        ]
+        "tags": ["持仓量数据"]
       }
     },
     "/open-interest/stats/{symbol}": {
@@ -3003,9 +2845,7 @@
           }
         ],
         "summary": "获取持仓量统计数据",
-        "tags": [
-          "持仓量数据"
-        ]
+        "tags": ["持仓量数据"]
       }
     },
     "/admin/orderbook-configs": {
@@ -3028,10 +2868,7 @@
             "description": "交易场所类型筛选",
             "schema": {
               "type": "string",
-              "enum": [
-                "CEX",
-                "DEX"
-              ]
+              "enum": ["CEX", "DEX"]
             }
           },
           {
@@ -3041,11 +2878,7 @@
             "description": "交易品种类型筛选",
             "schema": {
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -3088,9 +2921,7 @@
           }
         ],
         "summary": "获取所有订单薄交易对配置",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       },
       "post": {
         "operationId": "AdminOrderbookPairConfigController_createConfig",
@@ -3132,9 +2963,7 @@
           }
         ],
         "summary": "创建订单薄交易对配置",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       }
     },
     "/admin/orderbook-configs/{id}": {
@@ -3177,9 +3006,7 @@
           }
         ],
         "summary": "获取单个订单薄交易对配置",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       },
       "put": {
         "operationId": "AdminOrderbookPairConfigController_updateConfig",
@@ -3230,9 +3057,7 @@
           }
         ],
         "summary": "更新订单薄交易对配置",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       },
       "delete": {
         "operationId": "AdminOrderbookPairConfigController_deleteConfig",
@@ -3279,9 +3104,7 @@
           }
         ],
         "summary": "删除订单薄交易对配置",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       }
     },
     "/admin/orderbook-configs/{id}/orderbook": {
@@ -3324,9 +3147,7 @@
           }
         ],
         "summary": "查看指定订单薄配置的当前订单薄快照（来自 Redis）",
-        "tags": [
-          "admin-orderbook-config"
-        ]
+        "tags": ["admin-orderbook-config"]
       }
     },
     "/crypto-stock-quotes/latest": {
@@ -3389,9 +3210,7 @@
           }
         ],
         "summary": "获取加密相关股票的最新报价列表",
-        "tags": [
-          "crypto-stock-quotes"
-        ]
+        "tags": ["crypto-stock-quotes"]
       }
     },
     "/admin/trades-configs": {
@@ -3414,11 +3233,7 @@
             "description": "交易品种类型筛选",
             "schema": {
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -3461,9 +3276,7 @@
           }
         ],
         "summary": "获取所有交易记录订阅配置",
-        "tags": [
-          "admin-trades-config"
-        ]
+        "tags": ["admin-trades-config"]
       },
       "post": {
         "operationId": "AdminTradesPairConfigController_createConfig",
@@ -3505,9 +3318,7 @@
           }
         ],
         "summary": "创建交易记录订阅配置",
-        "tags": [
-          "admin-trades-config"
-        ]
+        "tags": ["admin-trades-config"]
       }
     },
     "/admin/trades-configs/{id}": {
@@ -3550,9 +3361,7 @@
           }
         ],
         "summary": "获取单个交易记录订阅配置",
-        "tags": [
-          "admin-trades-config"
-        ]
+        "tags": ["admin-trades-config"]
       },
       "put": {
         "operationId": "AdminTradesPairConfigController_updateConfig",
@@ -3603,9 +3412,7 @@
           }
         ],
         "summary": "更新交易记录订阅配置",
-        "tags": [
-          "admin-trades-config"
-        ]
+        "tags": ["admin-trades-config"]
       },
       "delete": {
         "operationId": "AdminTradesPairConfigController_deleteConfig",
@@ -3630,9 +3437,7 @@
           }
         ],
         "summary": "删除交易记录订阅配置",
-        "tags": [
-          "admin-trades-config"
-        ]
+        "tags": ["admin-trades-config"]
       }
     },
     "/markets/pairs": {
@@ -3646,10 +3451,7 @@
             "description": "交易 venue 类型",
             "schema": {
               "type": "string",
-              "enum": [
-                "DEX",
-                "CEX"
-              ]
+              "enum": ["DEX", "CEX"]
             }
           },
           {
@@ -3659,11 +3461,7 @@
             "description": "交易品种类型",
             "schema": {
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -3673,11 +3471,7 @@
             "description": "交易所标识，仅对 CEX 生效",
             "schema": {
               "type": "string",
-              "enum": [
-                "BINANCE",
-                "OKX",
-                "BYBIT"
-              ]
+              "enum": ["BINANCE", "OKX", "BYBIT"]
             }
           }
         ],
@@ -3702,9 +3496,7 @@
           }
         ],
         "summary": "获取交易对配置列表",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/markets/long-short-ratio": {
@@ -3729,20 +3521,7 @@
             "schema": {
               "example": "4h",
               "type": "string",
-              "enum": [
-                "1m",
-                "3m",
-                "5m",
-                "15m",
-                "30m",
-                "1h",
-                "4h",
-                "6h",
-                "8h",
-                "12h",
-                "1d",
-                "1w"
-              ]
+              "enum": ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "6h", "8h", "12h", "1d", "1w"]
             }
           },
           {
@@ -3800,9 +3579,7 @@
           }
         ],
         "summary": "获取交易对的多空比时间序列",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/markets/long-short-ratio/exchanges": {
@@ -3827,15 +3604,7 @@
             "schema": {
               "example": "4h",
               "type": "string",
-              "enum": [
-                "5m",
-                "15m",
-                "30m",
-                "1h",
-                "4h",
-                "12h",
-                "24h"
-              ]
+              "enum": ["5m", "15m", "30m", "1h", "4h", "12h", "24h"]
             }
           }
         ],
@@ -3871,9 +3640,7 @@
           }
         ],
         "summary": "按交易所维度获取指定标的的多空比快照",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/markets/trades/latest": {
@@ -3898,11 +3665,7 @@
             "schema": {
               "example": "SPOT",
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -3950,9 +3713,7 @@
           }
         ],
         "summary": "获取最新成交记录",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/markets/trades/large": {
@@ -3977,11 +3738,7 @@
             "schema": {
               "example": "SPOT",
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -4041,9 +3798,7 @@
           }
         ],
         "summary": "获取大额成交记录",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/markets/trades": {
@@ -4091,11 +3846,7 @@
             "schema": {
               "example": "SPOT",
               "type": "string",
-              "enum": [
-                "SPOT",
-                "PERPETUAL",
-                "FUTURE"
-              ]
+              "enum": ["SPOT", "PERPETUAL", "FUTURE"]
             }
           },
           {
@@ -4136,10 +3887,7 @@
             "schema": {
               "example": "buy",
               "type": "string",
-              "enum": [
-                "buy",
-                "sell"
-              ]
+              "enum": ["buy", "sell"]
             }
           },
           {
@@ -4195,9 +3943,7 @@
           }
         ],
         "summary": "查询交易记录（分页）",
-        "tags": [
-          "markets"
-        ]
+        "tags": ["markets"]
       }
     },
     "/aggregated-liquidation/summary": {
@@ -4244,9 +3990,7 @@
           }
         ],
         "summary": "获取聚合爆仓汇总数据（多时间区间）",
-        "tags": [
-          "聚合爆仓数据"
-        ]
+        "tags": ["聚合爆仓数据"]
       }
     },
     "/aggregated-liquidation/exchanges": {
@@ -4260,12 +4004,7 @@
             "in": "query",
             "description": "时间区间/粒度，例如 1h/4h/12h/24h",
             "schema": {
-              "enum": [
-                "1h",
-                "4h",
-                "12h",
-                "24h"
-              ],
+              "enum": ["1h", "4h", "12h", "24h"],
               "type": "string"
             }
           },
@@ -4308,9 +4047,7 @@
           }
         ],
         "summary": "获取按交易所拆分的聚合爆仓数据（单一时间区间）",
-        "tags": [
-          "聚合爆仓数据"
-        ]
+        "tags": ["聚合爆仓数据"]
       }
     },
     "/admin/exchange-configs": {
@@ -4365,10 +4102,7 @@
             "description": "交易场所类型筛选",
             "schema": {
               "type": "string",
-              "enum": [
-                "CEX",
-                "DEX"
-              ]
+              "enum": ["CEX", "DEX"]
             }
           },
           {
@@ -4413,9 +4147,7 @@
           }
         ],
         "summary": "分页获取交易所配置列表",
-        "tags": [
-          "admin-exchange-config"
-        ]
+        "tags": ["admin-exchange-config"]
       },
       "post": {
         "operationId": "AdminExchangeConfigController_createConfig",
@@ -4457,9 +4189,7 @@
           }
         ],
         "summary": "创建交易所配置",
-        "tags": [
-          "admin-exchange-config"
-        ]
+        "tags": ["admin-exchange-config"]
       }
     },
     "/admin/exchange-configs/{id}": {
@@ -4502,9 +4232,7 @@
           }
         ],
         "summary": "获取单个交易所配置",
-        "tags": [
-          "admin-exchange-config"
-        ]
+        "tags": ["admin-exchange-config"]
       },
       "put": {
         "operationId": "AdminExchangeConfigController_updateConfig",
@@ -4555,9 +4283,7 @@
           }
         ],
         "summary": "更新交易所配置",
-        "tags": [
-          "admin-exchange-config"
-        ]
+        "tags": ["admin-exchange-config"]
       },
       "delete": {
         "operationId": "AdminExchangeConfigController_deleteConfig",
@@ -4604,9 +4330,7 @@
           }
         ],
         "summary": "删除交易所配置",
-        "tags": [
-          "admin-exchange-config"
-        ]
+        "tags": ["admin-exchange-config"]
       }
     },
     "/whale-alerts/realtime": {
@@ -4675,9 +4399,7 @@
           }
         ],
         "summary": "获取 Hyperliquid 鲸鱼持仓预警实时列表",
-        "tags": [
-          "whale-alerts"
-        ]
+        "tags": ["whale-alerts"]
       }
     },
     "/whale-tracking/discover": {
@@ -4703,9 +4425,7 @@
           }
         ],
         "summary": "鲸鱼发现页 - 获取推荐鲸鱼与详情列表",
-        "tags": [
-          "whale-tracking"
-        ]
+        "tags": ["whale-tracking"]
       }
     },
     "/whale-tracking/traders/{address}/performance": {
@@ -4774,9 +4494,7 @@
           }
         ],
         "summary": "鲸鱼地址维度的历史交易与绩效统计",
-        "tags": [
-          "whale-tracking"
-        ]
+        "tags": ["whale-tracking"]
       }
     },
     "/whale-holdings": {
@@ -4850,9 +4568,7 @@
           }
         ],
         "summary": "获取当前鲸鱼持仓列表（基于 Hyperliquid Whale Alert 数据）",
-        "tags": [
-          "鲸鱼持仓"
-        ]
+        "tags": ["鲸鱼持仓"]
       }
     }
   },
@@ -4879,9 +4595,7 @@
             "example": "Success"
           }
         },
-        "required": [
-          "data"
-        ]
+        "required": ["data"]
       },
       "SettingResponseDto": {
         "type": "object",
@@ -4970,12 +4684,7 @@
             "type": "string",
             "description": "值类型",
             "example": "string",
-            "enum": [
-              "string",
-              "number",
-              "boolean",
-              "json"
-            ]
+            "enum": ["string", "number", "boolean", "json"]
           },
           "description": {
             "type": "string",
@@ -4993,10 +4702,7 @@
             "example": false
           }
         },
-        "required": [
-          "key",
-          "value"
-        ]
+        "required": ["key", "value"]
       },
       "UpdateSettingDto": {
         "type": "object",
@@ -5026,12 +4732,7 @@
             "type": "string",
             "description": "值类型",
             "example": "string",
-            "enum": [
-              "string",
-              "number",
-              "boolean",
-              "json"
-            ]
+            "enum": ["string", "number", "boolean", "json"]
           },
           "description": {
             "type": "string",
@@ -5049,9 +4750,7 @@
             "example": false
           }
         },
-        "required": [
-          "value"
-        ]
+        "required": ["value"]
       },
       "UserProfileResponseDto": {
         "type": "object",
@@ -5089,9 +4788,7 @@
           },
           "roles": {
             "description": "User roles",
-            "example": [
-              "user"
-            ],
+            "example": ["user"],
             "type": "array",
             "items": {
               "type": "string"
@@ -5110,15 +4807,7 @@
             "example": "2025-01-02T00:00:00.000Z"
           }
         },
-        "required": [
-          "id",
-          "email",
-          "emailVerified",
-          "isGuest",
-          "roles",
-          "createdAt",
-          "updatedAt"
-        ]
+        "required": ["id", "email", "emailVerified", "isGuest", "roles", "createdAt", "updatedAt"]
       },
       "AuthResponseDto": {
         "type": "object",
@@ -5137,10 +4826,7 @@
             ]
           }
         },
-        "required": [
-          "accessToken",
-          "user"
-        ]
+        "required": ["accessToken", "user"]
       },
       "SendVerificationCodeRequestDto": {
         "type": "object",
@@ -5153,17 +4839,11 @@
           "purpose": {
             "type": "string",
             "description": "Purpose of verification code",
-            "enum": [
-              "EMAIL_VERIFICATION",
-              "PASSWORD_RESET"
-            ],
+            "enum": ["EMAIL_VERIFICATION", "PASSWORD_RESET"],
             "example": "EMAIL_VERIFICATION"
           }
         },
-        "required": [
-          "email",
-          "purpose"
-        ]
+        "required": ["email", "purpose"]
       },
       "RegisterRequestDto": {
         "type": "object",
@@ -5178,10 +4858,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "email",
-          "password"
-        ]
+        "required": ["email", "password"]
       },
       "LoginRequestDto": {
         "type": "object",
@@ -5197,10 +4874,7 @@
             "example": "P@ssw0rd123"
           }
         },
-        "required": [
-          "email",
-          "password"
-        ]
+        "required": ["email", "password"]
       },
       "PasswordResetRequestDto": {
         "type": "object",
@@ -5211,9 +4885,7 @@
             "example": "user@example.com"
           }
         },
-        "required": [
-          "email"
-        ]
+        "required": ["email"]
       },
       "VerifyPasswordResetRequestDto": {
         "type": "object",
@@ -5235,11 +4907,7 @@
             "minLength": 6
           }
         },
-        "required": [
-          "email",
-          "code",
-          "newPassword"
-        ]
+        "required": ["email", "code", "newPassword"]
       },
       "VerifyEmailRequestDto": {
         "type": "object",
@@ -5261,10 +4929,7 @@
             "default": true
           }
         },
-        "required": [
-          "email",
-          "code"
-        ]
+        "required": ["email", "code"]
       },
       "ResendVerificationRequestDto": {
         "type": "object",
@@ -5275,9 +4940,7 @@
             "example": "user@example.com"
           }
         },
-        "required": [
-          "email"
-        ]
+        "required": ["email"]
       },
       "AdminLoginDto": {
         "type": "object",
@@ -5292,10 +4955,7 @@
             "description": "管理员登录密码"
           }
         },
-        "required": [
-          "username",
-          "password"
-        ]
+        "required": ["username", "password"]
       },
       "AdminProfileDto": {
         "type": "object",
@@ -5330,12 +4990,7 @@
             }
           }
         },
-        "required": [
-          "id",
-          "username",
-          "isFrozen",
-          "menuPermissions"
-        ]
+        "required": ["id", "username", "isFrozen", "menuPermissions"]
       },
       "AdminAuthResponseDto": {
         "type": "object",
@@ -5361,10 +5016,7 @@
             ]
           }
         },
-        "required": [
-          "accessToken",
-          "admin"
-        ]
+        "required": ["accessToken", "admin"]
       },
       "AdminRefreshDto": {
         "type": "object",
@@ -5374,9 +5026,7 @@
             "description": "刷新令牌"
           }
         },
-        "required": [
-          "refreshToken"
-        ]
+        "required": ["refreshToken"]
       },
       "AdminRegisterDto": {
         "type": "object",
@@ -5407,10 +5057,7 @@
             }
           }
         },
-        "required": [
-          "username",
-          "password"
-        ]
+        "required": ["username", "password"]
       },
       "BasePaginationResponseDto": {
         "type": "object",
@@ -5438,12 +5085,7 @@
             }
           }
         },
-        "required": [
-          "total",
-          "page",
-          "limit",
-          "items"
-        ]
+        "required": ["total", "page", "limit", "items"]
       },
       "AdminAssignedRoleDto": {
         "type": "object",
@@ -5466,11 +5108,7 @@
             "nullable": true
           }
         },
-        "required": [
-          "id",
-          "code",
-          "name"
-        ]
+        "required": ["id", "code", "name"]
       },
       "AdminUserDto": {
         "type": "object",
@@ -5559,11 +5197,7 @@
           "type": {
             "type": "string",
             "description": "菜单类型",
-            "enum": [
-              "DIRECTORY",
-              "MENU",
-              "FEATURE"
-            ]
+            "enum": ["DIRECTORY", "MENU", "FEATURE"]
           },
           "children": {
             "type": "array",
@@ -5572,16 +5206,10 @@
               "additionalProperties": true,
               "description": "Original schema是递归结构，openapi-zod-client 暂不支持。这里改为宽松 object，客户端可在运行时递归自身类型。"
             },
-            "description": "Patched via scripts/dx to avoid recursive schema preventing openapi-zod-client generation. See scripts/lib for context."
+            "description": "Patched to avoid recursive schema preventing openapi-zod-client generation."
           }
         },
-        "required": [
-          "id",
-          "name",
-          "sortOrder",
-          "code",
-          "type"
-        ]
+        "required": ["id", "name", "sortOrder", "code", "type"]
       },
       "AdminUserInfoDto": {
         "type": "object",
@@ -5680,10 +5308,7 @@
             }
           }
         },
-        "required": [
-          "username",
-          "password"
-        ]
+        "required": ["username", "password"]
       },
       "UpdateAdminUserDto": {
         "type": "object",
@@ -5757,10 +5382,7 @@
             }
           }
         },
-        "required": [
-          "code",
-          "name"
-        ]
+        "required": ["code", "name"]
       },
       "UpdateAdminRoleDto": {
         "type": "object",
@@ -5842,10 +5464,7 @@
             "default": true
           }
         },
-        "required": [
-          "type",
-          "title"
-        ]
+        "required": ["type", "title"]
       },
       "UpdateAdminMenuDto": {
         "type": "object",
@@ -5958,14 +5577,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "key",
-          "name",
-          "enabled",
-          "createdAt",
-          "updatedAt"
-        ]
+        "required": ["id", "key", "name", "enabled", "createdAt", "updatedAt"]
       },
       "AdminDataPullExecutionResponseDto": {
         "type": "object",
@@ -6000,13 +5612,7 @@
             "nullable": true
           }
         },
-        "required": [
-          "id",
-          "taskId",
-          "status",
-          "fetchedCount",
-          "startedAt"
-        ]
+        "required": ["id", "taskId", "status", "fetchedCount", "startedAt"]
       },
       "CreateAdminDataPullTaskDto": {
         "type": "object",
@@ -6059,10 +5665,7 @@
             "nullable": true
           }
         },
-        "required": [
-          "key",
-          "name"
-        ]
+        "required": ["key", "name"]
       },
       "UpdateAdminDataPullTaskDto": {
         "type": "object",
@@ -6136,11 +5739,7 @@
           "modelType": {
             "type": "string",
             "description": "Heatmap 模型类型",
-            "enum": [
-              "MODEL1",
-              "MODEL2",
-              "MODEL3"
-            ]
+            "enum": ["MODEL1", "MODEL2", "MODEL3"]
           },
           "timeInterval": {
             "type": "string",
@@ -6286,12 +5885,7 @@
             "example": "2025-12-24T10:00:00Z"
           }
         },
-        "required": [
-          "exchange",
-          "symbol",
-          "open_interest_usd",
-          "open_interest_quantity"
-        ]
+        "required": ["exchange", "symbol", "open_interest_usd", "open_interest_quantity"]
       },
       "OpenInterestStatsDto": {
         "type": "object",
@@ -6483,19 +6077,12 @@
           "venueType": {
             "type": "string",
             "description": "交易场所类型",
-            "enum": [
-              "CEX",
-              "DEX"
-            ]
+            "enum": ["CEX", "DEX"]
           },
           "instrumentType": {
             "type": "string",
             "description": "交易品种类型",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "enabled": {
             "type": "boolean",
@@ -6563,10 +6150,7 @@
             "description": "数量（base 数量，例如 0.1 BTC）"
           }
         },
-        "required": [
-          "price",
-          "size"
-        ]
+        "required": ["price", "size"]
       },
       "VenueOrderBookDto": {
         "type": "object",
@@ -6608,14 +6192,7 @@
             "description": "本地版本号 / 序列号，用于去重与连续性检查"
           }
         },
-        "required": [
-          "venueId",
-          "marketKey",
-          "bids",
-          "asks",
-          "receivedTs",
-          "version"
-        ]
+        "required": ["venueId", "marketKey", "bids", "asks", "receivedTs", "version"]
       },
       "CreateOrderbookPairConfigDto": {
         "type": "object",
@@ -6645,19 +6222,12 @@
           "venueType": {
             "type": "string",
             "description": "交易场所类型",
-            "enum": [
-              "CEX",
-              "DEX"
-            ]
+            "enum": ["CEX", "DEX"]
           },
           "instrumentType": {
             "type": "string",
             "description": "交易品种类型",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "enabled": {
             "type": "boolean",
@@ -6901,15 +6471,7 @@
             "description": "更新时间"
           }
         },
-        "required": [
-          "id",
-          "symbol",
-          "price",
-          "source",
-          "quoteTimestamp",
-          "createdAt",
-          "updatedAt"
-        ]
+        "required": ["id", "symbol", "price", "source", "quoteTimestamp", "createdAt", "updatedAt"]
       },
       "TradesPairConfigResponseDto": {
         "type": "object",
@@ -6941,11 +6503,7 @@
           "instrumentType": {
             "type": "string",
             "description": "交易品种类型",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "canonicalInstId": {
             "type": "string",
@@ -7021,11 +6579,7 @@
           "instrumentType": {
             "type": "string",
             "description": "交易品种类型",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "enabled": {
             "type": "boolean",
@@ -7052,14 +6606,7 @@
             "description": "备注说明"
           }
         },
-        "required": [
-          "pairId",
-          "exchange",
-          "symbol",
-          "baseAsset",
-          "quoteAsset",
-          "instrumentType"
-        ]
+        "required": ["pairId", "exchange", "symbol", "baseAsset", "quoteAsset", "instrumentType"]
       },
       "UpdateTradesPairConfigDto": {
         "type": "object",
@@ -7155,11 +6702,7 @@
             "type": "string",
             "description": "合约类型",
             "example": "SPOT",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "symbol": {
             "type": "string",
@@ -7195,10 +6738,7 @@
             "type": "string",
             "description": "交易方向",
             "example": "buy",
-            "enum": [
-              "buy",
-              "sell"
-            ]
+            "enum": ["buy", "sell"]
           },
           "tradeTimestamp": {
             "type": "string",
@@ -7252,19 +6792,12 @@
           "venueType": {
             "type": "string",
             "description": "交易 venue 类型（DEX / CEX）",
-            "enum": [
-              "DEX",
-              "CEX"
-            ]
+            "enum": ["DEX", "CEX"]
           },
           "instrumentType": {
             "type": "string",
             "description": "交易品种类型（现货 / 永续 / 期货）",
-            "enum": [
-              "SPOT",
-              "PERPETUAL",
-              "FUTURE"
-            ]
+            "enum": ["SPOT", "PERPETUAL", "FUTURE"]
           },
           "pricePrecision": {
             "type": "number",
@@ -7289,11 +6822,7 @@
           "exchange": {
             "type": "string",
             "description": "交易所标识，仅对 CEX 生效",
-            "enum": [
-              "BINANCE",
-              "OKX",
-              "BYBIT"
-            ]
+            "enum": ["BINANCE", "OKX", "BYBIT"]
           },
           "exchangeSymbol": {
             "type": "string",
@@ -7357,20 +6886,7 @@
             "type": "string",
             "description": "时间粒度，可选值：1m / 5m / 15m / 1h / 4h / 1d",
             "example": "4h",
-            "enum": [
-              "1m",
-              "3m",
-              "5m",
-              "15m",
-              "30m",
-              "1h",
-              "4h",
-              "6h",
-              "8h",
-              "12h",
-              "1d",
-              "1w"
-            ]
+            "enum": ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "6h", "8h", "12h", "1d", "1w"]
           },
           "timestamp": {
             "type": "string",
@@ -7418,13 +6934,7 @@
             "example": "COINGLASS"
           }
         },
-        "required": [
-          "tradingPairId",
-          "interval",
-          "timestamp",
-          "longShortRatio",
-          "source"
-        ]
+        "required": ["tradingPairId", "interval", "timestamp", "longShortRatio", "source"]
       },
       "LiquidationSummaryItemDto": {
         "type": "object",
@@ -7432,12 +6942,7 @@
           "timeframe": {
             "type": "string",
             "description": "时间区间（粒度），与 Coinglass interval 对齐，例如 1h/4h/12h/24h",
-            "enum": [
-              "1h",
-              "4h",
-              "12h",
-              "24h"
-            ],
+            "enum": ["1h", "4h", "12h", "24h"],
             "example": "4h"
           },
           "totalUsd": {
@@ -7456,12 +6961,7 @@
             "example": 78000000
           }
         },
-        "required": [
-          "timeframe",
-          "totalUsd",
-          "longUsd",
-          "shortUsd"
-        ]
+        "required": ["timeframe", "totalUsd", "longUsd", "shortUsd"]
       },
       "AggregatedLiquidationSummaryDto": {
         "type": "object",
@@ -7479,10 +6979,7 @@
             }
           }
         },
-        "required": [
-          "symbol",
-          "items"
-        ]
+        "required": ["symbol", "items"]
       },
       "ExchangeLiquidationRowDto": {
         "type": "object",
@@ -7500,12 +6997,7 @@
           "timeframe": {
             "type": "string",
             "description": "时间区间（粒度），与 Coinglass interval 对齐，例如 1h/4h/12h/24h",
-            "enum": [
-              "1h",
-              "4h",
-              "12h",
-              "24h"
-            ],
+            "enum": ["1h", "4h", "12h", "24h"],
             "example": "4h"
           },
           "amountUsd": {
@@ -7534,14 +7026,7 @@
             "example": false
           }
         },
-        "required": [
-          "exchange",
-          "symbol",
-          "timeframe",
-          "amountUsd",
-          "longUsd",
-          "shortUsd"
-        ]
+        "required": ["exchange", "symbol", "timeframe", "amountUsd", "longUsd", "shortUsd"]
       },
       "ExchangeLiquidationResponseDto": {
         "type": "object",
@@ -7554,12 +7039,7 @@
           "timeframe": {
             "type": "string",
             "description": "时间区间（粒度），与 Coinglass interval 对齐，例如 1h/4h/12h/24h",
-            "enum": [
-              "1h",
-              "4h",
-              "12h",
-              "24h"
-            ],
+            "enum": ["1h", "4h", "12h", "24h"],
             "example": "4h"
           },
           "rows": {
@@ -7570,11 +7050,7 @@
             }
           }
         },
-        "required": [
-          "symbol",
-          "timeframe",
-          "rows"
-        ]
+        "required": ["symbol", "timeframe", "rows"]
       },
       "ExchangeConfigResponseDto": {
         "type": "object",
@@ -7611,10 +7087,7 @@
           "venueType": {
             "type": "string",
             "description": "交易场所类型",
-            "enum": [
-              "CEX",
-              "DEX"
-            ],
+            "enum": ["CEX", "DEX"],
             "nullable": true
           },
           "enabled": {
@@ -7641,15 +7114,7 @@
             "description": "更新时间"
           }
         },
-        "required": [
-          "id",
-          "code",
-          "name",
-          "enabled",
-          "sort",
-          "createdAt",
-          "updatedAt"
-        ]
+        "required": ["id", "code", "name", "enabled", "sort", "createdAt", "updatedAt"]
       },
       "CreateExchangeConfigDto": {
         "type": "object",
@@ -7683,10 +7148,7 @@
           "venueType": {
             "type": "string",
             "description": "交易场所类型",
-            "enum": [
-              "CEX",
-              "DEX"
-            ],
+            "enum": ["CEX", "DEX"],
             "nullable": true
           },
           "enabled": {
@@ -7706,18 +7168,12 @@
             "description": "扩展信息（JSON）",
             "example": {
               "country": "CN",
-              "aliases": [
-                "binance",
-                "bn"
-              ]
+              "aliases": ["binance", "bn"]
             },
             "nullable": true
           }
         },
-        "required": [
-          "code",
-          "name"
-        ]
+        "required": ["code", "name"]
       },
       "UpdateExchangeConfigDto": {
         "type": "object",
@@ -7751,10 +7207,7 @@
           "venueType": {
             "type": "string",
             "description": "交易场所类型",
-            "enum": [
-              "CEX",
-              "DEX"
-            ],
+            "enum": ["CEX", "DEX"],
             "nullable": true
           },
           "enabled": {
@@ -7772,10 +7225,7 @@
             "description": "扩展信息（JSON）",
             "example": {
               "country": "CN",
-              "aliases": [
-                "binance",
-                "bn"
-              ]
+              "aliases": ["binance", "bn"]
             },
             "nullable": true
           }
@@ -7783,10 +7233,7 @@
       },
       "WhaleAlertSide": {
         "type": "string",
-        "enum": [
-          "Long",
-          "Short"
-        ],
+        "enum": ["Long", "Short"],
         "description": "持仓方向：Long / Short（由 position_size 正负推导，>= 0 视为 Long，< 0 视为 Short）"
       },
       "RealtimeWhaleAlertDto": {
@@ -7860,13 +7307,7 @@
           "key": {
             "type": "string",
             "description": "AI 标签 key，用于前端 i18n 映射",
-            "enum": [
-              "bullWarGod",
-              "swingKing",
-              "smartTrader",
-              "treasuryKeeper",
-              "twitterKol"
-            ]
+            "enum": ["bullWarGod", "swingKing", "smartTrader", "treasuryKeeper", "twitterKol"]
           },
           "color": {
             "type": "string",
@@ -7879,20 +7320,10 @@
           "descriptionKey": {
             "type": "string",
             "description": "描述文案对应的 i18n key，可选",
-            "enum": [
-              "bullWarGod",
-              "swingKing",
-              "smartTrader",
-              "treasuryKeeper",
-              "twitterKol"
-            ]
+            "enum": ["bullWarGod", "swingKing", "smartTrader", "treasuryKeeper", "twitterKol"]
           }
         },
-        "required": [
-          "key",
-          "color",
-          "bgColor"
-        ]
+        "required": ["key", "color", "bgColor"]
       },
       "WhaleDiscoverTraderDto": {
         "type": "object",
@@ -7900,10 +7331,7 @@
           "variant": {
             "type": "string",
             "description": "卡片展示变体：推荐卡片或详情卡片",
-            "enum": [
-              "recommended",
-              "detail"
-            ]
+            "enum": ["recommended", "detail"]
           },
           "address": {
             "type": "string",
@@ -7930,10 +7358,7 @@
           "pnlLabelKey": {
             "type": "string",
             "description": "盈亏标签 key，用于前端展示对应时间维度",
-            "enum": [
-              "realizedPnl",
-              "realizedPnl1m"
-            ]
+            "enum": ["realizedPnl", "realizedPnl1m"]
           },
           "trades": {
             "type": "number",
@@ -7950,10 +7375,7 @@
           "winRateLabelKey": {
             "type": "string",
             "description": "胜率标签 key，用于前端展示对应时间维度",
-            "enum": [
-              "winRate",
-              "winRate1m"
-            ]
+            "enum": ["winRate", "winRate1m"]
           },
           "avatarColor": {
             "type": "string",
@@ -7967,14 +7389,7 @@
             }
           }
         },
-        "required": [
-          "variant",
-          "address",
-          "totalValueUsd",
-          "pnlUsd",
-          "winRatePct",
-          "avatarColor"
-        ]
+        "required": ["variant", "address", "totalValueUsd", "pnlUsd", "winRatePct", "avatarColor"]
       },
       "WhaleDiscoverResponseDto": {
         "type": "object",
@@ -7994,10 +7409,7 @@
             }
           }
         },
-        "required": [
-          "recommended",
-          "details"
-        ]
+        "required": ["recommended", "details"]
       },
       "WhaleTraderSummaryPerformanceDto": {
         "type": "object",
@@ -8094,13 +7506,7 @@
             "example": 4
           }
         },
-        "required": [
-          "symbol",
-          "totalValueUsd",
-          "trades",
-          "longCount",
-          "shortCount"
-        ]
+        "required": ["symbol", "totalValueUsd", "trades", "longCount", "shortCount"]
       },
       "WhaleTradeHistoryItemDto": {
         "type": "object",
@@ -8119,10 +7525,7 @@
             "type": "string",
             "description": "仓位方向，多头 LONG / 空头 SHORT，根据 positionSize 正负推导",
             "example": "LONG",
-            "enum": [
-              "LONG",
-              "SHORT"
-            ]
+            "enum": ["LONG", "SHORT"]
           },
           "positionSize": {
             "type": "number",
@@ -8147,10 +7550,7 @@
           "positionAction": {
             "type": "number",
             "description": "持仓操作类型：1 = 开仓, 2 = 平仓（直接来自 Hyperliquid Whale Alert 数据）",
-            "enum": [
-              1,
-              2
-            ],
+            "enum": [1, 2],
             "example": 1
           },
           "createTime": {
@@ -8197,11 +7597,7 @@
             }
           }
         },
-        "required": [
-          "summary",
-          "byAsset",
-          "trades"
-        ]
+        "required": ["summary", "byAsset", "trades"]
       },
       "WhaleHoldingDto": {
         "type": "object",
@@ -8220,10 +7616,7 @@
             "type": "string",
             "description": "仓位方向，多头 LONG / 空头 SHORT，根据 positionSize 正负推导",
             "example": "LONG",
-            "enum": [
-              "LONG",
-              "SHORT"
-            ]
+            "enum": ["LONG", "SHORT"]
           },
           "positionSize": {
             "type": "number",

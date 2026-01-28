@@ -17,18 +17,21 @@ Binance WebSocket → BinanceWsService → KlineGateway → Socket.IO → 前端
 **文件**: `apps/backend/src/modules/kline/binance-ws.service.ts`
 
 **核心功能**:
+
 - 管理 Binance WebSocket 连接池（`Map<SubscriptionKey, BinanceConnection>`）
 - 引用计数：多客户端订阅同一 symbol+interval 只建一个 Binance 连接
 - 自动重连机制（最多 5 次，延迟递增：1s, 2s, 4s, 8s, 16s）
 - 连接清理：最后一个客户端取消订阅时关闭 Binance 连接
 
 **关键方法**:
+
 ```typescript
 subscribe(symbol: string, interval: string, callback: (bar: KlineBarDto) => void): void
 unsubscribe(symbol: string, interval: string, callback: (bar: KlineBarDto) => void): void
 ```
 
 **Binance WebSocket URL**:
+
 ```
 wss://stream.binance.com:9443/ws/<symbol>@kline_<interval>
 例如: wss://stream.binance.com:9443/ws/btcusdt@kline_1m
@@ -39,12 +42,14 @@ wss://stream.binance.com:9443/ws/<symbol>@kline_<interval>
 **文件**: `apps/backend/src/modules/kline/kline.gateway.ts`
 
 **核心功能**:
+
 - 使用 `@WebSocketGateway` 装饰器，namespace 为 `/kline`
 - 监听客户端 `subscribe`/`unsubscribe` 事件
 - 管理客户端订阅列表（`Map<clientId, Set<subscriptionKey>>`）
 - 客户端断开时自动清理所有订阅
 
 **事件处理**:
+
 ```typescript
 @SubscribeMessage('subscribe')
 handleSubscribe(client: Socket, payload: KlineSubscriptionDto)
@@ -57,6 +62,7 @@ handleDisconnect(client: Socket)
 ```
 
 **推送事件**:
+
 - `subscribed`: 订阅成功确认
 - `kline`: 实时 K线数据推送
 - `unsubscribed`: 取消订阅确认
@@ -68,7 +74,7 @@ handleDisconnect(client: Socket)
 ```typescript
 export class KlineSubscriptionDto {
   @IsString()
-  symbol: string  // 例如: BTCUSDT
+  symbol: string // 例如: BTCUSDT
 
   @IsIn(['1m', '5m', '15m', '1h', '4h', '1d'])
   interval: string
@@ -95,11 +101,13 @@ export class KlineModule {}
 **文件**: `apps/front/src/components/tradingview/mockDatafeed.ts`
 
 **核心功能**:
+
 - 使用 `socket.io-client` 连接后端 WebSocket
 - `subscribeBars`: 创建 Socket.IO 连接，发送订阅请求，监听实时 K线数据
 - `unsubscribeBars`: 发送取消订阅请求，断开连接
 
 **WebSocket 连接配置**:
+
 ```typescript
 const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
 const socket = io(`${wsUrl}/kline`, {
@@ -111,6 +119,7 @@ const socket = io(`${wsUrl}/kline`, {
 ```
 
 **事件监听**:
+
 ```typescript
 socket.on('connect', () => { ... })
 socket.on('subscribed', (data) => { ... })
@@ -275,10 +284,10 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 
 ```bash
 # 启动后端
-./scripts/dx start backend --dev
+dx start backend --dev
 
 # 启动前端
-./scripts/dx start front --dev
+dx start front --dev
 ```
 
 ### 2. 打开浏览器
@@ -288,6 +297,7 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 ### 3. 观察日志
 
 **浏览器控制台**:
+
 ```
 [subscribeBars] uid-123 { symbolInfo: {...}, resolution: '15' }
 [subscribeBars] Socket.IO connected, subscribing to BTCUSDT:15m
@@ -297,6 +307,7 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 ```
 
 **后端日志**:
+
 ```
 [KlineGateway] Client connected: socket-id-123
 [KlineGateway] Subscribe request: { symbol: 'BTCUSDT', interval: '15m' }
@@ -317,6 +328,7 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 **症状**: 浏览器控制台显示 `Socket.IO connection error`
 
 **解决方案**:
+
 1. 检查后端是否正常运行
 2. 检查 `NEXT_PUBLIC_WS_URL` 环境变量是否正确
 3. 检查防火墙/CORS 配置
@@ -326,6 +338,7 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 **症状**: 后端日志显示 `WebSocket connection failed`
 
 **解决方案**:
+
 1. 检查网络连接
 2. 检查 Binance WebSocket 服务是否可用
 3. 检查防火墙是否阻止出站连接
@@ -335,6 +348,7 @@ NEXT_PUBLIC_WS_URL=https://api.yourdomain.com
 **症状**: 图表显示但不更新
 
 **解决方案**:
+
 1. 检查浏览器控制台是否有 `[subscribeBars] Updated bar` 日志
 2. 检查后端是否正常接收 Binance 数据
 3. 检查前端 `onRealtimeCallback` 是否被正确调用

@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "选择要运行/部署的目标（默认 all）"
+        description: '选择要运行/部署的目标（默认 all）'
         required: true
         default: all
         type: choice
@@ -23,8 +23,8 @@ on:
           - admin
 
 env:
-  NODE_VERSION: "22.14.0"
-  PNPM_VERSION: "10.28.0"
+  NODE_VERSION: '22.14.0'
+  PNPM_VERSION: '10.28.0'
   # 从 Repository secrets 读取部署环境 (staging 或 prod)
   DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}
 
@@ -36,8 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.target == 'all' || inputs.target == 'front' || inputs.target == 'admin' }}
     env:
-      NX_DAEMON: "false"
-      CI: "1"
+      NX_DAEMON: 'false'
+      CI: '1'
       # 根据环境设置相应的环境变量
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       # 仅 VERCEL_TOKEN 是敏感信息，从 secrets 读取
@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
@@ -95,11 +95,11 @@ jobs:
       # deploy 命令内部会自动编译 backend 和 sdk
       - name: 部署 front 到 Vercel
         if: ${{ inputs.target == 'all' || inputs.target == 'front' }}
-        run: ./scripts/dx deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+        run: dx deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
 
       - name: 部署 admin 到 Vercel
         if: ${{ inputs.target == 'all' || inputs.target == 'admin' }}
-        run: ./scripts/dx deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+        run: dx deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
 
   # ============================================
   # Job 2: 通过 SSH 部署后端到 AWS 服务器
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.target == 'all' || inputs.target == 'backend' }}
     env:
-      NX_DAEMON: "false"
+      NX_DAEMON: 'false'
 
     steps:
       - name: 显示部署环境
@@ -337,11 +337,11 @@ jobs:
           fi
 
           echo "[$(date)] 构建 & 迁移数据库"
-          ./scripts/dx build shared ${BUILD_FLAG}
-          ./scripts/dx db generate ${BUILD_FLAG} -Y
-          ./scripts/dx db deploy ${BUILD_FLAG} -Y
-          ./scripts/dx db seed ${BUILD_FLAG} -Y
-          ./scripts/dx build backend ${BUILD_FLAG}
+          dx build shared ${BUILD_FLAG}
+          dx db generate ${BUILD_FLAG} -Y
+          dx db deploy ${BUILD_FLAG} -Y
+          dx db seed ${BUILD_FLAG} -Y
+          dx build backend ${BUILD_FLAG}
 
           echo "[$(date)] 重启后端服务"
           if [ "$DEPLOY_ENV" = "prod" ]; then

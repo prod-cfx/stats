@@ -78,19 +78,20 @@ npx prisma migrate dev --name add-aggregated-volume
 
 **创建的表**: `aggregated_volumes`
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | SERIAL | 主键 |
-| exchange | TEXT | 交易所名称（'All' 表示聚合总量） |
-| symbol | TEXT | 币种符号（如 'BTC'） |
-| instrument_type | TEXT | 合约类型（'SPOT' 或 'PERPETUAL'） |
-| volume_usd | DECIMAL(30,10) | 24h 成交量（USD） |
-| data_timestamp | TIMESTAMP | 数据时间戳 |
-| source | TEXT | 数据来源（默认 'COINGLASS'） |
-| created_at | TIMESTAMP | 创建时间 |
-| updated_at | TIMESTAMP | 更新时间 |
+| 字段            | 类型           | 说明                              |
+| --------------- | -------------- | --------------------------------- |
+| id              | SERIAL         | 主键                              |
+| exchange        | TEXT           | 交易所名称（'All' 表示聚合总量）  |
+| symbol          | TEXT           | 币种符号（如 'BTC'）              |
+| instrument_type | TEXT           | 合约类型（'SPOT' 或 'PERPETUAL'） |
+| volume_usd      | DECIMAL(30,10) | 24h 成交量（USD）                 |
+| data_timestamp  | TIMESTAMP      | 数据时间戳                        |
+| source          | TEXT           | 数据来源（默认 'COINGLASS'）      |
+| created_at      | TIMESTAMP      | 创建时间                          |
+| updated_at      | TIMESTAMP      | 更新时间                          |
 
 **创建的索引**:
+
 - 唯一索引: `(exchange, symbol, instrument_type, data_timestamp)`
 - 查询索引: `(symbol, instrument_type, data_timestamp)`
 - 查询索引: `(exchange, instrument_type, data_timestamp)`
@@ -108,15 +109,15 @@ psql -U your_username -d coinflux -c "SELECT key, enabled, interval_seconds FROM
 
 **创建的任务** (7 个):
 
-| 任务 Key | 币种 | 间隔 | 状态 |
-|----------|------|------|------|
-| markets-volume-sync-BTC | BTC | 60s | 启用 |
-| markets-volume-sync-ETH | ETH | 60s | 启用 |
-| markets-volume-sync-SOL | SOL | 60s | 启用 |
-| markets-volume-sync-XRP | XRP | 60s | 启用 |
-| markets-volume-sync-DOGE | DOGE | 60s | 启用 |
-| markets-volume-sync-HYPE | HYPE | 60s | 启用 |
-| markets-volume-sync-BNB | BNB | 60s | 启用 |
+| 任务 Key                 | 币种 | 间隔 | 状态 |
+| ------------------------ | ---- | ---- | ---- |
+| markets-volume-sync-BTC  | BTC  | 60s  | 启用 |
+| markets-volume-sync-ETH  | ETH  | 60s  | 启用 |
+| markets-volume-sync-SOL  | SOL  | 60s  | 启用 |
+| markets-volume-sync-XRP  | XRP  | 60s  | 启用 |
+| markets-volume-sync-DOGE | DOGE | 60s  | 启用 |
+| markets-volume-sync-HYPE | HYPE | 60s  | 启用 |
+| markets-volume-sync-BNB  | BNB  | 60s  | 启用 |
 
 ### 3. 配置环境变量
 
@@ -142,12 +143,13 @@ npx prisma generate
 
 ```bash
 cd /Users/sa/Documents/codes/coinflux/stats_issue_agg_vol
-node scripts/dx build contracts
+dx build contracts --dev
 ```
 
 **生成的文件**: `packages/api-contracts/src/generated/backend.ts`
 
 包含新增的类型和 API 方法：
+
 - `GetAggregatedVolumeRequestDto`
 - `AggregatedVolumeResponseDto`
 - `GET /markets/volume/aggregated`
@@ -158,10 +160,11 @@ node scripts/dx build contracts
 
 ```bash
 cd /Users/sa/Documents/codes/coinflux/stats_issue_agg_vol
-node scripts/dx start backend --dev
+dx start backend --dev
 ```
 
 **验证后端启动成功**:
+
 - 服务监听: `http://localhost:3000`
 - 健康检查: `curl http://localhost:3000/health`
 - Swagger 文档: `http://localhost:3000/api/docs`
@@ -171,10 +174,11 @@ node scripts/dx start backend --dev
 ```bash
 # 在另一个终端
 cd /Users/sa/Documents/codes/coinflux/stats_issue_agg_vol
-node scripts/dx start front --dev
+dx start front --dev
 ```
 
 **验证前端启动成功**:
+
 - 服务监听: `http://localhost:3001`
 - 访问页面: `http://localhost:3001/aggregated-orderbook`
 
@@ -186,10 +190,11 @@ node scripts/dx start front --dev
 
 ```bash
 cd /Users/sa/Documents/codes/coinflux/stats_issue_agg_vol
-bash scripts/verify-aggregated-volume.sh
+dx start all
 ```
 
 脚本会自动检查：
+
 1. 数据库连接
 2. 数据库表结构
 3. 数据同步任务配置
@@ -216,6 +221,7 @@ SELECT * FROM aggregated_volumes WHERE exchange = 'All';
 ```
 
 **预期结果**:
+
 - 表包含 9 个字段
 - 有 4 个索引（1 个唯一索引 + 3 个查询索引）
 - 数据正常更新（`data_timestamp` 接近当前时间）
@@ -266,6 +272,7 @@ curl -X GET "http://localhost:3000/markets/volume/aggregated?symbol=ETH&instrume
 ```
 
 **关键验证点**:
+
 - `exchange='All'` 排在第一位
 - `volumeUsd` 为 Decimal 转 string（非科学计数法）
 - `items` 按 `volumeUsd` 降序排列（除 'All' 外）
@@ -297,6 +304,7 @@ LIMIT 10;
 ```
 
 **预期结果**:
+
 - 每个任务每 60 秒执行一次
 - `status = 'SUCCESS'`
 - `error_message` 为空
@@ -310,6 +318,7 @@ LIMIT 10;
 **症状**: Prisma migrate 或 generate 报错 `P1002: The database server was reached but timed out`
 
 **解决方案**:
+
 ```bash
 # 检查 PostgreSQL 是否运行
 pg_isready
@@ -328,6 +337,7 @@ cat .env.development.local | grep DATABASE_URL
 **症状**: `curl http://localhost:3000/markets/volume/aggregated` 返回 404
 
 **排查步骤**:
+
 1. 确认后端服务已启动
 2. 检查 Controller 是否正确注册
 3. 验证 SDK 是否已生成
@@ -343,6 +353,7 @@ curl http://localhost:3000/api/docs | grep "volume/aggregated"
 **症状**: 前端仍显示固定的 mock 数据，不会更新
 
 **排查步骤**:
+
 1. 检查浏览器 Network 面板，是否有 API 请求
 2. 检查 API 请求是否返回 200
 3. 检查前端组件是否使用了正确的 API 调用
@@ -358,6 +369,7 @@ grep -n "client.GET.*markets/volume/aggregated" apps/front/src/components/aggreg
 **症状**: `aggregated_volumes` 表为空或数据不更新
 
 **排查步骤**:
+
 1. 检查数据同步任务是否启用
 2. 检查 Coinglass API Key 是否配置
 3. 查看后端日志是否有错误
@@ -379,12 +391,13 @@ ORDER BY started_at DESC LIMIT 5;
 **症状**: 前端编译时报 API 类型错误
 
 **解决方案**:
+
 ```bash
 # 重新生成 SDK
-node scripts/dx build contracts
+dx build contracts --dev
 
 # 重启前端开发服务器
-node scripts/dx start front --dev
+dx start front --dev
 ```
 
 ---

@@ -10,16 +10,16 @@
       "outputs": ["{workspaceRoot}/dist/admin-front"],
       "defaultConfiguration": "production",
       "options": {
-        "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+        "command": "next build",
         "cwd": "apps/admin-front"
       },
       "configurations": {
         "development": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+          "command": "next build",
           "cwd": "apps/admin-front"
         },
         "production": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+          "command": "next build",
           "cwd": "apps/admin-front"
         }
       }
