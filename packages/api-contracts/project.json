@@ -4,7 +4,15 @@
   "sourceRoot": "packages/api-contracts/src",
   "projectType": "library",
   "tags": ["scope:shared", "type:contracts"],
+  "implicitDependencies": ["backend"],
   "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/packages/api-contracts/dist"],
+      "options": {
+        "command": "pnpm --filter @ai/api-contracts run build"
+      }
+    },
     "lint": {
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"],
