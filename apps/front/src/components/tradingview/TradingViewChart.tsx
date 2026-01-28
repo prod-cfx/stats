@@ -7,10 +7,32 @@ import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
-import { fetchLongShortRatio } from '@/lib/api'
+import { fetchAggregatedOpenInterest, fetchLongShortRatio } from '@/lib/api'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
 import { mockDatafeed } from './mockDatafeed'
+
+// 日志控制：仅在开发环境或显式启用时输出调试日志
+const isDevelopment = process.env.NODE_ENV === 'development'
+const enableOIDebugLogs = isDevelopment || process.env.NEXT_PUBLIC_ENABLE_OI_DEBUG === 'true'
+
+// 持仓量数据日志辅助函数
+const oiLogger = {
+  debug: (...args: any[]) => {
+    if (enableOIDebugLogs) {
+      console.log('[OI]', ...args)
+    }
+  },
+  warn: (...args: any[]) => {
+    if (enableOIDebugLogs) {
+      console.warn('[OI]', ...args)
+    }
+  },
+  error: (...args: any[]) => {
+    // 错误日志始终输出
+    console.error('[OI]', ...args)
+  },
+}
 
 // Constants for long-short ratio data fetching
 const LONG_SHORT_RATIO_FETCH_LIMIT = 500
@@ -192,6 +214,29 @@ function formatUsdCompactFromMillions(valueM: number): string {
   return `$${Math.round(v)}M`
 }
 
+function parseResolutionToMs(resolution?: string): number {
+  if (!resolution) return 0
+  const match = resolution.match(/^(\d+)([a-z]?)$/i)
+  if (!match) return 0
+  const value = Number(match[1])
+  if (!Number.isFinite(value) || value <= 0) return 0
+  const unit = match[2]?.toUpperCase() ?? ''
+  switch (unit) {
+    case '':
+      return value * 60 * 1000
+    case 'H':
+      return value * 60 * 60 * 1000
+    case 'D':
+      return value * 24 * 60 * 60 * 1000
+    case 'W':
+      return value * 7 * 24 * 60 * 60 * 1000
+    case 'M':
+      return value * 30 * 24 * 60 * 60 * 1000
+    default:
+      return 0
+  }
+}
+
 const LONG_SHORT_RATIO_SUPPORTED_INTERVALS = new Set([
   '1m',
   '3m',
@@ -303,11 +348,18 @@ function createCustomIndicatorsGetter(opts?: {
   t: (key: string) => string
   lsDataRef?: MutableRefObject<Map<number, number>>
   lsSortedTimestampsRef?: MutableRefObject<number[]>
+  openInterestDataRef?: MutableRefObject<{
+    timestamps: number[]
+    values: number[]
+  }>
+  interval?: string
 }) {
   // Charting Library custom studies: register indicator definitions at widget init time.
   return function custom_indicators_getter(PineJS: any) {
     const theme = opts?.theme ?? 'Light'
     const tFunc = opts?.t ?? ((k: string) => k)
+    const oiDataRef = opts?.openInterestDataRef
+    const intervalMs = parseResolutionToMs(opts?.interval)
     const names = CUSTOM_STUDY_NAME_BY_ID
     const lsDataRef = opts?.lsDataRef
     const lsSortedTimestampsRef = opts?.lsSortedTimestampsRef
@@ -336,6 +388,44 @@ function createCustomIndicatorsGetter(opts?: {
       inputs: [],
       format,
     })
+
+    function findClosestValue(
+      timestamps: number[],
+      values: number[],
+      target: number,
+      tolerance: number,
+    ): number | null {
+      if (!timestamps.length) return null
+
+      let left = 0
+      let right = timestamps.length - 1
+
+      while (left < right) {
+        const mid = Math.floor((left + right) / 2)
+        if (timestamps[mid] < target) {
+          left = mid + 1
+        } else {
+          right = mid
+        }
+      }
+
+      let closestIdx = left
+      if (left > 0) {
+        const diffLeft = Math.abs(timestamps[left] - target)
+        const diffPrev = Math.abs(timestamps[left - 1] - target)
+        if (diffPrev < diffLeft) {
+          closestIdx = left - 1
+        }
+      }
+
+      const diff = Math.abs(timestamps[closestIdx] - target)
+      if (diff <= tolerance) {
+        const value = values[closestIdx]
+        return typeof value === 'number' ? value : null
+      }
+
+      return null
+    }
 
     const IND_LS = {
       name: names['long-short-ratio'],
@@ -550,25 +640,33 @@ function createCustomIndicatorsGetter(opts?: {
         }
         this.main = function (context: any) {
           this._context = context
-          const vol = PineJS.Std.volume(context)
-          const close = PineJS.Std.close(context)
           const time = PineJS.Std.time(context)
 
-          const vVol = typeof vol === 'number' && Number.isFinite(vol) ? vol : 0
-          const vClose = typeof close === 'number' && Number.isFinite(close) ? close : 0
           const vTime = typeof time === 'number' && Number.isFinite(time) ? time : 0
 
-          // mock: “上上下下”的聚合持仓量（均值回归 + 波动），避免单边漂移
-          // - 使用 time/close 的多频正弦形成稳定波动
-          // - 用 volume 做一点扰动（volume 在 mockDatafeed 里约 50~250）
-          const base = 650_000
-          const wave1 = Math.sin(vTime / 8.6e7) * 70_000 // ~1d 周期
-          const wave2 = Math.sin(vTime / 2.2e7) * 35_000 // ~6h 周期
-          const wave3 = Math.sin(vClose / 180) * 18_000
-          const noise = (vVol - 150) * 420
+          // 尝试从真实数据中获取
+          let oi: number | null = null
+          if (oiDataRef?.current && vTime > 0) {
+            const { timestamps, values } = oiDataRef.current
+            const tolerance = Math.max(5 * 60 * 1000, intervalMs)
+            oi = findClosestValue(timestamps, values, vTime, tolerance)
+          }
 
-          const oi = Math.max(0, base + wave1 + wave2 + wave3 + noise)
-          // baseline=0 让 filled area “向下填充”
+          // 如果没有真实数据，降级到 mock 数据
+          if (oi === null) {
+            const vol = PineJS.Std.volume(context)
+            const close = PineJS.Std.close(context)
+            const vVol = typeof vol === 'number' && Number.isFinite(vol) ? vol : 0
+            const vClose = typeof close === 'number' && Number.isFinite(close) ? close : 0
+
+            const base = 650_000
+            const wave1 = Math.sin(vTime / 8.6e7) * 70_000
+            const wave2 = Math.sin(vTime / 2.2e7) * 35_000
+            const wave3 = Math.sin(vClose / 180) * 18_000
+            const noise = (vVol - 150) * 420
+            oi = Math.max(0, base + wave1 + wave2 + wave3 + noise)
+          }
+
           return [oi, 0]
         }
       },
@@ -920,6 +1018,8 @@ export const TradingViewChart = forwardRef((
   const liqLegendStudySeenRef = useRef(false)
   const liqLegendStudyMissRef = useRef(0)
   const liqLegendStudyRemovingRef = useRef(false)
+  // 持仓量数据缓存：按时间戳排序的数组
+  const openInterestDataRef = useRef<{ timestamps: number[]; values: number[] }>({ timestamps: [], values: [] })
   const [liqSelected, setLiqSelected] = useState<null | {
     locked: boolean
     x: number
@@ -934,6 +1034,10 @@ export const TradingViewChart = forwardRef((
   }>(null)
   const liqLockedRef = useRef(false)
   const liqLockedPriceRef = useRef<number | null>(null)
+  interface OpenInterestFallbackFields {
+    timestamp?: string | number
+    openInterest?: number
+  }
   const liqSeriesRef = useRef<null | {
     xs: number[]
     bybit: number[]
@@ -943,6 +1047,85 @@ export const TradingViewChart = forwardRef((
     cumLong: number[]
     cumShort: number[]
   }>(null)
+  const fetchOpenInterestData = useCallback(async (symbolParam: string, shouldCancel?: () => boolean) => {
+    try {
+      // 提取币种符号（去掉 USDT 后缀）
+      const baseSymbol = symbolParam.replace(/USDT$/, '').toUpperCase()
+      if (!/^[A-Z0-9]+$/.test(baseSymbol)) {
+        oiLogger.warn('Invalid symbol format:', baseSymbol)
+        openInterestDataRef.current = { timestamps: [], values: [] }
+        return
+      }
+      if (shouldCancel?.()) return
+      oiLogger.debug('Fetching data for:', baseSymbol)
+
+      // 获取最近 1000 条数据（覆盖多个时间粒度）
+      const data = await fetchAggregatedOpenInterest({
+        symbol: baseSymbol,
+        exchange: 'All',
+        limit: 1000,
+      })
+      if (shouldCancel?.()) return
+      oiLogger.debug('Received data points:', data.length)
+      if (enableOIDebugLogs && data.length > 0) {
+        oiLogger.debug('First item structure:', JSON.stringify(data[0], null, 2))
+        oiLogger.debug('First item keys:', Object.keys(data[0]))
+      }
+
+      const dataPoints: Array<{ timestamp: number; value: number }> = []
+      data.forEach((item, index) => {
+        const fallbackFields = item as OpenInterestFallbackFields
+        const timestampValue = item.data_timestamp ?? fallbackFields.timestamp
+        const oiValue = item.open_interest_usd ?? fallbackFields.openInterest
+
+        if (enableOIDebugLogs && index < 3) {
+          oiLogger.debug(`Item ${index}:`, {
+            data_timestamp: item.data_timestamp,
+            open_interest_usd: item.open_interest_usd,
+            timestamp: fallbackFields.timestamp,
+            openInterest: fallbackFields.openInterest,
+            timestampValue,
+            oiValue,
+            oiValueType: typeof oiValue,
+          })
+        }
+
+        if (timestampValue != null && typeof oiValue === 'number' && Number.isFinite(oiValue)) {
+          let timestamp = new Date(timestampValue).getTime()
+          if (!Number.isFinite(timestamp)) return
+          if (timestamp < 1e12) {
+            timestamp *= 1000
+          }
+          dataPoints.push({ timestamp, value: oiValue })
+        }
+      })
+
+      dataPoints.sort((a, b) => a.timestamp - b.timestamp)
+      if (shouldCancel?.()) return
+      openInterestDataRef.current = {
+        timestamps: dataPoints.map((d) => d.timestamp),
+        values: dataPoints.map((d) => d.value),
+      }
+      oiLogger.debug('Cached data points:', dataPoints.length)
+      if (data.length > 0 && dataPoints.length === 0) {
+        oiLogger.warn('Warning: Received data but all items were filtered out. Check field names.')
+        oiLogger.warn('Sample item:', data[0])
+      }
+      if (dataPoints.length > 0) {
+        oiLogger.debug(
+          'Time range:',
+          new Date(dataPoints[0].timestamp),
+          'to',
+          new Date(dataPoints[dataPoints.length - 1].timestamp)
+        )
+      }
+    } catch (error) {
+      if (shouldCancel?.()) return
+      oiLogger.error('Failed to fetch open interest data:', error)
+      // 失败时保持空数据，降级到 mock 数据
+      openInterestDataRef.current = { timestamps: [], values: [] }
+    }
+  }, [])
   const liqDataRef = useRef<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
   const liqCurrentPriceRef = useRef<number>(0)
   const [liqData, setLiqData] = useState<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
@@ -964,6 +1147,16 @@ export const TradingViewChart = forwardRef((
   useEffect(() => {
     liqHiddenRef.current = liqHidden
   }, [liqHidden])
+
+  useEffect(() => {
+    if (!symbol) return
+    let cancelled = false
+    oiLogger.debug('Fetching open interest data for symbol:', symbol)
+    fetchOpenInterestData(symbol, () => cancelled)
+    return () => {
+      cancelled = true
+    }
+  }, [symbol, fetchOpenInterestData])
 
   // Sync currentInterval with interval prop (for external control)
   useEffect(() => {
@@ -1259,7 +1452,14 @@ export const TradingViewChart = forwardRef((
           interval,
 
           datafeed: mockDatafeed,
-          custom_indicators_getter: createCustomIndicatorsGetter({ theme, t, lsDataRef, lsSortedTimestampsRef }),
+          custom_indicators_getter: createCustomIndicatorsGetter({
+            theme,
+            t,
+            openInterestDataRef,
+            interval,
+            lsDataRef,
+            lsSortedTimestampsRef,
+          }),
           // Ensure legend action buttons (eye/delete) are functional.
           // NOTE: This build gates legend actions behind these feature flags.
           // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
