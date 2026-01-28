@@ -101,14 +101,20 @@ export class KlineModule {}
 
 **WebSocket 连接配置**:
 ```typescript
-const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
-const socket = io(`${wsUrl}/kline`, {
+import { getWsBaseUrl } from '@/lib/ws'
+
+const wsBaseUrl = getWsBaseUrl()
+const socket = io(`${wsBaseUrl}/kline`, {
   transports: ['websocket'],
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionAttempts: 5,
 })
 ```
+
+**getWsBaseUrl() 规则**:
+- 优先级：`NEXT_PUBLIC_WS_URL` → `NEXT_PUBLIC_API_SERVER_URL` → `http://localhost:3000`
+- 自动移除尾部斜杠，避免 `//kline` 拼接问题
 
 **事件监听**:
 ```typescript

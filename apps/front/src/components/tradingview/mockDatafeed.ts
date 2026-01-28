@@ -14,6 +14,7 @@
 import type { Socket } from 'socket.io-client';
 import { io } from 'socket.io-client'
 import { fetchKlineData } from '@/lib/api'
+import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
 
 export type TvResolution = '1' | '5' | '15' | '60' | '240' | '1D'
@@ -317,10 +318,10 @@ export const mockDatafeed = {
     const symbol = normalizeSymbol(ticker)
 
     // 获取 WebSocket URL（从环境变量或使用默认值）
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+    const wsBaseUrl = getWsBaseUrl()
 
     // 创建 Socket.IO 连接
-    const socket = io(`${wsUrl}/kline`, {
+    const socket = io(`${wsBaseUrl}/kline`, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
