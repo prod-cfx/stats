@@ -2760,18 +2760,6 @@ const endpoints = makeApi([
     path: "/markets/ticker",
     alias: "MarketsController_getTicker",
     requestFormat: "json",
-    parameters: [
-      {
-        name: "symbol",
-        type: "Query",
-        schema: z.string(),
-      },
-      {
-        name: "exchange",
-        type: "Query",
-        schema: z.string().optional(),
-      },
-    ],
     response: TickerResponseDto,
   },
   {
