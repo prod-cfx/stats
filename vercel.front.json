@@ -1,0 +1,23 @@
+{
+  "$schema": "https://vercel.json.schema.vercel.sh",
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm exec dx build shared && pnpm exec dx build contracts --prod && pnpm exec dx build front --${APP_ENV}",
+  "outputDirectory": "apps/front/.next",
+  "redirects": [
+    {
+      "source": "/:path*/index.txt",
+      "destination": "/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/index.txt",
+      "destination": "/",
+      "permanent": true
+    }
+  ],
+  "images": {
+    "sizes": [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    "domains": []
+  }
+}

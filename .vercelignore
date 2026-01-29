@@ -1,0 +1,53 @@
+# Dependencies - Vercel will install fresh
+node_modules/
+
+# Build outputs - Vercel will build fresh
+/dist/
+.next/
+.nx/
+.turbo/
+
+# Test & coverage
+coverage/
+.nyc_output/
+e2e/
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Cache
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# Local env files
+.env*.local
+
+# Git
+.git/
+
+# Backend app - not needed for frontend deployment
+apps/backend/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Dev tools
+.claude/
+.opencode/
+scripts/logs/
+
+# PM2 configs - backend only
+ecosystem.config.cjs
+prod-ecosystem.config.cjs
+staging-ecosystem.config.cjs
