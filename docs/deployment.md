@@ -114,6 +114,9 @@ dx build contracts --prod
 - `db generate` 生成 Prisma Client，后端代码依赖此步骤
 - `build backend` 编译 TypeScript 代码到 `dist/` 目录，并生成 OpenAPI 规范
 - `build contracts` 基于 OpenAPI 生成 Zod 模型和 HTTP 客户端，供前端使用
+- `build contracts` 基于 OpenAPI 生成 Zod 模型和 HTTP 客户端，供前端使用
+- 注意：合约生成依赖 `dotenv-cli`，它会把 `--` 后面的内容当作“可执行文件+参数”运行，因此命令本身不能以 `set -euo pipefail; ...` 这类 shell 语句开头；当前实现会用 `bash -lc` 包裹执行
+- 注意：`openapi-zod-client` 对递归 schema（DTO 自引用）支持不稳定；如遇到生成失败，需避免在 Swagger Schema 中直接输出递归引用（可改成宽松 object/unknown，并由前端在运行时自行递归处理）
 - 虽然 `start` 命令会自动触发 build（如需要），但**显式构建是最佳实践**，确保构建过程可控和可追踪
 
 #### 步骤 5：数据库迁移

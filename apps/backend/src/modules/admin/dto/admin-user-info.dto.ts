@@ -26,8 +26,10 @@ class AdminMenuPermissionDto {
   @ApiProperty({ description: '菜单类型', enum: AdminMenuType })
   type!: AdminMenuType
 
-  @ApiProperty({ type: () => [AdminMenuPermissionDto], required: false })
-  children?: AdminMenuPermissionDto[]
+  // openapi-zod-client currently cannot handle recursive schema refs reliably.
+  // Keep OpenAPI output generation-friendly; client side can treat this as unknown and refine at runtime.
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  children?: unknown
 }
 
 export class AdminUserInfoDto {
@@ -55,5 +57,3 @@ export class AdminUserInfoDto {
   @ApiProperty({ description: 'API权限', type: [String] })
   apiPermissions!: string[]
 }
-
-

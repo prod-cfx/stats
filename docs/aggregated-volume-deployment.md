@@ -146,6 +146,8 @@ cd /Users/sa/Documents/codes/coinflux/stats_issue_agg_vol
 dx build contracts --dev
 ```
 
+说明：SDK 生成基于后端导出的 OpenAPI；当前生成器对递归 schema（DTO 自引用）支持不稳定，如生成失败通常需要将递归字段在 Swagger 输出中改成宽松 object/unknown，再由前端在运行时递归处理。
+
 **生成的文件**: `packages/api-contracts/src/generated/backend.ts`
 
 包含新增的类型和 API 方法：

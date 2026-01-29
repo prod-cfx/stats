@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { io  } from 'socket.io-client'
 import { fetchKlineData, fetchTicker  } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
+import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
 
 interface TopBarProps {
@@ -208,9 +209,9 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     if (!selectedSymbol) return;
 
     if (!socketRef.current) {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+      const wsBaseUrl = getWsBaseUrl();
       setWsConnectionStatus('connecting');
-      socketRef.current = io(`${wsUrl}/kline`, {
+      socketRef.current = io(`${wsBaseUrl}/kline`, {
         transports: ['websocket'],
         reconnection: true,
         reconnectionDelay: 1000,

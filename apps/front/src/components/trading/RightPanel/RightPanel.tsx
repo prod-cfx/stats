@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/loading';
 import { fetchTicker } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market';
+import { getWsBaseUrl } from '@/lib/ws';
 import { OrderbookRow } from './components/OrderbookRow';
 import { TradeRow } from './components/TradeRow';
 
@@ -292,7 +293,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
 
   // WebSocket 连接管理 - Trades 实时数据
   useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+    const wsBaseUrl = getWsBaseUrl();
     let socket: Socket | null = null;
 
     const connectWebSocket = () => {
@@ -300,7 +301,7 @@ export const RightPanel = ({ isAggregated, selectedExchange, symbol, marketType 
       const token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
 
       // 创建 Socket.IO 连接
-      socket = io(`${wsUrl}/kline`, {
+      socket = io(`${wsBaseUrl}/kline`, {
         transports: ['websocket'],
         reconnection: true,
         reconnectionDelay: 1000,
