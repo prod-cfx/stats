@@ -3,7 +3,7 @@ name: CI
 # 说明：
 # - 统一的 CI/CD 脚本，支持 staging 和 production 环境
 # - 通过 workflow_dispatch 的 environment 参数选择部署环境
-# - CI/CD 与本地开发统一使用 ./scripts/dx 命令系统
+# - CI/CD 与本地开发统一使用 dx 命令系统
 # - Node 版本需与仓库要求一致（.nvmrc 指定 22.14.0）
 # - 前端在 GitHub Actions 中构建并部署到 Vercel
 # - 后端通过 SSH 部署到 AWS 服务器
@@ -25,6 +25,8 @@ on:
 env:
   NODE_VERSION: '22.14.0'
   PNPM_VERSION: '10.28.0'
+  DX_VERSION: '0.1.9'
+  VERCEL_VERSION: '50.4.5'
   # 从 Repository secrets 读取部署环境 (staging 或 prod)
   DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}
 
@@ -40,6 +42,7 @@ jobs:
       CI: '1'
       # 根据环境设置相应的环境变量
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       # 仅 VERCEL_TOKEN 是敏感信息，从 secrets 读取
       # VERCEL_ORG_ID 和 VERCEL_PROJECT_ID_* 从对应的 .env 文件加载
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -85,21 +88,18 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
       - name: 安装 Vercel CLI
         # 锁定 Vercel CLI 版本以确保 CI 构建可重现
-        run: pnpm add -g vercel@50.4.5
+        run: pnpm add -g vercel@${{ env.VERCEL_VERSION }}
 
       # deploy 命令内部会自动编译 backend 和 sdk
       - name: 部署 front 到 Vercel
         if: ${{ inputs.target == 'all' || inputs.target == 'front' }}
-        run: dx deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+        run: npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
 
       - name: 部署 admin 到 Vercel
         if: ${{ inputs.target == 'all' || inputs.target == 'admin' }}
-        run: dx deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+        run: npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
 
   # ============================================
   # Job 2: 通过 SSH 部署后端到 AWS 服务器
@@ -146,12 +146,13 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
           DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          DX_VERSION: ${{ env.DX_VERSION }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
 
-          ssh ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '-o ServerAliveInterval=60' || '' }} -p "$PORT" "$USER@$HOST" "export REF_NAME='${REF_NAME}'; export REF_TYPE='${REF_TYPE}'; export DEPLOY_ENV='${DEPLOY_ENV}'; bash -s" <<'REMOTE'
+          ssh ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '-o ServerAliveInterval=60' || '' }} -p "$PORT" "$USER@$HOST" "export REF_NAME='${REF_NAME}'; export REF_TYPE='${REF_TYPE}'; export DEPLOY_ENV='${DEPLOY_ENV}'; export DX_VERSION='${DX_VERSION}'; bash -s" <<'REMOTE'
           set -euo pipefail
 
           # === 加载 NVM ===
@@ -206,7 +207,7 @@ jobs:
           echo "=== 开始部署后端 (${DEPLOY_ENV}) ==="
           echo "[INFO] REF_TYPE=${REF_TYPE:-<none>}  REF_NAME=${REF_NAME:-<none>}"
 
-          export DEST_PATH="/opt/ai-monorepo"
+          export DEST_PATH="/opt/stats"
           export PNPM_HOME="/root/.local/share/pnpm"
           export PATH="$PNPM_HOME:/usr/local/bin:$PATH"
           export CI=1 NX_DAEMON=false
@@ -305,7 +306,7 @@ jobs:
           GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
           DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
-          DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_SECRET }}
+          DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}
 
           # 邮件服务
           RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
@@ -328,6 +329,22 @@ jobs:
           else
             pnpm install --no-frozen-lockfile
           fi
+
+          # dx 通过 --config-dir / DX_CONFIG_DIR / 向上查找 dx/config/commands.json 来定位项目配置。
+          # 远端部署场景更稳妥的方式是显式指定 config-dir，避免因 cwd/目录结构差异导致找不到配置。
+          export DX_CONFIG_DIR="${DEST_PATH}/dx/config"
+          if [ ! -f "${DX_CONFIG_DIR}/commands.json" ]; then
+            echo "[ERROR] 未找到 dx 配置文件: ${DX_CONFIG_DIR}/commands.json"
+            echo "[ERROR] 当前目录: $(pwd)"
+            ls -la "${DEST_PATH}" || true
+            ls -la "${DEST_PATH}/dx" || true
+            ls -la "${DEST_PATH}/dx/config" || true
+            exit 1
+          fi
+
+          dx() {
+            npx -y "@ranger1/dx@${DX_VERSION}" --config-dir "${DX_CONFIG_DIR}" "$@"
+          }
 
           # 构建参数
           if [ "$DEPLOY_ENV" = "prod" ]; then
