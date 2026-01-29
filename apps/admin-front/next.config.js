@@ -54,6 +54,15 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  async rewrites() {
+    const apiServer = (process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: `${apiServer}/api/v1/:path*`,
+      },
+    ]
+  },
 }
 
 export default nextConfig

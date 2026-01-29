@@ -22,7 +22,6 @@ async function bootstrap() {
 
   const findWorkspaceRoot = (startDir: string) => {
     let current = startDir
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (existsSync(join(current, 'pnpm-workspace.yaml'))) {
         return current

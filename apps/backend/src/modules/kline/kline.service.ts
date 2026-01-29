@@ -1,11 +1,13 @@
-import type { MarketTimeframe, Prisma  } from '@prisma/client'
+import type { MarketTimeframe } from '@prisma/client'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 RedisService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
+import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -18,7 +20,6 @@ export class KlineService {
   private readonly CACHE_TTL_SECONDS = 30 // Redis 缓存过期时间（秒）
 
   // 查询配置
-  private readonly DEFAULT_QUERY_LIMIT = 200 // 默认返回的 K线数量
   private readonly MIN_QUERY_LIMIT = 50 // 最小返回数量
   private readonly MAX_QUERY_LIMIT = 500 // 最大返回数量
 
@@ -113,6 +114,9 @@ export class KlineService {
 
     // 映射前端 interval → Prisma 枚举
     const timeframe = this.mapIntervalToTimeframe(cleanInterval)
+    const intervalSeconds = this.mapIntervalToSeconds(cleanInterval)
+    const expectedBars = Math.floor((to - from) / intervalSeconds) + 1
+    const queryLimit = this.clampQueryLimit(expectedBars)
 
     // 构建查询条件（使用清理后的参数）
     const timeRange = {
@@ -131,14 +135,17 @@ export class KlineService {
     // P2-4: 添加 try-catch 包裹聚合调用
     let result: KlineBarDto[]
     try {
-      // 查询数据库（按时间升序，限制返回数量）
-      result = shouldAggregate
-        ? await this.aggregateKlineData(client, where)
-        : (await client.futuresPriceHistory.findMany({
+      // 查询数据库（按时间降序，取窗口内最后 queryLimit 根，再反转）
+      if (shouldAggregate) {
+        result = await this.aggregateKlineData(client, where, timeframe, queryLimit)
+      } else {
+        const records = await client.futuresPriceHistory.findMany({
           where,
-          orderBy: { timestamp: 'asc' },
-          take: this.DEFAULT_QUERY_LIMIT,
-        })).map((record) => ({
+          orderBy: { timestamp: 'desc' },
+          take: queryLimit,
+        })
+        const orderedRecords = records.slice().reverse()
+        result = orderedRecords.map(record => ({
           time: record.timestamp.getTime(),
           open: record.open.toNumber(),
           high: record.high.toNumber(),
@@ -146,6 +153,7 @@ export class KlineService {
           close: record.close.toNumber(),
           volume: record.volumeUsd?.toNumber() ?? 0,
         }))
+      }
     } catch (error) {
       this.logger.error({
         message: shouldAggregate ? 'Kline aggregation failed' : 'Kline query failed',
@@ -162,19 +170,21 @@ export class KlineService {
     }
 
     // 缓存结果（异步，不阻塞响应）
-    redisClient.setex(cacheKey, this.CACHE_TTL_SECONDS, JSON.stringify(result)).catch(cacheError => {
-      this.logger.warn({
-        message: 'Redis setex failed',
-        cacheKey,
-        symbol: cleanSymbol,
-        interval: cleanInterval,
-        from,
-        to,
-        exchange: exchange || 'all',
-        resultCount: result.length,
-        error: (cacheError as Error).message,
+    redisClient
+      .setex(cacheKey, this.CACHE_TTL_SECONDS, JSON.stringify(result))
+      .catch(cacheError => {
+        this.logger.warn({
+          message: 'Redis setex failed',
+          cacheKey,
+          symbol: cleanSymbol,
+          interval: cleanInterval,
+          from,
+          to,
+          exchange: exchange || 'all',
+          resultCount: result.length,
+          error: (cacheError as Error).message,
+        })
       })
-    })
 
     return result
   }
@@ -194,6 +204,8 @@ export class KlineService {
   private async aggregateKlineData(
     client: ReturnType<typeof this.prisma.getClient>,
     where: Prisma.FuturesPriceHistoryWhereInput,
+    timeframe: MarketTimeframe,
+    queryLimit: number,
   ): Promise<KlineBarDto[]> {
     // 使用数据库聚合查询，避免加载大量原始数据到内存
     const aggregatedData = await client.futuresPriceHistory.groupBy({
@@ -202,8 +214,8 @@ export class KlineService {
       _max: { high: true },
       _min: { low: true, open: true },
       _sum: { volumeUsd: true },
-      orderBy: { timestamp: 'asc' },
-      take: this.DEFAULT_QUERY_LIMIT,
+      orderBy: { timestamp: 'desc' },
+      take: queryLimit,
     })
 
     // 对于 open/close，需要单独查询（因为 groupBy 不支持 FIRST/LAST 聚合）
@@ -217,11 +229,11 @@ export class KlineService {
     // 批量获取每个时间点的 open（第一个交易所）和 close（最后一个交易所）
     // PERF: 此查询依赖复合索引 (symbol, interval, timestamp) 以避免全表扫描
     // 索引定义见 prisma/schema/market_data.prisma: @@index([symbol, interval, timestamp])
-    const openCloseData = await client.$queryRaw<Array<{
-      timestamp: Date
-      open: number
-      close: number
-    }>>`
+    const dbInterval = reverseMapTimeframe(timeframe)
+
+    const symbol = String(where.symbol).toUpperCase()
+
+    const openCloseData = (await client.$queryRaw(Prisma.sql`
       WITH ranked AS (
         SELECT
           timestamp,
@@ -230,11 +242,9 @@ export class KlineService {
           ROW_NUMBER() OVER (PARTITION BY timestamp ORDER BY exchange_code ASC) as rn_first,
           ROW_NUMBER() OVER (PARTITION BY timestamp ORDER BY exchange_code DESC) as rn_last
         FROM futures_price_history
-        WHERE symbol = ${(where.symbol as string).toUpperCase()}
-          AND interval = ${where.interval}::market_timeframe
-          AND timestamp >= ${timestamps[0]}
-          AND timestamp <= ${timestamps[timestamps.length - 1]}
-        LIMIT ${Math.min(timestamps.length * 10, this.MAX_QUERY_LIMIT * 2)}
+        WHERE symbol = ${symbol}
+          AND interval = ${dbInterval}
+          AND timestamp IN (${Prisma.join(timestamps)})
       )
       SELECT
         timestamp,
@@ -243,7 +253,11 @@ export class KlineService {
       FROM ranked
       GROUP BY timestamp
       ORDER BY timestamp ASC
-    `
+    `)) as Array<{
+      timestamp: Date
+      open: number
+      close: number
+    }>
 
     // 构建 timestamp -> open/close 映射
     const openCloseMap = new Map<number, { open: number; close: number }>()
@@ -255,7 +269,8 @@ export class KlineService {
     }
 
     // 合并聚合结果
-    return aggregatedData.map(row => {
+    const orderedAggregated = aggregatedData.slice().reverse()
+    return orderedAggregated.map(row => {
       const timeKey = row.timestamp.getTime()
       const openClose = openCloseMap.get(timeKey)
 
@@ -288,5 +303,27 @@ export class KlineService {
     }
 
     return timeframe ?? ('m15' as MarketTimeframe)
+  }
+
+  private mapIntervalToSeconds(interval: string): number {
+    const map: Record<string, number> = {
+      '1m': 60,
+      '5m': 300,
+      '15m': 900,
+      '1h': 3600,
+      '4h': 14400,
+      '1d': 86400,
+    }
+
+    const seconds = map[interval]
+    if (!seconds) {
+      this.logger.warn(`Invalid interval: ${interval}, fallback to 15m seconds`)
+    }
+
+    return seconds ?? 900
+  }
+
+  private clampQueryLimit(expected: number): number {
+    return Math.min(this.MAX_QUERY_LIMIT, Math.max(this.MIN_QUERY_LIMIT, expected))
   }
 }

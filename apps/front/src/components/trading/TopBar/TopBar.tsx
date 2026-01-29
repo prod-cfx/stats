@@ -1,12 +1,12 @@
 'use client';
 
-import type {Socket} from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import type {TickerData} from '@/lib/api';
 import type { DataSource, MarketType } from '@/types/trading';
 import { ChevronDown, Info, Search } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { io  } from 'socket.io-client'
+import { io } from 'socket.io-client'
 import { fetchKlineData, fetchTicker  } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { getWsBaseUrl } from '@/lib/ws'
@@ -107,6 +107,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
   const prevSymbolRef = useRef<string | null>(null);
   const selectedSymbolRef = useRef<string>(selectedSymbol);
   const lastKlineUpdateTimeRef = useRef<number>(0);
+  const klineParamsRef = useRef<{ symbol: string; exchange?: DataSource }>({ symbol: '' });
   const THROTTLE_INTERVAL = 1000;
 
   // Sync selectedSymbolRef with selectedSymbol state
@@ -151,6 +152,13 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     return selectedSymbol
   }, [selectedSymbol])
 
+  useEffect(() => {
+    klineParamsRef.current = {
+      symbol: selectedSymbol,
+      exchange: isAggregated ? undefined : selectedExchange,
+    };
+  }, [selectedSymbol, isAggregated, selectedExchange]);
+
   // Fetch ticker data from API
   useEffect(() => {
     if (!selectedBase) return;
@@ -172,37 +180,34 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
     return () => clearInterval(interval);
   }, [selectedBase, isAggregated, selectedExchange]);
 
-  // Fetch latest kline close price from API (fallback when WebSocket is not connected)
+  const fetchLatestKline = async (params: { symbol: string; exchange?: DataSource }) => {
+    if (!params.symbol) return;
+    try {
+      const to = Math.floor(Date.now() / 1000);
+      const from = to - 60;
+      const bars = await fetchKlineData({
+        symbol: params.symbol,
+        interval: '1m',
+        from,
+        to,
+        exchange: params.exchange,
+      });
+      const latestClose = bars.at(-1)?.close;
+      setKlineClosePrice(Number.isFinite(latestClose) ? latestClose : null);
+    } catch (error) {
+      logger.error('Failed to fetch kline data:', error);
+      setKlineClosePrice(null);
+    }
+  };
+
+  // Fetch latest kline close price from API (one-shot on params change)
   useEffect(() => {
     if (!selectedSymbol) return;
-    // 只在 WebSocket 未连接时才使用 API 轮询
-    if (wsConnectionStatus === 'connected') return;
-
-    const fetchLatestKline = async () => {
-      try {
-        const exchange = isAggregated ? undefined : selectedExchange;
-        const to = Math.floor(Date.now() / 1000);
-        const from = to - 60;
-        const bars = await fetchKlineData({
-          symbol: selectedSymbol,
-          interval: '1m',
-          from,
-          to,
-          exchange,
-        });
-        const latestClose = bars.at(-1)?.close;
-        setKlineClosePrice(latestClose !== undefined && Number.isFinite(latestClose) ? latestClose : null);
-      } catch (error) {
-        logger.error('Failed to fetch kline data:', error);
-        setKlineClosePrice(null);
-      }
-    };
-
-    fetchLatestKline();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchLatestKline, 10000);
-    return () => clearInterval(interval);
-  }, [selectedSymbol, isAggregated, selectedExchange, wsConnectionStatus]);
+    fetchLatestKline({
+      symbol: selectedSymbol,
+      exchange: isAggregated ? undefined : selectedExchange,
+    });
+  }, [selectedSymbol, isAggregated, selectedExchange]);
 
   // WebSocket real-time kline updates
   useEffect(() => {
@@ -230,6 +235,7 @@ export const TopBar = ({ isAggregated, selectedExchange, marketType, setMarketTy
           socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' });
           logger.debug(`[TopBar] Subscribed to kline: ${selectedSymbol}`);
         }
+        fetchLatestKline(klineParamsRef.current);
       });
 
       socket.on('kline', (data: { symbol: string; interval: string; bar: { close: number } }) => {

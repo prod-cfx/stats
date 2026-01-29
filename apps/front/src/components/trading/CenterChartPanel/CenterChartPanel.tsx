@@ -31,7 +31,7 @@ export const CenterChartPanel = ({
   variant = 'default'
 }: CenterChartPanelProps) => {
   const { t } = useTranslation();
-  const [interval, setInterval] = useState('15m');
+  const [interval] = useState('15m');
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
   const [indicatorSearch, setIndicatorSearch] = useState('')
   
@@ -106,17 +106,6 @@ export const CenterChartPanel = ({
       else chart.removeCustomIndicator(id)
     })
   }, [activeIds])
-
-  const getTimeframeLabel = (tf: string) => {
-    if (tf === '1s') return t('chart.timeframes.1s');
-    if (tf === '1m') return t('chart.timeframes.1m');
-    if (tf === '5m') return t('chart.timeframes.5m');
-    if (tf === '15m') return t('chart.timeframes.15m');
-    if (tf === '1h') return t('chart.timeframes.1h');
-    if (tf === '4h') return t('chart.timeframes.4h');
-    if (tf === '1d') return t('chart.timeframes.1d');
-    return tf;
-  };
 
   return (
     <div className="flex-1 flex flex-col bg-[color:var(--cf-bg)] overflow-hidden min-h-0 relative w-full">

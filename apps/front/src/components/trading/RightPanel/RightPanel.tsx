@@ -1,9 +1,9 @@
 'use client';
 
-import type { OrderBookLevel as SharedOrderBookLevel, AggregatedLevel } from '@ai/shared';
+import type { AggregatedLevel, OrderBookLevel as SharedOrderBookLevel } from '@ai/shared';
 import type { Socket } from 'socket.io-client';
-import type { DataSource, MarketType } from '@/types/trading';
 import type { TickerData } from '@/lib/api';
+import type { DataSource, MarketType } from '@/types/trading';
 import { AlignJustify, ArrowDownUp, ChevronDown, Copy, RotateCcw } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';

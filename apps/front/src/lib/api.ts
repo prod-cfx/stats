@@ -880,7 +880,7 @@ export interface FetchExchangeLongShortRatioQuery {
   timeRange: ExchangeLongShortTimeRange
 }
 
-type LongShortRatioQuery = {
+interface LongShortRatioQuery {
   tradingPairId: string
   interval: string
   from?: string
@@ -888,7 +888,7 @@ type LongShortRatioQuery = {
   limit?: number
 }
 
-type LongShortRatioPoint = {
+interface LongShortRatioPoint {
   tradingPairId: string
   interval: string
   timestamp: string

@@ -11,7 +11,7 @@ import { useAggregatedVolumeData } from '@/hooks/useAggregatedVolumeData'
 import { fetchAggregatedOpenInterest, fetchLongShortRatio } from '@/lib/api'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
-import { mockDatafeed } from './mockDatafeed'
+import { createMockDatafeed } from './mockDatafeed'
 
 // P2-6: TradingView 最小类型定义，替代 any
 // 这些类型基于 TradingView Charting Library 的实际 API，但由于库未提供完整类型，
@@ -156,8 +156,8 @@ interface TradingViewWidgetConfig {
 /** TradingView Widget 实例 */
 interface TradingViewWidgetInstance {
   onChartReady: (callback: () => void) => void
-  activeChart: () => TradingViewChart
-  chart: () => TradingViewChart
+  activeChart: () => TradingViewChartApi
+  chart: () => TradingViewChartApi
   remove: () => void
   headerReady: () => Promise<void>
   createButton: (options: { align: string }) => HTMLElement
@@ -165,7 +165,7 @@ interface TradingViewWidgetInstance {
 }
 
 /** TradingView Chart 接口 */
-interface TradingViewChart {
+interface TradingViewChartApi {
   createStudy: (name: string, forceOverlay?: boolean, lock?: boolean, inputs?: unknown[], callback?: (id: string) => void, priceScale?: unknown, options?: unknown) => string | Promise<string>
   removeEntity: (id: string) => void
   getAllStudies: () => Array<{ id: string; name: string }>
@@ -597,6 +597,78 @@ function createCustomIndicatorsGetter(opts?: {
       return null
     }
 
+    const longShortRatioConstructor = function (this: LongShortRatioIndicatorThis) {
+      this.init = function (context: PineContext, inputCallback: unknown) {
+        this._context = context
+        this._input = inputCallback
+        this._dataRef = lsDataRef
+        this._sortedTimestampsRef = lsSortedTimestampsRef
+        this._prev = null
+      }
+      this.main = function (context: PineContext) {
+        this._context = context
+        const time = PineJS.Std.time(context)
+        const dataMap: Map<number, number> | undefined = this._dataRef?.current
+        const sortedTimestamps: number[] | undefined = this._sortedTimestampsRef?.current
+
+        if (!dataMap || dataMap.size === 0 || !sortedTimestamps || sortedTimestamps.length === 0) {
+          return [Number.NaN, 0]
+        }
+
+        // Binary search to find the closest timestamp
+        let left = 0
+        let right = sortedTimestamps.length - 1
+        let closestIdx = 0
+
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2)
+          const midTs = sortedTimestamps[mid]
+          if (midTs === time) {
+            closestIdx = mid
+            break
+          } else if (midTs < time) {
+            left = mid + 1
+          } else {
+            right = mid - 1
+          }
+          // Track closest so far
+          if (Math.abs(sortedTimestamps[closestIdx] - time) > Math.abs(midTs - time)) {
+            closestIdx = mid
+          }
+        }
+
+        // Check neighbors for the actual closest
+        const candidates = [closestIdx]
+        if (closestIdx > 0) candidates.push(closestIdx - 1)
+        if (closestIdx < sortedTimestamps.length - 1) candidates.push(closestIdx + 1)
+
+        let bestTs = sortedTimestamps[closestIdx]
+        let minDiff = Math.abs(bestTs - time)
+        for (const idx of candidates) {
+          const ts = sortedTimestamps[idx]
+          const diff = Math.abs(ts - time)
+          if (diff < minDiff) {
+            minDiff = diff
+            bestTs = ts
+          }
+        }
+
+        if (minDiff > LONG_SHORT_RATIO_MAX_TIME_DIFF_MS) {
+          return [Number.NaN, 0]
+        }
+
+        const ratio = dataMap.get(bestTs)
+        if (ratio == null) {
+          return [Number.NaN, 0]
+        }
+
+        const isGreen = ratio >= 1.0
+        this._prev = ratio
+
+        return [ratio, isGreen ? 0 : 1]
+      }
+    }
+
     const IND_LS = {
       name: names['long-short-ratio'],
       metainfo: {
@@ -644,80 +716,48 @@ function createCustomIndicatorsGetter(opts?: {
       },
       // IMPORTANT: Charting Library will do `new indicator.constructor()`
       // Object method shorthand `constructor () {}` is NOT constructible in JS.
-      constructor: function (this: LongShortRatioIndicatorThis) {
-        this.init = function (context: PineContext, inputCallback: unknown) {
-          this._context = context
-          this._input = inputCallback
-          this._dataRef = lsDataRef
-          this._sortedTimestampsRef = lsSortedTimestampsRef
-          this._prev = null
-        }
-        this.main = function (context: PineContext) {
-          this._context = context
-          const time = PineJS.Std.time(context)
-          const dataMap: Map<number, number> | undefined = this._dataRef?.current
-          const sortedTimestamps: number[] | undefined = this._sortedTimestampsRef?.current
-
-          if (!dataMap || dataMap.size === 0 || !sortedTimestamps || sortedTimestamps.length === 0) {
-            return [Number.NaN, 0]
-          }
-
-          // Binary search to find the closest timestamp
-          let left = 0
-          let right = sortedTimestamps.length - 1
-          let closestIdx = 0
-
-          while (left <= right) {
-            const mid = Math.floor((left + right) / 2)
-            const midTs = sortedTimestamps[mid]
-            if (midTs === time) {
-              closestIdx = mid
-              break
-            } else if (midTs < time) {
-              left = mid + 1
-            } else {
-              right = mid - 1
-            }
-            // Track closest so far
-            if (Math.abs(sortedTimestamps[closestIdx] - time) > Math.abs(midTs - time)) {
-              closestIdx = mid
-            }
-          }
-
-          // Check neighbors for the actual closest
-          const candidates = [closestIdx]
-          if (closestIdx > 0) candidates.push(closestIdx - 1)
-          if (closestIdx < sortedTimestamps.length - 1) candidates.push(closestIdx + 1)
-
-          let bestTs = sortedTimestamps[closestIdx]
-          let minDiff = Math.abs(bestTs - time)
-          for (const idx of candidates) {
-            const ts = sortedTimestamps[idx]
-            const diff = Math.abs(ts - time)
-            if (diff < minDiff) {
-              minDiff = diff
-              bestTs = ts
-            }
-          }
-
-          if (minDiff > LONG_SHORT_RATIO_MAX_TIME_DIFF_MS) {
-            return [Number.NaN, 0]
-          }
-
-          const ratio = dataMap.get(bestTs)
-          if (ratio == null) {
-            return [Number.NaN, 0]
-          }
-
-          const isGreen = ratio >= 1.0
-          this._prev = ratio
-
-          return [ratio, isGreen ? 0 : 1]
-        }
-      },
+      constructor: longShortRatioConstructor,
     }
 
     const oiGradientBottom = theme === 'Dark' ? '#0b1220' : '#ffffff'
+
+    const aggregatedOpenInterestConstructor = function (this: IndicatorThis) {
+      this.init = function (context: PineContext, inputCallback: unknown) {
+        this._context = context
+        this._input = inputCallback
+      }
+      this.main = function (context: PineContext) {
+        this._context = context
+        const time = PineJS.Std.time(context)
+
+        const vTime = typeof time === 'number' && Number.isFinite(time) ? time : 0
+
+        // 尝试从真实数据中获取
+        let oi: number | null = null
+        if (oiDataRef?.current && vTime > 0) {
+          const { timestamps, values } = oiDataRef.current
+          const tolerance = Math.max(5 * 60 * 1000, intervalMs)
+          oi = findClosestValue(timestamps, values, vTime, tolerance)
+        }
+
+        // 如果没有真实数据，降级到 mock 数据
+        if (oi === null) {
+          const vol = PineJS.Std.volume(context)
+          const close = PineJS.Std.close(context)
+          const vVol = typeof vol === 'number' && Number.isFinite(vol) ? vol : 0
+          const vClose = typeof close === 'number' && Number.isFinite(close) ? close : 0
+
+          const base = 650_000
+          const wave1 = Math.sin(vTime / 8.6e7) * 70_000
+          const wave2 = Math.sin(vTime / 2.2e7) * 35_000
+          const wave3 = Math.sin(vClose / 180) * 18_000
+          const noise = (vVol - 150) * 420
+          oi = Math.max(0, base + wave1 + wave2 + wave3 + noise)
+        }
+
+        return [oi, 0]
+      }
+    }
 
     const IND_OI = {
       name: names['aggregated-open-interest'],
@@ -803,43 +843,28 @@ function createCustomIndicatorsGetter(opts?: {
         inputs: [],
         format: { type: 'volume', precision: 0 },
       },
-      constructor: function (this: IndicatorThis) {
-        this.init = function (context: PineContext, inputCallback: unknown) {
-          this._context = context
-          this._input = inputCallback
+      constructor: aggregatedOpenInterestConstructor,
+    }
+
+    const aggregatedVolumeConstructor = function (this: IndicatorThis) {
+      this.init = function (context: PineContext, inputCallback: unknown) {
+        this._context = context
+        this._input = inputCallback
+      }
+      this.main = function (context: PineContext) {
+        this._context = context
+        const time = PineJS.Std.time(context)
+
+        // 从实例 Map 获取聚合成交量数据源（独立于 K 线数据）
+        const volumeMap = instanceId ? aggregatedVolumeMapByInstance.get(instanceId)?.current : undefined
+        if (volumeMap && volumeMap.size > 0) {
+          const volume = volumeMap.get(time) ?? 0
+          return [typeof volume === 'number' && Number.isFinite(volume) ? volume : 0]
         }
-        this.main = function (context: PineContext) {
-          this._context = context
-          const time = PineJS.Std.time(context)
 
-          const vTime = typeof time === 'number' && Number.isFinite(time) ? time : 0
-
-          // 尝试从真实数据中获取
-          let oi: number | null = null
-          if (oiDataRef?.current && vTime > 0) {
-            const { timestamps, values } = oiDataRef.current
-            const tolerance = Math.max(5 * 60 * 1000, intervalMs)
-            oi = findClosestValue(timestamps, values, vTime, tolerance)
-          }
-
-          // 如果没有真实数据，降级到 mock 数据
-          if (oi === null) {
-            const vol = PineJS.Std.volume(context)
-            const close = PineJS.Std.close(context)
-            const vVol = typeof vol === 'number' && Number.isFinite(vol) ? vol : 0
-            const vClose = typeof close === 'number' && Number.isFinite(close) ? close : 0
-
-            const base = 650_000
-            const wave1 = Math.sin(vTime / 8.6e7) * 70_000
-            const wave2 = Math.sin(vTime / 2.2e7) * 35_000
-            const wave3 = Math.sin(vClose / 180) * 18_000
-            const noise = (vVol - 150) * 420
-            oi = Math.max(0, base + wave1 + wave2 + wave3 + noise)
-          }
-
-          return [oi, 0]
-        }
-      },
+        // 数据缺失时返回 0（不使用 mock 数据）
+        return [0]
+      }
     }
 
     const IND_VOL = {
@@ -873,26 +898,38 @@ function createCustomIndicatorsGetter(opts?: {
         { plot_0: { title: tFunc('chart.indicators.aggregatedVolume'), histogramBase: 0, joinPoints: false } },
         { type: 'volume', precision: 0 },
       ),
-      constructor: function (this: IndicatorThis) {
-        this.init = function (context: PineContext, inputCallback: unknown) {
-          this._context = context
-          this._input = inputCallback
-        }
-        this.main = function (context: PineContext) {
-          this._context = context
-          const time = PineJS.Std.time(context)
+      constructor: aggregatedVolumeConstructor,
+    }
 
-          // 从实例 Map 获取聚合成交量数据源（独立于 K 线数据）
-          const volumeMap = instanceId ? aggregatedVolumeMapByInstance.get(instanceId)?.current : undefined
-          if (volumeMap && volumeMap.size > 0) {
-            const volume = volumeMap.get(time) ?? 0
-            return [typeof volume === 'number' && Number.isFinite(volume) ? volume : 0]
-          }
+    const liquidationDataConstructor = function (this: IndicatorThis) {
+      this.init = function (context: PineContext, inputCallback: unknown) {
+        this._context = context
+        this._input = inputCallback
+      }
+      this.main = function (context: PineContext) {
+        this._context = context
+        // ✅ 正确语义：同一时间点同时有多单爆仓(L)和空单爆仓(S)的量
+        // mock：用成交量/价格组合出一个"百万级"爆仓量，并用 time 做一个平滑的占比分配
+        const closeRaw = PineJS.Std.close(context)
+        const volRaw = PineJS.Std.volume(context)
+        const timeRaw = PineJS.Std.time(context)
 
-          // 数据缺失时返回 0（不使用 mock 数据）
-          return [0]
-        }
-      },
+        const close = typeof closeRaw === 'number' && Number.isFinite(closeRaw) ? closeRaw : 0
+        const vol = typeof volRaw === 'number' && Number.isFinite(volRaw) ? volRaw : 0
+        const t = typeof timeRaw === 'number' && Number.isFinite(timeRaw) ? timeRaw : 0
+
+        // 量级：close*vol 大约是 1e8 级，乘 0.03~0.08 得到 3M~12M 左右（接近你图里的 $M）
+        const baseFactor = 0.05 + Math.sin(t / 3.6e7) * 0.015 // 约 10h 周期缓慢变化
+        const total = Math.max(0, close * vol * baseFactor)
+
+        // 分配比例：0.25~0.75 之间来回摆动（保证两边同一时刻同时存在）
+        const ratio = 0.5 + Math.sin(t / 1.6e7) * 0.25
+        const longL = total * ratio
+        const shortS = total * (1 - ratio)
+
+        // 约定：S 画在上方（正值），L 画在下方（负值）
+        return [shortS, -longL, total]
+      }
     }
 
     const IND_LIQ = {
@@ -928,36 +965,20 @@ function createCustomIndicatorsGetter(opts?: {
         },
         { type: 'volume', precision: 0 },
       ),
-      constructor: function (this: IndicatorThis) {
-        this.init = function (context: PineContext, inputCallback: unknown) {
-          this._context = context
-          this._input = inputCallback
-        }
-        this.main = function (context: PineContext) {
-          this._context = context
-          // ✅ 正确语义：同一时间点同时有多单爆仓(L)和空单爆仓(S)的量
-          // mock：用成交量/价格组合出一个"百万级"爆仓量，并用 time 做一个平滑的占比分配
-          const closeRaw = PineJS.Std.close(context)
-          const volRaw = PineJS.Std.volume(context)
-          const timeRaw = PineJS.Std.time(context)
+      constructor: liquidationDataConstructor,
+    }
 
-          const close = typeof closeRaw === 'number' && Number.isFinite(closeRaw) ? closeRaw : 0
-          const vol = typeof volRaw === 'number' && Number.isFinite(volRaw) ? volRaw : 0
-          const t = typeof timeRaw === 'number' && Number.isFinite(timeRaw) ? timeRaw : 0
-
-          // 量级：close*vol 大约是 1e8 级，乘 0.03~0.08 得到 3M~12M 左右（接近你图里的 $M）
-          const baseFactor = 0.05 + Math.sin(t / 3.6e7) * 0.015 // 约 10h 周期缓慢变化
-          const total = Math.max(0, close * vol * baseFactor)
-
-          // 分配比例：0.25~0.75 之间来回摆动（保证两边同一时刻同时存在）
-          const ratio = 0.5 + Math.sin(t / 1.6e7) * 0.25
-          const longL = total * ratio
-          const shortS = total * (1 - ratio)
-
-          // 约定：S 画在上方（正值），L 画在下方（负值）
-          return [shortS, -longL, total]
-        }
-      },
+    const liquidationMapLegendConstructor = function (this: IndicatorThis) {
+      this.init = function (context: PineContext, inputCallback: unknown) {
+        this._context = context
+        this._input = inputCallback
+      }
+      this.main = function (context: PineContext) {
+        this._context = context
+        // 返回 close，但 visible=false；仅用于出现在 legend 并拥有 eye/X
+        const c = PineJS.Std.close(context)
+        return [typeof c === 'number' && Number.isFinite(c) ? c : Number.NaN]
+      }
     }
 
     const IND_LIQ_MAP_LEGEND = {
@@ -991,18 +1012,7 @@ function createCustomIndicatorsGetter(opts?: {
         is_custom_indicator: true,
         is_hidden_study: false,
       },
-      constructor: function (this: IndicatorThis) {
-        this.init = function (context: PineContext, inputCallback: unknown) {
-          this._context = context
-          this._input = inputCallback
-        }
-        this.main = function (context: PineContext) {
-          this._context = context
-          // 返回 close，但 visible=false；仅用于出现在 legend 并拥有 eye/X
-          const c = PineJS.Std.close(context)
-          return [typeof c === 'number' && Number.isFinite(c) ? c : Number.NaN]
-        }
-      },
+      constructor: liquidationMapLegendConstructor,
     }
 
     return Promise.resolve([IND_LS, IND_OI, IND_VOL, IND_LIQ, IND_LIQ_MAP_LEGEND])
@@ -1368,6 +1378,7 @@ export const TradingViewChart = forwardRef((
   const pendingRemovesRef = useRef<Set<CustomIndicatorId>>(new Set())
 
   const stableInputs = useMemo(() => ({ symbol, interval, theme, language: i18n.language }), [symbol, interval, theme, i18n.language])
+  const datafeedRef = useRef(createMockDatafeed({ isAggregated, exchange: selectedExchange }))
 
   // 这些回调/状态会频繁变化，不能放进 init effect 依赖，否则会导致 widget 被重建。
   const callbacksRef = useRef({
@@ -1384,6 +1395,7 @@ export const TradingViewChart = forwardRef((
   }, [onOpenDataIndicator, onOpenIndicator, onRemoveIndicator, onSelectExchange, onToggleAggregate])
 
   useEffect(() => {
+    datafeedRef.current.setContext({ isAggregated, exchange: selectedExchange })
     stateRef.current = { isAggregated, selectedExchange }
   }, [isAggregated, selectedExchange])
 
@@ -1646,7 +1658,7 @@ export const TradingViewChart = forwardRef((
           symbol,
           interval,
 
-          datafeed: mockDatafeed,
+          datafeed: datafeedRef.current,
           custom_indicators_getter: createCustomIndicatorsGetter({
             theme,
             t,

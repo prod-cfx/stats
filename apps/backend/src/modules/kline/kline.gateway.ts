@@ -714,20 +714,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
             return
           }
 
-          // 防止任务堆积：如果上一次还在运行，跳过本次
-          if (subscriptionInfo.isRunning) {
-            this.logger.warn({
-              message: 'Previous orderbook polling still running, skipping',
-              subscriptionKey,
-              params: subscriptionInfo.params,
-            })
-            scheduleNext()
-            return
-          }
-
           try {
-            subscriptionInfo.isRunning = true
-
             const clientCount = subscriptionInfo.clients.size
             if (clientCount === 0) {
               this.logger.log({
@@ -748,7 +735,6 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
               stack: error instanceof Error ? error.stack : undefined,
             })
           } finally {
-            subscriptionInfo.isRunning = false
             // 只有订阅仍存在时才调度下一次
             if (this.orderbookIntervals.has(subscriptionKey)) {
               scheduleNext()
@@ -1171,7 +1157,8 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
   cleanupStaleConnections(): void {
     const now = Date.now()
 
-    this.server.sockets.sockets.forEach((socket) => {
+    const socketsCollection = this.getSocketsCollection()
+    const handleSocket = (socket: Socket): void => {
       try {
         const lastActivity = this.getLastActivity(socket)
         if (now - lastActivity > STALE_CONNECTION_THRESHOLD_MS) {
@@ -1189,7 +1176,56 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           error: error instanceof Error ? error.message : String(error),
         })
       }
+    }
+
+    if (this.hasSocketForEach(socketsCollection)) {
+      socketsCollection.forEach(handleSocket)
+      return
+    }
+
+    if (this.isSocketIterable(socketsCollection)) {
+      for (const socket of socketsCollection) {
+        handleSocket(socket)
+      }
+      return
+    }
+
+    this.logger.warn({
+      message: 'Socket collection missing or not iterable during stale connection cleanup',
     })
+  }
+
+  private getSocketsCollection(): unknown {
+    const server: unknown = this.server
+    if (!this.isRecord(server)) {
+      return undefined
+    }
+
+    const sockets = server.sockets
+    if (this.isRecord(sockets) && 'sockets' in sockets) {
+      return sockets.sockets
+    }
+
+    return sockets
+  }
+
+  private hasSocketForEach(
+    value: unknown,
+  ): value is { forEach: (callback: (socket: Socket) => void) => void } {
+    return this.isRecord(value) && typeof value.forEach === 'function'
+  }
+
+  private isSocketIterable(value: unknown): value is Iterable<Socket> {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+      return false
+    }
+
+    const maybeIterable = value as { [Symbol.iterator]?: unknown }
+    return typeof maybeIterable[Symbol.iterator] === 'function'
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null
   }
 
   private updateClientActivity(client: Socket): void {
