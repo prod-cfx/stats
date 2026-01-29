@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
-  "buildCommand": "cd ../.. && ./scripts/dx build shared && ./scripts/dx build front --${APP_ENV:-staging}",
+  "buildCommand": "cd ../.. && APP_ENV=${APP_ENV:-staging} dx build shared && APP_ENV=${APP_ENV:-staging} dx build front --staging",
   "outputDirectory": ".next",
   "redirects": [
     {
@@ -17,16 +17,7 @@
     }
   ],
   "images": {
-    "sizes": [
-      640,
-      750,
-      828,
-      1080,
-      1200,
-      1920,
-      2048,
-      3840
-    ],
+    "sizes": [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     "domains": [
       "source.unsplash.com",
       "images.unsplash.com",

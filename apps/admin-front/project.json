@@ -4,22 +4,23 @@
   "sourceRoot": "apps/admin-front/src",
   "projectType": "application",
   "tags": ["scope:admin", "type:app", "framework:nextjs"],
+  "implicitDependencies": ["api-contracts", "shared", "config"],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/admin-front"],
       "defaultConfiguration": "production",
       "options": {
-        "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+        "command": "next build",
         "cwd": "apps/admin-front"
       },
       "configurations": {
         "development": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+          "command": "next build",
           "cwd": "apps/admin-front"
         },
         "production": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app admin -- next build",
+          "command": "next build",
           "cwd": "apps/admin-front"
         }
       }

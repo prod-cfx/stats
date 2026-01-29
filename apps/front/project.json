@@ -4,22 +4,23 @@
   "sourceRoot": "apps/front/src",
   "projectType": "application",
   "tags": ["scope:frontend", "type:app", "framework:nextjs"],
+  "implicitDependencies": ["api-contracts", "shared", "config"],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/front"],
       "defaultConfiguration": "production",
       "options": {
-        "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+        "command": "next build && node scripts/post-build.js",
         "cwd": "apps/front"
       },
       "configurations": {
         "development": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+          "command": "next build && node scripts/post-build.js",
           "cwd": "apps/front"
         },
         "production": {
-          "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+          "command": "next build && node scripts/post-build.js",
           "cwd": "apps/front"
         }
       }
@@ -51,7 +52,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/front"],
       "options": {
-        "command": "node ../../scripts/lib/run-with-version-env.js --app front -- next build && node scripts/post-build.js",
+        "command": "next build && node scripts/post-build.js",
         "cwd": "apps/front"
       }
     },

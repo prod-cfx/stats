@@ -19,11 +19,11 @@
  *     pm2 delete all
  */
 
-const path = require('path');
-const projectRoot = __dirname;
+const path = require('path')
+const projectRoot = __dirname
 
 // 检测运行环境（支持 NODE_ENV 和 PM2_ENV）
-const isProduction = process.env.NODE_ENV === 'production' || process.env.PM2_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production' || process.env.PM2_ENV === 'production'
 
 /**
  * 创建 Backend 配置
@@ -48,13 +48,13 @@ function createBackendConfig() {
       merge_logs: true,
       autorestart: true,
       watch: false,
-    };
+    }
   }
 
   return {
     name: 'backend',
     cwd: projectRoot,
-    script: './scripts/dx',
+    script: 'dx',
     args: 'start backend --dev',
     env: {
       NODE_ENV: 'development',
@@ -66,7 +66,7 @@ function createBackendConfig() {
     merge_logs: true,
     autorestart: true,
     watch: false,
-  };
+  }
 }
 
 /**
@@ -91,13 +91,13 @@ function createFrontConfig() {
       merge_logs: true,
       autorestart: true,
       watch: false,
-    };
+    }
   }
 
   return {
     name: 'front',
     cwd: projectRoot,
-    script: './scripts/dx',
+    script: 'dx',
     args: 'start front --dev',
     env: {
       NODE_ENV: 'development',
@@ -109,7 +109,7 @@ function createFrontConfig() {
     merge_logs: true,
     autorestart: true,
     watch: false,
-  };
+  }
 }
 
 /**
@@ -134,13 +134,13 @@ function createAdminConfig() {
       merge_logs: true,
       autorestart: true,
       watch: false,
-    };
+    }
   }
 
   return {
     name: 'admin',
     cwd: projectRoot,
-    script: './scripts/dx',
+    script: 'dx',
     args: 'start admin --dev',
     env: {
       NODE_ENV: 'development',
@@ -152,13 +152,9 @@ function createAdminConfig() {
     merge_logs: true,
     autorestart: true,
     watch: false,
-  };
+  }
 }
 
 module.exports = {
-  apps: [
-    createBackendConfig(),
-    createFrontConfig(),
-    createAdminConfig(),
-  ],
-};
+  apps: [createBackendConfig(), createFrontConfig(), createAdminConfig()],
+}

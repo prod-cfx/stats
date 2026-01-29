@@ -8,13 +8,13 @@
 
 代码采用 Nx Monorepo 组织，主要模块如下：
 
-| 层级 / 模块        | 说明                                                                 | 技术栈 |
-| ------------------ | -------------------------------------------------------------------- | ------ |
-| apps/backend       | 面向前端与网关的统一 API 服务，负责数据聚合、清洗、权限与风控       | NestJS 11 + TS + Prisma 7 |
-| apps/front         | 面向终端用户的数据展示站点（图表、报表、分析视图）                   | Next.js 14 (React 19) |
-| apps/admin-front   | 管理后台（RBAC、菜单、系统配置、数据源管理等）                       | Next.js 15 + React 19 + Redux Toolkit |
-| packages/shared    | 前后端共享的 DTO、常量、工具函数（时间、金额、ID 等）               | TypeScript |
-| packages/config    | 环境配置加载与 Zod 校验，统一 `.env` 层级                           | dotenv + zod |
+| 层级 / 模块      | 说明                                                          | 技术栈                                |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------- |
+| apps/backend     | 面向前端与网关的统一 API 服务，负责数据聚合、清洗、权限与风控 | NestJS 11 + TS + Prisma 7             |
+| apps/front       | 面向终端用户的数据展示站点（图表、报表、分析视图）            | Next.js 14 (React 19)                 |
+| apps/admin-front | 管理后台（RBAC、菜单、系统配置、数据源管理等）                | Next.js 15 + React 19 + Redux Toolkit |
+| packages/shared  | 前后端共享的 DTO、常量、工具函数（时间、金额、ID 等）         | TypeScript                            |
+| packages/config  | 环境配置加载与 Zod 校验，统一 `.env` 层级                     | dotenv + zod                          |
 
 > 说明：Serverless 网关通常部署在云端（如 API Gateway / Cloudflare Workers），不一定在本仓库中体现，这里将其视为“基础设施层”的一部分。
 
@@ -25,7 +25,7 @@
 - 所有应用统一通过 `@net/config` 的 `loadEnvironment` 加载环境变量，保证本地 / e2e / 生产的 `.env` 行为一致。
 - `.env.example`：敏感字段占位符，仅用于文档与提示。
 - `.env.<env>`：可提交的非敏感配置。
-- `.env.<env>.local`：本地私有配置（被 Git 忽略），由 `scripts/check-env.mjs` / `apps/*/scripts/check-env.js` 做必需项校验。
+- `.env.<env>.local`：本地私有配置（被 Git 忽略），由 `apps/*/scripts/check-env.js` 做必需项校验。
 
 ---
 

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { BaseResponseDto } from '../common/dto/base.dto'
@@ -20,7 +20,23 @@ async function bootstrap() {
     extraModels: [BaseResponseDto, CryptoStockQuoteResponseDto],
   })
 
-  const outputDir = join(process.cwd(), 'dist', 'openapi')
+  const findWorkspaceRoot = (startDir: string) => {
+    let current = startDir
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (existsSync(join(current, 'pnpm-workspace.yaml'))) {
+        return current
+      }
+      const parent = dirname(current)
+      if (parent === current) return startDir
+      current = parent
+    }
+  }
+
+  const workspaceRoot = process.env.DX_PROJECT_ROOT
+    ? resolve(process.env.DX_PROJECT_ROOT)
+    : findWorkspaceRoot(process.cwd())
+  const outputDir = join(workspaceRoot, 'dist', 'openapi')
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true })
   }
