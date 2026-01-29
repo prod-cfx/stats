@@ -54,7 +54,7 @@ function createBackendConfig() {
   return {
     name: 'backend',
     cwd: projectRoot,
-    script: 'dx',
+    script: 'scripts/pm2/run-dx.cjs',
     args: 'start backend --dev',
     env: {
       NODE_ENV: 'development',
@@ -97,7 +97,7 @@ function createFrontConfig() {
   return {
     name: 'front',
     cwd: projectRoot,
-    script: 'dx',
+    script: 'scripts/pm2/run-dx.cjs',
     args: 'start front --dev',
     env: {
       NODE_ENV: 'development',
@@ -140,7 +140,7 @@ function createAdminConfig() {
   return {
     name: 'admin',
     cwd: projectRoot,
-    script: 'dx',
+    script: 'scripts/pm2/run-dx.cjs',
     args: 'start admin --dev',
     env: {
       NODE_ENV: 'development',
