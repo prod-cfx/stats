@@ -69,6 +69,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
   private readonly defaultSymbol = 'BTCUSDT'
   private readonly defaultInterval: MarketTimeframe = '4h'
   private readonly defaultLimit = 1000
+  private readonly intervalFormatCache = new Map<MarketTimeframe, string>()
 
   constructor(
     private readonly configService: ConfigService,
@@ -261,12 +262,11 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       } catch (error) {
         const isAbort = this.isAbortError(error)
 
-        const failure =
-          isAbort
-            ? `timeout after ${this.requestTimeoutMs}ms`
-            : error instanceof Error
-              ? error.message
-              : String(error)
+        const failure = isAbort
+          ? `timeout after ${this.requestTimeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error)
 
         lastFailure = failure
 
@@ -346,17 +346,60 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     }
   }
 
+  /**
+   * 将内部时间粒度转换为 Coinglass API 的 interval 格式。
+   * 格式规则：前缀 + 数字，例如 m1=1分钟、h4=4小时、d1=1天、w1=1周。
+   */
   private convertIntervalToCoinglassFormat(interval: MarketTimeframe): string {
-    switch (interval) {
-      case '1h':
-        return 'h1'
-      case '4h':
-        return 'h4'
-      case '1d':
-        return 'd1'
-      default:
-        return interval
+    if (this.intervalFormatCache.has(interval)) {
+      return this.intervalFormatCache.get(interval) ?? interval
     }
+
+    let converted: string
+    switch (interval) {
+      case '1m':
+        converted = 'm1'
+        break
+      case '3m':
+        converted = 'm3'
+        break
+      case '5m':
+        converted = 'm5'
+        break
+      case '15m':
+        converted = 'm15'
+        break
+      case '30m':
+        converted = 'm30'
+        break
+      case '1h':
+        converted = 'h1'
+        break
+      case '4h':
+        converted = 'h4'
+        break
+      case '6h':
+        converted = 'h6'
+        break
+      case '8h':
+        converted = 'h8'
+        break
+      case '12h':
+        converted = 'h12'
+        break
+      case '1d':
+        converted = 'd1'
+        break
+      case '1w':
+        converted = 'w1'
+        break
+      default:
+        this.logger.warn(`Unknown interval "${interval}" for Coinglass API, using raw value`)
+        converted = interval
+        break
+    }
+
+    this.intervalFormatCache.set(interval, converted)
+    return converted
   }
 }
-

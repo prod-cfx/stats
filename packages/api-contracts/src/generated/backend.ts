@@ -3368,10 +3368,7 @@ const endpoints = makeApi([
   },
 ]);
 
-export const aiBackendClient = new Zodios(
-  "http://localhost:3000/api/v1",
-  endpoints
-);
+export const aiBackendClient = new Zodios("/api/v1", endpoints);
 
 export function createApiClient(baseUrl: string, options?: ZodiosOptions) {
   return new Zodios(baseUrl, endpoints, options);
