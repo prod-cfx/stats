@@ -105,8 +105,8 @@ dx db generate
 # 2. 构建后端（编译 TypeScript → JavaScript）
 dx build backend --prod
 
- # 3. 生成 API Contracts（SDK）
- dx build contracts --prod
+# 3. 生成 API Contracts（SDK）
+dx build contracts --prod
 ```
 
 **说明**：
