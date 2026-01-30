@@ -1,8 +1,26 @@
- 'use client'
+'use client'
 
 import type { ColumnsType } from 'antd/es/table'
+import type { Key } from 'react'
 import type { DataPullExecutionLog, DataPullTask, RegisteredJobInfo } from '@/lib/api'
-import { App, Badge, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, Tooltip } from 'antd'
+import type { BulkFailure, BulkTarget } from '@/lib/bulk-action'
+import {
+  App,
+  Badge,
+  Button,
+  Card,
+  Drawer,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tag,
+  Tooltip,
+} from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createDataPullTask,
@@ -14,6 +32,7 @@ import {
   triggerDataPullTask,
   updateDataPullTask,
 } from '@/lib/api'
+import { aggregateBulkSettledResults, toErrorMessage } from '@/lib/bulk-action'
 
 interface TaskFormValues {
   /** Job 类型（从已注册的 key 中选择） */
@@ -59,7 +78,7 @@ function buildTaskKey(jobKey: string, suffix?: string): string {
 }
 
 export default function DataPullTasksPage() {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const [tasks, setTasks] = useState<DataPullTask[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
@@ -85,9 +104,17 @@ export default function DataPullTasksPage() {
   const [logPage, setLogPage] = useState(1)
   const [logLimit, setLogLimit] = useState(20)
   const [triggeringId, setTriggeringId] = useState<number | null>(null)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
+  const [bulkAction, setBulkAction] = useState<
+    'trigger' | 'interrupt' | 'enable' | 'disable' | null
+  >(null)
 
   const loadTasks = useCallback(
-    async (pageParam: number, limitParam: number, filters?: { key?: string; name?: string; enabled?: boolean }) => {
+    async (
+      pageParam: number,
+      limitParam: number,
+      filters?: { key?: string; name?: string; enabled?: boolean },
+    ) => {
       setLoading(true)
       try {
         const result = await fetchDataPullTasks({
@@ -156,11 +183,36 @@ export default function DataPullTasksPage() {
     return registeredJobs.find(job => job.key === selectedJobKey) ?? null
   }, [selectedJobKey, registeredJobs])
 
+  const selectedTasks = useMemo(
+    () => tasks.filter(task => selectedRowKeys.includes(task.id)),
+    [tasks, selectedRowKeys],
+  )
+  const runningSelectedTasks = useMemo(
+    () => selectedTasks.filter(task => task.lastStatus === 'RUNNING'),
+    [selectedTasks],
+  )
+  const hasSelection = selectedRowKeys.length > 0
+  const hasRunningSelection = runningSelectedTasks.length > 0
+
+  // 组件初始化时加载任务列表和注册任务信息
+  // loadTasks 和 loadRegisteredJobs 由 useCallback 包装且依赖稳定（message 来自 App Context）
+  // 仅在挂载时执行一次
   useEffect(() => {
     void loadTasks(1, 20)
     void loadRegisteredJobs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!selectedRowKeys.length) return
+
+    const taskIds = new Set(tasks.map(task => task.id))
+    const nextKeys = selectedRowKeys.filter(id => taskIds.has(id))
+
+    if (nextKeys.length === selectedRowKeys.length) return
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
+    setSelectedRowKeys(nextKeys)
+  }, [tasks, selectedRowKeys])
 
   const openCreateModal = useCallback(() => {
     setCurrentTask(null)
@@ -173,24 +225,27 @@ export default function DataPullTasksPage() {
     setModalVisible(true)
   }, [form])
 
-  const openEditModal = useCallback((task: DataPullTask) => {
-    setCurrentTask(task)
-    const { jobKey, suffix } = parseTaskKey(task.key)
-    setSelectedJobKey(jobKey)
-    form.setFieldsValue({
-      jobKey,
-      keySuffix: suffix,
-      name: task.name,
-      source: task.source ?? undefined,
-      type: task.type ?? undefined,
-      cron: task.cron ?? undefined,
-      intervalSeconds: task.intervalSeconds ?? undefined,
-      enabled: task.enabled,
-      cursor: task.cursor ?? undefined,
-      meta: (task as any).meta ? JSON.stringify((task as any).meta, null, 2) : undefined,
-    })
-    setModalVisible(true)
-  }, [form])
+  const openEditModal = useCallback(
+    (task: DataPullTask) => {
+      setCurrentTask(task)
+      const { jobKey, suffix } = parseTaskKey(task.key)
+      setSelectedJobKey(jobKey)
+      form.setFieldsValue({
+        jobKey,
+        keySuffix: suffix,
+        name: task.name,
+        source: task.source ?? undefined,
+        type: task.type ?? undefined,
+        cron: task.cron ?? undefined,
+        intervalSeconds: task.intervalSeconds ?? undefined,
+        enabled: task.enabled,
+        cursor: task.cursor ?? undefined,
+        meta: (task as any).meta ? JSON.stringify((task as any).meta, null, 2) : undefined,
+      })
+      setModalVisible(true)
+    },
+    [form],
+  )
 
   const handleSubmit = async () => {
     try {
@@ -236,37 +291,33 @@ export default function DataPullTasksPage() {
       }
       setModalVisible(false)
       void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
-    } catch (error: any) {
-      // 处理各种错误格式
-      const errorMsg =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        error?.data?.message ||
-        error?.message ||
-        '操作失败，请重试'
-      message.error(errorMsg)
+    } catch (error: unknown) {
+      message.error(toErrorMessage(error) || '操作失败，请重试')
       console.error('创建/更新任务失败:', error)
     }
   }
 
-  const handleDelete = useCallback((task: DataPullTask) => {
-    Modal.confirm({
-      title: `确认删除任务「${task.name}」?`,
-      content: '删除后无法恢复，请确认该任务不再使用。',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      async onOk() {
-        try {
-          await deleteDataPullTask(task.id)
-          message.success('任务已删除')
-          void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
-        } catch (error: any) {
-          message.error(error?.message ?? '删除失败')
-        }
-      },
-    })
-  }, [loadTasks, message, page, limit, queryKey, queryName, queryEnabled])
+  const handleDelete = useCallback(
+    (task: DataPullTask) => {
+      modal.confirm({
+        title: `确认删除任务「${task.name}」?`,
+        content: '删除后无法恢复，请确认该任务不再使用。',
+        okText: '删除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        async onOk() {
+          try {
+            await deleteDataPullTask(task.id)
+            message.success('任务已删除')
+            void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          } catch (error: unknown) {
+            message.error(toErrorMessage(error) || '删除失败')
+          }
+        },
+      })
+    },
+    [loadTasks, message, modal, page, limit, queryKey, queryName, queryEnabled],
+  )
 
   const handleTrigger = useCallback(
     async (task: DataPullTask) => {
@@ -284,26 +335,32 @@ export default function DataPullTasksPage() {
         if (logTask && logTask.id === task.id) {
           void loadTaskLogs(task, 1, logLimit)
         }
-      } catch (error: any) {
-        const errorMsg =
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          error?.data?.message ||
-          error?.message ||
-          '触发任务失败'
-        message.error(errorMsg)
+      } catch (error: unknown) {
+        message.error(toErrorMessage(error) || '触发任务失败')
       } finally {
         setTriggeringId(null)
       }
     },
-    [loadTasks, loadTaskLogs, logLimit, logTask, message, page, limit, queryKey, queryName, queryEnabled],
+    [
+      loadTasks,
+      loadTaskLogs,
+      logLimit,
+      logTask,
+      message,
+      page,
+      limit,
+      queryKey,
+      queryName,
+      queryEnabled,
+    ],
   )
 
   const handleInterrupt = useCallback(
     async (task: DataPullTask) => {
-      Modal.confirm({
+      modal.confirm({
         title: `确认中断任务「${task.name}」?`,
-        content: '中断后任务状态将重置为 IDLE，可以被重新调度。正在执行的 Job 不会立即停止，但会在完成或超时后标记为失败。',
+        content:
+          '中断后任务状态将重置为 IDLE，可以被重新调度。正在执行的 Job 不会立即停止，但会在完成或超时后标记为失败。',
         okText: '中断',
         okButtonProps: { danger: true },
         cancelText: '取消',
@@ -313,19 +370,216 @@ export default function DataPullTasksPage() {
             message.success(result.message)
             void loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
           } catch (error: unknown) {
-            const errorMsg =
-              (typeof error === 'object' && error !== null
-                ? (error as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message
-                  ?? (error as { message?: string }).message
-                : undefined) ||
-              '中断任务失败'
-            message.error(errorMsg)
+            message.error(toErrorMessage(error) || '中断任务失败')
           }
         },
       })
     },
-    [loadTasks, message, page, limit, queryKey, queryName, queryEnabled],
+    [loadTasks, message, modal, page, limit, queryKey, queryName, queryEnabled],
   )
+
+  const handleRowSelectionChange = useCallback((keys: Key[]) => {
+    const nextKeys: number[] = []
+    for (const key of keys) {
+      const numKey = typeof key === 'number' ? key : Number(key)
+      if (Number.isFinite(numKey)) {
+        nextKeys.push(numKey)
+      }
+    }
+    setSelectedRowKeys(nextKeys)
+  }, [])
+
+  const showBulkFailures = useCallback(
+    (title: string, failures: BulkFailure[]) => {
+      if (!failures.length) return
+      const visibleFailures = failures.slice(0, 8)
+      const remaining = failures.length - visibleFailures.length
+      modal.error({
+        title,
+        content: (
+          <div>
+            {visibleFailures.map(failure => (
+              <div key={failure.target.id}>
+                {failure.target.name} - {failure.errorMessage}
+              </div>
+            ))}
+            {remaining > 0 && <div>...等 {remaining} 条</div>}
+          </div>
+        ),
+      })
+    },
+    [modal],
+  )
+
+  const runBulkAction = useCallback(
+    async (title: string, targets: BulkTarget[], action: (id: number) => Promise<unknown>) => {
+      const results = await Promise.allSettled(
+        targets.map(target => Promise.resolve().then(() => action(target.id))),
+      )
+      const aggregate = aggregateBulkSettledResults(targets, results)
+      message.success(`${title}：成功 ${aggregate.successCount} / 失败 ${aggregate.failureCount}`)
+      if (aggregate.failureCount > 0) {
+        showBulkFailures(`${title}失败`, aggregate.failures)
+      }
+    },
+    [message, showBulkFailures],
+  )
+
+  const handleBulkTrigger = useCallback(() => {
+    if (!selectedTasks.length) return
+    modal.confirm({
+      title: '确认批量立即执行?',
+      content: `将立即执行选中的 ${selectedTasks.length} 个任务。`,
+      okText: '执行',
+      cancelText: '取消',
+      async onOk() {
+        setBulkAction('trigger')
+        try {
+          const targets: BulkTarget[] = selectedTasks.map(task => ({
+            id: task.id,
+            name: task.name,
+          }))
+          await runBulkAction('批量立即执行', targets, triggerDataPullTask)
+          await loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          setSelectedRowKeys([])
+        } catch (error: unknown) {
+          message.error(toErrorMessage(error))
+        } finally {
+          setBulkAction(null)
+        }
+      },
+    })
+  }, [
+    selectedTasks,
+    runBulkAction,
+    loadTasks,
+    modal,
+    page,
+    limit,
+    queryKey,
+    queryName,
+    queryEnabled,
+    message,
+  ])
+
+  const handleBulkInterrupt = useCallback(() => {
+    if (!runningSelectedTasks.length) return
+    modal.confirm({
+      title: '确认批量中断?',
+      content: `将中断选中的 ${runningSelectedTasks.length} 个运行中任务。`,
+      okText: '中断',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      async onOk() {
+        setBulkAction('interrupt')
+        try {
+          const targets: BulkTarget[] = runningSelectedTasks.map(task => ({
+            id: task.id,
+            name: task.name,
+          }))
+          await runBulkAction('批量中断', targets, interruptDataPullTask)
+          await loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          setSelectedRowKeys([])
+        } catch (error: unknown) {
+          message.error(toErrorMessage(error))
+        } finally {
+          setBulkAction(null)
+        }
+      },
+    })
+  }, [
+    runningSelectedTasks,
+    runBulkAction,
+    loadTasks,
+    modal,
+    page,
+    limit,
+    queryKey,
+    queryName,
+    queryEnabled,
+    message,
+  ])
+
+  const handleBulkEnable = useCallback(() => {
+    if (!selectedTasks.length) return
+
+    modal.confirm({
+      title: '确认批量启用?',
+      content: `将启用选中的 ${selectedTasks.length} 个任务。`,
+      okText: '启用',
+      cancelText: '取消',
+      async onOk() {
+        setBulkAction('enable')
+        try {
+          const targets: BulkTarget[] = selectedTasks.map(task => ({
+            id: task.id,
+            name: task.name,
+          }))
+          await runBulkAction('批量启用', targets, async (id: number) => {
+            await updateDataPullTask(id, { enabled: true })
+          })
+          await loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          setSelectedRowKeys([])
+        } catch (error: unknown) {
+          message.error(toErrorMessage(error))
+        } finally {
+          setBulkAction(null)
+        }
+      },
+    })
+  }, [
+    selectedTasks,
+    runBulkAction,
+    loadTasks,
+    modal,
+    page,
+    limit,
+    queryKey,
+    queryName,
+    queryEnabled,
+    message,
+  ])
+
+  const handleBulkDisable = useCallback(() => {
+    if (!selectedTasks.length) return
+
+    modal.confirm({
+      title: '确认批量停用?',
+      content: `将停用选中的 ${selectedTasks.length} 个任务。`,
+      okText: '停用',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      async onOk() {
+        setBulkAction('disable')
+        try {
+          const targets: BulkTarget[] = selectedTasks.map(task => ({
+            id: task.id,
+            name: task.name,
+          }))
+          await runBulkAction('批量停用', targets, async (id: number) => {
+            await updateDataPullTask(id, { enabled: false })
+          })
+          await loadTasks(page, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+          setSelectedRowKeys([])
+        } catch (error: unknown) {
+          message.error(toErrorMessage(error))
+        } finally {
+          setBulkAction(null)
+        }
+      },
+    })
+  }, [
+    selectedTasks,
+    runBulkAction,
+    loadTasks,
+    modal,
+    page,
+    limit,
+    queryKey,
+    queryName,
+    queryEnabled,
+    message,
+  ])
 
   const statusBadge = useCallback((task: DataPullTask) => {
     if (!task.lastStatus) {
@@ -410,7 +664,15 @@ export default function DataPullTasksPage() {
         ),
       },
     ],
-    [handleDelete, handleInterrupt, handleTrigger, openEditModal, openLogDrawer, statusBadge, triggeringId],
+    [
+      handleDelete,
+      handleInterrupt,
+      handleTrigger,
+      openEditModal,
+      openLogDrawer,
+      statusBadge,
+      triggeringId,
+    ],
   )
 
   return (
@@ -456,14 +718,70 @@ export default function DataPullTasksPage() {
               { value: 'false', label: '仅停用' },
             ]}
           />
-          <Button type="primary" onClick={() => loadTasks(1, limit, { key: queryKey, name: queryName, enabled: queryEnabled })}>
+          <Button
+            type="primary"
+            onClick={() => {
+              setSelectedRowKeys([])
+              void loadTasks(1, limit, { key: queryKey, name: queryName, enabled: queryEnabled })
+            }}
+          >
             查询
           </Button>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>已选择 {selectedRowKeys.length} 项</span>
+          <Space>
+            <Button
+              loading={bulkAction === 'enable'}
+              disabled={!hasSelection || bulkAction !== null}
+              onClick={handleBulkEnable}
+            >
+              批量启用
+            </Button>
+            <Button
+              danger
+              loading={bulkAction === 'disable'}
+              disabled={!hasSelection || bulkAction !== null}
+              onClick={handleBulkDisable}
+            >
+              批量停用
+            </Button>
+            <Button
+              type="primary"
+              loading={bulkAction === 'trigger'}
+              disabled={!hasSelection || bulkAction !== null}
+              onClick={handleBulkTrigger}
+            >
+              批量立即执行
+            </Button>
+            <Button
+              danger
+              loading={bulkAction === 'interrupt'}
+              disabled={!hasSelection || !hasRunningSelection || bulkAction !== null}
+              onClick={handleBulkInterrupt}
+            >
+              批量中断
+            </Button>
+          </Space>
         </div>
 
         <Table<DataPullTask>
           rowKey="id"
           columns={columns}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: handleRowSelectionChange,
+          }}
           dataSource={tasks}
           loading={loading}
           scroll={{ x: 1200 }}
@@ -475,6 +793,7 @@ export default function DataPullTasksPage() {
             onChange: (p, ps) => {
               setPage(p)
               setLimit(ps)
+              setSelectedRowKeys([])
               void loadTasks(p, ps, { key: queryKey, name: queryName, enabled: queryEnabled })
             },
           }}
@@ -580,7 +899,10 @@ export default function DataPullTasksPage() {
                   showSearch
                   optionFilterProp="label"
                   style={{ width: '60%' }}
-                  options={registeredJobs.map(job => ({ value: job.key, label: job.name || job.key }))}
+                  options={registeredJobs.map(job => ({
+                    value: job.key,
+                    label: job.name || job.key,
+                  }))}
                   notFoundContent={jobsLoading ? '加载中...' : '暂无可用的 Job'}
                   onChange={(value: string) => {
                     setSelectedJobKey(value)
@@ -607,15 +929,29 @@ export default function DataPullTasksPage() {
 
           {/* 显示选中 Job 的 meta 格式说明 */}
           {selectedJob?.metaSchema && (
-            <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6, fontSize: 13 }}>
-              <div style={{ fontWeight: 500, marginBottom: 8 }}>{selectedJob.metaSchema.description}</div>
+            <div
+              style={{
+                marginBottom: 16,
+                padding: 12,
+                background: '#f5f5f5',
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ fontWeight: 500, marginBottom: 8 }}>
+                {selectedJob.metaSchema.description}
+              </div>
               <div style={{ marginBottom: 8 }}>
                 <strong>配置字段：</strong>
                 <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
                   {selectedJob.metaSchema.fields.map(field => (
                     <li key={field.name}>
                       <code>{field.name}</code>
-                      {field.required && <Tag color="red" style={{ marginLeft: 4, fontSize: 10 }}>必填</Tag>}
+                      {field.required && (
+                        <Tag color="red" style={{ marginLeft: 4, fontSize: 10 }}>
+                          必填
+                        </Tag>
+                      )}
                       <span style={{ color: '#666' }}> - {field.description}</span>
                       {field.options && (
                         <span style={{ color: '#999' }}> 可选值: {field.options.join(', ')}</span>
@@ -680,4 +1016,3 @@ export default function DataPullTasksPage() {
     </div>
   )
 }
-

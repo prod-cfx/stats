@@ -56,6 +56,13 @@
         "eslintConfig": "eslint.config.js"
       }
     },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest --config jest.config.ts",
+        "cwd": "apps/admin-front"
+      }
+    },
     "type-check": {
       "executor": "nx:run-commands",
       "options": {
