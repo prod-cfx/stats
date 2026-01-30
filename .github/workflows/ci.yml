@@ -24,7 +24,7 @@ on:
 
 env:
   NODE_VERSION: '22.14.0'
-  PNPM_VERSION: '10.28.0'
+  # PNPM_VERSION: '10.28.2'
   DX_VERSION: '0.1.9'
   VERCEL_VERSION: '50.4.5'
   # 从 Repository secrets 读取部署环境 (staging 或 prod)
@@ -79,8 +79,8 @@ jobs:
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
+        # with:
+        #   version: ${{ env.PNPM_VERSION }}
 
       - name: 安装 Node.js
         uses: actions/setup-node@v4
