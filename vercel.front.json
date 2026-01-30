@@ -2,7 +2,7 @@
   "$schema": "https://vercel.json.schema.vercel.sh",
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && npx -y @ranger1/dx@0.1.9 build shared && npx -y @ranger1/dx@0.1.9 build contracts --prod && npx -y @ranger1/dx@0.1.9 build front --${APP_ENV}",
+  "buildCommand": "cd ../.. && npx -y @ranger1/dx@0.1.9 db generate && npx -y @ranger1/dx@0.1.9 build shared && npx -y @ranger1/dx@0.1.9 build contracts --prod && npx -y @ranger1/dx@0.1.9 build front --${APP_ENV}",
   "outputDirectory": ".next",
   "redirects": [
     {
