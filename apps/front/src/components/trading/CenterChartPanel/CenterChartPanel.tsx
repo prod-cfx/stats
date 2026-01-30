@@ -31,7 +31,7 @@ export const CenterChartPanel = ({
   variant = 'default'
 }: CenterChartPanelProps) => {
   const { t } = useTranslation();
-  const [interval] = useState('15m');
+  const [interval, setChartInterval] = useState('15m');
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
   const [indicatorSearch, setIndicatorSearch] = useState('')
   
@@ -42,7 +42,8 @@ export const CenterChartPanel = ({
 
   const { items: catalogItems } = useMarketDataCatalog()
 
-  const storageKey = `trade:chart-indicators:${symbol}:${interval}`
+  // NOTE: v2 是为了避免旧版本误写入的本地缓存导致“默认全部已添加”
+  const storageKey = `trade:chart-indicators:v2:${symbol}:${interval}`
   const { value: activeIds, setValue: setActiveIds } = useLocalStorageState<string[]>(storageKey, [])
 
   const chartIndicatorItems = catalogItems
@@ -129,7 +130,7 @@ export const CenterChartPanel = ({
             setIsAggregated(!isAggregated)
           }}
           onIntervalChanged={(newInterval: string) => {
-            setInterval(newInterval)
+            setChartInterval(newInterval)
           }}
           onOpenIndicator={() => {
             setIsIndicatorModalOpen(true)
