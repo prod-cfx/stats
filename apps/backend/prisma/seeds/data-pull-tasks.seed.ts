@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client'
-import { OI_SYMBOLS } from '@ai/shared/constants/trading-symbols'
+import { OI_SYMBOLS } from '@ai/shared'
 
 /**
  * 数据拉取任务种子数据
@@ -40,20 +40,28 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     // 为每个币种和时间粒度创建独立任务，避免单个任务过载
     ...(() => {
       // Binance 合约交易对格式：BTCUSDT, ETHUSDT 等
-      const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'BNBUSDT', 'HYPEUSDT'] as const
+      const symbols = [
+        'BTCUSDT',
+        'ETHUSDT',
+        'SOLUSDT',
+        'XRPUSDT',
+        'DOGEUSDT',
+        'BNBUSDT',
+        'HYPEUSDT',
+      ] as const
       const intervals = [
-        { interval: '1m' as const, syncSeconds: 120, priority: 3 },   // 1分钟粒度，每2分钟同步（低优先级）
-        { interval: '5m' as const, syncSeconds: 300, priority: 1 },   // 5分钟粒度，每5分钟同步（高优先级）✅
-        { interval: '15m' as const, syncSeconds: 600, priority: 1 },  // 15分钟粒度，每10分钟同步（高优先级）
-        { interval: '30m' as const, syncSeconds: 900, priority: 2 },  // 30分钟粒度，每15分钟同步（中优先级）
-        { interval: '1h' as const, syncSeconds: 1800, priority: 1 },  // 1小时粒度，每30分钟同步（高优先级）
-        { interval: '4h' as const, syncSeconds: 3600, priority: 1 },  // 4小时粒度，每1小时同步（高优先级）
-        { interval: '1d' as const, syncSeconds: 7200, priority: 1 },  // 1天粒度，每2小时同步（高优先级）
+        { interval: '1m' as const, syncSeconds: 120, priority: 3 }, // 1分钟粒度，每2分钟同步（低优先级）
+        { interval: '5m' as const, syncSeconds: 300, priority: 1 }, // 5分钟粒度，每5分钟同步（高优先级）✅
+        { interval: '15m' as const, syncSeconds: 600, priority: 1 }, // 15分钟粒度，每10分钟同步（高优先级）
+        { interval: '30m' as const, syncSeconds: 900, priority: 2 }, // 30分钟粒度，每15分钟同步（中优先级）
+        { interval: '1h' as const, syncSeconds: 1800, priority: 1 }, // 1小时粒度，每30分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 3600, priority: 1 }, // 4小时粒度，每1小时同步（高优先级）
+        { interval: '1d' as const, syncSeconds: 7200, priority: 1 }, // 1天粒度，每2小时同步（高优先级）
       ] as const
 
       const contractTypes = [
-        { type: 'PERPETUAL', label: '永续', priority: 1 },  // 高优先级
-        { type: null, label: '现货', priority: 2 },         // 低优先级（可选）
+        { type: 'PERPETUAL', label: '永续', priority: 1 }, // 高优先级
+        { type: null, label: '现货', priority: 2 }, // 低优先级（可选）
       ] as const
 
       const tasks: Array<{
@@ -73,7 +81,8 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
             // 每个任务错开 10 秒执行，避免并发触发 API 速率限制
             const keyType = contractType ?? 'SPOT'
             // 只启用高优先级任务（永续合约 + 15m/1h/4h/1d）
-            const enabled = intervalPriority === 1 && typePriority === 1
+            const isHighFrequency = interval === '1m' || interval === '3m' || interval === '5m'
+            const enabled = intervalPriority === 1 && typePriority === 1 && !isHighFrequency
             tasks.push({
               key: `coinglass-futures-price-history:${symbol}:${keyType}:${interval}`,
               name: `Coinglass K线 - ${symbol} ${label} ${interval}`,
@@ -104,9 +113,18 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
         { tradingPairId: 'SOLUSDT.BINANCE.PERP', symbol: 'SOLUSDT' },
       ] as const
       const intervals = [
+        { interval: '1m' as const, syncSeconds: 300 },
+        { interval: '3m' as const, syncSeconds: 450 },
+        { interval: '5m' as const, syncSeconds: 600 },
+        { interval: '15m' as const, syncSeconds: 900 },
+        { interval: '30m' as const, syncSeconds: 1200 },
         { interval: '1h' as const, syncSeconds: 1800 },
         { interval: '4h' as const, syncSeconds: 3600 },
+        { interval: '6h' as const, syncSeconds: 5400 },
+        { interval: '8h' as const, syncSeconds: 7200 },
+        { interval: '12h' as const, syncSeconds: 10800 },
         { interval: '1d' as const, syncSeconds: 7200 },
+        { interval: '1w' as const, syncSeconds: 21600 },
       ] as const
 
       const tasks: Array<{
@@ -122,13 +140,14 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       let delayOffset = 0
       for (const pair of pairs) {
         for (const { interval, syncSeconds } of intervals) {
+          const isHighFrequency = interval === '1m' || interval === '3m' || interval === '5m'
           tasks.push({
             key: `coinglass-long-short-ratio:${pair.tradingPairId}:${interval}`,
             name: `Coinglass 多空比 - ${pair.symbol} ${interval}`,
             source: 'coinglass',
             type: 'long-short-ratio',
             intervalSeconds: syncSeconds + delayOffset,
-            enabled: true,
+            enabled: !isHighFrequency,
             cursor: JSON.stringify({
               tradingPairId: pair.tradingPairId,
               symbol: pair.symbol,
@@ -148,18 +167,18 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       // Binance 交易对格式：BTCUSDT, ETHUSDT 等
       const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'BNBUSDT'] as const
       const intervals = [
-        { interval: '1m' as const, syncSeconds: 120, priority: 3 },   // 1分钟粒度，每2分钟同步（低优先级）
-        { interval: '5m' as const, syncSeconds: 300, priority: 1 },   // 5分钟粒度，每5分钟同步（高优先级）✅
-        { interval: '15m' as const, syncSeconds: 600, priority: 1 },  // 15分钟粒度，每10分钟同步（高优先级）
-        { interval: '30m' as const, syncSeconds: 900, priority: 2 },  // 30分钟粒度，每15分钟同步（中优先级）
-        { interval: '1h' as const, syncSeconds: 1800, priority: 1 },  // 1小时粒度，每30分钟同步（高优先级）
-        { interval: '4h' as const, syncSeconds: 3600, priority: 1 },  // 4小时粒度，每1小时同步（高优先级）
-        { interval: '1d' as const, syncSeconds: 7200, priority: 1 },  // 1天粒度，每2小时同步（高优先级）
+        { interval: '1m' as const, syncSeconds: 120, priority: 3 }, // 1分钟粒度，每2分钟同步（低优先级）
+        { interval: '5m' as const, syncSeconds: 300, priority: 1 }, // 5分钟粒度，每5分钟同步（高优先级）✅
+        { interval: '15m' as const, syncSeconds: 600, priority: 1 }, // 15分钟粒度，每10分钟同步（高优先级）
+        { interval: '30m' as const, syncSeconds: 900, priority: 2 }, // 30分钟粒度，每15分钟同步（中优先级）
+        { interval: '1h' as const, syncSeconds: 1800, priority: 1 }, // 1小时粒度，每30分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 3600, priority: 1 }, // 4小时粒度，每1小时同步（高优先级）
+        { interval: '1d' as const, syncSeconds: 7200, priority: 1 }, // 1天粒度，每2小时同步（高优先级）
       ] as const
 
       const marketTypes = [
-        { type: 'PERPETUAL' as const, label: '永续', priority: 1 },  // 高优先级
-        { type: 'SPOT' as const, label: '现货', priority: 2 },       // 低优先级
+        { type: 'PERPETUAL' as const, label: '永续', priority: 1 }, // 高优先级
+        { type: 'SPOT' as const, label: '现货', priority: 2 }, // 低优先级
       ] as const
 
       const tasks: Array<{
@@ -277,10 +296,21 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     // Coinglass OI OHLC Aggregated History - 聚合持仓量 K 线数据
     // 为每个币种和时间粒度创建独立任务
     ...(() => {
-      const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'DOT', 'MATIC'] as const
+      const symbols = [
+        'BTC',
+        'ETH',
+        'SOL',
+        'XRP',
+        'DOGE',
+        'ADA',
+        'AVAX',
+        'LINK',
+        'DOT',
+        'MATIC',
+      ] as const
       const intervals = [
-        { interval: '1h' as const, syncSeconds: 900, priority: 1 },  // 1小时粒度，每15分钟同步（高优先级）
-        { interval: '4h' as const, syncSeconds: 900, priority: 1 },  // 4小时粒度，每15分钟同步（高优先级）
+        { interval: '1h' as const, syncSeconds: 900, priority: 1 }, // 1小时粒度，每15分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 900, priority: 1 }, // 4小时粒度，每15分钟同步（高优先级）
       ] as const
 
       const tasks: Array<{
@@ -410,7 +440,5 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
     }
   }
 
-  console.log(
-    `✅ Data-pull tasks seeded: ${createdCount} created, ${skippedCount} skipped`,
-  )
+  console.log(`✅ Data-pull tasks seeded: ${createdCount} created, ${skippedCount} skipped`)
 }
