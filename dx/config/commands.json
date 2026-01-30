@@ -328,5 +328,19 @@
     }
   },
 
-  "demo": {}
+  "demo": {},
+  "deploy": {
+    "front": {
+      "description": "部署前端到 Vercel"
+    },
+    "admin": {
+      "description": "部署管理后台到 Vercel"
+    },
+    "telegram-bot": {
+      "description": "部署 Telegram 机器人"
+    },
+    "all": {
+      "description": "部署所有应用"
+    }
+  }
 }
