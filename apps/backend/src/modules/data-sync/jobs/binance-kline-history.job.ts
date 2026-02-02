@@ -1,5 +1,10 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
+import type {
+  DataPullJob,
+  DataPullJobContext,
+  JobMetaSchema,
+  JobRunResult,
+} from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -26,6 +31,14 @@ interface BinanceKlineCursor {
    * 用于增量拉取
    */
   lastTimestamp?: number
+  /**
+   * 是否已完成历史回填
+   */
+  backfillCompleted?: boolean
+  /**
+   * 回填完成时间戳（毫秒），用于定期复查
+   */
+  backfillCompletedAt?: number
 }
 
 /**
@@ -70,9 +83,26 @@ export class BinanceKlineHistoryJob implements DataPullJob {
     description: 'Binance K 线数据拉取任务的游标配置',
     fields: [
       { name: 'symbol', type: 'string', required: true, description: '交易对符号，如 BTCUSDT' },
-      { name: 'marketType', type: 'string', required: true, description: '市场类型', options: ['PERPETUAL', 'SPOT'] },
-      { name: 'interval', type: 'string', required: true, description: '时间粒度', options: ['1m', '5m', '15m', '30m', '1h', '4h', '1d'] },
-      { name: 'lastTimestamp', type: 'number', required: false, description: '最后同步的时间戳（毫秒）' },
+      {
+        name: 'marketType',
+        type: 'string',
+        required: true,
+        description: '市场类型',
+        options: ['PERPETUAL', 'SPOT'],
+      },
+      {
+        name: 'interval',
+        type: 'string',
+        required: true,
+        description: '时间粒度',
+        options: ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],
+      },
+      {
+        name: 'lastTimestamp',
+        type: 'number',
+        required: false,
+        description: '最后同步的时间戳（毫秒）',
+      },
     ],
     example: {
       symbol: 'BTCUSDT',
@@ -89,6 +119,10 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   private readonly TIMESTAMP_INCREMENT_MS = 1
   // 批量插入单次上限，控制单次写入规模
   private readonly BATCH_INSERT_SIZE = 500
+  // 回填完成后的复查间隔（默认 90 天，可通过 BACKFILL_RECHECK_WINDOW_DAYS 覆盖）
+  private readonly BACKFILL_RECHECK_WINDOW_DAYS = this.parseBackfillRecheckWindowDays()
+  private readonly BACKFILL_RECHECK_WINDOW_MS =
+    this.BACKFILL_RECHECK_WINDOW_DAYS * 24 * 60 * 60 * 1000
 
   // 默认配置
   private readonly defaultSymbol = 'BTCUSDT'
@@ -108,21 +142,63 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
-    // 根据市场类型选择 API 端点
-    const endpoint = cursor.marketType === 'PERPETUAL'
-      ? 'https://fapi.binance.com/fapi/v1/klines' // 永续合约
-      : 'https://api.binance.com/api/v3/klines' // 现货
+    const endpoint =
+      cursor.marketType === 'PERPETUAL'
+        ? 'https://fapi.binance.com/fapi/v1/klines'
+        : 'https://api.binance.com/api/v3/klines'
 
     const interval = cursor.interval ?? this.defaultInterval
     const lastTimestampMs = cursor.lastTimestamp ?? null
+    const shouldSkipBackfillCheck =
+      cursor.backfillCompleted &&
+      typeof cursor.backfillCompletedAt === 'number' &&
+      Date.now() - cursor.backfillCompletedAt < this.BACKFILL_RECHECK_WINDOW_MS
 
-    // 构建请求 URL
+    const dbClient = this.prisma.getClient()
+    const prismaInterval = mapTimeframe(interval as MarketTimeframe)
+
+    if (!shouldSkipBackfillCheck) {
+      const earliestRecord = await dbClient.futuresPriceHistory.findFirst({
+        where: {
+          symbol: cursor.symbol,
+          exchangeCode: 'BINANCE',
+          contractType: cursor.marketType === 'PERPETUAL' ? 'PERPETUAL' : null,
+          interval: prismaInterval,
+        },
+        orderBy: { timestamp: 'asc' },
+        select: { timestamp: true },
+      })
+
+      if (earliestRecord) {
+        const earliestMs = earliestRecord.timestamp.getTime()
+        const backfillTargetMs = this.getBackfillTarget(interval)
+
+        if (earliestMs > backfillTargetMs) {
+          this.logger.log(
+            `Backfilling history for ${cursor.symbol} ${interval}: from ${new Date(backfillTargetMs).toISOString()} to ${new Date(earliestMs).toISOString()}`,
+          )
+          return await this.runBackfill(
+            ctx,
+            cursor,
+            endpoint,
+            earliestMs,
+            backfillTargetMs,
+            interval,
+          )
+        }
+
+        if (!cursor.backfillCompleted) {
+          cursor.backfillCompleted = true
+          cursor.backfillCompletedAt = Date.now()
+        }
+      }
+    }
+
     const url = new URL(endpoint)
     url.searchParams.set('symbol', cursor.symbol)
     url.searchParams.set('interval', interval)
     url.searchParams.set('limit', this.getMaxLimit(cursor.marketType).toString())
 
-    // 增量拉取：从上次时间戳之后开始
     if (typeof lastTimestampMs === 'number') {
       url.searchParams.set('startTime', (lastTimestampMs + this.TIMESTAMP_INCREMENT_MS).toString())
     }
@@ -146,10 +222,6 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       }
     }
 
-    const client = this.prisma.getClient()
-    const prismaInterval = mapTimeframe(interval as MarketTimeframe)
-
-    // 转换数据格式并过滤增量数据
     const pointsWithTimestamps = klineData.map(point => ({
       openTime: point[0],
       open: point[1],
@@ -158,10 +230,9 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       close: point[4],
       volume: point[5],
       closeTime: point[6],
-      quoteAssetVolume: point[7], // USDT 成交额
+      quoteAssetVolume: point[7],
     }))
 
-    // 客户端二次过滤：虽然 API 已通过 startTime 过滤，但保留此逻辑以防 API 行为不一致
     const incrementalPoints = lastTimestampMs
       ? pointsWithTimestamps.filter(point => point.openTime > lastTimestampMs)
       : pointsWithTimestamps
@@ -178,13 +249,13 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         high: point.high,
         low: point.low,
         close: point.close,
-        volumeUsd: point.quoteAssetVolume, // 使用 USDT 成交额
+        volumeUsd: point.quoteAssetVolume,
         source: 'BINANCE',
       }))
 
       for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
         const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-        const result = await client.futuresPriceHistory.createMany({
+        const result = await dbClient.futuresPriceHistory.createMany({
           data: batch,
           skipDuplicates: true,
         })
@@ -192,18 +263,15 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       }
     }
 
-    // 计算最新时间戳（使用 reduce 避免大数组 spread 导致栈溢出）
     let latestTimestampMs: number | undefined
     if (pointsWithTimestamps.length > 0) {
       const maxOpenTime = pointsWithTimestamps.reduce(
         (max, point) => Math.max(max, point.openTime),
         0,
       )
-      latestTimestampMs = typeof lastTimestampMs === 'number'
-        ? Math.max(maxOpenTime, lastTimestampMs)
-        : maxOpenTime
-    }
-    else {
+      latestTimestampMs =
+        typeof lastTimestampMs === 'number' ? Math.max(maxOpenTime, lastTimestampMs) : maxOpenTime
+    } else {
       latestTimestampMs = typeof lastTimestampMs === 'number' ? lastTimestampMs : undefined
     }
 
@@ -212,6 +280,8 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       marketType: cursor.marketType,
       interval,
       lastTimestamp: latestTimestampMs,
+      backfillCompleted: cursor.backfillCompleted,
+      backfillCompletedAt: cursor.backfillCompletedAt,
     }
 
     return {
@@ -227,6 +297,148 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         insertedCount,
       },
     }
+  }
+
+  private async runBackfill(
+    ctx: DataPullJobContext,
+    cursor: BinanceKlineCursor,
+    endpoint: string,
+    earliestMs: number,
+    targetMs: number,
+    interval: string,
+  ): Promise<JobRunResult> {
+    const url = new URL(endpoint)
+    url.searchParams.set('symbol', cursor.symbol)
+    url.searchParams.set('interval', cursor.interval)
+    url.searchParams.set('limit', this.getMaxLimit(cursor.marketType).toString())
+    // Binance API 文档说明 endTime 为闭区间
+    // 向前错开 1s 避免边界重叠，粗粒度周期通过后续轮次补齐缺口
+    const backfillEndTimeMs = Math.max(earliestMs - 1000, 0)
+    url.searchParams.set('endTime', backfillEndTimeMs.toString())
+
+    this.logger.log(`Backfill request: ${url.toString()}`)
+
+    const klineData = await this.fetchKlineJson(url)
+
+    if (klineData.length === 0) {
+      const backfillCompletedAt = Date.now()
+      const newCursor: BinanceKlineCursor = {
+        symbol: cursor.symbol,
+        marketType: cursor.marketType,
+        interval: cursor.interval,
+        lastTimestamp: cursor.lastTimestamp,
+        backfillCompleted: true,
+        backfillCompletedAt,
+      }
+      return {
+        fetchedCount: 0,
+        newCursor: JSON.stringify(newCursor),
+        meta: {
+          symbol: cursor.symbol,
+          marketType: cursor.marketType,
+          interval: cursor.interval,
+          note: 'Backfill complete - no more historical data',
+        },
+      }
+    }
+
+    const dbClient = this.prisma.getClient()
+    const prismaInterval = mapTimeframe(interval as MarketTimeframe)
+    const pointsWithTimestamps = klineData.map(point => ({
+      openTime: point[0],
+      open: point[1],
+      high: point[2],
+      low: point[3],
+      close: point[4],
+      volume: point[5],
+      closeTime: point[6],
+      quoteAssetVolume: point[7],
+    }))
+
+    const filteredPoints = pointsWithTimestamps.filter(point => point.openTime < earliestMs)
+
+    const rows = filteredPoints.map(point => ({
+      symbol: cursor.symbol,
+      exchangeCode: 'BINANCE',
+      contractType: cursor.marketType === 'PERPETUAL' ? 'PERPETUAL' : null,
+      interval: prismaInterval,
+      timestamp: new Date(point.openTime),
+      open: point.open,
+      high: point.high,
+      low: point.low,
+      close: point.close,
+      volumeUsd: point.quoteAssetVolume,
+      source: 'BINANCE',
+    }))
+
+    let insertedCount = 0
+    for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
+      const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
+      const result = await dbClient.futuresPriceHistory.createMany({
+        data: batch,
+        skipDuplicates: true,
+      })
+      insertedCount += result.count
+    }
+
+    const oldestFetched =
+      filteredPoints.length > 0
+        ? filteredPoints.reduce((min, point) => Math.min(min, point.openTime), Infinity)
+        : earliestMs
+
+    const backfillCompleted = oldestFetched <= targetMs
+    const backfillCompletedAt = backfillCompleted ? Date.now() : cursor.backfillCompletedAt
+
+    const denominator = earliestMs - targetMs
+    const backfillProgress =
+      denominator === 0 ? 100 : Math.round(((earliestMs - oldestFetched) / denominator) * 100)
+
+    const newCursor: BinanceKlineCursor = {
+      symbol: cursor.symbol,
+      marketType: cursor.marketType,
+      interval: cursor.interval,
+      lastTimestamp: cursor.lastTimestamp,
+      backfillCompleted: backfillCompleted ? true : cursor.backfillCompleted,
+      backfillCompletedAt,
+    }
+
+    return {
+      fetchedCount: insertedCount,
+      newCursor: JSON.stringify(newCursor),
+      meta: {
+        symbol: cursor.symbol,
+        marketType: cursor.marketType,
+        interval: cursor.interval,
+        mode: 'backfill',
+        oldestFetched: new Date(oldestFetched).toISOString(),
+        backfillProgress: `${backfillProgress}%`,
+        insertedCount,
+      },
+    }
+  }
+
+  private getBackfillTarget(interval: string): number {
+    const now = Date.now()
+    const depthMap: Record<string, number> = {
+      '1m': 7 * 24 * 60 * 60 * 1000,
+      '5m': 30 * 24 * 60 * 60 * 1000,
+      '15m': 90 * 24 * 60 * 60 * 1000,
+      '30m': 180 * 24 * 60 * 60 * 1000,
+      '1h': 365 * 24 * 60 * 60 * 1000,
+      '4h': 2 * 365 * 24 * 60 * 60 * 1000,
+      '1d': 5 * 365 * 24 * 60 * 60 * 1000,
+    }
+    const depth = depthMap[interval] ?? 90 * 24 * 60 * 60 * 1000
+    return now - depth
+  }
+
+  private parseBackfillRecheckWindowDays(): number {
+    const rawValue = Number(process.env.BACKFILL_RECHECK_WINDOW_DAYS ?? 90)
+    if (!Number.isFinite(rawValue) || rawValue <= 0) {
+      return 90
+    }
+
+    return Math.floor(rawValue)
   }
 
   /**
@@ -289,16 +501,14 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         }
 
         return data as BinanceKlinePoint[]
-      }
-      catch (error) {
+      } catch (error) {
         const isAbort = this.isAbortError(error)
 
-        const failure =
-          isAbort
-            ? `timeout after ${this.requestTimeoutMs}ms`
-            : error instanceof Error
-              ? error.message
-              : String(error)
+        const failure = isAbort
+          ? `timeout after ${this.requestTimeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error)
 
         lastFailure = failure
 
@@ -312,8 +522,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         throw new Error(
           `Binance kline request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${failure}`,
         )
-      }
-      finally {
+      } finally {
         clearTimeout(timer)
       }
     }
@@ -333,8 +542,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   private async safeReadText(response: Response): Promise<string> {
     try {
       return await response.text()
-    }
-    catch {
+    } catch {
       return ''
     }
   }
@@ -349,6 +557,8 @@ export class BinanceKlineHistoryJob implements DataPullJob {
         marketType: this.defaultMarketType,
         interval: this.defaultInterval,
         lastTimestamp: undefined,
+        backfillCompleted: false,
+        backfillCompletedAt: undefined,
       }
     }
 
@@ -366,15 +576,22 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       if (typeof parsed.lastTimestamp !== 'number') {
         delete parsed.lastTimestamp
       }
+      if (typeof parsed.backfillCompleted !== 'boolean') {
+        delete parsed.backfillCompleted
+      }
+      if (typeof parsed.backfillCompletedAt !== 'number') {
+        delete parsed.backfillCompletedAt
+      }
       return parsed as BinanceKlineCursor
-    }
-    catch {
+    } catch {
       this.logger.warn(`Failed to parse cursor: ${currentCursor}, fallback to default`)
       return {
         symbol: this.defaultSymbol,
         marketType: this.defaultMarketType,
         interval: this.defaultInterval,
         lastTimestamp: undefined,
+        backfillCompleted: false,
+        backfillCompletedAt: undefined,
       }
     }
   }

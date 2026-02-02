@@ -42,10 +42,7 @@ const STALE_CONNECTION_THRESHOLD_MS = 120000
 // 允许的 CORS origin 正则模式
 const ALLOWED_ORIGIN_PATTERNS = [
   ...(process.env.NODE_ENV === 'development'
-    ? [
-        /^http:\/\/localhost(:\d+)?$/,
-        /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-      ]
+    ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
     : []),
   /^https:\/\/(www|app|admin)\.coinflux\.com$/,
 ]
@@ -66,14 +63,17 @@ function isValidOrigin(origin: string | undefined): boolean {
   } catch {
     return false
   }
-  return ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin))
+  return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin))
 }
 
 /**
  * 解析并验证 ALLOWED_ORIGINS 环境变量
  */
 function parseAllowedOrigins(): string[] {
-  const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) || []
+  const envOrigins =
+    process.env.ALLOWED_ORIGINS?.split(',')
+      .map(o => o.trim())
+      .filter(Boolean) || []
   const validOrigins = envOrigins.filter(isValidOrigin)
 
   // 如果没有有效的 origin，使用默认值
@@ -116,7 +116,9 @@ interface OrderbookSubscriptionInfo {
   }
 }
 
-type AggregatedOrderbookResult = Awaited<ReturnType<AggregatedOrderbookService['getAggregatedOrderbook']>>
+type AggregatedOrderbookResult = Awaited<
+  ReturnType<AggregatedOrderbookService['getAggregatedOrderbook']>
+>
 
 interface VenueOrderbookSnapshot {
   bids: OrderBookLevel[]
@@ -234,7 +236,13 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           const callbackKey = `${client.id}:${key}`
           const callback = this.clientCallbacks.get(callbackKey)
           if (callback) {
-            this.klineAggregatorService.unsubscribe(exchange, instrumentType, symbol, interval, callback)
+            this.klineAggregatorService.unsubscribe(
+              exchange,
+              instrumentType,
+              symbol,
+              interval,
+              callback,
+            )
             this.clientCallbacks.delete(callbackKey)
           }
         }
@@ -369,13 +377,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.clientCallbacks.set(callbackKey, callback)
 
     // 订阅聚合 K线
-    this.klineAggregatorService.subscribe(
-      exchange,
-      instrumentType,
-      symbol,
-      interval,
-      callback,
-    )
+    this.klineAggregatorService.subscribe(exchange, instrumentType, symbol, interval, callback)
 
     // 发送订阅成功确认
     client.emit('subscribed', {
@@ -431,7 +433,12 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
   }
 
-  private getSubscriptionKey(exchange: string, instrumentType: string, symbol: string, interval: string): string {
+  private getSubscriptionKey(
+    exchange: string,
+    instrumentType: string,
+    symbol: string,
+    interval: string,
+  ): string {
     return `${exchange}:${instrumentType}:${symbol.toUpperCase()}:${interval}`
   }
 
@@ -443,7 +450,12 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.updateClientActivity(client)
     const { exchange, instrumentType, symbol, minValue, limit = 50 } = data
 
-    const subscriptionKey = this.getTradesSubscriptionKey(exchange, instrumentType, symbol, minValue)
+    const subscriptionKey = this.getTradesSubscriptionKey(
+      exchange,
+      instrumentType,
+      symbol,
+      minValue,
+    )
 
     // 任务1: 速率限制 - 检查客户端当前订阅数
     let clientSubs = this.clientTradesSubscriptions.get(client.id)
@@ -629,7 +641,12 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.updateClientActivity(client)
     const { exchange, instrumentType, symbol, minValue } = data
 
-    const subscriptionKey = this.getTradesSubscriptionKey(exchange, instrumentType, symbol, minValue)
+    const subscriptionKey = this.getTradesSubscriptionKey(
+      exchange,
+      instrumentType,
+      symbol,
+      minValue,
+    )
 
     this.logger.log({
       message: 'Client unsubscribing from trades',
@@ -707,8 +724,14 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         params,
       }
 
-      const scheduleNext = () => {
-        subscriptionInfo.timer = setTimeout(async () => {
+      const runOrderbookBroadcast = async (): Promise<void> => {
+        if (subscriptionInfo.isRunning) {
+          return
+        }
+
+        subscriptionInfo.isRunning = true
+
+        try {
           // 检查订阅是否仍然存在
           if (!this.orderbookIntervals.has(subscriptionKey)) {
             return
@@ -735,27 +758,27 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
               stack: error instanceof Error ? error.stack : undefined,
             })
           } finally {
-            // 只有订阅仍存在时才调度下一次
-            if (this.orderbookIntervals.has(subscriptionKey)) {
-              scheduleNext()
-            }
+            subscriptionInfo.isRunning = false
           }
+        } finally {
+          // 只有订阅仍存在时才调度下一次
+          if (this.orderbookIntervals.has(subscriptionKey)) {
+            scheduleNext()
+          }
+        }
+      }
+
+      const scheduleNext = () => {
+        subscriptionInfo.timer = setTimeout(async () => {
+          await runOrderbookBroadcast()
         }, 1000) // 1 秒推送一次
       }
 
       this.orderbookIntervals.set(subscriptionKey, subscriptionInfo)
       subInfo = subscriptionInfo
 
-      // 立即推送一次
-      this.broadcastOrderbook(subscriptionKey, roomName, params).catch((error) => {
-        this.logger.error({
-          message: 'Failed to broadcast initial orderbook',
-          subscriptionKey,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      })
-
-      // 启动定时轮询
+      // 立即推送一次，完成后再启动轮询，避免并发重叠
+      await runOrderbookBroadcast()
       scheduleNext()
 
       this.logger.log({
@@ -840,6 +863,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     params: TradesSubscriptionInfo['params'],
   ): Promise<void> {
     const { exchange, instrumentType, symbol, minValue, limit } = params
+    const startTime = Date.now()
 
     // 任务3: Redis 缓存层
     const cacheKey = `trades:${exchange}:${instrumentType}:${symbol}:${minValue ?? 'all'}`
@@ -883,55 +907,69 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 先尝试从缓存获取格式化后的数据
     let formattedTrades = await this.cacheService.get<FormattedTrade[]>(cacheKey)
 
-    if (!formattedTrades) {
-      // 缓存未命中，查询数据库（添加超时控制）
-      let rawTrades: MarketTrade[]
-      try {
-        if (minValue !== undefined && minValue > 0) {
-          rawTrades = await withTimeout(
-            this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit),
-          )
-        } else {
-          rawTrades = await withTimeout(this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit))
+    try {
+      if (!formattedTrades) {
+        // 缓存未命中，查询数据库（添加超时控制）
+        let rawTrades: MarketTrade[]
+        try {
+          if (minValue !== undefined && minValue > 0) {
+            rawTrades = await withTimeout(
+              this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit),
+            )
+          } else {
+            rawTrades = await withTimeout(
+              this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit),
+            )
+          }
+        } catch (error) {
+          this.logger.error({
+            message: 'Failed to fetch trades data',
+            subscriptionKey,
+            params: { exchange, instrumentType, symbol, minValue, limit },
+            error: error instanceof Error ? error.message : String(error),
+          })
+          throw error
         }
-      } catch (error) {
-        this.logger.error({
-          message: 'Failed to fetch trades data',
-          subscriptionKey,
-          params: { exchange, instrumentType, symbol, minValue, limit },
-          error: error instanceof Error ? error.message : String(error),
-        })
-        throw error
+
+        // 立即格式化数据（将 BigInt 转为 string）
+        formattedTrades = rawTrades.map((trade: MarketTrade) => ({
+          id: trade.id.toString(),
+          exchange: trade.exchange,
+          instrumentType: trade.instrumentType,
+          symbol: trade.symbol,
+          baseAsset: trade.baseAsset,
+          quoteAsset: trade.quoteAsset,
+          tradeId: trade.tradeId,
+          price: trade.price.toString(),
+          size: trade.size.toString(),
+          side: trade.side,
+          tradeTimestamp: trade.tradeTimestamp.toString(),
+          createdAt: trade.createdAt.toISOString(),
+        }))
+
+        // 写入缓存格式化后的数据，TTL 1秒
+        await this.cacheService.set(cacheKey, formattedTrades, 1)
       }
 
-      // 立即格式化数据（将 BigInt 转为 string）
-      formattedTrades = rawTrades.map((trade: MarketTrade) => ({
-        id: trade.id.toString(),
-        exchange: trade.exchange,
-        instrumentType: trade.instrumentType,
-        symbol: trade.symbol,
-        baseAsset: trade.baseAsset,
-        quoteAsset: trade.quoteAsset,
-        tradeId: trade.tradeId,
-        price: trade.price.toString(),
-        size: trade.size.toString(),
-        side: trade.side,
-        tradeTimestamp: trade.tradeTimestamp.toString(),
-        createdAt: trade.createdAt.toISOString(),
-      }))
-
-      // 写入缓存格式化后的数据，TTL 1秒
-      await this.cacheService.set(cacheKey, formattedTrades, 1)
+      // 使用 Socket.IO room 机制一次性广播给所有订阅客户端
+      // 比循环遍历 clients 更高效，Socket.IO 内部会优化批量发送
+      this.server.to(roomName).emit('trades', {
+        exchange,
+        instrumentType,
+        symbol,
+        trades: formattedTrades,
+      })
+    } finally {
+      const durationMs = Date.now() - startTime
+      if (durationMs > 800) {
+        this.logger.warn({
+          message: 'Trades broadcast slow',
+          subscriptionKey,
+          durationMs,
+          params: { exchange, instrumentType, symbol, minValue, limit },
+        })
+      }
     }
-
-    // 使用 Socket.IO room 机制一次性广播给所有订阅客户端
-    // 比循环遍历 clients 更高效，Socket.IO 内部会优化批量发送
-    this.server.to(roomName).emit('trades', {
-      exchange,
-      instrumentType,
-      symbol,
-      trades: formattedTrades,
-    })
   }
 
   private async broadcastOrderbook(
@@ -957,6 +995,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return
     }
 
+    const startTime = Date.now()
     subInfo.isRunning = true
 
     try {
@@ -1081,6 +1120,14 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       })
     } finally {
       subInfo.isRunning = false
+      const durationMs = Date.now() - startTime
+      if (durationMs > 800) {
+        this.logger.warn({
+          message: 'Orderbook broadcast slow',
+          subscriptionKey,
+          durationMs,
+        })
+      }
     }
   }
 

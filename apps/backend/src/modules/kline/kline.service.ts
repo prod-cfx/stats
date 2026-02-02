@@ -17,7 +17,8 @@ export class KlineService {
   private readonly logger = new Logger(KlineService.name)
 
   // 缓存配置
-  private readonly CACHE_TTL_SECONDS = 30 // Redis 缓存过期时间（秒）
+  private readonly CACHE_TTL_SECONDS = 30 // Redis 缓存过期时间(秒)
+  private readonly MAX_KLINE_POINTS = 10_000
 
   // 查询配置
   private readonly MIN_QUERY_LIMIT = 50 // 最小返回数量
@@ -53,7 +54,7 @@ export class KlineService {
     }
 
     // interval: 白名单验证
-    const VALID_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
+    const VALID_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
     const cleanInterval = interval?.trim().toLowerCase() || ''
     if (!VALID_INTERVALS.includes(cleanInterval)) {
       this.logger.warn({
@@ -64,6 +65,36 @@ export class KlineService {
       throw new DomainException('Invalid interval parameter', {
         code: ErrorCode.MARKET_INVALID_TIMEFRAME,
         args: { interval, validIntervals: VALID_INTERVALS },
+      })
+    }
+
+    const intervalSecondsMap: Record<string, number> = {
+      '1m': 60,
+      '5m': 300,
+      '15m': 900,
+      '30m': 1800,
+      '1h': 3600,
+      '4h': 14400,
+      '1d': 86400,
+    }
+    const intervalSecondsForValidation = intervalSecondsMap[cleanInterval]
+    const rangeSeconds = Math.max(to - from, 0)
+    const expectedPoints = intervalSecondsForValidation
+      ? Math.floor(rangeSeconds / intervalSecondsForValidation) + 1
+      : 0
+    if (expectedPoints > this.MAX_KLINE_POINTS) {
+      this.logger.warn({
+        message: 'Kline range too large, rejecting request',
+        symbol: cleanSymbol,
+        interval: cleanInterval,
+        from,
+        to,
+        expectedPoints,
+        maxPoints: this.MAX_KLINE_POINTS,
+      })
+      throw new DomainException('Kline range too large', {
+        code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
+        args: { maxPoints: this.MAX_KLINE_POINTS, expectedPoints },
       })
     }
 
@@ -135,7 +166,6 @@ export class KlineService {
     // P2-4: 添加 try-catch 包裹聚合调用
     let result: KlineBarDto[]
     try {
-      // 查询数据库（按时间降序，取窗口内最后 queryLimit 根，再反转）
       if (shouldAggregate) {
         result = await this.aggregateKlineData(client, where, timeframe, queryLimit)
       } else {
@@ -165,11 +195,10 @@ export class KlineService {
         error: (error as Error).message,
         stack: (error as Error).stack,
       })
-      // 返回空数组而非抛出异常，让前端能够优雅降级
       return []
     }
 
-    // 缓存结果（异步，不阻塞响应）
+    // 缓存结果(异步,不阻塞响应)
     redisClient
       .setex(cacheKey, this.CACHE_TTL_SECONDS, JSON.stringify(result))
       .catch(cacheError => {
@@ -195,10 +224,9 @@ export class KlineService {
    * P1-3: 使用数据库聚合替代内存聚合，避免一次性加载大量数据
    *
    * 聚合规则：
-   * - open: 取第一个交易所的开盘价（按 exchangeCode 排序）
+   * - open/close: 取交易所平均价，避免单一交易所价差导致偏移
    * - high: 取所有交易所的最高价
    * - low: 取所有交易所的最低价
-   * - close: 取最后一个交易所的收盘价（按 exchangeCode 排序）
    * - volume: 求和所有交易所的成交量
    */
   private async aggregateKlineData(
@@ -207,7 +235,6 @@ export class KlineService {
     timeframe: MarketTimeframe,
     queryLimit: number,
   ): Promise<KlineBarDto[]> {
-    // 使用数据库聚合查询，避免加载大量原始数据到内存
     const aggregatedData = await client.futuresPriceHistory.groupBy({
       by: ['timestamp'],
       where,
@@ -218,20 +245,13 @@ export class KlineService {
       take: queryLimit,
     })
 
-    // 对于 open/close，需要单独查询（因为 groupBy 不支持 FIRST/LAST 聚合）
-    // 使用子查询获取每个时间点的第一个和最后一个交易所的价格
-    const timestamps = aggregatedData.map(d => d.timestamp)
-
-    if (timestamps.length === 0) {
+    if (aggregatedData.length === 0) {
       return []
     }
 
-    // 批量获取每个时间点的 open（第一个交易所）和 close（最后一个交易所）
-    // PERF: 此查询依赖复合索引 (symbol, interval, timestamp) 以避免全表扫描
-    // 索引定义见 prisma/schema/market_data.prisma: @@index([symbol, interval, timestamp])
     const dbInterval = reverseMapTimeframe(timeframe)
-
     const symbol = String(where.symbol).toUpperCase()
+    const timestamps = aggregatedData.map(row => row.timestamp)
 
     const openCloseData = (await client.$queryRaw(Prisma.sql`
       WITH ranked AS (
@@ -286,12 +306,13 @@ export class KlineService {
   }
 
   private mapIntervalToTimeframe(interval: string): MarketTimeframe {
-    // 前端传入的是数据库格式（'1m', '5m', '15m', '1h', '4h', '1d'）
-    // 需要映射到 Prisma 枚举键名（m1, m5, m15, h1, h4, d1）
+    // 前端传入的是数据库格式（'1m', '5m', '15m', '30m', '1h', '4h', '1d'）
+    // 需要映射到 Prisma 枚举键名（m1, m5, m15, m30, h1, h4, d1）
     const map: Record<string, MarketTimeframe> = {
       '1m': 'm1' as MarketTimeframe,
       '5m': 'm5' as MarketTimeframe,
       '15m': 'm15' as MarketTimeframe,
+      '30m': 'm30' as MarketTimeframe,
       '1h': 'h1' as MarketTimeframe,
       '4h': 'h4' as MarketTimeframe,
       '1d': 'd1' as MarketTimeframe,
