@@ -527,6 +527,31 @@ const UpdateTradesPairConfigDto = z
   })
   .partial()
   .passthrough();
+const WhaleAlertSide = z.enum(["Long", "Short"]);
+const RealtimeWhaleAlertDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    position_size: z.number(),
+    entry_price: z.number(),
+    liq_price: z.number(),
+    position_value_usd: z.number(),
+    position_action: z.number(),
+    create_time: z.string(),
+    side: WhaleAlertSide,
+  })
+  .passthrough();
+const WhaleTradeDto = z
+  .object({
+    user_address: z.string(),
+    symbol: z.string(),
+    side: z.enum(["Long", "Short"]),
+    trade_size: z.number(),
+    price: z.number(),
+    trade_value_usd: z.number(),
+    trade_time: z.string(),
+  })
+  .passthrough();
 const WhaleDiscoverTraderAiTagDto = z
   .object({
     key: z.enum([
@@ -935,31 +960,6 @@ const PredictionMarketCardDto = z
     rules: PredictionMarketRulesDto.optional(),
   })
   .passthrough();
-const WhaleAlertSide = z.enum(["Long", "Short"]);
-const RealtimeWhaleAlertDto = z
-  .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    position_size: z.number(),
-    entry_price: z.number(),
-    liq_price: z.number(),
-    position_value_usd: z.number(),
-    position_action: z.number(),
-    create_time: z.string(),
-    side: WhaleAlertSide,
-  })
-  .passthrough();
-const WhaleTradeDto = z
-  .object({
-    user_address: z.string(),
-    symbol: z.string(),
-    side: z.enum(["Long", "Short"]),
-    trade_size: z.number(),
-    price: z.number(),
-    trade_value_usd: z.number(),
-    trade_time: z.string(),
-  })
-  .passthrough();
 const WhaleHoldingDto = z
   .object({
     userAddress: z.string(),
@@ -1020,6 +1020,9 @@ export const schemas = {
   TradesPairConfigResponseDto,
   CreateTradesPairConfigDto,
   UpdateTradesPairConfigDto,
+  WhaleAlertSide,
+  RealtimeWhaleAlertDto,
+  WhaleTradeDto,
   WhaleDiscoverTraderAiTagDto,
   WhaleDiscoverTraderDto,
   WhaleDiscoverResponseDto,
@@ -1058,9 +1061,6 @@ export const schemas = {
   PredictionMarketOutcomeDto,
   PredictionMarketRulesDto,
   PredictionMarketCardDto,
-  WhaleAlertSide,
-  RealtimeWhaleAlertDto,
-  WhaleTradeDto,
   WhaleHoldingDto,
 };
 
@@ -3206,24 +3206,24 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
-        name: "since",
+        name: "symbol",
         type: "Query",
-        schema: z.unknown().optional(),
-      },
-      {
-        name: "limit",
-        type: "Query",
-        schema: z.unknown().optional(),
+        schema: z.string().optional(),
       },
       {
         name: "min_trade_value_usd",
         type: "Query",
-        schema: z.unknown().optional(),
+        schema: z.number().optional(),
       },
       {
-        name: "symbol",
+        name: "limit",
         type: "Query",
-        schema: z.unknown().optional(),
+        schema: z.number().optional(),
+      },
+      {
+        name: "since",
+        type: "Query",
+        schema: z.string().optional(),
       },
     ],
     response: z.array(WhaleTradeDto),
