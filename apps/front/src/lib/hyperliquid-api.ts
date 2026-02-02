@@ -12,6 +12,7 @@
 
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
+import { safeParseFloat, validateHyperliquidUrl } from '@ai/shared'
 import pLimit from 'p-limit'
 import { ApiError, logError } from './errors'
 import { logger } from './logger'
@@ -103,7 +104,6 @@ interface HyperliquidMarginSummary {
   accountValue: string
   totalMarginUsed: string
   totalNtlPos: string // 总持仓名义价值
-  withdrawable: string
 }
 
 /**
@@ -111,6 +111,7 @@ interface HyperliquidMarginSummary {
  */
 interface HyperliquidClearinghouseStateResponse {
   marginSummary: HyperliquidMarginSummary
+  withdrawable: string
   assetPositions: HyperliquidAssetPosition[]
   crossMarginSummary?: HyperliquidMarginSummary
   time: number
@@ -121,7 +122,7 @@ interface HyperliquidClearinghouseStateResponse {
  */
 interface HyperliquidSpotBalance {
   coin: string
-  token: number  // Token index
+  token: number // Token index
   total: string
   hold: string
   entryNtl: string
@@ -139,9 +140,9 @@ interface HyperliquidSpotClearinghouseStateResponse {
  */
 interface HyperliquidSpotMetaResponse {
   universe: Array<{
-    tokens: number[]  // [tokenA_index, tokenB_index]
-    name: string      // 交易对名称或 @index
-    index: number     // Universe index
+    tokens: number[] // [tokenA_index, tokenB_index]
+    name: string // 交易对名称或 @index
+    index: number // Universe index
     isCanonical: boolean
   }>
   tokens: Array<{
@@ -228,8 +229,8 @@ const EMPTY_PERP_DATA: HyperliquidClearinghouseStateResponse = {
     accountValue: '0',
     totalMarginUsed: '0',
     totalNtlPos: '0',
-    withdrawable: '0',
   },
+  withdrawable: '0',
   assetPositions: [],
   time: 0,
 }
@@ -244,20 +245,33 @@ const EMPTY_SPOT_DATA: HyperliquidSpotClearinghouseStateResponse = {
 /**
  * 有效的投资组合周期（用于 portfolio 数据转换）
  */
-const VALID_PERIODS = ['day', 'week', 'month', 'allTime', 'perpDay', 'perpWeek', 'perpMonth', 'perpAllTime'] as const
-type ValidPeriod = typeof VALID_PERIODS[number]
+const VALID_PERIODS = [
+  'day',
+  'week',
+  'month',
+  'allTime',
+  'perpDay',
+  'perpWeek',
+  'perpMonth',
+  'perpAllTime',
+] as const
+type ValidPeriod = (typeof VALID_PERIODS)[number]
 
 /**
  * 有效的成交方向（用于 fills 数据转换）
  */
 const VALID_DIRECTIONS = ['Open Long', 'Close Long', 'Open Short', 'Close Short'] as const
-type ValidDirection = typeof VALID_DIRECTIONS[number]
+type ValidDirection = (typeof VALID_DIRECTIONS)[number]
 
 // ============================================================================
 // Hyperliquid API HTTP 客户端
 // ============================================================================
 
-const HYPERLIQUID_API_URL = process.env.NEXT_PUBLIC_HYPERLIQUID_API_URL || 'https://api.hyperliquid.xyz/info'
+const HYPERLIQUID_BASE_URL = validateHyperliquidUrl(
+  process.env.NEXT_PUBLIC_HYPERLIQUID_API_URL,
+  'https://api.hyperliquid.xyz',
+)
+const HYPERLIQUID_API_URL = `${HYPERLIQUID_BASE_URL}/info`
 
 // ============================================================================
 // 地址校验
@@ -294,13 +308,14 @@ async function getCachedSpotMeta(): Promise<HyperliquidSpotMetaResponse> {
     return spotMetaPromise
   }
   spotMetaCacheExpiry = now + CACHE_TTL_MS
-  spotMetaPromise = postHyperliquidInfo<HyperliquidSpotMetaResponse>({ type: 'spotMeta' })
-    .catch((error) => {
+  spotMetaPromise = postHyperliquidInfo<HyperliquidSpotMetaResponse>({ type: 'spotMeta' }).catch(
+    error => {
       // 请求失败时清除缓存，允许下次重试
       spotMetaPromise = null
       spotMetaCacheExpiry = 0
       throw error
-    })
+    },
+  )
   return spotMetaPromise
 }
 
@@ -313,13 +328,14 @@ async function getCachedAllMids(): Promise<HyperliquidAllMidsResponse> {
     return allMidsPromise
   }
   allMidsCacheExpiry = now + CACHE_TTL_MS
-  allMidsPromise = postHyperliquidInfo<HyperliquidAllMidsResponse>({ type: 'allMids' })
-    .catch((error) => {
+  allMidsPromise = postHyperliquidInfo<HyperliquidAllMidsResponse>({ type: 'allMids' }).catch(
+    error => {
       // 请求失败时清除缓存，允许下次重试
       allMidsPromise = null
       allMidsCacheExpiry = 0
       throw error
-    })
+    },
+  )
   return allMidsPromise
 }
 /**
@@ -379,14 +395,14 @@ async function postHyperliquidInfo<T>(request: {
             const retryAfter = response.headers.get('Retry-After')
             const delay = retryAfter
               ? Number.parseInt(retryAfter) * 1000
-              : Math.min(2**attempt * 1000, 10000)
+              : Math.min(2 ** attempt * 1000, 10000)
 
             if (attempt < MAX_RETRIES - 1) {
               await new Promise(resolve => setTimeout(resolve, delay))
               lastError = new ApiError(
                 `Hyperliquid API 速率限制，正在重试... (${attempt + 1}/${MAX_RETRIES})`,
                 'HYPERLIQUID_API_RATE_LIMIT',
-                429
+                429,
               )
               continue
             }
@@ -396,7 +412,7 @@ async function postHyperliquidInfo<T>(request: {
             `Hyperliquid API 请求失败: ${response.status} ${response.statusText}`,
             'HYPERLIQUID_API_ERROR',
             response.status,
-            { errorText: errorText?.slice(0, 200) }
+            { errorText: errorText?.slice(0, 200) },
           )
         }
 
@@ -407,7 +423,7 @@ async function postHyperliquidInfo<T>(request: {
           throw new ApiError(
             `Hyperliquid API 请求超时 (${REQUEST_TIMEOUT_MS}ms)`,
             'HYPERLIQUID_API_TIMEOUT',
-            408
+            408,
           )
         }
 
@@ -464,7 +480,7 @@ function isAbortError(error: unknown): boolean {
 function findSpotPrice(
   tokenIndex: number,
   spotMeta: HyperliquidSpotMetaResponse,
-  priceData: HyperliquidAllMidsResponse
+  priceData: HyperliquidAllMidsResponse,
 ): number {
   // 1. 如果是 USDC (token index 0)，直接返回 1.0
   if (tokenIndex === 0) {
@@ -500,42 +516,78 @@ function findSpotPrice(
     return 0
   }
 
-  return Number.parseFloat(priceStr)
+  return safeParseFloat(priceStr)
 }
 
 /**
  * 转换 clearinghouseState 和 spotClearinghouseState 为 TraderSnapshotResponse
+ *
+ * 对齐 hyperbot.network：
+ * - 可用保证金 / withdrawable 来自默认 dex 的 clearinghouseState
+ * - 持仓（positionValue、unrealizedPnl、marginUsed）来自 dex=xyz 的 clearinghouseState
  */
 function transformToTraderSnapshot(
-  perpData: HyperliquidClearinghouseStateResponse,
+  perpCashData: HyperliquidClearinghouseStateResponse,
+  perpXyzData: HyperliquidClearinghouseStateResponse,
   spotData: HyperliquidSpotClearinghouseStateResponse,
   spotMeta: HyperliquidSpotMetaResponse,
-  priceData: HyperliquidAllMidsResponse
+  priceData: HyperliquidAllMidsResponse,
 ): TraderSnapshotResponse {
-  const marginSummary = perpData.marginSummary
-  const accountValue = Number.parseFloat(marginSummary.accountValue) || 0
-  const totalMarginUsed = Number.parseFloat(marginSummary.totalMarginUsed) || 0
-  const totalPositionValue = Number.parseFloat(marginSummary.totalNtlPos) || 0
-  const withdrawable = Number.parseFloat(marginSummary.withdrawable) || 0
+  const cashMarginSummary = perpCashData.marginSummary
+  const withdrawable = safeParseFloat(perpCashData.withdrawable)
+
+  const cashPositions = perpCashData.assetPositions
+  const xyzPositions = perpXyzData.assetPositions
+
+  const cashMarginUsed = safeParseFloat(cashMarginSummary.totalMarginUsed)
+  const xyzMarginUsed = xyzPositions.reduce(
+    (sum, pos) => sum + safeParseFloat(pos.position.marginUsed),
+    0,
+  )
+  const totalMarginUsed = cashMarginUsed + xyzMarginUsed
+
+  // 账户总价值（Perp）：可提资金 + 已用保证金（含 xyz）
+  const accountValue = withdrawable + totalMarginUsed
+
+  // 总持仓价值：使用 assetPositions 聚合，避免 totalNtlPos 的净值口径
+  const cashPositionValue = cashPositions.reduce(
+    (sum, pos) => sum + Math.abs(safeParseFloat(pos.position.positionValue)),
+    0,
+  )
+  const xyzPositionValue = xyzPositions.reduce(
+    (sum, pos) => sum + Math.abs(safeParseFloat(pos.position.positionValue)),
+    0,
+  )
+  const totalPositionValue = cashPositionValue + xyzPositionValue
+
+  logger.debug('transformToTraderSnapshot', {
+    cashMarginSummary,
+    accountValue,
+    totalMarginUsed,
+    totalPositionValue,
+    withdrawable,
+    assetPositionsCount: cashPositions.length + xyzPositions.length,
+  })
 
   // 计算总未实现盈亏
-  const unrealizedPnl = perpData.assetPositions.reduce((sum, pos) => {
-    return sum + Number.parseFloat(pos.position.unrealizedPnl)
-  }, 0)
+  const unrealizedPnl = [...cashPositions, ...xyzPositions].reduce(
+    (sum, pos) => sum + safeParseFloat(pos.position.unrealizedPnl),
+    0,
+  )
 
   // 计算保证金使用率
   const marginUsagePercent = accountValue > 0 ? (totalMarginUsed / accountValue) * 100 : 0
 
   // 计算杠杆倍数
-  const leverageRatio = accountValue > 0 ? totalPositionValue / accountValue : 0
+  const leverageRatio = totalMarginUsed > 0 ? totalPositionValue / totalMarginUsed : 0
 
   // 计算 ROI
   const roi = accountValue > 0 ? (unrealizedPnl / accountValue) * 100 : 0
 
   // 处理现货余额，使用价格数据计算 USD 价值
-  const spotBalances = spotData.balances.map((balance) => {
-    const total = Number.parseFloat(balance.total)
-    const hold = Number.parseFloat(balance.hold)
+  const spotBalances = spotData.balances.map(balance => {
+    const total = safeParseFloat(balance.total)
+    const hold = safeParseFloat(balance.hold)
 
     // 使用 token index 查找价格
     const price = findSpotPrice(balance.token, spotMeta, priceData)
@@ -559,7 +611,7 @@ function transformToTraderSnapshot(
 
   // 更新现货占比
   if (spotTotalValue > 0) {
-    spotBalances.forEach((balance) => {
+    spotBalances.forEach(balance => {
       balance.sharePercent = (balance.value / spotTotalValue) * 100
     })
   }
@@ -598,27 +650,27 @@ function transformToTraderPositions(
   spotData: HyperliquidSpotClearinghouseStateResponse,
   spotMeta: HyperliquidSpotMetaResponse,
   priceData: HyperliquidAllMidsResponse,
-  type: 'perp' | 'spot' | 'all' = 'all'
+  type: 'perp' | 'spot' | 'all' = 'all',
 ): TraderPositionsResponse {
   const perpPositions =
     type === 'spot'
       ? []
-      : perpData.assetPositions.map((assetPos) => {
+      : perpData.assetPositions.map(assetPos => {
           const pos = assetPos.position
-          const size = Number.parseFloat(pos.szi)
+          const size = safeParseFloat(pos.szi)
           const side = size >= 0 ? ('LONG' as const) : ('SHORT' as const)
-          const entryPrice = Number.parseFloat(pos.entryPx)
-          const positionValue = Number.parseFloat(pos.positionValue)
-          const marginUsed = Number.parseFloat(pos.marginUsed)
-          const unrealizedPnl = Number.parseFloat(pos.unrealizedPnl)
-          const roi = Number.parseFloat(pos.returnOnEquity) * 100
+          const entryPrice = safeParseFloat(pos.entryPx)
+          const positionValue = safeParseFloat(pos.positionValue)
+          const marginUsed = safeParseFloat(pos.marginUsed)
+          const unrealizedPnl = safeParseFloat(pos.unrealizedPnl)
+          const roi = safeParseFloat(pos.returnOnEquity) * 100
 
           // 计算标记价格（基于持仓价值和数量）
           const markPrice = size !== 0 ? Math.abs(positionValue / size) : entryPrice
 
           // 解析清算价格
           // 注意：当 liquidationPx 为 null 时使用 0，实际上全仓模式可能不适用清算价
-          const liquidationPrice = pos.liquidationPx ? Number.parseFloat(pos.liquidationPx) : 0
+          const liquidationPrice = pos.liquidationPx ? safeParseFloat(pos.liquidationPx) : 0
 
           // 计算未实现盈亏百分比
           const unrealizedPnlPercent = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
@@ -645,9 +697,9 @@ function transformToTraderPositions(
   const spotPositions =
     type === 'perp'
       ? []
-      : spotData.balances.map((balance) => {
-          const total = Number.parseFloat(balance.total)
-          const hold = Number.parseFloat(balance.hold)
+      : spotData.balances.map(balance => {
+          const total = safeParseFloat(balance.total)
+          const hold = safeParseFloat(balance.hold)
           const available = total - hold
 
           // 使用 token index 查找价格
@@ -682,20 +734,18 @@ const MIN_ORDER_SIZE = 0.0000001
 /**
  * 转换 openOrders 为 TraderOpenOrdersResponse
  */
-function transformToTraderOpenOrders(
-  orders: HyperliquidOpenOrder[]
-): TraderOpenOrdersResponse {
+function transformToTraderOpenOrders(orders: HyperliquidOpenOrder[]): TraderOpenOrdersResponse {
   // 过滤掉 sz=0 的订单（可能已完全成交但未清理）
-  const activeOrders = orders.filter((order) => {
-    const size = Number.parseFloat(order.sz)
+  const activeOrders = orders.filter(order => {
+    const size = safeParseFloat(order.sz)
     return size > MIN_ORDER_SIZE // 使用常量替代魔法数字
   })
 
-  const transformedOrders = activeOrders.map((order) => {
+  const transformedOrders = activeOrders.map(order => {
     const side = order.side === 'A' ? ('BUY' as const) : ('SELL' as const)
-    const price = Number.parseFloat(order.limitPx)
-    const size = Number.parseFloat(order.sz)
-    const origSize = Number.parseFloat(order.origSz)
+    const price = safeParseFloat(order.limitPx)
+    const size = safeParseFloat(order.sz)
+    const origSize = safeParseFloat(order.origSz)
     const value = price * size
 
     return {
@@ -708,7 +758,7 @@ function transformToTraderOpenOrders(
       origSize,
       value,
       timestamp: new Date(order.timestamp).toISOString(),
-      triggerPrice: order.triggerPx ? Number.parseFloat(order.triggerPx) : undefined,
+      triggerPrice: order.triggerPx ? safeParseFloat(order.triggerPx) : undefined,
       triggerCondition: order.triggerCondition ?? undefined,
       reduceOnly: order.reduceOnly ?? false,
     }
@@ -730,17 +780,22 @@ function transformToTraderOpenOrders(
  * @returns 账户快照数据（兼容后端 DTO 格式）
  */
 export async function fetchTraderSnapshotFromHyperliquid(
-  address: string
+  address: string,
 ): Promise<TraderSnapshotResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
   }
 
   try {
-    const [perpData, spotData, spotMeta, priceData] = await Promise.all([
+    const [perpCashData, perpXyzData, spotData, spotMeta, priceData] = await Promise.all([
       postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
         type: 'clearinghouseState',
         user: address,
+      }),
+      postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
+        type: 'clearinghouseState',
+        user: address,
+        dex: 'xyz',
       }),
       postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
         type: 'spotClearinghouseState',
@@ -750,7 +805,7 @@ export async function fetchTraderSnapshotFromHyperliquid(
       getCachedAllMids(),
     ])
 
-    return transformToTraderSnapshot(perpData, spotData, spotMeta, priceData)
+    return transformToTraderSnapshot(perpCashData, perpXyzData, spotData, spotMeta, priceData)
   } catch (error) {
     logError('FETCH_TRADER_SNAPSHOT_FROM_HYPERLIQUID', error, { address })
     throw error
@@ -766,7 +821,7 @@ export async function fetchTraderSnapshotFromHyperliquid(
  */
 export async function fetchTraderPositionsFromHyperliquid(
   address: string,
-  options: { type?: 'perp' | 'spot' | 'all' } = {}
+  options: { type?: 'perp' | 'spot' | 'all' } = {},
 ): Promise<TraderPositionsResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
@@ -777,10 +832,15 @@ export async function fetchTraderPositionsFromHyperliquid(
   try {
     // 根据查询类型直接调用对应的 API，避免复杂的动态数组逻辑
     if (type === 'all') {
-      const [perpData, spotData, spotMeta, priceData] = await Promise.all([
+      const [perpCashData, perpXyzData, spotData, spotMeta, priceData] = await Promise.all([
         postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
           type: 'clearinghouseState',
           user: address,
+        }),
+        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
+          type: 'clearinghouseState',
+          user: address,
+          dex: 'xyz',
         }),
         postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
           type: 'spotClearinghouseState',
@@ -789,15 +849,33 @@ export async function fetchTraderPositionsFromHyperliquid(
         getCachedSpotMeta(),
         getCachedAllMids(),
       ])
-      return transformToTraderPositions(perpData, spotData, spotMeta, priceData, type)
+
+      const mergedPerpData: HyperliquidClearinghouseStateResponse = {
+        ...perpCashData,
+        assetPositions: [...perpCashData.assetPositions, ...perpXyzData.assetPositions],
+      }
+
+      return transformToTraderPositions(mergedPerpData, spotData, spotMeta, priceData, type)
     } else if (type === 'perp') {
-      const perpData = await postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
-        type: 'clearinghouseState',
-        user: address,
-      })
+      const [perpCashData, perpXyzData] = await Promise.all([
+        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
+          type: 'clearinghouseState',
+          user: address,
+        }),
+        postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
+          type: 'clearinghouseState',
+          user: address,
+          dex: 'xyz',
+        }),
+      ])
+
+      const mergedPerpData: HyperliquidClearinghouseStateResponse = {
+        ...perpCashData,
+        assetPositions: [...perpCashData.assetPositions, ...perpXyzData.assetPositions],
+      }
       // perp-only 查询不需要价格数据
       const emptySpotMeta: HyperliquidSpotMetaResponse = { universe: [], tokens: [] }
-      return transformToTraderPositions(perpData, EMPTY_SPOT_DATA, emptySpotMeta, {}, type)
+      return transformToTraderPositions(mergedPerpData, EMPTY_SPOT_DATA, emptySpotMeta, {}, type)
     } else {
       // type === 'spot'
       const [spotData, spotMeta, priceData] = await Promise.all([
@@ -825,7 +903,7 @@ export async function fetchTraderPositionsFromHyperliquid(
  */
 export async function fetchTraderOpenOrdersFromHyperliquid(
   address: string,
-  options: { coin?: string } = {}
+  options: { coin?: string } = {},
 ): Promise<TraderOpenOrdersResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
@@ -839,7 +917,7 @@ export async function fetchTraderOpenOrdersFromHyperliquid(
 
     // 如果指定了 coin，进行过滤
     const filteredOrders = options.coin
-      ? orders.filter((order) => order.coin === options.coin)
+      ? orders.filter(order => order.coin === options.coin)
       : orders
 
     return transformToTraderOpenOrders(filteredOrders)
@@ -856,7 +934,7 @@ export async function fetchTraderOpenOrdersFromHyperliquid(
  * @returns 投资组合历史数据
  */
 export async function fetchUserPortfolioFromHyperliquid(
-  address: string
+  address: string,
 ): Promise<UserPortfolioResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
@@ -889,13 +967,13 @@ export async function fetchUserPortfolioFromHyperliquid(
       result[periodKey] = {
         accountValueHistory: data.accountValueHistory.map(([timestamp, value]) => ({
           timestamp,
-          value: Number.parseFloat(value),
+          value: safeParseFloat(value),
         })),
         pnlHistory: data.pnlHistory.map(([timestamp, value]) => ({
           timestamp,
-          value: Number.parseFloat(value),
+          value: safeParseFloat(value),
         })),
-        volume: Number.parseFloat(data.vlm),
+        volume: safeParseFloat(data.vlm),
       }
     }
 
@@ -915,7 +993,7 @@ export async function fetchUserPortfolioFromHyperliquid(
  */
 export async function fetchUserFillsFromHyperliquid(
   address: string,
-  options: { aggregateByTime?: boolean } = {}
+  options: { aggregateByTime?: boolean } = {},
 ): Promise<UserFillsResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
@@ -930,7 +1008,7 @@ export async function fetchUserFillsFromHyperliquid(
       aggregateByTime,
     })
 
-    const fills: UserFill[] = rawFills.map((fill) => {
+    const fills: UserFill[] = rawFills.map(fill => {
       const direction: ValidDirection = VALID_DIRECTIONS.includes(fill.dir as ValidDirection)
         ? (fill.dir as ValidDirection)
         : 'Open Long' // 默认值，避免类型错误
@@ -941,13 +1019,13 @@ export async function fetchUserFillsFromHyperliquid(
 
       return {
         coin: fill.coin,
-        price: Number.parseFloat(fill.px),
-        size: Number.parseFloat(fill.sz),
+        price: safeParseFloat(fill.px),
+        size: safeParseFloat(fill.sz),
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
         direction,
-        closedPnl: Number.parseFloat(fill.closedPnl),
-        fee: Number.parseFloat(fill.fee),
+        closedPnl: safeParseFloat(fill.closedPnl),
+        fee: safeParseFloat(fill.fee),
         hash: fill.hash,
       }
     })
@@ -969,7 +1047,7 @@ export interface TraderFullDataResponse {
 
 export async function fetchTraderFullData(
   address: string,
-  options: { aggregateByTime?: boolean } = {}
+  options: { aggregateByTime?: boolean } = {},
 ): Promise<TraderFullDataResponse> {
   if (!isValidEthereumAddress(address)) {
     throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
@@ -979,10 +1057,24 @@ export async function fetchTraderFullData(
     const aggregateByTime = options.aggregateByTime ?? false
 
     // 合并为单个 Promise.all，最大化并发效率
-    const [perpData, spotData, spotMeta, priceData, orders, portfolioData, rawFills] = await Promise.all([
+    const [
+      perpCashData,
+      perpXyzData,
+      spotData,
+      spotMeta,
+      priceData,
+      orders,
+      portfolioData,
+      rawFills,
+    ] = await Promise.all([
       postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
         type: 'clearinghouseState',
         user: address,
+      }),
+      postHyperliquidInfo<HyperliquidClearinghouseStateResponse>({
+        type: 'clearinghouseState',
+        user: address,
+        dex: 'xyz',
       }),
       postHyperliquidInfo<HyperliquidSpotClearinghouseStateResponse>({
         type: 'spotClearinghouseState',
@@ -1025,17 +1117,17 @@ export async function fetchTraderFullData(
       portfolio[periodKey] = {
         accountValueHistory: data.accountValueHistory.map(([timestamp, value]) => ({
           timestamp,
-          value: Number.parseFloat(value),
+          value: safeParseFloat(value),
         })),
         pnlHistory: data.pnlHistory.map(([timestamp, value]) => ({
           timestamp,
-          value: Number.parseFloat(value),
+          value: safeParseFloat(value),
         })),
-        volume: Number.parseFloat(data.vlm),
+        volume: safeParseFloat(data.vlm),
       }
     }
 
-    const fills: UserFill[] = rawFills.map((fill) => {
+    const fills: UserFill[] = rawFills.map(fill => {
       const direction: ValidDirection = VALID_DIRECTIONS.includes(fill.dir as ValidDirection)
         ? (fill.dir as ValidDirection)
         : 'Open Long'
@@ -1046,20 +1138,25 @@ export async function fetchTraderFullData(
 
       return {
         coin: fill.coin,
-        price: Number.parseFloat(fill.px),
-        size: Number.parseFloat(fill.sz),
+        price: safeParseFloat(fill.px),
+        size: safeParseFloat(fill.sz),
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
         direction,
-        closedPnl: Number.parseFloat(fill.closedPnl),
-        fee: Number.parseFloat(fill.fee),
+        closedPnl: safeParseFloat(fill.closedPnl),
+        fee: safeParseFloat(fill.fee),
         hash: fill.hash,
       }
     })
 
+    const mergedPerpData: HyperliquidClearinghouseStateResponse = {
+      ...perpCashData,
+      assetPositions: [...perpCashData.assetPositions, ...perpXyzData.assetPositions],
+    }
+
     return {
-      snapshot: transformToTraderSnapshot(perpData, spotData, spotMeta, priceData),
-      positions: transformToTraderPositions(perpData, spotData, spotMeta, priceData, 'all'),
+      snapshot: transformToTraderSnapshot(perpCashData, perpXyzData, spotData, spotMeta, priceData),
+      positions: transformToTraderPositions(mergedPerpData, spotData, spotMeta, priceData, 'all'),
       orders: transformToTraderOpenOrders(orders),
       portfolio,
       fills: { fills },

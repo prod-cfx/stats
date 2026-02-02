@@ -12,10 +12,7 @@ import type {
   QueryTraderPositionsDto,
   TraderPositionsResponseDto,
 } from './dto/trader-positions.dto'
-import type {
-  QueryTraderSnapshotDto,
-  TraderSnapshotResponseDto,
-} from './dto/trader-snapshot.dto'
+import type { QueryTraderSnapshotDto, TraderSnapshotResponseDto } from './dto/trader-snapshot.dto'
 import type {
   QueryWhaleAddressPerformanceDto,
   WhaleAddressPerformanceResponseDto,
@@ -29,6 +26,7 @@ import type {
   HyperliquidOpenOrder,
   HyperliquidSpotBalance,
 } from './services/hyperliquid-api.service'
+import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -167,10 +165,10 @@ export class WhaleTrackingService {
       const baseTotal =
         Number.isFinite(totalValueFromGroup) && totalValueFromGroup > 0
           ? totalValueFromGroup
-          : fromStats?.totalValueUsd ?? 0
+          : (fromStats?.totalValueUsd ?? 0)
 
       const symbols = perUserSymbols.get(g.userAddress)
-      const positions = symbols ? symbols.size : fromStats?.positions ?? 0
+      const positions = symbols ? symbols.size : (fromStats?.positions ?? 0)
 
       return {
         address: g.userAddress,
@@ -312,8 +310,7 @@ export class WhaleTrackingService {
   ): Promise<WhaleAddressPerformanceResponseDto> {
     const client = this.prisma.getClient()
 
-    const lookbackDays =
-      typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
+    const lookbackDays = typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
     const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
 
     const where = {
@@ -442,13 +439,10 @@ export class WhaleTrackingService {
 
     const totalDirectional = longCount + shortCount
     const winRatePct =
-      totalDirectional > 0
-        ? Number(((longCount / totalDirectional) * 100).toFixed(2))
-        : 50
+      totalDirectional > 0 ? Number(((longCount / totalDirectional) * 100).toFixed(2)) : 50
 
     const pnlScale = 0.08
-    const directionFactor =
-      totalDirectional > 0 ? (longCount >= shortCount ? 1 : -1) : 1
+    const directionFactor = totalDirectional > 0 ? (longCount >= shortCount ? 1 : -1) : 1
     const rawPnl = totalValueUsd * pnlScale * directionFactor
     const pnlUsd = Number(rawPnl.toFixed(2))
 
@@ -466,24 +460,20 @@ export class WhaleTrackingService {
     }
 
     const limit =
-      typeof query.limit === 'number' && query.limit > 0
-        ? Math.min(query.limit, 500)
-        : 200
+      typeof query.limit === 'number' && query.limit > 0 ? Math.min(query.limit, 500) : 200
 
     // 3）针对交易明细，仅拉取有限条数到 Node 层，避免一次性加载过多记录
-    const tradesSource: HyperliquidWhaleAlert[] =
-      await client.hyperliquidWhaleAlert.findMany({
-        where,
-        orderBy: {
-          createTime: 'desc',
-        },
-        take: limit,
-      })
+    const tradesSource: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
+      where,
+      orderBy: {
+        createTime: 'desc',
+      },
+      take: limit,
+    })
 
     const trades: WhaleTradeHistoryItemDto[] = tradesSource.map(a => {
       const positionSize = Number(a.positionSize ?? 0)
-      const side: 'LONG' | 'SHORT' =
-        positionSize >= 0 ? 'LONG' : 'SHORT'
+      const side: 'LONG' | 'SHORT' = positionSize >= 0 ? 'LONG' : 'SHORT'
 
       return {
         address: a.userAddress,
@@ -636,22 +626,22 @@ export class WhaleTrackingService {
     ])
 
     // 解析永续合约账户数据
-    const perpSummary = perpState.marginSummary || ({} as ClearinghouseStateResponse['marginSummary'])
-    const accountValue = Number.parseFloat(perpSummary.accountValue || '0')
-    const totalMarginUsed = Number.parseFloat(perpSummary.totalMarginUsed || '0')
-    const totalPositionValue = Number.parseFloat(perpSummary.totalNtlPos || '0')
-    const withdrawable = Number.parseFloat(perpSummary.withdrawable || '0')
+    const perpSummary =
+      perpState.marginSummary || ({} as ClearinghouseStateResponse['marginSummary'])
+    const accountValue = safeParseFloat(perpSummary.accountValue)
+    const totalMarginUsed = safeParseFloat(perpSummary.totalMarginUsed)
+    const totalPositionValue = safeParseFloat(perpSummary.totalNtlPos)
+    const withdrawable = safeParseFloat(perpState.withdrawable)
 
     // 计算保证金使用率和杠杆倍数
-    const marginUsagePercent =
-      accountValue > 0 ? (totalMarginUsed / accountValue) * 100 : 0
+    const marginUsagePercent = accountValue > 0 ? (totalMarginUsed / accountValue) * 100 : 0
     const leverageRatio = totalMarginUsed > 0 ? totalPositionValue / totalMarginUsed : 0
 
     // 计算未实现盈亏和 ROI
     let unrealizedPnl = 0
     const assetPositions: HyperliquidAssetPosition[] = perpState.assetPositions || []
     for (const ap of assetPositions) {
-      unrealizedPnl += Number.parseFloat(ap.position?.unrealizedPnl || '0')
+      unrealizedPnl += safeParseFloat(ap.position?.unrealizedPnl)
     }
     const roi = totalMarginUsed > 0 ? (unrealizedPnl / totalMarginUsed) * 100 : 0
 
@@ -681,8 +671,8 @@ export class WhaleTrackingService {
     const balances: BalanceWithValue[] = []
 
     for (const balance of spotBalances) {
-      const total = Number.parseFloat(balance.total || '0')
-      const hold = Number.parseFloat(balance.hold || '0')
+      const total = safeParseFloat(balance.total)
+      const hold = safeParseFloat(balance.hold)
       const value = 0 // TODO(PERF-002): 等待价格 API 实现
       spotTotalValue += value
 
@@ -697,8 +687,7 @@ export class WhaleTrackingService {
 
     // 计算现货余额占比
     for (const balance of balances) {
-      balance.sharePercent =
-        spotTotalValue > 0 ? (balance.value / spotTotalValue) * 100 : 0
+      balance.sharePercent = spotTotalValue > 0 ? (balance.value / spotTotalValue) * 100 : 0
     }
 
     // 计算汇总数据
@@ -776,12 +765,11 @@ export class WhaleTrackingService {
         const position = ap.position
         if (!position) continue
 
-        const szi = Number.parseFloat(position.szi || '0')
-        if (szi === 0)
-          continue // 跳过空仓位
-
+        const szi = safeParseFloat(position.szi)
         const side: 'LONG' | 'SHORT' = szi > 0 ? 'LONG' : 'SHORT'
-        const entryPrice = Number.parseFloat(position.entryPx || '0')
+
+        // entryPx 解析
+        const entryPrice = safeParseFloat(position.entryPx)
 
         // 标记价格获取（技术债务）：
         // 需要调用 Hyperliquid API 的 meta 端点获取实时标记价格
@@ -790,18 +778,18 @@ export class WhaleTrackingService {
         // 2. 根据 position.coin 查询对应的 markPx
         // 3. 添加价格缓存（TTL 5秒）避免频繁请求
         // 临时方案：使用 positionValue 和 szi 反推近似价格
-        const markPrice =
-          szi !== 0 ? Math.abs(Number.parseFloat(position.positionValue || '0') / szi) : 0
+        const markPrice = szi !== 0 ? Math.abs(safeParseFloat(position.positionValue) / szi) : 0
 
-        const liquidationPrice = Number.parseFloat(position.liquidationPx || '0')
-        const positionValue = Number.parseFloat(position.positionValue || '0')
-        const marginUsed = Number.parseFloat(position.marginUsed || '0')
-        const unrealizedPnl = Number.parseFloat(position.unrealizedPnl || '0')
+        const liquidationPrice = safeParseFloat(position.liquidationPx)
+        const positionValue = safeParseFloat(position.positionValue)
+        const marginUsed = safeParseFloat(position.marginUsed)
+        const unrealizedPnl = safeParseFloat(position.unrealizedPnl)
         const unrealizedPnlPercent = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
         const roi = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
 
         const leverage = position.leverage || { type: 'cross' as const, value: 1 }
-        const leverageType: 'cross' | 'isolated' = leverage.type === 'isolated' ? 'isolated' : 'cross'
+        const leverageType: 'cross' | 'isolated' =
+          leverage.type === 'isolated' ? 'isolated' : 'cross'
         const leverageValue = Number(leverage.value || 1)
 
         perpPositions.push({
@@ -846,11 +834,10 @@ export class WhaleTrackingService {
       }
 
       for (const balance of balances) {
-        const total = Number.parseFloat(balance.total || '0')
-        if (total === 0)
-          continue // 跳过零余额
+        const total = safeParseFloat(balance.total)
+        if (total === 0) continue // 跳过零余额
 
-        const hold = Number.parseFloat(balance.hold || '0')
+        const hold = safeParseFloat(balance.hold)
         const available = total - hold
         const value = 0 // TODO(PERF-002): 等待价格 API 实现
 
@@ -885,7 +872,10 @@ export class WhaleTrackingService {
     const coinFilter = query.coin
 
     // 调用 Hyperliquid API 获取挂单
-    const openOrders: HyperliquidOpenOrder[] = await this.hyperliquidApi.getOpenOrders(address, skipCache)
+    const openOrders: HyperliquidOpenOrder[] = await this.hyperliquidApi.getOpenOrders(
+      address,
+      skipCache,
+    )
 
     // 过滤和转换数据
     let filteredOrders = openOrders || []
@@ -893,11 +883,11 @@ export class WhaleTrackingService {
       filteredOrders = filteredOrders.filter(order => order.coin === coinFilter)
     }
 
-    const orders = filteredOrders.map((order) => {
+    const orders = filteredOrders.map(order => {
       const side: 'BUY' | 'SELL' = order.side === 'A' ? 'BUY' : 'SELL'
-      const limitPrice = Number.parseFloat(order.limitPx || '0')
-      const size = Number.parseFloat(order.sz || '0')
-      const origSize = Number.parseFloat(order.origSz || '0')
+      const limitPrice = safeParseFloat(order.limitPx)
+      const size = safeParseFloat(order.sz)
+      const origSize = safeParseFloat(order.origSz)
       const value = limitPrice * size
       const timestamp = new Date(order.timestamp).toISOString()
 
@@ -911,7 +901,7 @@ export class WhaleTrackingService {
         origSize,
         value,
         timestamp,
-        triggerPrice: order.triggerPx ? Number.parseFloat(order.triggerPx) : null,
+        triggerPrice: order.triggerPx ? safeParseFloat(order.triggerPx) : null,
         triggerCondition: order.triggerCondition || null,
         reduceOnly: order.reduceOnly || false,
       }
@@ -920,10 +910,3 @@ export class WhaleTrackingService {
     return { orders }
   }
 }
-
-
-
-
-
-
-

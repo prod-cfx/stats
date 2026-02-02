@@ -1,8 +1,17 @@
+import type { z } from 'zod'
+import { validateHyperliquidUrl } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
-// Nest 注入需要运行时引用 ConfigService，保留值导入
+// Nest 注入需要运行时引用 ConfigService,保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { LRUCache } from 'lru-cache'
+import {
+  HyperliquidClearinghouseStateSchema,
+  HyperliquidOpenOrderSchema,
+  HyperliquidSpotClearinghouseStateSchema,
+  HyperliquidUserFillSchema,
+  validateHyperliquidResponse,
+} from '../schemas/hyperliquid.schema'
 
 /**
  * Hyperliquid API 请求类型枚举
@@ -138,7 +147,6 @@ export interface HyperliquidMarginSummary {
   accountValue: string
   totalMarginUsed: string
   totalNtlPos: string
-  withdrawable: string
 }
 
 /**
@@ -146,6 +154,7 @@ export interface HyperliquidMarginSummary {
  */
 export interface ClearinghouseStateResponse {
   marginSummary: HyperliquidMarginSummary
+  withdrawable: string
   assetPositions: HyperliquidAssetPosition[]
   crossMarginSummary?: HyperliquidMarginSummary
 }
@@ -201,8 +210,8 @@ export class HyperliquidApiService {
   private readonly cache: LRUCache<string, unknown>
 
   constructor(private readonly configService: ConfigService) {
-    this.apiUrl =
-      this.configService.get<string>('HYPERLIQUID_API_URL') ?? 'https://api.hyperliquid.xyz'
+    const configUrl = this.configService.get<string>('HYPERLIQUID_API_URL')
+    this.apiUrl = validateHyperliquidUrl(configUrl, 'https://api.hyperliquid.xyz')
 
     // 初始化 LRU 缓存：最多 1000 项，TTL 5 秒
     this.cache = new LRUCache<string, unknown>({
@@ -222,6 +231,7 @@ export class HyperliquidApiService {
    * @param options - 可选配置
    * @param options.skipCache - 是否跳过缓存
    * @param options.timeout - 请求超时时间（毫秒）
+   * @param options.schema - Zod schema 用于验证响应数据
    * @returns API 响应数据
    */
   async post<T = unknown>(
@@ -229,6 +239,7 @@ export class HyperliquidApiService {
     options?: {
       skipCache?: boolean
       timeout?: number
+      schema?: z.ZodSchema<T>
     },
   ): Promise<T> {
     const cacheKey = JSON.stringify(request)
@@ -270,10 +281,7 @@ export class HyperliquidApiService {
             const errorMessage = `HTTP ${response.status} ${response.statusText}${errorText ? `: ${errorText.slice(0, 200)}` : ''}`
 
             // 5xx 错误或 429 限流错误可重试
-            if (
-              (response.status >= 500 || response.status === 429)
-              && attempt < this.maxRetries
-            ) {
+            if ((response.status >= 500 || response.status === 429) && attempt < this.maxRetries) {
               this.logger.warn(
                 `Request failed (attempt ${attempt}/${this.maxRetries}): ${errorMessage}`,
               )
@@ -286,16 +294,21 @@ export class HyperliquidApiService {
 
           const data = (await response.json()) as T
 
+          // 如果提供了 schema,进行运行时验证
+          if (options?.schema) {
+            const validated = validateHyperliquidResponse(options.schema, data, request.type)
+            this.cache.set(cacheKey, validated)
+            return validated
+          }
+
           // 写入缓存（LRU 缓存会自动处理容量限制和过期时间）
           this.cache.set(cacheKey, data)
 
           return data
-        }
-        finally {
+        } finally {
           clearTimeout(timer)
         }
-      }
-      catch (error) {
+      } catch (error) {
         const isAbort = this.isAbortError(error)
         const errorMessage = isAbort
           ? `Request timeout after ${timeout}ms`
@@ -341,7 +354,11 @@ export class HyperliquidApiService {
         type: HyperliquidApiType.CLEARINGHOUSE_STATE,
         user: userAddress,
       },
-      { skipCache },
+      {
+        skipCache,
+        schema:
+          HyperliquidClearinghouseStateSchema as unknown as z.ZodSchema<ClearinghouseStateResponse>,
+      },
     )
   }
 
@@ -361,7 +378,11 @@ export class HyperliquidApiService {
         type: HyperliquidApiType.SPOT_CLEARINGHOUSE_STATE,
         user: userAddress,
       },
-      { skipCache },
+      {
+        skipCache,
+        schema:
+          HyperliquidSpotClearinghouseStateSchema as unknown as z.ZodSchema<SpotClearinghouseStateResponse>,
+      },
     )
   }
 
@@ -378,7 +399,12 @@ export class HyperliquidApiService {
         type: HyperliquidApiType.OPEN_ORDERS,
         user: userAddress,
       },
-      { skipCache },
+      {
+        skipCache,
+        schema: HyperliquidOpenOrderSchema.array() as unknown as z.ZodSchema<
+          HyperliquidOpenOrder[]
+        >,
+      },
     )
   }
 
@@ -401,7 +427,7 @@ export class HyperliquidApiService {
         user: userAddress,
         aggregateByTime,
       },
-      { skipCache },
+      { skipCache, schema: HyperliquidUserFillSchema.array() as unknown as z.ZodSchema<T> },
     )
   }
 
@@ -464,10 +490,7 @@ export class HyperliquidApiService {
    * @param skipCache - 是否跳过缓存
    * @returns 历史订单列表
    */
-  async getHistoricalOrders<T = unknown>(
-    userAddress: string,
-    skipCache = false,
-  ): Promise<T> {
+  async getHistoricalOrders<T = unknown>(userAddress: string, skipCache = false): Promise<T> {
     return this.post<T>(
       {
         type: HyperliquidApiType.HISTORICAL_ORDERS,
@@ -509,8 +532,7 @@ export class HyperliquidApiService {
   private async safeReadText(response: Response): Promise<string> {
     try {
       return await response.text()
-    }
-    catch {
+    } catch {
       return ''
     }
   }
@@ -519,10 +541,8 @@ export class HyperliquidApiService {
    * 判断是否为 AbortError
    */
   private isAbortError(error: unknown): boolean {
-    if (typeof error !== 'object' || error === null)
-      return false
-    if (!('name' in error))
-      return false
+    if (typeof error !== 'object' || error === null) return false
+    if (!('name' in error)) return false
     return (error as { name?: unknown }).name === 'AbortError'
   }
 }

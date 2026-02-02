@@ -148,7 +148,7 @@ export class CryptoStockQuotesRepository {
       return 0
     }
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const source = inputs[0]?.source ?? 'BBX'
 
       const inconsistentSource = inputs.find(input => (input.source ?? 'BBX') !== source)
@@ -239,7 +239,10 @@ export class CryptoStockQuotesRepository {
    *
    * - 对每个 symbol 返回一条最新记录（按 quoteTimestamp 降序）
    */
-  async findLatestQuotesForSymbols(symbols: string[], source?: string): Promise<CryptoStockQuote[]> {
+  async findLatestQuotesForSymbols(
+    symbols: string[],
+    source?: string,
+  ): Promise<CryptoStockQuote[]> {
     if (!symbols.length) return []
 
     const client = this.getClient()
@@ -251,11 +254,7 @@ export class CryptoStockQuotesRepository {
 
     return client.cryptoStockQuote.findMany({
       where,
-      orderBy: [
-        { symbol: 'asc' },
-        { source: 'asc' },
-        { quoteTimestamp: 'desc' },
-      ],
+      orderBy: [{ symbol: 'asc' }, { source: 'asc' }, { quoteTimestamp: 'desc' }],
       distinct: ['symbol', 'source'],
     })
   }
@@ -274,11 +273,7 @@ export class CryptoStockQuotesRepository {
 
     return client.cryptoStockQuote.findMany({
       where,
-      orderBy: [
-        { symbol: 'asc' },
-        { source: 'asc' },
-        { quoteTimestamp: 'desc' },
-      ],
+      orderBy: [{ symbol: 'asc' }, { source: 'asc' }, { quoteTimestamp: 'desc' }],
       distinct: ['symbol', 'source'],
     })
   }
