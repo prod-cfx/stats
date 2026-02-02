@@ -4,7 +4,7 @@
   "layout": {
     "forbidExact": [".env", ".env.local"],
     "allowRoot": [".env.{env}", ".env.{env}.local"],
-    "allowSubdirGlobs": ["docker/.env*", ".vercel/.env*", "apps/*/.env*", "packages/*/.env*"],
+    "allowSubdirGlobs": ["docker/.env*", ".vercel/.env*", "apps/*/.env*", "packages/*/.env*"]
   },
   "secretPlaceholder": "__SET_IN_env.local__",
   "keys": {
@@ -23,7 +23,7 @@
       "EXCHANGE_ACCOUNT_CRYPTO_KEY",
       "VERCEL_TOKEN",
       "BBX_ACCESS_KEY_ID",
-      "BBX_ACCESS_SECRET",
+      "BBX_ACCESS_SECRET"
     ],
     "localOnly": [],
     "localOverride": [
@@ -212,36 +212,36 @@
       "JWT_ACCESS_EXPIRATION",
       "HTTP_TRUST_PROXY",
       "HTTP_TRUST_PROXY_HOPS",
-      "TRUST_PROXY",
-    ],
+      "TRUST_PROXY"
+    ]
   },
   "appToTarget": {
     "backend": "backend",
     "front": "frontend",
-    "admin-front": "frontend",
+    "admin-front": "frontend"
   },
   "targets": {
     "backend": {
       "files": {
         "committed": ".env.{env}",
-        "local": ".env.{env}.local",
+        "local": ".env.{env}.local"
       },
       "required": {
         "_common": ["APP_ENV"],
         "development": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "staging": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "production": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
-        "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
-      },
+        "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"]
+      }
     },
     "frontend": {
       "files": {
         "committed": ".env.{env}",
-        "local": ".env.{env}.local",
+        "local": ".env.{env}.local"
       },
       "required": {
-        "_common": [],
-      },
-    },
-  },
+        "_common": []
+      }
+    }
+  }
 }
