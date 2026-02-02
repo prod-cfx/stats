@@ -69,7 +69,8 @@
     "ts-node": "^10.9.2",
     "tslib": "^2.8.1",
     "typescript": "^5.9.2",
-    "yaml": "^2.6.0"
+    "yaml": "^2.6.0",
+    "@ranger1/dx": "0.1.9"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
