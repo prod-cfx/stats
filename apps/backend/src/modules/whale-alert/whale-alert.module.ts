@@ -10,11 +10,6 @@ import { WhaleAlertService } from './whale-alert.service'
   imports: [PrismaModule, AuthModule, DataSyncModule],
   controllers: [WhaleAlertController, WhaleAlertStreamController],
   providers: [WhaleAlertService],
+  exports: [WhaleAlertService],
 })
 export class WhaleAlertModule {}
-
-
-
-
-
-

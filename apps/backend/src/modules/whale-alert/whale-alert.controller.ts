@@ -4,8 +4,8 @@
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 // eslint-disable-next-line ts/consistent-type-imports
 import { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
-import type { QueryWhaleTradeDto} from './dto/whale-trade.dto';
-import { WhaleTradeDto } from './dto/whale-trade.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
@@ -44,9 +44,7 @@ export class WhaleAlertController {
     description: '仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时',
   })
   @ApiOkResponse({ type: RealtimeWhaleAlertDto, isArray: true })
-  async getRealtime(
-    @Query() query: QueryRealtimeWhaleAlertDto,
-  ): Promise<RealtimeWhaleAlertDto[]> {
+  async getRealtime(@Query() query: QueryRealtimeWhaleAlertDto): Promise<RealtimeWhaleAlertDto[]> {
     const result = await this.service.getRealtimeAlerts(query)
     return result
   }
@@ -81,9 +79,3 @@ export class WhaleAlertController {
     return result
   }
 }
-
-
-
-
-
-

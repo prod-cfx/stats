@@ -13,12 +13,17 @@ import { OrderbookConfigModule } from '@/modules/orderbook-config/orderbook-conf
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
 import { SettingsModule } from '@/modules/settings/settings.module'
 import { TradesConfigModule } from '@/modules/trades-config/trades-config.module'
+import { WhaleAlertModule } from '@/modules/whale-alert/whale-alert.module'
 import { WhaleTrackingModule } from '@/modules/whale-tracking/whale-tracking.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AdminDataPullTaskController } from './controllers/admin-data-pull-task.controller'
 import { DataSyncCronService } from './data-sync-cron.service'
 import { DataSyncOrchestrator } from './data-sync-orchestrator.service'
-import { DATA_PULL_JOB_REGISTRY, ORDERBOOK_WS_ADAPTER_REGISTRY, TRADES_WS_ADAPTER_REGISTRY } from './data-sync.tokens'
+import {
+  DATA_PULL_JOB_REGISTRY,
+  ORDERBOOK_WS_ADAPTER_REGISTRY,
+  TRADES_WS_ADAPTER_REGISTRY,
+} from './data-sync.tokens'
 import { BbxCryptoStockQuotesJob } from './jobs/bbx-crypto-stock-quotes.job'
 import { BbxCryptoStockScraperJob } from './jobs/bbx-crypto-stock-scraper.job'
 import { BinanceKlineHistoryJob } from './jobs/binance-kline-history.job'
@@ -61,6 +66,7 @@ import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-p
 import { OkxCexPerpetualTradesWsAdapter } from './services/adapters/okx-cex-perpetual-trades-ws.adapter'
 import { OkxCexSpotOrderbookWsAdapter } from './services/adapters/okx-cex-spot-orderbook-ws.adapter'
 import { OkxCexSpotTradesWsAdapter } from './services/adapters/okx-cex-spot-trades-ws.adapter'
+import { HyperliquidTradesWsConfig } from './services/adapters/hyperliquid/hyperliquid-trades-ws.config'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
@@ -82,6 +88,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     SettingsModule,
     CryptoStockQuotesModule,
     TradesConfigModule,
+    WhaleAlertModule,
     WhaleTrackingModule,
     MarketsModule,
   ],
@@ -261,6 +268,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     OrderbookWsSyncManager,
 
     // ===== Trades WS sync（动态订阅交易记录）=====
+    HyperliquidTradesWsConfig,
     BinanceCexSpotTradesWsAdapter,
     BinanceCexPerpetualTradesWsAdapter,
     BinanceCexFutureTradesWsAdapter,

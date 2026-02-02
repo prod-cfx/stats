@@ -1,4 +1,7 @@
-import type { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtime-whale-alert.dto'
+import type {
+  QueryRealtimeWhaleAlertDto,
+  RealtimeWhaleAlertDto,
+} from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
@@ -38,9 +41,7 @@ export class WhaleAlertService {
     }
 
     const sinceRaw =
-      query.since != null
-        ? new Date(query.since)
-        : new Date(Date.now() - 24 * 60 * 60 * 1000)
+      query.since != null ? new Date(query.since) : new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     let sinceForQuery: Date | null = null
     if (!Number.isNaN(sinceRaw.getTime())) {
@@ -121,9 +122,7 @@ export class WhaleAlertService {
     }
 
     const sinceRaw =
-      query.since != null
-        ? new Date(query.since)
-        : new Date(Date.now() - 24 * 60 * 60 * 1000)
+      query.since != null ? new Date(query.since) : new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     let sinceForQuery: Date | null = null
     if (!Number.isNaN(sinceRaw.getTime())) {
@@ -174,10 +173,63 @@ export class WhaleAlertService {
       return dto
     })
   }
+
+  /**
+   * 获取所有活跃鲸鱼地址(用于 Adapter 订阅)
+   */
+  async getActiveWhaleAddresses(): Promise<string[]> {
+    const rows = await this.prisma.hyperliquidWhaleAlert.findMany({
+      select: { userAddress: true },
+      distinct: ['userAddress'],
+    })
+
+    const addresses: string[] = []
+    for (const row of rows) {
+      const address = row.userAddress?.trim().toLowerCase()
+      if (!address) continue
+      addresses.push(address)
+    }
+
+    return addresses
+  }
+
+  /**
+   * 记录鲸鱼交易(用于 Adapter 写入数据)
+   */
+  async recordWhaleTrade(data: {
+    whaleAddress: string
+    coin: string
+    side: string
+    tradeSize: number
+    price: number
+    tradeValueUsd: number
+    tradeTime: Date
+  }): Promise<void> {
+    const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = data
+
+    await this.prisma.hyperliquidWhaleTrade.upsert({
+      where: {
+        userAddress_symbol_tradeTime_side: {
+          userAddress: whaleAddress,
+          symbol: coin,
+          tradeTime,
+          side,
+        },
+      },
+      create: {
+        userAddress: whaleAddress,
+        symbol: coin,
+        side,
+        tradeSize,
+        price,
+        tradeValueUsd,
+        tradeTime,
+      },
+      update: {
+        tradeSize,
+        price,
+        tradeValueUsd,
+      },
+    })
+  }
 }
-
-
-
-
-
-

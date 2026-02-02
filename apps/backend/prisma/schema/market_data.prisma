@@ -254,6 +254,7 @@ model HyperliquidWhaleAlert {
 
   /// 联合唯一约束：同一用户、币种、时间点的持仓变动应该是唯一的
   @@unique([userAddress, symbol, createTime, positionAction], map: "uniq_whale_alert_user_symbol_time_action")
+  @@index([userAddress], map: "idx_whale_alert_user_address")
   @@index([symbol, createTime], map: "idx_whale_alert_symbol_time")
   @@index([userAddress, createTime], map: "idx_whale_alert_user_time")
   @@index([createTime], map: "idx_whale_alert_time")

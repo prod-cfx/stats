@@ -2,8 +2,11 @@ import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trad
 import { inspect } from 'node:util'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Mutex } from 'async-mutex'
 import WebSocket from 'ws'
+import { WhaleAlertService } from '@/modules/whale-alert/whale-alert.service'
 import { PrismaService } from '@/prisma/prisma.service'
+import { HyperliquidTradesWsConfig } from './hyperliquid-trades-ws.config'
 
 interface HyperliquidWsTrade {
   coin?: string
@@ -23,7 +26,10 @@ interface HyperliquidTradesPayload {
 
 type HyperliquidWsMessage =
   | { channel: 'trades'; data: HyperliquidWsTrade[] | HyperliquidTradesPayload }
-  | { channel: 'subscriptionResponse'; data: { method: string; subscription: { type: string; coin: string } } }
+  | {
+      channel: 'subscriptionResponse'
+      data: { method: string; subscription: { type: string; coin: string } }
+    }
   | { channel: 'error'; data: { message: string } }
 
 interface TradeState {
@@ -66,13 +72,17 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   private whaleList = new Set<string>()
   private lastWhaleRefreshAt = 0
   private whaleRefreshTimer: NodeJS.Timeout | null = null
-  private whaleRefreshPromise: Promise<void> | null = null
+  private readonly whaleRefreshMutex = new Mutex()
 
   constructor(
     @Inject(ConfigService)
     protected readonly configService: ConfigService,
+    @Inject(HyperliquidTradesWsConfig)
+    protected readonly hyperliquidTradesConfig: HyperliquidTradesWsConfig,
     @Inject(PrismaService)
     protected readonly prismaService: PrismaService,
+    @Inject(WhaleAlertService)
+    protected readonly whaleAlertService: WhaleAlertService,
   ) {}
 
   async ensureConnected(): Promise<void> {
@@ -81,25 +91,16 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   }
 
   async syncTargetConfigs(configs: TradesConfig[]): Promise<void> {
-    if (!this.isHyperliquidEnabled()) {
-      const coinsToRemove = [...this.states.keys()]
-      for (const coin of coinsToRemove) {
-        this.pendingRemoval.add(coin)
-      }
-      await Promise.allSettled(
-        coinsToRemove.map(async (coin) => {
-          await this.unsubscribe(coin)
-          this.states.delete(coin)
-          this.pendingRemoval.delete(coin)
-        }),
-      )
+    if (!this.hyperliquidTradesConfig.isEnabled) {
+      await this.disableSubscriptions()
       return
     }
 
     const targets = configs
-      .filter(cfg =>
-        cfg.exchange.toUpperCase() === 'HYPERLIQUID'
-        && cfg.instrumentType === this.instrumentType,
+      .filter(
+        cfg =>
+          cfg.exchange.toUpperCase() === 'HYPERLIQUID' &&
+          cfg.instrumentType === this.instrumentType,
       )
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
 
@@ -107,11 +108,15 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     for (const cfg of targets) {
       const coin = this.toCoin(cfg)
       if (!coin) {
-        this.logger.warn(`Trades config missing Hyperliquid coin mapping, skip: symbol=${cfg.symbol}`)
+        this.logger.warn(
+          `Trades config missing Hyperliquid coin mapping, skip: symbol=${cfg.symbol}`,
+        )
         continue
       }
       if (targetCoins.has(coin)) {
-        this.logger.warn(`Duplicate Hyperliquid trades config detected for coin=${coin}, keep first`)
+        this.logger.warn(
+          `Duplicate Hyperliquid trades config detected for coin=${coin}, keep first`,
+        )
         continue
       }
       targetCoins.set(coin, cfg)
@@ -123,7 +128,7 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     }
 
     await Promise.allSettled(
-      coinsToRemove.map(async (coin) => {
+      coinsToRemove.map(async coin => {
         await this.unsubscribe(coin)
         this.states.delete(coin)
         this.pendingRemoval.delete(coin)
@@ -169,33 +174,38 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   }
 
   refreshWhaleList(): Promise<void> {
-    if (this.whaleRefreshPromise) return this.whaleRefreshPromise
-
-    this.whaleRefreshPromise = (async () => {
-      const client = this.prismaService.getClient()
-      const rows = await client.hyperliquidWhaleAlert.findMany({
-        select: { userAddress: true },
-        distinct: ['userAddress'],
-      })
+    return this.whaleRefreshMutex.runExclusive(async () => {
+      const addresses = await this.whaleAlertService.getActiveWhaleAddresses()
       const next = new Set<string>()
-      for (const row of rows) {
-        const address = row.userAddress?.trim().toLowerCase()
-        if (!address) continue
+      for (const address of addresses) {
         next.add(address)
       }
       this.whaleList = next
       this.lastWhaleRefreshAt = Date.now()
       this.logger.debug(`Hyperliquid whale list refreshed, count=${next.size}`)
-    })()
-
-    return this.whaleRefreshPromise.finally(() => {
-      this.whaleRefreshPromise = null
     })
   }
 
   isWhale(address: string): boolean {
     if (!address) return false
     return this.whaleList.has(address.trim().toLowerCase())
+  }
+
+  private mapTradeSide(side: string): string {
+    const normalized = side.toLowerCase()
+    if (normalized === 'a' || normalized === 'short' || normalized === 's') {
+      return 'Short'
+    }
+    if (normalized === 'b' || normalized === 'long' || normalized === 'l') {
+      return 'Long'
+    }
+
+    // 记录未知的交易方向,便于发现 Hyperliquid API 新增的交易方向类型
+    this.logger.warn(
+      `Unknown trade side from Hyperliquid: "${side}", defaulting to Long. ` +
+        `Please update mapTradeSide() if this is a new valid value.`,
+    )
+    return 'Long'
   }
 
   protected handleTradesMessage(trades: HyperliquidWsTrade[], coinOverride?: string): void {
@@ -218,8 +228,10 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
       const timeValue = trade.time != null ? Number(trade.time) : Number.NaN
       const time = Number.isFinite(timeValue) ? timeValue : Date.now()
       const createTime = new Date(time)
+
       const normalizedSide = (trade.side ?? '').trim().toLowerCase()
-      const side = normalizedSide === 'short' ? 'Short' : 'Long'
+      const side = this.mapTradeSide(normalizedSide)
+
       const absSize = Math.abs(size)
 
       const event: HyperliquidWhaleTradeEvent = {
@@ -256,33 +268,16 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     tradeValueUsd: number
     tradeTime: Date
   }): Promise<void> {
-    const client = this.prismaService.getClient()
     const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = payload
     try {
-      await client.hyperliquidWhaleTrade.upsert({
-        where: {
-          userAddress_symbol_tradeTime_side: {
-            userAddress: whaleAddress,
-            symbol: coin,
-            tradeTime,
-            side,
-          },
-        },
-        create: {
-          userAddress: whaleAddress,
-          symbol: coin,
-          side,
-          tradeSize: tradeSize.toString(),
-          price: price.toString(),
-          tradeValueUsd: tradeValueUsd.toString(),
-          tradeTime,
-          source: 'HYPERLIQUID_WS',
-        },
-        update: {
-          tradeSize: tradeSize.toString(),
-          price: price.toString(),
-          tradeValueUsd: tradeValueUsd.toString(),
-        },
+      await this.whaleAlertService.recordWhaleTrade({
+        whaleAddress,
+        coin,
+        side,
+        tradeSize,
+        price,
+        tradeValueUsd,
+        tradeTime,
       })
     } catch (err) {
       this.logger.warn(
@@ -312,7 +307,9 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
       this.startHeartbeat()
       this.ensureWhaleRefreshTicker()
       void this.refreshWhaleList().catch(err => {
-        this.logger.warn(`Failed to refresh whale list on connect: ${err instanceof Error ? err.message : String(err)}`)
+        this.logger.warn(
+          `Failed to refresh whale list on connect: ${err instanceof Error ? err.message : String(err)}`,
+        )
       })
       void this.resubscribeAll()
     })
@@ -338,7 +335,9 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
       this.open = false
       this.subscribedCoins.clear()
       this.stopHeartbeat()
-      this.logger.error(`Hyperliquid trades WS error: ${err instanceof Error ? err.message : String(err)}`)
+      this.logger.error(
+        `Hyperliquid trades WS error: ${err instanceof Error ? err.message : String(err)}`,
+      )
       this.scheduleReconnect()
     })
   }
@@ -388,13 +387,29 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     }
   }
 
+  private async disableSubscriptions(): Promise<void> {
+    const coinsToRemove = [...this.states.keys()]
+    for (const coin of coinsToRemove) {
+      this.pendingRemoval.add(coin)
+    }
+    await Promise.allSettled(
+      coinsToRemove.map(async coin => {
+        await this.unsubscribe(coin)
+        this.states.delete(coin)
+        this.pendingRemoval.delete(coin)
+      }),
+    )
+  }
+
   private async onMessage(raw: WebSocket.RawData): Promise<void> {
     let msg: HyperliquidWsMessage
     try {
       msg = JSON.parse(raw.toString()) as HyperliquidWsMessage
     } catch (err) {
       const rawStr = raw.toString()
-      this.logger.debug(`JSON parse failed: ${inspect(err, { depth: 1 })}, raw=${rawStr.slice(0, 200)}`)
+      this.logger.debug(
+        `JSON parse failed: ${inspect(err, { depth: 1 })}, raw=${rawStr.slice(0, 200)}`,
+      )
       return
     }
 
@@ -424,9 +439,12 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   private ensureWhaleRefreshTicker(): void {
     if (this.whaleRefreshTimer) return
     const intervalMs = this.getWhaleRefreshIntervalMs()
-    this.whaleRefreshTimer = setInterval(() => {
-      void this.ensureWhaleListFresh()
-    }, Math.max(30_000, intervalMs))
+    this.whaleRefreshTimer = setInterval(
+      () => {
+        void this.ensureWhaleListFresh()
+      },
+      Math.max(30_000, intervalMs),
+    )
   }
 
   private async ensureWhaleListFresh(): Promise<void> {
@@ -436,7 +454,9 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     try {
       await this.refreshWhaleList()
     } catch (err) {
-      this.logger.warn(`Failed to refresh whale list: ${err instanceof Error ? err.message : String(err)}`)
+      this.logger.warn(
+        `Failed to refresh whale list: ${err instanceof Error ? err.message : String(err)}`,
+      )
     }
   }
 
@@ -457,10 +477,13 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
     const delayMs = this.configService.get<number>('marketData.wsReconnectDelayMs') ?? 5_000
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      void this.connect()
-    }, Math.max(1_000, delayMs))
+    this.reconnectTimer = setTimeout(
+      () => {
+        this.reconnectTimer = null
+        void this.connect()
+      },
+      Math.max(1_000, delayMs),
+    )
   }
 
   private startHeartbeat(): void {
@@ -469,28 +492,35 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     const maxMissedPongs = this.configService.get<number>('TRADES_WS_MAX_MISSED_PONGS') ?? 3
 
     this.missedPongCount = 0
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.ws) return
-      const now = Date.now()
-      if (now - this.lastPongTs > intervalMs * 1.5) {
-        this.missedPongCount++
-        this.logger.debug(`Missed pong #${this.missedPongCount}, last pong ${now - this.lastPongTs}ms ago`)
-      }
-      if (this.missedPongCount >= maxMissedPongs) {
-        try {
-          this.logger.warn(`Hyperliquid trades WS heartbeat: ${this.missedPongCount} consecutive missed pongs, terminating`)
-          this.ws.terminate()
-        } catch (err) {
-          this.logger.debug(`WS terminate failed: ${inspect(err, { depth: 1 })}`)
+    this.heartbeatTimer = setInterval(
+      () => {
+        if (!this.ws) return
+        const now = Date.now()
+        if (now - this.lastPongTs > intervalMs * 1.5) {
+          this.missedPongCount++
+          this.logger.debug(
+            `Missed pong #${this.missedPongCount}, last pong ${now - this.lastPongTs}ms ago`,
+          )
         }
-        return
-      }
-      try {
-        this.ws.ping()
-      } catch (err) {
-        this.logger.debug(`WS ping failed: ${inspect(err, { depth: 1 })}`)
-      }
-    }, Math.max(3_000, intervalMs))
+        if (this.missedPongCount >= maxMissedPongs) {
+          try {
+            this.logger.warn(
+              `Hyperliquid trades WS heartbeat: ${this.missedPongCount} consecutive missed pongs, terminating`,
+            )
+            this.ws.terminate()
+          } catch (err) {
+            this.logger.debug(`WS terminate failed: ${inspect(err, { depth: 1 })}`)
+          }
+          return
+        }
+        try {
+          this.ws.ping()
+        } catch (err) {
+          this.logger.debug(`WS ping failed: ${inspect(err, { depth: 1 })}`)
+        }
+      },
+      Math.max(3_000, intervalMs),
+    )
   }
 
   private stopHeartbeat(): void {
@@ -505,13 +535,5 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     const parsed = raw != null ? Number(raw) : Number.NaN
     const ms = Number.isFinite(parsed) ? parsed : 300_000
     return Math.max(30_000, ms)
-  }
-
-  private isHyperliquidEnabled(): boolean {
-    const raw = this.configService.get<string>('HYPERLIQUID_TRADES_WS_ENABLED')
-    if (typeof raw === 'string') {
-      return raw.toLowerCase() === 'true'
-    }
-    return Boolean(raw)
   }
 }
