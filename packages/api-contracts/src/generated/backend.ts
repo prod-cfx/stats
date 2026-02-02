@@ -3369,7 +3369,7 @@ const endpoints = makeApi([
 ]);
 
 export const aiBackendClient = new Zodios(
-  "https://api-staging.example.com/api/v1",
+  "/api/v1",
   endpoints
 );
 
