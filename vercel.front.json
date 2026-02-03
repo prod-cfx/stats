@@ -3,7 +3,7 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && npx dx build front --${APP_ENV}",
-  "outputDirectory": "../../dist/front",
+  "outputDirectory": "../../dist/front/.next",
   "redirects": [
     {
       "source": "/:path*/index.txt",
@@ -17,16 +17,7 @@
     }
   ],
   "images": {
-    "sizes": [
-      640,
-      750,
-      828,
-      1080,
-      1200,
-      1920,
-      2048,
-      3840
-    ],
+    "sizes": [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     "domains": []
   }
 }

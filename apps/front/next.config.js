@@ -161,6 +161,34 @@ const nextConfig = {
       '**/@img+sharp-linux-arm*/**/*',
       // WASM sharp - not used at runtime
       '**/@img+sharp-wasm32*/**/*',
+      // Additional patterns for pnpm nested node_modules structure (@img inside sharp package)
+      // Pattern: node_modules/.pnpm/sharp@*/node_modules/@img/*
+      // Windows/win32 sharp binaries nested in pnpm
+      '**/node_modules/@img/sharp-win32-arm64*/**/*',
+      '**/node_modules/@img/sharp-win32-ia32*/**/*',
+      '**/node_modules/@img/sharp-win32-x64*/**/*',
+      // macOS/darwin sharp binaries nested in pnpm
+      '**/node_modules/@img/sharp-darwin-arm64*/**/*',
+      '**/node_modules/@img/sharp-darwin-x64*/**/*',
+      '**/node_modules/@img/sharp-libvips-darwin-arm64*/**/*',
+      '**/node_modules/@img/sharp-libvips-darwin-x64*/**/*',
+      // Non-ARM64 Linux architectures nested in pnpm
+      '**/node_modules/@img/sharp-linuxmusl-arm64*/**/*',
+      '**/node_modules/@img/sharp-linuxmusl-x64*/**/*',
+      '**/node_modules/@img/sharp-libvips-linuxmusl-arm64*/**/*',
+      '**/node_modules/@img/sharp-libvips-linuxmusl-x64*/**/*',
+      '**/node_modules/@img/sharp-libvips-linux-ppc64*/**/*',
+      '**/node_modules/@img/sharp-libvips-linux-riscv64*/**/*',
+      '**/node_modules/@img/sharp-libvips-linux-s390x*/**/*',
+      '**/node_modules/@img/sharp-libvips-linux-x64*/**/*', // keep only arm64
+      '**/node_modules/@img/sharp-libvips-linux-arm*/**/*',
+      '**/node_modules/@img/sharp-linux-ppc64*/**/*',
+      '**/node_modules/@img/sharp-linux-riscv64*/**/*',
+      '**/node_modules/@img/sharp-linux-s390x*/**/*',
+      '**/node_modules/@img/sharp-linux-x64*/**/*', // keep only arm64
+      '**/node_modules/@img/sharp-linux-arm*/**/*',
+      // WASM sharp nested in pnpm
+      '**/node_modules/@img/sharp-wasm32*/**/*',
       // Source maps - not needed in production bundles
       '**/dist/compiled/next-server/**/*.map',
     ],
