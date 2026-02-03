@@ -1,5 +1,8 @@
 'use client'
 
+/* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
+/* eslint-disable react-web-api/no-leaked-event-listener */
+
 import type { MutableRefObject, Ref } from 'react'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
@@ -312,6 +315,8 @@ export interface TradingViewChartProps {
   }>
   onRemoveIndicator?: (id: string) => void
 }
+
+const EMPTY_ACTIVE_INDICATORS: NonNullable<TradingViewChartProps['activeIndicators']> = []
 
 export interface TradingViewChartRef {
   addStudy: (studyName: string) => void
@@ -1270,8 +1275,6 @@ function tryExecuteActionInsertIndicator(widget: any) {
   }
 }
 
-const DEFAULT_ACTIVE_INDICATORS: TradingViewChartProps['activeIndicators'] = []
-
 export const TradingViewChart = forwardRef(
   (
     {
@@ -1286,7 +1289,7 @@ export const TradingViewChart = forwardRef(
       onOpenDataIndicator,
       onIntervalChanged,
       onRemoveIndicator,
-      activeIndicators = DEFAULT_ACTIVE_INDICATORS,
+      activeIndicators = EMPTY_ACTIVE_INDICATORS,
     }: TradingViewChartProps,
     ref: Ref<TradingViewChartRef>,
   ) => {
@@ -1496,8 +1499,7 @@ export const TradingViewChart = forwardRef(
 
     // Sync currentInterval with interval prop (for external control)
     useEffect(() => {
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync external interval
-      setCurrentInterval(interval)
+      setCurrentInterval(() => interval)
     }, [interval])
 
     const { dataRef: lsDataRef, sortedTimestampsRef: lsSortedTimestampsRef } =
@@ -1511,10 +1513,6 @@ export const TradingViewChart = forwardRef(
     const pendingEnsuresRef = useRef<Set<CustomIndicatorId>>(new Set())
     const pendingRemovesRef = useRef<Set<CustomIndicatorId>>(new Set())
 
-    const stableInputs = useMemo(
-      () => ({ symbol, interval, theme, language: i18n.language }),
-      [symbol, interval, theme, i18n.language],
-    )
     const datafeedRef = useRef(createMockDatafeed({ isAggregated, exchange: selectedExchange }))
 
     // 这些回调/状态会频繁变化，不能放进 init effect 依赖，否则会导致 widget 被重建。
@@ -1523,6 +1521,7 @@ export const TradingViewChart = forwardRef(
       onOpenIndicator,
       onOpenDataIndicator,
       onSelectExchange,
+      onIntervalChanged,
       onRemoveIndicator,
     })
     const stateRef = useRef({ isAggregated, selectedExchange })
@@ -1533,11 +1532,13 @@ export const TradingViewChart = forwardRef(
         onOpenIndicator,
         onOpenDataIndicator,
         onSelectExchange,
+        onIntervalChanged,
         onRemoveIndicator,
       }
     }, [
       onOpenDataIndicator,
       onOpenIndicator,
+      onIntervalChanged,
       onRemoveIndicator,
       onSelectExchange,
       onToggleAggregate,
@@ -1570,7 +1571,7 @@ export const TradingViewChart = forwardRef(
       cleanupMenuListener: null,
     })
 
-    const closeMenu = () => {
+    const closeMenu = useCallback(() => {
       const els = headerElsRef.current
       if (els.activeMenu) {
         try {
@@ -1582,7 +1583,7 @@ export const TradingViewChart = forwardRef(
       }
       els.cleanupMenuListener?.()
       els.cleanupMenuListener = null
-    }
+    }, [])
 
     const updateHeaderUi = useCallback(() => {
       const { isAggregated: agg, selectedExchange: ex } = stateRef.current
@@ -1756,6 +1757,69 @@ export const TradingViewChart = forwardRef(
       let cancelled = false
       let readyTimer: ReturnType<typeof setTimeout> | null = null
 
+      let headerDoc: Document | null = null
+      let aggSwitchEl: HTMLElement | null = null
+      let aggLabelEl: HTMLElement | null = null
+      let indicatorBtnEl: HTMLElement | null = null
+
+      const onHeaderMouseDownCapture = (evt: MouseEvent) => {
+        const els = headerElsRef.current
+        const menu = els.activeMenu
+        if (!menu) return
+        const target = evt.target as Node | null
+        if (!target) return
+        if (menu.contains(target) || els.aggBtn?.contains(target)) return
+        closeMenu()
+      }
+
+      const onAggSwitchClick = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        callbacksRef.current.onToggleAggregate?.()
+      }
+
+      const onAggLabelClick = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        // 聚合=开：文字仅展示，不弹出交易所
+        if (stateRef.current.isAggregated) return
+
+        const els = headerElsRef.current
+        if (els.activeMenu) {
+          closeMenu()
+          return
+        }
+
+        const labelEl = e.currentTarget as HTMLElement | null
+        if (!labelEl) return
+
+        const menu = createBodyDropdown(labelEl, [
+          {
+            label: 'Binance',
+            onClick: () => {
+              closeMenu()
+              callbacksRef.current.onSelectExchange?.('binance')
+            },
+          },
+          {
+            label: 'OKX',
+            onClick: () => {
+              closeMenu()
+              callbacksRef.current.onSelectExchange?.('okx')
+            },
+          },
+        ])
+        labelEl.ownerDocument.body.appendChild(menu)
+        els.activeMenu = menu
+      }
+
+      const onIndicatorBtnClick = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        callbacksRef.current.onOpenIndicator?.()
+      }
+
       async function init() {
         // 延迟一帧执行，确保 DOM 已经挂载
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
@@ -1867,7 +1931,7 @@ export const TradingViewChart = forwardRef(
                   if (intervalChanged && typeof (intervalChanged as any).subscribe === 'function') {
                     ;(intervalChanged as any).subscribe(null, (newInterval: string) => {
                       setCurrentInterval(newInterval)
-                      onIntervalChanged?.(newInterval)
+                      callbacksRef.current.onIntervalChanged?.(newInterval)
                     })
                   }
                 }
@@ -1967,78 +2031,15 @@ export const TradingViewChart = forwardRef(
               // 交互约定：
               // - 点击开关：切换聚合开/关
               // - 当聚合=关时，点击文字区域：直接下拉选择交易所（不再出现单独的交易所按钮）
-              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
-              aggSwitch.addEventListener('click', e => {
-                e.preventDefault()
-                e.stopPropagation()
-                callbacksRef.current.onToggleAggregate?.()
-              })
-
-              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
-              aggLabel.addEventListener('click', e => {
-                e.preventDefault()
-                e.stopPropagation()
-
-                // 聚合=开：文字仅展示，不弹出交易所
-                if (stateRef.current.isAggregated) return
-
-                // toggle dropdown
-                const els = headerElsRef.current
-                if (els.activeMenu) {
-                  closeMenu()
-                  return
-                }
-
-                const menu = createBodyDropdown(aggLabel, [
-                  {
-                    label: 'Binance',
-                    onClick: () => {
-                      closeMenu()
-                      callbacksRef.current.onSelectExchange?.('binance')
-                    },
-                  },
-                  {
-                    label: 'OKX',
-                    onClick: () => {
-                      closeMenu()
-                      callbacksRef.current.onSelectExchange?.('okx')
-                    },
-                  },
-                ])
-                const doc = aggLabel.ownerDocument
-                doc.body.appendChild(menu)
-                els.activeMenu = menu
-
-                const onDoc = (evt: MouseEvent) => {
-                  const target = evt.target as Node | null
-                  if (!target) return
-                  if (menu.contains(target) || aggBtn.contains(target)) return
-                  closeMenu()
-                }
-                // 监听 iframe 内部点击
-                // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via cleanupMenuListener
-                doc.addEventListener('mousedown', onDoc, true)
-                // 同时也尝试监听主文档点击（如果 iframe 未跨域）
-                // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via cleanupMenuListener
-                document.addEventListener('mousedown', onDoc, true)
-
-                els.cleanupMenuListener = () => {
-                  doc.removeEventListener('mousedown', onDoc, true)
-                  document.removeEventListener('mousedown', onDoc, true)
-                }
-              })
+              aggSwitch.onclick = onAggSwitchClick
+              aggLabel.onclick = onAggLabelClick
 
               // 精选指标（打开你们原来的弹窗）
               const indicatorBtn = widget.createButton({ align: 'right' })
               indicatorBtn.classList.add('tv-custom-btn')
               const indicatorLabel = t('chart.toolbar.featuredIndicators')
               indicatorBtn.textContent = indicatorLabel
-              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
-              indicatorBtn.addEventListener('click', e => {
-                e.preventDefault()
-                e.stopPropagation()
-                callbacksRef.current.onOpenIndicator?.()
-              })
+              indicatorBtn.onclick = onIndicatorBtnClick
 
               headerElsRef.current.aggBtn = aggBtn
               headerElsRef.current.aggSwitch = aggSwitch
@@ -2046,6 +2047,16 @@ export const TradingViewChart = forwardRef(
               headerElsRef.current.aggLabel = aggLabel
               headerElsRef.current.indicatorBtn = indicatorBtn
               // headerElsRef.current.dataIndicatorBtn = dataIndicatorBtn
+
+              aggSwitchEl = aggSwitch
+              aggLabelEl = aggLabel
+              indicatorBtnEl = indicatorBtn
+
+              headerDoc = aggLabel.ownerDocument
+              headerDoc.addEventListener('mousedown', onHeaderMouseDownCapture, true)
+              if (headerDoc !== document) {
+                document.addEventListener('mousedown', onHeaderMouseDownCapture, true)
+              }
 
               // 将“聚合开关 + 交易所选择”放到 header 右侧（与旧页面右侧工具区一致）
               // 末尾顺序：交易所 → 聚合（聚合开关在最右侧）
@@ -2068,14 +2079,36 @@ export const TradingViewChart = forwardRef(
       return () => {
         cancelled = true
         if (readyTimer) clearTimeout(readyTimer)
+
+        if (headerDoc) headerDoc.removeEventListener('mousedown', onHeaderMouseDownCapture, true)
+        document.removeEventListener('mousedown', onHeaderMouseDownCapture, true)
+
+        if (aggSwitchEl) aggSwitchEl.onclick = null
+        if (aggLabelEl) aggLabelEl.onclick = null
+        if (indicatorBtnEl) indicatorBtnEl.onclick = null
+        aggSwitchEl = null
+        aggLabelEl = null
+        indicatorBtnEl = null
+        headerDoc = null
+
         closeMenu()
         widgetRef.current?.remove?.()
         widgetRef.current = null
         chartReadyRef.current = false
         setIsChartReady(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- widget init relies on stableInputs to avoid rebuilds
-    }, [stableInputs])
+    }, [
+      closeMenu,
+      containerId,
+      i18n.language,
+      interval,
+      lsDataRef,
+      lsSortedTimestampsRef,
+      symbol,
+      t,
+      theme,
+      updateHeaderUi,
+    ])
 
     // state 变化只更新 header 文案/可见性，不重建 widget
     useEffect(() => {
@@ -2089,6 +2122,11 @@ export const TradingViewChart = forwardRef(
       if (!widget || !isReady || !isChartReady) return
 
       let cleanup: null | (() => void) = null
+
+      let legendPointerDoc: Document | null = null
+      let legendPointerHandler: EventListener | null = null
+      let hoverMoveDoc: Document | null = null
+      let hoverMoveHandler: EventListener | null = null
 
       const safe = <T extends (...args: any[]) => any>(fn: T): T => {
         return ((...args: any[]) => {
@@ -2112,10 +2150,7 @@ export const TradingViewChart = forwardRef(
           try {
             const panes = chart?.getPanes?.()
             const h = panes?.[0]?.getHeight?.()
-            if (typeof h === 'number' && Number.isFinite(h) && h > 0) {
-              // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- measured from chart instance
-              setMainPaneHeight(h)
-            }
+            if (typeof h === 'number' && Number.isFinite(h) && h > 0) setMainPaneHeight(h)
           } catch {
             // ignore
           }
@@ -2241,7 +2276,6 @@ export const TradingViewChart = forwardRef(
             liqNativeRemovingRef.current = false
             liqNativeShapeIdsRef.current = []
             liqNativeMissRef.current = 0
-            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync native drawing state
             setLiqNativeActive(false)
           }
         }
@@ -2476,10 +2510,7 @@ export const TradingViewChart = forwardRef(
 
         if (showLiqOverlay) {
           // 显示时默认不隐藏（避免上一次隐藏状态残留导致“看起来没效果”）
-          if (liqHiddenRef.current) {
-            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset hidden state on show
-            setLiqHidden(false)
-          }
+          if (liqHiddenRef.current) setLiqHidden(false)
 
           // 1) 创建 legend 占位 study（这样清算地图会出现在指标 legend 上，并且有 eye/X 按钮）
           // 防御：历史遗留的错误值（把 Promise stringify 成了 "[object Promise]"）会导致后续定位/删除全部失效
@@ -2769,10 +2800,10 @@ export const TradingViewChart = forwardRef(
               }
 
               // 用 pointerdown/mousedown 捕获，优先于内部 click handler，避免内部拦截导致我们收不到事件
-              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via _legendUiCleanupRef
               doc.addEventListener('pointerdown', onDocPointerDown, true)
-              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via _legendUiCleanupRef
               doc.addEventListener('mousedown', onDocPointerDown, true)
+              legendPointerDoc = doc
+              legendPointerHandler = onDocPointerDown as EventListener
               _legendUiCleanupRef.current = () => {
                 if (retryTimer) clearTimeout(retryTimer)
                 try {
@@ -2828,7 +2859,6 @@ export const TradingViewChart = forwardRef(
           }, 700)
 
           // Native drawings 支持探测（部分内置精简版可能没有 createMultipointShape）
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- probe native drawings support
           setLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
 
           paneSizeTimer = setInterval(() => computeMainPaneHeight(), 800)
@@ -2880,7 +2910,6 @@ export const TradingViewChart = forwardRef(
             const anchor = mid > 0 ? mid : fallbackAnchor
             liqCurrentPriceRef.current = anchor
             const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
-            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync generated mock data
             setLiqData(d)
             // 同步绘制 native rectangles（如果支持）
             try {
@@ -2917,12 +2946,9 @@ export const TradingViewChart = forwardRef(
 
           removeAllLiqDrawings()
           removeLiqHoverLine()
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset hidden state on teardown
           setLiqHidden(false)
 
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset liq data on teardown
           setLiqData(null)
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset selection on teardown
           setLiqSelected(null)
           liqLockedRef.current = false
           liqLockedPriceRef.current = null
@@ -3104,11 +3130,12 @@ export const TradingViewChart = forwardRef(
               }
             }
 
-            // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via hoverMoveCleanup
-            doc.addEventListener('pointermove', onMove, { capture: true })
+            doc.addEventListener('pointermove', onMove, true)
+            hoverMoveDoc = doc
+            hoverMoveHandler = onMove as EventListener
             hoverMoveCleanup = () => {
               try {
-                doc.removeEventListener('pointermove', onMove as any, { capture: true } as any)
+                doc.removeEventListener('pointermove', onMove, true)
               } catch {
                 // ignore
               }
@@ -3214,9 +3241,29 @@ export const TradingViewChart = forwardRef(
       return () => {
         cleanup?.()
         cleanup = null
+
+        if (legendPointerDoc && legendPointerHandler) {
+          try {
+            legendPointerDoc.removeEventListener('pointerdown', legendPointerHandler, true)
+            legendPointerDoc.removeEventListener('mousedown', legendPointerHandler, true)
+          } catch {
+            // ignore
+          }
+        }
+        legendPointerDoc = null
+        legendPointerHandler = null
+
+        if (hoverMoveDoc && hoverMoveHandler) {
+          try {
+            hoverMoveDoc.removeEventListener('pointermove', hoverMoveHandler, true)
+          } catch {
+            // ignore
+          }
+        }
+        hoverMoveDoc = null
+        hoverMoveHandler = null
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- overlay setup relies on refs and stable inputs
-    }, [isReady, isChartReady, showLiqOverlay, symbol])
+    }, [containerId, isReady, isChartReady, showLiqOverlay, symbol, t, theme])
 
     useEffect(() => {
       if (!liqData) {

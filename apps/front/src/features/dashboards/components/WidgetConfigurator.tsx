@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
 'use client'
 
 import type { UnitSize } from '../widgets/unitSizePresets'

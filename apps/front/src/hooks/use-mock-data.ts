@@ -5,7 +5,7 @@ import { useViewState } from './use-view-state'
 
 export function useMockData<T>(
   fetcher: () => Promise<T>,
-  dependencies: any[] = [],
+  dependencies: unknown[] = [],
   options: MockOptions = {},
 ) {
   const { data, loading, error, setData, setLoading, setError } = useViewState<T>()
@@ -14,7 +14,6 @@ export function useMockData<T>(
 
   const load = useCallback(
     async (isTransition = false) => {
-      void dependencies
       // Determine delay based on rules:
       // Initial: 1200-2000ms, Transition: 600-1000ms
       const delay = options.delay ?? (isTransition ? 800 : 1500)
@@ -69,13 +68,12 @@ export function useMockData<T>(
       setData,
       setError,
       setLoading,
-      dependencies,
     ],
   )
 
   useEffect(() => {
     load()
-  }, [load, dependencies])
+  }, [dependencies, load])
 
   return { data, loading, error, reload: () => load(true) }
 }

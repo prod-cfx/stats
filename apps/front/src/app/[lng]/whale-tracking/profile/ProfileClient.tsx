@@ -102,7 +102,7 @@ export function ProfileClient({ address }: { address: string }) {
                   spotPositions={positionsData.spot}
                   perpPositions={positionsData.perp}
                   openOrders={ordersData.orders}
-                  fillsData={fillsData}
+                  traderAddress={address}
                 />
               )}
             </div>

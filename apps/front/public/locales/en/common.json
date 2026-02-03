@@ -667,7 +667,11 @@
         "filled": "Filled"
       },
       "tradeAction": {
-        "openLongAdd": "Open long (add)"
+        "openLongAdd": "Open long (add)",
+        "openLong": "Open long",
+        "closeLong": "Close long",
+        "openShort": "Open short",
+        "closeShort": "Close short"
       },
       "columns": {
         "time": "Time",

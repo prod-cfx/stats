@@ -1,3 +1,4 @@
+/* eslint-disable jsdoc/check-param-names */
 /**
  * Hyperliquid API 前端客户端
  *
@@ -53,6 +54,7 @@ export interface UserFill {
   side: 'BUY' | 'SELL'
   time: number
   direction: 'Open Long' | 'Close Long' | 'Open Short' | 'Close Short'
+  startPosition: number
   closedPnl: number
   fee: number
   feeToken: string
@@ -1030,6 +1032,7 @@ export async function fetchUserFillsFromHyperliquid(
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
         direction,
+        startPosition: safeParseFloat(fill.startPosition),
         closedPnl: safeParseFloat(fill.closedPnl),
         fee: safeParseFloat(fill.fee),
         feeToken: fill.feeToken,
@@ -1150,6 +1153,7 @@ export async function fetchTraderFullData(
         side: fill.side === 'A' ? 'BUY' : 'SELL',
         time: fill.time,
         direction,
+        startPosition: safeParseFloat(fill.startPosition),
         closedPnl: safeParseFloat(fill.closedPnl),
         fee: safeParseFloat(fill.fee),
         feeToken: fill.feeToken,

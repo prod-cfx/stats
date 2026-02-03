@@ -677,7 +677,11 @@
         "filled": "完全成交"
       },
       "tradeAction": {
-        "openLongAdd": "开多 加仓"
+        "openLongAdd": "开多 加仓",
+        "openLong": "开多",
+        "closeLong": "平多",
+        "openShort": "开空",
+        "closeShort": "平空"
       },
       "columns": {
         "time": "时间",

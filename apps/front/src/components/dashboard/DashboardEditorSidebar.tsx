@@ -3,7 +3,7 @@
 import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
 import { Bookmark, Check, ChevronDown, Layout, Loader2, Plus, Send, Trash2 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
@@ -32,13 +32,43 @@ export const DashboardEditorSidebar = ({
   const router = useRouter()
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
-  const [doc, setDoc] = useState(() => ensureDashboard(dashboardId))
+
+  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
+    if (typeof window === 'undefined') {
+      return () => {}
+    }
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
+    window.addEventListener('storage', onStoreChange)
+    return () => {
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
+      window.removeEventListener('storage', onStoreChange)
+    }
+  }, [])
+
+  const getDashboardsSnapshot = useCallback(
+    () => ({
+      myDashboards: getMyDashboards(),
+      savedDashboards: getSavedDashboards(),
+    }),
+    [],
+  )
+
+  const { myDashboards, savedDashboards } = useSyncExternalStore(
+    subscribeDashboards,
+    getDashboardsSnapshot,
+    getDashboardsSnapshot,
+  )
+
+  const getDocSnapshot = useCallback(() => {
+    if (dashboardId === 'draft') return ensureDashboard('draft')
+    return getDashboard(dashboardId)
+  }, [dashboardId])
+
+  const doc = useSyncExternalStore(subscribeDashboards, getDocSnapshot, getDocSnapshot)
   const [error, setError] = useState<string | null>(null)
   const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success'>('idle')
   const [deleteStatus, setDeleteStatus] = useState<'idle' | 'deleting'>('idle')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [myDashboards, setMyDashboards] = useState<DashboardDoc[]>([])
-  const [savedDashboards, setSavedDashboards] = useState<DashboardDoc[]>([])
   const [showMyDashboards, setShowMyDashboards] = useState(false)
   const [showSavedDashboards, setShowSavedDashboards] = useState(true)
   const [showAllMyDashboards, setShowAllMyDashboards] = useState(false)
@@ -55,34 +85,14 @@ export const DashboardEditorSidebar = ({
   }
 
   useEffect(() => {
-    const refresh = () => {
-      // IMPORTANT: do not recreate deleted dashboards implicitly
-      if (dashboardId === 'draft') {
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft from storage
-        setDoc(ensureDashboard('draft'))
-      } else {
-        const existing = getDashboard(dashboardId)
-        if (existing) {
-          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard
-          setDoc(existing)
-        }
-      }
-      // Always refresh lists regardless of current dashboard
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
-      setMyDashboards(getMyDashboards())
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
-      setSavedDashboards(getSavedDashboards())
-    }
-    refresh()
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
-    window.addEventListener('storage', refresh)
-    return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
-      window.removeEventListener('storage', refresh)
-    }
-  }, [dashboardId])
+    // IMPORTANT: do not recreate deleted dashboards implicitly
+    if (dashboardId === 'draft') return
+    if (doc) return
+    router.replace(`/${lng}/dashboard/?tab=saved`)
+  }, [dashboardId, doc, lng, router])
 
   const validatePublish = () => {
+    if (!doc) return false
     // 验证标题
     const rawTitle = (doc.name ?? '').trim()
     const isPlaceholderTitle =
@@ -131,6 +141,7 @@ export const DashboardEditorSidebar = ({
 
   const handlePublish = async () => {
     if (!validatePublish()) return
+    if (!doc) return
     if (publishStatus === 'publishing') return
 
     setPublishStatus('publishing')
@@ -146,8 +157,9 @@ export const DashboardEditorSidebar = ({
       // because 'draft' is filtered out of lists.
       if (dashboardId === 'draft') {
         const newId = crypto.randomUUID()
+        const base = doc
         const newDoc: DashboardDoc = {
-          ...doc,
+          ...base,
           id: newId,
           isPublished: true,
           updatedAt: Date.now(),
@@ -172,7 +184,6 @@ export const DashboardEditorSidebar = ({
         router.push(`/${lng}/dashboard/?tab=my`)
         return
       }
-      setDoc(updated)
       setPublishStatus('success')
 
       // 显示成功提示
@@ -210,6 +221,11 @@ export const DashboardEditorSidebar = ({
     setDeleteStatus('deleting')
     setError(null)
 
+    if (!doc) {
+      router.push(`/${lng}/dashboard/?tab=saved`)
+      return
+    }
+
     const dashboardName = resolveDashboardName(doc.name)
     const deletedId = dashboardId
 
@@ -220,11 +236,7 @@ export const DashboardEditorSidebar = ({
       // 执行删除
       deleteDashboard(deletedId)
 
-      // 立即刷新列表（在跳转前）
-      const updatedMy = getMyDashboards()
       const updatedSaved = getSavedDashboards()
-      setMyDashboards(updatedMy)
-      setSavedDashboards(updatedSaved)
 
       // 成功提示
       toast.success({
@@ -492,7 +504,7 @@ export const DashboardEditorSidebar = ({
           isOpen={showDeleteConfirm}
           title={t('dashboard.editor.dialog.deleteTitle')}
           description={t('dashboard.editor.dialog.deleteDesc', {
-            name: resolveDashboardName(doc.name),
+            name: doc ? resolveDashboardName(doc.name) : '',
           })}
           confirmText={t('dashboard.editor.dialog.deleteConfirm')}
           cancelText={t('dashboard.editor.dialog.deleteCancel')}

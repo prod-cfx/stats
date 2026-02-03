@@ -2,10 +2,11 @@
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
 import {
+  DASHBOARD_UPDATED_EVENT,
   ensureDashboard,
   getDashboard,
   updateDashboard,
@@ -24,37 +25,31 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const params = useParams()
   const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [doc, setDoc] = useState(() =>
-    dashboardId === DEFAULT_DASHBOARD_ID
-      ? ensureDashboard(DEFAULT_DASHBOARD_ID)
-      : getDashboard(dashboardId),
-  )
+
+  const subscribeDashboards = useCallback((onStoreChange: () => void) => {
+    if (typeof window === 'undefined') {
+      return () => {}
+    }
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
+    window.addEventListener('storage', onStoreChange)
+    return () => {
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, onStoreChange as EventListener)
+      window.removeEventListener('storage', onStoreChange)
+    }
+  }, [])
+
+  const getDocSnapshot = useCallback(() => {
+    if (dashboardId === DEFAULT_DASHBOARD_ID) return ensureDashboard(DEFAULT_DASHBOARD_ID)
+    return getDashboard(dashboardId)
+  }, [dashboardId])
+
+  const doc = useSyncExternalStore(subscribeDashboards, getDocSnapshot, getDocSnapshot)
 
   useEffect(() => {
-    const refresh = () => {
-      if (dashboardId === DEFAULT_DASHBOARD_ID) {
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft dashboard from storage
-        setDoc(ensureDashboard(DEFAULT_DASHBOARD_ID))
-        return
-      }
-      const existing = getDashboard(dashboardId)
-      if (!existing) {
-        // deleted or missing; go back to list
-        router.replace(`/${lng}/dashboard/?tab=saved`)
-        return
-      }
-      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard on id change
-      setDoc(existing)
-    }
-    refresh()
-    window.addEventListener('storage', refresh)
-    // eslint-disable-next-line react-web-api/no-leaked-event-listener
-    window.addEventListener('coinflux_dashboards_updated', refresh as any)
-    return () => {
-      window.removeEventListener('storage', refresh)
-      window.removeEventListener('coinflux_dashboards_updated', refresh as any)
-    }
-  }, [dashboardId, router, lng])
+    if (dashboardId === DEFAULT_DASHBOARD_ID) return
+    if (doc) return
+    router.replace(`/${lng}/dashboard/?tab=saved`)
+  }, [dashboardId, doc, lng, router])
 
   return (
     <div className="flex flex-col gap-8 pb-20">
@@ -67,7 +62,6 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
             if (!doc) return
             const next = e.target.value
             updateDashboard(dashboardId, d => ({ ...d, name: next }))
-            setDoc(getDashboard(dashboardId))
           }}
           className="text-h1 w-full border-none bg-transparent font-bold text-[color:var(--cf-text-strong)] placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50 focus:outline-none"
         />

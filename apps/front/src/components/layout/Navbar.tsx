@@ -31,7 +31,6 @@ export const Navbar = () => {
   const { info: _info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
-  const searchFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -98,12 +97,6 @@ export const Navbar = () => {
     },
     { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ]
-
-  // Close mobile menu when route changes
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived from pathname
-    setMobileMenuOpen(false)
-  }, [pathname])
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
@@ -210,15 +203,9 @@ export const Navbar = () => {
     }
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (searchFocusTimeoutRef.current) clearTimeout(searchFocusTimeoutRef.current)
-    }
-  }, [])
-
   // 快捷键 / (Focus search)
   useEffect(() => {
-    let focusTimeout: ReturnType<typeof setTimeout> | null = null
+    let focusTimer: ReturnType<typeof setTimeout> | null = null
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === '/' &&
@@ -227,14 +214,14 @@ export const Navbar = () => {
       ) {
         e.preventDefault()
         setSearchOpen(true)
-        if (focusTimeout) clearTimeout(focusTimeout)
-        focusTimeout = setTimeout(() => searchInputRef.current?.focus(), 0)
+        if (focusTimer) clearTimeout(focusTimer)
+        focusTimer = setTimeout(() => searchInputRef.current?.focus(), 0)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
-      if (focusTimeout) clearTimeout(focusTimeout)
+      if (focusTimer) clearTimeout(focusTimer)
     }
   }, [searchOpen])
 
@@ -371,15 +358,7 @@ export const Navbar = () => {
                 type="button"
                 onClick={() => {
                   setSearchOpen(!searchOpen)
-                  if (!searchOpen) {
-                    if (searchFocusTimeoutRef.current) {
-                      clearTimeout(searchFocusTimeoutRef.current)
-                    }
-                    searchFocusTimeoutRef.current = setTimeout(
-                      () => searchInputRef.current?.focus(),
-                      100,
-                    )
-                  }
+                  if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
                 }}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
               >
