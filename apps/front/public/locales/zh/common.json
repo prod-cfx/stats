@@ -593,6 +593,11 @@
       "tradesCount": "{{count}} 笔交易"
     },
     "profile": {
+      "empty": {
+        "completedTrades": "暂无已完成交易",
+        "filteredResults": "当前筛选条件下暂无结果"
+      },
+      "loadMore": "加载更多",
       "invalidAddressTitle": "无效的钱包地址",
       "invalidAddressDescription": "请提供正确的 EVM 兼容钱包地址以查看深度档案。",
       "header": {

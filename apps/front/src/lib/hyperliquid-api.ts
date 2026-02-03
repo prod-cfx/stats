@@ -55,6 +55,7 @@ export interface UserFill {
   direction: 'Open Long' | 'Close Long' | 'Open Short' | 'Close Short'
   closedPnl: number
   fee: number
+  feeToken: string
   hash: string
 }
 
@@ -1031,6 +1032,7 @@ export async function fetchUserFillsFromHyperliquid(
         direction,
         closedPnl: safeParseFloat(fill.closedPnl),
         fee: safeParseFloat(fill.fee),
+        feeToken: fill.feeToken,
         hash: fill.hash,
       }
     })
@@ -1150,6 +1152,7 @@ export async function fetchTraderFullData(
         direction,
         closedPnl: safeParseFloat(fill.closedPnl),
         fee: safeParseFloat(fill.fee),
+        feeToken: fill.feeToken,
         hash: fill.hash,
       }
     })

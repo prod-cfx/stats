@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
     "incremental": true,
+    "forceConsistentCasingInFileNames": true,
     "target": "ES2017",
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "lib": [
       "dom",
       "dom.iterable",
@@ -28,6 +29,9 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "skipLibCheck": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "plugins": [
       {
         "name": "next"

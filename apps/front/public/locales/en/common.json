@@ -583,6 +583,11 @@
       "tradesCount": "{{count}} trades"
     },
     "profile": {
+      "empty": {
+        "completedTrades": "No completed trades",
+        "filteredResults": "No results for the current filters"
+      },
+      "loadMore": "Load more",
       "invalidAddressTitle": "Invalid wallet address",
       "invalidAddressDescription": "Please provide a valid EVM-compatible wallet address to view the profile.",
       "header": {
