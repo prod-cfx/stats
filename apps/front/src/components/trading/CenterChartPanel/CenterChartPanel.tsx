@@ -31,7 +31,7 @@ export const CenterChartPanel = ({
   variant = 'default',
 }: CenterChartPanelProps) => {
   const { t } = useTranslation()
-  const [interval, setChartInterval] = useState('15m')
+  const [interval] = useState('15m')
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false)
   const [indicatorSearch, setIndicatorSearch] = useState('')
 

@@ -1,5 +1,5 @@
 import type { DataPullJob } from './contracts/data-pull-job'
-import { Module } from '@nestjs/common'
+import { forwardRef, Module } from '@nestjs/common'
 import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
@@ -60,13 +60,13 @@ import { BybitCexSpotOrderbookWsAdapter } from './services/adapters/bybit-cex-sp
 import { HyperliquidDexPerpetualOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-orderbook-ws.adapter'
 import { HyperliquidDexPerpetualTradesWsAdapter } from './services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { HyperliquidDexSpotOrderbookWsAdapter } from './services/adapters/hyperliquid-dex-spot-orderbook-ws.adapter'
+import { HyperliquidTradesWsConfig } from './services/adapters/hyperliquid/hyperliquid-trades-ws.config'
 import { OkxCexFutureOrderbookWsAdapter } from './services/adapters/okx-cex-future-orderbook-ws.adapter'
 import { OkxCexFutureTradesWsAdapter } from './services/adapters/okx-cex-future-trades-ws.adapter'
 import { OkxCexPerpetualOrderbookWsAdapter } from './services/adapters/okx-cex-perpetual-orderbook-ws.adapter'
 import { OkxCexPerpetualTradesWsAdapter } from './services/adapters/okx-cex-perpetual-trades-ws.adapter'
 import { OkxCexSpotOrderbookWsAdapter } from './services/adapters/okx-cex-spot-orderbook-ws.adapter'
 import { OkxCexSpotTradesWsAdapter } from './services/adapters/okx-cex-spot-trades-ws.adapter'
-import { HyperliquidTradesWsConfig } from './services/adapters/hyperliquid/hyperliquid-trades-ws.config'
 import { AdminDataPullTaskService } from './services/admin-data-pull-task.service'
 import { OrderbookWsSyncManager } from './services/orderbook-ws-sync-manager.service'
 import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
@@ -88,7 +88,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     SettingsModule,
     CryptoStockQuotesModule,
     TradesConfigModule,
-    WhaleAlertModule,
+    forwardRef(() => WhaleAlertModule),
     WhaleTrackingModule,
     MarketsModule,
   ],

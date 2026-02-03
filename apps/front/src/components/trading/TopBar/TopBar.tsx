@@ -11,6 +11,7 @@ import { fetchKlineData, fetchTicker } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
+import { calculateTopBarDisplayValues } from './price-change'
 
 interface TopBarProps {
   isAggregated: boolean
@@ -33,67 +34,7 @@ interface MarketItem {
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
-/**
- * 从 ticker 数据计算涨跌幅
- */
-export function calculateFromTicker(tickerData: TickerData, lastPrice: number) {
-  const changePct = Number.parseFloat(tickerData.priceChangePercent24h || '0')
-  return {
-    changePct,
-    changeAbs: lastPrice * (changePct / 100),
-  }
-}
-
-/**
- * 计算价格涨跌幅和涨跌额
- * 优先级：实时 K线 + ticker 24h 前价格 > ticker 数据 > mock 数据
- */
-export function calculatePriceChange(
-  tickerData: TickerData | null,
-  klineClosePrice: number | null,
-  lastPrice: number,
-  fallbackPct: number,
-): { changePct: number; changeAbs: number } {
-  // 优先：实时 K线 + ticker 24h 前价格
-  if (tickerData?.priceChangePercent24h && klineClosePrice !== null) {
-    const tickerChangePct = Number.parseFloat(tickerData.priceChangePercent24h)
-    const currentPrice = Number.parseFloat(tickerData.currentPrice)
-
-    // 数值校验
-    if (!Number.isFinite(tickerChangePct) || !Number.isFinite(currentPrice)) {
-      return calculateFromTicker(tickerData, lastPrice)
-    }
-
-    // 计算 24h 前价格
-    const pctFactor = 1 + tickerChangePct / 100
-    if (pctFactor === 0) {
-      return calculateFromTicker(tickerData, lastPrice)
-    }
-
-    const price24hAgo = currentPrice / pctFactor
-    if (!Number.isFinite(price24hAgo) || price24hAgo === 0) {
-      return calculateFromTicker(tickerData, lastPrice)
-    }
-
-    // 基于实时价格重算涨跌幅
-    const changeAbs = klineClosePrice - price24hAgo
-    return {
-      changePct: (changeAbs / price24hAgo) * 100,
-      changeAbs,
-    }
-  }
-
-  // 降级：仅使用 ticker 数据
-  if (tickerData?.priceChangePercent24h) {
-    return calculateFromTicker(tickerData, lastPrice)
-  }
-
-  // 最终降级：使用 mock 数据
-  return {
-    changePct: fallbackPct,
-    changeAbs: lastPrice * (fallbackPct / 100),
-  }
-}
+// NOTE: 价格/涨跌幅的纯计算逻辑在 ./price-change.ts，避免测试引入 UI 依赖。
 
 export const TopBar = ({
   isAggregated,
@@ -367,6 +308,9 @@ export const TopBar = ({
 
   // Use API data if available, otherwise fallback to mock
   const basePrice = basePriceByAsset[selectedBase] ?? 100
+
+  // 顶部“主价格”展示变量 lastPrice：
+  // 优先级：实时 K 线收盘价 klineClosePrice > tickerData.currentPrice > mock（依赖 selectedBase + isAggregated/selectedExchange）。
   const lastPrice =
     klineClosePrice ??
     (tickerData
@@ -389,12 +333,17 @@ export const TopBar = ({
     LINK: 0.5,
     DOT: -0.9,
   }
-  const { changePct, changeAbs } = calculatePriceChange(
+
+  const fallbackPct = changePctByAsset[selectedBase] ?? 0.5
+
+  // 顶部主价格/24h 涨跌幅统一口径（严格以 ticker 为准）；ticker 缺失时回退到 mock。
+  const { displayLastPrice, displayChangePct, displayChangeAbs } = calculateTopBarDisplayValues({
     tickerData,
-    klineClosePrice,
-    lastPrice,
-    changePctByAsset[selectedBase] ?? 0.5,
-  )
+    isAggregated,
+    isBinance: selectedExchange === 'binance',
+    basePrice,
+    fallbackPct,
+  })
 
   // Index price and mark price
   const indexPrice =
@@ -624,19 +573,22 @@ export const TopBar = ({
           )}
         </div>
 
+        {/* 顶部主价格 + 24h 涨跌幅展示：
+            - 价格：displayLastPrice（ticker last 优先；ticker 缺失时回退到 mock；不再使用 klineClosePrice 覆盖展示）
+            - 涨跌幅：displayChangePct（ticker 24h 涨跌幅优先；ticker 缺失时回退到 mock 百分比） */}
         <div className="flex flex-col">
           <span
             className={`${isCompact ? 'text-base' : 'text-lg'} leading-tight font-semibold text-[#ef4444]`}
           >
-            {priceFormatter.format(lastPrice)}
+            {priceFormatter.format(displayLastPrice)}
           </span>
           <div className="flex items-center gap-2 text-[10px] leading-tight text-[#ef4444]">
             <span>
-              {changeAbs >= 0
-                ? `+${priceFormatter.format(changeAbs)}`
-                : priceFormatter.format(changeAbs)}
+              {displayChangeAbs >= 0
+                ? `+${priceFormatter.format(displayChangeAbs)}`
+                : priceFormatter.format(displayChangeAbs)}
             </span>
-            <span>{formatPct(changePct)}</span>
+            <span>{formatPct(displayChangePct)}</span>
           </div>
         </div>
 

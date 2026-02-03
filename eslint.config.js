@@ -50,6 +50,9 @@ export default antfu(
       'no-useless-catch': 'error',
       'node/prefer-global/process': 'off',
       'node/prefer-global/buffer': 'off',
+      'perfectionist/sort-named-imports': 'off',
+      'unused-imports/no-unused-imports': 'off',
+      'ts/no-unused-vars': 'off',
       'unicorn/number-literal-case': ['error', { hexadecimalValue: 'lowercase' }],
     },
   },
@@ -59,6 +62,30 @@ export default antfu(
       'react/no-forward-ref': 'off',
       'react/no-use-context': 'off',
       'react/no-context-provider': 'off',
+      'react-hooks-extra/no-direct-set-state-in-use-effect': 'off',
+      'react-web-api/no-leaked-event-listener': 'off',
+      'react-web-api/no-leaked-timeout': 'off',
+      'react-refresh/only-export-components': 'off',
+      'react-dom/no-missing-button-type': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+    },
+  },
+  {
+    files: ['apps/front/src/lib/**/*.ts'],
+    rules: {
+      'perfectionist/sort-named-imports': 'off',
+      'unused-imports/no-unused-imports': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'ts/no-unused-vars': 'off',
+    },
+  },
+  {
+    files: ['apps/front/src/lib/api.ts', 'apps/front/src/lib/server-api.ts'],
+    rules: {
+      'perfectionist/sort-named-imports': 'off',
+      'unused-imports/no-unused-imports': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'ts/no-unused-vars': 'off',
     },
   },
   {
@@ -86,4 +113,3 @@ export default antfu(
     },
   },
 )
-
