@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import { ChevronDown, Menu, Search, X } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { ChevronDown, Menu, Search, X } from 'lucide-react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
-import { LanguageSwitcher } from './LanguageSwitcher';
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { ThemeToggle } from './ThemeToggle'
 
 type SearchEntryType = 'coin' | 'indicator' | 'feature' | 'page' | 'address'
@@ -25,10 +25,10 @@ interface SearchEntry {
 }
 
 export const Navbar = () => {
-  const pathname = usePathname();
+  const pathname = usePathname()
   const router = useRouter()
-  const { t } = useTranslation();
-  const { info: _info } = useToast();
+  const { t } = useTranslation()
+  const { info: _info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -45,12 +45,12 @@ export const Navbar = () => {
 
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {
-    const pathLng = pathname?.split('/')[1];
-    return (pathLng === 'zh' || pathLng === 'en') ? pathLng : 'zh';
-  }, [pathname]);
-  
+    const pathLng = pathname?.split('/')[1]
+    return pathLng === 'zh' || pathLng === 'en' ? pathLng : 'zh'
+  }, [pathname])
+
   // 辅助函数：为路径添加语言前缀
-  const withLng = (path: string) => `/${currentLng}${path}`;
+  const withLng = (path: string) => `/${currentLng}${path}`
 
   const { items: catalogItems } = useMarketDataCatalog()
 
@@ -72,10 +72,10 @@ export const Navbar = () => {
   ]
 
   const dataChildren = catalogItems
-    .filter((x) => x.kind === 'nav' && x.href)
+    .filter(x => x.kind === 'nav' && x.href)
     .slice()
     .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
-    .map((x) => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
+    .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
 
   const whaleChildren = [
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
@@ -85,45 +85,59 @@ export const Navbar = () => {
 
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
-    { 
-      name: t('nav.data'), 
+    {
+      name: t('nav.data'),
       href: '#',
-      children: dataChildren
+      children: dataChildren,
     },
     {
       name: t('nav.whales'),
       href: '#',
-      children: whaleChildren
+      children: whaleChildren,
     },
     { name: t('nav.dashboard'), href: withLng('/dashboard') },
-  ];
+  ]
 
   // Close mobile menu when route changes
   useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
+    setMobileMenuOpen(false)
+  }, [pathname])
 
   // 获取热门搜索建议（示例）
   // 实际场景：可以基于 extraBases 或 mock market list 动态生成
   const searchResults: SearchEntry[] = useMemo(() => {
     if (!searchQuery) return []
-    
+
     const q = searchQuery.toLowerCase()
     const results: SearchEntry[] = []
 
     // 1. Pages
     if ('dashboard'.includes(q) || '看板'.includes(q)) {
-      results.push({ id: 'p-dash', type: 'page', label: t('nav.dashboard'), href: withLng('/dashboard') })
+      results.push({
+        id: 'p-dash',
+        type: 'page',
+        label: t('nav.dashboard'),
+        href: withLng('/dashboard'),
+      })
     }
     if ('liquidation'.includes(q) || 'map'.includes(q) || '清算'.includes(q)) {
-      results.push({ id: 'p-liq', type: 'page', label: t('nav.liquidation_map'), href: withLng('/liquidation-map') })
+      results.push({
+        id: 'p-liq',
+        type: 'page',
+        label: t('nav.liquidation_map'),
+        href: withLng('/liquidation-map'),
+      })
     }
 
     // 2. Coins (Mock data + extraBases)
-    const mockList = getMockMarketList() // { base, quote, ... }
+    const mockList = getMockMarketList({
+      marketType: 'futures',
+      isAggregated: true,
+      selectedExchange: 'binance',
+    }) // { base, quote, ... }
     // 简单去重
     const seen = new Set<string>()
-    
+
     // extraBases first
     extraBases.forEach(base => {
       if (base.toLowerCase().includes(q) && !seen.has(base)) {
@@ -140,7 +154,10 @@ export const Navbar = () => {
 
     // mock list
     mockList.forEach(m => {
-      if ((m.base.toLowerCase().includes(q) || m.symbol.toLowerCase().includes(q)) && !seen.has(m.base)) {
+      if (
+        (m.base.toLowerCase().includes(q) || m.displaySymbol.toLowerCase().includes(q)) &&
+        !seen.has(m.base)
+      ) {
         seen.add(m.base)
         results.push({
           id: `c-${m.base}`,
@@ -156,7 +173,7 @@ export const Navbar = () => {
   }, [searchQuery, extraBases, t, withLng])
 
   const _handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (searchResults.length > 0) {
       router.push(searchResults[activeIndex].href)
       setSearchOpen(false)
@@ -164,7 +181,7 @@ export const Navbar = () => {
       // 默认搜索跳转
       // router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
-  };
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -182,27 +199,31 @@ export const Navbar = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
-        setSearchOpen(false);
+        setSearchOpen(false)
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
+    }
+    document.addEventListener('mousedown', handleClickOutside)
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   // 快捷键 / (Focus search)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && !searchOpen && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
-        e.preventDefault();
-        setSearchOpen(true);
-        setTimeout(() => searchInputRef.current?.focus(), 0);
+      if (
+        e.key === '/' &&
+        !searchOpen &&
+        !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)
+      ) {
+        e.preventDefault()
+        setSearchOpen(true)
+        setTimeout(() => searchInputRef.current?.focus(), 0)
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchOpen]);
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [searchOpen])
 
   // 高亮匹配文字
   const highlight = (label: string) => {
@@ -216,7 +237,7 @@ export const Navbar = () => {
     return (
       <>
         {before}
-        <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary font-semibold">
+        <span className="from-primary to-secondary bg-gradient-to-r bg-clip-text font-semibold text-transparent">
           {mid}
         </span>
         {after}
@@ -225,67 +246,71 @@ export const Navbar = () => {
   }
 
   const toggleMobileSubmenu = (name: string) => {
-    setExpandedMobileMenus(prev => 
-      prev.includes(name) 
-        ? prev.filter(item => item !== name)
-        : [...prev, name]
+    setExpandedMobileMenus(prev =>
+      prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name],
     )
   }
 
   return (
-    <nav className="h-16 md:h-20 bg-[color:var(--cf-bg)] border-b border-[color:var(--cf-border)] px-4 md:px-8 flex items-center justify-between sticky top-0 z-50">
+    <nav className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 md:h-20 md:px-8">
       <div className="flex items-center gap-4 md:gap-12">
         <div className="flex items-center gap-3">
           {/* Mobile Menu Button */}
-          <button 
-            className="md:hidden text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
+          <button
+            className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
             onClick={() => setMobileMenuOpen(true)}
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="h-6 w-6" />
           </button>
-          
+
           <Link href={withLng('/')} className="flex flex-col no-underline">
             <div className="flex items-center">
-              <CoinfluxMark className="w-7 h-7 md:w-10 md:h-10" />
-              <span className="text-[color:var(--cf-text-strong)] font-bold text-xl md:text-2xl leading-none tracking-tight -ml-1.5">oinflux</span>
+              <CoinfluxMark className="h-7 w-7 md:h-10 md:w-10" />
+              <span className="-ml-1.5 text-xl leading-none font-bold tracking-tight text-[color:var(--cf-text-strong)] md:text-2xl">
+                oinflux
+              </span>
             </div>
-            <span className="hidden md:block text-[color:var(--cf-muted)] text-[10px] md:text-xs tracking-wider pl-0.5">Crypto Data Aggregation</span>
+            <span className="hidden pl-0.5 text-[10px] tracking-wider text-[color:var(--cf-muted)] md:block md:text-xs">
+              Crypto Data Aggregation
+            </span>
           </Link>
         </div>
-        
-        <div className="hidden md:flex items-center gap-8 h-full">
-            {navLinks.map((link) => {
-            const isActive = pathname === link.href || (link.children && link.children.some(child => pathname === child.href));
-            
+
+        <div className="hidden h-full items-center gap-8 md:flex">
+          {navLinks.map(link => {
+            const isActive =
+              pathname === link.href ||
+              (link.children && link.children.some(child => pathname === child.href))
+
             if (link.children) {
               return (
-                <div key={link.name} className="relative group h-full flex items-center">
-                  <Link 
+                <div key={link.name} className="group relative flex h-full items-center">
+                  <Link
                     href={link.href}
-                    className={`font-medium transition-colors flex items-center gap-1 h-full transition-all cursor-pointer no-underline relative ${
-                      isActive 
-                        ? 'text-[color:var(--cf-text-strong)]' 
+                    className={`relative flex h-full cursor-pointer items-center gap-1 font-medium no-underline transition-all transition-colors ${
+                      isActive
+                        ? 'text-[color:var(--cf-text-strong)]'
                         : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
                     } text-body`}
                   >
                     {link.name}
-                    <ChevronDown className="w-4 h-4 transition-transform group-hover:rotate-180" />
+                    <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
                     {isActive && (
-                      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary to-secondary" />
+                      <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
                     )}
                   </Link>
-                  
+
                   {/* Dropdown Menu */}
-                  <div className="absolute top-[95%] left-0 w-48 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 overflow-hidden z-50">
+                  <div className="invisible absolute top-[95%] left-0 z-50 w-48 translate-y-2 transform overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] opacity-0 shadow-xl transition-all duration-200 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
                     <div className="py-1">
-                      {link.children.map((child) => (
-                        <Link 
-                          key={child.name} 
+                      {link.children.map(child => (
+                        <Link
+                          key={child.name}
                           href={child.href}
-                          className={`block px-4 py-2.5 text-caption transition-colors ${
-                            pathname === child.href 
-                              ? 'bg-gradient-to-r from-primary to-secondary text-white' 
-                              : 'text-[color:var(--cf-text)] hover:bg-primary/10 hover:text-primary'
+                          className={`text-caption block px-4 py-2.5 transition-colors ${
+                            pathname === child.href
+                              ? 'from-primary to-secondary bg-gradient-to-r text-white'
+                              : 'hover:bg-primary/10 hover:text-primary text-[color:var(--cf-text)]'
                           }`}
                         >
                           {child.name}
@@ -294,14 +319,14 @@ export const Navbar = () => {
                     </div>
                   </div>
                 </div>
-              );
+              )
             }
 
             return (
               <Link
                 key={link.name}
                 href={link.href}
-                className={`font-medium transition-colors h-full flex items-center relative ${
+                className={`relative flex h-full items-center font-medium transition-colors ${
                   isActive
                     ? 'text-[color:var(--cf-text-strong)]'
                     : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
@@ -309,10 +334,10 @@ export const Navbar = () => {
               >
                 {link.name}
                 {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary to-secondary" />
+                  <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-[2px] bg-gradient-to-r" />
                 )}
               </Link>
-            );
+            )
           })}
         </div>
       </div>
@@ -321,46 +346,48 @@ export const Navbar = () => {
         {/* Global Search - Phase 1 Hidden */}
         {ENABLE_GLOBAL_SEARCH && (
           <div className="relative" ref={searchWrapRef}>
-            <div 
+            <div
               className={`flex items-center transition-all duration-300 ${
-                searchOpen ? 'w-full md:w-80 bg-[color:var(--cf-surface-2)]' : 'w-8 md:w-10 bg-transparent'
-              } h-8 md:h-10 rounded-full overflow-hidden`}
+                searchOpen
+                  ? 'w-full bg-[color:var(--cf-surface-2)] md:w-80'
+                  : 'w-8 bg-transparent md:w-10'
+              } h-8 overflow-hidden rounded-full md:h-10`}
             >
-              <button 
+              <button
                 onClick={() => {
                   setSearchOpen(!searchOpen)
                   if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
                 }}
-                className="w-8 h-8 md:w-10 md:h-10 flex items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] flex-shrink-0"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
               >
-                <Search className="w-4 h-4 md:w-5 md:h-5" />
+                <Search className="h-4 w-4 md:h-5 md:w-5" />
               </button>
-              
+
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t('nav.search') || 'Search...'}
-                className={`w-full h-full bg-transparent border-none outline-none text-sm text-[color:var(--cf-text)] px-2 ${
-                  searchOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                className={`h-full w-full border-none bg-transparent px-2 text-sm text-[color:var(--cf-text)] outline-none ${
+                  searchOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
                 }`}
               />
-              
+
               {searchOpen && searchQuery && (
-                <button 
+                <button
                   onClick={() => setSearchQuery('')}
                   className="mr-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="h-3 w-3" />
                 </button>
               )}
             </div>
 
             {/* Search Results Dropdown */}
             {searchOpen && searchQuery && (
-              <div className="absolute top-full right-0 mt-2 w-[calc(100vw-32px)] md:w-96 bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+              <div className="animate-in fade-in zoom-in-95 absolute top-full right-0 z-50 mt-2 w-[calc(100vw-32px)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl duration-200 md:w-96">
                 {searchResults.length > 0 ? (
                   <div className="py-2">
                     {searchResults.map((result, idx) => (
@@ -368,50 +395,62 @@ export const Navbar = () => {
                         key={result.id}
                         href={result.href}
                         onClick={() => setSearchOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 hover:bg-[color:var(--cf-surface-hover)] transition-colors ${
+                        className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[color:var(--cf-surface-hover)] ${
                           idx === activeIndex ? 'bg-[color:var(--cf-surface-hover)]' : ''
                         }`}
                       >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                          result.type === 'coin' ? 'bg-primary/10 text-primary' : 
-                          result.type === 'page' ? 'bg-purple-500/10 text-purple-500' :
-                          'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)]'
-                        }`}>
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
+                            result.type === 'coin'
+                              ? 'bg-primary/10 text-primary'
+                              : result.type === 'page'
+                                ? 'bg-purple-500/10 text-purple-500'
+                                : 'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)]'
+                          }`}
+                        >
                           {result.type === 'coin' ? 'C' : result.type === 'page' ? 'P' : '#'}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-[color:var(--cf-text-strong)] truncate">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-[color:var(--cf-text-strong)]">
                             {highlight(result.label)}
                           </div>
                           {result.subtitle && (
-                            <div className="text-xs text-[color:var(--cf-muted)] truncate">{result.subtitle}</div>
+                            <div className="truncate text-xs text-[color:var(--cf-muted)]">
+                              {result.subtitle}
+                            </div>
                           )}
                         </div>
                       </Link>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-[color:var(--cf-muted)] text-sm">
+                  <div className="p-8 text-center text-sm text-[color:var(--cf-muted)]">
                     {t('modal.noResults') || 'No results found'}
                   </div>
                 )}
-                <div className="px-4 py-2 bg-[color:var(--cf-surface-2)] border-t border-[color:var(--cf-border)] flex justify-between text-[10px] text-[color:var(--cf-muted)]">
-                  <span>Select <kbd className="font-sans bg-[color:var(--cf-surface)] px-1 rounded">↑↓</kbd></span>
-                  <span>Open <kbd className="font-sans bg-[color:var(--cf-surface)] px-1 rounded">Enter</kbd></span>
+                <div className="flex justify-between border-t border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-4 py-2 text-[10px] text-[color:var(--cf-muted)]">
+                  <span>
+                    Select{' '}
+                    <kbd className="rounded bg-[color:var(--cf-surface)] px-1 font-sans">↑↓</kbd>
+                  </span>
+                  <span>
+                    Open{' '}
+                    <kbd className="rounded bg-[color:var(--cf-surface)] px-1 font-sans">Enter</kbd>
+                  </span>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        <div className="hidden md:block w-[1px] h-6 bg-[color:var(--cf-border)] mx-1" />
-        
+        <div className="mx-1 hidden h-6 w-[1px] bg-[color:var(--cf-border)] md:block" />
+
         <LanguageSwitcher />
         <ThemeToggle />
-        
+
         {/* User System - Phase 1 Hidden */}
         {ENABLE_USER_SYSTEM && (
-          <button className="hidden md:flex px-4 py-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95">
+          <button className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex">
             {t('nav.login')}
           </button>
         )}
@@ -419,46 +458,48 @@ export const Navbar = () => {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] bg-[color:var(--cf-bg)] md:hidden flex flex-col animate-in slide-in-from-top-10 duration-200">
-          <div className="h-16 px-4 flex items-center justify-between border-b border-[color:var(--cf-border)]">
+        <div className="animate-in slide-in-from-top-10 fixed inset-0 z-[60] flex flex-col bg-[color:var(--cf-bg)] duration-200 md:hidden">
+          <div className="flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] px-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20 flex items-center justify-center">
-                <CoinfluxMark className="w-5 h-5 text-white" />
+              <div className="from-primary to-secondary shadow-primary/20 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-lg">
+                <CoinfluxMark className="h-5 w-5 text-white" />
               </div>
-              <span className="text-[color:var(--cf-text-strong)] font-bold text-lg">Coinflux</span>
+              <span className="text-lg font-bold text-[color:var(--cf-text-strong)]">Coinflux</span>
             </div>
-            <button 
+            <button
               onClick={() => setMobileMenuOpen(false)}
               className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
             >
-              <X className="w-6 h-6" />
+              <X className="h-6 w-6" />
             </button>
           </div>
-          
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-            {navLinks.map((link) => {
-              const hasChildren = link.children && link.children.length > 0;
-              const isExpanded = expandedMobileMenus.includes(link.name);
-              
+
+          <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+            {navLinks.map(link => {
+              const hasChildren = link.children && link.children.length > 0
+              const isExpanded = expandedMobileMenus.includes(link.name)
+
               if (hasChildren) {
                 return (
                   <div key={link.name} className="flex flex-col">
-                    <button 
+                    <button
                       onClick={() => toggleMobileSubmenu(link.name)}
-                      className="flex items-center justify-between py-3 px-2 text-lg font-medium text-[color:var(--cf-text-strong)]"
+                      className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
                     >
                       {link.name}
-                      <ChevronDown className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      <ChevronDown
+                        className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      />
                     </button>
-                    
+
                     {isExpanded && (
-                      <div className="flex flex-col bg-[color:var(--cf-surface)] rounded-lg overflow-hidden border border-[color:var(--cf-border)] mb-2">
-                        {link.children!.map((child) => (
+                      <div className="mb-2 flex flex-col overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
+                        {link.children!.map(child => (
                           <Link
                             key={child.name}
                             href={child.href}
                             onClick={() => setMobileMenuOpen(false)}
-                            className="py-3 px-4 text-base text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)] border-b border-[color:var(--cf-border)] last:border-0"
+                            className="border-b border-[color:var(--cf-border)] px-4 py-3 text-base text-[color:var(--cf-text)] last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
                           >
                             {child.name}
                           </Link>
@@ -466,7 +507,7 @@ export const Navbar = () => {
                       </div>
                     )}
                   </div>
-                );
+                )
               }
 
               return (
@@ -474,16 +515,16 @@ export const Navbar = () => {
                   key={link.name}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="py-3 px-2 text-lg font-medium text-[color:var(--cf-text-strong)] border-b border-[color:var(--cf-border)] last:border-0"
+                  className="border-b border-[color:var(--cf-border)] px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)] last:border-0"
                 >
                   {link.name}
                 </Link>
-              );
+              )
             })}
-            
+
             {ENABLE_USER_SYSTEM && (
               <div className="mt-6">
-                <button className="w-full py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl font-bold text-lg shadow-lg shadow-primary/20">
+                <button className="from-primary to-secondary shadow-primary/20 w-full rounded-xl bg-gradient-to-r py-3 text-lg font-bold text-white shadow-lg">
                   {t('nav.login')}
                 </button>
               </div>
@@ -492,5 +533,5 @@ export const Navbar = () => {
         </div>
       )}
     </nav>
-  );
-};
+  )
+}

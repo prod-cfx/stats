@@ -13,9 +13,9 @@ import { DASHBOARD_UPDATED_EVENT, getDashboard } from '@/features/dashboards/sto
 export function DashboardViewClient() {
   const { t } = useTranslation()
   const params = useParams()
-  const lng = params.lng as string || 'zh'
+  const lng = (params?.lng as string) || 'zh'
   const searchParams = useSearchParams()
-  const dashboardId = searchParams.get('id') || ''
+  const dashboardId = searchParams?.get('id') || ''
   const [dashboard, setDashboard] = useState<DashboardDoc | null>(null)
 
   useEffect(() => {
@@ -34,9 +34,9 @@ export function DashboardViewClient() {
 
   if (!dashboardId) {
     return (
-      <main className="flex-1 flex min-h-0">
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-8">
-          <div className="max-w-[1440px] mx-auto w-full">
+      <main className="flex min-h-0 flex-1">
+        <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+          <div className="mx-auto w-full max-w-[1440px]">
             <div className="text-[#8b949e]">{t('dashboard.view.missingId')}</div>
           </div>
         </div>
@@ -46,18 +46,18 @@ export function DashboardViewClient() {
 
   if (!dashboard) {
     return (
-      <main className="flex-1 flex min-h-0">
+      <main className="flex min-h-0 flex-1">
         <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-8">
-          <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6">
+        <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+          <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
             <Link
               href={`/${lng}/dashboard/`}
-              className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors text-sm w-fit"
+              className="flex w-fit items-center gap-2 text-sm text-[#8b949e] transition-colors hover:text-white"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
               <span>{t('dashboard.view.backToList')}</span>
             </Link>
-            <div className="text-center text-[#8b949e] py-20">{t('dashboard.view.notFound')}</div>
+            <div className="py-20 text-center text-[#8b949e]">{t('dashboard.view.notFound')}</div>
           </div>
         </div>
       </main>
@@ -65,27 +65,29 @@ export function DashboardViewClient() {
   }
 
   return (
-    <main className="flex-1 flex min-h-0">
+    <main className="flex min-h-0 flex-1">
       <DashboardEditorSidebar dashboardId={dashboardId} mode="view" />
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar p-8">
-        <div className="max-w-[1440px] mx-auto w-full flex flex-col gap-6">
+      <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
           <Link
             href={`/${lng}/dashboard/`}
-            className="flex items-center gap-2 text-[#8b949e] hover:text-white transition-colors text-sm w-fit"
+            className="flex w-fit items-center gap-2 text-sm text-[#8b949e] transition-colors hover:text-white"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-4 w-4" />
             <span>{t('dashboard.view.backToList')}</span>
           </Link>
 
           <div className="flex items-center gap-4">
             {dashboard.thumbnail ? (
-              <div className="w-14 h-14 rounded-lg overflow-hidden border border-primary/30 flex-shrink-0">
-                <img src={dashboard.thumbnail} alt="" className="w-full h-full object-cover" />
+              <div className="border-primary/30 h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border">
+                <img src={dashboard.thumbnail} alt="" className="h-full w-full object-cover" />
               </div>
             ) : null}
             <div>
-              <h1 className="text-3xl font-bold text-white">{dashboard.name || t('dashboard.sidebar.untitled')}</h1>
+              <h1 className="text-3xl font-bold text-white">
+                {dashboard.name || t('dashboard.sidebar.untitled')}
+              </h1>
               {dashboard.description ? (
                 <div className="mt-1 text-sm text-[#8b949e]">{dashboard.description}</div>
               ) : null}
@@ -98,4 +100,3 @@ export function DashboardViewClient() {
     </main>
   )
 }
-

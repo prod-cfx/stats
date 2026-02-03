@@ -38,17 +38,20 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "build/types/**/*.ts",
     "next-env.d.ts",
-    "out/types/**/*.ts",
     "src/types/globals.d.ts",
-    "../../dist/front/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "../../dist/front/dev/types/**/*.ts",
     "../../dist/front/.next/types/**/*.ts",
     "../../dist/front/.next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "dist",
+    "build",
+    "out",
+    "../../dist"
   ]
 }

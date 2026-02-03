@@ -1,29 +1,29 @@
-'use client';
+'use client'
 
-import type { DataSource, MarketType } from '@/types/trading';
-import React, { useState } from 'react';
-import { Footer } from '@/components/layout/Footer';
-import { Navbar } from '@/components/layout/Navbar';
+import type { DataSource, MarketType } from '@/types/trading'
+import React, { useState } from 'react'
+import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
 // import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
+import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
 // import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
-import { TopBar } from '@/components/trading/TopBar/TopBar';
+import { RightPanel } from '@/components/trading/RightPanel/RightPanel'
+import { TopBar } from '@/components/trading/TopBar/TopBar'
 
 export default function MarketPage() {
-  const [isAggregated, setIsAggregated] = useState(true);
-  const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance');
-  const [marketType, setMarketType] = useState<MarketType>('futures');
-  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
+  const [isAggregated, setIsAggregated] = useState(true)
+  const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance')
+  const [marketType, setMarketType] = useState<MarketType>('futures')
+  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
 
   return (
-    <div className="flex flex-col min-h-screen w-full bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
+    <div className="flex min-h-screen w-full flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       {/* Global Navbar */}
       <div className="flex-none">
         <Navbar />
       </div>
-      
-      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Top Bar fixed below Navbar */}
         <div className="flex-none">
           <TopBar
@@ -36,23 +36,23 @@ export default function MarketPage() {
           />
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Main Layout: Center(Chart) + Right */}
-          <div className="flex flex-col md:flex-row min-h-0 w-full">
+          <div className="flex min-h-0 w-full flex-col md:flex-row">
             {/* Center Content (Chart Only) */}
-            <div className="flex-none h-[50vh] md:h-[calc(100vh-120px)] md:flex-1 flex flex-col min-w-0 bg-[color:var(--cf-bg)] relative overflow-hidden border-b md:border-b-0 border-[color:var(--cf-border)]">
+            <div className="relative flex h-[50vh] min-w-0 flex-none flex-col overflow-hidden border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] md:h-[calc(100vh-120px)] md:flex-1 md:border-b-0">
               <CenterChartPanel
                 isAggregated={isAggregated}
                 setIsAggregated={setIsAggregated}
                 selectedExchange={selectedExchange}
                 setSelectedExchange={setSelectedExchange}
                 symbol={selectedSymbol}
+                marketType={marketType}
               />
             </div>
 
             {/* Right Panel - Independent Scroll */}
-            <div className="flex-none w-full md:w-[20%] md:max-w-[340px] md:min-w-[240px] border-l-0 md:border-l border-[color:var(--cf-border)] h-auto md:h-[calc(100vh-120px)] overflow-y-visible md:overflow-y-auto cf-scrollbar pr-1 pb-10 md:pb-0">
+            <div className="cf-scrollbar h-auto w-full flex-none overflow-y-visible border-l-0 border-[color:var(--cf-border)] pr-1 pb-10 md:h-[calc(100vh-120px)] md:w-[20%] md:max-w-[340px] md:min-w-[240px] md:overflow-y-auto md:border-l md:pb-0">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}
@@ -65,5 +65,5 @@ export default function MarketPage() {
       </div>
       <Footer />
     </div>
-  );
+  )
 }

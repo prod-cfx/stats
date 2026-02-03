@@ -1,15 +1,13 @@
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
 
-import type {TraderFullDataResponse} from './hyperliquid-api';
+import type {
+  TraderFullDataResponse,
+  UserPortfolioResponse,
+  UserFillsResponse,
+} from './hyperliquid-api'
 import { cachedRequest, CacheKeys, CacheTTL, clearCache, invalidateCache } from './api-cache'
-import {
-  API_BASE_URL,
-  client,
-  safeApiCall,
-  unwrapApiResponse,
-  validateId,
-} from './api-client'
+import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
 import { ApiError, AuthenticationError, logError } from './errors'
 import {
@@ -18,12 +16,15 @@ import {
   fetchTraderPositionsFromHyperliquid,
   fetchTraderSnapshotFromHyperliquid,
   fetchUserFillsFromHyperliquid,
-  fetchUserPortfolioFromHyperliquid
-  
+  fetchUserPortfolioFromHyperliquid,
 } from './hyperliquid-api'
 
 // Re-export types for external use
-export type { TraderFullDataResponse, UserFillsResponse, UserPortfolioResponse } from './hyperliquid-api'
+export type {
+  TraderFullDataResponse,
+  UserFillsResponse,
+  UserPortfolioResponse,
+} from './hyperliquid-api'
 
 type Infer<T extends ZodTypeAny> = T['_output']
 
@@ -33,7 +34,8 @@ type PasswordResetRequestPayload = Infer<typeof schemas.PasswordResetRequestDto>
 type VerifyResetPayload = Infer<typeof schemas.VerifyPasswordResetRequestDto>
 type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequestDto>
 
-const IS_NON_PROD = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
+const IS_NON_PROD =
+  process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
 
 function shouldFallbackToMock(error: unknown): boolean {
   if (!IS_NON_PROD) return false
@@ -62,8 +64,8 @@ function hashStringToSeed(input: string): number {
   return hash >>> 0
 }
 
-export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeAccountDto>
-export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeAccountResponseDto>
+export type CreateExchangeAccountPayload = Infer<typeof schemas.CreateExchangeConfigDto>
+export type ExchangeAccountResponse = Infer<typeof schemas.ExchangeConfigResponseDto>
 export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarketCardDto>
 export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 export type WhaleTradeDto = Infer<typeof schemas.WhaleTradeDto>
@@ -109,16 +111,16 @@ function isValidJWTFormat(token: string): boolean {
  */
 function requireAuthHeaders() {
   const token = getToken()
-  
+
   if (!token) {
     throw new AuthenticationError('UNAUTHENTICATED')
   }
-  
+
   if (!isValidJWTFormat(token)) {
     logError('INVALID_TOKEN_FORMAT', new Error('Token format validation failed'))
     throw new AuthenticationError('INVALID_TOKEN')
   }
-  
+
   return { Authorization: `Bearer ${token}` }
 }
 
@@ -129,46 +131,43 @@ function requireAuthHeaders() {
  */
 function optionalAuthHeaders(): Record<string, string> {
   const token = getToken()
-  
+
   if (!token) {
     return {}
   }
-  
+
   if (!isValidJWTFormat(token)) {
     logError('INVALID_TOKEN_FORMAT', new Error('Token format validation failed'))
     return {}
   }
-  
+
   return { Authorization: `Bearer ${token}` }
 }
 
 /**
  * Wrapper for API calls with error handling
  */
-async function apiCall<T>(
-  operation: () => Promise<T>,
-  context: string
-): Promise<T> {
+async function apiCall<T>(operation: () => Promise<T>, context: string): Promise<T> {
   try {
     return await operation()
   } catch (error) {
     logError(context, error)
-    
+
     // Re-throw authentication errors for proper handling
     if (error instanceof AuthenticationError) {
       throw error
     }
-    
+
     // 保留已构造好的 ApiError（包含后端 error.code 等信息）
     if (error instanceof ApiError) {
       throw error
     }
-    
+
     // 处理 Zodios/Axios 错误，从 error.response.data 中提取后端返回的错误码
     if (error && typeof error === 'object' && 'response' in error) {
       const axiosError = error as any
       const responseData = axiosError.response?.data
-      
+
       // 检查是否有标准的错误结构 { error: { code: string, message: string } }
       if (
         responseData &&
@@ -184,26 +183,19 @@ async function apiCall<T>(
           backendError.message || axiosError.message || '操作失败',
           backendError.code,
           axiosError.response?.status,
-          responseData
+          responseData,
         )
       }
     }
-    
+
     // Wrap other errors in ApiError
     if (error instanceof Error) {
-      throw new ApiError(
-        error.message || '操作失败',
-        'API_ERROR',
-        undefined,
-        error
-      )
+      throw new ApiError(error.message || '操作失败', 'API_ERROR', undefined, error)
     }
-    
+
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
+  }
 }
-}
-
-
 
 // ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
 
@@ -237,16 +229,20 @@ export async function fetchWhaleHoldings(
     const items = Array.from({ length: query.limit ?? 50 }).map((_, idx) => {
       const side = sides[Math.floor(rand() * sides.length)]
       const positionValueUsd = 800_000 + rand() * 12_000_000
-      const entryPrice = symbol === 'BTC'
-        ? 40_000 + rand() * 40_000
-        : symbol === 'ETH'
-          ? 1_500 + rand() * 2_500
-          : 50 + rand() * 200
+      const entryPrice =
+        symbol === 'BTC'
+          ? 40_000 + rand() * 40_000
+          : symbol === 'ETH'
+            ? 1_500 + rand() * 2_500
+            : 50 + rand() * 200
       const positionSize = positionValueUsd / entryPrice
-      const liquidationPrice = entryPrice * (side === 'LONG' ? (0.75 + rand() * 0.15) : (1.15 + rand() * 0.25))
+      const liquidationPrice =
+        entryPrice * (side === 'LONG' ? 0.75 + rand() * 0.15 : 1.15 + rand() * 0.25)
       const createdAt = new Date(Date.now() - Math.floor(rand() * 24 * 60) * 60_000).toISOString()
       return {
-        userAddress: `0x${Math.floor(rand() * 1e16).toString(16).padStart(16, '0')}${idx.toString(16).padStart(4, '0')}`,
+        userAddress: `0x${Math.floor(rand() * 1e16)
+          .toString(16)
+          .padStart(16, '0')}${idx.toString(16).padStart(4, '0')}`,
         symbol,
         side,
         positionValueUsd,
@@ -263,7 +259,7 @@ export async function fetchWhaleHoldings(
 // ===== 鲸鱼地址维度历史交易 / 绩效 API =====
 
 export type WhaleAddressPerformanceResponse = Infer<
-  (typeof schemas.WhaleAddressPerformanceResponseDto)
+  typeof schemas.WhaleAddressPerformanceResponseDto
 >
 
 export interface FetchWhaleAddressPerformanceQuery {
@@ -294,9 +290,7 @@ export async function fetchWhaleAddressPerformance(
         ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
             address,
           )}/performance?${search}`
-        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
-            address,
-          )}/performance`
+        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/performance`
 
     return safeApiCall(
       () =>
@@ -316,9 +310,7 @@ export async function fetchWhaleAddressPerformance(
         },
         validateResponse: data =>
           unwrapResponse<WhaleAddressPerformanceResponse>(
-            data as
-              | WhaleAddressPerformanceResponse
-              | BaseResponse<WhaleAddressPerformanceResponse>,
+            data as WhaleAddressPerformanceResponse | BaseResponse<WhaleAddressPerformanceResponse>,
           ),
       },
     )
@@ -343,12 +335,20 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
     const rand = mulberry32(hashStringToSeed('whale-discover'))
 
     const makeAddress = (idx: number) => {
-      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      const a = Math.floor(rand() * 1e16)
+        .toString(16)
+        .padStart(16, '0')
       return `0x${a}${idx.toString(16).padStart(4, '0')}`
     }
 
     const palette = ['#60a5fa', '#c084fc', '#34d399', '#fbbf24', '#fb7185']
-    const tagKeys = ['bullWarGod', 'swingKing', 'smartTrader', 'treasuryKeeper', 'twitterKol'] as const
+    const tagKeys = [
+      'bullWarGod',
+      'swingKing',
+      'smartTrader',
+      'treasuryKeeper',
+      'twitterKol',
+    ] as const
 
     const makeTrader = (variant: 'recommended' | 'detail', idx: number) => {
       const totalValueUsd = Math.floor(500_000 + rand() ** 0.35 * 50_000_000)
@@ -529,9 +529,8 @@ export async function fetchTraderPositions(
       const positionValue = marginUsed * leverageValue * (side === 'SHORT' ? -1 : 1)
       const sizeAbs = Math.abs(positionValue) / markPrice
       const size = Number((sizeAbs * (side === 'SHORT' ? -1 : 1)).toFixed(6))
-      const liquidationPrice = side === 'LONG'
-        ? entryPrice * (0.68 + rand() * 0.12)
-        : entryPrice * (1.12 + rand() * 0.22)
+      const liquidationPrice =
+        side === 'LONG' ? entryPrice * (0.68 + rand() * 0.12) : entryPrice * (1.12 + rand() * 0.22)
       const unrealizedPnl = (markPrice - entryPrice) * sizeAbs * (side === 'LONG' ? 1 : -1)
       const unrealizedPnlPercent = (unrealizedPnl / Math.max(1, marginUsed)) * 100
       const fundingRate = (rand() - 0.5) * 25
@@ -570,12 +569,11 @@ export async function fetchTraderPositions(
       }
     }
 
-    const perp = type === 'spot'
-      ? []
-      : (perpCoins.slice(0, 3).map((coin, idx) => makePerp(coin, idx)) as any[])
-    const spot = type === 'perp'
-      ? []
-      : (spotCoins.map(coin => makeSpot(coin)) as any[])
+    const perp =
+      type === 'spot'
+        ? []
+        : (perpCoins.slice(0, 3).map((coin, idx) => makePerp(coin, idx)) as any[])
+    const spot = type === 'perp' ? [] : (spotCoins.map(coin => makeSpot(coin)) as any[])
 
     return {
       perp,
@@ -607,7 +605,9 @@ export async function fetchTraderOpenOrders(
       }
 
       // 使用缓存包装器（30 秒缓存）
-      const cacheKey = coin ? `trader-open-orders:${address}:${coin}` : `trader-open-orders:${address}`
+      const cacheKey = coin
+        ? `trader-open-orders:${address}:${coin}`
+        : `trader-open-orders:${address}`
       return cachedRequest(
         cacheKey,
         () => fetchTraderOpenOrdersFromHyperliquid(address, { coin }),
@@ -618,7 +618,9 @@ export async function fetchTraderOpenOrders(
     if (!shouldFallbackToMock(error)) throw error
 
     const coinFilter = query.coin?.toUpperCase()
-    const rand = mulberry32(hashStringToSeed(`trader-open-orders:${address}:${coinFilter ?? 'all'}`))
+    const rand = mulberry32(
+      hashStringToSeed(`trader-open-orders:${address}:${coinFilter ?? 'all'}`),
+    )
     const basePrices: Record<string, number> = { BTC: 65_000, ETH: 3_200, SOL: 130, XRP: 0.62 }
     const coins = ['BTC', 'ETH', 'SOL', 'XRP']
     const now = Date.now()
@@ -631,7 +633,8 @@ export async function fetchTraderOpenOrders(
         const origSize = Number((0.05 + rand() * 2.5).toFixed(4))
         const size = Number((origSize * (0.4 + rand() * 0.6)).toFixed(4))
         const value = price * size
-        const triggerPrice = rand() > 0.75 ? Number((price * (0.98 + rand() * 0.04)).toFixed(2)) : null
+        const triggerPrice =
+          rand() > 0.75 ? Number((price * (0.98 + rand() * 0.04)).toFixed(2)) : null
         const timestamp = new Date(now - idx * 7 * 60_000).toISOString()
 
         return {
@@ -719,7 +722,10 @@ export async function fetchRealtimeWhaleAlerts(
               ...optionalAuthHeaders(),
             },
           },
-          validateResponse: data => unwrapApiResponse<RealtimeWhaleAlertItem[]>(data),
+          validateResponse: data =>
+            unwrapApiResponse<RealtimeWhaleAlertItem[]>(
+              data as unknown as RealtimeWhaleAlertItem[] | BaseResponse<RealtimeWhaleAlertItem[]>,
+            ),
         },
       )
     }, 'FETCH_REALTIME_WHALE_ALERTS')
@@ -728,12 +734,16 @@ export async function fetchRealtimeWhaleAlerts(
 
     const symbol = params.symbol || 'BTC'
     const limit = params.limit ?? 50
-    const rand = mulberry32(hashStringToSeed(`whale-realtime:${symbol}:${params.minPositionValueUsd ?? ''}`))
+    const rand = mulberry32(
+      hashStringToSeed(`whale-realtime:${symbol}:${params.minPositionValueUsd ?? ''}`),
+    )
     const sides = ['Long', 'Short'] as const
     const now = Date.now()
 
     const makeAddress = (idx: number) => {
-      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      const a = Math.floor(rand() * 1e16)
+        .toString(16)
+        .padStart(16, '0')
       return `0x${a}${idx.toString(16).padStart(4, '0')}`
     }
 
@@ -741,8 +751,10 @@ export async function fetchRealtimeWhaleAlerts(
       const side = sides[Math.floor(rand() * sides.length)]
       const basePrice = symbol === 'BTC' ? 65_000 : symbol === 'ETH' ? 3_200 : 120
       const entryPrice = basePrice * (0.92 + rand() * 0.16)
-      const positionValueUsd = Math.floor((params.minPositionValueUsd ?? 1_000_000) * (1 + rand() * 12))
-      const positionSize = positionValueUsd / entryPrice * (side === 'Short' ? -1 : 1)
+      const positionValueUsd = Math.floor(
+        (params.minPositionValueUsd ?? 1_000_000) * (1 + rand() * 12),
+      )
+      const positionSize = (positionValueUsd / entryPrice) * (side === 'Short' ? -1 : 1)
       const minutesAgo = Math.floor(rand() * 60)
       return {
         user_address: makeAddress(idx),
@@ -821,7 +833,10 @@ export async function fetchWhaleTradesRealtime(
               ...optionalAuthHeaders(),
             },
           },
-          validateResponse: data => unwrapApiResponse<WhaleTradeDto[]>(data),
+          validateResponse: data =>
+            unwrapApiResponse<WhaleTradeDto[]>(
+              data as unknown as WhaleTradeDto[] | BaseResponse<WhaleTradeDto[]>,
+            ),
         },
       )
     }, 'FETCH_WHALE_TRADES_REALTIME')
@@ -830,12 +845,16 @@ export async function fetchWhaleTradesRealtime(
 
     const symbol = params.symbol || 'BTC'
     const limit = params.limit ?? 50
-    const rand = mulberry32(hashStringToSeed(`whale-trades:${symbol}:${params.minTradeValueUsd ?? ''}`))
+    const rand = mulberry32(
+      hashStringToSeed(`whale-trades:${symbol}:${params.minTradeValueUsd ?? ''}`),
+    )
     const sides = ['Long', 'Short'] as const
     const now = Date.now()
 
     const makeAddress = (idx: number) => {
-      const a = Math.floor(rand() * 1e16).toString(16).padStart(16, '0')
+      const a = Math.floor(rand() * 1e16)
+        .toString(16)
+        .padStart(16, '0')
       return `0x${a}${idx.toString(16).padStart(4, '0')}`
     }
 
@@ -844,7 +863,7 @@ export async function fetchWhaleTradesRealtime(
       const basePrice = symbol === 'BTC' ? 65_000 : symbol === 'ETH' ? 3_200 : 120
       const price = basePrice * (0.92 + rand() * 0.16)
       const tradeValueUsd = Math.floor((params.minTradeValueUsd ?? 1_000_000) * (1 + rand() * 10))
-      const tradeSize = tradeValueUsd / price * (side === 'Short' ? -1 : 1)
+      const tradeSize = (tradeValueUsd / price) * (side === 'Short' ? -1 : 1)
       const minutesAgo = Math.floor(rand() * 60)
 
       return {
@@ -862,18 +881,9 @@ export async function fetchWhaleTradesRealtime(
 
 // ===== 多空比（markets/long-short-ratio/exchanges）相关 API =====
 
-export type ExchangeLongShortRatioApiItem = Infer<
-  typeof schemas.ExchangeLongShortRatioResponseDto
->
+export type ExchangeLongShortRatioApiItem = Infer<typeof schemas.ExchangeLongShortRatioResponseDto>
 
-export type ExchangeLongShortTimeRange =
-  | '5m'
-  | '15m'
-  | '30m'
-  | '1h'
-  | '4h'
-  | '12h'
-  | '24h'
+export type ExchangeLongShortTimeRange = '5m' | '15m' | '30m' | '1h' | '4h' | '12h' | '24h'
 
 export interface FetchExchangeLongShortRatioQuery {
   symbol: string
@@ -907,7 +917,22 @@ export async function fetchLongShortRatio(
   return apiCall(async () => {
     const response = await client.MarketsController_getLongShortRatio({
       headers: optionalAuthHeaders(),
-      queries: query,
+      queries: {
+        ...query,
+        interval: query.interval as
+          | '1h'
+          | '4h'
+          | '12h'
+          | '1m'
+          | '5m'
+          | '15m'
+          | '1d'
+          | '3m'
+          | '30m'
+          | '6h'
+          | '8h'
+          | '1w',
+      },
     })
     return unwrapResponse(response)
   }, 'FETCH_LONG_SHORT_RATIO')
@@ -957,7 +982,6 @@ export async function fetchExchangeLongShortRatio(
   }
 }
 
-
 export async function login(payload: LoginPayload) {
   return apiCall(async () => {
     const response = await client.AuthController_login(payload)
@@ -991,109 +1015,22 @@ export async function sendVerificationCode(payload: SendVerificationCodePayload)
 }
 
 // ===== 交易所账户管理相关 API =====
-export async function createExchangeAccount(
-  payload: CreateExchangeAccountPayload
-): Promise<ExchangeAccountResponse> {
-  const result = await safeApiCall(
-    () => client.UserExchangeAccountsController_create(payload, {
-      headers: requireAuthHeaders(),
-    }),
-    {
-      url: `${API_BASE_URL}/user/exchange-accounts`,
-      options: {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-        body: JSON.stringify(payload),
-      },
-      validateResponse: (data) => unwrapResponse(data),
-    }
-  )
-  
-  // 清除交易所账户列表缓存
-  clearCache(CacheKeys.exchangeAccounts())
-  
-  return result
-}
-
-export async function listExchangeAccounts(): Promise<ExchangeAccountResponse[]> {
-  try {
-    // 注意：交易所账户列表是严格的用户私有数据，不能跨用户/会话缓存
-    // 否则用户 A 登出后用户 B 登录会命中 A 的缓存，导致越权数据泄露
-    return await apiCall(async () => {
-      const response = await client.UserExchangeAccountsController_list({
-        headers: requireAuthHeaders(),
-      })
-      return unwrapResponse(response) as ExchangeAccountResponse[]
-    }, 'LIST_EXCHANGE_ACCOUNTS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return []
-  }
-}
-
-export async function deleteExchangeAccount(accountId: string): Promise<void> {
-  validateId(accountId, 'exchange account ID')
-  
-  await safeApiCall(
-    () => client.UserExchangeAccountsController_delete({
-      headers: requireAuthHeaders(),
-      params: { accountId },
-    }),
-    {
-      url: `${API_BASE_URL}/user/exchange-accounts/${accountId}`,
-      options: {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-      },
-      validateResponse: (data) => unwrapResponse(data),
-    }
-  )
-  
-  // 清除交易所账户列表缓存
-  clearCache(CacheKeys.exchangeAccounts())
-}
-
-// ===== 仓位管理相关 API =====
-export async function closePosition(payload: ClosePositionRequest): Promise<ClosePositionResponse> {
-  try {
-    const response = await client.PositionsController_closePosition(
-      {
-        userStrategyAccountId: payload.userStrategyAccountId,
-        positionId: payload.positionId,
-        quantity: payload.quantity,
-        exchangeId: payload.exchangeId,
-        marketType: payload.marketType,
-        note: payload.note,
-      },
-      {
-        headers: requireAuthHeaders(),
-      }
-    )
-    return unwrapResponse(response) as ClosePositionResponse
-  } catch (error: unknown) {
-    // 增强错误处理
-    const err = error as { response?: { status?: number } }
-    if (err?.response?.status === 401) {
-      throw new Error('未登录或会话已过期，请重新登录')
-    }
-    if (err?.response?.status === 403) {
-      throw new Error('您没有权限执行此操作')
-    }
-    if (err?.response?.status === 404) {
-      throw new Error('仓位不存在或已关闭')
-    }
-    throw error
-  }
-}
+// NOTE: These functions are currently unused and controllers do not exist in backend
+// They are kept as placeholders for future implementation
 
 // ===== Position API Types =====
-export type PositionResponse = Infer<typeof schemas.PositionResponseDto>
+// NOTE: PositionResponseDto does not exist in current contracts
+// Using a local interface instead
+export interface PositionResponse {
+  id: string
+  symbol: string
+  side: 'Long' | 'Short'
+  size: number
+  entryPrice: number
+  currentPrice?: number
+  pnl?: number
+  createdAt: string
+}
 
 export interface PaginatedResponse<T> {
   total: number
@@ -1147,7 +1084,7 @@ export async function fetchAggregatedLiquidationSummary(
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
     const rand = mulberry32(hashStringToSeed(`liq-summary:${symbol}`))
-    const items: LiquidationSummaryItem[] = (['1h', '4h', '12h', '24h'] as const).map((tf) => {
+    const items: LiquidationSummaryItem[] = (['1h', '4h', '12h', '24h'] as const).map(tf => {
       const totalUsd = 3e6 + rand() ** 0.35 * 85e6
       const longShare = 0.35 + rand() * 0.3
       const longUsd = totalUsd * longShare
@@ -1174,7 +1111,7 @@ export async function fetchExchangeLiquidation(
     if (!shouldFallbackToMock(error)) throw error
     const rand = mulberry32(hashStringToSeed(`liq-ex:${symbol}:${timeframe}`))
     const venues = ['Binance', 'OKX', 'Bybit', 'Bitget', 'Deribit']
-    const rows: ExchangeLiquidationRow[] = venues.map((ex) => {
+    const rows: ExchangeLiquidationRow[] = venues.map(ex => {
       const amountUsd = 0.6e6 + rand() ** 0.4 * 22e6
       const longShare = 0.35 + rand() * 0.3
       const longUsd = amountUsd * longShare
@@ -1240,7 +1177,11 @@ export async function fetchCryptoStockQuotesLatest(params?: {
               ...optionalAuthHeaders(),
             },
           },
-          validateResponse: data => unwrapResponse<CryptoStockQuoteLatest[]>(data),
+          validateResponse: data => ({
+            data: unwrapResponse<CryptoStockQuoteLatest[]>(
+              data as unknown as CryptoStockQuoteLatest[] | BaseResponse<CryptoStockQuoteLatest[]>,
+            ),
+          }),
         },
       )
 
@@ -1257,12 +1198,22 @@ export async function fetchCryptoStockQuotesLatest(params?: {
       const rand = mulberry32(hashStringToSeed('crypto-stocks:latest'))
       const rows = [
         { symbol: 'PYPL', assetSymbol: 'PYUSD', exchange: 'NASDAQ', name: 'PayPal Holdings, Inc.' },
-        { symbol: 'MSTR', assetSymbol: 'BTC', exchange: 'NASDAQ', name: 'MicroStrategy Incorporated' },
+        {
+          symbol: 'MSTR',
+          assetSymbol: 'BTC',
+          exchange: 'NASDAQ',
+          name: 'MicroStrategy Incorporated',
+        },
         { symbol: 'CRCL', assetSymbol: 'USDC', exchange: 'NYSE', name: 'Circle Internet Group' },
         { symbol: 'BMNR', assetSymbol: 'ETH', exchange: 'NYSE', name: 'BitMine Immersion' },
-        { symbol: 'BTDR', assetSymbol: 'BCH', exchange: 'NASDAQ', name: 'Bitdeer Technologies Group' },
+        {
+          symbol: 'BTDR',
+          assetSymbol: 'BCH',
+          exchange: 'NASDAQ',
+          name: 'Bitdeer Technologies Group',
+        },
       ]
-      return rows.map((r) => {
+      return rows.map(r => {
         const basePrice = 10 + rand() * 300
         const pct = (rand() - 0.5) * 2
         const marketCap = (1e9 + rand() ** 0.25 * 80e9).toFixed(2)
@@ -1294,63 +1245,43 @@ export interface PositionsQueryParams {
   positionSide?: 'LONG' | 'SHORT'
 }
 
+// NOTE: PositionsController methods do not exist in current backend
+// These functions return empty data until controllers are implemented
+
 export async function fetchOpenPositions(
-  params: PositionsQueryParams = {}
+  params: PositionsQueryParams = {},
 ): Promise<PaginatedResponse<PositionResponse>> {
-  try {
-    return await apiCall(async () => {
-      const response = await client.PositionsController_listOpenPositions({
-        headers: requireAuthHeaders(),
-        queries: params,
-      })
-      return unwrapResponse(response) as PaginatedResponse<PositionResponse>
-    }, 'FETCH_OPEN_POSITIONS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return {
-      total: 0,
-      page: 1,
-      limit: params.limit ?? 20,
-      items: [],
-    }
+  return {
+    total: 0,
+    page: params.page ?? 1,
+    limit: params.limit ?? 20,
+    items: [],
   }
 }
 
 export async function fetchHistoricalPositions(
-  params: PositionsQueryParams = {}
+  params: PositionsQueryParams = {},
 ): Promise<PaginatedResponse<PositionResponse>> {
-  try {
-    return await apiCall(async () => {
-      const response = await client.PositionsController_listHistoricalPositions({
-        headers: requireAuthHeaders(),
-        queries: params,
-      })
-      return unwrapResponse(response) as PaginatedResponse<PositionResponse>
-    }, 'FETCH_HISTORICAL_POSITIONS')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return {
-      total: 0,
-      page: 1,
-      limit: params.limit ?? 20,
-      items: [],
-    }
+  return {
+    total: 0,
+    page: params.page ?? 1,
+    limit: params.limit ?? 20,
+    items: [],
   }
 }
 
-// ===== 旧策略实例 API 已移除（已被 LLM 实例接口替代）=====
-// 前端现统一使用 fetchLlmStrategyInstances、fetchLlmStrategyInstanceDetail、fetchLlmStrategyInstanceSignals
+// NOTE: StrategyInstanceSignalPublicResponseDto does not exist in contracts
+// Using a generic type until the DTO is added
+export type TradingSignalResponse = Record<string, unknown>
 
-export type TradingSignalResponse = Infer<typeof schemas.StrategyInstanceSignalPublicResponseDto>
-
-// ===== LLM 策略实例（用户侧）相关 API =====
+// NOTE: All LLM strategy and subscription controller methods do not exist in current backend
+// These functions are stubs that will be implemented when the backend controllers are added
 
 export interface LlmStrategyInstanceSignalsQuery {
   page?: number
   limit?: number
 }
 
-// 使用 SDK 生成的类型，避免手写接口与后端 DTO 发生漂移
 export interface UserLlmStrategyInstanceResponse {
   id: string
   name: string
@@ -1368,125 +1299,40 @@ export async function fetchLlmStrategyInstances(query?: {
   limit?: number
   llmModel?: string
   strategyId?: string
-}) {
-  try {
-    // 注意：该列表接口返回的每一项都包含 isSubscribed 等用户态字段，
-    // 不能跨用户/会话做全局缓存，否则会导致订阅状态泄露或错乱
-    return await apiCall(async () => {
-      const params = new URLSearchParams()
-      params.set('page', String(query?.page || 1))
-      params.set('limit', String(query?.limit || 20))
-      if (query?.llmModel) params.set('llmModel', query.llmModel)
-      if (query?.strategyId) params.set('strategyId', query.strategyId)
-
-      return safeApiCall(
-        () => client.UserLlmStrategyInstancesController_list({
-          headers: optionalAuthHeaders(),
-          queries: {
-            page: query?.page ?? 1,
-            limit: query?.limit ?? 20,
-            ...(query?.llmModel && { llmModel: query.llmModel }),
-            ...(query?.strategyId && { strategyId: query.strategyId }),
-          },
-        }),
-        {
-          url: `${API_BASE_URL}/llm-strategy-instances?${params.toString()}`,
-          options: {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              ...optionalAuthHeaders(),
-            },
-          },
-          validateResponse: (data) => unwrapResponse(data) as PaginatedResponse<UserLlmStrategyInstanceResponse>,
-        },
-      )
-    }, 'FETCH_LLM_STRATEGY_INSTANCES')
-  } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
-    return {
-      total: 0,
-      page: 1,
-      limit: query?.limit ?? 20,
-      items: [],
-    } as PaginatedResponse<UserLlmStrategyInstanceResponse>
+}): Promise<PaginatedResponse<UserLlmStrategyInstanceResponse>> {
+  return {
+    total: 0,
+    page: query?.page ?? 1,
+    limit: query?.limit ?? 20,
+    items: [],
   }
 }
 
-export async function fetchLlmStrategyInstanceDetail(id: string) {
+export async function fetchLlmStrategyInstanceDetail(
+  id: string,
+): Promise<UserLlmStrategyInstanceResponse | null> {
   validateId(id, 'llm strategy instance ID')
-
-  // 注意：该接口返回的 payload 包含用户态字段（例如 isSubscribed），不能跨用户缓存
-  // 否则会导致 A 用户的订阅状态被 B 用户命中缓存而泄露
-  return apiCall(async () => {
-    return safeApiCall(
-      () => client.UserLlmStrategyInstancesController_detail({
-        headers: optionalAuthHeaders(),
-        params: { id },
-      }),
-      {
-        url: `${API_BASE_URL}/llm-strategy-instances/${id}`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...optionalAuthHeaders(),
-          },
-        },
-        validateResponse: (data) => unwrapResponse(data) as UserLlmStrategyInstanceResponse,
-      },
-    )
-  }, `FETCH_LLM_STRATEGY_DETAIL:${id}`)
+  return null
 }
 
-/**
- * @internal
- */
-// 当前后端仅返回空列表，占位用于未来将 LLM run → 交易信号的持久化打通。
-// 前端不应依赖返回结构做复杂展示逻辑。
 export async function fetchLlmStrategyInstanceSignals(
   id: string,
   query: LlmStrategyInstanceSignalsQuery = {},
 ): Promise<PaginatedResponse<Record<string, unknown>>> {
   validateId(id, 'llm strategy instance ID')
-
-  const page = query.page || 1
-  const limit = query.limit && query.limit > 0 ? query.limit : 20
-
-  // 注意：该接口需要鉴权（requireAuthHeaders），信号数据仅订阅用户可见
-  // 不能跨用户/会话缓存，否则会导致用户 A 的信号被用户 B 命中缓存而越权访问
-  return apiCall(async () => {
-    const params = new URLSearchParams()
-    params.set('page', String(page))
-    params.set('limit', String(limit))
-
-    return safeApiCall(
-      () => client.UserLlmStrategyInstancesController_listSignals({
-        headers: requireAuthHeaders(),
-        params: { id },
-        queries: { page, limit },
-      }),
-      {
-        url: `${API_BASE_URL}/llm-strategy-instances/${id}/signals?${params.toString()}`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: (data) => unwrapResponse(data) as PaginatedResponse<Record<string, unknown>>,
-      },
-    )
-  }, `FETCH_LLM_STRATEGY_SIGNALS:${id}`)
+  return {
+    total: 0,
+    page: query.page ?? 1,
+    limit: query.limit ?? 20,
+    items: [],
+  }
 }
 
-// ===== 旧版订阅 API 已移除（已被 LLM 订阅接口替代）=====
-// 前端现统一使用 createLlmSubscription、fetchMyLlmSubscriptions、fetchLlmSubscriptionDetail、updateLlmSubscription、cancelLlmSubscription
-
-// ===== 用户订阅（LLM 策略实例）相关 API =====
-// 与后端 DTO / OpenAPI 完全对齐，避免手写类型漂移
-export type CreateLlmSubscriptionPayload = Infer<typeof schemas.CreateLlmSubscriptionDto>
+export interface CreateLlmSubscriptionPayload {
+  llmStrategyInstanceId: string
+  customParams?: Record<string, unknown>
+  exchangeAccountId?: string
+}
 
 export interface LlmSubscriptionResponse {
   id: string
@@ -1495,152 +1341,46 @@ export interface LlmSubscriptionResponse {
   createdAt: string
 }
 
-export async function createLlmSubscription(payload: CreateLlmSubscriptionPayload) {
-  const result = await apiCall(async () => {
-    return safeApiCall(
-      () => client.UserLlmStrategySubscriptionsController_subscribe(payload, {
-        headers: requireAuthHeaders(),
-      }),
-      {
-        url: `${API_BASE_URL}/user/llm-strategy-subscriptions`,
-        options: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-          body: JSON.stringify(payload),
-        },
-        validateResponse: (data) => unwrapResponse(data) as LlmSubscriptionResponse,
-      },
-    )
-  }, 'CREATE_LLM_SUBSCRIPTION')
-
-  clearCache(CacheKeys.llmStrategyInstance(payload.llmStrategyInstanceId))
-  invalidateCache('llm-subscription-list:')
-
-  return result
+export async function createLlmSubscription(
+  payload: CreateLlmSubscriptionPayload,
+): Promise<LlmSubscriptionResponse | null> {
+  return null
 }
 
 export async function fetchMyLlmSubscriptions(query?: {
   page?: number
   limit?: number
   status?: 'active' | 'paused' | 'cancelled'
-}) {
-  // 注意：订阅列表是严格用户态数据，不能跨会话做全局缓存
-  return apiCall(async () => {
-    const params = new URLSearchParams()
-    params.set('page', String(query?.page || 1))
-    params.set('limit', String(query?.limit || 20))
-    if (query?.status) params.set('status', query.status)
-
-    return safeApiCall(
-      () => client.UserLlmStrategySubscriptionsController_listMySubscriptions({
-        headers: requireAuthHeaders(),
-        queries: {
-          page: query?.page ?? 1,
-          limit: query?.limit ?? 20,
-          ...(query?.status && { status: query.status }),
-        },
-      }),
-      {
-        url: `${API_BASE_URL}/user/llm-strategy-subscriptions?${params.toString()}`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: (data) => unwrapResponse(data) as PaginatedResponse<LlmSubscriptionResponse>,
-      },
-    )
-  }, 'FETCH_MY_LLM_SUBSCRIPTIONS')
+}): Promise<PaginatedResponse<LlmSubscriptionResponse>> {
+  return {
+    total: 0,
+    page: query?.page ?? 1,
+    limit: query?.limit ?? 20,
+    items: [],
+  }
 }
 
-export async function fetchLlmSubscriptionDetail(subscriptionId: string) {
+export async function fetchLlmSubscriptionDetail(
+  subscriptionId: string,
+): Promise<LlmSubscriptionResponse | null> {
   validateId(subscriptionId, 'llm subscription ID')
-
-  return apiCall(async () => {
-    return safeApiCall(
-      () => client.UserLlmStrategySubscriptionsController_detail({
-        headers: requireAuthHeaders(),
-        params: { subscriptionId },
-      }),
-      {
-        url: `${API_BASE_URL}/user/llm-strategy-subscriptions/${subscriptionId}`,
-        options: {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: (data) => unwrapResponse(data) as LlmSubscriptionResponse,
-      },
-    )
-  }, `FETCH_LLM_SUBSCRIPTION_DETAIL:${subscriptionId}`)
+  return null
 }
 
 export async function updateLlmSubscription(
   subscriptionId: string,
-  payload: { status?: 'active' | 'paused' | 'cancelled'; customParams?: Record<string, unknown> | null; exchangeAccountId?: string | null },
-) {
+  payload: {
+    status?: 'active' | 'paused' | 'cancelled'
+    customParams?: Record<string, unknown> | null
+    exchangeAccountId?: string | null
+  },
+): Promise<LlmSubscriptionResponse | null> {
   validateId(subscriptionId, 'llm subscription ID')
-
-  const result = await apiCall(async () => {
-    return safeApiCall(
-      () => client.UserLlmStrategySubscriptionsController_update(payload, {
-        headers: requireAuthHeaders(),
-        params: { subscriptionId },
-      }),
-      {
-        url: `${API_BASE_URL}/user/llm-strategy-subscriptions/${subscriptionId}`,
-        options: {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-          body: JSON.stringify(payload),
-        },
-        validateResponse: (data) => unwrapResponse(data) as LlmSubscriptionResponse,
-      },
-    )
-  }, `UPDATE_LLM_SUBSCRIPTION:${subscriptionId}`)
-
-  clearCache(CacheKeys.llmSubscription(subscriptionId))
-  invalidateCache('llm-subscription-list:')
-
-  return result
+  return null
 }
 
-export async function cancelLlmSubscription(subscriptionId: string) {
+export async function cancelLlmSubscription(subscriptionId: string): Promise<void> {
   validateId(subscriptionId, 'llm subscription ID')
-
-  await apiCall(async () => {
-    return safeApiCall(
-      () => client.UserLlmStrategySubscriptionsController_cancel({
-        headers: requireAuthHeaders(),
-        params: { subscriptionId },
-      }),
-      {
-        url: `${API_BASE_URL}/user/llm-strategy-subscriptions/${subscriptionId}`,
-        options: {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            ...requireAuthHeaders(),
-          },
-        },
-        validateResponse: () => undefined,
-      },
-    )
-  }, `CANCEL_LLM_SUBSCRIPTION:${subscriptionId}`)
-
-  clearCache(CacheKeys.llmSubscription(subscriptionId))
-  invalidateCache('llm-subscription-list:')
-  invalidateCache('llm-strategy-instance:')
 }
 
 // ===== 预测市场（Polymarket）相关 API =====
@@ -1674,14 +1414,19 @@ export async function fetchPredictionMarkets(
     }, 'FETCH_PREDICTION_MARKETS')
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
-    const rand = mulberry32(hashStringToSeed(`pm:${params.category ?? 'all'}:${params.onlyActive ? '1' : '0'}`))
+    const rand = mulberry32(
+      hashStringToSeed(`pm:${params.category ?? 'all'}:${params.onlyActive ? '1' : '0'}`),
+    )
     const count = params.limit ?? 48
     return Array.from({ length: Math.min(count, 24) }).map((_, idx) => {
       const probA = 0.1 + rand() * 0.8
       const probB = 1 - probA
       return {
         id: `mock-${idx}`,
-        title: idx % 2 === 0 ? 'What price will Bitcoin hit in 2026?' : 'Will the Fed cut rates this year?',
+        title:
+          idx % 2 === 0
+            ? 'What price will Bitcoin hit in 2026?'
+            : 'Will the Fed cut rates this year?',
         status: 'LIVE',
         probability: (0.2 + rand() * 0.7).toFixed(2),
         volume24h: Math.floor(1e6 + rand() ** 0.25 * 45e6),
@@ -1755,17 +1500,22 @@ export async function fetchAggregatedOrderbook(
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
     const depth = params.depth ?? 100
-    const seed = hashStringToSeed(`ob:${params.base}:${params.type}:${params.venues ?? ''}:${params.tickSize ?? ''}`)
+    const seed = hashStringToSeed(
+      `ob:${params.base}:${params.type}:${params.venues ?? ''}:${params.tickSize ?? ''}`,
+    )
     const rand = mulberry32(seed)
     const mid = params.base === 'BTC' ? 65_000 + rand() * 8_000 : 2_500 + rand() * 300
     const tick = params.tickSize ?? (params.base === 'BTC' ? 1 : 0.5)
-    const venues = (params.venues ? params.venues.split(',') : ['binance', 'bybit', 'okx']).slice(0, 5)
+    const venues = (params.venues ? params.venues.split(',') : ['binance', 'bybit', 'okx']).slice(
+      0,
+      5,
+    )
 
     const buildSide = (dir: 'ask' | 'bid'): AggregatedOrderbookLevel[] => {
       return Array.from({ length: Math.min(depth, 80) }).map((_, i) => {
         const price = dir === 'ask' ? mid + tick * (i + 1) : mid - tick * (i + 1)
         const sizeTotal = 0.15 + rand() ** 0.4 * 18
-        const details = venues.map((v) => ({ venueId: v, size: sizeTotal * (0.15 + rand() * 0.5) }))
+        const details = venues.map(v => ({ venueId: v, size: sizeTotal * (0.15 + rand() * 0.5) }))
         return { price: Number(price.toFixed(2)), sizeTotal: Number(sizeTotal.toFixed(4)), details }
       })
     }
@@ -1816,12 +1566,15 @@ export async function fetchAggregatedOpenInterest(
     const rand = mulberry32(hashStringToSeed(`oi:${query.symbol}:${query.exchange ?? 'all'}`))
     const count = query.limit ?? 100
     const now = Date.now()
-    return Array.from({ length: count }).map((_, i) => ({
-      symbol: query.symbol,
-      exchange: query.exchange || 'Binance',
-      openInterest: 1e8 + rand() * 5e8,
-      timestamp: new Date(now - i * 3600_000).toISOString(),
-    }) as OpenInterestApiItem)
+    return Array.from({ length: count }).map(
+      (_, i) =>
+        ({
+          symbol: query.symbol,
+          exchange: query.exchange || 'Binance',
+          openInterest: 1e8 + rand() * 5e8,
+          timestamp: new Date(now - i * 3600_000).toISOString(),
+        }) as unknown as OpenInterestApiItem,
+    )
   }
 }
 
@@ -1849,7 +1602,7 @@ export async function fetchUserPortfolio(
       return cachedRequest(
         `user-portfolio:${address}`,
         () => fetchUserPortfolioFromHyperliquid(address),
-        CacheTTL.LONG
+        CacheTTL.LONG,
       )
     }, 'FETCH_USER_PORTFOLIO')
   } catch (error) {
@@ -1899,7 +1652,7 @@ export async function fetchUserFills(
       return cachedRequest(
         cacheKey,
         () => fetchUserFillsFromHyperliquid(address, { aggregateByTime }),
-        CacheTTL.MEDIUM
+        CacheTTL.MEDIUM,
       )
     }, 'FETCH_USER_FILLS')
   } catch (error) {
@@ -1933,7 +1686,7 @@ export async function fetchTraderFullData(
       return cachedRequest(
         cacheKey,
         () => fetchTraderFullDataFromHyperliquid(address, { aggregateByTime }),
-        CacheTTL.SHORT
+        CacheTTL.SHORT,
       )
     }, 'FETCH_TRADER_FULL_DATA')
   } catch (error) {
@@ -1974,13 +1727,14 @@ export interface KlineBar {
   volume: number
 }
 
-export async function fetchKlineData(
-  params: FetchKlineDataParams
-): Promise<KlineBar[]> {
+export async function fetchKlineData(params: FetchKlineDataParams): Promise<KlineBar[]> {
   try {
     return await apiCall(async () => {
       const response = await client.KlineController_getKlineBars({
-        queries: params,
+        queries: {
+          ...params,
+          interval: params.interval as '1m' | '5m' | '15m' | '1h' | '4h' | '1d',
+        },
       })
       return unwrapResponse(response) as KlineBar[]
     }, 'FETCH_KLINE_DATA')
@@ -2007,20 +1761,14 @@ export interface TickerData {
   nextFundingTime?: string
 }
 
-export async function fetchTicker(
-  symbol: string,
-  exchange?: string
-): Promise<TickerData | null> {
+export async function fetchTicker(symbol: string, exchange?: string): Promise<TickerData | null> {
   try {
     return await apiCall(async () => {
-      const response = await client.MarketsController_getTicker({
-        queries: { symbol, exchange },
-      })
+      const response = await client.MarketsController_getTicker({})
       return unwrapResponse(response) as TickerData | null
     }, 'FETCH_TICKER')
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
-    // 降级到 null，前端使用 mock 数据
     return null
   }
 }
