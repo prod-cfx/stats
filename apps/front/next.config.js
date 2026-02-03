@@ -53,10 +53,13 @@ const isDev = process.env.NODE_ENV !== 'production'
 
 const nextConfig = {
   // 设置构建输出目录
-  // 生产构建产物需要输出到 dist/front（用于部署/打包）
-  // 但开发模式下使用 distDir=dist/front 会导致缓存/文件缺失问题（vendor-chunks、manifest 等）
+  // 生产构建产物需要输出到 dist/front/.next（用于Vercel部署/打包）
+  // Vercel 的构建输出 API 在 outputDirectory 中查找 .next/trace 文件
+  // 当 distDir 设置为 ../../dist/front/.next 时，Next.js 会在 dist/front 下创建 .next 子目录
+  // Vercel 可以正确找到 dist/front/.next/trace，避免重新追踪导致的文件膨胀问题
+  // 但开发模式下使用 distDir=dist/front/.next 会导致缓存/文件缺失问题（vendor-chunks、manifest 等）
   // 因此开发模式回退到默认 .next，确保 `next dev` 稳定运行。
-  distDir: isDev ? '.next' : '../../dist/front',
+  distDir: isDev ? '.next' : '../../dist/front/.next',
 
   images: {
     unoptimized: true, // 静态导出下禁用 Next.js 内置图片优化，改用懒加载与占位符
@@ -123,6 +126,45 @@ const nextConfig = {
   // 启用 Cache Components 功能,配合 "use cache" 指令使用
   // 注意: 当前 Next.js 15.4.7 不支持此选项，需升级到 Next.js 16+ 才能启用
   // cacheComponents: true,
+
+  // Reduce Vercel serverless function size by excluding unnecessary traced files
+  // Issue: .vercel/output/functions/404.func/.vc-config.json traced 284 MB (exceeds 250 MB limit)
+  // Root cause: sharp binaries for multiple platforms (win32, darwin, linux, linuxmusl, wasm, etc.)
+  // and Next.js source maps included in trace
+  // Strategy: use outputFileTracingExcludes to exclude platform-specific sharp binaries and source maps
+  // that are only needed for non-Vercel platforms (win32, darwin, non-arm64 linux)
+  outputFileTracingExcludes: {
+    '/*': [
+      // Windows/win32 sharp binaries - not used on Vercel Linux
+      '**/@img+sharp-win32-arm64*/**/*',
+      '**/@img+sharp-win32-ia32*/**/*',
+      '**/@img+sharp-win32-x64*/**/*',
+      // macOS/darwin sharp binaries - not used on Vercel Linux
+      '**/@img+sharp-darwin-arm64*/**/*',
+      '**/@img+sharp-darwin-x64*/**/*',
+      '**/@img+sharp-libvips-darwin-arm64*/**/*',
+      '**/@img+sharp-libvips-darwin-x64*/**/*',
+      // Non-ARM64 Linux architectures (Vercel uses linux-arm64, not x64/ppc64/etc)
+      '**/@img+sharp-linuxmusl-arm64*/**/*',
+      '**/@img+sharp-linuxmusl-x64*/**/*',
+      '**/@img+sharp-libvips-linuxmusl-arm64*/**/*',
+      '**/@img+sharp-libvips-linuxmusl-x64*/**/*',
+      '**/@img+sharp-libvips-linux-ppc64*/**/*',
+      '**/@img+sharp-libvips-linux-riscv64*/**/*',
+      '**/@img+sharp-libvips-linux-s390x*/**/*',
+      '**/@img+sharp-libvips-linux-x64*/**/*', // keep only arm64
+      '**/@img+sharp-libvips-linux-arm*/**/*',
+      '**/@img+sharp-linux-ppc64*/**/*',
+      '**/@img+sharp-linux-riscv64*/**/*',
+      '**/@img+sharp-linux-s390x*/**/*',
+      '**/@img+sharp-linux-x64*/**/*', // keep only arm64
+      '**/@img+sharp-linux-arm*/**/*',
+      // WASM sharp - not used at runtime
+      '**/@img+sharp-wasm32*/**/*',
+      // Source maps - not needed in production bundles
+      '**/dist/compiled/next-server/**/*.map',
+    ],
+  },
 
   // Next.js 16: 实验性功能配置
   experimental: {

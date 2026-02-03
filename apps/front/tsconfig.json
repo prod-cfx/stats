@@ -44,7 +44,9 @@
     "src/types/globals.d.ts",
     "../../dist/front/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "../../dist/front/dev/types/**/*.ts"
+    "../../dist/front/dev/types/**/*.ts",
+    "../../dist/front/.next/types/**/*.ts",
+    "../../dist/front/.next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
