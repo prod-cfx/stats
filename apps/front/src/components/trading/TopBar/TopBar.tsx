@@ -1,10 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 'use client'
 
 import type { Socket } from 'socket.io-client'
 import type { TickerData } from '@/lib/api'
 import type { DataSource, MarketType } from '@/types/trading'
 import { ChevronDown, Info, Search } from 'lucide-react'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { fetchKlineData, fetchTicker } from '@/lib/api'
@@ -51,6 +52,10 @@ export const TopBar = ({
   const [tickerData, setTickerData] = useState<TickerData | null>(null)
   const [klineClosePrice, setKlineClosePrice] = useState<number | null>(null)
   const [wsConnectionStatus, setWsConnectionStatus] = useState<ConnectionStatus>('disconnected')
+  const setWsStatus = useCallback((status: ConnectionStatus) => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- centralized setter for effects
+    setWsConnectionStatus(status)
+  }, [])
   const menuRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<Socket | null>(null)
   const prevSymbolRef = useRef<string | null>(null)
@@ -175,7 +180,7 @@ export const TopBar = ({
 
     if (!socketRef.current) {
       const wsBaseUrl = getWsBaseUrl()
-      setWsConnectionStatus('connecting')
+      setWsStatus('connecting')
       socketRef.current = io(`${wsBaseUrl}/kline`, {
         transports: ['websocket'],
         reconnection: true,
@@ -189,7 +194,7 @@ export const TopBar = ({
         logger.debug('[TopBar] WebSocket connected')
         logger.debug(`[TopBar] Current selectedSymbol: ${selectedSymbol}`)
         logger.debug(`[TopBar] Current selectedSymbolRef: ${selectedSymbolRef.current}`)
-        setWsConnectionStatus('connected')
+        setWsStatus('connected')
         // 使用闭包中的 selectedSymbol,因为 prevSymbolRef.current 在首次连接时还未设置
         if (selectedSymbol) {
           socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
@@ -219,9 +224,7 @@ export const TopBar = ({
         if (Number.isFinite(bar.close)) {
           const now = Date.now()
           if (now - lastKlineUpdateTimeRef.current >= THROTTLE_INTERVAL) {
-            logger.debug(
-              `[TopBar] Updating klineClosePrice from ${klineClosePrice} to ${bar.close}`,
-            )
+            logger.debug(`[TopBar] Updating klineClosePrice to ${bar.close}`)
             setKlineClosePrice(bar.close)
             lastKlineUpdateTimeRef.current = now
             logger.debug(`[TopBar] Real-time price update: ${bar.close} for ${symbol}`)
@@ -245,17 +248,17 @@ export const TopBar = ({
 
       socket.on('disconnect', () => {
         logger.debug('[TopBar] WebSocket disconnected')
-        setWsConnectionStatus('disconnected')
+        setWsStatus('disconnected')
       })
 
       socket.on('connect_error', error => {
         logger.error('[TopBar] WebSocket connection error:', error)
-        setWsConnectionStatus('error')
+        setWsStatus('error')
       })
 
       socket.on('error', error => {
         logger.error('[TopBar] WebSocket error:', error)
-        setWsConnectionStatus('error')
+        setWsStatus('error')
       })
     }
 
@@ -272,11 +275,11 @@ export const TopBar = ({
     if (socket.connected) {
       socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
     } else {
-      setWsConnectionStatus('connecting')
+      setWsStatus('connecting')
     }
 
     return () => {}
-  }, [selectedSymbol])
+  }, [selectedSymbol, setWsStatus])
 
   useEffect(() => {
     return () => {

@@ -58,20 +58,26 @@ export const DashboardEditorSidebar = ({
     const refresh = () => {
       // IMPORTANT: do not recreate deleted dashboards implicitly
       if (dashboardId === 'draft') {
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft from storage
         setDoc(ensureDashboard('draft'))
       } else {
         const existing = getDashboard(dashboardId)
-        if (existing) setDoc(existing)
+        if (existing) {
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard
+          setDoc(existing)
+        }
       }
       // Always refresh lists regardless of current dashboard
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
       setMyDashboards(getMyDashboards())
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
       setSavedDashboards(getSavedDashboards())
     }
     refresh()
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
     window.addEventListener('storage', refresh)
     return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
       window.removeEventListener('storage', refresh)
     }
   }, [dashboardId])

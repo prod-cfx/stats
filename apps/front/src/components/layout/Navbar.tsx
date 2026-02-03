@@ -3,7 +3,7 @@
 import { ChevronDown, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
@@ -31,6 +31,7 @@ export const Navbar = () => {
   const { info: _info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
+  const searchFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -50,7 +51,7 @@ export const Navbar = () => {
   }, [pathname])
 
   // 辅助函数：为路径添加语言前缀
-  const withLng = (path: string) => `/${currentLng}${path}`
+  const withLng = useCallback((path: string) => `/${currentLng}${path}`, [currentLng])
 
   const { items: catalogItems } = useMarketDataCatalog()
 
@@ -100,6 +101,7 @@ export const Navbar = () => {
 
   // Close mobile menu when route changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived from pathname
     setMobileMenuOpen(false)
   }, [pathname])
 
@@ -208,8 +210,15 @@ export const Navbar = () => {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (searchFocusTimeoutRef.current) clearTimeout(searchFocusTimeoutRef.current)
+    }
+  }, [])
+
   // 快捷键 / (Focus search)
   useEffect(() => {
+    let focusTimeout: ReturnType<typeof setTimeout> | null = null
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === '/' &&
@@ -218,11 +227,15 @@ export const Navbar = () => {
       ) {
         e.preventDefault()
         setSearchOpen(true)
-        setTimeout(() => searchInputRef.current?.focus(), 0)
+        if (focusTimeout) clearTimeout(focusTimeout)
+        focusTimeout = setTimeout(() => searchInputRef.current?.focus(), 0)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      if (focusTimeout) clearTimeout(focusTimeout)
+    }
   }, [searchOpen])
 
   // 高亮匹配文字
@@ -257,6 +270,7 @@ export const Navbar = () => {
         <div className="flex items-center gap-3">
           {/* Mobile Menu Button */}
           <button
+            type="button"
             className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:hidden"
             onClick={() => setMobileMenuOpen(true)}
           >
@@ -354,9 +368,18 @@ export const Navbar = () => {
               } h-8 overflow-hidden rounded-full md:h-10`}
             >
               <button
+                type="button"
                 onClick={() => {
                   setSearchOpen(!searchOpen)
-                  if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100)
+                  if (!searchOpen) {
+                    if (searchFocusTimeoutRef.current) {
+                      clearTimeout(searchFocusTimeoutRef.current)
+                    }
+                    searchFocusTimeoutRef.current = setTimeout(
+                      () => searchInputRef.current?.focus(),
+                      100,
+                    )
+                  }
                 }}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] md:h-10 md:w-10"
               >
@@ -377,6 +400,7 @@ export const Navbar = () => {
 
               {searchOpen && searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery('')}
                   className="mr-3 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
                 >
@@ -450,7 +474,10 @@ export const Navbar = () => {
 
         {/* User System - Phase 1 Hidden */}
         {ENABLE_USER_SYSTEM && (
-          <button className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex">
+          <button
+            type="button"
+            className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex"
+          >
             {t('nav.login')}
           </button>
         )}
@@ -467,6 +494,7 @@ export const Navbar = () => {
               <span className="text-lg font-bold text-[color:var(--cf-text-strong)]">Coinflux</span>
             </div>
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(false)}
               className="p-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
             >
@@ -483,6 +511,7 @@ export const Navbar = () => {
                 return (
                   <div key={link.name} className="flex flex-col">
                     <button
+                      type="button"
                       onClick={() => toggleMobileSubmenu(link.name)}
                       className="flex items-center justify-between px-2 py-3 text-lg font-medium text-[color:var(--cf-text-strong)]"
                     >
@@ -524,7 +553,10 @@ export const Navbar = () => {
 
             {ENABLE_USER_SYSTEM && (
               <div className="mt-6">
-                <button className="from-primary to-secondary shadow-primary/20 w-full rounded-xl bg-gradient-to-r py-3 text-lg font-bold text-white shadow-lg">
+                <button
+                  type="button"
+                  className="from-primary to-secondary shadow-primary/20 w-full rounded-xl bg-gradient-to-r py-3 text-lg font-bold text-white shadow-lg"
+                >
                   {t('nav.login')}
                 </button>
               </div>

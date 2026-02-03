@@ -1,11 +1,22 @@
 'use client'
 
-import type {UnitSize} from '../widgets/unitSizePresets';
+import type { UnitSize } from '../widgets/unitSizePresets'
 import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CRYPTO_STOCKS_UNIT_SIZE_PRESETS, KLINE_UNIT_SIZE_PRESETS, LIQUIDATION_FEED_UNIT_SIZE_PRESETS, LIQUIDATION_MAP_UNIT_SIZE_PRESETS, LONG_SHORT_UNIT_SIZE_PRESETS, OPEN_INTEREST_UNIT_SIZE_PRESETS, ORDERBOOK_UNIT_SIZE_PRESETS, PREDICTION_UNIT_SIZE_PRESETS, UNIT_SIZE_PRESETS, VOLUME_UNIT_SIZE_PRESETS } from '../widgets/unitSizePresets'
+import {
+  CRYPTO_STOCKS_UNIT_SIZE_PRESETS,
+  KLINE_UNIT_SIZE_PRESETS,
+  LIQUIDATION_FEED_UNIT_SIZE_PRESETS,
+  LIQUIDATION_MAP_UNIT_SIZE_PRESETS,
+  LONG_SHORT_UNIT_SIZE_PRESETS,
+  OPEN_INTEREST_UNIT_SIZE_PRESETS,
+  ORDERBOOK_UNIT_SIZE_PRESETS,
+  PREDICTION_UNIT_SIZE_PRESETS,
+  UNIT_SIZE_PRESETS,
+  VOLUME_UNIT_SIZE_PRESETS,
+} from '../widgets/unitSizePresets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 interface WidgetConfiguratorProps {
@@ -52,7 +63,10 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
   React.useEffect(() => {
     if (!sizePresets[selectedSize]) {
       const firstAvailable = Object.keys(sizePresets)[0] as UnitSize
-      if (firstAvailable) setSelectedSize(firstAvailable)
+      if (firstAvailable) {
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- normalize invalid size
+        setSelectedSize(firstAvailable)
+      }
     }
   }, [sizePresets, selectedSize])
 
@@ -69,50 +83,84 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (item.type.includes('kline')) {
       fields.push(
         // 只保留一个：筛选交易对（其他配置保持默认值，不在左侧展示）
-        { key: 'symbol', label: t('widget.config.selectSymbol'), type: 'select', options: [
-          { value: 'BTCUSDT', label: 'BTC/USDT' },
-          { value: 'ETHUSDT', label: 'ETH/USDT' },
-          { value: 'SOLUSDT', label: 'SOL/USDT' },
-        ]},
+        {
+          key: 'symbol',
+          label: t('widget.config.selectSymbol'),
+          type: 'select',
+          options: [
+            { value: 'BTCUSDT', label: 'BTC/USDT' },
+            { value: 'ETHUSDT', label: 'ETH/USDT' },
+            { value: 'SOLUSDT', label: 'SOL/USDT' },
+          ],
+        },
       )
     }
 
     if (item.type.includes('long_short')) {
       fields.push(
-        { key: 'symbol', label: t('widget.config.symbol'), type: 'select', options: [
-          { value: 'BTC', label: 'Bitcoin (BTC)' },
-          { value: 'ETH', label: 'Ethereum (ETH)' },
-          { value: 'SOL', label: 'Solana (SOL)' },
-        ]},
-        { key: 'window', label: t('widget.config.timeWindow'), type: 'select', options: [
-          { value: '1h', label: t('chart.timeframes.1h') },
-          { value: '4h', label: t('chart.timeframes.4h') },
-          { value: '24h', label: t('longShort.timeRanges.24h') },
-        ]},
+        {
+          key: 'symbol',
+          label: t('widget.config.symbol'),
+          type: 'select',
+          options: [
+            { value: 'BTC', label: 'Bitcoin (BTC)' },
+            { value: 'ETH', label: 'Ethereum (ETH)' },
+            { value: 'SOL', label: 'Solana (SOL)' },
+          ],
+        },
+        {
+          key: 'window',
+          label: t('widget.config.timeWindow'),
+          type: 'select',
+          options: [
+            { value: '1h', label: t('chart.timeframes.1h') },
+            { value: '4h', label: t('chart.timeframes.4h') },
+            { value: '24h', label: t('longShort.timeRanges.24h') },
+          ],
+        },
       )
     }
 
-    if (item.type.includes('orderbook_agg') || item.type.includes('open_interest') || item.type.includes('volume_agg')) {
+    if (
+      item.type.includes('orderbook_agg') ||
+      item.type.includes('open_interest') ||
+      item.type.includes('volume_agg')
+    ) {
       // User requested to remove left-side configuration fields for orderbook
     }
 
     if (item.type.includes('liquidation.map')) {
       fields.push(
-        { key: 'symbol', label: t('widget.config.symbol'), type: 'select', options: [
-          { value: 'BTC', label: 'BTC' },
-          { value: 'ETH', label: 'ETH' },
-          { value: 'SOL', label: 'SOL' },
-        ]},
-        { key: 'range', label: t('widget.config.timeRange'), type: 'select', options: [
-          { value: '1D', label: t('chart.timeframes.1d') },
-          { value: '7D', label: t('liquidationMap.range.7d') },
-          { value: '30D', label: t('liquidationMap.range.30d') },
-        ]},
-        { key: 'scope', label: t('widget.config.exchangeScope'), type: 'select', options: [
-          { value: 'ALL', label: t('liquidationMap.exchangeType.all') },
-          { value: 'CEX', label: t('liquidationMap.exchangeType.cex') },
-          { value: 'DEX', label: t('liquidationMap.exchangeType.dex') },
-        ]},
+        {
+          key: 'symbol',
+          label: t('widget.config.symbol'),
+          type: 'select',
+          options: [
+            { value: 'BTC', label: 'BTC' },
+            { value: 'ETH', label: 'ETH' },
+            { value: 'SOL', label: 'SOL' },
+          ],
+        },
+        {
+          key: 'range',
+          label: t('widget.config.timeRange'),
+          type: 'select',
+          options: [
+            { value: '1D', label: t('chart.timeframes.1d') },
+            { value: '7D', label: t('liquidationMap.range.7d') },
+            { value: '30D', label: t('liquidationMap.range.30d') },
+          ],
+        },
+        {
+          key: 'scope',
+          label: t('widget.config.exchangeScope'),
+          type: 'select',
+          options: [
+            { value: 'ALL', label: t('liquidationMap.exchangeType.all') },
+            { value: 'CEX', label: t('liquidationMap.exchangeType.cex') },
+            { value: 'DEX', label: t('liquidationMap.exchangeType.dex') },
+          ],
+        },
       )
     }
 
@@ -128,38 +176,40 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
   }, [item.type, t])
 
   const handleConfigChange = (key: string, value: any) => {
-    setConfig((prev) => ({ ...prev, [key]: value }))
+    setConfig(prev => ({ ...prev, [key]: value }))
   }
 
   return (
-    <div className="flex h-full min-h-[70vh] max-h-[80vh]">
+    <div className="flex h-full max-h-[80vh] min-h-[70vh]">
       {/* Left: Configuration */}
-      <div className="w-1/3 border-r border-[color:var(--cf-border)] p-6 overflow-y-auto">
+      <div className="w-1/3 overflow-y-auto border-r border-[color:var(--cf-border)] p-6">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-2 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] mb-6 transition-colors"
+          className="mb-6 flex items-center gap-2 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="h-4 w-4" />
           <span className="text-sm">{t('widget.config.back')}</span>
         </button>
 
-        <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1">{t(item.title)}</h3>
-        <p className="text-[color:var(--cf-muted)] text-xs mb-6">{t(item.description)}</p>
+        <h3 className="mb-1 text-lg font-bold text-[color:var(--cf-text-strong)]">
+          {t(item.title)}
+        </h3>
+        <p className="mb-6 text-xs text-[color:var(--cf-muted)]">{t(item.description)}</p>
 
         <div className="space-y-4">
-          {configFields.map((field) => (
+          {configFields.map(field => (
             <div key={field.key}>
-              <label className="block text-[color:var(--cf-muted)] text-xs font-medium mb-2 uppercase tracking-wide">
+              <label className="mb-2 block text-xs font-medium tracking-wide text-[color:var(--cf-muted)] uppercase">
                 {field.label}
               </label>
               {field.type === 'select' && field.options ? (
                 <select
                   value={config[field.key] || ''}
-                  onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-[color:var(--cf-text-strong)] text-sm focus:border-primary focus:outline-none"
+                  onChange={e => handleConfigChange(field.key, e.target.value)}
+                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)] focus:outline-none"
                 >
-                  {field.options.map((opt) => (
+                  {field.options.map(opt => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
@@ -169,8 +219,8 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
                 <input
                   type={field.type === 'number' ? 'number' : 'text'}
                   value={config[field.key] || ''}
-                  onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-[color:var(--cf-text-strong)] text-sm focus:border-primary focus:outline-none"
+                  onChange={e => handleConfigChange(field.key, e.target.value)}
+                  className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)] focus:outline-none"
                 />
               )}
             </div>
@@ -179,21 +229,21 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
       </div>
 
       {/* Right: Size & Preview */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex flex-1 flex-col">
         {/* Size Selection */}
         <div className="border-b border-[color:var(--cf-border)] p-6">
-          <label className="block text-[color:var(--cf-muted)] text-xs font-medium mb-3 uppercase tracking-wide">
+          <label className="mb-3 block text-xs font-medium tracking-wide text-[color:var(--cf-muted)] uppercase">
             {t('widget.config.size')}
           </label>
           <div className="flex gap-2">
-            {(Object.keys(sizePresets) as UnitSize[]).map((size) => (
+            {(Object.keys(sizePresets) as UnitSize[]).map(size => (
               <button
                 type="button"
                 key={size}
                 onClick={() => setSelectedSize(size)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                   selectedSize === size
-                    ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
+                    ? 'from-primary to-secondary shadow-primary/20 bg-gradient-to-r text-white shadow-lg'
                     : 'bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] hover:bg-[color:var(--cf-surface-hover)]'
                 }`}
               >
@@ -207,14 +257,14 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
         </div>
 
         {/* Preview */}
-        <div className="flex-1 p-6 overflow-auto">
+        <div className="flex-1 overflow-auto p-6">
           <div className="mb-3">
-            <div className="text-[color:var(--cf-muted)] text-xs font-medium uppercase tracking-wide mb-2">
+            <div className="mb-2 text-xs font-medium tracking-wide text-[color:var(--cf-muted)] uppercase">
               {t('widget.config.preview')}
             </div>
           </div>
           <div
-            className="bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden relative"
+            className="relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]"
             style={{
               height: '360px', // Strict fixed height as requested
               width: '100%',
@@ -237,7 +287,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
           <button
             type="button"
             onClick={() => onSave({ ...config, size: selectedSize }, layout)}
-            className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-medium py-3 rounded-lg transition-all shadow-lg shadow-primary/20 active:scale-95"
+            className="from-primary to-secondary shadow-primary/20 w-full rounded-lg bg-gradient-to-r py-3 font-medium text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           >
             {t('widget.config.saveAndAdd')}
           </button>

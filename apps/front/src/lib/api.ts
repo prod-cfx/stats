@@ -3,10 +3,10 @@ import type { ZodTypeAny } from 'zod'
 
 import type {
   TraderFullDataResponse,
-  UserPortfolioResponse,
   UserFillsResponse,
+  UserPortfolioResponse,
 } from './hyperliquid-api'
-import { cachedRequest, CacheKeys, CacheTTL, clearCache, invalidateCache } from './api-cache'
+import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
 import { ApiError, AuthenticationError, logError } from './errors'
@@ -74,24 +74,6 @@ export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDt
 interface BaseResponse<T> {
   data?: T
   message?: string
-}
-
-interface ClosePositionRequest {
-  userStrategyAccountId: string
-  positionId: string
-  quantity: string
-  exchangeId: string
-  marketType: string
-  note?: string
-}
-
-interface ClosePositionResponse {
-  success: boolean
-  orderId: string
-  positionId: string
-  filledQuantity: string
-  averagePrice?: string
-  message: string
 }
 
 // 使用统一的unwrapApiResponse
@@ -1342,7 +1324,7 @@ export interface LlmSubscriptionResponse {
 }
 
 export async function createLlmSubscription(
-  payload: CreateLlmSubscriptionPayload,
+  _payload: CreateLlmSubscriptionPayload,
 ): Promise<LlmSubscriptionResponse | null> {
   return null
 }
@@ -1369,7 +1351,7 @@ export async function fetchLlmSubscriptionDetail(
 
 export async function updateLlmSubscription(
   subscriptionId: string,
-  payload: {
+  _payload: {
     status?: 'active' | 'paused' | 'cancelled'
     customParams?: Record<string, unknown> | null
     exchangeAccountId?: string | null
@@ -1761,7 +1743,7 @@ export interface TickerData {
   nextFundingTime?: string
 }
 
-export async function fetchTicker(symbol: string, exchange?: string): Promise<TickerData | null> {
+export async function fetchTicker(_symbol: string, _exchange?: string): Promise<TickerData | null> {
   try {
     return await apiCall(async () => {
       const response = await client.MarketsController_getTicker({})
@@ -1770,5 +1752,60 @@ export async function fetchTicker(symbol: string, exchange?: string): Promise<Ti
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
     return null
+  }
+}
+
+// ============================================================================
+// 聚合成交量（24h Volume）API
+// ============================================================================
+
+export interface FetchAggregatedVolumeQuery {
+  symbol: string
+  instrumentType?: 'SPOT' | 'PERPETUAL'
+  page?: number
+  limit?: number
+}
+
+// 与后端 AggregatedVolumeResponseDto 对齐的最小字段集合
+export interface AggregatedVolumeApiItem {
+  id: number
+  exchange: string
+  symbol: string
+  instrumentType?: string
+  volumeUsd: string
+  dataTimestamp: string
+  source: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AggregatedVolumeApiResponse extends PaginatedResponse<AggregatedVolumeApiItem> {}
+
+export async function fetchAggregatedVolume(
+  query: FetchAggregatedVolumeQuery,
+): Promise<AggregatedVolumeApiResponse> {
+  try {
+    return await apiCall(async () => {
+      const response = await client.MarketsController_getAggregatedVolumes({
+        headers: optionalAuthHeaders(),
+        queries: {
+          symbol: query.symbol,
+          ...(query.instrumentType && { instrumentType: query.instrumentType }),
+          page: query.page ?? 1,
+          limit: query.limit ?? 50,
+        },
+      })
+
+      return unwrapResponse(response) as AggregatedVolumeApiResponse
+    }, 'FETCH_AGGREGATED_VOLUME')
+  } catch (error) {
+    if (!shouldFallbackToMock(error)) throw error
+    // 在非生产环境或可回退场景下，返回空列表，由调用方决定是否使用本地 mock
+    return {
+      total: 0,
+      page: query.page ?? 1,
+      limit: query.limit ?? 50,
+      items: [],
+    }
   }
 }

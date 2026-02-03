@@ -14,6 +14,7 @@ export function useMockData<T>(
 
   const load = useCallback(
     async (isTransition = false) => {
+      void dependencies
       // Determine delay based on rules:
       // Initial: 1200-2000ms, Transition: 600-1000ms
       const delay = options.delay ?? (isTransition ? 800 : 1500)
@@ -57,7 +58,6 @@ export function useMockData<T>(
           setLoading(false)
         }
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [
       fetcher,
@@ -69,14 +69,13 @@ export function useMockData<T>(
       setData,
       setError,
       setLoading,
-      ...dependencies,
+      dependencies,
     ],
   )
 
   useEffect(() => {
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies)
+  }, [load, dependencies])
 
   return { data, loading, error, reload: () => load(true) }
 }

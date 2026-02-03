@@ -16,7 +16,10 @@ function useContainerWidth() {
     if (!el) return
     const read = () => {
       const w = Math.floor(el.getBoundingClientRect().width)
-      if (w > 0) setWidth(w)
+      if (w > 0) {
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync container width
+        setWidth(w)
+      }
     }
     read()
     const RO = (window as any).ResizeObserver as typeof ResizeObserver | undefined
@@ -35,7 +38,7 @@ function useContainerWidth() {
 // Same clamp logic as editor canvas (read-only):
 // - All widgets respect preset width/height
 const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
-  (items || []).map((n) => {
+  (items || []).map(n => {
     const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
     if (widgetType) {
       const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
@@ -49,7 +52,10 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
-  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
+  const widgetsById = useMemo(
+    () => new Map((doc?.widgets ?? []).map(w => [w.id, w])),
+    [doc?.widgets],
+  )
   const [layoutState, setLayoutState] = useState(() =>
     clampLayout((doc ?? ensureDashboard('draft')).layout, widgetsById),
   )
@@ -66,35 +72,40 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
     const refresh = () => {
       if (props.dashboardId === 'draft') {
         const freshDoc = ensureDashboard('draft')
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft dashboard
         setDoc(freshDoc)
-        const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+        const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync layout from storage
         setLayoutState(clampLayout(freshDoc.layout, map))
         return
       }
       const freshDoc = getDashboard(props.dashboardId)
       if (!freshDoc) return // do not recreate deleted dashboards
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard
       setDoc(freshDoc)
-      const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+      const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync layout from storage
       setLayoutState(clampLayout(freshDoc.layout, map))
     }
     refresh()
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
     window.addEventListener('storage', refresh)
     return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
       window.removeEventListener('storage', refresh)
     }
   }, [props.dashboardId])
 
-  if (!doc) return <div className="text-white/30 p-10 text-center">{t('dashboard.notFound')}</div>
-  if (!GridLayout) return <div className="text-white/30 p-10 text-center">{t('common.loading')}</div>
+  if (!doc) return <div className="p-10 text-center text-white/30">{t('dashboard.notFound')}</div>
+  if (!GridLayout)
+    return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
   const rowHeight = 10
   const marginY = 6
 
   return (
-    <div className="w-full flex flex-col h-full overflow-hidden">
-      <div ref={containerRef} className="flex-1 relative overflow-y-auto no-scrollbar min-h-0">
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         <GridLayout
           layout={layoutState as any}
           cols={12}
@@ -112,7 +123,7 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
             return (
               <div
                 key={l.i}
-                className="bg-[#161b22] border border-white/10 rounded-xl overflow-hidden shadow-sm relative transition-all duration-300"
+                className="relative overflow-hidden rounded-xl border border-white/10 bg-[#161b22] shadow-sm transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
                 <WidgetRenderer widget={w} />
@@ -124,4 +135,3 @@ export function DashboardReadOnlyCanvas(props: { dashboardId: string }) {
     </div>
   )
 }
-

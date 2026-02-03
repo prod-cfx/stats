@@ -1,10 +1,5 @@
-import type { schemas } from '@ai/api-contracts'
-import type { ZodTypeAny } from 'zod'
-
 import { API_BASE_URL, unwrapApiResponse } from './api-client'
 import { getServerAuthHeaders } from './server-auth'
-
-type Infer<T extends ZodTypeAny> = T['_output']
 
 export type UserLlmStrategyInstanceResponse = any
 

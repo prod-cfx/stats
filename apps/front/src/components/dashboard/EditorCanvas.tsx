@@ -33,6 +33,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   useEffect(() => {
     const refresh = () => {
       if (dashboardId === DEFAULT_DASHBOARD_ID) {
+        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync draft dashboard from storage
         setDoc(ensureDashboard(DEFAULT_DASHBOARD_ID))
         return
       }
@@ -42,6 +43,7 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
         router.replace(`/${lng}/dashboard/?tab=saved`)
         return
       }
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync stored dashboard on id change
       setDoc(existing)
     }
     refresh()

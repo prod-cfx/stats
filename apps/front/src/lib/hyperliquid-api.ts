@@ -362,6 +362,8 @@ const MAX_RETRIES = 3
  * 发送 POST 请求到 Hyperliquid API
  *
  * @param request - API 请求参数
+ * @param request.type - Hyperliquid info type
+ * @param request.user - 用户地址（可选）
  * @returns API 响应数据
  * @throws ApiError 当请求失败时
  */
@@ -817,6 +819,7 @@ export async function fetchTraderSnapshotFromHyperliquid(
  *
  * @param address - 用户地址（42 字符十六进制格式）
  * @param options - 查询选项
+ * @param options.type - 查询类型（perp/spot/all）
  * @returns 持仓详情数据（兼容后端 DTO 格式）
  */
 export async function fetchTraderPositionsFromHyperliquid(
@@ -899,6 +902,7 @@ export async function fetchTraderPositionsFromHyperliquid(
  *
  * @param address - 用户地址（42 字符十六进制格式）
  * @param options - 查询选项
+ * @param options.coin - 指定币种过滤
  * @returns 挂单列表数据（兼容后端 DTO 格式）
  */
 export async function fetchTraderOpenOrdersFromHyperliquid(
@@ -989,6 +993,7 @@ export async function fetchUserPortfolioFromHyperliquid(
  *
  * @param address - 用户地址（42 字符十六进制格式）
  * @param options - 查询选项
+ * @param options.aggregateByTime - 是否按时间聚合
  * @returns 成交记录列表
  */
 export async function fetchUserFillsFromHyperliquid(

@@ -726,7 +726,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       let scheduleNext: () => void
 
-      const runOrderbookBroadcast = async (): Promise<void> => {
+      async function runOrderbookBroadcast(): Promise<void> {
         if (subscriptionInfo.isRunning) {
           return
         }

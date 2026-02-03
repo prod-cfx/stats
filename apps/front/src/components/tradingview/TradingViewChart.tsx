@@ -1270,6 +1270,8 @@ function tryExecuteActionInsertIndicator(widget: any) {
   }
 }
 
+const DEFAULT_ACTIVE_INDICATORS: TradingViewChartProps['activeIndicators'] = []
+
 export const TradingViewChart = forwardRef(
   (
     {
@@ -1284,7 +1286,7 @@ export const TradingViewChart = forwardRef(
       onOpenDataIndicator,
       onIntervalChanged,
       onRemoveIndicator,
-      activeIndicators = [],
+      activeIndicators = DEFAULT_ACTIVE_INDICATORS,
     }: TradingViewChartProps,
     ref: Ref<TradingViewChartRef>,
   ) => {
@@ -1494,6 +1496,7 @@ export const TradingViewChart = forwardRef(
 
     // Sync currentInterval with interval prop (for external control)
     useEffect(() => {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync external interval
       setCurrentInterval(interval)
     }, [interval])
 
@@ -1581,7 +1584,7 @@ export const TradingViewChart = forwardRef(
       els.cleanupMenuListener = null
     }
 
-    const updateHeaderUi = () => {
+    const updateHeaderUi = useCallback(() => {
       const { isAggregated: agg, selectedExchange: ex } = stateRef.current
       const els = headerElsRef.current
 
@@ -1612,7 +1615,7 @@ export const TradingViewChart = forwardRef(
           els.indicatorBtn.textContent = indicatorLabel
         }
       }
-    }
+    }, [t])
 
     useImperativeHandle(
       ref,
@@ -1964,12 +1967,14 @@ export const TradingViewChart = forwardRef(
               // 交互约定：
               // - 点击开关：切换聚合开/关
               // - 当聚合=关时，点击文字区域：直接下拉选择交易所（不再出现单独的交易所按钮）
+              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
               aggSwitch.addEventListener('click', e => {
                 e.preventDefault()
                 e.stopPropagation()
                 callbacksRef.current.onToggleAggregate?.()
               })
 
+              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
               aggLabel.addEventListener('click', e => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -2011,8 +2016,10 @@ export const TradingViewChart = forwardRef(
                   closeMenu()
                 }
                 // 监听 iframe 内部点击
+                // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via cleanupMenuListener
                 doc.addEventListener('mousedown', onDoc, true)
                 // 同时也尝试监听主文档点击（如果 iframe 未跨域）
+                // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via cleanupMenuListener
                 document.addEventListener('mousedown', onDoc, true)
 
                 els.cleanupMenuListener = () => {
@@ -2026,6 +2033,7 @@ export const TradingViewChart = forwardRef(
               indicatorBtn.classList.add('tv-custom-btn')
               const indicatorLabel = t('chart.toolbar.featuredIndicators')
               indicatorBtn.textContent = indicatorLabel
+              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- button removed on widget teardown
               indicatorBtn.addEventListener('click', e => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -2066,12 +2074,13 @@ export const TradingViewChart = forwardRef(
         chartReadyRef.current = false
         setIsChartReady(false)
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- widget init relies on stableInputs to avoid rebuilds
     }, [stableInputs])
 
     // state 变化只更新 header 文案/可见性，不重建 widget
     useEffect(() => {
       updateHeaderUi()
-    }, [isAggregated, selectedExchange])
+    }, [isAggregated, selectedExchange, updateHeaderUi])
 
     // === 清算地图 overlay：挂接适配器 + 生成数据 + hover/click 交互 ===
     // IMPORTANT: 只有在 isChartReady=true 后才允许触碰 activeChart()/chart()（否则某些版本会崩）。
@@ -2103,7 +2112,10 @@ export const TradingViewChart = forwardRef(
           try {
             const panes = chart?.getPanes?.()
             const h = panes?.[0]?.getHeight?.()
-            if (typeof h === 'number' && Number.isFinite(h) && h > 0) setMainPaneHeight(h)
+            if (typeof h === 'number' && Number.isFinite(h) && h > 0) {
+              // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- measured from chart instance
+              setMainPaneHeight(h)
+            }
           } catch {
             // ignore
           }
@@ -2229,6 +2241,7 @@ export const TradingViewChart = forwardRef(
             liqNativeRemovingRef.current = false
             liqNativeShapeIdsRef.current = []
             liqNativeMissRef.current = 0
+            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync native drawing state
             setLiqNativeActive(false)
           }
         }
@@ -2463,7 +2476,10 @@ export const TradingViewChart = forwardRef(
 
         if (showLiqOverlay) {
           // 显示时默认不隐藏（避免上一次隐藏状态残留导致“看起来没效果”）
-          if (liqHiddenRef.current) setLiqHidden(false)
+          if (liqHiddenRef.current) {
+            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset hidden state on show
+            setLiqHidden(false)
+          }
 
           // 1) 创建 legend 占位 study（这样清算地图会出现在指标 legend 上，并且有 eye/X 按钮）
           // 防御：历史遗留的错误值（把 Promise stringify 成了 "[object Promise]"）会导致后续定位/删除全部失效
@@ -2753,7 +2769,9 @@ export const TradingViewChart = forwardRef(
               }
 
               // 用 pointerdown/mousedown 捕获，优先于内部 click handler，避免内部拦截导致我们收不到事件
+              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via _legendUiCleanupRef
               doc.addEventListener('pointerdown', onDocPointerDown, true)
+              // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via _legendUiCleanupRef
               doc.addEventListener('mousedown', onDocPointerDown, true)
               _legendUiCleanupRef.current = () => {
                 if (retryTimer) clearTimeout(retryTimer)
@@ -2810,6 +2828,7 @@ export const TradingViewChart = forwardRef(
           }, 700)
 
           // Native drawings 支持探测（部分内置精简版可能没有 createMultipointShape）
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- probe native drawings support
           setLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
 
           paneSizeTimer = setInterval(() => computeMainPaneHeight(), 800)
@@ -2861,6 +2880,7 @@ export const TradingViewChart = forwardRef(
             const anchor = mid > 0 ? mid : fallbackAnchor
             liqCurrentPriceRef.current = anchor
             const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
+            // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync generated mock data
             setLiqData(d)
             // 同步绘制 native rectangles（如果支持）
             try {
@@ -2897,9 +2917,12 @@ export const TradingViewChart = forwardRef(
 
           removeAllLiqDrawings()
           removeLiqHoverLine()
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset hidden state on teardown
           setLiqHidden(false)
 
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset liq data on teardown
           setLiqData(null)
+          // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset selection on teardown
           setLiqSelected(null)
           liqLockedRef.current = false
           liqLockedPriceRef.current = null
@@ -3081,6 +3104,7 @@ export const TradingViewChart = forwardRef(
               }
             }
 
+            // eslint-disable-next-line react-web-api/no-leaked-event-listener -- cleaned up via hoverMoveCleanup
             doc.addEventListener('pointermove', onMove, { capture: true })
             hoverMoveCleanup = () => {
               try {
@@ -3191,6 +3215,7 @@ export const TradingViewChart = forwardRef(
         cleanup?.()
         cleanup = null
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- overlay setup relies on refs and stable inputs
     }, [isReady, isChartReady, showLiqOverlay, symbol])
 
     useEffect(() => {

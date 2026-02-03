@@ -25,7 +25,9 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   const lng = (params as any)?.lng || 'zh'
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState(dashboard.name)
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>(
+    'idle',
+  )
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [savePublishStatus, setSavePublishStatus] = useState<SavePublishStatus>('idle')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -35,6 +37,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   // 监听看板变化，检测是否有未保存的修改
   useEffect(() => {
     const currentState = JSON.stringify(dashboard)
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived from dashboard prop
     setHasUnsavedChanges(currentState !== lastSavedStateRef.current)
   }, [dashboard])
 
@@ -74,7 +77,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
     setUploadError(null)
 
     const reader = new FileReader()
-    
+
     reader.onerror = () => {
       setUploadStatus('error')
       setUploadError(t('dashboard.editor.actions.uploadFail'))
@@ -90,7 +93,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         updateDashboardMeta(dashboard.id, { thumbnail: base64 })
         setUploadStatus('success')
         onRefresh()
-        
+
         // 2秒后恢复初始状态
         setTimeout(() => {
           setUploadStatus('idle')
@@ -105,18 +108,18 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         }, 3000)
       }
     }
-    
+
     reader.readAsDataURL(file)
-    
+
     // 清空 input，允许重复上传同一文件
     e.target.value = ''
   }
 
   const handleSaveChanges = async () => {
     if (savePublishStatus === 'saving') return
-    
+
     setSavePublishStatus('saving')
-    
+
     try {
       // If we're still on the internal placeholder `draft`, materialize it into a real dashboard id
       // so it can appear under "Saved Dashboards" (lists intentionally filter out `draft`).
@@ -133,20 +136,20 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
 
       // 模拟保存延迟
       await new Promise(resolve => setTimeout(resolve, 600))
-      
+
       // 更新最后保存状态
       lastSavedStateRef.current = JSON.stringify(dashboard)
       setHasUnsavedChanges(false)
       setSavePublishStatus('success')
-      
+
       toast.success({
         title: t('dashboard.editor.validation.saveSuccess'),
         description: t('dashboard.editor.validation.saveSuccessDesc'),
         duration: 2000,
       })
-      
+
       onRefresh()
-      
+
       // 1.5秒后恢复按钮状态
       setTimeout(() => {
         setSavePublishStatus('idle')
@@ -165,27 +168,27 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   }
 
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="mb-6 flex items-center justify-between">
       {/* Title */}
       <div className="flex items-center gap-3">
         {/* Thumbnail Preview */}
         {dashboard.thumbnail && (
-          <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-[color:var(--cf-border)] flex-shrink-0">
+          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg border-2 border-[color:var(--cf-border)]">
             <img
               src={dashboard.thumbnail}
               alt="Dashboard thumbnail"
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
             />
           </div>
         )}
-        
+
         {isEditingTitle ? (
           <input
             type="text"
             value={titleValue}
-            onChange={(e) => setTitleValue(e.target.value)}
+            onChange={e => setTitleValue(e.target.value)}
             onBlur={handleSaveTitle}
-            onKeyDown={(e) => {
+            onKeyDown={e => {
               if (e.key === 'Enter') handleSaveTitle()
               if (e.key === 'Escape') {
                 setTitleValue(dashboard.name)
@@ -193,18 +196,20 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
               }
             }}
             autoFocus
-            className="bg-transparent border-b border-[color:var(--cf-border)] text-4xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none px-2"
+            className="border-b border-[color:var(--cf-border)] bg-transparent px-2 text-4xl font-bold text-[color:var(--cf-text-strong)] focus:outline-none"
           />
         ) : (
-          <h1 className="text-4xl font-bold text-[color:var(--cf-text-strong)]">{dashboard.name}</h1>
+          <h1 className="text-4xl font-bold text-[color:var(--cf-text-strong)]">
+            {dashboard.name}
+          </h1>
         )}
         <button
           type="button"
           onClick={() => setIsEditingTitle(!isEditingTitle)}
-          className="text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors p-2"
+          className="p-2 text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
           title={t('dashboard.editor.actions.editTitle')}
         >
-          <Edit2 className="w-4 h-4" />
+          <Edit2 className="h-4 w-4" />
         </button>
       </div>
 
@@ -216,41 +221,51 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadStatus === 'uploading'}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-lg active:scale-95 ${
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
               uploadStatus === 'uploading'
-                ? 'bg-gray-500 cursor-not-allowed'
+                ? 'cursor-not-allowed bg-gray-500'
                 : uploadStatus === 'success'
                   ? 'bg-green-600 text-white'
                   : uploadStatus === 'error'
                     ? 'bg-red-600 text-white'
-                    : 'bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-primary/20'
+                    : 'from-primary to-secondary shadow-primary/20 bg-gradient-to-r text-white hover:opacity-90'
             }`}
-            title={uploadStatus === 'idle' ? t('dashboard.editor.actions.selectThumbnail') : uploadStatus === 'uploading' ? t('dashboard.editor.actions.uploading') : uploadStatus === 'success' ? t('dashboard.editor.actions.uploadSuccess') : t('dashboard.editor.actions.uploadFail')}
+            title={
+              uploadStatus === 'idle'
+                ? t('dashboard.editor.actions.selectThumbnail')
+                : uploadStatus === 'uploading'
+                  ? t('dashboard.editor.actions.uploading')
+                  : uploadStatus === 'success'
+                    ? t('dashboard.editor.actions.uploadSuccess')
+                    : t('dashboard.editor.actions.uploadFail')
+            }
           >
             {uploadStatus === 'uploading' ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 {t('dashboard.editor.actions.uploading')}
               </>
             ) : uploadStatus === 'success' ? (
               <>
-                <Check className="w-4 h-4" />
+                <Check className="h-4 w-4" />
                 {t('dashboard.editor.actions.uploadSuccess')}
               </>
             ) : uploadStatus === 'error' ? (
               <>
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
                 {t('dashboard.editor.actions.uploadFail')}
               </>
             ) : (
               <>
-                <Image className="w-4 h-4" />
-                {dashboard.thumbnail ? t('dashboard.editor.actions.changeThumbnail') : t('dashboard.editor.actions.selectThumbnail')}
+                <Image className="h-4 w-4" />
+                {dashboard.thumbnail
+                  ? t('dashboard.editor.actions.changeThumbnail')
+                  : t('dashboard.editor.actions.selectThumbnail')}
               </>
             )}
           </button>
           {uploadError && (
-            <div className="absolute top-full mt-2 left-0 right-0 bg-red-500/10 border border-red-500/30 rounded px-3 py-2 text-xs text-red-400 whitespace-nowrap z-10">
+            <div className="absolute top-full right-0 left-0 z-10 mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs whitespace-nowrap text-red-400">
               {uploadError}
             </div>
           )}
@@ -267,55 +282,59 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
         {(() => {
           const canSave = hasUnsavedChanges || dashboard.id === 'draft'
           return (
-        <button
-          type="button"
-          onClick={handleSaveChanges}
-          disabled={savePublishStatus === 'saving' || savePublishStatus === 'success' || !canSave}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium shadow-lg active:scale-95 ${
-            savePublishStatus === 'saving'
-              ? 'bg-gray-600 cursor-not-allowed text-white'
-              : savePublishStatus === 'success'
-                ? 'bg-green-600 text-white'
-                : savePublishStatus === 'error'
-                  ? 'bg-red-600 text-white'
-                  : !canSave
-                    ? 'bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)] cursor-not-allowed'
-                    : 'bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-primary/20'
-          }`}
-          title={
-            savePublishStatus === 'saving'
-              ? t('dashboard.editor.actions.saving')
-              : savePublishStatus === 'success'
-                ? t('dashboard.editor.validation.saveSuccess')
-              : savePublishStatus === 'error'
-                ? t('dashboard.editor.validation.saveFail')
-                : !canSave
-                  ? t('dashboard.editor.actions.noChanges')
-                  : t('dashboard.editor.actions.saveChanges')
-          }
-        >
-          {savePublishStatus === 'saving' ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {t('dashboard.editor.actions.saving')}
-            </>
-          ) : savePublishStatus === 'success' ? (
-            <>
-              <Check className="w-4 h-4" />
-              {t('dashboard.editor.actions.saved')}
-            </>
-          ) : savePublishStatus === 'error' ? (
-            <>
-              <X className="w-4 h-4" />
-              {t('dashboard.editor.validation.saveFail')}
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              {canSave ? t('dashboard.editor.actions.save') : t('dashboard.editor.actions.saved')}
-            </>
-          )}
-        </button>
+            <button
+              type="button"
+              onClick={handleSaveChanges}
+              disabled={
+                savePublishStatus === 'saving' || savePublishStatus === 'success' || !canSave
+              }
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all active:scale-95 ${
+                savePublishStatus === 'saving'
+                  ? 'cursor-not-allowed bg-gray-600 text-white'
+                  : savePublishStatus === 'success'
+                    ? 'bg-green-600 text-white'
+                    : savePublishStatus === 'error'
+                      ? 'bg-red-600 text-white'
+                      : !canSave
+                        ? 'cursor-not-allowed bg-[color:var(--cf-surface)] text-[color:var(--cf-muted)]'
+                        : 'from-primary to-secondary shadow-primary/20 bg-gradient-to-r text-white hover:opacity-90'
+              }`}
+              title={
+                savePublishStatus === 'saving'
+                  ? t('dashboard.editor.actions.saving')
+                  : savePublishStatus === 'success'
+                    ? t('dashboard.editor.validation.saveSuccess')
+                    : savePublishStatus === 'error'
+                      ? t('dashboard.editor.validation.saveFail')
+                      : !canSave
+                        ? t('dashboard.editor.actions.noChanges')
+                        : t('dashboard.editor.actions.saveChanges')
+              }
+            >
+              {savePublishStatus === 'saving' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('dashboard.editor.actions.saving')}
+                </>
+              ) : savePublishStatus === 'success' ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  {t('dashboard.editor.actions.saved')}
+                </>
+              ) : savePublishStatus === 'error' ? (
+                <>
+                  <X className="h-4 w-4" />
+                  {t('dashboard.editor.validation.saveFail')}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  {canSave
+                    ? t('dashboard.editor.actions.save')
+                    : t('dashboard.editor.actions.saved')}
+                </>
+              )}
+            </button>
           )
         })()}
       </div>

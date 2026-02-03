@@ -36,7 +36,9 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
     dataMapRef.current.clear()
     lastFetchTimeRef.current = 0
     retryCountRef.current = 0
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset data for new symbol/interval
     setData([])
+    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset error for new symbol/interval
     setError(null)
   }, [symbol, interval])
 
@@ -60,7 +62,7 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
         const now = Math.floor(Date.now() / 1000)
 
         // 增量更新：首次加载获取 24 小时数据，后续只获取新数据
-        const from = lastFetchTimeRef.current || (now - 24 * 60 * 60)
+        const from = lastFetchTimeRef.current || now - 24 * 60 * 60
 
         logger.debug('[useAggregatedVolumeData] Fetching aggregated volume data', {
           symbol,
@@ -115,7 +117,7 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
         // 重试逻辑（指数退避）
         if (retryCountRef.current < MAX_RETRIES) {
           retryCountRef.current++
-          const retryDelay = 1000 * 2**(retryCountRef.current - 1) // 1s, 2s, 4s
+          const retryDelay = 1000 * 2 ** (retryCountRef.current - 1) // 1s, 2s, 4s
           logger.warn('[useAggregatedVolumeData] Retrying...', {
             attempt: retryCountRef.current,
             maxRetries: MAX_RETRIES,
@@ -144,9 +146,12 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
     void fetchData()
 
     // 每3分钟更新一次
-    const intervalId = setInterval(() => {
-      void fetchData()
-    }, 3 * 60 * 1000)
+    const intervalId = setInterval(
+      () => {
+        void fetchData()
+      },
+      3 * 60 * 1000,
+    )
 
     return () => {
       isActive = false

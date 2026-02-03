@@ -68,14 +68,16 @@ export const DashboardSidebar = ({
 
   useEffect(() => {
     const refresh = () => {
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
       setMyDashboards(getMyDashboards())
+      // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- sync dashboard lists from storage
       setSavedDashboards(getSavedDashboards())
     }
     refresh()
-    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+    window.addEventListener(DASHBOARD_UPDATED_EVENT, refresh)
     window.addEventListener('storage', refresh)
     return () => {
-      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh as any)
+      window.removeEventListener(DASHBOARD_UPDATED_EVENT, refresh)
       window.removeEventListener('storage', refresh)
     }
   }, [])
