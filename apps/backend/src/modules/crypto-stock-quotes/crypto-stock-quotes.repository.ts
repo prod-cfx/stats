@@ -182,6 +182,88 @@ export class CryptoStockQuotesRepository {
   }
 
   /**
+   * BBX_SCRAPER 专用：按 symbol 替换快照
+   *
+   * - 仅允许 source='BBX_SCRAPER'
+   * - 同一轮 inputs 的 quoteTimestamp 必须一致
+   * - 每个 symbol 仅删除该 symbol+source 的旧记录，再插入该 symbol 的新快照
+   */
+  async upsertBbxScraperQuotesBySymbolReplace(
+    inputs: CreateCryptoStockQuoteInput[],
+  ): Promise<number> {
+    if (inputs.length === 0) {
+      throw new Error('BBX_SCRAPER inputs cannot be empty.')
+    }
+
+    const source = inputs[0]?.source
+    if (source !== 'BBX_SCRAPER') {
+      throw new Error('BBX_SCRAPER source only.')
+    }
+
+    const inconsistentSource = inputs.find(input => input.source !== source)
+    if (inconsistentSource) {
+      throw new SourceConsistencyException({
+        expected: source,
+        got: inconsistentSource.source ?? 'UNKNOWN',
+      })
+    }
+
+    const quoteTimestamp = inputs[0]?.quoteTimestamp
+    const inconsistentTimestamp = inputs.find(
+      input => input.quoteTimestamp.getTime() !== quoteTimestamp.getTime(),
+    )
+    if (inconsistentTimestamp) {
+      throw new Error('BBX_SCRAPER quoteTimestamp must be consistent.')
+    }
+
+    const groupedBySymbol = new Map<string, CreateCryptoStockQuoteInput[]>()
+    for (const input of inputs) {
+      const group = groupedBySymbol.get(input.symbol)
+      if (group) {
+        group.push(input)
+      } else {
+        groupedBySymbol.set(input.symbol, [input])
+      }
+    }
+
+    const startedAt = Date.now()
+    const { createdCount, symbolCount } = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        let created = 0
+
+        for (const [symbol, symbolInputs] of groupedBySymbol) {
+          await tx.cryptoStockQuote.deleteMany({
+            where: {
+              source,
+              symbol,
+            },
+          })
+
+          const createData = symbolInputs.map(input => this.buildCreateData(input))
+          if (createData.length > 0) {
+            await tx.cryptoStockQuote.createMany({
+              data: createData,
+            })
+            created += createData.length
+          }
+        }
+
+        return {
+          createdCount: created,
+          symbolCount: groupedBySymbol.size,
+        }
+      },
+    )
+
+    const durationMs = Date.now() - startedAt
+    this.logger.log(
+      `BBX_SCRAPER replace by symbol: symbols=${symbolCount}, created=${createdCount}, durationMs=${durationMs}`,
+    )
+
+    return createdCount
+  }
+
+  /**
    * 查询加密股票报价记录
    */
   async findQuotes(query: QueryCryptoStockQuotesInput): Promise<CryptoStockQuote[]> {

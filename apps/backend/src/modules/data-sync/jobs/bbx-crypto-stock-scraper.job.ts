@@ -1,4 +1,4 @@
-import type { Locator } from 'playwright'
+import type { APIRequestContext } from 'playwright'
 import type {
   DataPullJob,
   DataPullJobContext,
@@ -9,6 +9,87 @@ import { Injectable, Logger } from '@nestjs/common'
 import { chromium } from 'playwright'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
+
+const SYMBOL_EXTRACT_REGEX = /([A-Z][A-Z0-9.]{1,9})/g
+
+export function parseBbxCompactNumber(input: string): number | undefined {
+  const text = normalizeBbxWhitespace(input)
+  if (!text || text === '-') return undefined
+
+  // Normalize spaces/newlines like: "1386.6 B\nUSD" -> "1386.6 B USD"
+  const normalized = normalizeBbxWhitespace(text)
+
+  // Match: 1,386.6 B | 233.51B | 10.72 B | 45.4 BUSD | 210.66 MUSD | 45.4 B HKD
+  // NOTE: BBX sometimes renders unit+currency without whitespace, e.g. "41.11 BUSD".
+  const match = normalized.match(/([\d,.]+)\s*([TBMK])(?=\b|[A-Z])/i)
+  if (!match) return undefined
+
+  const rawNum = match[1]!.replace(/,/g, '')
+  const num = Number.parseFloat(rawNum)
+  if (Number.isNaN(num)) return undefined
+
+  const suffix = match[2]!.toUpperCase()
+  if (suffix === 'T') return num * 1e12
+  if (suffix === 'B') return num * 1e9
+  if (suffix === 'M') return num * 1e6
+  if (suffix === 'K') return num * 1e3
+  return undefined
+}
+
+function normalizeBbxWhitespace(input: string): string {
+  return input
+    .replace(/[\u00A0\u202F\u200B\uFEFF]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function parseBbxMarketCapText(input: string): number | undefined {
+  // Market cap cell often looks like:
+  // "1386.6 B\nUSD" or "45.4 B\nHKD" or "-"
+  return parseBbxCompactNumber(input)
+}
+
+export function parseBbxPriceText(input: string): number | undefined {
+  const text = normalizeBbxWhitespace(input)
+  if (!text || text === '-') return undefined
+  const normalized = normalizeBbxWhitespace(text)
+  // Price is usually a plain number, sometimes with $ and commas.
+  const match = normalized.match(/\$?\s*([\d,.]+)/)
+  if (!match) return undefined
+  const raw = match[1]!.replace(/,/g, '')
+  const num = Number.parseFloat(raw)
+  return Number.isNaN(num) ? undefined : num
+}
+
+interface ParsedStockInfo {
+  symbol: string
+  exchange: string
+}
+
+export function parseBbxStockInfoFromCompanyCell(input: string): ParsedStockInfo | undefined {
+  const normalized = normalizeBbxWhitespace(input.replace(/[—–−]/g, '-'))
+  if (!normalized) return undefined
+
+  // 先定位市场标识与交易所（这比假设 symbol 在行首更稳健）
+  const marketRe = /(美股|港股|加股|英股|日股|韩股|德股|法股|澳股)\s*-\s*([A-Z0-9-]+)/i
+  const marketMatch = normalized.match(marketRe)
+  if (!marketMatch || marketMatch.index == null) return undefined
+
+  const exchange = marketMatch[2]!.toUpperCase()
+
+  // 在 market 标识之前寻找最靠近它的 symbol 候选（处理 "...MSTR美股-NASDAQ"）
+  const prefix = normalized.slice(0, marketMatch.index)
+  SYMBOL_EXTRACT_REGEX.lastIndex = 0
+  const matches = Array.from(prefix.matchAll(SYMBOL_EXTRACT_REGEX))
+    .map(m => m[1])
+    .filter(Boolean)
+  if (matches.length === 0) return undefined
+
+  return {
+    symbol: matches[matches.length - 1]!,
+    exchange,
+  }
+}
 
 /**
  * 从 BBX 页面抓取的币股数据结构
@@ -25,6 +106,63 @@ interface BbxScrapedQuote {
   holdingCoin?: string
   price: number
   priceChangePercent?: number
+  rawData?: Record<string, unknown>
+}
+
+interface BbxCompanyListItem {
+  symbol: string
+  name?: string
+  exchange?: string
+  companyType?: string
+  price?: number
+  priceChangePercent?: number
+  marketCap?: number
+  mNav?: number
+  holdingValue?: number
+  holdingQuantity?: number
+  holdingCoin?: string
+  rawMarketCap?: string
+  rawData?: Record<string, unknown>
+}
+
+interface BbxCompanyListFetchResult {
+  items: BbxCompanyListItem[]
+  totalCount: number
+  filteredSymbols: string[]
+  filteredCount: number
+  filteredTotalCount: number
+  sortCheckPassed: boolean
+  usedLocalSort: boolean
+  fetchSucceeded: boolean
+  usedItems: BbxCompanyListItem[]
+}
+
+interface BbxCompanyListDiagnostics {
+  topKeys: string[]
+  dataKeys?: string[]
+  listNodeKeys?: string[]
+  listLength?: number
+  sampleItemKeys?: string[][]
+  sampleMarketCaps?: Array<{ key: string; value: string | number | boolean | null | undefined }>
+}
+
+interface BbxEnrichmentFailure {
+  symbol: string
+  reason: string
+}
+
+interface BbxEnrichmentStats {
+  totalCount: number
+  successCount: number
+  failCount: number
+  successRate: number
+  failures: BbxEnrichmentFailure[]
+  timeBudgetExceeded: boolean
+}
+
+interface BbxEnrichmentResult {
+  quotes: BbxScrapedQuote[]
+  stats: BbxEnrichmentStats
 }
 
 interface BbxScraperJobCursor {
@@ -62,7 +200,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
   readonly key = 'bbx-crypto-stock-scraper'
   readonly name = 'BBX 币股数据页面抓取'
   readonly metaSchema: JobMetaSchema = {
-    description: '从 BBX 加密概念股页面抓取币股报价数据（仅保留市值≥1B USD的记录）',
+    description: '从 BBX 加密概念股页面抓取币股报价数据（仅保留市值≥1B的记录）',
     fields: [
       {
         name: 'url',
@@ -89,28 +227,16 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
   // ========== 业务规则常量 ==========
 
   /** 市值最小阈值（USD），仅保留≥此值的记录 */
-  private static readonly MIN_MARKET_CAP_USD_THRESHOLD = 1e9
+  private static readonly MIN_MARKET_CAP_THRESHOLD = 1e9
+  private static readonly COMPANY_LIST_ENDPOINT = 'https://bbx.com/api/company-list?lan=cn'
+  private static readonly SORT_CHECK_SAMPLE_SIZE = 10
+  private static readonly ENRICHMENT_CONCURRENCY = 4
+  private static readonly ENRICHMENT_MAX_RETRIES = 2
+  private static readonly ENRICHMENT_PER_TICKER_TIMEOUT_MS = 25000
+  private static readonly ENRICHMENT_TIME_BUDGET_MS = 12 * 60 * 1000
+  private static readonly ENRICHMENT_MAX_SCROLL_ITERATIONS = 30
 
   // ========== 正则表达式常量 ==========
-
-  /** 股票代码和交易所：兼容中英与多种短横线（如 "TSLA 美股 - NASDAQ" / "TSLA US - NASDAQ"） */
-  private static readonly STOCK_INFO_REGEX =
-    /\b([A-Z]{1,6}(?:\.[A-Z])?)(?:\s+(?:美股|US|U\.S\.|USA))?\s*[\-–—]\s*(NASDAQ|NYSE|OTCMARKETS)(?=[^A-Z]|$)/i
-
-  /** 从带前缀的符号中提取纯大写股票代码：如 dMSTR -> MSTR */
-  private static readonly SYMBOL_EXTRACT_REGEX = /([A-Z]{1,5}(?:\.[A-Z])?)$/
-
-  /** 公司名称：匹配以常见公司后缀结尾的英文名称 */
-  private static readonly COMPANY_NAME_REGEX =
-    /([A-Z][A-Z\s.,'&()/-]+?(?:Inc\.?|Corp\.?|Ltd\.?|Group|Company|Solutions|Holdings|Technologies|Immersion|Industries)?)(?=[A-Z]{1,6}(?:\.[A-Z])?\s*美股)/i
-
-  /** 公司类型：在交易所信息后、价格前的文本 */
-  private static readonly COMPANY_TYPE_REGEX =
-    /美股\s*-\s*(?:NASDAQ|NYSE|OTCMARKETS)\s*([A-Z][A-Z\s/]*)(?=\d)/i
-
-  /** mNAV：交易所信息后的 4 位小数格式（如 0.8120） */
-  // eslint-disable-next-line regexp/prefer-d
-  private static readonly MNAV_REGEX = /美股\s*-\s*(?:NASDAQ|NYSE|OTCMARKETS)[^0-9]*(\d\.\d{4})/i
 
   /** 持仓金额：$+数字+B/M/K后缀，排除市值（紧跟USD）（如 $61.98B） */
   private static readonly HOLDING_VALUE_REGEX = /\$([\d,.]+)([BMK])(?!USD)/i
@@ -127,10 +253,11 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
 
   async run(ctx: DataPullJobContext<BbxScraperMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
-    const url = ctx.meta?.url ?? 'https://bbx.com/zh-Hans'
+    const jobUrl = ctx.meta?.url ?? 'https://bbx.com/zh-Hans'
     const waitTimeout = ctx.meta?.waitTimeout ?? 10000
-
-    this.logger.log(`Starting BBX page scrape from: ${url}`)
+    this.logger.log(
+      `Starting BBX company list fetch from: ${BbxCryptoStockScraperJob.COMPANY_LIST_ENDPOINT}`,
+    )
 
     const browser = await chromium.launch({
       headless: true,
@@ -157,137 +284,168 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         locale: 'zh-CN',
       })
 
-      const page = await context.newPage()
-
-      // BBX 页面通常会保持长连接，networkidle 可能永远等不到。
-      // 这里改用 domcontentloaded + 显式等待表格出现。
-      await this.gotoWithRetry(page, url, Math.max(30_000, waitTimeout))
-
-      // 点击"全部"按钮展开完整列表（优先尝试 Tab，再 fallback 到纯文本匹配）
-      try {
-        const allTab = page.getByRole('tab', { name: '全部' }).first()
-        if ((await allTab.count()) > 0) {
-          await allTab.click()
-          this.logger.log('Clicked "全部" button')
-
-          // 等待table元素出现（最多10秒）
-          await page.waitForSelector(
-            '.ant-table-tbody tr:not(.ant-table-measure-row):not([aria-hidden="true"]), table tbody tr',
-            { timeout: 10000 },
-          )
-          this.logger.log('Table rows appeared after clicking "全部"')
-
-          // 额外等待2秒确保数据完全加载
-          await page.waitForTimeout(2000)
-        } else {
-          const allButtons = await page.locator('text="全部"').all()
-          if (allButtons.length > 0) {
-            await allButtons[0].click()
-            this.logger.log('Clicked "全部" button')
-            await page.waitForSelector(
-              '.ant-table-tbody tr:not(.ant-table-measure-row):not([aria-hidden="true"]), table tbody tr',
-              { timeout: 10000 },
-            )
-            this.logger.log('Table rows appeared after clicking "全部"')
-            await page.waitForTimeout(2000)
-          }
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Failed to click "全部" button or wait for table: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-
-      // 点击"市值"列头2次（降序排序）
-      try {
-        const marketCapHeader = page.locator('th, div, span', { hasText: '市值' }).first()
-
-        // 先等待元素可见（最多10秒）
-        await marketCapHeader.waitFor({ state: 'visible', timeout: 10000 })
-
-        await marketCapHeader.click()
-        this.logger.log('Clicked "市值" header (1st time - ascending)')
-        await page.waitForTimeout(2000)
-
-        await marketCapHeader.click()
-        this.logger.log('Clicked "市值" header (2nd time - descending)')
-        await page.waitForTimeout(3000)
-      } catch {
-        // 兼容英文表头：Market Cap
-        try {
-          const marketCapHeaderEn = page.locator('th, div, span', { hasText: 'Market Cap' }).first()
-          await marketCapHeaderEn.waitFor({ state: 'visible', timeout: 5000 })
-          await marketCapHeaderEn.click()
-          this.logger.log('Clicked "Market Cap" header (1st time - ascending)')
-          await page.waitForTimeout(2000)
-          await marketCapHeaderEn.click()
-          this.logger.log('Clicked "Market Cap" header (2nd time - descending)')
-          await page.waitForTimeout(3000)
-        } catch (error2) {
-          this.logger.warn(
-            `Failed to click market cap header: ${error2 instanceof Error ? error2.message : String(error2)}`,
-          )
-          // 点击失败不影响继续执行，直接提取当前可见数据
-          this.logger.log('Continuing without sorting, will extract visible data')
-        }
-      }
-
-      // 等待数据表格加载：优先等待元素出现，失败后 fallback 到固定等待
-      try {
-        await page.waitForSelector(
-          '.ant-table-tbody tr.ant-table-row, .ant-table-tbody tr, table tbody tr',
-          { timeout: waitTimeout },
-        )
-      } catch {
-        this.logger.warn('waitForSelector timeout, falling back to fixed wait')
-        await page.waitForTimeout(waitTimeout)
-
-        // Fallback 后检测页面状态，区分「加载失败」和「无数据」
-        const pageContent = await page.content()
-        const hasErrorIndicator =
-          pageContent.includes('error') ||
-          pageContent.includes('失败') ||
-          pageContent.includes('网络异常')
-        const hasNoDataIndicator =
-          pageContent.includes('暂无数据') || pageContent.includes('no data')
-        const rowsAfterWait = await page.$$('.ant-table-tbody tr, table tbody tr')
-
-        if (rowsAfterWait.length === 0) {
-          if (hasErrorIndicator) {
-            this.logger.error('Page load failed: detected error indicators in page content')
-          } else if (hasNoDataIndicator) {
-            this.logger.warn('Page loaded but contains no data indicator')
-          } else {
-            this.logger.warn(
-              `Page state unclear: no .crypto-row found after fallback wait. URL: ${url}`,
-            )
-          }
-        } else {
-          this.logger.log(`Found ${rowsAfterWait.length} table rows after fallback wait`)
-        }
-      }
-
-      // 提取表格数据
-      const quotes = await this.extractQuotes(page)
-
-      if (quotes.length === 0) {
-        this.logger.warn('No quotes extracted from BBX page')
-
-        // 尝试输出轻量诊断信息（写入 executions.meta，便于在后台查看，不依赖 stdout 日志）
-        const debug = await this.buildDebugMeta(page)
+      const listResult = await this.fetchCompanyList(context.request)
+      this.logger.log(
+        `BBX list API totals: total=${listResult.totalCount}, items=${listResult.items.length}, >=1B=${listResult.filteredCount}, sortCheck=${listResult.sortCheckPassed ? 'pass' : 'local-sort'}`,
+      )
+      this.logger.log(`BBX list API >=1B raw count: ${listResult.filteredTotalCount}`)
+      if (!listResult.fetchSucceeded || listResult.items.length === 0) {
+        this.logger.warn('BBX list API failed or returned empty list')
         return {
           fetchedCount: 0,
           newCursor: JSON.stringify({ ...cursor, lastFetchTime: new Date().toISOString() }),
-          meta: { note: 'No quotes extracted', debug },
+          meta: { note: 'List API empty or failed' },
         }
       }
 
-      this.logger.log(`Extracted ${quotes.length} quotes from BBX page`)
+      const topItems = listResult.usedItems.length
+        ? listResult.usedItems
+        : listResult.items
+            .filter(
+              item => (item.marketCap ?? 0) >= BbxCryptoStockScraperJob.MIN_MARKET_CAP_THRESHOLD,
+            )
+            .slice()
+            .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+            .slice(0, 30)
+
+      if (topItems.length === 0) {
+        this.logger.warn('No quotes extracted from BBX list API')
+        return {
+          fetchedCount: 0,
+          newCursor: JSON.stringify({ ...cursor, lastFetchTime: new Date().toISOString() }),
+          meta: { note: 'No quotes extracted from list API' },
+        }
+      }
+
+      if (topItems.length < 10) {
+        this.logger.warn(
+          `BBX list API returned only ${topItems.length} records after filter; expected 10-30`,
+        )
+      }
+
+      const domEnrichmentEnabled = process.env.BBX_SCRAPER_DOM_ENRICH === '1'
+      if (domEnrichmentEnabled) {
+        this.logger.warn('BBX DOM enrichment enabled via BBX_SCRAPER_DOM_ENRICH=1')
+        const symbols = topItems.map(item => item.symbol)
+        const page = await context.newPage()
+        try {
+          await this.prepareConceptPage(page, jobUrl, waitTimeout)
+          const domQuotes = await this.extractQuotes(page, undefined, new Set(symbols))
+          this.logger.log(`BBX DOM extract enabled: quotes=${domQuotes.length}`)
+        } finally {
+          await page.close().catch(() => undefined)
+        }
+        const domResult = await this.enrichQuotesBySymbols(context, jobUrl, waitTimeout, symbols)
+        this.logger.log(
+          `BBX DOM enrichment enabled: successRate=${(domResult.stats.successRate * 100).toFixed(
+            2,
+          )}%, total=${domResult.stats.totalCount}, success=${domResult.stats.successCount}, fail=${domResult.stats.failCount}`,
+        )
+        this.getFirstBoolean({ enabled: true }, ['enabled'])
+      }
+
+      const quotes: BbxScrapedQuote[] = topItems.map(item => {
+        const holdingsDefaulted =
+          item.mNav == null || item.holdingValue == null || item.holdingQuantity == null
+        const rawData = holdingsDefaulted
+          ? { ...(item.rawData ?? {}), holdingsDefaulted: true }
+          : item.rawData
+
+        return {
+          symbol: item.symbol,
+          name: item.name ?? item.symbol,
+          exchange: item.exchange ?? 'UNKNOWN',
+          companyType: item.companyType,
+          mNav: holdingsDefaulted ? 0 : item.mNav,
+          marketCap: item.marketCap,
+          holdingValue: holdingsDefaulted ? 0 : item.holdingValue,
+          holdingQuantity: holdingsDefaulted ? 0 : item.holdingQuantity,
+          holdingCoin: item.holdingCoin,
+          price: item.price ?? 0,
+          priceChangePercent: item.priceChangePercent,
+          rawData,
+        }
+      })
+
+      const missingPriceCount = quotes.filter(quote => !(quote.price > 0)).length
+      if (missingPriceCount > 0) {
+        this.logger.warn(`BBX list API missing price for ${missingPriceCount} records`)
+      }
+
+      const buildFailureReasons = (quote: BbxScrapedQuote): string[] => {
+        const reasons: string[] = []
+        if (!(quote.price > 0)) reasons.push('missing-price')
+        if (!(quote.marketCap != null)) reasons.push('missing-marketCap')
+        else if (quote.marketCap < BbxCryptoStockScraperJob.MIN_MARKET_CAP_THRESHOLD)
+          reasons.push('marketCap-below-1b')
+        return reasons
+      }
+
+      const failures: BbxEnrichmentFailure[] = []
+      const successQuotes: BbxScrapedQuote[] = []
+      const reasonCounts = new Map<string, number>()
+      const defaultedHoldingsSymbols: string[] = []
+      const missingPriceChangeSymbols: string[] = []
+
+      for (const quote of quotes) {
+        const reasons = buildFailureReasons(quote)
+        if (reasons.length === 0) {
+          successQuotes.push(quote)
+        } else {
+          failures.push({ symbol: quote.symbol, reason: reasons.join('|') })
+          for (const reason of reasons) {
+            reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1)
+          }
+        }
+
+        if (quote.priceChangePercent == null) missingPriceChangeSymbols.push(quote.symbol)
+      }
+
+      for (const quote of quotes) {
+        const rawData = quote.rawData as Record<string, unknown> | undefined
+        if (rawData?.holdingsDefaulted === true) defaultedHoldingsSymbols.push(quote.symbol)
+      }
+
+      const totalCount = quotes.length
+      const successCount = successQuotes.length
+      const failCount = failures.length
+      const successRate = totalCount > 0 ? successCount / totalCount : 0
+      const failureListSample = failures.slice(0, 20)
+      const failureSummary = JSON.stringify(failureListSample)
+      const reasonSummary = JSON.stringify(Object.fromEntries(reasonCounts.entries()))
+      const defaultedHoldingsSample = JSON.stringify(defaultedHoldingsSymbols.slice(0, 20))
+      const missingPriceChangeSample = JSON.stringify(missingPriceChangeSymbols.slice(0, 20))
+
+      this.logger.log(`Extracted ${quotes.length} quotes from BBX list API`)
+      this.logger.log(
+        `BBX validation: successRate=${(successRate * 100).toFixed(2)}%, total=${totalCount}, success=${successCount}, fail=${failCount}, reasons=${reasonSummary}, defaultedHoldings=${defaultedHoldingsSymbols.length}, defaultedHoldingsSample=${defaultedHoldingsSample}, missingPriceChange=${missingPriceChangeSymbols.length}, missingPriceChangeSample=${missingPriceChangeSample}, sampleFailures=${failureSummary}`,
+      )
+
+      if (successRate < 0.95) {
+        this.logger.warn(
+          `BBX write skipped: successRate=${(successRate * 100).toFixed(2)}% < 95%, total=${totalCount}, success=${successCount}, fail=${failCount}`,
+        )
+        const newCursor: BbxScraperJobCursor = {
+          lastFetchTime: new Date().toISOString(),
+        }
+        return {
+          fetchedCount: 0,
+          newCursor: JSON.stringify(newCursor),
+          meta: {
+            note: 'skipped: successRate below 95%',
+            symbols: successQuotes.map(q => q.symbol),
+            fetchTime: newCursor.lastFetchTime,
+            totalCount,
+            successCount,
+            failCount,
+          },
+        }
+      }
 
       // 写入数据库
       const quoteTimestamp = new Date()
-      const count = await this.repo.upsertQuotes(
-        quotes.map(quote => ({
+      const count = await this.repo.upsertBbxScraperQuotesBySymbolReplace(
+        successQuotes.map(quote => ({
           symbol: quote.symbol,
           name: quote.name,
           exchange: quote.exchange,
@@ -314,6 +472,12 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         })),
       )
 
+      this.logger.log(
+        `BBX write completed: fetchedCount=${count}, successRate=${(successRate * 100).toFixed(
+          2,
+        )}%, failures=${failCount}, sample=${failureSummary}`,
+      )
+
       const newCursor: BbxScraperJobCursor = {
         lastFetchTime: new Date().toISOString(),
       }
@@ -322,12 +486,11 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         fetchedCount: count,
         newCursor: JSON.stringify(newCursor),
         meta: {
-          symbols: quotes.map(q => q.symbol),
+          symbols: successQuotes.map(q => q.symbol),
           fetchTime: newCursor.lastFetchTime,
-          debug: await this.buildDebugMeta(page, {
-            extractedCount: quotes.length,
-            filteredCount: quotes.length,
-          }),
+          totalCount,
+          successCount,
+          failCount,
         },
       }
     } finally {
@@ -335,279 +498,1605 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
     }
   }
 
+  private async prepareConceptPage(
+    page: import('playwright').Page,
+    url: string,
+    waitTimeout: number,
+    snapshot?: (phaseName: string) => Promise<void>,
+  ): Promise<void> {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      this.logger.log(`Page loaded: ${url}`)
+    } catch (error) {
+      this.logger.warn(
+        `Page goto timeout, continuing anyway: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+    await snapshot?.('after-goto')
+
+    // 点击"全部"按钮展开完整列表
+    try {
+      const allButtons = await page.locator('text="全部"').all()
+      if (allButtons.length > 0) {
+        await allButtons[0].click()
+        this.logger.log('Clicked "全部" button')
+
+        // 等待table元素出现（最多10秒）
+        await page.waitForSelector('table tbody tr', { timeout: 10000 })
+        this.logger.log('Table rows appeared after clicking "全部"')
+
+        // 额外等待2秒确保数据完全加载
+        await page.waitForTimeout(2000)
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to click "全部" button or wait for table: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+    await snapshot?.('after-click-all')
+
+    // 等待数据表格加载：优先等待元素出现，失败后 fallback 到固定等待
+    try {
+      await page.waitForSelector('table tbody tr', { timeout: waitTimeout })
+      this.logger.log('Table rows appeared')
+
+      // 额外等待确保数据填充（React/Vue等框架可能先渲染空行）
+      await page.waitForTimeout(3000)
+      this.logger.log('Waited 3s for data population')
+    } catch {
+      this.logger.warn('waitForSelector timeout, falling back to fixed wait')
+      await page.waitForTimeout(waitTimeout)
+
+      // Fallback 后检测页面状态，区分「加载失败」和「无数据」
+      const pageContent = await page.content()
+      const hasErrorIndicator =
+        pageContent.includes('error') ||
+        pageContent.includes('失败') ||
+        pageContent.includes('网络异常')
+      const hasNoDataIndicator = pageContent.includes('暂无数据') || pageContent.includes('no data')
+      const rowsAfterWait = await page.$$('table tbody tr')
+
+      if (rowsAfterWait.length === 0) {
+        if (hasErrorIndicator) {
+          this.logger.error('Page load failed: detected error indicators in page content')
+        } else if (hasNoDataIndicator) {
+          this.logger.warn('Page loaded but contains no data indicator')
+        } else {
+          this.logger.warn(
+            `Page state unclear: no .crypto-row found after fallback wait. URL: ${url}`,
+          )
+        }
+      } else {
+        this.logger.log(`Found ${rowsAfterWait.length} table rows after fallback wait`)
+      }
+    }
+  }
+
+  private async getHeaderTexts(
+    table: import('playwright').ElementHandle<HTMLElement>,
+  ): Promise<string[]> {
+    const fromThead = await table
+      .$$eval('thead tr th, thead tr td', (ths: Element[]) =>
+        ths.map(th => (th.textContent ?? '').replace(/\s+/g, ' ').trim()),
+      )
+      .catch(() => [])
+
+    if (fromThead.length > 0) return fromThead
+
+    const fromTh = await table
+      .$$eval('tr th', (ths: Element[]) =>
+        ths.map(th => (th.textContent ?? '').replace(/\s+/g, ' ').trim()),
+      )
+      .catch(() => [])
+
+    if (fromTh.length > 0) return fromTh
+
+    // Fallback: some tables don't render <thead>, treat first row as header.
+    const maybeHeader = await table
+      .$$eval('tbody tr:first-child td', (tds: Element[]) =>
+        tds.map(td => (td.textContent ?? '').replace(/\s+/g, ' ').trim()),
+      )
+      .catch(() => [])
+
+    const hasKnownHeader = maybeHeader.some(h => {
+      const v = h.toLowerCase()
+      return (
+        v.includes('mnav') || v.includes('市值') || v.includes('market cap') || v.includes('价格')
+      )
+    })
+
+    return hasKnownHeader ? maybeHeader : []
+  }
+
+  private async looksLikeConceptStockTable(
+    table: import('playwright').ElementHandle<HTMLElement>,
+    headers: string[],
+  ): Promise<boolean> {
+    // Column index might not be the first column (Table[0] has headers: 币种 | 公司 | ...)
+    const companyColIndex = headers.findIndex(h => h.replace(/\s+/g, '').includes('公司'))
+    const resolvedCompanyColIndex = companyColIndex >= 0 ? companyColIndex : 0
+
+    const sampleCells = await table
+      .$$eval(
+        'tbody tr',
+        (trs: Element[], idx: number) =>
+          trs.slice(0, 8).map(tr => {
+            const cells = Array.from(tr.querySelectorAll('td'))
+            return (cells[idx]?.textContent ?? '').trim()
+          }),
+        resolvedCompanyColIndex,
+      )
+      .catch(() => [])
+
+    return sampleCells.some(text => Boolean(parseBbxStockInfoFromCompanyCell(text)))
+  }
+
+  private async resolveTargetTable(page: import('playwright').Page): Promise<{
+    table: import('playwright').ElementHandle<HTMLElement>
+    headerTexts: string[]
+  } | null> {
+    // 先定位目标表格：必须同时包含 mNAV 与 市值/Market Cap 表头。
+    // 优先选择“表头 + 行内容”都匹配的表；否则退化到仅表头匹配的表（避免识别过严导致 0 表）。
+    const tables = await page.$$('table')
+    let targetTable: import('playwright').ElementHandle<HTMLElement> | null = null
+    let headerTexts: string[] = []
+
+    // 先打印每张 table 的摘要，方便线上定位选择失败原因
+    for (let i = 0; i < tables.length; i++) {
+      const table = tables[i] as import('playwright').ElementHandle<HTMLElement>
+      const headers = await this.getHeaderTexts(table)
+      const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+      const hasMarketCap = headers.some(h => {
+        const v = h.toLowerCase()
+        return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+      })
+      const looksRight =
+        hasMnav && hasMarketCap ? await this.looksLikeConceptStockTable(table, headers) : false
+      this.logger.log(
+        `Table[${i}] headers=${headers.join(' | ')}; hasMnav=${hasMnav}; hasMarketCap=${hasMarketCap}; looksLikeConceptStock=${looksRight}`,
+      )
+    }
+
+    for (const table of tables) {
+      const headers = await this.getHeaderTexts(
+        table as import('playwright').ElementHandle<HTMLElement>,
+      )
+
+      const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+      const hasMarketCap = headers.some(h => {
+        const v = h.toLowerCase()
+        return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+      })
+
+      if (!hasMnav || !hasMarketCap) continue
+
+      const looksRight = await this.looksLikeConceptStockTable(
+        table as import('playwright').ElementHandle<HTMLElement>,
+        headers,
+      )
+      if (!looksRight) continue
+
+      targetTable = table as import('playwright').ElementHandle<HTMLElement>
+      headerTexts = headers
+      break
+    }
+
+    if (!targetTable) {
+      for (const table of tables) {
+        const headers = await this.getHeaderTexts(
+          table as import('playwright').ElementHandle<HTMLElement>,
+        )
+        const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+        const hasMarketCap = headers.some(h => {
+          const v = h.toLowerCase()
+          return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+        })
+        if (hasMnav && hasMarketCap) {
+          targetTable = table as import('playwright').ElementHandle<HTMLElement>
+          headerTexts = headers
+          this.logger.warn('Target table selected by headers only (content check failed)')
+          break
+        }
+      }
+    }
+
+    if (!targetTable) {
+      this.logger.warn(
+        `No target table found (tables=${tables.length}). Skip extraction to avoid wrong table.`,
+      )
+      return null
+    }
+
+    return { table: targetTable, headerTexts }
+  }
+
+  private resolveCompanyColumnIndex(headerTexts: string[]): number {
+    const companyHeaderIndex = headerTexts.findIndex(h => {
+      const v = h.replace(/\s+/g, '').toLowerCase()
+      return v.includes('公司') || v.includes('company')
+    })
+    return companyHeaderIndex >= 0 ? companyHeaderIndex : 1
+  }
+
+  private async resolvePriceColumnIndex(
+    rows: import('playwright').ElementHandle<Element>[],
+    headerTexts: string[],
+    mNavHeaderIndex: number,
+    marketCapHeaderIndex: number,
+  ): Promise<number> {
+    const priceHeaderIndex = headerTexts.findIndex(t => {
+      const v = t.toLowerCase()
+      return v.includes('价格') || v.includes('现价') || v.includes('price')
+    })
+
+    if (priceHeaderIndex >= 0) return priceHeaderIndex
+
+    const sampleCount = Math.min(10, rows.length)
+    const counts = new Map<number, number>()
+
+    for (let i = 0; i < sampleCount; i++) {
+      const cells: string[] = await rows[i]
+        .$$eval('td', tds => tds.map(td => (td.textContent ?? '').trim()))
+        .catch(() => [])
+
+      for (let idx = 0; idx < cells.length; idx++) {
+        if (idx === mNavHeaderIndex || idx === marketCapHeaderIndex) continue
+        const price = parseBbxPriceText(cells[idx] ?? '')
+        if (price && price > 0) counts.set(idx, (counts.get(idx) ?? 0) + 1)
+      }
+    }
+
+    let bestIndex = -1
+    let bestCount = 0
+    for (const [idx, count] of counts.entries()) {
+      if (count > bestCount) {
+        bestCount = count
+        bestIndex = idx
+      }
+    }
+
+    if (bestIndex >= 0 && bestCount >= 3) return bestIndex
+    if (mNavHeaderIndex > 0) return mNavHeaderIndex - 1
+    if (marketCapHeaderIndex > 0) return marketCapHeaderIndex - 1
+    return 1
+  }
+
+  private async findScrollableContainer(
+    table: import('playwright').ElementHandle<HTMLElement>,
+  ): Promise<import('playwright').ElementHandle<HTMLElement> | null> {
+    try {
+      const handle = await table.evaluateHandle((el: HTMLElement) => {
+        let cur: HTMLElement | null = el
+        for (let i = 0; i < 8 && cur; i++) {
+          const style = window.getComputedStyle(cur)
+          const overflowY = style.overflowY
+          const canScroll =
+            (overflowY === 'auto' || overflowY === 'scroll') &&
+            cur.scrollHeight > cur.clientHeight + 24
+          if (canScroll) return cur
+          cur = cur.parentElement
+        }
+        return null
+      })
+
+      return handle.asElement() as import('playwright').ElementHandle<HTMLElement> | null
+    } catch {
+      return null
+    }
+  }
+
+  public async enrichQuotesBySymbols(
+    context: import('playwright').BrowserContext,
+    url: string,
+    waitTimeout: number,
+    symbols: string[],
+    snapshot?: (phaseName: string) => Promise<void>,
+  ): Promise<BbxEnrichmentResult> {
+    const startTime = Date.now()
+    const timeBudgetMs = BbxCryptoStockScraperJob.ENRICHMENT_TIME_BUDGET_MS
+    const maxRetries = BbxCryptoStockScraperJob.ENRICHMENT_MAX_RETRIES
+    const perTickerTimeoutMs = BbxCryptoStockScraperJob.ENRICHMENT_PER_TICKER_TIMEOUT_MS
+    const concurrency = BbxCryptoStockScraperJob.ENRICHMENT_CONCURRENCY
+    const uniqueSymbols = Array.from(new Set(symbols.map(symbol => symbol.toUpperCase())))
+
+    const quoteBySymbol = new Map<string, BbxScrapedQuote>()
+    const failureBySymbol = new Map<string, string>()
+    let timeBudgetExceeded = false
+
+    const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error('timeout'))
+        }, timeoutMs)
+        promise
+          .then(resolve)
+          .catch(reject)
+          .finally(() => clearTimeout(timer))
+      })
+
+    const processSymbol = async (symbol: string) => {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (Date.now() - startTime > timeBudgetMs) {
+          return { status: 'failed', reason: 'time-budget-exceeded' }
+        }
+
+        const page = await context.newPage()
+        try {
+          await this.prepareConceptPage(page, url, waitTimeout, snapshot)
+          const result = await withTimeout(
+            this.extractQuoteForSymbol(page, symbol),
+            perTickerTimeoutMs,
+          )
+          if (result.quote) return { status: 'success', quote: result.quote }
+          const reason = result.reason ?? 'parse-failed'
+          if (attempt >= maxRetries) return { status: 'failed', reason }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const reason = message.includes('timeout') ? 'timeout' : 'parse-failed'
+          if (attempt >= maxRetries) return { status: 'failed', reason }
+        } finally {
+          await page.close().catch(() => undefined)
+        }
+      }
+
+      return { status: 'failed', reason: 'parse-failed' }
+    }
+
+    let index = 0
+    let active = 0
+
+    await new Promise<void>(resolve => {
+      const launchNext = () => {
+        if (Date.now() - startTime > timeBudgetMs) {
+          timeBudgetExceeded = true
+        }
+
+        while (!timeBudgetExceeded && active < concurrency && index < uniqueSymbols.length) {
+          if (Date.now() - startTime > timeBudgetMs) {
+            timeBudgetExceeded = true
+            break
+          }
+          const symbol = uniqueSymbols[index++]
+          active++
+          processSymbol(symbol)
+            .then(result => {
+              if (result.status === 'success') {
+                quoteBySymbol.set(result.quote.symbol, result.quote)
+              } else {
+                failureBySymbol.set(symbol, result.reason)
+              }
+            })
+            .catch(error => {
+              failureBySymbol.set(
+                symbol,
+                error instanceof Error && error.message.includes('timeout')
+                  ? 'timeout'
+                  : 'parse-failed',
+              )
+            })
+            .finally(() => {
+              active--
+              if ((index >= uniqueSymbols.length || timeBudgetExceeded) && active === 0) {
+                resolve()
+                return
+              }
+              launchNext()
+            })
+        }
+
+        if ((index >= uniqueSymbols.length || timeBudgetExceeded) && active === 0) {
+          resolve()
+        }
+      }
+
+      launchNext()
+    })
+
+    if (timeBudgetExceeded) {
+      for (const symbol of uniqueSymbols) {
+        if (!quoteBySymbol.has(symbol) && !failureBySymbol.has(symbol)) {
+          failureBySymbol.set(symbol, 'time-budget-exceeded')
+        }
+      }
+    }
+
+    const failures: BbxEnrichmentFailure[] = Array.from(failureBySymbol.entries()).map(
+      ([symbol, reason]) => ({ symbol, reason }),
+    )
+
+    const totalCount = uniqueSymbols.length
+    const successCount = quoteBySymbol.size
+    const failCount = failures.length
+    const successRate = totalCount > 0 ? successCount / totalCount : 0
+
+    return {
+      quotes: Array.from(quoteBySymbol.values()),
+      stats: {
+        totalCount,
+        successCount,
+        failCount,
+        successRate,
+        failures,
+        timeBudgetExceeded,
+      },
+    }
+  }
+
+  private async extractQuoteForSymbol(
+    page: import('playwright').Page,
+    symbol: string,
+  ): Promise<{ quote?: BbxScrapedQuote; reason?: string }> {
+    const resolved = await this.resolveTargetTable(page)
+    if (!resolved) return { reason: 'table-not-found' }
+
+    const { table: targetTable, headerTexts } = resolved
+    const mNavHeaderIndex = headerTexts.findIndex(t => t.toLowerCase().includes('mnav'))
+    const marketCapHeaderIndex = headerTexts.findIndex(t => {
+      const v = t.toLowerCase()
+      return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+    })
+    const resolvedCompanyIndex = this.resolveCompanyColumnIndex(headerTexts)
+
+    let rows = await targetTable.$$('tbody tr')
+    const resolvedPriceIndex = await this.resolvePriceColumnIndex(
+      rows,
+      headerTexts,
+      mNavHeaderIndex,
+      marketCapHeaderIndex,
+    )
+
+    const scrollContainer = await this.findScrollableContainer(targetTable)
+    const symbolUpper = symbol.toUpperCase()
+
+    let foundCells: string[] | null = null
+    let foundCompanyCellText = ''
+    let foundRowText = ''
+    let foundExchange = ''
+
+    for (let iter = 0; iter < BbxCryptoStockScraperJob.ENRICHMENT_MAX_SCROLL_ITERATIONS; iter++) {
+      rows = await targetTable.$$('tbody tr')
+      for (const row of rows) {
+        const cells: string[] = await row
+          .$$eval('td', tds => tds.map(td => (td.textContent ?? '').trim()))
+          .catch(() => [])
+        if (cells.length === 0) continue
+
+        const companyCellText = cells[resolvedCompanyIndex] ?? ''
+        const stockInfo = parseBbxStockInfoFromCompanyCell(companyCellText)
+        if (!stockInfo) continue
+        if (stockInfo.symbol.toUpperCase() !== symbolUpper) continue
+
+        foundCells = cells
+        foundCompanyCellText = companyCellText
+        foundRowText = cells.join(' ')
+        foundExchange = stockInfo.exchange
+        break
+      }
+
+      if (foundCells) break
+
+      try {
+        if (scrollContainer) {
+          await scrollContainer.evaluate(el => {
+            el.scrollBy(0, Math.max(240, Math.floor(el.clientHeight * 0.85)))
+          })
+        } else {
+          await page.mouse.wheel(0, 1200)
+        }
+      } catch {
+        await page.mouse.wheel(0, 1200)
+      }
+      await page.waitForTimeout(300)
+    }
+
+    if (!foundCells) return { reason: 'row-not-found' }
+
+    const priceCellText = foundCells[resolvedPriceIndex] ?? ''
+    const stockPrice = parseBbxPriceText(priceCellText) ?? 0
+    if (!(stockPrice > 0)) return { reason: 'parse-failed:price' }
+
+    const marketCapCellText =
+      marketCapHeaderIndex >= 0 && marketCapHeaderIndex < foundCells.length
+        ? foundCells[marketCapHeaderIndex]
+        : foundCells.at(-1)
+    const marketCap = marketCapCellText ? parseBbxMarketCapText(marketCapCellText) : undefined
+    if (!marketCap) return { reason: 'parse-failed:marketCap' }
+
+    const companyDisplayName = foundCompanyCellText
+      .split('\n')
+      .map((s: string) => s.trim())
+      .filter(Boolean)[0]
+
+    const mNavCellText =
+      mNavHeaderIndex >= 0 && mNavHeaderIndex < foundCells.length
+        ? foundCells[mNavHeaderIndex]
+        : undefined
+    const mNavStr = mNavCellText?.replace(/\s+/g, '').trim()
+
+    const holdingMatch = foundRowText.match(BbxCryptoStockScraperJob.HOLDING_VALUE_REGEX)
+    const holdingQtyMatch = foundRowText.match(BbxCryptoStockScraperJob.HOLDING_QTY_REGEX)
+    const priceChangeMatch = foundRowText.match(BbxCryptoStockScraperJob.PRICE_CHANGE_REGEX)
+
+    const priceChangePercent = priceChangeMatch
+      ? Number.parseFloat(priceChangeMatch[1] ?? '')
+      : undefined
+
+    return {
+      quote: {
+        symbol: symbolUpper,
+        name: companyDisplayName ?? symbolUpper,
+        exchange: foundExchange,
+        companyType: undefined,
+        mNav: mNavStr ? this.parseNumber(mNavStr) : undefined,
+        marketCap,
+        holdingValue: holdingMatch
+          ? this.parseMarketCap(`${holdingMatch[1]}${holdingMatch[2] ?? ''}`)
+          : undefined,
+        holdingQuantity: holdingQtyMatch
+          ? this.parseMarketCap(`${holdingQtyMatch[1]}${holdingQtyMatch[2] ?? ''}`)
+          : undefined,
+        holdingCoin: holdingQtyMatch?.[3] || holdingQtyMatch?.[4],
+        price: stockPrice,
+        priceChangePercent,
+      },
+    }
+  }
+
   /**
    * 从页面提取币股数据
    * 使用表格行选择器获取数据行，从行文本中正则提取各字段
    */
-  private async extractQuotes(page: import('playwright').Page): Promise<BbxScrapedQuote[]> {
+  public async extractQuotes(
+    page: import('playwright').Page,
+    snapshot?: (phaseName: string) => Promise<void>,
+    allowedSymbols?: Set<string>,
+  ): Promise<BbxScrapedQuote[]> {
     const quotes: BbxScrapedQuote[] = []
 
-    const debugCounters = {
-      rowsSeen: 0,
-      rowsNonEmpty: 0,
-      identityOk: 0,
-      priceOk: 0,
-      marketCapParsed: 0,
-      passedFilter: 0,
-      sampleIdentityFailures: [] as string[],
+    const getHeaderTexts = async (table: import('playwright').ElementHandle<HTMLElement>) => {
+      const fromThead = await table
+        .$$eval('thead tr th, thead tr td', (ths: Element[]) =>
+          ths.map(th => (th.textContent ?? '').replace(/\s+/g, ' ').trim()),
+        )
+        .catch(() => [])
+
+      if (fromThead.length > 0) return fromThead
+
+      const fromTh = await table
+        .$$eval('tr th', (ths: Element[]) =>
+          ths.map(th => (th.textContent ?? '').replace(/\s+/g, ' ').trim()),
+        )
+        .catch(() => [])
+
+      if (fromTh.length > 0) return fromTh
+
+      // Fallback: some tables don't render <thead>, treat first row as header.
+      const maybeHeader = await table
+        .$$eval('tbody tr:first-child td', (tds: Element[]) =>
+          tds.map(td => (td.textContent ?? '').replace(/\s+/g, ' ').trim()),
+        )
+        .catch(() => [])
+
+      const hasKnownHeader = maybeHeader.some(h => {
+        const v = h.toLowerCase()
+        return (
+          v.includes('mnav') || v.includes('市值') || v.includes('market cap') || v.includes('价格')
+        )
+      })
+
+      return hasKnownHeader ? maybeHeader : []
     }
 
-    // 页面会同时渲染多个表（如币种行情表 + 币股/加密概念股表）。
-    // 必须先选中目标表，否则会把币种行情表的行喂给 parseIdentity，导致全部失败。
-    const table = await this.pickBbxDataTable(page)
-
-    await this.loadMoreRowsIfNeeded(table)
-
-    // 这里不再依赖 thead/th 定位列：该页面会把多个 header 混在一起，导致列索引错位。
-    // 直接按 tr.textContent 做解析更稳定。
-    const rowsLocator = await this.pickBodyRowsLocator(table)
-    const rows = await rowsLocator.elementHandles()
-    this.logger.log(`Found ${rows.length} table rows`)
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
+    const trySortByMarketCapDesc = async (
+      table: import('playwright').ElementHandle<HTMLElement>,
+    ): Promise<void> => {
       try {
-        debugCounters.rowsSeen += 1
-        const rowText = await row
-          .evaluate(el => {
-            const ht = el as HTMLElement
-            return (ht.textContent || '').trim()
-          })
-          .then(t => t.replace(/\s+/g, ' ').trim())
-        if (!rowText) continue
+        const headerCells = await table.$$('thead tr th, thead tr td, tr th')
+        if (headerCells.length === 0) {
+          this.logger.warn('No header cells found in target table; skip sorting')
+          return
+        }
 
-        debugCounters.rowsNonEmpty += 1
-
-        const quote = this.parseQuoteFromRowText(rowText)
-        if (!quote) {
-          if (debugCounters.sampleIdentityFailures.length < 3) {
-            debugCounters.sampleIdentityFailures.push(rowText.slice(0, 200))
+        let marketCapHeader: import('playwright').ElementHandle<HTMLElement> | null = null
+        for (const cell of headerCells) {
+          const raw = await cell.evaluate(el => (el.textContent ?? '') as string)
+          const text = normalizeBbxWhitespace(raw)
+          const v = text.toLowerCase()
+          if (v.includes('市值') || v.includes('market cap') || v.includes('市场价值')) {
+            marketCapHeader = cell as import('playwright').ElementHandle<HTMLElement>
+            break
           }
-          continue
         }
 
-        debugCounters.identityOk += 1
-        if (typeof quote.marketCap === 'number') debugCounters.marketCapParsed += 1
-
-        if (quote.price > 0) {
-          debugCounters.priceOk += 1
-          quotes.push(quote)
+        if (!marketCapHeader) {
+          this.logger.warn('Market cap header not found inside target table; skip sorting')
+          return
         }
+
+        // Click twice to reach descending (UI cycles asc/desc/none). Keep waits short to avoid slowing the job.
+        await marketCapHeader.click()
+        await page.waitForTimeout(800)
+        await marketCapHeader.click()
+        await page.waitForTimeout(1200)
+        this.logger.log('Sorted target table by market cap (attempted descending)')
       } catch (error) {
         this.logger.warn(
-          `Failed to extract row ${i}: ${error instanceof Error ? error.message : String(error)}`,
+          `Failed to sort target table by market cap: ${error instanceof Error ? error.message : String(error)}`,
         )
       }
     }
 
-    const parsedMarketCapCount = quotes.filter(q => typeof q.marketCap === 'number').length
-    const filtered = quotes.filter(
-      q => (q.marketCap ?? 0) >= BbxCryptoStockScraperJob.MIN_MARKET_CAP_USD_THRESHOLD,
-    )
-    debugCounters.passedFilter = filtered.length
+    const findScrollableContainer = async (
+      table: import('playwright').ElementHandle<HTMLElement>,
+    ): Promise<import('playwright').ElementHandle<HTMLElement> | null> => {
+      try {
+        const handle = await table.evaluateHandle((el: HTMLElement) => {
+          let cur: HTMLElement | null = el
+          for (let i = 0; i < 8 && cur; i++) {
+            const style = window.getComputedStyle(cur)
+            const overflowY = style.overflowY
+            const canScroll =
+              (overflowY === 'auto' || overflowY === 'scroll') &&
+              cur.scrollHeight > cur.clientHeight + 24
+            if (canScroll) return cur
+            cur = cur.parentElement
+          }
+          return null
+        })
+
+        return handle.asElement() as import('playwright').ElementHandle<HTMLElement> | null
+      } catch {
+        return null
+      }
+    }
+
+    const looksLikeConceptStockTable = async (
+      table: import('playwright').ElementHandle<HTMLElement>,
+    ) => {
+      // Column index might not be the first column (Table[0] has headers: 币种 | 公司 | ...)
+      const headers = await getHeaderTexts(table)
+      const companyColIndex = headers.findIndex(h => h.replace(/\s+/g, '').includes('公司'))
+      const resolvedCompanyColIndex = companyColIndex >= 0 ? companyColIndex : 0
+
+      const sampleCells = await table
+        .$$eval(
+          'tbody tr',
+          (trs: Element[], idx: number) =>
+            trs.slice(0, 8).map(tr => {
+              const cells = Array.from(tr.querySelectorAll('td'))
+              return (cells[idx]?.textContent ?? '').trim()
+            }),
+          resolvedCompanyColIndex,
+        )
+        .catch(() => [])
+
+      return sampleCells.some(text => Boolean(parseBbxStockInfoFromCompanyCell(text)))
+    }
+
+    // 先定位目标表格：必须同时包含 mNAV 与 市值/Market Cap 表头。
+    // 优先选择“表头 + 行内容”都匹配的表；否则退化到仅表头匹配的表（避免识别过严导致 0 表）。
+    const tables = await page.$$('table')
+    let targetTable: import('playwright').ElementHandle<HTMLElement> | null = null
+    let headerTexts: string[] = []
+
+    // 先打印每张 table 的摘要，方便线上定位选择失败原因
+    for (let i = 0; i < tables.length; i++) {
+      const table = tables[i] as import('playwright').ElementHandle<HTMLElement>
+      const headers = await getHeaderTexts(table)
+      const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+      const hasMarketCap = headers.some(h => {
+        const v = h.toLowerCase()
+        return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+      })
+      const looksRight = hasMnav && hasMarketCap ? await looksLikeConceptStockTable(table) : false
+      this.logger.log(
+        `Table[${i}] headers=${headers.join(' | ')}; hasMnav=${hasMnav}; hasMarketCap=${hasMarketCap}; looksLikeConceptStock=${looksRight}`,
+      )
+    }
+
+    for (const table of tables) {
+      const headers = await getHeaderTexts(table as import('playwright').ElementHandle<HTMLElement>)
+
+      const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+      const hasMarketCap = headers.some(h => {
+        const v = h.toLowerCase()
+        return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+      })
+
+      if (!hasMnav || !hasMarketCap) continue
+
+      const looksRight = await looksLikeConceptStockTable(
+        table as import('playwright').ElementHandle<HTMLElement>,
+      )
+      if (!looksRight) continue
+
+      targetTable = table as import('playwright').ElementHandle<HTMLElement>
+      headerTexts = headers
+      break
+    }
+
+    if (!targetTable) {
+      for (const table of tables) {
+        const headers = await getHeaderTexts(
+          table as import('playwright').ElementHandle<HTMLElement>,
+        )
+        const hasMnav = headers.some(h => h.toLowerCase().includes('mnav'))
+        const hasMarketCap = headers.some(h => {
+          const v = h.toLowerCase()
+          return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+        })
+        if (hasMnav && hasMarketCap) {
+          targetTable = table as import('playwright').ElementHandle<HTMLElement>
+          headerTexts = headers
+          this.logger.warn('Target table selected by headers only (content check failed)')
+          break
+        }
+      }
+    }
+
+    if (!targetTable) {
+      this.logger.warn(
+        `No target table found (tables=${tables.length}). Skip extraction to avoid wrong table.`,
+      )
+      return []
+    }
+
+    // 关键：在“目标表格”内部点击市值列头进行排序（避免点到页面其它表导致排序无效）
+    await trySortByMarketCapDesc(targetTable)
+    await snapshot?.('after-sort')
+
+    const mNavHeaderIndex = headerTexts.findIndex(t => t.toLowerCase().includes('mnav'))
+    const marketCapHeaderIndex = headerTexts.findIndex(t => {
+      const v = t.toLowerCase()
+      return v.includes('市值') || v.includes('market cap') || v.includes('市场价值')
+    })
+
+    const companyHeaderIndex = headerTexts.findIndex(h => {
+      const v = h.replace(/\s+/g, '').toLowerCase()
+      return v.includes('公司') || v.includes('company')
+    })
+    // Table[0] headers: 币种 | 公司 | mNAV ...
+    const resolvedCompanyIndex = companyHeaderIndex >= 0 ? companyHeaderIndex : 1
+
+    // 仅抓取目标表格的 tbody 行（注意：BBX 可能是虚拟列表，DOM 行数可能恒定）
+    let rows = await targetTable.$$('tbody tr')
+    this.logger.log(`Found ${rows.length} table rows (initial viewport)`)
+
+    // 价格列：优先按表头识别；否则用前几行“可解析价格”次数最多的列；最后再 fallback。
+    const priceHeaderIndex = headerTexts.findIndex(t => {
+      const v = t.toLowerCase()
+      return v.includes('价格') || v.includes('现价') || v.includes('price')
+    })
+
+    let resolvedPriceIndex: number
+    if (priceHeaderIndex >= 0) {
+      resolvedPriceIndex = priceHeaderIndex
+    } else {
+      const sampleCount = Math.min(10, rows.length)
+      const counts = new Map<number, number>()
+
+      for (let i = 0; i < sampleCount; i++) {
+        const cells: string[] = await rows[i]
+          .$$eval('td', tds => tds.map(td => (td.textContent ?? '').trim()))
+          .catch(() => [])
+
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (idx === mNavHeaderIndex || idx === marketCapHeaderIndex) continue
+          const price = parseBbxPriceText(cells[idx] ?? '')
+          if (price && price > 0) counts.set(idx, (counts.get(idx) ?? 0) + 1)
+        }
+      }
+
+      let bestIndex = -1
+      let bestCount = 0
+      for (const [idx, count] of counts.entries()) {
+        if (count > bestCount) {
+          bestCount = count
+          bestIndex = idx
+        }
+      }
+
+      if (bestIndex >= 0 && bestCount >= 3) {
+        resolvedPriceIndex = bestIndex
+      } else if (mNavHeaderIndex > 0) {
+        resolvedPriceIndex = mNavHeaderIndex - 1
+      } else if (marketCapHeaderIndex > 0) {
+        resolvedPriceIndex = marketCapHeaderIndex - 1
+      } else {
+        resolvedPriceIndex = 1
+      }
+    }
+
+    if (mNavHeaderIndex >= 0) {
+      this.logger.log(
+        `Detected mNAV column index: ${mNavHeaderIndex} (header="${headerTexts[mNavHeaderIndex]}")`,
+      )
+    }
+    if (marketCapHeaderIndex >= 0) {
+      this.logger.log(
+        `Detected market cap column index: ${marketCapHeaderIndex} (header="${headerTexts[marketCapHeaderIndex]}")`,
+      )
+    }
+    this.logger.log(`Target table headers: ${headerTexts.join(' | ')}`)
     this.logger.log(
-      `Filtered ${quotes.length} quotes to ${filtered.length} with marketCap ≥ ${BbxCryptoStockScraperJob.MIN_MARKET_CAP_USD_THRESHOLD / 1e9}B USD (parsedMarketCap=${parsedMarketCapCount})`,
+      `Resolved company column index: ${resolvedCompanyIndex} (header="${headerTexts[resolvedCompanyIndex] ?? 'unknown'}")`,
+    )
+    this.logger.log(
+      `Resolved price column index: ${resolvedPriceIndex} (header="${headerTexts[resolvedPriceIndex] ?? 'unknown'}")`,
     )
 
-    // 仅在本次执行周期内保存，便于写入 execution.meta.debug（buildDebugMeta 会读取此字段）。
-    ;(page as any).__bbxDebugCounters = debugCounters
+    // 调试：检查前3行的HTML结构（首屏）
+    if (rows.length > 0) {
+      for (let i = 0; i < Math.min(3, rows.length); i++) {
+        const html = await rows[i].evaluate(el => el.outerHTML)
+        this.logger.debug(`Row ${i} HTML (first 300 chars): ${html.substring(0, 300)}`)
+      }
+    }
+
+    // 虚拟列表/分页：反复采集“当前可见行”，滚动后继续，直到连续多次没有新 symbol。
+    const quoteBySymbol = new Map<string, BbxScrapedQuote>()
+    const scrollContainer = await findScrollableContainer(targetTable)
+    this.logger.log(
+      `Virtual scroll: scrollableContainer=${scrollContainer ? 'yes' : 'no'}; viewportRows=${rows.length}`,
+    )
+
+    let skippedNoText = 0
+    let skippedNoStockInfo = 0
+    let skippedNotInList = 0
+    let loggedMarketCapParseFailures = 0
+    let loggedNewQuotes = 0
+
+    const extractVisibleOnce = async (): Promise<number> => {
+      rows = await targetTable.$$('tbody tr')
+      let newlyAdded = 0
+
+      for (let i = 0; i < rows.length; i++) {
+        try {
+          const cells: string[] = await rows[i]
+            .$$eval('td', tds => tds.map(td => (td.textContent ?? '').trim()))
+            .catch(() => [])
+
+          const rowText = cells.join(' ')
+          if (!rowText.trim()) {
+            skippedNoText++
+            continue
+          }
+
+          const companyCellText = cells[resolvedCompanyIndex] ?? ''
+          const stockInfo = parseBbxStockInfoFromCompanyCell(companyCellText)
+          if (!stockInfo) {
+            skippedNoStockInfo++
+            continue
+          }
+
+          const symbol = stockInfo.symbol
+          if (allowedSymbols && !allowedSymbols.has(symbol)) {
+            skippedNotInList++
+            continue
+          }
+          if (quoteBySymbol.has(symbol)) continue
+
+          const exchange = stockInfo.exchange
+
+          const priceCellText = cells[resolvedPriceIndex] ?? ''
+          const stockPrice = parseBbxPriceText(priceCellText) ?? 0
+          if (!(stockPrice > 0)) continue
+
+          const companyDisplayName = companyCellText
+            .split('\n')
+            .map((s: string) => s.trim())
+            .filter(Boolean)[0]
+
+          const mNavCellText =
+            mNavHeaderIndex >= 0 && mNavHeaderIndex < cells.length
+              ? cells[mNavHeaderIndex]
+              : undefined
+          const mNavStr = mNavCellText?.replace(/\s+/g, '').trim()
+
+          const marketCapCellText =
+            marketCapHeaderIndex >= 0 && marketCapHeaderIndex < cells.length
+              ? cells[marketCapHeaderIndex]
+              : cells.at(-1)
+          const marketCap = marketCapCellText ? parseBbxMarketCapText(marketCapCellText) : undefined
+
+          if (!marketCap && loggedMarketCapParseFailures < 3) {
+            loggedMarketCapParseFailures++
+            this.logger.warn(
+              `marketCap parse failed (sample ${loggedMarketCapParseFailures}/3) row=${i}, headerIndex=${marketCapHeaderIndex}, header="${headerTexts[marketCapHeaderIndex] ?? 'unknown'}", headerCount=${headerTexts.length}, cellCount=${cells.length}`,
+            )
+            this.logger.warn(`marketCap raw cell text: ${JSON.stringify(marketCapCellText ?? '')}`)
+            this.logger.warn(
+              `row cells snapshot (0..${Math.min(10, cells.length) - 1}): ${JSON.stringify(
+                cells.slice(0, 10),
+              )}`,
+            )
+            this.logger.warn(`company cell raw: ${JSON.stringify(companyCellText)}`)
+          }
+
+          const holdingMatch = rowText.match(BbxCryptoStockScraperJob.HOLDING_VALUE_REGEX)
+          const holdingQtyMatch = rowText.match(BbxCryptoStockScraperJob.HOLDING_QTY_REGEX)
+          const holdingValue = holdingMatch
+            ? this.parseMarketCap(`${holdingMatch[1]}${holdingMatch[2] ?? ''}`)
+            : undefined
+
+          const quote: BbxScrapedQuote = {
+            symbol,
+            name: companyDisplayName ?? symbol,
+            exchange,
+            companyType: undefined,
+            mNav: mNavStr ? this.parseNumber(mNavStr) : undefined,
+            marketCap,
+            holdingValue,
+            holdingQuantity: holdingQtyMatch
+              ? this.parseMarketCap(`${holdingQtyMatch[1]}${holdingQtyMatch[2] ?? ''}`)
+              : undefined,
+            holdingCoin: holdingQtyMatch?.[3] || holdingQtyMatch?.[4],
+            price: stockPrice,
+            priceChangePercent: undefined,
+          }
+
+          quoteBySymbol.set(symbol, quote)
+          newlyAdded++
+
+          if (loggedNewQuotes < 12) {
+            loggedNewQuotes++
+            this.logger.debug(
+              `Collected ${quote.symbol}: price=$${quote.price}, marketCap=${quote.marketCap ?? 'undefined'}`,
+            )
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to extract row ${i}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+
+      return newlyAdded
+    }
+
+    const maxIterations = 80
+    const stopAfterNoNewFor = 3
+    let noNewCount = 0
+
+    for (let iter = 0; iter < maxIterations; iter++) {
+      const newlyAdded = await extractVisibleOnce()
+      if (newlyAdded === 0) noNewCount++
+      else noNewCount = 0
+
+      if (noNewCount >= stopAfterNoNewFor) break
+
+      // 继续向下滚动加载/切换下一屏
+      try {
+        if (scrollContainer) {
+          await scrollContainer.evaluate(el => {
+            el.scrollBy(0, Math.max(240, Math.floor(el.clientHeight * 0.85)))
+          })
+        } else {
+          await page.mouse.wheel(0, 1200)
+        }
+      } catch {
+        await page.mouse.wheel(0, 1200)
+      }
+
+      await page.waitForTimeout(450)
+    }
+    await snapshot?.('after-scroll')
+
+    quotes.push(...quoteBySymbol.values())
+
+    this.logger.log(
+      `Extraction summary: viewportRows=${rows.length}, ${skippedNoText} no text, ${skippedNoStockInfo} no stock info, ${skippedNotInList} not-in-list, ${quotes.length} unique quotes`,
+    )
+
+    // 只保留市值≥1B的记录
+    const filtered = quotes.filter(
+      q => (q.marketCap ?? 0) >= BbxCryptoStockScraperJob.MIN_MARKET_CAP_THRESHOLD,
+    )
+    this.logger.log(
+      `Filtered ${quotes.length} quotes to ${filtered.length} with marketCap ≥ ${BbxCryptoStockScraperJob.MIN_MARKET_CAP_THRESHOLD / 1e9}B`,
+    )
+
+    // 调试：输出前5个记录的详细信息（无论是否被过滤）
+    if (quotes.length > 0) {
+      const samples = quotes.slice(0, 5)
+      this.logger.log(`Sample extracted quotes (first 5):`)
+      samples.forEach(q => {
+        this.logger.log(
+          `  ${q.symbol}: price=$${q.price}, marketCap=${q.marketCap ?? 'undefined'}, holdingValue=${q.holdingValue ?? 'undefined'}`,
+        )
+      })
+    }
+
+    // 如果过滤后为空但原始数据不为空，说明过滤条件可能有问题
+    if (filtered.length === 0 && quotes.length > 0) {
+      this.logger.warn(`All ${quotes.length} quotes were filtered out by marketCap >= 1B threshold`)
+      this.logger.warn(`Sample filtered quotes:`)
+      const samples = quotes.slice(0, 5)
+      samples.forEach(q => {
+        this.logger.warn(`  ${q.symbol}: marketCap=${q.marketCap ?? 'undefined'}`)
+      })
+    }
 
     return filtered
   }
 
-  private parseQuoteFromRowText(rowText: string): BbxScrapedQuote | null {
-    const identity = this.parseIdentity('', rowText)
-    if (!identity) return null
+  private async fetchCompanyList(request: APIRequestContext): Promise<BbxCompanyListFetchResult> {
+    const items: BbxCompanyListItem[] = []
+    const queryUrl = BbxCryptoStockScraperJob.COMPANY_LIST_ENDPOINT
+    const netlogEnabled = process.env.BBX_SCRAPER_NETLOG === '1'
+    let totalCount = 0
+    let lastDiagnostics: BbxCompanyListDiagnostics | undefined
 
-    const nameMatch = rowText.match(BbxCryptoStockScraperJob.COMPANY_NAME_REGEX)
-    const typeMatch = rowText.match(BbxCryptoStockScraperJob.COMPANY_TYPE_REGEX)
+    const truncateText = (text: string, maxLength = 160) =>
+      text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
 
-    const mNavMatch = rowText.match(/\b(\d+\.\d{4})\b/)
-    const mNav = mNavMatch ? this.parseNumber(mNavMatch[1]) : undefined
-
-    const marketCap = this.parseUsdMarketCapFromRowText(rowText)
-    const price = this.parsePriceFromRowText(rowText) ?? 0
-    const priceChangePercent = this.parseChangePercentFromRowText(rowText)
-
-    return {
-      symbol: identity.symbol,
-      name: identity.name ?? nameMatch?.[1]?.trim() ?? identity.symbol,
-      exchange: identity.exchange,
-      companyType: typeMatch?.[1]?.trim(),
-      mNav,
-      marketCap,
-      holdingValue: this.parseHoldingValueFromRowText(rowText),
-      holdingQuantity: undefined,
-      holdingCoin: undefined,
-      price,
-      priceChangePercent,
+    const sanitizeLogValue = (value: unknown): string | number | boolean | null | undefined => {
+      if (value == null) return undefined
+      if (typeof value === 'string') return truncateText(value)
+      if (typeof value === 'number' || typeof value === 'boolean') return value
+      if (Array.isArray(value)) return `[array:${value.length}]`
+      return '[object]'
     }
-  }
 
-  private parseUsdMarketCapFromRowText(rowText: string): number | undefined {
-    if (!rowText || !/USD/i.test(rowText)) return undefined
-
-    // 行文本经常存在字段粘连（例如 mNAV + marketCap 紧贴在一起）。
-    // 优先：从 mNAV（四位小数）之后的片段里解析首个 x.xx BUSD/MUSD/...，避免误把 mNAV 的尾部拼进市值。
-    const mNavMatch = rowText.match(/\d\.\d{4}/)
-    if (mNavMatch?.index !== undefined) {
-      const after = rowText.slice(mNavMatch.index + mNavMatch[0].length)
-      const tailMatch = after.match(
-        /(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([KMBT])\s*USD/i,
+    const logDiagnostics = (
+      phase: string,
+      diagnostics: BbxCompanyListDiagnostics | undefined,
+      level: 'log' | 'warn' = 'log',
+    ) => {
+      if (!netlogEnabled || !diagnostics) return
+      const base = `[bbx-list] ${phase}`
+      this.logger[level](
+        `${base} schema: topKeys=${JSON.stringify(diagnostics.topKeys)} dataKeys=${JSON.stringify(
+          diagnostics.dataKeys ?? [],
+        )} listNodeKeys=${JSON.stringify(diagnostics.listNodeKeys ?? [])} listLength=${diagnostics.listLength ?? 'unknown'}`,
       )
-      if (tailMatch) {
-        const parsed = this.parseUsdMarketCap(tailMatch[0])
-        if (typeof parsed === 'number') return parsed
+      if (diagnostics.sampleItemKeys?.length) {
+        this.logger[level](
+          `${base} sample item keys: ${JSON.stringify(diagnostics.sampleItemKeys)}`,
+        )
+      }
+      if (diagnostics.sampleMarketCaps?.length) {
+        this.logger[level](
+          `${base} sample marketCap: ${JSON.stringify(diagnostics.sampleMarketCaps)}`,
+        )
       }
     }
 
-    // fallback：整行扫描（但会跳过明显的“数字.数字”粘连导致的假匹配，并按最右侧匹配优先）
-    return this.parseUsdMarketCap(rowText)
-  }
+    let fetchedAnyPage = false
 
-  private async extractFirstRowTdsViaTableRoot(table: Locator): Promise<string[]> {
     try {
-      const rowHandle = await (await this.pickBodyRowsLocator(table)).first().elementHandle()
-      if (!rowHandle) return []
-
-      const texts = await rowHandle
-        .evaluate(el => {
-          const cells = Array.from(el.querySelectorAll('td'))
-          return cells.map(td => (td.textContent ?? '').replace(/\s+/g, ' ').trim())
-        })
-        .catch(() => [])
-
-      return Array.isArray(texts) ? texts : []
-    } catch {
-      return []
+      const response = await request.get(queryUrl)
+      const status = response.status()
+      const contentType = response.headers()['content-type'] ?? 'unknown'
+      if (netlogEnabled) {
+        this.logger.log(`[bbx-list] status=${status} contentType=${contentType}`)
+      }
+      if (!response.ok()) {
+        this.logger.warn(`BBX list API request failed: status=${response.status()}`)
+      } else {
+        const data = (await response.json()) as unknown
+        const diagnostics = this.buildCompanyListDiagnostics(data, sanitizeLogValue)
+        lastDiagnostics = diagnostics
+        logDiagnostics('list', diagnostics)
+        const extracted = this.extractCompanyListFromResponse(data)
+        if (extracted) {
+          items.push(...extracted.items)
+          totalCount = extracted.totalCount ?? items.length
+          fetchedAnyPage = true
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `BBX list API request error: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
-  }
 
-  private resolveIndex(
-    preferred: number | undefined,
-    fallback: number | undefined,
-    cellCount: number,
-  ): number | undefined {
-    if (typeof preferred === 'number' && preferred >= 0 && preferred < cellCount) return preferred
-    if (typeof fallback === 'number' && fallback >= 0 && fallback < cellCount) return fallback
-    return undefined
-  }
+    const sortCheckPassed = this.checkMarketCapSorted(items)
+    let usedLocalSort = false
+    if (!sortCheckPassed) {
+      this.logger.warn('BBX list API marketCap not sorted; applying local sort')
+      items.sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+      usedLocalSort = true
+    }
 
-  private async pickBodyRowsLocator(table: Locator): Promise<Locator> {
-    const antRows = table.locator(
-      '.ant-table-tbody tr:not(.ant-table-measure-row):not([aria-hidden="true"])',
+    const filteredRaw = items.filter(
+      item => (item.marketCap ?? 0) >= BbxCryptoStockScraperJob.MIN_MARKET_CAP_THRESHOLD,
     )
-    if ((await antRows.count().catch(() => 0)) > 0) return antRows
-    return table.locator('tbody tr')
-  }
+    const sortedFiltered = filteredRaw
+      .slice()
+      .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+    const usedItems = sortedFiltered.slice(0, Math.min(30, sortedFiltered.length))
 
-  /**
-   * 从首行 cell 文本推断列索引，避免 header 与 tbody 不对齐。
-   * 适配币股表的典型布局：mNAV | 市值(…USD) | 持币价值($…B) | 股价($….) | 24h涨跌(+…%)
-   */
-  private inferColumnIndexes(cellTexts: string[]): {
-    mNavIndex?: number
-    marketCapIndex?: number
-    holdingValueIndex?: number
-    priceIndex?: number
-    changeIndex?: number
-  } {
-    const cleaned = cellTexts.map(t => (t ?? '').replace(/\s+/g, ' ').trim())
+    totalCount = totalCount || items.length
 
-    const marketCapIndex = cleaned.findIndex(t => /USD/i.test(t))
-    const holdingValueIndex = cleaned.findIndex(
-      t => /^\$[\d,.]+\s*[KMBT]?\b/i.test(t) && !/USD/i.test(t),
-    )
+    if (filteredRaw.length === 0 && items.length > 0) {
+      this.logger.warn('BBX list API returned items but none passed marketCap >= 1B filter')
+    }
 
-    // price：$数字（不带 B/M/K/T 的那种），优先取在 holdingValue 后面的第一个
-    const isPlainUsdPrice = (t: string) => /^\$[\d,.]+$/.test(t)
-    const priceCandidates = cleaned
-      .map((t, i) => ({ t, i }))
-      .filter(x => isPlainUsdPrice(x.t))
-      .map(x => x.i)
+    if (netlogEnabled && filteredRaw.length === 0 && items.length > 0) {
+      const samples = items.slice(0, 5).map(item => ({
+        symbol: item.symbol,
+        marketCap: item.marketCap ?? null,
+        rawMarketCap: item.rawMarketCap ?? null,
+      }))
+      this.logger.warn(`[bbx-list] marketCap samples: ${JSON.stringify(samples)}`)
+    }
 
-    const priceIndex =
-      typeof holdingValueIndex === 'number' && holdingValueIndex >= 0
-        ? priceCandidates.find(i => i > holdingValueIndex)
-        : priceCandidates[0]
-
-    const changeIndex = cleaned.findIndex(t => /%/.test(t))
-
-    // mNAV：类似 0.8842 / 1.1210 的四位小数
-    const mNavIndex = cleaned.findIndex(t => /^\d+\.\d{4}$/.test(t))
+    if (netlogEnabled && (items.length === 0 || filteredRaw.length === 0)) {
+      this.logger.warn('[bbx-list] 结构诊断日志: list API 结果异常')
+      logDiagnostics('structure-check', lastDiagnostics, 'warn')
+    }
 
     return {
-      mNavIndex: mNavIndex >= 0 ? mNavIndex : undefined,
-      marketCapIndex: marketCapIndex >= 0 ? marketCapIndex : undefined,
-      holdingValueIndex: holdingValueIndex >= 0 ? holdingValueIndex : undefined,
-      priceIndex: typeof priceIndex === 'number' ? priceIndex : undefined,
-      changeIndex: changeIndex >= 0 ? changeIndex : undefined,
+      items,
+      totalCount,
+      filteredSymbols: usedItems.map(item => item.symbol),
+      filteredCount: usedItems.length,
+      filteredTotalCount: filteredRaw.length,
+      sortCheckPassed,
+      usedLocalSort,
+      fetchSucceeded: fetchedAnyPage,
+      usedItems,
     }
   }
 
-  private parsePriceFromRowText(rowText: string): number | undefined {
-    if (!rowText) return undefined
-    const matches = [...rowText.matchAll(/\$([\d,.]+)(?![KMBT])/g)]
-    if (matches.length === 0) return undefined
-    const last = matches[matches.length - 1]?.[1]
-    return last ? this.parseNumber(last) : undefined
+  private extractCompanyListFromResponse(data: unknown): {
+    items: BbxCompanyListItem[]
+    totalCount?: number
+  } | null {
+    if (!data) return null
+
+    const list = Array.isArray(data)
+      ? data
+      : (() => {
+          if (typeof data !== 'object') return undefined
+          const root = data as Record<string, unknown>
+          const rootData = root.data
+          if (Array.isArray(rootData)) return rootData
+          const dataNode = this.findFirstRecordDeep(root, ['data', 'result', 'payload'], 3) ?? root
+          const listHit =
+            this.findFirstArrayDeep(
+              dataNode,
+              ['list', 'items', 'rows', 'records', 'companyList'],
+              4,
+            ) ??
+            this.findFirstArrayDeep(root, ['list', 'items', 'rows', 'records', 'companyList'], 4)
+          return listHit?.list
+        })()
+
+    if (!list) return null
+
+    const items: BbxCompanyListItem[] = []
+    for (const entry of list) {
+      if (!entry || typeof entry !== 'object') continue
+      const record = entry as Record<string, unknown>
+      const symbol =
+        this.getFirstString(record, [
+          'symbol',
+          'ticker',
+          'code',
+          'stockSymbol',
+          'stock_code',
+          'stockCode',
+        ]) ?? this.getFirstString(record, ['companySymbol', 'company_code'])
+      if (!symbol) continue
+
+      const marketCapCandidate = this.getMarketCapCandidate(record)
+      const rawMarketCap =
+        typeof marketCapCandidate.value === 'string' ? marketCapCandidate.value : undefined
+
+      const marketCap = this.parseMarketCapValue(
+        marketCapCandidate.value ??
+          this.getFirstValue(record, [
+            'marketCap',
+            'market_cap',
+            'marketcap',
+            'marketCapUsd',
+            'market_cap_usd',
+            'marketCapUSD',
+            'marketCapValue',
+            'market_cap_value',
+            'marketValue',
+            'market_value',
+          ]) ??
+          rawMarketCap,
+      )
+
+      const name =
+        this.getFirstString(record, ['name', 'companyName', 'company_name', 'stockName']) ??
+        this.getFirstString(record, ['company', 'title'])
+      const exchange = this.getFirstString(record, ['exchange', 'market', 'marketCode'])
+      const companyType = this.getFirstString(record, ['companyType', 'type', 'category'])
+
+      const price = this.parseNumericValue(
+        this.getFirstValue(record, [
+          'stockPrice',
+          'price',
+          'lastPrice',
+          'last',
+          'close',
+          'currentPrice',
+        ]),
+      )
+      const priceChangePercent = this.parsePercentValue(
+        this.getFirstValue(record, [
+          'priceChange24h',
+          'priceChangePercent',
+          'price_change_percent',
+          'changePercent',
+          'changeRate',
+          'change24h',
+        ]),
+      )
+
+      const mNavSelection = this.resolveMNavSelection(record)
+
+      items.push({
+        symbol: symbol.toUpperCase(),
+        name,
+        exchange,
+        companyType,
+        price,
+        priceChangePercent,
+        marketCap,
+        mNav: mNavSelection.mNav,
+        holdingValue: mNavSelection.holdingValue,
+        holdingQuantity: mNavSelection.holdingQuantity,
+        holdingCoin: mNavSelection.coin,
+        rawMarketCap,
+        rawData: {
+          companyListItem: record,
+          mNavData: mNavSelection.entry,
+          coin: mNavSelection.coin,
+        },
+      })
+    }
+
+    const dataNode =
+      data && typeof data === 'object'
+        ? this.findFirstRecordDeep(
+            data as Record<string, unknown>,
+            ['data', 'result', 'payload'],
+            3,
+          )
+        : undefined
+    const totalCount = dataNode
+      ? this.getFirstNumber(dataNode, ['total', 'totalCount', 'count', 'total_size', 'totalSize'])
+      : undefined
+
+    return { items, totalCount }
   }
 
-  private parseChangePercentFromRowText(rowText: string): number | undefined {
-    if (!rowText) return undefined
-    const match = rowText.match(/([+-]?\d+\.\d+)%/)
-    if (!match) return undefined
-    return this.parseNumber(match[1])
+  private checkMarketCapSorted(items: BbxCompanyListItem[]): boolean {
+    const caps = items
+      .map(item => item.marketCap)
+      .filter((cap): cap is number => typeof cap === 'number' && cap > 0)
+
+    if (caps.length < 2) return true
+    const sampleSize = Math.min(BbxCryptoStockScraperJob.SORT_CHECK_SAMPLE_SIZE, caps.length)
+    for (let i = 1; i < sampleSize; i++) {
+      if (caps[i - 1] < caps[i]) return false
+    }
+    return true
   }
 
-  private findHeaderIndex(headers: string[], keys: string[]): number | undefined {
-    const normalized = headers.map(h => h.replace(/\s+/g, '').toLowerCase())
-    for (const k of keys) {
-      const key = k.replace(/\s+/g, '').toLowerCase()
-      const exact = normalized.findIndex(h => h === key)
-      if (exact >= 0) return exact
-      const fuzzy = normalized.findIndex(h => h.includes(key))
-      if (fuzzy >= 0) return fuzzy
+  private resolveMNavSelection(record: Record<string, unknown>): {
+    entry?: Record<string, unknown>
+    coin?: string
+    mNav?: number
+    holdingValue?: number
+    holdingQuantity?: number
+  } {
+    const candidates = this.getFirstArray(record, [
+      'mNavData',
+      'mnavData',
+      'mNavList',
+      'mnavList',
+      'mNavs',
+      'mnavs',
+    ])
+    if (!candidates || candidates.length === 0) return {}
+
+    const coinValueKeys = [
+      'coinValueUSD',
+      'coinValueUsd',
+      'coinValue',
+      'holdingValueUSD',
+      'holdingValueUsd',
+      'holdingValue',
+      'valueUsd',
+      'valueUSD',
+    ]
+
+    let bestEntry: Record<string, unknown> | undefined
+    let bestValue = -1
+
+    for (const entry of candidates) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const recordEntry = entry as Record<string, unknown>
+      const coinValue = this.parseMarketCapValue(this.getFirstValue(recordEntry, coinValueKeys))
+      if (coinValue == null) continue
+      if (coinValue > bestValue) {
+        bestValue = coinValue
+        bestEntry = recordEntry
+      }
+    }
+
+    if (!bestEntry) {
+      const fallback = candidates.find(
+        entry => entry && typeof entry === 'object' && !Array.isArray(entry),
+      ) as Record<string, unknown> | undefined
+      if (!fallback) return {}
+      bestEntry = fallback
+    }
+
+    const coin = this.getFirstString(bestEntry, [
+      'coin',
+      'coinSymbol',
+      'symbol',
+      'asset',
+      'coinName',
+    ])
+    const mNav = this.parseNumericValue(
+      this.getFirstValue(bestEntry, ['mNav', 'mNAV', 'mnav', 'nav', 'mNavValue', 'mnavValue']),
+    )
+    const holdingValue = this.parseMarketCapValue(this.getFirstValue(bestEntry, coinValueKeys))
+    const holdingQuantity = this.parseNumericValue(
+      this.getFirstValue(bestEntry, [
+        'holdingAmount',
+        'holdingQuantity',
+        'holdingQty',
+        'amount',
+        'holding_amount',
+        'holding_qty',
+      ]),
+    )
+
+    return {
+      entry: bestEntry,
+      coin,
+      mNav,
+      holdingValue,
+      holdingQuantity,
+    }
+  }
+
+  private getMarketCapCandidate(record: Record<string, unknown>): {
+    key?: string
+    value?: unknown
+  } {
+    const keys = [
+      'marketCap',
+      'market_cap',
+      'marketcap',
+      'marketCapUsd',
+      'market_cap_usd',
+      'marketCapUSD',
+      'marketCapValue',
+      'market_cap_value',
+      'marketValue',
+      'market_value',
+      'marketCapText',
+      'market_cap_text',
+      'marketCapStr',
+      'market_cap_str',
+    ]
+
+    for (const key of keys) {
+      if (key in record) return { key, value: record[key] }
+    }
+
+    for (const [key, value] of Object.entries(record)) {
+      if (this.isMarketCapKey(key)) return { key, value }
+    }
+
+    return {}
+  }
+
+  private isMarketCapKey(key: string): boolean {
+    return /market.*cap|market.*value|mktcap/i.test(key)
+  }
+
+  private getFirstValue(record: Record<string, unknown>, keys: string[]): unknown | undefined {
+    for (const key of keys) {
+      if (key in record) return record[key]
     }
     return undefined
   }
 
-  private findAllHeaderIndexes(headers: string[], keys: string[]): number[] {
-    const normalized = headers.map(h => h.replace(/\s+/g, '').toLowerCase())
-    const wanted = keys.map(k => k.replace(/\s+/g, '').toLowerCase())
-    const matches: number[] = []
-
-    for (let i = 0; i < normalized.length; i += 1) {
-      const h = normalized[i]
-      if (!h) continue
-      if (wanted.some(k => h === k || h.includes(k))) matches.push(i)
+  private getFirstArray(record: Record<string, unknown>, keys: string[]): unknown[] | undefined {
+    for (const key of keys) {
+      const value = record[key]
+      if (Array.isArray(value)) return value
     }
-    return matches
+    return undefined
   }
 
-  /**
-   * 选择“市值/Market Cap”列索引。
-   * - 页面可能同时渲染多个表/多个“市值”列
-   * - 若存在“持币价值/Holding Value”列，优先选择其左侧相邻的市值列（常见为：mNAV | 市值 | 持币价值）
-   */
-  private pickMarketCapIndex(
-    headers: string[],
-    holdingValueIndex: number | undefined,
-  ): number | undefined {
-    const candidates = this.findAllHeaderIndexes(headers, ['市值', 'market cap', 'marketcap'])
-    if (candidates.length === 0) return undefined
-
-    if (typeof holdingValueIndex === 'number') {
-      const adjacent = candidates.find(idx => idx === holdingValueIndex - 1)
-      if (typeof adjacent === 'number') return adjacent
-
-      // 次优：距离 holdingValue 最近且在其左侧
-      const leftSide = candidates.filter(idx => idx < holdingValueIndex)
-      if (leftSide.length > 0) return leftSide[leftSide.length - 1]
+  private parseNumericValue(value: unknown): number | undefined {
+    if (typeof value === 'number') return Number.isNaN(value) ? undefined : value
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/[,$%\s]/g, '')
+      if (!cleaned) return undefined
+      const parsed = Number.parseFloat(cleaned)
+      return Number.isNaN(parsed) ? undefined : parsed
     }
+    return undefined
+  }
 
-    // 默认取第一个出现的市值列
-    return candidates[0]
+  private parsePercentValue(value: unknown): number | undefined {
+    return this.parseNumericValue(value)
+  }
+
+  private parseMarketCapValue(value: unknown): number | undefined {
+    if (typeof value === 'number') return Number.isNaN(value) ? undefined : value
+    if (typeof value === 'string') {
+      const parsedWithUnit = parseBbxMarketCapText(value)
+      if (parsedWithUnit != null) return parsedWithUnit
+      const plain = Number.parseFloat(value.replace(/,/g, ''))
+      return Number.isNaN(plain) ? undefined : plain
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const record = value as Record<string, unknown>
+      const unit = this.getFirstString(record, [
+        'unit',
+        'unitText',
+        'unitName',
+        'currency',
+        'currencyCode',
+        'currencySymbol',
+      ])
+      const numeric = this.getFirstNumber(record, [
+        'value',
+        'amount',
+        'marketCap',
+        'market_cap',
+        'marketcap',
+      ])
+      if (numeric != null) {
+        const normalized = unit ? this.parseMarketCapValue(`${numeric} ${unit}`) : undefined
+        return normalized ?? numeric
+      }
+
+      const text = this.getFirstString(record, [
+        'text',
+        'display',
+        'value',
+        'amount',
+        'marketCap',
+        'market_cap',
+        'marketcap',
+      ])
+      if (text) {
+        const combined = unit ? `${text} ${unit}` : text
+        return this.parseMarketCapValue(combined)
+      }
+    }
+    return undefined
+  }
+
+  private getFirstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = record[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+      if (typeof value === 'number') return String(value)
+    }
+    return undefined
+  }
+
+  private getFirstNumber(record: Record<string, unknown>, keys: string[]): number | undefined {
+    for (const key of keys) {
+      const value = record[key]
+      if (typeof value === 'number' && !Number.isNaN(value)) return value
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number.parseFloat(value.replace(/,/g, ''))
+        if (!Number.isNaN(parsed)) return parsed
+      }
+    }
+    return undefined
+  }
+
+  public getFirstBoolean(record: Record<string, unknown>, keys: string[]): boolean | undefined {
+    for (const key of keys) {
+      const value = record[key]
+      if (typeof value === 'boolean') return value
+    }
+    return undefined
+  }
+
+  private findFirstRecord(
+    record: Record<string, unknown>,
+    keys: string[],
+  ): Record<string, unknown> | undefined {
+    for (const key of keys) {
+      const value = record[key]
+      if (value && typeof value === 'object' && !Array.isArray(value))
+        return value as Record<string, unknown>
+    }
+    return undefined
+  }
+
+  private findFirstRecordDeep(
+    record: Record<string, unknown>,
+    keys: string[],
+    maxDepth: number,
+  ): Record<string, unknown> | undefined {
+    if (maxDepth <= 0) return undefined
+    const direct = this.findFirstRecord(record, keys)
+    if (direct) return direct
+    for (const value of Object.values(record)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const found = this.findFirstRecordDeep(value as Record<string, unknown>, keys, maxDepth - 1)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  private findFirstArrayDeep(
+    record: Record<string, unknown>,
+    keys: string[],
+    maxDepth: number,
+  ): { list: unknown[]; container: Record<string, unknown> } | undefined {
+    if (maxDepth <= 0) return undefined
+    for (const key of keys) {
+      const value = record[key]
+      if (Array.isArray(value)) return { list: value, container: record }
+    }
+    for (const value of Object.values(record)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const found = this.findFirstArrayDeep(value as Record<string, unknown>, keys, maxDepth - 1)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  private buildCompanyListDiagnostics(
+    data: unknown,
+    sanitizeLogValue: (value: unknown) => string | number | boolean | null | undefined,
+  ): BbxCompanyListDiagnostics {
+    if (!data || typeof data !== 'object') return { topKeys: [] }
+    const root = data as Record<string, unknown>
+    const topKeys = Object.keys(root).slice(0, 12)
+    const dataNode = this.findFirstRecordDeep(root, ['data', 'result', 'payload'], 3)
+    const dataKeys = dataNode ? Object.keys(dataNode).slice(0, 12) : undefined
+    const listHit =
+      (dataNode
+        ? this.findFirstArrayDeep(dataNode, ['list', 'items', 'rows', 'records', 'companyList'], 4)
+        : undefined) ??
+      this.findFirstArrayDeep(root, ['list', 'items', 'rows', 'records', 'companyList'], 4)
+
+    const diagnostics: BbxCompanyListDiagnostics = { topKeys, dataKeys }
+    if (!listHit) return diagnostics
+
+    diagnostics.listNodeKeys = Object.keys(listHit.container).slice(0, 12)
+    diagnostics.listLength = listHit.list.length
+
+    const samples = listHit.list.slice(0, 3)
+    diagnostics.sampleItemKeys = samples
+      .map(item =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? Object.keys(item as Record<string, unknown>).slice(0, 12)
+          : [],
+      )
+      .filter(keys => keys.length > 0)
+
+    const marketSamples: Array<{
+      key: string
+      value: string | number | boolean | null | undefined
+    }> = []
+    for (const item of samples) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+      const record = item as Record<string, unknown>
+      const candidate = this.getMarketCapCandidate(record)
+      if (candidate.key) {
+        marketSamples.push({ key: candidate.key, value: sanitizeLogValue(candidate.value) })
+        continue
+      }
+    }
+    if (marketSamples.length > 0) diagnostics.sampleMarketCaps = marketSamples
+
+    return diagnostics
   }
 
   /**
@@ -637,319 +2126,6 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
     else if (suffix === 'K') value *= 1e3
 
     return value
-  }
-
-  private parsePercent(text: string): number | undefined {
-    if (!text || text === '-') return undefined
-    const cleaned = text.trim().replace('%', '')
-    return this.parseNumber(cleaned)
-  }
-
-  private parseUsdMarketCap(text: string): number | undefined {
-    if (!text || text === '-') return undefined
-    const normalized = text.replace(/\s+/g, ' ').trim()
-    if (!/USD/i.test(normalized)) return undefined
-
-    // 单位在 BBX 上通常表现为 BUSD/MUSD/KUSD/TUSD。
-    // number 允许 1 个小数点；允许出现逗号分隔。
-    const matches = [
-      ...normalized.matchAll(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([KMBT])\s*USD/gi),
-    ]
-    if (matches.length === 0) return undefined
-
-    let best: { value: number; index: number } | undefined
-    for (const m of matches) {
-      const index = m.index ?? -1
-
-      // 过滤明显的“字段粘连”假匹配：如 "0.8842.37 BUSD" 中从 "8842.37" 开始的匹配，
-      // 其前一位是 '.' 且前二位是数字。
-      if (index >= 2) {
-        const prev = normalized[index - 1]
-        const prev2 = normalized[index - 2]
-        if (prev === '.' && /\d/.test(prev2)) continue
-      }
-
-      const raw = m[1]
-      const unit = m[2]?.toUpperCase()
-      let value = this.parseNumber(raw)
-      if (!value) continue
-
-      if (unit === 'T') value *= 1e12
-      else if (unit === 'B') value *= 1e9
-      else if (unit === 'M') value *= 1e6
-      else if (unit === 'K') value *= 1e3
-
-      // 市值在一行里通常只出现一次；若出现多次，优先取“最右侧”的那个，
-      // 以减少 mNAV/其它字段粘连导致的错配。
-      if (!best || index > best.index) best = { value, index }
-    }
-
-    return best?.value
-  }
-
-  private parseHoldingValueFromRowText(rowText: string): number | undefined {
-    if (!rowText) return undefined
-    const match = rowText.match(BbxCryptoStockScraperJob.HOLDING_VALUE_REGEX)
-    if (!match) return undefined
-    let value = this.parseNumber(match[1])
-    if (!value) return undefined
-
-    const unit = match[2]?.toUpperCase()
-    if (unit === 'B') value *= 1e9
-    else if (unit === 'M') value *= 1e6
-    else if (unit === 'K') value *= 1e3
-    return value
-  }
-
-  /**
-   * 从首列/整行文本中解析 symbol/exchange/name。
-   * - 不依赖固定的“美股 - NASDAQ”格式，尽量兼容 BBX 页面渲染差异
-   */
-  private parseIdentity(
-    firstCell: string,
-    rowText: string,
-  ): { symbol: string; exchange: string; name?: string } | null {
-    const combined = `${firstCell} ${rowText}`.replace(/\s+/g, ' ').trim()
-
-    // 不能对整行做 upper-case：公司名里的小写尾字符（例如 Incorporated 的 d）会变成大写，
-    // 与 ticker 粘连后导致误判（例如 dMSTR）。ticker 必须用严格的大写匹配。
-    const stockInfoMatch = combined.match(BbxCryptoStockScraperJob.STOCK_INFO_REGEX)
-
-    const exchange =
-      stockInfoMatch?.[2] ?? combined.match(/\b(NASDAQ|NYSE|OTCMARKETS)(?=[^A-Z]|$)/)?.[1] ?? null
-    if (!exchange) return null
-
-    // symbol 优先：STOCK_INFO_REGEX 捕获 -> fallback 用“最后一个大写 token”
-    const rawSymbol = stockInfoMatch?.[1]
-    const extracted = rawSymbol?.match(BbxCryptoStockScraperJob.SYMBOL_EXTRACT_REGEX)?.[1]
-
-    const fallbackSymbol = (() => {
-      // 注意：BBX 行文本可能是 "...IncorporatedMSTR美股-NASDAQ..."，
-      // symbol 前后不一定存在 word-boundary（大小写仍属于 \w），因此不能依赖 \b。
-      const tokens = combined.match(/[A-Z]{1,6}(?:\.[A-Z])?/g)
-      if (!tokens || tokens.length === 0) return null
-      return tokens[tokens.length - 1]
-    })()
-
-    const symbol = extracted ?? fallbackSymbol
-    if (!symbol) return null
-
-    // name：优先从首列中剥离 symbol/exchange 信息，取剩余非空文本
-    const cleanedFirst = firstCell
-      .replace(new RegExp(`\\b${symbol}\\b`, 'g'), '')
-      .replace(/\b(NASDAQ|NYSE|OTCMARKETS)\b/gi, '')
-      .replace(/美股|\bUSA\b|\bUS\b|U\.S\./gi, '')
-      .replace(/[\-–—]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-
-    const name = cleanedFirst || undefined
-
-    return { symbol, exchange, name }
-  }
-
-  private async gotoWithRetry(
-    page: import('playwright').Page,
-    url: string,
-    timeout: number,
-  ): Promise<void> {
-    const retriable =
-      /ERR_CONNECTION_CLOSED|ERR_CONNECTION_RESET|ERR_TIMED_OUT|ECONNRESET|ETIMEDOUT/i
-
-    let lastError: unknown
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
-        return
-      } catch (e) {
-        lastError = e
-        const message = e instanceof Error ? e.message : String(e)
-        if (!retriable.test(message) || attempt === 3) throw e
-        await page.waitForTimeout(500 * attempt)
-      }
-    }
-
-    // 理论上不会到这里
-    throw lastError instanceof Error ? lastError : new Error(String(lastError))
-  }
-
-  private async buildDebugMeta(
-    page: import('playwright').Page,
-    counts?: { extractedCount?: number; filteredCount?: number },
-  ): Promise<Record<string, unknown>> {
-    try {
-      const title = await page.title().catch(() => '')
-      const url = page.url()
-      const antTableCount = await page
-        .locator('.ant-table')
-        .count()
-        .catch(() => 0)
-      const rowCount = await page
-        .locator(
-          '.ant-table-tbody tr:not(.ant-table-measure-row):not([aria-hidden="true"]), table tbody tr',
-        )
-        .count()
-        .catch(() => 0)
-
-      const pickedTable = await this.pickBbxDataTable(page)
-      const pickedRowCount = await (await this.pickBodyRowsLocator(pickedTable))
-        .count()
-        .catch(() => 0)
-
-      const headerTexts = await page
-        .locator('.ant-table thead th, table thead th')
-        .allTextContents()
-        .then(xs => xs.map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean))
-        .catch(() => [])
-
-      const pickedHeaderTexts = await pickedTable
-        .locator('thead th')
-        .allTextContents()
-        .then(xs => xs.map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean))
-        .catch(() => [])
-
-      const firstRowTds = await this.extractFirstRowTdsViaTableRoot(pickedTable)
-      const inferred = this.inferColumnIndexes(firstRowTds)
-
-      const sampleRowsLocator = await this.pickBodyRowsLocator(pickedTable)
-      const sampleRows = await sampleRowsLocator
-        .evaluateAll(rows => {
-          const texts: string[] = []
-          for (let i = 0; i < rows.length && i < 3; i += 1) {
-            const t = (rows[i]?.textContent ?? '').replace(/\s+/g, ' ').trim()
-            if (t) texts.push(t.slice(0, 200))
-          }
-          return texts
-        })
-        .catch(() => [])
-
-      // 轻量判断是否遇到挑战/拦截
-      const html = await page.content().catch(() => '')
-      const blocked =
-        /captcha|cloudflare|verify you are human|attention required|安全验证|人机验证/i.test(html)
-
-      // 仅保留很小的片段，避免把大 HTML 写进 meta
-      const snippet = html ? html.replace(/\s+/g, ' ').slice(0, 300) : ''
-
-      return {
-        url,
-        title,
-        antTableCount,
-        rowCount,
-        headers: headerTexts,
-        pickedRowCount,
-        pickedHeaders: pickedHeaderTexts,
-        firstRowTds,
-        inferred,
-        sampleRows,
-        extractedCount: counts?.extractedCount ?? null,
-        filteredCount: counts?.filteredCount ?? null,
-        counters: (page as any).__bbxDebugCounters ?? null,
-        blocked,
-        snippet,
-      }
-    } catch (e) {
-      return {
-        error: e instanceof Error ? e.message : String(e),
-      }
-    }
-  }
-
-  private async pickHeadersForBodyRow(table: Locator, expectedColumns: number): Promise<string[]> {
-    const rows = table.locator('thead tr')
-    const rowCount = await rows.count().catch(() => 0)
-    if (rowCount === 0) return []
-
-    // 选择 th 数量与 tbody td 数量一致的那一行。
-    // 若 expectedColumns=0（极端情况），就返回最后一行（通常是最“细”的那行）。
-    let picked: string[] | null = null
-    for (let i = 0; i < rowCount; i += 1) {
-      const ths = rows.nth(i).locator('th')
-      const count = await ths.count().catch(() => 0)
-      if (expectedColumns > 0 && count === expectedColumns) {
-        picked = await ths
-          .allTextContents()
-          .then(xs => xs.map(x => x.replace(/\s+/g, ' ').trim()))
-          .catch(() => [])
-        break
-      }
-    }
-
-    if (picked) return picked
-
-    return rows
-      .nth(rowCount - 1)
-      .locator('th')
-      .allTextContents()
-      .then(xs => xs.map(x => x.replace(/\s+/g, ' ').trim()))
-      .catch(() => [])
-  }
-
-  private async loadMoreRowsIfNeeded(table: Locator) {
-    const tableBody = table.locator('.ant-table-body').first()
-    if ((await tableBody.count()) === 0) return
-
-    let lastRowCount = 0
-    let stableRounds = 0
-    for (let i = 0; i < 20; i++) {
-      const current = await table.locator('.ant-table-tbody tr').count()
-      if (current > lastRowCount) {
-        lastRowCount = current
-        stableRounds = 0
-      } else {
-        stableRounds++
-        if (stableRounds >= 3) break
-      }
-
-      await tableBody.evaluate(el => {
-        ;(el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight
-      })
-      // Locator 上无法直接 waitForTimeout，这里用元素所在的 frame/page。
-      await tableBody.page().waitForTimeout(500)
-    }
-  }
-
-  private async pickBbxDataTable(page: import('playwright').Page) {
-    // 页面可能同时渲染：
-    // - 币种行情表（无“美股-NASDAQ/NYSE”之类的交易所标记）
-    // - 币股/加密概念股表（行里包含 “美股- NASDAQ/NYSE/OTCMARKETS”）
-    // 仅靠 header 文本不可靠（页面会混入多个 header），这里用“行内容是否匹配交易所信息”来选表。
-
-    const candidates = page.locator('.ant-table, table')
-    const count = await candidates.count().catch(() => 0)
-    if (count <= 0) return page.locator('.ant-table, table').first()
-
-    let bestIndex = 0
-    let bestScore = -1
-
-    for (let i = 0; i < count; i += 1) {
-      const table = candidates.nth(i)
-      const rows = await this.pickBodyRowsLocator(table)
-      const sample = await rows
-        .evaluateAll(els => {
-          const out: string[] = []
-          for (let j = 0; j < els.length && j < 5; j += 1) {
-            const t = (els[j]?.textContent ?? '').replace(/\s+/g, ' ').trim()
-            if (t) out.push(t)
-          }
-          return out
-        })
-        .catch(() => [])
-
-      const joined = Array.isArray(sample) ? sample.join(' ') : ''
-      let score = 0
-      if (/美股\s*[\-–—]\s*(?:NASDAQ|NYSE|OTCMARKETS)/i.test(joined)) score += 100
-      if (BbxCryptoStockScraperJob.STOCK_INFO_REGEX.test(joined)) score += 100
-      if (/\bmNAV\b|持币价值|Holding Value/i.test(joined)) score += 10
-      if (/公司|Company/i.test(joined)) score += 2
-
-      if (score > bestScore) {
-        bestScore = score
-        bestIndex = i
-      }
-    }
-
-    return candidates.nth(bestIndex)
   }
 
   private parseCursor(currentCursor: string | null): BbxScraperJobCursor {
