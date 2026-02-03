@@ -5,7 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardCanvas } from '@/features/dashboards/components/DashboardCanvas'
-import { ensureDashboard, getDashboard, updateDashboard } from '@/features/dashboards/store/dashboardStore'
+import {
+  ensureDashboard,
+  getDashboard,
+  updateDashboard,
+} from '@/features/dashboards/store/dashboardStore'
 import { AddWidgetModal } from './AddWidgetModal'
 
 const DEFAULT_DASHBOARD_ID = 'draft'
@@ -18,10 +22,12 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
   const { t } = useTranslation()
   const router = useRouter()
   const params = useParams()
-  const lng = params.lng as string || 'zh'
+  const lng = (params?.lng as string) || 'zh'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [doc, setDoc] = useState(() =>
-    dashboardId === DEFAULT_DASHBOARD_ID ? ensureDashboard(DEFAULT_DASHBOARD_ID) : getDashboard(dashboardId),
+    dashboardId === DEFAULT_DASHBOARD_ID
+      ? ensureDashboard(DEFAULT_DASHBOARD_ID)
+      : getDashboard(dashboardId),
   )
 
   useEffect(() => {
@@ -55,22 +61,22 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
           type="text"
           placeholder={t('dashboard.editor.descriptionPlaceholder')}
           value={doc?.name ?? ''}
-          onChange={(e) => {
+          onChange={e => {
             if (!doc) return
             const next = e.target.value
-            updateDashboard(dashboardId, (d) => ({ ...d, name: next }))
+            updateDashboard(dashboardId, d => ({ ...d, name: next }))
             setDoc(getDashboard(dashboardId))
           }}
-          className="w-full bg-transparent border-none text-[color:var(--cf-text-strong)] text-h1 font-bold focus:outline-none placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50"
+          className="text-h1 w-full border-none bg-transparent font-bold text-[color:var(--cf-text-strong)] placeholder:text-[color:var(--cf-muted)] placeholder:opacity-50 focus:outline-none"
         />
 
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary hover:opacity-90 rounded-lg text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
+            className="from-primary to-secondary shadow-primary/20 flex items-center gap-2 rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
             <span>{t('dashboard.editor.addWidgetTitle')}</span>
           </button>
 
@@ -78,21 +84,29 @@ export const EditorCanvas = ({ dashboardId = DEFAULT_DASHBOARD_ID }: EditorCanva
 
           <button
             type="button"
-            className="flex items-center gap-2 px-3 py-1.5 text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] transition-colors text-xs font-medium"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[color:var(--cf-muted)] transition-colors hover:text-[color:var(--cf-text-strong)]"
           >
-            <LayoutIcon className="w-3.5 h-3.5" />
+            <LayoutIcon className="h-3.5 w-3.5" />
             <span>{t('dashboard.resetLayout')}</span>
           </button>
         </div>
       </div>
 
-      <div className="min-h-[600px] bg-[color:var(--cf-bg)] rounded-xl border border-[color:var(--cf-border)] p-4 relative bg-grid-pattern">
-        {doc ? <DashboardCanvas dashboardId={dashboardId} /> : (
-          <div className="text-center text-[color:var(--cf-muted)] py-20">{t('dashboard.notFound')}</div>
+      <div className="bg-grid-pattern relative min-h-[600px] rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
+        {doc ? (
+          <DashboardCanvas dashboardId={dashboardId} />
+        ) : (
+          <div className="py-20 text-center text-[color:var(--cf-muted)]">
+            {t('dashboard.notFound')}
+          </div>
         )}
       </div>
 
-      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={dashboardId} />
+      <AddWidgetModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        dashboardId={dashboardId}
+      />
 
       <style jsx global>{`
         .bg-grid-pattern {

@@ -40,7 +40,7 @@ function useContainerWidth() {
 // - All widgets now respect their snapped preset size if available
 // - Fallback to 6x3 if snapping fails or no type
 const clampLayout = (items: any[], widgetsById: Map<string, any>) =>
-  (items || []).map((n) => {
+  (items || []).map(n => {
     const widgetType = widgetsById.get(String(n.i))?.type as string | undefined
     if (widgetType) {
       const snapped = snapToPresetForWidgetType(widgetType, Number(n.w ?? 6), Number(n.h ?? 3))
@@ -66,14 +66,17 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   const [doc, setDoc] = useState(() =>
     props.dashboardId === 'draft' ? ensureDashboard('draft') : getDashboard(props.dashboardId),
   )
-  const widgetsById = useMemo(() => new Map((doc?.widgets ?? []).map((w) => [w.id, w])), [doc?.widgets])
+  const widgetsById = useMemo(
+    () => new Map((doc?.widgets ?? []).map(w => [w.id, w])),
+    [doc?.widgets],
+  )
   const [layoutState, setLayoutState] = useState(() =>
     clampLayout((doc ?? ensureDashboard('draft')).layout, widgetsById),
   )
   const [GridLayout, setGridLayout] = useState<GridLayoutComponent>(null)
   const [resetKey, setResetKey] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  
+
   const { setEl: containerRef, width } = useContainerWidth()
   const saveTimerRef = useRef<any>(null)
 
@@ -89,7 +92,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         const freshDoc = ensureDashboard('draft')
         setDoc(freshDoc)
         if (!saveTimerRef.current) {
-          const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+          const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
           setLayoutState(clampLayout(freshDoc.layout, map))
         }
         return
@@ -98,7 +101,7 @@ export function DashboardCanvas(props: { dashboardId: string }) {
       if (!freshDoc) return // do not recreate deleted dashboards
       setDoc(freshDoc)
       if (!saveTimerRef.current) {
-        const map = new Map((freshDoc.widgets ?? []).map((w) => [w.id, w]))
+        const map = new Map((freshDoc.widgets ?? []).map(w => [w.id, w]))
         setLayoutState(clampLayout(freshDoc.layout, map))
       }
     }
@@ -118,17 +121,20 @@ export function DashboardCanvas(props: { dashboardId: string }) {
   }
 
   const handleResetLayout = () => {
-    if (!doc.widgets.length) return
+    if (!doc || !doc.widgets.length) return
     let currentX = 0
     let currentY = 0
     let currentRowHeight = 0
 
-    const newLayout = doc.widgets.map((widget) => {
-      const existing = doc.layout?.find((l) => String(l.i) === widget.id)
+    const newLayout = doc.widgets.map(widget => {
+      const existing = doc.layout?.find(l => String(l.i) === widget.id)
       let catalogItem = null
       for (const group of WIDGET_CATALOG) {
-        const found = group.items.find((i) => i.type === widget.type)
-        if (found) { catalogItem = found; break }
+        const found = group.items.find(i => i.type === widget.type)
+        if (found) {
+          catalogItem = found
+          break
+        }
       }
       const d = catalogItem?.defaultLayout || { w: 6, h: 3 }
       const w0 = existing?.w ?? d.w
@@ -172,34 +178,37 @@ export function DashboardCanvas(props: { dashboardId: string }) {
     setResetKey(prev => prev + 1)
   }
 
-  if (!doc) return <div className="text-white/30 p-10 text-center">{t('dashboard.notFound')}</div>
-  if (!GridLayout) return <div className="text-white/30 p-10 text-center">{t('common.loading')}</div>
+  if (!doc) return <div className="p-10 text-center text-white/30">{t('dashboard.notFound')}</div>
+  if (!GridLayout)
+    return <div className="p-10 text-center text-white/30">{t('common.loading')}</div>
 
   const rowHeight = 10
   const marginY = 6
 
   return (
-    <div className="w-full flex flex-col h-full overflow-hidden">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       <DashboardHeader dashboard={doc} onRefresh={() => setDoc(getDashboard(props.dashboardId)!)} />
-      
-      <div className="flex items-center gap-4 mb-6">
+
+      <div className="mb-6 flex items-center gap-4">
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
-          className="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded text-sm font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
+          className="from-primary to-secondary shadow-primary/20 rounded bg-gradient-to-r px-4 py-2 text-sm font-medium text-white shadow-lg transition-all active:scale-95"
         >
-          <Plus className="w-4 h-4 inline mr-1" />{t('dashboard.addWidget')}
+          <Plus className="mr-1 inline h-4 w-4" />
+          {t('dashboard.addWidget')}
         </button>
         <button
           type="button"
           onClick={handleResetLayout}
-          className="border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] px-4 py-2 rounded text-sm hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] transition-colors"
+          className="rounded border border-[color:var(--cf-border)] px-4 py-2 text-sm text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
         >
-          <LayoutIcon className="w-4 h-4 inline mr-1" />{t('dashboard.resetLayout')}
+          <LayoutIcon className="mr-1 inline h-4 w-4" />
+          {t('dashboard.resetLayout')}
         </button>
       </div>
 
-      <div ref={containerRef} className="flex-1 relative overflow-y-auto no-scrollbar min-h-0">
+      <div ref={containerRef} className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         <GridLayout
           key={resetKey}
           layout={layoutState as any}
@@ -220,19 +229,19 @@ export function DashboardCanvas(props: { dashboardId: string }) {
             return (
               <div
                 key={l.i}
-                className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden shadow-sm relative group transition-all duration-300"
+                className="group relative overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm transition-all duration-300"
                 style={{ height: '100%', overflow: 'hidden' }}
               >
-                <WidgetRenderer 
-                  widget={w} 
+                <WidgetRenderer
+                  widget={w}
                   onRemove={() => {
                     removeWidgetFromDashboard(props.dashboardId, w.id)
                     const freshDoc = getDashboard(props.dashboardId)
                     if (!freshDoc) return
                     setDoc(freshDoc)
-                    const newMap = new Map((freshDoc.widgets ?? []).map((wd) => [wd.id, wd]))
+                    const newMap = new Map((freshDoc.widgets ?? []).map(wd => [wd.id, wd]))
                     setLayoutState(clampLayout(freshDoc.layout, newMap))
-                  }} 
+                  }}
                 />
               </div>
             )
@@ -240,7 +249,11 @@ export function DashboardCanvas(props: { dashboardId: string }) {
         </GridLayout>
       </div>
 
-      <AddWidgetModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} dashboardId={props.dashboardId} />
+      <AddWidgetModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        dashboardId={props.dashboardId}
+      />
     </div>
   )
 }

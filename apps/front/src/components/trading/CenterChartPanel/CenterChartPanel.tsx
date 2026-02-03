@@ -133,9 +133,6 @@ export const CenterChartPanel = ({
           onToggleAggregate={() => {
             setIsAggregated(!isAggregated)
           }}
-          onIntervalChanged={(newInterval: string) => {
-            setChartInterval(newInterval)
-          }}
           onOpenIndicator={() => {
             setIsIndicatorModalOpen(true)
           }}

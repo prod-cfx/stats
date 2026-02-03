@@ -33,6 +33,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+.sisyphus/
 
 # typescript
 *.tsbuildinfo
@@ -52,7 +53,7 @@ next-env.d.ts
 .Trashes
 ehthumbs.db
 Thumbs.db
-
+.cache
 dist/
 node_modules/
 logs

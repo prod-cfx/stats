@@ -25,9 +25,9 @@ export function DashboardClient() {
   const { t } = useTranslation()
   const router = useRouter()
   const params = useParams()
-  const lng = (params.lng as string) || 'zh'
+  const lng = (params?.lng as string) || 'zh'
   const searchParams = useSearchParams()
-  const urlTabRaw = (searchParams.get('tab') as TabType) || 'my'
+  const urlTabRaw = (searchParams?.get('tab') as TabType) || 'my'
   // 暂时隐藏「探索看板」，避免早期内容稀缺时干扰体验
   const urlTab: TabType = urlTabRaw === 'explore' ? 'my' : urlTabRaw
   const [activeTab, setActiveTab] = useState<TabType>(urlTab)
@@ -54,10 +54,8 @@ export function DashboardClient() {
 
   const resolveDashboardName = (name?: string) => {
     const raw = (name ?? '').trim()
-    if (!raw || raw === 'UNTITLED')
-      return t('dashboard.sidebar.untitled')
-    if (raw === '行情' || raw.toLowerCase() === 'market')
-      return t('nav.home')
+    if (!raw || raw === 'UNTITLED') return t('dashboard.sidebar.untitled')
+    if (raw === '行情' || raw.toLowerCase() === 'market') return t('nav.home')
     return raw
   }
 
@@ -82,8 +80,7 @@ export function DashboardClient() {
 
   // Transition loading: 600-1000ms
   const handleTabChange = (tab: TabType) => {
-    if (tab === activeTab)
-      return
+    if (tab === activeTab) return
     setLoading(true)
     setActiveTab(tab)
     router.replace(`/${lng}/dashboard/?tab=${tab}`)
@@ -98,15 +95,15 @@ export function DashboardClient() {
   const displayDashboards = activeTab === 'my' ? myDashboards : savedDashboards
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full flex flex-col md:flex-row min-h-0 gap-8">
-      <div className="flex-none hidden md:block">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-col gap-8 md:flex-row">
+      <div className="hidden flex-none md:block">
         <DashboardSidebar activeTab={activeTab} />
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 relative">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-10">
-          <div className="flex items-center gap-2 border-b border-[color:var(--cf-border)] overflow-x-auto no-scrollbar">
-            {tabs.map((tab) => {
+          <div className="no-scrollbar flex items-center gap-2 overflow-x-auto border-b border-[color:var(--cf-border)]">
+            {tabs.map(tab => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
               return (
@@ -114,14 +111,18 @@ export function DashboardClient() {
                   key={tab.id}
                   type="button"
                   onClick={() => handleTabChange(tab.id as TabType)}
-                  className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all relative -mb-[px] ${isActive
-                    ? 'text-[color:var(--cf-text-strong)] bg-[color:var(--cf-surface-2)]'
-                    : 'text-[color:var(--cf-muted)] border-transparent hover:text-[color:var(--cf-text-strong)]'}`}
+                  className={`relative -mb-[px] flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all ${
+                    isActive
+                      ? 'bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text-strong)]'
+                      : 'border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+                  }`}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`} />
+                  <Icon
+                    className={`h-4 w-4 ${isActive ? 'text-primary' : 'text-[color:var(--cf-muted)]'}`}
+                  />
                   <span>{tab.label}</span>
                   {isActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary" />
+                    <div className="from-primary to-secondary absolute right-0 bottom-0 left-0 h-0.5 bg-gradient-to-r" />
                   )}
                 </button>
               )
@@ -131,60 +132,63 @@ export function DashboardClient() {
           <div className="relative min-h-[400px]" onClick={() => setOpenMenuId(null)}>
             <LoadingState isLoading={loading}>
               <div className="animate-in fade-in duration-500">
-                {activeTab === 'my' && (
-                  displayDashboards.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-[color:var(--cf-muted)] gap-4 border-2 border-dashed border-[color:var(--cf-border)] rounded-2xl">
-                    <Layout className="w-12 h-12" />
-                    <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
-                    <button
-                      type="button"
-                      onClick={handleCreateDashboard}
-                      className="text-white bg-primary hover:bg-primary/90 px-6 py-2 rounded-lg font-bold transition-all shadow-md shadow-primary/15"
-                    >
-                      {t('dashboard.actions.createFirst')}
-                    </button>
-                  </div>
+                {activeTab === 'my' &&
+                  (displayDashboards.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[color:var(--cf-border)] py-20 text-[color:var(--cf-muted)]">
+                      <Layout className="h-12 w-12" />
+                      <p className="text-lg font-medium">{t('dashboard.empty.my')}</p>
+                      <button
+                        type="button"
+                        onClick={handleCreateDashboard}
+                        className="bg-primary hover:bg-primary/90 shadow-primary/15 rounded-lg px-6 py-2 font-bold text-white shadow-md transition-all"
+                      >
+                        {t('dashboard.actions.createFirst')}
+                      </button>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {displayDashboards.map((dash) => (
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {displayDashboards.map(dash => (
                         <button
                           key={dash.id}
                           type="button"
                           onClick={() => router.push(`/${lng}/dashboard/view?id=${dash.id}`)}
-                          className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-[color:var(--cf-border)] hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/20 bg-[color:var(--cf-surface)]"
+                          className="group hover:border-primary/50 hover:shadow-primary/20 relative aspect-[4/3] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] transition-all hover:shadow-lg"
                         >
-                          <div className="absolute top-3 right-3 z-20" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="absolute top-3 right-3 z-20"
+                            onClick={e => e.stopPropagation()}
+                          >
                             <button
                               type="button"
-                              className="w-9 h-9 flex items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 backdrop-blur-sm text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] transition-colors"
-                              onClick={() => setOpenMenuId((v) => (v === dash.id ? null : dash.id))}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 text-[color:var(--cf-muted)] backdrop-blur-sm transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                              onClick={() => setOpenMenuId(v => (v === dash.id ? null : dash.id))}
                               aria-label="dashboard-actions"
                             >
-                              <MoreHorizontal className="w-4 h-4" />
+                              <MoreHorizontal className="h-4 w-4" />
                             </button>
                             {openMenuId === dash.id && (
-                              <div className="absolute right-0 mt-2 w-44 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl overflow-hidden">
+                              <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
                                 <button
                                   type="button"
-                                  className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
                                   onClick={() => {
                                     setOpenMenuId(null)
                                     setRenameTarget(dash)
                                     setRenameValue(dash.name || '')
                                   }}
                                 >
-                                  <Pencil className="w-4 h-4 text-[color:var(--cf-muted)]" />
+                                  <Pencil className="h-4 w-4 text-[color:var(--cf-muted)]" />
                                   {tr('common.rename', '重命名', 'Rename')}
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-red-500 hover:bg-[color:var(--cf-surface-hover)]"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-[color:var(--cf-surface-hover)]"
                                   onClick={() => {
                                     setOpenMenuId(null)
                                     setDeleteTarget(dash)
                                   }}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="h-4 w-4" />
                                   {t('dashboard.actions.delete') || '删除'}
                                 </button>
                               </div>
@@ -196,91 +200,95 @@ export function DashboardClient() {
                               <img
                                 src={dash.thumbnail}
                                 alt={dash.name}
-                                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                             </div>
                           ) : (
-                            <div className="absolute inset-0 bg-[color:var(--cf-surface-2)] flex items-center justify-center">
-                              <Grid3x3 className="w-16 h-16 text-[color:var(--cf-border)] group-hover:text-[color:var(--cf-muted)] transition-colors" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--cf-surface-2)]">
+                              <Grid3x3 className="h-16 w-16 text-[color:var(--cf-border)] transition-colors group-hover:text-[color:var(--cf-muted)]" />
                             </div>
                           )}
 
-                          <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                            <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors drop-shadow-md">
+                          <div className="absolute inset-0 flex flex-col justify-end p-4">
+                            <h3 className="group-hover:text-primary mb-1 truncate text-lg font-bold text-[color:var(--cf-text-strong)] drop-shadow-md transition-colors">
                               {resolveDashboardName(dash.name)}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
-                                {t('dashboard.editor.componentsCount', { count: dash.widgets?.length || 0 })}
+                                {t('dashboard.editor.componentsCount', {
+                                  count: dash.widgets?.length || 0,
+                                })}
                               </span>
-                              <span className="px-2 py-0.5 bg-green-600/20 text-green-400 rounded-full border border-green-600/30 font-medium backdrop-blur-sm">
+                              <span className="rounded-full border border-green-600/30 bg-green-600/20 px-2 py-0.5 font-medium text-green-400 backdrop-blur-sm">
                                 {t('dashboard.editor.status.published')}
                               </span>
                             </div>
                           </div>
 
-                          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                          <div className="bg-primary/5 pointer-events-none absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100" />
                         </button>
                       ))}
                     </div>
-                  )
-                )}
+                  ))}
 
-                {activeTab === 'saved' && (
-                  displayDashboards.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-[color:var(--cf-muted)] gap-4 border-2 border-dashed border-[color:var(--cf-border)] rounded-2xl">
-                    <Bookmark className="w-12 h-12" />
-                    <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
-                    <button
-                      type="button"
-                      onClick={handleCreateDashboard}
-                        className="text-white bg-primary hover:bg-primary/90 px-6 py-2 rounded-lg font-bold transition-all shadow-md shadow-primary/15"
-                    >
+                {activeTab === 'saved' &&
+                  (displayDashboards.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[color:var(--cf-border)] py-20 text-[color:var(--cf-muted)]">
+                      <Bookmark className="h-12 w-12" />
+                      <p className="text-lg font-medium">{t('dashboard.empty.saved')}</p>
+                      <button
+                        type="button"
+                        onClick={handleCreateDashboard}
+                        className="bg-primary hover:bg-primary/90 shadow-primary/15 rounded-lg px-6 py-2 font-bold text-white shadow-md transition-all"
+                      >
                         {t('dashboard.actions.createFirst')}
-                    </button>
-                  </div>
+                      </button>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {displayDashboards.map((dash) => (
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {displayDashboards.map(dash => (
                         <button
                           key={dash.id}
                           type="button"
                           onClick={() => router.push(`/${lng}/dashboard/editor?id=${dash.id}`)}
-                          className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-[color:var(--cf-border)] hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/20 bg-[color:var(--cf-surface)]"
+                          className="group hover:border-primary/50 hover:shadow-primary/20 relative aspect-[4/3] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] transition-all hover:shadow-lg"
                         >
-                          <div className="absolute top-3 right-3 z-20" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="absolute top-3 right-3 z-20"
+                            onClick={e => e.stopPropagation()}
+                          >
                             <button
                               type="button"
-                              className="w-9 h-9 flex items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 backdrop-blur-sm text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface-hover)] transition-colors"
-                              onClick={() => setOpenMenuId((v) => (v === dash.id ? null : dash.id))}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]/80 text-[color:var(--cf-muted)] backdrop-blur-sm transition-colors hover:bg-[color:var(--cf-surface-hover)] hover:text-[color:var(--cf-text-strong)]"
+                              onClick={() => setOpenMenuId(v => (v === dash.id ? null : dash.id))}
                               aria-label="dashboard-actions"
                             >
-                              <MoreHorizontal className="w-4 h-4" />
+                              <MoreHorizontal className="h-4 w-4" />
                             </button>
                             {openMenuId === dash.id && (
-                              <div className="absolute right-0 mt-2 w-44 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl overflow-hidden">
+                              <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
                                 <button
                                   type="button"
-                                  className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-hover)]"
                                   onClick={() => {
                                     setOpenMenuId(null)
                                     setRenameTarget(dash)
                                     setRenameValue(dash.name || '')
                                   }}
                                 >
-                                  <Pencil className="w-4 h-4 text-[color:var(--cf-muted)]" />
+                                  <Pencil className="h-4 w-4 text-[color:var(--cf-muted)]" />
                                   {tr('common.rename', '重命名', 'Rename')}
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-3 py-2 text-sm text-left flex items-center gap-2 text-red-500 hover:bg-[color:var(--cf-surface-hover)]"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-[color:var(--cf-surface-hover)]"
                                   onClick={() => {
                                     setOpenMenuId(null)
                                     setDeleteTarget(dash)
                                   }}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="h-4 w-4" />
                                   {t('dashboard.actions.delete') || '删除'}
                                 </button>
                               </div>
@@ -292,36 +300,37 @@ export function DashboardClient() {
                               <img
                                 src={dash.thumbnail}
                                 alt={dash.name}
-                                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                             </div>
                           ) : (
-                            <div className="absolute inset-0 bg-[color:var(--cf-surface-2)] flex items-center justify-center">
-                              <Grid3x3 className="w-16 h-16 text-[color:var(--cf-border)] group-hover:text-[color:var(--cf-muted)] transition-colors" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-[color:var(--cf-surface-2)]">
+                              <Grid3x3 className="h-16 w-16 text-[color:var(--cf-border)] transition-colors group-hover:text-[color:var(--cf-muted)]" />
                             </div>
                           )}
 
-                          <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                            <h3 className="text-[color:var(--cf-text-strong)] font-bold text-lg mb-1 truncate group-hover:text-primary transition-colors drop-shadow-md">
+                          <div className="absolute inset-0 flex flex-col justify-end p-4">
+                            <h3 className="group-hover:text-primary mb-1 truncate text-lg font-bold text-[color:var(--cf-text-strong)] drop-shadow-md transition-colors">
                               {resolveDashboardName(dash.name)}
                             </h3>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-[color:var(--cf-muted)] drop-shadow-md">
-                                {t('dashboard.editor.componentsCount', { count: dash.widgets?.length || 0 })}
+                                {t('dashboard.editor.componentsCount', {
+                                  count: dash.widgets?.length || 0,
+                                })}
                               </span>
-                              <span className="px-2 py-0.5 bg-[color:var(--cf-surface-2)] text-[color:var(--cf-muted)] rounded-full font-medium backdrop-blur-sm border border-[color:var(--cf-border)]">
+                              <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] px-2 py-0.5 font-medium text-[color:var(--cf-muted)] backdrop-blur-sm">
                                 {t('dashboard.editor.status.draft')}
                               </span>
                             </div>
                           </div>
 
-                          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                          <div className="bg-primary/5 pointer-events-none absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100" />
                         </button>
                       ))}
                     </div>
-                  )
-                )}
+                  ))}
               </div>
             </LoadingState>
           </div>
@@ -339,7 +348,7 @@ export function DashboardClient() {
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-lg bg-[color:var(--cf-surface-2)] hover:bg-[color:var(--cf-surface-hover)] text-[color:var(--cf-text-strong)] transition-colors"
+                  className="rounded-lg bg-[color:var(--cf-surface-2)] px-4 py-2 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                   onClick={() => {
                     setRenameTarget(null)
                     setRenameValue('')
@@ -349,16 +358,22 @@ export function DashboardClient() {
                 </button>
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white transition-colors"
+                  className="bg-primary hover:bg-primary/90 rounded-lg px-4 py-2 text-white transition-colors"
                   onClick={() => {
                     if (!renameTarget) return
                     const next = renameValue.trim()
                     if (!next) {
-                      toast.error({ title: t('common.error') || '错误', description: t('dashboard.editor.validation.titleRequired') })
+                      toast.error({
+                        title: t('common.error') || '错误',
+                        description: t('dashboard.editor.validation.titleRequired'),
+                      })
                       return
                     }
                     updateDashboardMeta(renameTarget.id, { name: next })
-                    toast.success({ title: t('common.success') || '成功', description: t('common.saved') || '已保存' })
+                    toast.success({
+                      title: t('common.success') || '成功',
+                      description: t('common.saved') || '已保存',
+                    })
                     setRenameTarget(null)
                     setRenameValue('')
                   }}
@@ -369,11 +384,13 @@ export function DashboardClient() {
             }
           >
             <div className="space-y-2">
-              <label className="text-sm text-[color:var(--cf-muted)]">{t('dashboard.editor.actions.editTitle') || '标题'}</label>
+              <label className="text-sm text-[color:var(--cf-muted)]">
+                {t('dashboard.editor.actions.editTitle') || '标题'}
+              </label>
               <input
                 value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                className="w-full bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-[color:var(--cf-text-strong)] focus:outline-none focus:border-primary"
+                onChange={e => setRenameValue(e.target.value)}
+                className="focus:border-primary w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[color:var(--cf-text-strong)] focus:outline-none"
                 placeholder={t('dashboard.sidebar.untitled')}
                 autoFocus
               />
@@ -396,7 +413,10 @@ export function DashboardClient() {
             onConfirm={() => {
               if (!deleteTarget) return
               deleteDashboard(deleteTarget.id)
-              toast.success({ title: t('common.success') || '成功', description: t('dashboard.editor.validation.deleteSuccess') || '已删除' })
+              toast.success({
+                title: t('common.success') || '成功',
+                description: t('dashboard.editor.validation.deleteSuccess') || '已删除',
+              })
               setDeleteTarget(null)
             }}
           />

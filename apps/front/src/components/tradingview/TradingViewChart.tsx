@@ -3,13 +3,25 @@
 import type { MutableRefObject, Ref } from 'react'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
-import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
 import { useAggregatedVolumeData } from '@/hooks/useAggregatedVolumeData'
 import { fetchAggregatedOpenInterest, fetchLongShortRatio } from '@/lib/api'
-import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
+import {
+  generateLiquidationMapMockData,
+  liquidationSymbolPrices,
+} from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
 import { createMockDatafeed } from './mockDatafeed'
 
@@ -89,7 +101,10 @@ interface StudyMetaInfo {
     palettes?: Record<string, unknown>
     inputs?: Record<string, unknown>
   }
-  styles: Record<string, { title?: string; histogramBase?: number; joinPoints?: boolean; zorder?: number }>
+  styles: Record<
+    string,
+    { title?: string; histogramBase?: number; joinPoints?: boolean; zorder?: number }
+  >
   inputs: unknown[]
   format?: { type: string; precision: number }
   palettes?: Record<string, unknown>
@@ -166,7 +181,15 @@ interface TradingViewWidgetInstance {
 
 /** TradingView Chart 接口 */
 interface TradingViewChartApi {
-  createStudy: (name: string, forceOverlay?: boolean, lock?: boolean, inputs?: unknown[], callback?: (id: string) => void, priceScale?: unknown, options?: unknown) => string | Promise<string>
+  createStudy: (
+    name: string,
+    forceOverlay?: boolean,
+    lock?: boolean,
+    inputs?: unknown[],
+    callback?: (id: string) => void,
+    priceScale?: unknown,
+    options?: unknown,
+  ) => string | Promise<string>
   removeEntity: (id: string) => void
   getAllStudies: () => Array<{ id: string; name: string }>
   setSymbol: (symbol: string, callback?: () => void) => void
@@ -197,7 +220,7 @@ function resolveMaybePromiseId(maybe: any, onResolved: (id: string) => void) {
   if (!maybe) return
   if (typeof maybe?.then === 'function') {
     void (maybe as Promise<any>)
-      .then((id) => {
+      .then(id => {
         if (id) onResolved(String(id))
       })
       .catch(() => {
@@ -212,7 +235,7 @@ function findAndDedupeStudyByName(chart: any, studyName: string): string | null 
   try {
     const studies = chart?.getAllStudies?.() as Array<{ id: any; name: string }> | undefined
     if (!Array.isArray(studies) || studies.length === 0) return null
-    const matches = studies.filter((s) => s?.name === studyName)
+    const matches = studies.filter(s => s?.name === studyName)
     if (matches.length === 0) return null
     const keep = matches[0]
     // Remove duplicates beyond the first one.
@@ -240,7 +263,9 @@ function loadTradingViewScript(): Promise<void> {
   if (existing) {
     return new Promise((resolve, reject) => {
       existing.addEventListener('load', () => resolve(), { once: true })
-      existing.addEventListener('error', () => reject(new Error(`Failed to load ${SCRIPT_SRC}`)), { once: true })
+      existing.addEventListener('error', () => reject(new Error(`Failed to load ${SCRIPT_SRC}`)), {
+        once: true,
+      })
     })
   }
 
@@ -290,12 +315,20 @@ export interface TradingViewChartProps {
 
 export interface TradingViewChartRef {
   addStudy: (studyName: string) => void
-  ensureCustomIndicator: (id: 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data') => void
-  removeCustomIndicator: (id: 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data') => void
+  ensureCustomIndicator: (
+    id: 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data',
+  ) => void
+  removeCustomIndicator: (
+    id: 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data',
+  ) => void
   removeAllStudies: () => void
 }
 
-type CustomIndicatorId = 'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data'
+type CustomIndicatorId =
+  | 'long-short-ratio'
+  | 'aggregated-open-interest'
+  | 'aggregated-volume'
+  | 'liquidation-data'
 
 // IMPORTANT:
 // - study name 必须稳定（不能随语言变化），否则 createStudy(name) 会找不到对应的指标 -> “聚合多空比不显示”
@@ -313,8 +346,11 @@ const CUSTOM_STUDY_NAME_BY_ID: Record<CustomIndicatorId, string> = {
 const aggregatedVolumeMapByInstance = new Map<string, React.MutableRefObject<Map<number, number>>>()
 
 // HMR 清理：模块热替换时清空 Map，避免累积旧实例引用
-if (typeof module !== 'undefined' && (module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot) {
-  (module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot?.dispose(() => {
+if (
+  typeof module !== 'undefined' &&
+  (module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot
+) {
+  ;(module as NodeModule & { hot?: { dispose: (cb: () => void) => void } }).hot?.dispose(() => {
     aggregatedVolumeMapByInstance.clear()
   })
 }
@@ -439,7 +475,8 @@ const LONG_SHORT_RATIO_INTERVAL_MAP: Record<string, string> = {
 
 function resolveLongShortRatioInterval(interval: string): string | null {
   const raw = interval.trim()
-  const mapped = LONG_SHORT_RATIO_INTERVAL_MAP[raw] ?? LONG_SHORT_RATIO_INTERVAL_MAP[raw.toLowerCase()] ?? raw
+  const mapped =
+    LONG_SHORT_RATIO_INTERVAL_MAP[raw] ?? LONG_SHORT_RATIO_INTERVAL_MAP[raw.toLowerCase()] ?? raw
   const normalized = mapped.toLowerCase()
   if (!LONG_SHORT_RATIO_SUPPORTED_INTERVALS.has(normalized)) return null
   return normalized
@@ -474,7 +511,7 @@ function useLongShortRatioData(pairSymbol: string, tvInterval: string) {
 
       const map = new Map<number, number>()
       const timestamps: number[] = []
-      data.forEach((item) => {
+      data.forEach(item => {
         const ts = new Date(item.timestamp).getTime()
         const ratio = Number.parseFloat(item.longShortRatio)
         if (!Number.isNaN(ratio)) {
@@ -696,7 +733,15 @@ function createCustomIndicatorsGetter(opts?: {
         },
         defaults: {
           styles: {
-            plot_0: { linestyle: 0, linewidth: 2, plottype: 'line', trackPrice: false, transparency: 0, visible: true, color: '#22c55e' },
+            plot_0: {
+              linestyle: 0,
+              linewidth: 2,
+              plottype: 'line',
+              trackPrice: false,
+              transparency: 0,
+              visible: true,
+              color: '#22c55e',
+            },
           },
           palettes: {
             palette_0: {
@@ -709,7 +754,12 @@ function createCustomIndicatorsGetter(opts?: {
           inputs: {},
         },
         styles: {
-          plot_0: { title: tFunc('chart.indicators.longShortRatio'), histogramBase: 0, joinPoints: true, zorder: 1 },
+          plot_0: {
+            title: tFunc('chart.indicators.longShortRatio'),
+            histogramBase: 0,
+            joinPoints: true,
+            zorder: 1,
+          },
         },
         inputs: [],
         format: { type: 'price', precision: 4 },
@@ -818,8 +868,24 @@ function createCustomIndicatorsGetter(opts?: {
         ],
         defaults: {
           styles: {
-            plot_0: { linestyle: 0, linewidth: 2, plottype: 'line', trackPrice: false, transparency: 0, visible: true, color: '#22d3ee' },
-            plot_baseline: { linestyle: 0, linewidth: 1, plottype: 'line', trackPrice: false, transparency: 100, visible: false, color: '#000000' },
+            plot_0: {
+              linestyle: 0,
+              linewidth: 2,
+              plottype: 'line',
+              trackPrice: false,
+              transparency: 0,
+              visible: true,
+              color: '#22d3ee',
+            },
+            plot_baseline: {
+              linestyle: 0,
+              linewidth: 1,
+              plottype: 'line',
+              trackPrice: false,
+              transparency: 100,
+              visible: false,
+              color: '#000000',
+            },
           },
           filledAreasStyle: {
             fill_0: {
@@ -836,7 +902,12 @@ function createCustomIndicatorsGetter(opts?: {
           inputs: {},
         },
         styles: {
-          plot_0: { title: tFunc('chart.indicators.aggregatedOpenInterest'), histogramBase: 0, joinPoints: true, zorder: 1 },
+          plot_0: {
+            title: tFunc('chart.indicators.aggregatedOpenInterest'),
+            histogramBase: 0,
+            joinPoints: true,
+            zorder: 1,
+          },
           plot_baseline: { title: 'Baseline', histogramBase: 0, joinPoints: true, zorder: 0 },
         },
         palettes: {},
@@ -856,7 +927,9 @@ function createCustomIndicatorsGetter(opts?: {
         const time = PineJS.Std.time(context)
 
         // 从实例 Map 获取聚合成交量数据源（独立于 K 线数据）
-        const volumeMap = instanceId ? aggregatedVolumeMapByInstance.get(instanceId)?.current : undefined
+        const volumeMap = instanceId
+          ? aggregatedVolumeMapByInstance.get(instanceId)?.current
+          : undefined
         if (volumeMap && volumeMap.size > 0) {
           const volume = volumeMap.get(time) ?? 0
           return [typeof volume === 'number' && Number.isFinite(volume) ? volume : 0]
@@ -895,7 +968,13 @@ function createCustomIndicatorsGetter(opts?: {
           },
           inputs: {},
         },
-        { plot_0: { title: tFunc('chart.indicators.aggregatedVolume'), histogramBase: 0, joinPoints: false } },
+        {
+          plot_0: {
+            title: tFunc('chart.indicators.aggregatedVolume'),
+            histogramBase: 0,
+            joinPoints: false,
+          },
+        },
         { type: 'volume', precision: 0 },
       ),
       constructor: aggregatedVolumeConstructor,
@@ -950,10 +1029,36 @@ function createCustomIndicatorsGetter(opts?: {
             // - S（空单爆仓）绿色，显示在 0 轴上方
             // - L（多单爆仓）红色，显示在 0 轴下方（用负值）
             // 同上：使用运行时数字枚举（与内置 Volume 一致）
-            plot_s: { plottype: 5, color: '#22c55e', trackPrice: false, histogramBase: 0, visible: true, linestyle: 0, linewidth: 1, transparency: 0 },
-            plot_l: { plottype: 5, color: '#ef4444', trackPrice: false, histogramBase: 0, visible: true, linestyle: 0, linewidth: 1, transparency: 0 },
+            plot_s: {
+              plottype: 5,
+              color: '#22c55e',
+              trackPrice: false,
+              histogramBase: 0,
+              visible: true,
+              linestyle: 0,
+              linewidth: 1,
+              transparency: 0,
+            },
+            plot_l: {
+              plottype: 5,
+              color: '#ef4444',
+              trackPrice: false,
+              histogramBase: 0,
+              visible: true,
+              linestyle: 0,
+              linewidth: 1,
+              transparency: 0,
+            },
             // Total: 不画出来，但用于 legend 数值
-            plot_t: { plottype: 0, color: '#94a3b8', trackPrice: false, visible: false, transparency: 100, linewidth: 1, linestyle: 0 },
+            plot_t: {
+              plottype: 0,
+              color: '#94a3b8',
+              trackPrice: false,
+              visible: false,
+              transparency: 100,
+              linewidth: 1,
+              linestyle: 0,
+            },
           },
           inputs: {},
         },
@@ -1004,7 +1109,13 @@ function createCustomIndicatorsGetter(opts?: {
             },
             inputs: {},
           },
-          { plot_0: { title: tFunc('chart.indicators.liquidationMap'), histogramBase: 0, joinPoints: false } },
+          {
+            plot_0: {
+              title: tFunc('chart.indicators.liquidationMap'),
+              histogramBase: 0,
+              joinPoints: false,
+            },
+          },
           { type: 'price', precision: 2 },
         ),
         // 关键：挂在主图（价格坐标），不创建新的 pane
@@ -1015,7 +1126,7 @@ function createCustomIndicatorsGetter(opts?: {
       constructor: liquidationMapLegendConstructor,
     }
 
-    return Promise.resolve([IND_LS, IND_OI, IND_VOL, IND_LIQ, IND_LIQ_MAP_LEGEND])
+    return [IND_LS, IND_OI, IND_VOL, IND_LIQ, IND_LIQ_MAP_LEGEND]
   }
 }
 
@@ -1025,7 +1136,10 @@ function setButtonActive(btn: HTMLElement | null, active: boolean) {
   else btn.classList.remove('is-active')
 }
 
-function createBodyDropdown(anchor: HTMLElement, items: Array<{ label: string; onClick: () => void }>) {
+function createBodyDropdown(
+  anchor: HTMLElement,
+  items: Array<{ label: string; onClick: () => void }>,
+) {
   const doc = anchor.ownerDocument
   const menu = doc.createElement('div')
   menu.style.position = 'fixed'
@@ -1043,7 +1157,7 @@ function createBodyDropdown(anchor: HTMLElement, items: Array<{ label: string; o
   menu.style.left = `${rect.left}px`
   menu.style.top = `${rect.bottom + 6}px`
 
-  items.forEach((it) => {
+  items.forEach(it => {
     const row = doc.createElement('div')
     row.textContent = it.label
     row.style.padding = '8px 12px'
@@ -1052,14 +1166,14 @@ function createBodyDropdown(anchor: HTMLElement, items: Array<{ label: string; o
     row.style.cursor = 'pointer'
     row.style.borderRadius = '4px'
     row.style.transition = 'background 0.1s ease'
-    
+
     row.addEventListener('mouseenter', () => {
       row.style.background = '#2a2a2a'
     })
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent'
     })
-    row.addEventListener('click', (e) => {
+    row.addEventListener('click', e => {
       e.preventDefault()
       e.stopPropagation()
       it.onClick()
@@ -1089,10 +1203,12 @@ function moveButtonsToHeaderRight(widget: any, buttons: HTMLElement[]) {
     if (!headerRoot) return
 
     // 只在“顶部区域”内找 header 按钮
-    const allButtons = Array.from(headerRoot.querySelectorAll('button'))
-      .map((b) => ({ b, rect: b.getBoundingClientRect() }))
-      .filter((x) => x.rect.width > 2 && x.rect.height > 2 && x.rect.top >= 0 && x.rect.top < 150)
-    
+    const allButtons = Array.from(
+      headerRoot.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    )
+      .map(b => ({ b, rect: b.getBoundingClientRect() }))
+      .filter(x => x.rect.width > 2 && x.rect.height > 2 && x.rect.top >= 0 && x.rect.top < 150)
+
     if (allButtons.length === 0) {
       // 兜底：如果找不到任何按钮，尝试直接 append 到 headerRoot
       buttons.forEach(btn => headerRoot.appendChild(btn))
@@ -1111,14 +1227,16 @@ function moveButtonsToHeaderRight(widget: any, buttons: HTMLElement[]) {
     if (!group) group = rightmostBtn.parentElement as HTMLElement | null
     if (!group) return
 
-    const groupButtons = Array.from(group.querySelectorAll('button'))
-      .map((b) => ({ b, rect: b.getBoundingClientRect() }))
-      .filter((x) => x.rect.width > 2 && x.rect.height > 2)
+    const groupButtons = Array.from(
+      group.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    )
+      .map(b => ({ b, rect: b.getBoundingClientRect() }))
+      .filter(x => x.rect.width > 2 && x.rect.height > 2)
     groupButtons.sort((a, b) => b.rect.right - a.rect.right)
     const anchor = groupButtons[0]?.b || null
 
     // 放到最右侧：插入到 group 的最后一个按钮之后
-    buttons.forEach((btn) => {
+    buttons.forEach(btn => {
       try {
         if (anchor && anchor.parentElement === group) {
           const next = anchor.nextSibling
@@ -1152,957 +1270,1026 @@ function tryExecuteActionInsertIndicator(widget: any) {
   }
 }
 
-export const TradingViewChart = forwardRef((
-  {
-    symbol = 'BTCUSDT',
-    interval = '60',
-    theme = 'Light',
-    isAggregated = true,
-    selectedExchange = 'binance',
-    onSelectExchange,
-    onToggleAggregate,
-    onOpenIndicator,
-    onOpenDataIndicator,
-    onIntervalChanged,
-    onRemoveIndicator,
-    activeIndicators = [],
-  }: TradingViewChartProps,
-  ref: Ref<TradingViewChartRef>,
-) => {
-  const { t, i18n } = useTranslation()
-  const widgetRef = useRef<TradingViewWidget | null>(null)
-  const [isReady, setIsReady] = useState(false)
-  const [isChartReady, setIsChartReady] = useState(false)
-  const chartReadyRef = useRef(false)
-  const [error, setError] = useState<string | null>(null)
-  const [currentInterval, setCurrentInterval] = useState(interval)
+export const TradingViewChart = forwardRef(
+  (
+    {
+      symbol = 'BTCUSDT',
+      interval = '60',
+      theme = 'Light',
+      isAggregated = true,
+      selectedExchange = 'binance',
+      onSelectExchange,
+      onToggleAggregate,
+      onOpenIndicator,
+      onOpenDataIndicator,
+      onIntervalChanged,
+      onRemoveIndicator,
+      activeIndicators = [],
+    }: TradingViewChartProps,
+    ref: Ref<TradingViewChartRef>,
+  ) => {
+    const { t, i18n } = useTranslation()
+    const widgetRef = useRef<TradingViewWidget | null>(null)
+    const [isReady, setIsReady] = useState(false)
+    const [isChartReady, setIsChartReady] = useState(false)
+    const chartReadyRef = useRef(false)
+    const [error, setError] = useState<string | null>(null)
+    const [currentInterval, setCurrentInterval] = useState(interval)
 
-  // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
-  const reactId = useId()
-  const containerId = useMemo(() => `tv_chart_${reactId.replace(/:/g, '')}`, [reactId])
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  // ---- 清算地图 overlay（Coinglass-style）----
-  const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
-  const chartAdapterRef = useRef<ChartAdapter | null>(null)
-  const [mainPaneHeight, setMainPaneHeight] = useState<number | null>(null)
-  const mainPaneHeightRef = useRef<number | null>(null)
-  // 清算地图（native drawings）：用 TradingView 的矩形 drawing 来画“右侧柱状热力条”，
-  // 这样用户可以通过 TV 自己的对象树(Object Tree)/绘图管理能力进行隐藏/删除。
-  const [liqNativeSupported, setLiqNativeSupported] = useState(false)
-  const [liqNativeActive, setLiqNativeActive] = useState(false) // 已成功绘制过至少一批 native rectangles
-  const [liqHidden, setLiqHidden] = useState(false) // legend 眼睛：隐藏/显示
-  const liqHiddenRef = useRef(false)
-  const liqNativeShapeIdsRef = useRef<string[]>([])
-  const liqNativeRemovingRef = useRef(false)
-  const liqNativeMissRef = useRef(0)
-  // 清算地图 hover price line：用 TV 的 horizontal_line drawing 显示一个始终正确的价格标签，
-  // 避免在 overlay 区域 crosshair 不更新导致的“价格对不上”错觉。
-  const liqHoverLineIdRef = useRef<string | null>(null)
-  const liqHoverLineCreatingRef = useRef(false)
-  const liqHoverLinePendingPriceRef = useRef<number | null>(null)
-  const liqHoverLineCreatingSinceRef = useRef<number | null>(null)
-  // 清算地图 legend 占位 study（提供 eye/X 按钮）
-  const liqLegendStudyIdRef = useRef<string | null>(null)
-  const liqLegendStudySeenRef = useRef(false)
-  const liqLegendStudyMissRef = useRef(0)
-  const liqLegendStudyRemovingRef = useRef(false)
-  // 持仓量数据缓存：按时间戳排序的数组
-  const openInterestDataRef = useRef<{ timestamps: number[]; values: number[] }>({ timestamps: [], values: [] })
-  const [liqSelected, setLiqSelected] = useState<null | {
-    locked: boolean
-    x: number
-    y: number
-    price: number
-    bybit: number
-    okx: number
-    binance: number
-    dex: number
-    cumLong: number
-    cumShort: number
-  }>(null)
-  const liqLockedRef = useRef(false)
-  const liqLockedPriceRef = useRef<number | null>(null)
-  interface OpenInterestFallbackFields {
-    timestamp?: string | number
-    openInterest?: number
-  }
-  const liqSeriesRef = useRef<null | {
-    xs: number[]
-    bybit: number[]
-    okx: number[]
-    binance: number[]
-    dex: number[]
-    cumLong: number[]
-    cumShort: number[]
-  }>(null)
-  const fetchOpenInterestData = useCallback(async (symbolParam: string, shouldCancel?: () => boolean) => {
-    try {
-      // 提取币种符号（去掉 USDT 后缀）
-      const baseSymbol = symbolParam.replace(/USDT$/, '').toUpperCase()
-      if (!/^[A-Z0-9]+$/.test(baseSymbol)) {
-        oiLogger.warn('Invalid symbol format:', baseSymbol)
-        openInterestDataRef.current = { timestamps: [], values: [] }
-        return
-      }
-      if (shouldCancel?.()) return
-      oiLogger.debug('Fetching data for:', baseSymbol)
-
-      // 获取最近 100 条数据（符合 API 限制）
-      const data = await fetchAggregatedOpenInterest({
-        symbol: baseSymbol,
-        exchange: 'All',
-        limit: 100,
-      })
-      if (shouldCancel?.()) return
-      oiLogger.debug('Received data points:', data.length)
-      if (enableOIDebugLogs && data.length > 0) {
-        oiLogger.debug('First item structure:', JSON.stringify(data[0], null, 2))
-        oiLogger.debug('First item keys:', Object.keys(data[0]))
-      }
-
-      const dataPoints: Array<{ timestamp: number; value: number }> = []
-      data.forEach((item, index) => {
-        const fallbackFields = item as OpenInterestFallbackFields
-        const timestampValue = item.data_timestamp ?? fallbackFields.timestamp
-        const oiValue = item.open_interest_usd ?? fallbackFields.openInterest
-
-        if (enableOIDebugLogs && index < 3) {
-          oiLogger.debug(`Item ${index}:`, {
-            data_timestamp: item.data_timestamp,
-            open_interest_usd: item.open_interest_usd,
-            timestamp: fallbackFields.timestamp,
-            openInterest: fallbackFields.openInterest,
-            timestampValue,
-            oiValue,
-            oiValueType: typeof oiValue,
-          })
-        }
-
-        if (timestampValue != null && typeof oiValue === 'number' && Number.isFinite(oiValue)) {
-          let timestamp = new Date(timestampValue).getTime()
-          if (!Number.isFinite(timestamp)) return
-          if (timestamp < 1e12) {
-            timestamp *= 1000
-          }
-          dataPoints.push({ timestamp, value: oiValue })
-        }
-      })
-
-      dataPoints.sort((a, b) => a.timestamp - b.timestamp)
-      if (shouldCancel?.()) return
-      openInterestDataRef.current = {
-        timestamps: dataPoints.map((d) => d.timestamp),
-        values: dataPoints.map((d) => d.value),
-      }
-      oiLogger.debug('Cached data points:', dataPoints.length)
-      if (data.length > 0 && dataPoints.length === 0) {
-        oiLogger.warn('Warning: Received data but all items were filtered out. Check field names.')
-        oiLogger.warn('Sample item:', data[0])
-      }
-      if (dataPoints.length > 0) {
-        oiLogger.debug(
-          'Time range:',
-          new Date(dataPoints[0].timestamp),
-          'to',
-          new Date(dataPoints[dataPoints.length - 1].timestamp)
-        )
-      }
-    } catch (error) {
-      if (shouldCancel?.()) return
-      oiLogger.error('Failed to fetch open interest data:', error)
-      // 失败时保持空数据，降级到 mock 数据
-      openInterestDataRef.current = { timestamps: [], values: [] }
+    // 用 useId() 生成 SSR/CSR 稳定的唯一 id，避免 hydration mismatch
+    const reactId = useId()
+    const containerId = useMemo(() => `tv_chart_${reactId.replace(/:/g, '')}`, [reactId])
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    // ---- 清算地图 overlay（Coinglass-style）----
+    const overlayRef = useRef<LiquidationMapChartHandle | null>(null)
+    const chartAdapterRef = useRef<ChartAdapter | null>(null)
+    const [mainPaneHeight, setMainPaneHeight] = useState<number | null>(null)
+    const mainPaneHeightRef = useRef<number | null>(null)
+    // 清算地图（native drawings）：用 TradingView 的矩形 drawing 来画“右侧柱状热力条”，
+    // 这样用户可以通过 TV 自己的对象树(Object Tree)/绘图管理能力进行隐藏/删除。
+    const [liqNativeSupported, setLiqNativeSupported] = useState(false)
+    const [liqNativeActive, setLiqNativeActive] = useState(false) // 已成功绘制过至少一批 native rectangles
+    const [liqHidden, setLiqHidden] = useState(false) // legend 眼睛：隐藏/显示
+    const liqHiddenRef = useRef(false)
+    const liqNativeShapeIdsRef = useRef<string[]>([])
+    const liqNativeRemovingRef = useRef(false)
+    const liqNativeMissRef = useRef(0)
+    // 清算地图 hover price line：用 TV 的 horizontal_line drawing 显示一个始终正确的价格标签，
+    // 避免在 overlay 区域 crosshair 不更新导致的“价格对不上”错觉。
+    const liqHoverLineIdRef = useRef<string | null>(null)
+    const liqHoverLineCreatingRef = useRef(false)
+    const liqHoverLinePendingPriceRef = useRef<number | null>(null)
+    const liqHoverLineCreatingSinceRef = useRef<number | null>(null)
+    // 清算地图 legend 占位 study（提供 eye/X 按钮）
+    const liqLegendStudyIdRef = useRef<string | null>(null)
+    const liqLegendStudySeenRef = useRef(false)
+    const liqLegendStudyMissRef = useRef(0)
+    const liqLegendStudyRemovingRef = useRef(false)
+    const _legendUiCleanupRef = useRef<null | (() => void)>(null)
+    // 持仓量数据缓存：按时间戳排序的数组
+    const openInterestDataRef = useRef<{ timestamps: number[]; values: number[] }>({
+      timestamps: [],
+      values: [],
+    })
+    const [liqSelected, setLiqSelected] = useState<null | {
+      locked: boolean
+      x: number
+      y: number
+      price: number
+      bybit: number
+      okx: number
+      binance: number
+      dex: number
+      cumLong: number
+      cumShort: number
+    }>(null)
+    const liqLockedRef = useRef(false)
+    const liqLockedPriceRef = useRef<number | null>(null)
+    interface OpenInterestFallbackFields {
+      timestamp?: string | number
+      openInterest?: number
     }
-  }, [])
-  const liqDataRef = useRef<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
-  const liqCurrentPriceRef = useRef<number>(0)
-  const [liqData, setLiqData] = useState<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
-  const showLiqOverlay = activeIndicators.some((x) => x.id === 'liquidation-map')
-  const showLiqOverlayRef = useRef(showLiqOverlay)
-
-  useEffect(() => {
-    showLiqOverlayRef.current = showLiqOverlay
-  }, [showLiqOverlay])
-
-  useEffect(() => {
-    liqDataRef.current = liqData
-  }, [liqData])
-
-  useEffect(() => {
-    mainPaneHeightRef.current = mainPaneHeight
-  }, [mainPaneHeight])
-
-  useEffect(() => {
-    liqHiddenRef.current = liqHidden
-  }, [liqHidden])
-
-  // ---- 聚合成交量数据（独立数据源）----
-  const showAggregatedVolume = activeIndicators.some((x) => x.id === 'aggregated-volume')
-  const { dataMapRef: aggregatedVolumeMapRef } = useAggregatedVolumeData({
-    symbol,
-    interval: resolutionToInterval(interval),
-    enabled: showAggregatedVolume,
-  })
-
-  // 设置实例 Map，供 TradingView 指标使用
-  useEffect(() => {
-    aggregatedVolumeMapByInstance.set(containerId, aggregatedVolumeMapRef)
-    return () => {
-      aggregatedVolumeMapByInstance.delete(containerId)
-    }
-  }, [containerId, aggregatedVolumeMapRef])
-
-  useEffect(() => {
-    if (!symbol) return
-    let cancelled = false
-    oiLogger.debug('Fetching open interest data for symbol:', symbol)
-    fetchOpenInterestData(symbol, () => cancelled)
-    return () => {
-      cancelled = true
-    }
-  }, [symbol, fetchOpenInterestData])
-
-  // Sync currentInterval with interval prop (for external control)
-  useEffect(() => {
-    setCurrentInterval(interval)
-  }, [interval])
-
-  const { dataRef: lsDataRef, sortedTimestampsRef: lsSortedTimestampsRef } = useLongShortRatioData(symbol, currentInterval)
-  const customStudyIdsRef = useRef<Record<CustomIndicatorId, string | null>>({
-    'long-short-ratio': null,
-    'aggregated-open-interest': null,
-    'aggregated-volume': null,
-    'liquidation-data': null,
-  })
-  const pendingEnsuresRef = useRef<Set<CustomIndicatorId>>(new Set())
-  const pendingRemovesRef = useRef<Set<CustomIndicatorId>>(new Set())
-
-  const stableInputs = useMemo(() => ({ symbol, interval, theme, language: i18n.language }), [symbol, interval, theme, i18n.language])
-  const datafeedRef = useRef(createMockDatafeed({ isAggregated, exchange: selectedExchange }))
-
-  // 这些回调/状态会频繁变化，不能放进 init effect 依赖，否则会导致 widget 被重建。
-  const callbacksRef = useRef({
-    onToggleAggregate,
-    onOpenIndicator,
-    onOpenDataIndicator,
-    onSelectExchange,
-    onRemoveIndicator,
-  })
-  const stateRef = useRef({ isAggregated, selectedExchange })
-
-  useEffect(() => {
-    callbacksRef.current = { onToggleAggregate, onOpenIndicator, onOpenDataIndicator, onSelectExchange, onRemoveIndicator }
-  }, [onOpenDataIndicator, onOpenIndicator, onRemoveIndicator, onSelectExchange, onToggleAggregate])
-
-  useEffect(() => {
-    datafeedRef.current.setContext({ isAggregated, exchange: selectedExchange })
-    stateRef.current = { isAggregated, selectedExchange }
-  }, [isAggregated, selectedExchange])
-
-  const headerElsRef = useRef<{
-    aggBtn: HTMLElement | null
-    aggSwitch: HTMLElement | null
-    aggKnob: HTMLElement | null
-    aggLabel: HTMLElement | null
-    exchangeBtn: HTMLElement | null
-    indicatorBtn: HTMLElement | null
-    dataIndicatorBtn: HTMLElement | null
-    activeMenu: HTMLElement | null
-    cleanupMenuListener: (() => void) | null
-  }>({
-    aggBtn: null,
-    aggSwitch: null,
-    aggKnob: null,
-    aggLabel: null,
-    exchangeBtn: null,
-    indicatorBtn: null,
-    dataIndicatorBtn: null,
-    activeMenu: null,
-    cleanupMenuListener: null,
-  })
-
-  const closeMenu = () => {
-    const els = headerElsRef.current
-    if (els.activeMenu) {
-      try {
-        els.activeMenu.remove()
-      } catch {
-        // ignore
-      }
-      els.activeMenu = null
-    }
-    els.cleanupMenuListener?.()
-    els.cleanupMenuListener = null
-  }
-
-  const updateHeaderUi = () => {
-    const { isAggregated: agg, selectedExchange: ex } = stateRef.current
-    const els = headerElsRef.current
-
-    // 聚合开关：外观保持与旧页面一致（渐变开/灰色关 + 白色滑块）
-    if (els.aggSwitch && els.aggKnob) {
-      els.aggSwitch.style.background = agg
-        ? 'linear-gradient(90deg, #396bff 0%, #8b5cff 100%)'
-        : 'rgba(127,127,127,0.35)'
-      els.aggKnob.style.transform = agg ? 'translateX(16px)' : 'translateX(2px)'
-    }
-    setButtonActive(els.aggBtn, agg)
-
-    // 聚合=关：同一个控件直接显示交易所下拉（不再额外渲染交易所按钮）
-    if (els.aggLabel) {
-      const exLabel = ex === 'okx' ? 'OKX' : 'Binance'
-      const labelText = agg ? t('chart.toolbar.aggregate') : `${t('chart.toolbar.exchange')}: ${exLabel} ▾`
-      if (els.aggLabel.textContent !== labelText) {
-        els.aggLabel.textContent = labelText
-      }
-    }
-
-    // 精选指标文案
-    if (els.indicatorBtn) {
-      const indicatorLabel = t('chart.toolbar.featuredIndicators')
-      if (els.indicatorBtn.textContent !== indicatorLabel) {
-        els.indicatorBtn.textContent = indicatorLabel
-      }
-    }
-  }
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      addStudy(studyName: string) {
-        const widget = widgetRef.current
-        if (!widget || !chartReadyRef.current) return
-        const chart = widget?.activeChart?.() || widget?.chart?.()
+    const liqSeriesRef = useRef<null | {
+      xs: number[]
+      bybit: number[]
+      okx: number[]
+      binance: number[]
+      dex: number[]
+      cumLong: number[]
+      cumShort: number[]
+    }>(null)
+    const fetchOpenInterestData = useCallback(
+      async (symbolParam: string, shouldCancel?: () => boolean) => {
         try {
-          if (chart?.createStudy) {
-            // Passing inputs as array is deprecated; use object.
-            resolveMaybePromiseId(chart.createStudy(studyName, false, false, {}), () => {
-              // ignore id for built-in studies
-            })
+          // 提取币种符号（去掉 USDT 后缀）
+          const baseSymbol = symbolParam.replace(/USDT$/, '').toUpperCase()
+          if (!/^[A-Z0-9]+$/.test(baseSymbol)) {
+            oiLogger.warn('Invalid symbol format:', baseSymbol)
+            openInterestDataRef.current = { timestamps: [], values: [] }
             return
           }
-        } catch {
-          // fallthrough to native indicator dialog
-        }
-        // fallback：打开 TV 原生指标面板，让用户手动选择（兼容 studyName 不可用的情况）
-        tryExecuteActionInsertIndicator(widget)
-      },
-      ensureCustomIndicator(id: CustomIndicatorId) {
-        const widget = widgetRef.current
-        if (!widget || !chartReadyRef.current) {
-          pendingRemovesRef.current.delete(id)
-          pendingEnsuresRef.current.add(id)
-          return
-        }
-        const chart = widget?.activeChart?.() || widget?.chart?.()
-        const name = CUSTOM_STUDY_NAME_BY_ID[id]
-        if (!name) return
-        // Prevent duplicate createStudy calls (toggle + sync effect, or rapid clicks).
-        if (customStudyIdsRef.current[id]) return
-        // If the study already exists (e.g. from earlier buggy double-creates), reuse the first one and
-        // delete the duplicates to restore the expected “only one pane per indicator” behavior.
-        const existingId = findAndDedupeStudyByName(chart, name)
-        if (existingId) {
-          customStudyIdsRef.current[id] = existingId
-          return
-        }
-        try {
-          customStudyIdsRef.current[id] = PENDING_STUDY_ID
-          const maybe = chart?.createStudy?.(name, false, false, {})
-          resolveMaybePromiseId(maybe, (sid) => {
-            customStudyIdsRef.current[id] = sid
+          if (shouldCancel?.()) return
+          oiLogger.debug('Fetching data for:', baseSymbol)
+
+          // 获取最近 100 条数据（符合 API 限制）
+          const data = await fetchAggregatedOpenInterest({
+            symbol: baseSymbol,
+            exchange: 'All',
+            limit: 100,
           })
+          if (shouldCancel?.()) return
+          oiLogger.debug('Received data points:', data.length)
+          if (enableOIDebugLogs && data.length > 0) {
+            oiLogger.debug('First item structure:', JSON.stringify(data[0], null, 2))
+            oiLogger.debug('First item keys:', Object.keys(data[0]))
+          }
+
+          const dataPoints: Array<{ timestamp: number; value: number }> = []
+          data.forEach((item, index) => {
+            const fallbackFields = item as OpenInterestFallbackFields
+            const timestampValue = item.data_timestamp ?? fallbackFields.timestamp
+            const oiValue = item.open_interest_usd ?? fallbackFields.openInterest
+
+            if (enableOIDebugLogs && index < 3) {
+              oiLogger.debug(`Item ${index}:`, {
+                data_timestamp: item.data_timestamp,
+                open_interest_usd: item.open_interest_usd,
+                timestamp: fallbackFields.timestamp,
+                openInterest: fallbackFields.openInterest,
+                timestampValue,
+                oiValue,
+                oiValueType: typeof oiValue,
+              })
+            }
+
+            if (timestampValue != null && typeof oiValue === 'number' && Number.isFinite(oiValue)) {
+              let timestamp = new Date(timestampValue).getTime()
+              if (!Number.isFinite(timestamp)) return
+              if (timestamp < 1e12) {
+                timestamp *= 1000
+              }
+              dataPoints.push({ timestamp, value: oiValue })
+            }
+          })
+
+          dataPoints.sort((a, b) => a.timestamp - b.timestamp)
+          if (shouldCancel?.()) return
+          openInterestDataRef.current = {
+            timestamps: dataPoints.map(d => d.timestamp),
+            values: dataPoints.map(d => d.value),
+          }
+          oiLogger.debug('Cached data points:', dataPoints.length)
+          if (data.length > 0 && dataPoints.length === 0) {
+            oiLogger.warn(
+              'Warning: Received data but all items were filtered out. Check field names.',
+            )
+            oiLogger.warn('Sample item:', data[0])
+          }
+          if (dataPoints.length > 0) {
+            oiLogger.debug(
+              'Time range:',
+              new Date(dataPoints[0].timestamp),
+              'to',
+              new Date(dataPoints[dataPoints.length - 1].timestamp),
+            )
+          }
+        } catch (error) {
+          if (shouldCancel?.()) return
+          oiLogger.error('Failed to fetch open interest data:', error)
+          // 失败时保持空数据，降级到 mock 数据
+          openInterestDataRef.current = { timestamps: [], values: [] }
+        }
+      },
+      [],
+    )
+    const liqDataRef = useRef<ReturnType<typeof generateLiquidationMapMockData> | null>(null)
+    const liqCurrentPriceRef = useRef<number>(0)
+    const [liqData, setLiqData] = useState<ReturnType<
+      typeof generateLiquidationMapMockData
+    > | null>(null)
+    const showLiqOverlay = activeIndicators.some(x => x.id === 'liquidation-map')
+    const showLiqOverlayRef = useRef(showLiqOverlay)
+
+    useEffect(() => {
+      showLiqOverlayRef.current = showLiqOverlay
+    }, [showLiqOverlay])
+
+    useEffect(() => {
+      liqDataRef.current = liqData
+    }, [liqData])
+
+    useEffect(() => {
+      mainPaneHeightRef.current = mainPaneHeight
+    }, [mainPaneHeight])
+
+    useEffect(() => {
+      liqHiddenRef.current = liqHidden
+    }, [liqHidden])
+
+    // ---- 聚合成交量数据（独立数据源）----
+    const showAggregatedVolume = activeIndicators.some(x => x.id === 'aggregated-volume')
+    const { dataMapRef: aggregatedVolumeMapRef } = useAggregatedVolumeData({
+      symbol,
+      interval: resolutionToInterval(interval),
+      enabled: showAggregatedVolume,
+    })
+
+    // 设置实例 Map，供 TradingView 指标使用
+    useEffect(() => {
+      aggregatedVolumeMapByInstance.set(containerId, aggregatedVolumeMapRef)
+      return () => {
+        aggregatedVolumeMapByInstance.delete(containerId)
+      }
+    }, [containerId, aggregatedVolumeMapRef])
+
+    useEffect(() => {
+      if (!symbol) return
+      let cancelled = false
+      oiLogger.debug('Fetching open interest data for symbol:', symbol)
+      fetchOpenInterestData(symbol, () => cancelled)
+      return () => {
+        cancelled = true
+      }
+    }, [symbol, fetchOpenInterestData])
+
+    // Sync currentInterval with interval prop (for external control)
+    useEffect(() => {
+      setCurrentInterval(interval)
+    }, [interval])
+
+    const { dataRef: lsDataRef, sortedTimestampsRef: lsSortedTimestampsRef } =
+      useLongShortRatioData(symbol, currentInterval)
+    const customStudyIdsRef = useRef<Record<CustomIndicatorId, string | null>>({
+      'long-short-ratio': null,
+      'aggregated-open-interest': null,
+      'aggregated-volume': null,
+      'liquidation-data': null,
+    })
+    const pendingEnsuresRef = useRef<Set<CustomIndicatorId>>(new Set())
+    const pendingRemovesRef = useRef<Set<CustomIndicatorId>>(new Set())
+
+    const stableInputs = useMemo(
+      () => ({ symbol, interval, theme, language: i18n.language }),
+      [symbol, interval, theme, i18n.language],
+    )
+    const datafeedRef = useRef(createMockDatafeed({ isAggregated, exchange: selectedExchange }))
+
+    // 这些回调/状态会频繁变化，不能放进 init effect 依赖，否则会导致 widget 被重建。
+    const callbacksRef = useRef({
+      onToggleAggregate,
+      onOpenIndicator,
+      onOpenDataIndicator,
+      onSelectExchange,
+      onRemoveIndicator,
+    })
+    const stateRef = useRef({ isAggregated, selectedExchange })
+
+    useEffect(() => {
+      callbacksRef.current = {
+        onToggleAggregate,
+        onOpenIndicator,
+        onOpenDataIndicator,
+        onSelectExchange,
+        onRemoveIndicator,
+      }
+    }, [
+      onOpenDataIndicator,
+      onOpenIndicator,
+      onRemoveIndicator,
+      onSelectExchange,
+      onToggleAggregate,
+    ])
+
+    useEffect(() => {
+      datafeedRef.current.setContext({ isAggregated, exchange: selectedExchange })
+      stateRef.current = { isAggregated, selectedExchange }
+    }, [isAggregated, selectedExchange])
+
+    const headerElsRef = useRef<{
+      aggBtn: HTMLElement | null
+      aggSwitch: HTMLElement | null
+      aggKnob: HTMLElement | null
+      aggLabel: HTMLElement | null
+      exchangeBtn: HTMLElement | null
+      indicatorBtn: HTMLElement | null
+      dataIndicatorBtn: HTMLElement | null
+      activeMenu: HTMLElement | null
+      cleanupMenuListener: (() => void) | null
+    }>({
+      aggBtn: null,
+      aggSwitch: null,
+      aggKnob: null,
+      aggLabel: null,
+      exchangeBtn: null,
+      indicatorBtn: null,
+      dataIndicatorBtn: null,
+      activeMenu: null,
+      cleanupMenuListener: null,
+    })
+
+    const closeMenu = () => {
+      const els = headerElsRef.current
+      if (els.activeMenu) {
+        try {
+          els.activeMenu.remove()
         } catch {
           // ignore
-          customStudyIdsRef.current[id] = null
         }
-      },
-      removeCustomIndicator(id: CustomIndicatorId) {
-        const widget = widgetRef.current
-        if (!widget || !chartReadyRef.current) {
-          pendingEnsuresRef.current.delete(id)
-          pendingRemovesRef.current.add(id)
-          customStudyIdsRef.current[id] = null
-          return
+        els.activeMenu = null
+      }
+      els.cleanupMenuListener?.()
+      els.cleanupMenuListener = null
+    }
+
+    const updateHeaderUi = () => {
+      const { isAggregated: agg, selectedExchange: ex } = stateRef.current
+      const els = headerElsRef.current
+
+      // 聚合开关：外观保持与旧页面一致（渐变开/灰色关 + 白色滑块）
+      if (els.aggSwitch && els.aggKnob) {
+        els.aggSwitch.style.background = agg
+          ? 'linear-gradient(90deg, #396bff 0%, #8b5cff 100%)'
+          : 'rgba(127,127,127,0.35)'
+        els.aggKnob.style.transform = agg ? 'translateX(16px)' : 'translateX(2px)'
+      }
+      setButtonActive(els.aggBtn, agg)
+
+      // 聚合=关：同一个控件直接显示交易所下拉（不再额外渲染交易所按钮）
+      if (els.aggLabel) {
+        const exLabel = ex === 'okx' ? 'OKX' : 'Binance'
+        const labelText = agg
+          ? t('chart.toolbar.aggregate')
+          : `${t('chart.toolbar.exchange')}: ${exLabel} ▾`
+        if (els.aggLabel.textContent !== labelText) {
+          els.aggLabel.textContent = labelText
         }
-        const chart = widget?.activeChart?.() || widget?.chart?.()
-        const studyId = customStudyIdsRef.current[id]
-        if (!studyId) {
-          // fallback: remove by name in case local ref was lost
+      }
+
+      // 精选指标文案
+      if (els.indicatorBtn) {
+        const indicatorLabel = t('chart.toolbar.featuredIndicators')
+        if (els.indicatorBtn.textContent !== indicatorLabel) {
+          els.indicatorBtn.textContent = indicatorLabel
+        }
+      }
+    }
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        addStudy(studyName: string) {
+          const widget = widgetRef.current
+          if (!widget || !chartReadyRef.current) return
+          const chart = widget?.activeChart?.() || widget?.chart?.()
+          try {
+            if (chart?.createStudy) {
+              // Passing inputs as array is deprecated; use object.
+              resolveMaybePromiseId(
+                chart.createStudy(studyName, false, false, [] as unknown[]),
+                () => {
+                  // ignore id for built-in studies
+                },
+              )
+              return
+            }
+          } catch {
+            // fallthrough to native indicator dialog
+          }
+          // fallback：打开 TV 原生指标面板，让用户手动选择（兼容 studyName 不可用的情况）
+          tryExecuteActionInsertIndicator(widget)
+        },
+        ensureCustomIndicator(id: CustomIndicatorId) {
+          const widget = widgetRef.current
+          if (!widget || !chartReadyRef.current) {
+            pendingRemovesRef.current.delete(id)
+            pendingEnsuresRef.current.add(id)
+            return
+          }
+          const chart = widget?.activeChart?.() || widget?.chart?.()
           const name = CUSTOM_STUDY_NAME_BY_ID[id]
           if (!name) return
+          // Prevent duplicate createStudy calls (toggle + sync effect, or rapid clicks).
+          if (customStudyIdsRef.current[id]) return
+          // If the study already exists (e.g. from earlier buggy double-creates), reuse the first one and
+          // delete the duplicates to restore the expected “only one pane per indicator” behavior.
           const existingId = findAndDedupeStudyByName(chart, name)
           if (existingId) {
-            try {
-              chart?.removeEntity?.(existingId)
-            } catch {
-              // ignore
-            }
+            customStudyIdsRef.current[id] = existingId
+            return
           }
-          return
-        }
-        if (studyId === PENDING_STUDY_ID) {
-          // Study is being created; schedule removal and clear local marker.
-          pendingEnsuresRef.current.delete(id)
-          pendingRemovesRef.current.add(id)
-          customStudyIdsRef.current[id] = null
-          return
-        }
-        try {
-          chart?.removeEntity?.(studyId)
-        } catch {
-          // ignore
-        }
-        customStudyIdsRef.current[id] = null
-      },
-      removeAllStudies() {
-        const widget = widgetRef.current
-        if (!widget || !chartReadyRef.current) return
-        const chart = widget?.activeChart?.() || widget?.chart?.()
-        try {
-          if (chart?.removeAllStudies) {
-            chart.removeAllStudies()
-            customStudyIdsRef.current = {
-              'long-short-ratio': null,
-              'aggregated-open-interest': null,
-              'aggregated-volume': null,
-              'liquidation-data': null,
+          try {
+            customStudyIdsRef.current[id] = PENDING_STUDY_ID
+            const maybe = chart?.createStudy?.(name, false, false, [] as unknown[])
+            resolveMaybePromiseId(maybe, sid => {
+              customStudyIdsRef.current[id] = sid
+            })
+          } catch {
+            // ignore
+            customStudyIdsRef.current[id] = null
+          }
+        },
+        removeCustomIndicator(id: CustomIndicatorId) {
+          const widget = widgetRef.current
+          if (!widget || !chartReadyRef.current) {
+            pendingEnsuresRef.current.delete(id)
+            pendingRemovesRef.current.add(id)
+            customStudyIdsRef.current[id] = null
+            return
+          }
+          const chart = widget?.activeChart?.() || widget?.chart?.()
+          const studyId = customStudyIdsRef.current[id]
+          if (!studyId) {
+            // fallback: remove by name in case local ref was lost
+            const name = CUSTOM_STUDY_NAME_BY_ID[id]
+            if (!name) return
+            const existingId = findAndDedupeStudyByName(chart, name)
+            if (existingId) {
+              try {
+                chart?.removeEntity?.(existingId)
+              } catch {
+                // ignore
+              }
             }
             return
           }
-        } catch {
-          // ignore
-        }
-        try {
-          const studies = chart?.getAllStudies?.() as Array<{ id: string }> | undefined
-          if (Array.isArray(studies) && typeof chart?.removeEntity === 'function') {
-            studies.forEach((s) => {
-              try {
-                chart.removeEntity(s.id)
-              } catch {
-                // ignore
-              }
-            })
-          }
-        } catch {
-          // ignore
-        }
-        customStudyIdsRef.current = {
-          'long-short-ratio': null,
-          'aggregated-open-interest': null,
-          'aggregated-volume': null,
-          'liquidation-data': null,
-        }
-      },
-    }),
-    [],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    let readyTimer: ReturnType<typeof setTimeout> | null = null
-
-    async function init() {
-      // 延迟一帧执行，确保 DOM 已经挂载
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-      if (cancelled) return
-
-      try {
-        setError(null)
-        setIsReady(false)
-        setIsChartReady(false)
-        chartReadyRef.current = false
-
-        await loadTradingViewScript()
-        if (cancelled) return
-
-        const TradingView = window.TradingView
-        if (!TradingView?.widget) {
-          throw new Error('TradingView.widget is not available. 请检查 library_path 是否正确。')
-        }
-
-        // 使用 ref 获取容器，避免 dev StrictMode / 异步初始化导致的时序问题
-        let containerEl = containerRef.current
-        // 兜底：最多等 ~10 帧
-        for (let i = 0; i < 10 && !containerEl; i += 1) {
-          if (cancelled) break
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          if (cancelled) break
-          containerEl = containerRef.current
-        }
-        if (cancelled) return
-        if (!containerEl) throw new Error(`Chart container not found: #${containerId}`)
-
-        // 在销毁/重建场景下，确保容器是干净的，避免残留 iframe/节点影响初始化
-        containerEl.innerHTML = ''
-
-        // HMR 场景下避免重复实例
-        widgetRef.current?.remove?.()
-        widgetRef.current = null
-
-        // 同时设置 container_id + container：
-        // - 你要求的关键参数是 container_id
-        // - 但当前 charting_library.js 内部实现读取的是 options.container
-        // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
-        const widget = new TradingView.widget({
-          container_id: containerId,
-          // 用真实 DOM 节点更稳（避免内部 query 时机差）
-          container: containerEl,
-
-          library_path: LIBRARY_PATH, // 必须严格使用 '/tradingview/charting_library/'
-          locale: i18n.language.startsWith('zh') ? 'zh' : 'en',
-          timezone: 'Etc/UTC',
-          autosize: true,
-          theme,
-
-          symbol,
-          interval,
-
-          datafeed: datafeedRef.current,
-          custom_indicators_getter: createCustomIndicatorsGetter({
-            theme,
-            t,
-            containerId,
-            openInterestDataRef,
-            interval,
-            lsDataRef,
-            lsSortedTimestampsRef,
-          }),
-          // Ensure legend action buttons (eye/delete) are functional.
-          // NOTE: This build gates legend actions behind these feature flags.
-          // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
-          enabled_features: ['show_hide_button_in_legend', 'delete_button_in_legend', 'legend_inplace_edit', 'study_buttons_in_legend'],
-          // Keep disabled to avoid incompatible persisted settings schema warnings.
-          disabled_features: ['use_localstorage_for_settings'],
-        }) as TradingViewWidget
-
-        widgetRef.current = widget
-        setIsReady(true)
-
-        // Chart must be ready before calling activeChart()/chart() on some versions, or it can crash.
-        try {
-          const markReady = () => {
-            if (cancelled) return
-            if (chartReadyRef.current) return
-            chartReadyRef.current = true
-            setIsChartReady(true)
-          }
-
-          widget.onChartReady(() => markReady())
-          // Fallback 1: header ready usually implies chart core is usable
-          widget.headerReady?.().then(() => markReady()).catch(() => {
-            /* ignore */
-          })
-          // Fallback 2: last resort time-based (guarded + overlay effect has try/catch)
-          readyTimer = setTimeout(() => markReady(), 1500)
-
-          // Listen for interval changes
-          widget.onChartReady(() => {
-            try {
-              const chart = widget?.activeChart?.() || widget?.chart?.()
-              chart?.onIntervalChanged?.().subscribe(null, (newInterval: string) => {
-                setCurrentInterval(newInterval)
-                onIntervalChanged?.(newInterval)
-              })
-            } catch (error) {
-              void error
-            }
-          })
-        } catch {
-          // ignore
-        }
-
-        // Apply any queued indicator operations (from UI clicks before widget is ready, or state rehydration).
-        try {
-          const chart = widget?.activeChart?.() || widget?.chart?.()
-          // removals first
-          for (const id of pendingRemovesRef.current) {
-            const sid = customStudyIdsRef.current[id]
-            if (sid && sid !== PENDING_STUDY_ID) {
-              try {
-                chart?.removeEntity?.(sid)
-              } catch {
-                // ignore
-              }
-            }
+          if (studyId === PENDING_STUDY_ID) {
+            // Study is being created; schedule removal and clear local marker.
+            pendingEnsuresRef.current.delete(id)
+            pendingRemovesRef.current.add(id)
             customStudyIdsRef.current[id] = null
+            return
           }
-          pendingRemovesRef.current.clear()
-
-          for (const id of pendingEnsuresRef.current) {
-            const name = CUSTOM_STUDY_NAME_BY_ID[id]
-            if (!name) continue
-            if (customStudyIdsRef.current[id]) continue
-            try {
-              const existingId = findAndDedupeStudyByName(chart, name)
-              if (existingId) {
-                customStudyIdsRef.current[id] = existingId
-                continue
-              }
-              customStudyIdsRef.current[id] = PENDING_STUDY_ID
-              const maybe = chart?.createStudy?.(name, false, false, {})
-              resolveMaybePromiseId(maybe, (sid) => {
-                customStudyIdsRef.current[id] = sid
-              })
-            } catch {
-              // ignore
-              customStudyIdsRef.current[id] = null
-            }
-          }
-          pendingEnsuresRef.current.clear()
-        } catch {
-          // ignore
-        }
-
-        // 在 TradingView header 注入自定义按钮（聚合/交易所/指标/精选指标）
-        try {
-          widget.headerReady?.().then(() => {
-            if (cancelled) return
-            // 清理旧 menu（如果有）
-            closeMenu()
-
-            // 聚合（显示开/关）
-            const aggBtn: HTMLElement = widget.createButton()
-            aggBtn.classList.add('tv-custom-btn')
-            aggBtn.style.display = 'flex'
-            aggBtn.style.alignItems = 'center'
-            aggBtn.style.gap = '8px'
-            aggBtn.style.padding = '0 10px'
-
-            const aggLabel = document.createElement('span')
-            aggLabel.textContent = t('chart.toolbar.aggregate')
-            aggLabel.style.fontSize = '12px'
-            aggLabel.style.fontWeight = '700'
-            aggLabel.style.cursor = 'pointer'
-
-            const aggSwitch = document.createElement('span')
-            aggSwitch.style.position = 'relative'
-            aggSwitch.style.width = '34px'
-            aggSwitch.style.height = '18px'
-            aggSwitch.style.borderRadius = '9999px'
-            aggSwitch.style.transition = 'background 150ms ease'
-            aggSwitch.style.cursor = 'pointer'
-
-            const aggKnob = document.createElement('span')
-            aggKnob.style.position = 'absolute'
-            aggKnob.style.top = '2px'
-            aggKnob.style.left = '0px'
-            aggKnob.style.width = '14px'
-            aggKnob.style.height = '14px'
-            aggKnob.style.borderRadius = '9999px'
-            aggKnob.style.background = '#fff'
-            aggKnob.style.transition = 'transform 150ms ease'
-
-            aggSwitch.appendChild(aggKnob)
-            aggBtn.appendChild(aggLabel)
-            aggBtn.appendChild(aggSwitch)
-
-            // 交互约定：
-            // - 点击开关：切换聚合开/关
-            // - 当聚合=关时，点击文字区域：直接下拉选择交易所（不再出现单独的交易所按钮）
-            aggSwitch.addEventListener('click', (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              callbacksRef.current.onToggleAggregate?.()
-            })
-
-            aggLabel.addEventListener('click', (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-
-              // 聚合=开：文字仅展示，不弹出交易所
-              if (stateRef.current.isAggregated) return
-
-              // toggle dropdown
-              const els = headerElsRef.current
-              if (els.activeMenu) {
-                closeMenu()
-                return
-              }
-
-              const menu = createBodyDropdown(aggLabel, [
-                {
-                  label: 'Binance',
-                  onClick: () => {
-                    closeMenu()
-                    callbacksRef.current.onSelectExchange?.('binance')
-                  },
-                },
-                {
-                  label: 'OKX',
-                  onClick: () => {
-                    closeMenu()
-                    callbacksRef.current.onSelectExchange?.('okx')
-                  },
-                },
-              ])
-              const doc = aggLabel.ownerDocument
-              doc.body.appendChild(menu)
-              els.activeMenu = menu
-
-              const onDoc = (evt: MouseEvent) => {
-                const target = evt.target as Node | null
-                if (!target) return
-                if (menu.contains(target) || aggBtn.contains(target)) return
-                closeMenu()
-              }
-              // 监听 iframe 内部点击
-              doc.addEventListener('mousedown', onDoc, true)
-              // 同时也尝试监听主文档点击（如果 iframe 未跨域）
-              document.addEventListener('mousedown', onDoc, true)
-
-              els.cleanupMenuListener = () => {
-                doc.removeEventListener('mousedown', onDoc, true)
-                document.removeEventListener('mousedown', onDoc, true)
-              }
-            })
-
-            // 精选指标（打开你们原来的弹窗）
-            const indicatorBtn = widget.createButton()
-            indicatorBtn.classList.add('tv-custom-btn')
-            const indicatorLabel = t('chart.toolbar.featuredIndicators')
-            indicatorBtn.textContent = indicatorLabel
-            indicatorBtn.addEventListener('click', (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              callbacksRef.current.onOpenIndicator?.()
-            })
-
-            headerElsRef.current.aggBtn = aggBtn
-            headerElsRef.current.aggSwitch = aggSwitch
-            headerElsRef.current.aggKnob = aggKnob
-            headerElsRef.current.aggLabel = aggLabel
-            headerElsRef.current.indicatorBtn = indicatorBtn
-            // headerElsRef.current.dataIndicatorBtn = dataIndicatorBtn
-
-            // 将“聚合开关 + 交易所选择”放到 header 右侧（与旧页面右侧工具区一致）
-            // 末尾顺序：交易所 → 聚合（聚合开关在最右侧）
-            moveButtonsToHeaderRight(widget, [aggBtn])
-
-            // 首次渲染状态
-            updateHeaderUi()
-          })
-        } catch {
-          // ignore
-        }
-      } catch (e) {
-        const message = (e as Error)?.message || 'Unknown error'
-        setError(message)
-      }
-    }
-
-    void init()
-
-    return () => {
-      cancelled = true
-      if (readyTimer) clearTimeout(readyTimer)
-      closeMenu()
-      widgetRef.current?.remove?.()
-      widgetRef.current = null
-      chartReadyRef.current = false
-      setIsChartReady(false)
-    }
-  }, [stableInputs])
-
-  // state 变化只更新 header 文案/可见性，不重建 widget
-  useEffect(() => {
-    updateHeaderUi()
-  }, [isAggregated, selectedExchange])
-
-  // === 清算地图 overlay：挂接适配器 + 生成数据 + hover/click 交互 ===
-  // IMPORTANT: 只有在 isChartReady=true 后才允许触碰 activeChart()/chart()（否则某些版本会崩）。
-  useEffect(() => {
-    const widget = widgetRef.current
-    if (!widget || !isReady || !isChartReady) return
-
-    let cleanup: null | (() => void) = null
-
-    const safe = <T extends (...args: any[]) => any>(fn: T): T => {
-      return ((...args: any[]) => {
-        try {
-          return fn(...args)
-        } catch (e) {
-          console.warn('[liq-overlay] error', e)
-          return undefined
-        }
-      }) as T
-    }
-
-    try {
-      const chart = widget?.activeChart?.() || widget?.chart?.()
-      if (!chart) return
-
-      const containerEl = document.getElementById(containerId)
-      if (!containerEl) return
-
-      const computeMainPaneHeight = () => {
-        try {
-          const panes = chart?.getPanes?.()
-          const h = panes?.[0]?.getHeight?.()
-          if (typeof h === 'number' && Number.isFinite(h) && h > 0) setMainPaneHeight(h)
-        } catch {
-          // ignore
-        }
-      }
-
-      const getVisibleRangeMidPrice = (): number | null => {
-        try {
-          const panes = chart?.getPanes?.()
-          const pane = Array.isArray(panes) && panes.length ? panes[0] : null
-          const scale = pane?.getMainSourcePriceScale?.()
-          const r = scale?.getVisiblePriceRange?.()
-          const from = r?.from
-          const to = r?.to
-          if (typeof from !== 'number' || typeof to !== 'number' || !Number.isFinite(from) || !Number.isFinite(to)) return null
-          return (from + to) / 2
-        } catch {
-          return null
-        }
-      }
-
-      computeMainPaneHeight()
-
-      const adapter = createTradingViewChartAdapter({
-        widget,
-        containerEl,
-        getCurrentPrice: () => liqCurrentPriceRef.current,
-      })
-      chartAdapterRef.current = adapter
-
-      const refreshOverlay = () => overlayRef.current?.refresh()
-
-      let paneSizeTimer: ReturnType<typeof setInterval> | null = null
-      let drawingsGcTimer: ReturnType<typeof setInterval> | null = null
-      let drawingsSyncTimer: ReturnType<typeof setTimeout> | null = null
-      let drawingsSyncPending = false
-      let legendStudyTimer: ReturnType<typeof setInterval> | null = null
-
-      const hexWithAlpha = (hex: string, alpha01: number) => {
-        const h = String(hex || '').trim()
-        if (!/^#?[0-9a-f]{6}$/i.test(h)) return h
-        const base = h.startsWith('#') ? h : `#${h}`
-        const a = Math.max(0, Math.min(1, alpha01))
-        const aa = Math.round(a * 255)
-          .toString(16)
-          .padStart(2, '0')
-        return `${base}${aa}`
-      }
-
-      const safeGetVisibleTimeRangeSec = (): { from: number; to: number } | null => {
-        try {
-          const r =
-            (typeof chart?.getVisibleRange === 'function' ? chart.getVisibleRange() : null) ||
-            (typeof chart?.timeScale === 'function' ? chart.timeScale?.()?.getVisibleRange?.() : null) ||
-            null
-
-          const normalizeTimeSec = (v: any): number | null => {
-            if (typeof v === 'number' && Number.isFinite(v)) return v > 1e12 ? Math.floor(v / 1000) : Math.floor(v)
-            if (typeof v === 'string') {
-              const n = Number(v)
-              if (Number.isFinite(n)) return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n)
-            }
-            // Charting Library 有时会返回 { timestamp: number } 或 { time: number }
-            const ts = v?.timestamp ?? v?.time
-            if (typeof ts === 'number' && Number.isFinite(ts)) return ts > 1e12 ? Math.floor(ts / 1000) : Math.floor(ts)
-            // BusinessDay: { year, month, day }
-            const y = v?.year
-            const m = v?.month
-            const d = v?.day
-            if ([y, m, d].every((x) => typeof x === 'number' && Number.isFinite(x))) {
-              const ms = Date.UTC(y, m - 1, d)
-              return Math.floor(ms / 1000)
-            }
-            return null
-          }
-
-          const from = normalizeTimeSec((r as any)?.from)
-          const to = normalizeTimeSec((r as any)?.to)
-          if (typeof from === 'number' && typeof to === 'number' && Number.isFinite(from) && Number.isFinite(to) && to > from) {
-            return { from, to }
-          }
-
-          // 兜底：如果 TV 不暴露可视时间区间（或返回的是 bar index），先用“现在”的时间范围，
-          // 这样至少不会空白；后续 onVisibleRangeChanged 会触发重绘对齐。
-          const now = Math.floor(Date.now() / 1000)
-          return { from: now - 3600 * 24, to: now }
-        } catch {
-          return null
-        }
-      }
-
-      const removeAllLiqDrawings = () => {
-        const ids = liqNativeShapeIdsRef.current
-        if (!ids.length) return
-        try {
-          liqNativeRemovingRef.current = true
-          for (const id of ids) {
-            try {
-              chart?.removeEntity?.(id)
-            } catch {
-              // ignore
-            }
-          }
-        } finally {
-          liqNativeRemovingRef.current = false
-          liqNativeShapeIdsRef.current = []
-          liqNativeMissRef.current = 0
-          setLiqNativeActive(false)
-        }
-      }
-
-      const removeLiqHoverLine = () => {
-        const id = liqHoverLineIdRef.current
-        liqHoverLineCreatingRef.current = false
-        liqHoverLinePendingPriceRef.current = null
-        liqHoverLineCreatingSinceRef.current = null
-        if (!id) return
-        try {
-          chart?.removeEntity?.(id as any)
-        } catch {
-          // ignore
-        } finally {
-          liqHoverLineIdRef.current = null
-        }
-      }
-
-      const upsertLiqHoverLine = (price: number) => {
-        if (!Number.isFinite(price)) return
-        if (typeof chart?.createMultipointShape !== 'function') return
-        if (liqHiddenRef.current) return
-        liqHoverLinePendingPriceRef.current = price
-        const tr = safeGetVisibleTimeRangeSec()
-        const time = tr?.to ?? Math.floor(Date.now() / 1000)
-        const id = liqHoverLineIdRef.current
-        if (id) {
           try {
-            chart?.getShapeById?.(id as any)?.setPoints?.([{ time, price } as any])
+            chart?.removeEntity?.(studyId)
           } catch {
             // ignore
           }
-          return
+          customStudyIdsRef.current[id] = null
+        },
+        removeAllStudies() {
+          const widget = widgetRef.current
+          if (!widget || !chartReadyRef.current) return
+          const chart = widget?.activeChart?.() || widget?.chart?.()
+          try {
+            if (chart?.removeAllStudies && typeof chart.removeAllStudies === 'function') {
+              chart.removeAllStudies()
+              customStudyIdsRef.current = {
+                'long-short-ratio': null,
+                'aggregated-open-interest': null,
+                'aggregated-volume': null,
+                'liquidation-data': null,
+              }
+              return
+            }
+          } catch {
+            // ignore
+          }
+          try {
+            const studies = chart?.getAllStudies?.() as Array<{ id: string }> | undefined
+            if (Array.isArray(studies) && typeof chart?.removeEntity === 'function') {
+              studies.forEach(s => {
+                try {
+                  chart.removeEntity(s.id)
+                } catch {
+                  // ignore
+                }
+              })
+            }
+          } catch {
+            // ignore
+          }
+          customStudyIdsRef.current = {
+            'long-short-ratio': null,
+            'aggregated-open-interest': null,
+            'aggregated-volume': null,
+            'liquidation-data': null,
+          }
+        },
+      }),
+      [],
+    )
+
+    useEffect(() => {
+      let cancelled = false
+      let readyTimer: ReturnType<typeof setTimeout> | null = null
+
+      async function init() {
+        // 延迟一帧执行，确保 DOM 已经挂载
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+        if (cancelled) return
+
+        try {
+          setError(null)
+          setIsReady(false)
+          setIsChartReady(false)
+          chartReadyRef.current = false
+
+          await loadTradingViewScript()
+          if (cancelled) return
+
+          const TradingView = window.TradingView
+          if (!TradingView?.widget) {
+            throw new Error('TradingView.widget is not available. 请检查 library_path 是否正确。')
+          }
+
+          // 使用 ref 获取容器，避免 dev StrictMode / 异步初始化导致的时序问题
+          let containerEl = containerRef.current
+          // 兜底：最多等 ~10 帧
+          for (let i = 0; i < 10 && !containerEl; i += 1) {
+            if (cancelled) break
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+            if (cancelled) break
+            containerEl = containerRef.current
+          }
+          if (cancelled) return
+          if (!containerEl) throw new Error(`Chart container not found: #${containerId}`)
+
+          // 在销毁/重建场景下，确保容器是干净的，避免残留 iframe/节点影响初始化
+          containerEl.innerHTML = ''
+
+          // HMR 场景下避免重复实例
+          widgetRef.current?.remove?.()
+          widgetRef.current = null
+
+          // 同时设置 container_id + container：
+          // - 你要求的关键参数是 container_id
+          // - 但当前 charting_library.js 内部实现读取的是 options.container
+          // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
+          const widget = new TradingView.widget({
+            container_id: containerId,
+            // 用真实 DOM 节点更稳（避免内部 query 时机差）
+            container: containerEl,
+
+            library_path: LIBRARY_PATH, // 必须严格使用 '/tradingview/charting_library/'
+            locale: i18n.language.startsWith('zh') ? 'zh' : 'en',
+            timezone: 'Etc/UTC',
+            autosize: true,
+            theme,
+
+            symbol,
+            interval,
+
+            datafeed: datafeedRef.current,
+            custom_indicators_getter: createCustomIndicatorsGetter({
+              theme,
+              t,
+              containerId,
+              openInterestDataRef,
+              interval,
+              lsDataRef,
+              lsSortedTimestampsRef,
+            }),
+            // Ensure legend action buttons (eye/delete) are functional.
+            // NOTE: This build gates legend actions behind these feature flags.
+            // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
+            enabled_features: [
+              'show_hide_button_in_legend',
+              'delete_button_in_legend',
+              'legend_inplace_edit',
+              'study_buttons_in_legend',
+            ],
+            // Keep disabled to avoid incompatible persisted settings schema warnings.
+            disabled_features: ['use_localstorage_for_settings'],
+          }) as TradingViewWidget
+
+          widgetRef.current = widget
+          setIsReady(true)
+
+          // Chart must be ready before calling activeChart()/chart() on some versions, or it can crash.
+          try {
+            const markReady = () => {
+              if (cancelled) return
+              if (chartReadyRef.current) return
+              chartReadyRef.current = true
+              setIsChartReady(true)
+            }
+
+            widget.onChartReady(() => markReady())
+            // Fallback 1: header ready usually implies chart core is usable
+            widget
+              .headerReady?.()
+              .then(() => markReady())
+              .catch(() => {
+                /* ignore */
+              })
+            // Fallback 2: last resort time-based (guarded + overlay effect has try/catch)
+            readyTimer = setTimeout(() => markReady(), 1500)
+
+            // Listen for interval changes
+            widget.onChartReady(() => {
+              try {
+                const chart = widget?.activeChart?.() || widget?.chart?.()
+                if (chart && typeof (chart as any).onIntervalChanged === 'function') {
+                  const intervalChanged = (chart as any).onIntervalChanged()
+                  if (intervalChanged && typeof (intervalChanged as any).subscribe === 'function') {
+                    ;(intervalChanged as any).subscribe(null, (newInterval: string) => {
+                      setCurrentInterval(newInterval)
+                      onIntervalChanged?.(newInterval)
+                    })
+                  }
+                }
+              } catch (error) {
+                void error
+              }
+            })
+          } catch {
+            // ignore
+          }
+
+          // Apply any queued indicator operations (from UI clicks before widget is ready, or state rehydration).
+          try {
+            const chart = widget?.activeChart?.() || widget?.chart?.()
+            // removals first
+            for (const id of pendingRemovesRef.current) {
+              const sid = customStudyIdsRef.current[id]
+              if (sid && sid !== PENDING_STUDY_ID) {
+                try {
+                  chart?.removeEntity?.(sid)
+                } catch {
+                  // ignore
+                }
+              }
+              customStudyIdsRef.current[id] = null
+            }
+            pendingRemovesRef.current.clear()
+
+            for (const id of pendingEnsuresRef.current) {
+              const name = CUSTOM_STUDY_NAME_BY_ID[id]
+              if (!name) continue
+              if (customStudyIdsRef.current[id]) continue
+              try {
+                const existingId = findAndDedupeStudyByName(chart, name)
+                if (existingId) {
+                  customStudyIdsRef.current[id] = existingId
+                  continue
+                }
+                customStudyIdsRef.current[id] = PENDING_STUDY_ID
+                const maybe = chart?.createStudy?.(name, false, false, [] as unknown[])
+                resolveMaybePromiseId(maybe, sid => {
+                  customStudyIdsRef.current[id] = sid
+                })
+              } catch {
+                // ignore
+                customStudyIdsRef.current[id] = null
+              }
+            }
+            pendingEnsuresRef.current.clear()
+          } catch {
+            // ignore
+          }
+
+          // 在 TradingView header 注入自定义按钮（聚合/交易所/指标/精选指标）
+          try {
+            widget.headerReady?.().then(() => {
+              if (cancelled) return
+              // 清理旧 menu（如果有）
+              closeMenu()
+
+              // 聚合（显示开/关）
+              const aggBtn: HTMLElement = widget.createButton({ align: 'right' })
+              aggBtn.classList.add('tv-custom-btn')
+              aggBtn.style.display = 'flex'
+              aggBtn.style.alignItems = 'center'
+              aggBtn.style.gap = '8px'
+              aggBtn.style.padding = '0 10px'
+
+              const aggLabel = document.createElement('span')
+              aggLabel.textContent = t('chart.toolbar.aggregate')
+              aggLabel.style.fontSize = '12px'
+              aggLabel.style.fontWeight = '700'
+              aggLabel.style.cursor = 'pointer'
+
+              const aggSwitch = document.createElement('span')
+              aggSwitch.style.position = 'relative'
+              aggSwitch.style.width = '34px'
+              aggSwitch.style.height = '18px'
+              aggSwitch.style.borderRadius = '9999px'
+              aggSwitch.style.transition = 'background 150ms ease'
+              aggSwitch.style.cursor = 'pointer'
+
+              const aggKnob = document.createElement('span')
+              aggKnob.style.position = 'absolute'
+              aggKnob.style.top = '2px'
+              aggKnob.style.left = '0px'
+              aggKnob.style.width = '14px'
+              aggKnob.style.height = '14px'
+              aggKnob.style.borderRadius = '9999px'
+              aggKnob.style.background = '#fff'
+              aggKnob.style.transition = 'transform 150ms ease'
+
+              aggSwitch.appendChild(aggKnob)
+              aggBtn.appendChild(aggLabel)
+              aggBtn.appendChild(aggSwitch)
+
+              // 交互约定：
+              // - 点击开关：切换聚合开/关
+              // - 当聚合=关时，点击文字区域：直接下拉选择交易所（不再出现单独的交易所按钮）
+              aggSwitch.addEventListener('click', e => {
+                e.preventDefault()
+                e.stopPropagation()
+                callbacksRef.current.onToggleAggregate?.()
+              })
+
+              aggLabel.addEventListener('click', e => {
+                e.preventDefault()
+                e.stopPropagation()
+
+                // 聚合=开：文字仅展示，不弹出交易所
+                if (stateRef.current.isAggregated) return
+
+                // toggle dropdown
+                const els = headerElsRef.current
+                if (els.activeMenu) {
+                  closeMenu()
+                  return
+                }
+
+                const menu = createBodyDropdown(aggLabel, [
+                  {
+                    label: 'Binance',
+                    onClick: () => {
+                      closeMenu()
+                      callbacksRef.current.onSelectExchange?.('binance')
+                    },
+                  },
+                  {
+                    label: 'OKX',
+                    onClick: () => {
+                      closeMenu()
+                      callbacksRef.current.onSelectExchange?.('okx')
+                    },
+                  },
+                ])
+                const doc = aggLabel.ownerDocument
+                doc.body.appendChild(menu)
+                els.activeMenu = menu
+
+                const onDoc = (evt: MouseEvent) => {
+                  const target = evt.target as Node | null
+                  if (!target) return
+                  if (menu.contains(target) || aggBtn.contains(target)) return
+                  closeMenu()
+                }
+                // 监听 iframe 内部点击
+                doc.addEventListener('mousedown', onDoc, true)
+                // 同时也尝试监听主文档点击（如果 iframe 未跨域）
+                document.addEventListener('mousedown', onDoc, true)
+
+                els.cleanupMenuListener = () => {
+                  doc.removeEventListener('mousedown', onDoc, true)
+                  document.removeEventListener('mousedown', onDoc, true)
+                }
+              })
+
+              // 精选指标（打开你们原来的弹窗）
+              const indicatorBtn = widget.createButton({ align: 'right' })
+              indicatorBtn.classList.add('tv-custom-btn')
+              const indicatorLabel = t('chart.toolbar.featuredIndicators')
+              indicatorBtn.textContent = indicatorLabel
+              indicatorBtn.addEventListener('click', e => {
+                e.preventDefault()
+                e.stopPropagation()
+                callbacksRef.current.onOpenIndicator?.()
+              })
+
+              headerElsRef.current.aggBtn = aggBtn
+              headerElsRef.current.aggSwitch = aggSwitch
+              headerElsRef.current.aggKnob = aggKnob
+              headerElsRef.current.aggLabel = aggLabel
+              headerElsRef.current.indicatorBtn = indicatorBtn
+              // headerElsRef.current.dataIndicatorBtn = dataIndicatorBtn
+
+              // 将“聚合开关 + 交易所选择”放到 header 右侧（与旧页面右侧工具区一致）
+              // 末尾顺序：交易所 → 聚合（聚合开关在最右侧）
+              moveButtonsToHeaderRight(widget, [aggBtn])
+
+              // 首次渲染状态
+              updateHeaderUi()
+            })
+          } catch {
+            // ignore
+          }
+        } catch (e) {
+          const message = (e as Error)?.message || 'Unknown error'
+          setError(message)
         }
+      }
 
-        // Avoid duplicate creation while the createShape promise hasn't resolved yet.
-        if (liqHoverLineCreatingRef.current) {
-          const since = liqHoverLineCreatingSinceRef.current
-          const ageMs = since ? Date.now() - since : null
+      void init()
 
-          // Circuit-breaker: if creation appears stalled, reset and try again.
-          if (typeof ageMs === 'number' && Number.isFinite(ageMs) && ageMs > 1500) {
-            liqHoverLineCreatingRef.current = false
-            liqHoverLineCreatingSinceRef.current = null
-          } else {
-          return
+      return () => {
+        cancelled = true
+        if (readyTimer) clearTimeout(readyTimer)
+        closeMenu()
+        widgetRef.current?.remove?.()
+        widgetRef.current = null
+        chartReadyRef.current = false
+        setIsChartReady(false)
+      }
+    }, [stableInputs])
+
+    // state 变化只更新 header 文案/可见性，不重建 widget
+    useEffect(() => {
+      updateHeaderUi()
+    }, [isAggregated, selectedExchange])
+
+    // === 清算地图 overlay：挂接适配器 + 生成数据 + hover/click 交互 ===
+    // IMPORTANT: 只有在 isChartReady=true 后才允许触碰 activeChart()/chart()（否则某些版本会崩）。
+    useEffect(() => {
+      const widget = widgetRef.current
+      if (!widget || !isReady || !isChartReady) return
+
+      let cleanup: null | (() => void) = null
+
+      const safe = <T extends (...args: any[]) => any>(fn: T): T => {
+        return ((...args: any[]) => {
+          try {
+            return fn(...args)
+          } catch (e) {
+            console.warn('[liq-overlay] error', e)
+            return undefined
+          }
+        }) as T
+      }
+
+      try {
+        const chart = widget?.activeChart?.() || widget?.chart?.()
+        if (!chart) return
+
+        const containerEl = document.getElementById(containerId)
+        if (!containerEl) return
+
+        const computeMainPaneHeight = () => {
+          try {
+            const panes = chart?.getPanes?.()
+            const h = panes?.[0]?.getHeight?.()
+            if (typeof h === 'number' && Number.isFinite(h) && h > 0) setMainPaneHeight(h)
+          } catch {
+            // ignore
           }
         }
 
-        liqHoverLineCreatingRef.current = true
-        liqHoverLineCreatingSinceRef.current = Date.now()
-        try {
-          const lineColor = theme === 'Dark' ? '#22c55e' : '#16a34a'
-          const maybe = chart.createMultipointShape(
-            [{ time, price } as any],
-            {
+        const getVisibleRangeMidPrice = (): number | null => {
+          try {
+            const panes = chart?.getPanes?.()
+            const pane = Array.isArray(panes) && panes.length ? panes[0] : null
+            const scale = pane?.getMainSourcePriceScale?.()
+            const r =
+              scale && typeof (scale as any).getVisiblePriceRange === 'function'
+                ? (scale as any).getVisiblePriceRange?.()
+                : null
+            const from = r?.from
+            const to = r?.to
+            if (
+              typeof from !== 'number' ||
+              typeof to !== 'number' ||
+              !Number.isFinite(from) ||
+              !Number.isFinite(to)
+            )
+              return null
+            return (from + to) / 2
+          } catch {
+            return null
+          }
+        }
+
+        computeMainPaneHeight()
+
+        const adapter = createTradingViewChartAdapter({
+          widget,
+          containerEl,
+          getCurrentPrice: () => liqCurrentPriceRef.current,
+        })
+        chartAdapterRef.current = adapter
+
+        const refreshOverlay = () => overlayRef.current?.refresh()
+
+        let paneSizeTimer: ReturnType<typeof setInterval> | null = null
+        let drawingsGcTimer: ReturnType<typeof setInterval> | null = null
+        let drawingsSyncTimer: ReturnType<typeof setTimeout> | null = null
+        let drawingsSyncPending = false
+        let legendStudyTimer: ReturnType<typeof setInterval> | null = null
+
+        const hexWithAlpha = (hex: string, alpha01: number) => {
+          const h = String(hex || '').trim()
+          if (!/^#?[0-9a-f]{6}$/i.test(h)) return h
+          const base = h.startsWith('#') ? h : `#${h}`
+          const a = Math.max(0, Math.min(1, alpha01))
+          const aa = Math.round(a * 255)
+            .toString(16)
+            .padStart(2, '0')
+          return `${base}${aa}`
+        }
+
+        const safeGetVisibleTimeRangeSec = (): { from: number; to: number } | null => {
+          try {
+            const r =
+              (typeof chart?.getVisibleRange === 'function' ? chart.getVisibleRange() : null) ||
+              (typeof chart?.timeScale === 'function'
+                ? chart.timeScale?.()?.getVisibleRange?.()
+                : null) ||
+              null
+
+            const normalizeTimeSec = (v: any): number | null => {
+              if (typeof v === 'number' && Number.isFinite(v))
+                return v > 1e12 ? Math.floor(v / 1000) : Math.floor(v)
+              if (typeof v === 'string') {
+                const n = Number(v)
+                if (Number.isFinite(n)) return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n)
+              }
+              // Charting Library 有时会返回 { timestamp: number } 或 { time: number }
+              const ts = v?.timestamp ?? v?.time
+              if (typeof ts === 'number' && Number.isFinite(ts))
+                return ts > 1e12 ? Math.floor(ts / 1000) : Math.floor(ts)
+              // BusinessDay: { year, month, day }
+              const y = v?.year
+              const m = v?.month
+              const d = v?.day
+              if ([y, m, d].every(x => typeof x === 'number' && Number.isFinite(x))) {
+                const ms = Date.UTC(y, m - 1, d)
+                return Math.floor(ms / 1000)
+              }
+              return null
+            }
+
+            const from = normalizeTimeSec((r as any)?.from)
+            const to = normalizeTimeSec((r as any)?.to)
+            if (
+              typeof from === 'number' &&
+              typeof to === 'number' &&
+              Number.isFinite(from) &&
+              Number.isFinite(to) &&
+              to > from
+            ) {
+              return { from, to }
+            }
+
+            // 兜底：如果 TV 不暴露可视时间区间（或返回的是 bar index），先用“现在”的时间范围，
+            // 这样至少不会空白；后续 onVisibleRangeChanged 会触发重绘对齐。
+            const now = Math.floor(Date.now() / 1000)
+            return { from: now - 3600 * 24, to: now }
+          } catch {
+            return null
+          }
+        }
+
+        const removeAllLiqDrawings = () => {
+          const ids = liqNativeShapeIdsRef.current
+          if (!ids.length) return
+          try {
+            liqNativeRemovingRef.current = true
+            for (const id of ids) {
+              try {
+                chart?.removeEntity?.(id)
+              } catch {
+                // ignore
+              }
+            }
+          } finally {
+            liqNativeRemovingRef.current = false
+            liqNativeShapeIdsRef.current = []
+            liqNativeMissRef.current = 0
+            setLiqNativeActive(false)
+          }
+        }
+
+        const removeLiqHoverLine = () => {
+          const id = liqHoverLineIdRef.current
+          liqHoverLineCreatingRef.current = false
+          liqHoverLinePendingPriceRef.current = null
+          liqHoverLineCreatingSinceRef.current = null
+          if (!id) return
+          try {
+            chart?.removeEntity?.(id as any)
+          } catch {
+            // ignore
+          } finally {
+            liqHoverLineIdRef.current = null
+          }
+        }
+
+        const upsertLiqHoverLine = (price: number) => {
+          if (!Number.isFinite(price)) return
+          if (typeof chart?.createMultipointShape !== 'function') return
+          if (liqHiddenRef.current) return
+          liqHoverLinePendingPriceRef.current = price
+          const tr = safeGetVisibleTimeRangeSec()
+          const time = tr?.to ?? Math.floor(Date.now() / 1000)
+          const id = liqHoverLineIdRef.current
+          if (id) {
+            try {
+              const shape =
+                typeof (chart as any)?.getShapeById === 'function'
+                  ? (chart as any).getShapeById(id)
+                  : null
+              if (shape && typeof (shape as any).setPoints === 'function') {
+                ;(shape as any).setPoints([{ time, price } as any])
+              }
+            } catch {
+              // ignore
+            }
+            return
+          }
+
+          // Avoid duplicate creation while the createShape promise hasn't resolved yet.
+          if (liqHoverLineCreatingRef.current) {
+            const since = liqHoverLineCreatingSinceRef.current
+            const ageMs = since ? Date.now() - since : null
+
+            // Circuit-breaker: if creation appears stalled, reset and try again.
+            if (typeof ageMs === 'number' && Number.isFinite(ageMs) && ageMs > 1500) {
+              liqHoverLineCreatingRef.current = false
+              liqHoverLineCreatingSinceRef.current = null
+            } else {
+              return
+            }
+          }
+
+          liqHoverLineCreatingRef.current = true
+          liqHoverLineCreatingSinceRef.current = Date.now()
+          try {
+            const lineColor = theme === 'Dark' ? '#22c55e' : '#16a34a'
+            const maybe = chart.createMultipointShape([{ time, price } as any], {
               shape: 'horizontal_line',
               text: '',
               showInObjectsTree: false,
@@ -2114,990 +2301,1086 @@ export const TradingViewChart = forwardRef((
                 linecolor: lineColor,
                 linewidth: 1,
               } as any,
-            } as any,
-          )
-          const onResolved = (newId: any) => {
-            liqHoverLineCreatingRef.current = false
-            liqHoverLineCreatingSinceRef.current = null
-            if (!newId) return
-            liqHoverLineIdRef.current = String(newId)
-            // Apply latest pending price immediately (user may have moved mouse while create was in-flight).
-            const latest = liqHoverLinePendingPriceRef.current
-            if (typeof latest === 'number' && Number.isFinite(latest)) {
-              try {
-                const tr2 = safeGetVisibleTimeRangeSec()
-                const time2 = tr2?.to ?? Math.floor(Date.now() / 1000)
-                chart?.getShapeById?.(String(newId) as any)?.setPoints?.([{ time: time2, price: latest } as any])
-              } catch {
-                // ignore
+            } as any)
+            const onResolved = (newId: any) => {
+              liqHoverLineCreatingRef.current = false
+              liqHoverLineCreatingSinceRef.current = null
+              if (!newId) return
+              liqHoverLineIdRef.current = String(newId)
+              // Apply latest pending price immediately (user may have moved mouse while create was in-flight).
+              const latest = liqHoverLinePendingPriceRef.current
+              if (typeof latest === 'number' && Number.isFinite(latest)) {
+                try {
+                  const tr2 = safeGetVisibleTimeRangeSec()
+                  const time2 = tr2?.to ?? Math.floor(Date.now() / 1000)
+                  const shape =
+                    typeof (chart as any)?.getShapeById === 'function'
+                      ? (chart as any).getShapeById(String(newId))
+                      : null
+                  if (shape && typeof (shape as any).setPoints === 'function') {
+                    ;(shape as any).setPoints([{ time: time2, price: latest } as any])
+                  }
+                } catch {
+                  // ignore
+                }
               }
             }
-          }
-          if (maybe && typeof (maybe as any).then === 'function') {
-            void (maybe as Promise<any>)
-              .then(onResolved)
-              .catch(() => {
+            if (maybe && typeof (maybe as any).then === 'function') {
+              void (maybe as unknown as Promise<any>).then(onResolved).catch(() => {
                 liqHoverLineCreatingRef.current = false
                 liqHoverLineCreatingSinceRef.current = null
               })
-          } else {
-            onResolved(maybe)
-          }
-        } catch {
-          liqHoverLineCreatingRef.current = false
-          liqHoverLineCreatingSinceRef.current = null
-          // ignore
-        }
-      }
-
-      const buildAndDrawLiqMap = (data: ReturnType<typeof generateLiquidationMapMockData>) => {
-        if (!data) return
-        if (liqHiddenRef.current) return
-        if (typeof chart?.createMultipointShape !== 'function') return
-        const tr = safeGetVisibleTimeRangeSec()
-        if (!tr) return
-
-        // 为避免性能问题，我们对价格阶梯做采样（保留整体观感 + tooltip 插值仍然精细）
-        const xs = data.labels.map(parsePriceLabel).filter((n) => typeof n === 'number' && Number.isFinite(n)) as number[]
-        if (!xs.length) return
-
-        // step：用于把每一条 bar 变成一个“有厚度”的矩形
-        const step = xs.length >= 2 ? Math.abs(xs[1] - xs[0]) : Math.max(1, Math.abs((xs[0] || 0) * 0.001))
-        const half = step / 2
-
-        // 计算强度（总量），并取 max 用于归一化宽度
-        const totals = xs.map((_, i) => (data.bybit[i] || 0) + (data.okx[i] || 0) + (data.binance[i] || 0) + (data.dex[i] || 0))
-        const maxVal = Math.max(1, ...totals)
-
-        // 矩形绘制区域固定在可视时间范围的最右侧一小段（视觉上贴近“右侧柱状热力条”）
-        const span = Math.max(60 * 10, Math.floor((tr.to - tr.from) * 0.12)) // 至少 10min，最多 ~12% 视窗宽度
-        const right = tr.to
-
-        const fillBase = theme === 'Dark' ? '#22c55e' : '#16a34a'
-        const borderBase = theme === 'Dark' ? '#1d4ed8' : '#2563eb'
-
-        // 重建：先清理旧的，再创建新的（我们做了采样，所以数量可控）
-        removeAllLiqDrawings()
-        const created: string[] = []
-        const pending: Promise<void>[] = []
-
-        // 采样：每 2 条取 1 条，同时过滤掉极小值
-        for (let i = 0; i < xs.length; i += 2) {
-          const v = totals[i] || 0
-          if (v <= 0.5) continue
-          const t = Math.max(0, Math.min(1, v / maxVal))
-          const width = Math.max(2, Math.floor(span * t))
-          const left = Math.max(tr.from, right - width)
-
-          const price = xs[i]
-          const p1 = price - half
-          const p2 = price + half
-
-          const bg = hexWithAlpha(fillBase, 0.10 + 0.55 * t)
-          const border = hexWithAlpha(borderBase, 0.18 + 0.60 * t)
-
-          try {
-            const maybe = chart.createMultipointShape(
-              [
-                { time: left, price: p2 },
-                { time: right, price: p1 },
-              ],
-              {
-                shape: 'rectangle',
-                text: LIQ_MAP_DRAWING_LABEL,
-                showInObjectsTree: true,
-                lock: false,
-                disableSelection: false,
-                disableSave: true,
-                zOrder: 'top',
-                overrides: {
-                  backgroundColor: bg,
-                  borderColor: border,
-                  borderWidth: 1,
-                },
-              },
-            )
-            // 有些 Charting Library build 返回 Promise<EntityId>
-            if (maybe && typeof (maybe as any).then === 'function') {
-              pending.push(
-                (maybe as Promise<any>)
-                  .then((id) => {
-                    if (id) created.push(String(id))
-                  })
-                  .catch(() => {
-                    /* ignore */
-                  }),
-              )
-            } else if (maybe) {
-              created.push(String(maybe))
+            } else {
+              onResolved(maybe)
             }
           } catch {
-            // ignore single bar failures
-          }
-        }
-
-        if (pending.length) {
-          void Promise.all(pending).then(() => {
-            liqNativeShapeIdsRef.current = created
-            liqNativeMissRef.current = 0
-            setLiqNativeActive(created.length > 0)
-          })
-        } else {
-          liqNativeShapeIdsRef.current = created
-          liqNativeMissRef.current = 0
-          setLiqNativeActive(created.length > 0)
-        }
-      }
-
-      const scheduleDrawingsSync = () => {
-        if (!showLiqOverlayRef.current) return
-        if (typeof chart?.createMultipointShape !== 'function') return
-        if (liqHiddenRef.current) return
-        if (drawingsSyncPending) return
-        drawingsSyncPending = true
-        drawingsSyncTimer = setTimeout(() => {
-          drawingsSyncPending = false
-          const d = liqDataRef.current
-          if (d) buildAndDrawLiqMap(d)
-        }, 120)
-      }
-
-      if (showLiqOverlay) {
-        // 显示时默认不隐藏（避免上一次隐藏状态残留导致“看起来没效果”）
-        if (liqHiddenRef.current) setLiqHidden(false)
-
-        // 1) 创建 legend 占位 study（这样清算地图会出现在指标 legend 上，并且有 eye/X 按钮）
-        // 防御：历史遗留的错误值（把 Promise stringify 成了 "[object Promise]"）会导致后续定位/删除全部失效
-        if (liqLegendStudyIdRef.current && String(liqLegendStudyIdRef.current).includes('Promise')) {
-          liqLegendStudyIdRef.current = null
-          liqLegendStudySeenRef.current = false
-          liqLegendStudyMissRef.current = 0
-        }
-        if (!liqLegendStudyIdRef.current) {
-          try {
-            const maybe = chart?.createStudy?.(LIQ_MAP_STUDY_NAME, false, false, {})
-            if (maybe && typeof (maybe as any).then === 'function') {
-              void (maybe as Promise<any>)
-                .then((id) => {
-                  if (!id) return
-                  liqLegendStudyIdRef.current = String(id)
-                  liqLegendStudySeenRef.current = false
-                  liqLegendStudyMissRef.current = 0
-                })
-                .catch(() => {
-                  /* ignore */
-                })
-            } else if (maybe) {
-              liqLegendStudyIdRef.current = String(maybe)
-              liqLegendStudySeenRef.current = false
-              liqLegendStudyMissRef.current = 0
-            }
-          } catch {
+            liqHoverLineCreatingRef.current = false
+            liqHoverLineCreatingSinceRef.current = null
             // ignore
           }
         }
 
-        // 1.1) 绑定 legend eye/X 点击（部分 build 虽然显示按钮，但点击没有效果；这里我们兜底实现）
-        let _legendUiCleanup: null | (() => void) = null
-        try {
-          let retryTimer: ReturnType<typeof setTimeout> | null = null
+        const buildAndDrawLiqMap = (data: ReturnType<typeof generateLiquidationMapMockData>) => {
+          if (!data) return
+          if (liqHiddenRef.current) return
+          if (typeof chart?.createMultipointShape !== 'function') return
+          const tr = safeGetVisibleTimeRangeSec()
+          if (!tr) return
 
-          const attach = () => {
-            const iframe = containerEl.querySelector('iframe') as HTMLIFrameElement | null
-            const doc = iframe?.contentDocument
-            if (!doc) {
-              retryTimer = setTimeout(attach, 250)
-              return
-            }
-            let liqLegendRowEl: HTMLElement | null = null
+          // 为避免性能问题，我们对价格阶梯做采样（保留整体观感 + tooltip 插值仍然精细）
+          const xs = data.labels
+            .map(parsePriceLabel)
+            .filter(n => typeof n === 'number' && Number.isFinite(n)) as number[]
+          if (!xs.length) return
 
-            const isActionEl = (el: Element | null, keywords: string[]) => {
-              if (!el) return false
-              const title = (el as HTMLElement).getAttribute('title') || ''
-              const aria = (el as HTMLElement).getAttribute('aria-label') || ''
-              const combined = `${title} ${aria}`.toLowerCase()
-              // 增加英文关键字匹配
-              const enKeywords = ['remove', 'close', 'hide', 'show', 'visibility', 'eye']
-              return keywords.concat(enKeywords).some((k) => combined.includes(k.toLowerCase()))
-            }
-            const isRemoveEl = (el: Element | null) =>
-              isActionEl(el, ['删除', '移除', 'x'])
-            const isVisibilityEl = (el: Element | null) =>
-              isActionEl(el, ['隐藏', '显示'])
+          // step：用于把每一条 bar 变成一个“有厚度”的矩形
+          const step =
+            xs.length >= 2 ? Math.abs(xs[1] - xs[0]) : Math.max(1, Math.abs((xs[0] || 0) * 0.001))
+          const half = step / 2
 
-            // ✅ 事件驱动的 legend 行定位：从用户点击目标向上找包含“清算地图”的那一行
-            const findRowFromTarget = (target: Element): HTMLElement | null => {
-              const nameCandidates = ['清算地图', t('chart.indicators.liquidationMap'), 'Liquidation Map'].filter(Boolean)
-              let cur: HTMLElement | null = target as any
-              for (let i = 0; i < 16 && cur; i += 1) {
-                try {
-                  const txt = (cur.textContent || '').trim()
-                  const hasName = nameCandidates.some((k) => txt.includes(String(k)))
-                  const candidates = Array.from(cur.querySelectorAll('button,[role="button"],[tabindex]')) as HTMLElement[]
-                  const buttons = candidates.filter((el) => {
-                    const r = el.getBoundingClientRect()
-                    return r.width > 0 && r.height > 0 && r.width <= 44 && r.height <= 44
-                  })
-                  const h = cur.getBoundingClientRect().height
-                  if (hasName && buttons.length >= 1 && h > 14 && h < 90) return cur
-                } catch {
-                  // ignore
-                }
-                cur = cur.parentElement
+          // 计算强度（总量），并取 max 用于归一化宽度
+          const totals = xs.map(
+            (_, i) =>
+              (data.bybit[i] || 0) +
+              (data.okx[i] || 0) +
+              (data.binance[i] || 0) +
+              (data.dex[i] || 0),
+          )
+          const maxVal = Math.max(1, ...totals)
+
+          // 矩形绘制区域固定在可视时间范围的最右侧一小段（视觉上贴近“右侧柱状热力条”）
+          const span = Math.max(60 * 10, Math.floor((tr.to - tr.from) * 0.12)) // 至少 10min，最多 ~12% 视窗宽度
+          const right = tr.to
+
+          const fillBase = theme === 'Dark' ? '#22c55e' : '#16a34a'
+          const borderBase = theme === 'Dark' ? '#1d4ed8' : '#2563eb'
+
+          // 重建：先清理旧的，再创建新的（我们做了采样，所以数量可控）
+          removeAllLiqDrawings()
+          const created: string[] = []
+          const pending: Promise<void>[] = []
+
+          // 采样：每 2 条取 1 条，同时过滤掉极小值
+          for (let i = 0; i < xs.length; i += 2) {
+            const v = totals[i] || 0
+            if (v <= 0.5) continue
+            const t = Math.max(0, Math.min(1, v / maxVal))
+            const width = Math.max(2, Math.floor(span * t))
+            const left = Math.max(tr.from, right - width)
+
+            const price = xs[i]
+            const p1 = price - half
+            const p2 = price + half
+
+            const bg = hexWithAlpha(fillBase, 0.1 + 0.55 * t)
+            const border = hexWithAlpha(borderBase, 0.18 + 0.6 * t)
+
+            try {
+              const maybe = chart.createMultipointShape(
+                [
+                  { time: left, price: p2 },
+                  { time: right, price: p1 },
+                ],
+                {
+                  shape: 'rectangle',
+                  text: LIQ_MAP_DRAWING_LABEL,
+                  showInObjectsTree: true,
+                  lock: false,
+                  disableSelection: false,
+                  disableSave: true,
+                  zOrder: 'top',
+                  overrides: {
+                    backgroundColor: bg,
+                    borderColor: border,
+                    borderWidth: 1,
+                  },
+                },
+              )
+              // 有些 Charting Library build 返回 Promise<EntityId>
+              if (maybe && typeof (maybe as any).then === 'function') {
+                pending.push(
+                  (maybe as unknown as Promise<any>)
+                    .then(id => {
+                      if (id) created.push(String(id))
+                    })
+                    .catch(() => {
+                      /* ignore */
+                    }),
+                )
+              } else if (maybe) {
+                created.push(String(maybe))
               }
-              return null
+            } catch {
+              // ignore single bar failures
             }
+          }
 
-            const findLiqLegendRow = () => {
-              try {
-                const sid = liqLegendStudyIdRef.current
-                const nameCandidates = ['清算地图', t('chart.indicators.liquidationMap'), 'Liquidation Map'].filter(Boolean)
+          if (pending.length) {
+            void Promise.all(pending).then(() => {
+              liqNativeShapeIdsRef.current = created
+              liqNativeMissRef.current = 0
+              setLiqNativeActive(created.length > 0)
+            })
+          } else {
+            liqNativeShapeIdsRef.current = created
+            liqNativeMissRef.current = 0
+            setLiqNativeActive(created.length > 0)
+          }
+        }
 
-                // Strategy 1: textContent XPath (may be 0 on some builds)
-                let node: HTMLElement | null = null
-                try {
-                  // 转义单引号以防万一
-                  const escapedName = t('chart.indicators.liquidationMap').replace(/'/g, "\\'")
-                  const xpath = `//*[contains(normalize-space(string(.)), "清算地图")] | //*[contains(normalize-space(string(.)), "${escapedName}")] | //*[contains(normalize-space(string(.)), "Liquidation Map")]`
-                  const res = doc.evaluate(
-                    xpath,
-                    doc.body,
-                    null,
-                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-                    null,
-                  )
-                  node = res.snapshotLength ? (res.snapshotItem(0) as HTMLElement | null) : null
-                } catch {
-                  // ignore
-                }
+        const scheduleDrawingsSync = () => {
+          if (!showLiqOverlayRef.current) return
+          if (typeof chart?.createMultipointShape !== 'function') return
+          if (liqHiddenRef.current) return
+          if (drawingsSyncPending) return
+          drawingsSyncPending = true
+          drawingsSyncTimer = setTimeout(() => {
+            drawingsSyncPending = false
+            const d = liqDataRef.current
+            if (d) buildAndDrawLiqMap(d)
+          }, 120)
+        }
 
-                // Strategy 2: aria/title search
-                if (!node) {
-                  const elems = Array.from(doc.querySelectorAll('[title],[aria-label]')) as HTMLElement[]
-                  node =
-                    elems.find((el) => {
-                      const tAttr = `${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`
-                      return nameCandidates.some((k) => tAttr.includes(k))
-                    }) ?? null
-                }
+        if (showLiqOverlay) {
+          // 显示时默认不隐藏（避免上一次隐藏状态残留导致“看起来没效果”）
+          if (liqHiddenRef.current) setLiqHidden(false)
 
-                // Strategy 3: data-* / id contains study id
-                if (!node && sid) {
-                  const sel = [
-                    `[data-study-id="${sid}"]`,
-                    `[data-entity-id="${sid}"]`,
-                    `[data-source-id="${sid}"]`,
-                    `[data-id="${sid}"]`,
-                    `[data-study-id*="${sid}"]`,
-                    `[data-entity-id*="${sid}"]`,
-                    `[data-source-id*="${sid}"]`,
-                    `[data-id*="${sid}"]`,
-                  ].join(',')
-                  node = (doc.querySelector(sel) as HTMLElement | null) ?? null
-                }
+          // 1) 创建 legend 占位 study（这样清算地图会出现在指标 legend 上，并且有 eye/X 按钮）
+          // 防御：历史遗留的错误值（把 Promise stringify 成了 "[object Promise]"）会导致后续定位/删除全部失效
+          if (
+            liqLegendStudyIdRef.current &&
+            String(liqLegendStudyIdRef.current).includes('Promise')
+          ) {
+            liqLegendStudyIdRef.current = null
+            liqLegendStudySeenRef.current = false
+            liqLegendStudyMissRef.current = 0
+          }
+          if (!liqLegendStudyIdRef.current) {
+            try {
+              const maybe = chart?.createStudy?.(LIQ_MAP_STUDY_NAME, false, false, [] as unknown[])
+              if (maybe && typeof (maybe as any).then === 'function') {
+                void (maybe as Promise<any>)
+                  .then(id => {
+                    if (!id) return
+                    liqLegendStudyIdRef.current = String(id)
+                    liqLegendStudySeenRef.current = false
+                    liqLegendStudyMissRef.current = 0
+                  })
+                  .catch(() => {
+                    /* ignore */
+                  })
+              } else if (maybe) {
+                liqLegendStudyIdRef.current = String(maybe)
+                liqLegendStudySeenRef.current = false
+                liqLegendStudyMissRef.current = 0
+              }
+            } catch {
+              // ignore
+            }
+          }
 
-                // Strategy 4: if legend is outside iframe (rare), try parent document within container
-                if (!node) {
+          // 1.1) 绑定 legend eye/X 点击（部分 build 虽然显示按钮，但点击没有效果；这里我们兜底实现）
+          try {
+            let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+            const attach = () => {
+              const iframe = containerEl.querySelector('iframe') as HTMLIFrameElement | null
+              const doc = iframe?.contentDocument
+              if (!doc) {
+                retryTimer = setTimeout(attach, 250)
+                return
+              }
+              let liqLegendRowEl: HTMLElement | null = null
+
+              const isActionEl = (el: Element | null, keywords: string[]) => {
+                if (!el) return false
+                const title = (el as HTMLElement).getAttribute('title') || ''
+                const aria = (el as HTMLElement).getAttribute('aria-label') || ''
+                const combined = `${title} ${aria}`.toLowerCase()
+                // 增加英文关键字匹配
+                const enKeywords = ['remove', 'close', 'hide', 'show', 'visibility', 'eye']
+                return keywords.concat(enKeywords).some(k => combined.includes(k.toLowerCase()))
+              }
+              const isRemoveEl = (el: Element | null) => isActionEl(el, ['删除', '移除', 'x'])
+              const isVisibilityEl = (el: Element | null) => isActionEl(el, ['隐藏', '显示'])
+
+              // ✅ 事件驱动的 legend 行定位：从用户点击目标向上找包含“清算地图”的那一行
+              const findRowFromTarget = (target: Element): HTMLElement | null => {
+                const nameCandidates = [
+                  '清算地图',
+                  t('chart.indicators.liquidationMap'),
+                  'Liquidation Map',
+                ].filter(Boolean)
+                let cur: HTMLElement | null = target as any
+                for (let i = 0; i < 16 && cur; i += 1) {
                   try {
-                    const res2 = document.evaluate(
-                      `//*[contains(normalize-space(string(.)), "清算地图")]`,
-                      containerEl,
+                    const txt = (cur.textContent || '').trim()
+                    const hasName = nameCandidates.some(k => txt.includes(String(k)))
+                    const candidates = Array.from(
+                      cur.querySelectorAll('button,[role="button"],[tabindex]'),
+                    ) as HTMLElement[]
+                    const buttons = candidates.filter(el => {
+                      const r = el.getBoundingClientRect()
+                      return r.width > 0 && r.height > 0 && r.width <= 44 && r.height <= 44
+                    })
+                    const h = cur.getBoundingClientRect().height
+                    if (hasName && buttons.length >= 1 && h > 14 && h < 90) return cur
+                  } catch {
+                    // ignore
+                  }
+                  cur = cur.parentElement
+                }
+                return null
+              }
+
+              const findLiqLegendRow = () => {
+                try {
+                  const sid = liqLegendStudyIdRef.current
+                  const nameCandidates = [
+                    '清算地图',
+                    t('chart.indicators.liquidationMap'),
+                    'Liquidation Map',
+                  ].filter(Boolean)
+
+                  // Strategy 1: textContent XPath (may be 0 on some builds)
+                  let node: HTMLElement | null = null
+                  try {
+                    // 转义单引号以防万一
+                    const escapedName = t('chart.indicators.liquidationMap').replace(/'/g, "\\'")
+                    const xpath = `//*[contains(normalize-space(string(.)), "清算地图")] | //*[contains(normalize-space(string(.)), "${escapedName}")] | //*[contains(normalize-space(string(.)), "Liquidation Map")]`
+                    const res = doc.evaluate(
+                      xpath,
+                      doc.body,
                       null,
                       XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
                       null,
                     )
-                    node = res2.snapshotLength ? (res2.snapshotItem(0) as HTMLElement | null) : null
+                    node = res.snapshotLength ? (res.snapshotItem(0) as HTMLElement | null) : null
                   } catch {
                     // ignore
                   }
-                }
 
-                if (!node) return null
+                  // Strategy 2: aria/title search
+                  if (!node) {
+                    const elems = Array.from(
+                      doc.querySelectorAll('[title],[aria-label]'),
+                    ) as HTMLElement[]
+                    node =
+                      elems.find(el => {
+                        const tAttr = `${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`
+                        return nameCandidates.some(k => tAttr.includes(k))
+                      }) ?? null
+                  }
 
-                // climb to row container
-                let cur: HTMLElement | null = node
-                for (let i = 0; i < 12 && cur; i += 1) {
-                  const h = cur.getBoundingClientRect().height
-                  const hasButtons = !!cur.querySelector('button,[role="button"],[title],[aria-label],[tabindex]')
-                  if (h > 14 && h < 56 && hasButtons) return cur
-                  cur = cur.parentElement
+                  // Strategy 3: data-* / id contains study id
+                  if (!node && sid) {
+                    const sel = [
+                      `[data-study-id="${sid}"]`,
+                      `[data-entity-id="${sid}"]`,
+                      `[data-source-id="${sid}"]`,
+                      `[data-id="${sid}"]`,
+                      `[data-study-id*="${sid}"]`,
+                      `[data-entity-id*="${sid}"]`,
+                      `[data-source-id*="${sid}"]`,
+                      `[data-id*="${sid}"]`,
+                    ].join(',')
+                    node = (doc.querySelector(sel) as HTMLElement | null) ?? null
+                  }
+
+                  // Strategy 4: if legend is outside iframe (rare), try parent document within container
+                  if (!node) {
+                    try {
+                      const res2 = document.evaluate(
+                        `//*[contains(normalize-space(string(.)), "清算地图")]`,
+                        containerEl,
+                        null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+                        null,
+                      )
+                      node = res2.snapshotLength
+                        ? (res2.snapshotItem(0) as HTMLElement | null)
+                        : null
+                    } catch {
+                      // ignore
+                    }
+                  }
+
+                  if (!node) return null
+
+                  // climb to row container
+                  let cur: HTMLElement | null = node
+                  for (let i = 0; i < 12 && cur; i += 1) {
+                    const h = cur.getBoundingClientRect().height
+                    const hasButtons = !!cur.querySelector(
+                      'button,[role="button"],[title],[aria-label],[tabindex]',
+                    )
+                    if (h > 14 && h < 56 && hasButtons) return cur
+                    cur = cur.parentElement
+                  }
+                  return node.parentElement
+                } catch {
+                  return null
                 }
-                return node.parentElement
+              }
+
+              const bindRow = () => {
+                liqLegendRowEl = findLiqLegendRow()
+              }
+              bindRow()
+              const mo = new MutationObserver(() => bindRow())
+              try {
+                mo.observe(doc.body, { childList: true, subtree: true })
               } catch {
+                // ignore
+              }
+
+              const resolveRowButtonAction = (
+                row: HTMLElement,
+                target: Element,
+              ): 'remove' | 'toggle' | null => {
+                // 某些 build 的 icon button 没有 title/aria；用“按钮位置”兜底：
+                // 约定：legend 行最右侧通常是 remove(X)，其左侧是 hide/show(eye)。
+                const btn =
+                  (target.closest?.('button,[role="button"],[tabindex]') as HTMLElement | null) ??
+                  null
+                const candidates = Array.from(
+                  row.querySelectorAll('button,[role="button"],[tabindex]'),
+                ) as HTMLElement[]
+                const buttons = candidates
+                  .filter(el => {
+                    const r = el.getBoundingClientRect()
+                    if (!r || r.width <= 0 || r.height <= 0) return false
+                    // 过滤掉整行容器等大块元素
+                    return r.width <= 40 && r.height <= 40
+                  })
+                  .filter((el, idx, arr) => arr.indexOf(el) === idx)
+
+                // 优先：title/aria 能识别时
+                if (btn && (isRemoveEl(btn) || isVisibilityEl(btn)))
+                  return isRemoveEl(btn) ? 'remove' : 'toggle'
+
+                // 兜底：用末尾位置判断
+                const hitIndex = buttons.findIndex(b => b === btn || b.contains(btn as any))
+                if (hitIndex === -1) return null
+                if (hitIndex === buttons.length - 1) return 'remove'
+                if (hitIndex === buttons.length - 2) return 'toggle'
                 return null
+              }
+
+              const onDocPointerDown = (ev: Event) => {
+                const target = ev.target as Element | null
+                if (!target) return
+                const row =
+                  (liqLegendRowEl && liqLegendRowEl.contains(target) ? liqLegendRowEl : null) ||
+                  findRowFromTarget(target)
+                liqLegendRowEl = row
+                if (!row) {
+                  return
+                }
+                const action = resolveRowButtonAction(row, target)
+                if (!action) return
+
+                // 由我们接管逻辑（避免“点了没反应”）
+                ev.preventDefault()
+                ;(ev as any).stopPropagation?.()
+                ;(ev as any).stopImmediatePropagation?.()
+
+                if (action === 'remove') {
+                  // 删除：移除 legend study + 关闭指标 + 清理 drawings
+                  const sid = liqLegendStudyIdRef.current
+                  if (sid) {
+                    try {
+                      liqLegendStudyRemovingRef.current = true
+                      chart?.removeEntity?.(sid)
+                    } catch {
+                      // ignore
+                    } finally {
+                      liqLegendStudyRemovingRef.current = false
+                      liqLegendStudyIdRef.current = null
+                      liqLegendStudySeenRef.current = false
+                      liqLegendStudyMissRef.current = 0
+                    }
+                  }
+                  setLiqHidden(false)
+                  removeAllLiqDrawings()
+                  // 立刻本地隐藏（避免父组件状态同步延迟导致“看起来没效果”）
+                  setLiqData(null)
+                  setLiqSelected(null)
+                  liqLockedRef.current = false
+                  liqLockedPriceRef.current = null
+                  callbacksRef.current.onRemoveIndicator?.('liquidation-map')
+                  return
+                }
+
+                if (action === 'toggle') {
+                  // 隐藏/显示：不改变“已添加”状态，只隐藏 map（drawings + overlay）
+                  setLiqHidden(prev => {
+                    const next = !prev
+                    if (next) {
+                      // hide
+                      removeAllLiqDrawings()
+                      setLiqSelected(null)
+                      liqLockedRef.current = false
+                      liqLockedPriceRef.current = null
+                    } else {
+                      // show => redraw
+                      const d = liqDataRef.current
+                      if (d) buildAndDrawLiqMap(d)
+                    }
+                    return next
+                  })
+                }
+              }
+
+              // 用 pointerdown/mousedown 捕获，优先于内部 click handler，避免内部拦截导致我们收不到事件
+              doc.addEventListener('pointerdown', onDocPointerDown, true)
+              doc.addEventListener('mousedown', onDocPointerDown, true)
+              _legendUiCleanupRef.current = () => {
+                if (retryTimer) clearTimeout(retryTimer)
+                try {
+                  doc.removeEventListener('pointerdown', onDocPointerDown, true)
+                  doc.removeEventListener('mousedown', onDocPointerDown, true)
+                } catch {
+                  // ignore
+                }
+                try {
+                  mo.disconnect()
+                } catch {
+                  // ignore
+                }
               }
             }
 
-            const bindRow = () => {
-              liqLegendRowEl = findLiqLegendRow()
-            }
-            bindRow()
-            const mo = new MutationObserver(() => bindRow())
+            attach()
+          } catch {
+            // ignore
+          }
+
+          // 2) 监听用户通过 legend 的 X 删除 study：被删除后同步关闭清算地图
+          legendStudyTimer = setInterval(() => {
             try {
-              mo.observe(doc.body, { childList: true, subtree: true })
+              const sid = liqLegendStudyIdRef.current
+              if (!sid) return
+              const all = chart?.getAllStudies?.() as Array<{ id: string }> | undefined
+              if (!Array.isArray(all)) return
+
+              const exists = all.some(s => String((s as any).id) === String(sid))
+              if (exists) {
+                liqLegendStudySeenRef.current = true
+                liqLegendStudyMissRef.current = 0
+                return
+              }
+
+              // 刚创建的短时间内可能还没出现在 getAllStudies 里，不能误判为“已删除”
+              if (!liqLegendStudySeenRef.current) return
+
+              liqLegendStudyMissRef.current += 1
+              if (liqLegendStudyMissRef.current < 3) return
+
+              liqLegendStudyIdRef.current = null
+              liqLegendStudySeenRef.current = false
+              liqLegendStudyMissRef.current = 0
+
+              // 用户删除了 legend study：关闭指标（父组件会把 activeIndicators 里移除）
+              if (!liqLegendStudyRemovingRef.current)
+                callbacksRef.current.onRemoveIndicator?.('liquidation-map')
             } catch {
               // ignore
             }
+          }, 700)
 
-            const resolveRowButtonAction = (row: HTMLElement, target: Element): 'remove' | 'toggle' | null => {
-              // 某些 build 的 icon button 没有 title/aria；用“按钮位置”兜底：
-              // 约定：legend 行最右侧通常是 remove(X)，其左侧是 hide/show(eye)。
-              const btn = (target.closest?.('button,[role="button"],[tabindex]') as HTMLElement | null) ?? null
-              const candidates = Array.from(row.querySelectorAll('button,[role="button"],[tabindex]')) as HTMLElement[]
-              const buttons = candidates
-                .filter((el) => {
-                  const r = el.getBoundingClientRect()
-                  if (!r || r.width <= 0 || r.height <= 0) return false
-                  // 过滤掉整行容器等大块元素
-                  return r.width <= 40 && r.height <= 40
-                })
-                .filter((el, idx, arr) => arr.indexOf(el) === idx)
+          // Native drawings 支持探测（部分内置精简版可能没有 createMultipointShape）
+          setLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
 
-              // 优先：title/aria 能识别时
-              if (btn && (isRemoveEl(btn) || isVisibilityEl(btn))) return isRemoveEl(btn) ? 'remove' : 'toggle'
-
-              // 兜底：用末尾位置判断
-              const hitIndex = buttons.findIndex((b) => b === btn || b.contains(btn as any))
-              if (hitIndex === -1) return null
-              if (hitIndex === buttons.length - 1) return 'remove'
-              if (hitIndex === buttons.length - 2) return 'toggle'
-              return null
-            }
-
-            const onDocPointerDown = (ev: Event) => {
-              const target = ev.target as Element | null
-              if (!target) return
-              const row =
-                (liqLegendRowEl && liqLegendRowEl.contains(target) ? liqLegendRowEl : null) || findRowFromTarget(target)
-              liqLegendRowEl = row
-              if (!row) {
-                return
-              }
-              const action = resolveRowButtonAction(row, target)
-              if (!action) return
-
-              // 由我们接管逻辑（避免“点了没反应”）
-              ev.preventDefault()
-              ;(ev as any).stopPropagation?.()
-              ;(ev as any).stopImmediatePropagation?.()
-
-              if (action === 'remove') {
-                // 删除：移除 legend study + 关闭指标 + 清理 drawings
-                const sid = liqLegendStudyIdRef.current
-                if (sid) {
+          paneSizeTimer = setInterval(() => computeMainPaneHeight(), 800)
+          // 如果用户在 TradingView 自己的 UI（对象树/绘图管理）里把这些矩形全删了，
+          // 我们需要把“清算地图”同步为未启用（按钮状态回退）。
+          if (typeof chart?.getShapeById === 'function') {
+            drawingsGcTimer = setInterval(() => {
+              try {
+                if (!showLiqOverlayRef.current) return
+                if (liqNativeRemovingRef.current) return
+                const ids = liqNativeShapeIdsRef.current
+                if (!ids.length) return
+                const anyAlive = ids.some(id => {
                   try {
-                    liqLegendStudyRemovingRef.current = true
-                    chart?.removeEntity?.(sid)
+                    return typeof (chart as any)?.getShapeById === 'function'
+                      ? !!(chart as any).getShapeById(id)
+                      : false
                   } catch {
-                    // ignore
-                  } finally {
-                    liqLegendStudyRemovingRef.current = false
-                    liqLegendStudyIdRef.current = null
-                    liqLegendStudySeenRef.current = false
-                    liqLegendStudyMissRef.current = 0
+                    return false
                   }
-                }
-                setLiqHidden(false)
-                removeAllLiqDrawings()
-                // 立刻本地隐藏（避免父组件状态同步延迟导致“看起来没效果”）
-                setLiqData(null)
-                setLiqSelected(null)
-                liqLockedRef.current = false
-                liqLockedPriceRef.current = null
-                callbacksRef.current.onRemoveIndicator?.('liquidation-map')
-                return
-              }
-
-              if (action === 'toggle') {
-                // 隐藏/显示：不改变“已添加”状态，只隐藏 map（drawings + overlay）
-                setLiqHidden((prev) => {
-                  const next = !prev
-                  if (next) {
-                    // hide
-                    removeAllLiqDrawings()
-                    setLiqSelected(null)
-                    liqLockedRef.current = false
-                    liqLockedPriceRef.current = null
-                  } else {
-                    // show => redraw
-                    const d = liqDataRef.current
-                    if (d) buildAndDrawLiqMap(d)
-                  }
-                  return next
                 })
-              }
-            }
+                if (anyAlive) {
+                  liqNativeMissRef.current = 0
+                  return
+                }
+                liqNativeMissRef.current += 1
+                if (liqNativeMissRef.current < 2) return
 
-            // 用 pointerdown/mousedown 捕获，优先于内部 click handler，避免内部拦截导致我们收不到事件
-            doc.addEventListener('pointerdown', onDocPointerDown, true)
-            doc.addEventListener('mousedown', onDocPointerDown, true)
-            _legendUiCleanup = () => {
-              if (retryTimer) clearTimeout(retryTimer)
-              try {
-                doc.removeEventListener('pointerdown', onDocPointerDown, true)
-                doc.removeEventListener('mousedown', onDocPointerDown, true)
+                // 连续两次都找不到，才认为用户真的删干净了
+                liqNativeShapeIdsRef.current = []
+                liqNativeMissRef.current = 0
+                callbacksRef.current.onRemoveIndicator?.('liquidation-map')
               } catch {
                 // ignore
               }
-              try {
-                mo.disconnect()
-              } catch {
-                // ignore
-              }
+            }, 900)
+          }
+
+          const computeAndSet = () => {
+            const symUpper = String(symbol || 'BTCUSDT').toUpperCase()
+            let base = symUpper
+            for (const q of ['USDT', 'USD', 'PERP', 'SWAP']) {
+              if (base.endsWith(q)) base = base.slice(0, -q.length)
+            }
+            base = base || symUpper.slice(0, 3) || 'BTC'
+
+            const mid = getVisibleRangeMidPrice() ?? 0
+            const fallbackAnchor = liquidationSymbolPrices[base] ?? 100
+            const anchor = mid > 0 ? mid : fallbackAnchor
+            liqCurrentPriceRef.current = anchor
+            const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
+            setLiqData(d)
+            // 同步绘制 native rectangles（如果支持）
+            try {
+              if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
+            } catch {
+              // ignore
             }
           }
 
-          attach()
-        } catch {
-          // ignore
+          // dataReady 后再取可视价格区间，避免刚初始化时拿不到 range 导致 overlay 锚点跑飞
+          try {
+            if (chart && typeof (chart as any)?.dataReady === 'function')
+              (chart as any).dataReady(() => computeAndSet())
+            else computeAndSet()
+          } catch {
+            computeAndSet()
+          }
+        } else {
+          // overlay 关闭：移除 legend 占位 study（避免残留 legend 条目），但不要触发 onRemoveIndicator
+          const sid = liqLegendStudyIdRef.current
+          if (sid) {
+            try {
+              liqLegendStudyRemovingRef.current = true
+              chart?.removeEntity?.(sid)
+            } catch {
+              // ignore
+            } finally {
+              liqLegendStudyRemovingRef.current = false
+              liqLegendStudyIdRef.current = null
+              liqLegendStudySeenRef.current = false
+              liqLegendStudyMissRef.current = 0
+            }
+          }
+
+          removeAllLiqDrawings()
+          removeLiqHoverLine()
+          setLiqHidden(false)
+
+          setLiqData(null)
+          setLiqSelected(null)
+          liqLockedRef.current = false
+          liqLockedPriceRef.current = null
         }
 
-        // 2) 监听用户通过 legend 的 X 删除 study：被删除后同步关闭清算地图
-        legendStudyTimer = setInterval(() => {
-          try {
-            const sid = liqLegendStudyIdRef.current
-            if (!sid) return
-            const all = chart?.getAllStudies?.() as Array<{ id: string }> | undefined
-            if (!Array.isArray(all)) return
+        const unsubChart = adapter.subscribeChartChange(
+          safe(() => {
+            refreshOverlay()
+            computeMainPaneHeight()
+            // K 线缩放/平移时，重新把“右侧矩形条”贴到最新可视右边界
+            scheduleDrawingsSync()
+            if (liqLockedRef.current && liqLockedPriceRef.current != null) {
+              const y = adapter.getPriceToY(liqLockedPriceRef.current)
+              if (typeof y === 'number' && Number.isFinite(y))
+                setLiqSelected(prev => (prev ? { ...prev, y } : prev))
+            }
+          }),
+        )
 
-            const exists = all.some((s) => String((s as any).id) === String(sid))
-            if (exists) {
-              liqLegendStudySeenRef.current = true
-              liqLegendStudyMissRef.current = 0
+        const unsubCrosshair = adapter.subscribeCrosshairMove(
+          safe((param: any) => {
+            if (!showLiqOverlayRef.current) return
+            try {
+              const pt = param?.point
+              const price = param?.price
+              ;(window as any).__liqLastCrosshair = {
+                ts: Date.now(),
+                price: typeof price === 'number' ? price : null,
+                y: typeof pt?.y === 'number' ? pt.y : null,
+              }
+            } catch {}
+
+            // ✅ 兜底：如果初次开启时拿不到可视价格区间（anchor 可能是 100），
+            // 那就用第一次十字线回传的 price 作为锚点重建清算地图数据，确保能“立刻看到效果”。
+            if (
+              (!liqDataRef.current || liqCurrentPriceRef.current <= 0) &&
+              typeof param?.price === 'number' &&
+              Number.isFinite(param.price)
+            ) {
+              const anchor = param.price
+              liqCurrentPriceRef.current = anchor
+              const symUpper = String(symbol || 'BTCUSDT').toUpperCase()
+              let base = symUpper
+              for (const q of ['USDT', 'USD', 'PERP', 'SWAP']) {
+                if (base.endsWith(q)) base = base.slice(0, -q.length)
+              }
+              base = base || symUpper.slice(0, 3) || 'BTC'
+              const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
+              setLiqData(d)
+              try {
+                if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
+              } catch {
+                // ignore
+              }
+            }
+
+            const pt = param?.point
+            if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
+
+            const containerW = containerEl.clientWidth
+            const containerH = containerEl.clientHeight
+            const rightScaleW = 72
+            const overlayW = 260
+            const bottomPad = 24
+            const paneH = mainPaneHeightRef.current ?? containerH - bottomPad
+            const x1 = containerW - rightScaleW - overlayW
+            const x2 = containerW - rightScaleW
+            const y2 = paneH
+
+            if (liqLockedRef.current) {
+              const lockedPrice = liqLockedPriceRef.current
+              if (lockedPrice == null) return
+              const y = adapter.getPriceToY(lockedPrice)
+              if (typeof y === 'number' && Number.isFinite(y))
+                setLiqSelected(prev => (prev ? { ...prev, y } : prev))
               return
             }
 
-            // 刚创建的短时间内可能还没出现在 getAllStudies 里，不能误判为“已删除”
-            if (!liqLegendStudySeenRef.current) return
-
-            liqLegendStudyMissRef.current += 1
-            if (liqLegendStudyMissRef.current < 3) return
-
-            liqLegendStudyIdRef.current = null
-            liqLegendStudySeenRef.current = false
-            liqLegendStudyMissRef.current = 0
-
-            // 用户删除了 legend study：关闭指标（父组件会把 activeIndicators 里移除）
-            if (!liqLegendStudyRemovingRef.current) callbacksRef.current.onRemoveIndicator?.('liquidation-map')
-          } catch {
-            // ignore
-          }
-        }, 700)
-
-        // Native drawings 支持探测（部分内置精简版可能没有 createMultipointShape）
-        setLiqNativeSupported(typeof chart?.createMultipointShape === 'function')
-
-        paneSizeTimer = setInterval(() => computeMainPaneHeight(), 800)
-        // 如果用户在 TradingView 自己的 UI（对象树/绘图管理）里把这些矩形全删了，
-        // 我们需要把“清算地图”同步为未启用（按钮状态回退）。
-        if (typeof chart?.getShapeById === 'function') {
-          drawingsGcTimer = setInterval(() => {
-            try {
-              if (!showLiqOverlayRef.current) return
-              if (liqNativeRemovingRef.current) return
-              const ids = liqNativeShapeIdsRef.current
-              if (!ids.length) return
-              const anyAlive = ids.some((id) => {
-                try {
-                  return !!chart.getShapeById(id)
-                } catch {
-                  return false
-                }
-              })
-              if (anyAlive) {
-                liqNativeMissRef.current = 0
-                return
-              }
-              liqNativeMissRef.current += 1
-              if (liqNativeMissRef.current < 2) return
-
-              // 连续两次都找不到，才认为用户真的删干净了
-              liqNativeShapeIdsRef.current = []
-              liqNativeMissRef.current = 0
-              callbacksRef.current.onRemoveIndicator?.('liquidation-map')
-            } catch {
-              // ignore
+            if (pt.x < x1 || pt.x > x2 || pt.y < 0 || pt.y > y2) {
+              setLiqSelected(null)
+              return
             }
-          }, 900)
+
+            const p = adapter.getYToPrice(pt.y)
+            if (typeof p !== 'number' || !Number.isFinite(p)) return
+
+            const price = p
+
+            const s = liqSeriesRef.current
+            if (!s) return
+
+            const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
+            const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
+            const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
+            const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
+            const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
+            const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
+
+            setLiqSelected({
+              locked: false,
+              x: pt.x,
+              y: pt.y,
+              price,
+              bybit: Number(bybit.toFixed(2)),
+              okx: Number(okx.toFixed(2)),
+              binance: Number(binance.toFixed(2)),
+              dex: Number(dex.toFixed(2)),
+              cumLong: Number(cumLong.toFixed(2)),
+              cumShort: Number(cumShort.toFixed(2)),
+            })
+          }),
+        )
+
+        // === 鼠标 hover（无需点击）：在清算地图区域悬停直接展示 tooltip ===
+        // 说明：TradingView 的 crossHairMoved 在部分区域（尤其右侧价格轴附近/图形覆盖层）不会触发，
+        // 但你的交互期望是“鼠标放上去就出信息”。因此这里补一个 iframe 内的 pointermove。
+        let hoverMoveCleanup: null | (() => void) = null
+        try {
+          const iframe = containerEl.querySelector('iframe') as HTMLIFrameElement | null
+          const doc = iframe?.contentDocument
+          if (iframe && doc) {
+            const onMove = (ev: PointerEvent) => {
+              try {
+                if (!showLiqOverlayRef.current) return
+                // locked 状态由 click 控制：锁定时 hover 不更新（只更新 y 由 chartChange 处理）
+                if (liqLockedRef.current) return
+
+                const containerRect = containerEl.getBoundingClientRect()
+                const iframeRect = iframe.getBoundingClientRect()
+                const x = ev.clientX + iframeRect.left - containerRect.left
+                const y = ev.clientY + iframeRect.top - containerRect.top
+
+                const containerW = containerEl.clientWidth
+                const containerH = containerEl.clientHeight
+                const rightScaleW = 72
+                const overlayW = 260
+                const bottomPad = 24
+                const paneH = mainPaneHeightRef.current ?? containerH - bottomPad
+                const x1 = containerW - rightScaleW - overlayW
+                const x2 = containerW - rightScaleW
+                const y2 = paneH
+
+                // 不在清算地图区域：清掉 hover tooltip
+                if (x < x1 || x > x2 || y < 0 || y > y2) {
+                  if (!liqLockedRef.current) setLiqSelected(null)
+                  removeLiqHoverLine()
+                  return
+                }
+
+                const p = adapter.getYToPrice(y)
+                if (typeof p !== 'number' || !Number.isFinite(p)) return
+                const price = p
+                upsertLiqHoverLine(price)
+
+                const s = liqSeriesRef.current
+                if (!s) return
+
+                const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
+                const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
+                const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
+                const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
+                const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
+                const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
+
+                setLiqSelected({
+                  locked: false,
+                  x,
+                  y,
+                  price,
+                  bybit: Number(bybit.toFixed(2)),
+                  okx: Number(okx.toFixed(2)),
+                  binance: Number(binance.toFixed(2)),
+                  dex: Number(dex.toFixed(2)),
+                  cumLong: Number(cumLong.toFixed(2)),
+                  cumShort: Number(cumShort.toFixed(2)),
+                })
+              } catch {
+                // ignore
+              }
+            }
+
+            doc.addEventListener('pointermove', onMove, { capture: true })
+            hoverMoveCleanup = () => {
+              try {
+                doc.removeEventListener('pointermove', onMove as any, { capture: true } as any)
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch {
+          // ignore
         }
 
-        const computeAndSet = () => {
-          const symUpper = String(symbol || 'BTCUSDT').toUpperCase()
-          let base = symUpper
-          for (const q of ['USDT', 'USD', 'PERP', 'SWAP']) {
-            if (base.endsWith(q)) base = base.slice(0, -q.length)
-          }
-          base = base || symUpper.slice(0, 3) || 'BTC'
+        const unsubClick = adapter.subscribeClick(
+          safe((param: any) => {
+            if (!showLiqOverlayRef.current) return
+            const pt = param?.point
+            if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
 
-          const mid = getVisibleRangeMidPrice() ?? 0
-          const fallbackAnchor = liquidationSymbolPrices[base] ?? 100
-          const anchor = mid > 0 ? mid : fallbackAnchor
-          liqCurrentPriceRef.current = anchor
-          const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
-          setLiqData(d)
-          // 同步绘制 native rectangles（如果支持）
+            const containerW = containerEl.clientWidth
+            const containerH = containerEl.clientHeight
+            const rightScaleW = 72
+            const overlayW = 260
+            const bottomPad = 24
+            const paneH = mainPaneHeightRef.current ?? containerH - bottomPad
+            const x1 = containerW - rightScaleW - overlayW
+            const x2 = containerW - rightScaleW
+            const y2 = paneH
+            const inOverlay = pt.x >= x1 && pt.x <= x2 && pt.y >= 0 && pt.y <= y2
+
+            if (!inOverlay) {
+              if (liqLockedRef.current) {
+                liqLockedRef.current = false
+                liqLockedPriceRef.current = null
+                setLiqSelected(null)
+                refreshOverlay()
+              }
+              return
+            }
+
+            // Toggle lock
+            if (liqLockedRef.current) {
+              liqLockedRef.current = false
+              liqLockedPriceRef.current = null
+              setLiqSelected(null)
+              refreshOverlay()
+              return
+            }
+
+            const p = adapter.getYToPrice(pt.y)
+            if (typeof p !== 'number' || !Number.isFinite(p)) return
+            const price = p
+
+            const s = liqSeriesRef.current
+            if (!s) return
+
+            const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
+            const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
+            const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
+            const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
+            const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
+            const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
+
+            liqLockedRef.current = true
+            liqLockedPriceRef.current = price
+            setLiqSelected({
+              locked: true,
+              x: pt.x,
+              y: pt.y,
+              price,
+              bybit: Number(bybit.toFixed(2)),
+              okx: Number(okx.toFixed(2)),
+              binance: Number(binance.toFixed(2)),
+              dex: Number(dex.toFixed(2)),
+              cumLong: Number(cumLong.toFixed(2)),
+              cumShort: Number(cumShort.toFixed(2)),
+            })
+            refreshOverlay()
+          }),
+        )
+
+        cleanup = () => {
+          unsubChart()
+          unsubCrosshair()
+          unsubClick()
+          hoverMoveCleanup?.()
+          hoverMoveCleanup = null
+          chartAdapterRef.current = null
+          if (paneSizeTimer) clearInterval(paneSizeTimer)
+          if (drawingsGcTimer) clearInterval(drawingsGcTimer)
+          if (drawingsSyncTimer) clearTimeout(drawingsSyncTimer)
+          if (legendStudyTimer) clearInterval(legendStudyTimer)
+          // legend ui handler 清理
           try {
-            if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
+            _legendUiCleanupRef.current?.()
           } catch {
             // ignore
           }
+          // 不要在 cleanup 强制 removeAllLiqDrawings()：
+          // - showLiqOverlay=false 分支会主动清理
+          // - rebuild widget/unmount 时，widget.remove() 会清理所有实体
         }
+      } catch (e) {
+        console.warn('[liq-overlay] setup failed', e)
+      }
 
-        // dataReady 后再取可视价格区间，避免刚初始化时拿不到 range 导致 overlay 锚点跑飞
-        try {
-          if (chart?.dataReady) chart.dataReady(() => computeAndSet())
-          else computeAndSet()
-        } catch {
-          computeAndSet()
+      return () => {
+        cleanup?.()
+        cleanup = null
+      }
+    }, [isReady, isChartReady, showLiqOverlay, symbol])
+
+    useEffect(() => {
+      if (!liqData) {
+        liqSeriesRef.current = null
+        return
+      }
+      const xs = liqData.labels.map(parsePriceLabel)
+      if (xs.every(n => typeof n === 'number' && Number.isFinite(n))) {
+        liqSeriesRef.current = {
+          xs: xs as number[],
+          bybit: liqData.bybit,
+          okx: liqData.okx,
+          binance: liqData.binance,
+          dex: liqData.dex,
+          cumLong: liqData.cumulativeLong.map(v => (typeof v === 'number' ? v : 0)),
+          cumShort: liqData.cumulativeShort.map(v => (typeof v === 'number' ? v : 0)),
         }
       } else {
-        // overlay 关闭：移除 legend 占位 study（避免残留 legend 条目），但不要触发 onRemoveIndicator
-        const sid = liqLegendStudyIdRef.current
-        if (sid) {
-          try {
-            liqLegendStudyRemovingRef.current = true
-            chart?.removeEntity?.(sid)
-          } catch {
-            // ignore
-          } finally {
-            liqLegendStudyRemovingRef.current = false
-            liqLegendStudyIdRef.current = null
-            liqLegendStudySeenRef.current = false
-            liqLegendStudyMissRef.current = 0
-          }
-        }
-
-        removeAllLiqDrawings()
-        removeLiqHoverLine()
-        setLiqHidden(false)
-
-        setLiqData(null)
-        setLiqSelected(null)
-        liqLockedRef.current = false
-        liqLockedPriceRef.current = null
+        liqSeriesRef.current = null
       }
+    }, [liqData])
 
-      const unsubChart = adapter.subscribeChartChange(
-        safe(() => {
-          refreshOverlay()
-          computeMainPaneHeight()
-          // K 线缩放/平移时，重新把“右侧矩形条”贴到最新可视右边界
-          scheduleDrawingsSync()
-          if (liqLockedRef.current && liqLockedPriceRef.current != null) {
-            const y = adapter.getPriceToY(liqLockedPriceRef.current)
-            if (typeof y === 'number' && Number.isFinite(y)) setLiqSelected((prev) => (prev ? { ...prev, y } : prev))
-          }
-        }),
-      )
+    return (
+      <div className="relative h-full w-full">
+        <div ref={containerRef} id={containerId} className="h-full w-full" />
 
-      const unsubCrosshair = adapter.subscribeCrosshairMove(
-        safe((param: any) => {
-          if (!showLiqOverlayRef.current) return
-          try {
-            const pt = param?.point
-            const price = param?.price
-            ;(window as any).__liqLastCrosshair = { ts: Date.now(), price: typeof price === 'number' ? price : null, y: typeof pt?.y === 'number' ? pt.y : null }
-          } catch {}
-
-      // ✅ 兜底：如果初次开启时拿不到可视价格区间（anchor 可能是 100），
-      // 那就用第一次十字线回传的 price 作为锚点重建清算地图数据，确保能“立刻看到效果”。
-      if ((!liqDataRef.current || liqCurrentPriceRef.current <= 0) && typeof param?.price === 'number' && Number.isFinite(param.price)) {
-        const anchor = param.price
-        liqCurrentPriceRef.current = anchor
-        const symUpper = String(symbol || 'BTCUSDT').toUpperCase()
-        let base = symUpper
-        for (const q of ['USDT', 'USD', 'PERP', 'SWAP']) {
-          if (base.endsWith(q)) base = base.slice(0, -q.length)
-        }
-        base = base || symUpper.slice(0, 3) || 'BTC'
-        const d = generateLiquidationMapMockData(base, '1d', 'All', anchor, 200)
-        setLiqData(d)
-        try {
-          if (typeof chart?.createMultipointShape === 'function') buildAndDrawLiqMap(d)
-        } catch {
-          // ignore
-        }
-      }
-
-      const pt = param?.point
-      if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
-
-      const containerW = containerEl.clientWidth
-      const containerH = containerEl.clientHeight
-      const rightScaleW = 72
-      const overlayW = 260
-      const bottomPad = 24
-      const paneH = mainPaneHeightRef.current ?? (containerH - bottomPad)
-      const x1 = containerW - rightScaleW - overlayW
-      const x2 = containerW - rightScaleW
-      const y2 = paneH
-
-      if (liqLockedRef.current) {
-        const lockedPrice = liqLockedPriceRef.current
-        if (lockedPrice == null) return
-        const y = adapter.getPriceToY(lockedPrice)
-        if (typeof y === 'number' && Number.isFinite(y)) setLiqSelected((prev) => (prev ? { ...prev, y } : prev))
-        return
-      }
-
-      if (pt.x < x1 || pt.x > x2 || pt.y < 0 || pt.y > y2) {
-        setLiqSelected(null)
-        return
-      }
-
-      const p = adapter.getYToPrice(pt.y)
-      if (typeof p !== 'number' || !Number.isFinite(p)) return
-
-      const price = p
-
-      const s = liqSeriesRef.current
-      if (!s) return
-
-      const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
-      const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
-      const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
-      const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
-      const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
-      const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
-
-      setLiqSelected({
-        locked: false,
-        x: pt.x,
-        y: pt.y,
-        price,
-        bybit: Number(bybit.toFixed(2)),
-        okx: Number(okx.toFixed(2)),
-        binance: Number(binance.toFixed(2)),
-        dex: Number(dex.toFixed(2)),
-        cumLong: Number(cumLong.toFixed(2)),
-        cumShort: Number(cumShort.toFixed(2)),
-      })
-        }),
-      )
-
-      // === 鼠标 hover（无需点击）：在清算地图区域悬停直接展示 tooltip ===
-      // 说明：TradingView 的 crossHairMoved 在部分区域（尤其右侧价格轴附近/图形覆盖层）不会触发，
-      // 但你的交互期望是“鼠标放上去就出信息”。因此这里补一个 iframe 内的 pointermove。
-      let hoverMoveCleanup: null | (() => void) = null
-      try {
-        const iframe = containerEl.querySelector('iframe') as HTMLIFrameElement | null
-        const doc = iframe?.contentDocument
-        if (iframe && doc) {
-          const onMove = (ev: PointerEvent) => {
-            try {
-              if (!showLiqOverlayRef.current) return
-              // locked 状态由 click 控制：锁定时 hover 不更新（只更新 y 由 chartChange 处理）
-              if (liqLockedRef.current) return
-
-              const containerRect = containerEl.getBoundingClientRect()
-              const iframeRect = iframe.getBoundingClientRect()
-              const x = ev.clientX + iframeRect.left - containerRect.left
-              const y = ev.clientY + iframeRect.top - containerRect.top
-
-              const containerW = containerEl.clientWidth
-              const containerH = containerEl.clientHeight
-              const rightScaleW = 72
-              const overlayW = 260
-              const bottomPad = 24
-              const paneH = mainPaneHeightRef.current ?? (containerH - bottomPad)
-              const x1 = containerW - rightScaleW - overlayW
-              const x2 = containerW - rightScaleW
-              const y2 = paneH
-
-              // 不在清算地图区域：清掉 hover tooltip
-              if (x < x1 || x > x2 || y < 0 || y > y2) {
-                if (!liqLockedRef.current) setLiqSelected(null)
-                removeLiqHoverLine()
-                return
-              }
-
-              const p = adapter.getYToPrice(y)
-              if (typeof p !== 'number' || !Number.isFinite(p)) return
-              const price = p
-              upsertLiqHoverLine(price)
-
-              const s = liqSeriesRef.current
-              if (!s) return
-
-              const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
-              const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
-              const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
-              const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
-              const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
-              const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
-
-              setLiqSelected({
-                locked: false,
-                x,
-                y,
-                price,
-                bybit: Number(bybit.toFixed(2)),
-                okx: Number(okx.toFixed(2)),
-                binance: Number(binance.toFixed(2)),
-                dex: Number(dex.toFixed(2)),
-                cumLong: Number(cumLong.toFixed(2)),
-                cumShort: Number(cumShort.toFixed(2)),
-              })
-            } catch {
-              // ignore
-            }
-          }
-
-          doc.addEventListener('pointermove', onMove, { capture: true })
-          hoverMoveCleanup = () => {
-            try {
-              doc.removeEventListener('pointermove', onMove as any, { capture: true } as any)
-            } catch {
-              // ignore
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      const unsubClick = adapter.subscribeClick(
-        safe((param: any) => {
-          if (!showLiqOverlayRef.current) return
-          const pt = param?.point
-          if (!pt || typeof pt.x !== 'number' || typeof pt.y !== 'number') return
-
-      const containerW = containerEl.clientWidth
-      const containerH = containerEl.clientHeight
-      const rightScaleW = 72
-      const overlayW = 260
-      const bottomPad = 24
-      const paneH = mainPaneHeightRef.current ?? (containerH - bottomPad)
-      const x1 = containerW - rightScaleW - overlayW
-      const x2 = containerW - rightScaleW
-      const y2 = paneH
-      const inOverlay = pt.x >= x1 && pt.x <= x2 && pt.y >= 0 && pt.y <= y2
-
-      if (!inOverlay) {
-        if (liqLockedRef.current) {
-          liqLockedRef.current = false
-          liqLockedPriceRef.current = null
-          setLiqSelected(null)
-          refreshOverlay()
-        }
-        return
-      }
-
-      // Toggle lock
-      if (liqLockedRef.current) {
-        liqLockedRef.current = false
-        liqLockedPriceRef.current = null
-        setLiqSelected(null)
-        refreshOverlay()
-        return
-      }
-
-      const p = adapter.getYToPrice(pt.y)
-      if (typeof p !== 'number' || !Number.isFinite(p)) return
-      const price = p
-
-      const s = liqSeriesRef.current
-      if (!s) return
-
-      const bybit = Math.max(0, interpolateByPrice(s.xs, s.bybit, price))
-      const okx = Math.max(0, interpolateByPrice(s.xs, s.okx, price))
-      const binance = Math.max(0, interpolateByPrice(s.xs, s.binance, price))
-      const dex = Math.max(0, interpolateByPrice(s.xs, s.dex, price))
-      const cumLong = Math.max(0, interpolateByPrice(s.xs, s.cumLong, price))
-      const cumShort = Math.max(0, interpolateByPrice(s.xs, s.cumShort, price))
-
-      liqLockedRef.current = true
-      liqLockedPriceRef.current = price
-      setLiqSelected({
-        locked: true,
-        x: pt.x,
-        y: pt.y,
-        price,
-        bybit: Number(bybit.toFixed(2)),
-        okx: Number(okx.toFixed(2)),
-        binance: Number(binance.toFixed(2)),
-        dex: Number(dex.toFixed(2)),
-        cumLong: Number(cumLong.toFixed(2)),
-        cumShort: Number(cumShort.toFixed(2)),
-      })
-      refreshOverlay()
-        }),
-      )
-
-      cleanup = () => {
-        unsubChart()
-        unsubCrosshair()
-        unsubClick()
-        hoverMoveCleanup?.()
-        hoverMoveCleanup = null
-        chartAdapterRef.current = null
-        if (paneSizeTimer) clearInterval(paneSizeTimer)
-        if (drawingsGcTimer) clearInterval(drawingsGcTimer)
-        if (drawingsSyncTimer) clearTimeout(drawingsSyncTimer)
-        if (legendStudyTimer) clearInterval(legendStudyTimer)
-        // legend ui handler 清理
-        try {
-          _legendUiCleanup?.()
-        } catch {
-          // ignore
-        }
-        // 不要在 cleanup 强制 removeAllLiqDrawings()：
-        // - showLiqOverlay=false 分支会主动清理
-        // - rebuild widget/unmount 时，widget.remove() 会清理所有实体
-      }
-    } catch (e) {
-      console.warn('[liq-overlay] setup failed', e)
-    }
-
-    return () => {
-      cleanup?.()
-      cleanup = null
-    }
-  }, [isReady, isChartReady, showLiqOverlay, symbol])
-
-  useEffect(() => {
-    if (!liqData) {
-      liqSeriesRef.current = null
-      return
-    }
-    const xs = liqData.labels.map(parsePriceLabel)
-    if (xs.every((n) => typeof n === 'number' && Number.isFinite(n))) {
-      liqSeriesRef.current = {
-        xs: xs as number[],
-        bybit: liqData.bybit,
-        okx: liqData.okx,
-        binance: liqData.binance,
-        dex: liqData.dex,
-        cumLong: liqData.cumulativeLong.map((v) => (typeof v === 'number' ? v : 0)),
-        cumShort: liqData.cumulativeShort.map((v) => (typeof v === 'number' ? v : 0)),
-      }
-    } else {
-      liqSeriesRef.current = null
-    }
-  }, [liqData])
-
-
-  return (
-    <div className="relative h-full w-full">
-      <div ref={containerRef} id={containerId} className="h-full w-full" />
-
-      {/* 清算地图 overlay（右侧堆叠条/累积曲线，对齐价格轴） */}
-      {/* Fallback：
+        {/* 清算地图 overlay（右侧堆叠条/累积曲线，对齐价格轴） */}
+        {/* Fallback：
           - build 不支持 native drawings：走 ECharts overlay
           - build 支持但没成功画出任何矩形：也走 overlay，避免“空白不显示” */}
-      {showLiqOverlay && !liqHidden && liqData && (!liqNativeSupported || !liqNativeActive) && (
-        <div
-          className="pointer-events-none absolute z-[100]"
-          style={{
-            top: 0,
-            right: 72,
-            width: 260,
-            height: typeof mainPaneHeight === 'number' && Number.isFinite(mainPaneHeight) && mainPaneHeight > 0 ? mainPaneHeight : undefined,
-            bottom: typeof mainPaneHeight === 'number' && Number.isFinite(mainPaneHeight) && mainPaneHeight > 0 ? undefined : 24,
-            opacity: 0.85,
-          }}
-        >
-          <LiquidationMapChart
-            ref={overlayRef as any}
-            mode="overlay"
-            data={liqData}
-            currentPrice={liqCurrentPriceRef.current || 0}
-            overlayWidth={260}
-            overlayOpacity={0.85}
-            selectedPrice={liqSelected?.price ?? null}
-            getPriceToY={(p) => {
-              try {
-                return chartAdapterRef.current?.getPriceToY(p) ?? null
-              } catch {
-                return null
-              }
+        {showLiqOverlay && !liqHidden && liqData && (!liqNativeSupported || !liqNativeActive) && (
+          <div
+            className="pointer-events-none absolute z-[100]"
+            style={{
+              top: 0,
+              right: 72,
+              width: 260,
+              height:
+                typeof mainPaneHeight === 'number' &&
+                Number.isFinite(mainPaneHeight) &&
+                mainPaneHeight > 0
+                  ? mainPaneHeight
+                  : undefined,
+              bottom:
+                typeof mainPaneHeight === 'number' &&
+                Number.isFinite(mainPaneHeight) &&
+                mainPaneHeight > 0
+                  ? undefined
+                  : 24,
+              opacity: 0.85,
             }}
-          />
-        </div>
-      )}
+          >
+            <LiquidationMapChart
+              ref={overlayRef as any}
+              mode="overlay"
+              data={liqData}
+              currentPrice={liqCurrentPriceRef.current || 0}
+              overlayWidth={260}
+              overlayOpacity={0.85}
+              selectedPrice={liqSelected?.price ?? null}
+              getPriceToY={p => {
+                try {
+                  return chartAdapterRef.current?.getPriceToY(p) ?? null
+                } catch {
+                  return null
+                }
+              }}
+            />
+          </div>
+        )}
 
-      {/* 清算地图 tooltip（hover/click lock） */}
-      {showLiqOverlay && !liqHidden && liqSelected && (
-        <div
-          className="pointer-events-none absolute z-[101] w-[260px]"
-          style={{
-            right: 80,
-            top: clamp(
-              liqSelected.y - 64,
-              8,
-              (typeof mainPaneHeight === 'number' && Number.isFinite(mainPaneHeight) && mainPaneHeight > 0
-                ? mainPaneHeight
-                : (document.getElementById(containerId)?.clientHeight ?? 520)) - 170,
-            ),
-          }}
-        >
-          <div className="bg-[color:var(--cf-bg)]/85 border border-[color:var(--cf-border)] rounded-lg px-3 py-2 text-xs text-[color:var(--cf-text)] backdrop-blur">
-            <div className="flex items-center justify-between">
-              <div className="font-bold">{t('chart.indicators.price')}: {liqSelected.price.toFixed(liqSelected.price >= 100 ? 2 : 4)}</div>
-              {liqSelected.locked && <div className="text-[10px] text-[color:var(--cf-text-muted)]">{t('chart.indicators.locked')}</div>}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#36b8c9' }} />
-                  <span>Bybit</span>
+        {/* 清算地图 tooltip（hover/click lock） */}
+        {showLiqOverlay && !liqHidden && liqSelected && (
+          <div
+            className="pointer-events-none absolute z-[101] w-[260px]"
+            style={{
+              right: 80,
+              top: clamp(
+                liqSelected.y - 64,
+                8,
+                (typeof mainPaneHeight === 'number' &&
+                Number.isFinite(mainPaneHeight) &&
+                mainPaneHeight > 0
+                  ? mainPaneHeight
+                  : (document.getElementById(containerId)?.clientHeight ?? 520)) - 170,
+              ),
+            }}
+          >
+            <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/85 px-3 py-2 text-xs text-[color:var(--cf-text)] backdrop-blur">
+              <div className="flex items-center justify-between">
+                <div className="font-bold">
+                  {t('chart.indicators.price')}:{' '}
+                  {liqSelected.price.toFixed(liqSelected.price >= 100 ? 2 : 4)}
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.bybit)}</span>
+                {liqSelected.locked && (
+                  <div className="text-[10px] text-[color:var(--cf-text-muted)]">
+                    {t('chart.indicators.locked')}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f7d05e' }} />
-                  <span>OKX</span>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#36b8c9' }}
+                    />
+                    <span>Bybit</span>
+                  </div>
+                  <span className="font-bold">
+                    {formatUsdCompactFromMillions(liqSelected.bybit)}
+                  </span>
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.okx)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#f08024' }} />
-                  <span>Binance</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#f7d05e' }}
+                    />
+                    <span>OKX</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.okx)}</span>
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.binance)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#bf5af2' }} />
-                  <span>DEX</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#f08024' }}
+                    />
+                    <span>Binance</span>
+                  </div>
+                  <span className="font-bold">
+                    {formatUsdCompactFromMillions(liqSelected.binance)}
+                  </span>
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.dex)}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#bf5af2' }}
+                    />
+                    <span>DEX</span>
+                  </div>
+                  <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.dex)}</span>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-2 border-t border-[color:var(--cf-border)] pt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
-                  <span>{t('chart.indicators.cumulativeLong')}</span>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-[color:var(--cf-border)] pt-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#ef4444' }}
+                    />
+                    <span>{t('chart.indicators.cumulativeLong')}</span>
+                  </div>
+                  <span className="font-bold">
+                    {formatUsdCompactFromMillions(liqSelected.cumLong)}
+                  </span>
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.cumLong)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#22c55e' }} />
-                  <span>{t('chart.indicators.cumulativeShort')}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-2 w-2 rounded-sm"
+                      style={{ backgroundColor: '#22c55e' }}
+                    />
+                    <span>{t('chart.indicators.cumulativeShort')}</span>
+                  </div>
+                  <span className="font-bold">
+                    {formatUsdCompactFromMillions(liqSelected.cumShort)}
+                  </span>
                 </div>
-                <span className="font-bold">{formatUsdCompactFromMillions(liqSelected.cumShort)}</span>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {!isReady && !error && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          Loading chart...
-        </div>
-      )}
+        {!isReady && !error && (
+          <div className="text-muted-foreground absolute inset-0 flex items-center justify-center text-sm">
+            Loading chart...
+          </div>
+        )}
 
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center px-4 text-sm text-red-500">
-          {error}
-        </div>
-      )}
-    </div>
-  )
-})
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-sm text-red-500">
+            {error}
+          </div>
+        )}
+      </div>
+    )
+  },
+)

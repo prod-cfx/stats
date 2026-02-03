@@ -724,6 +724,8 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         params,
       }
 
+      let scheduleNext: () => void
+
       const runOrderbookBroadcast = async (): Promise<void> => {
         if (subscriptionInfo.isRunning) {
           return
@@ -768,9 +770,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
-      const scheduleNext = () => {
+      const runOrderbookBroadcastBound = runOrderbookBroadcast.bind(this)
+
+      scheduleNext = (): void => {
         subscriptionInfo.timer = setTimeout(async () => {
-          await runOrderbookBroadcast()
+          await runOrderbookBroadcastBound()
         }, 1000) // 1 秒推送一次
       }
 
@@ -778,7 +782,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
       subInfo = subscriptionInfo
 
       // 立即推送一次，完成后再启动轮询，避免并发重叠
-      await runOrderbookBroadcast()
+      await runOrderbookBroadcastBound()
       scheduleNext()
 
       this.logger.log({

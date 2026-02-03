@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import type { DataSource, MarketType } from '@/types/trading';
-import { useSearchParams } from 'next/navigation';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Footer } from '@/components/layout/Footer';
-import { Navbar } from '@/components/layout/Navbar';
-import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel';
-import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel';
-import { TopBar } from '@/components/trading/TopBar/TopBar';
+import type { DataSource, MarketType } from '@/types/trading'
+import { useSearchParams } from 'next/navigation'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
+import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel'
+import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
+import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel'
+import { RightPanel } from '@/components/trading/RightPanel/RightPanel'
+import { TopBar } from '@/components/trading/TopBar/TopBar'
 
 function normalizeSymbol(raw: string | null): string | null {
   if (!raw) return null
@@ -24,18 +24,19 @@ function normalizeSymbol(raw: string | null): string | null {
 
 export default function TradingPageClient() {
   const searchParams = useSearchParams()
-  const [isAggregated, setIsAggregated] = useState(true);
-  const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance');
-  const [marketType, setMarketType] = useState<MarketType>('futures');
-  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT');
+  const [isAggregated, setIsAggregated] = useState(true)
+  const [selectedExchange, setSelectedExchange] = useState<DataSource>('binance')
+  const [marketType, setMarketType] = useState<MarketType>('futures')
+  const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
 
   const initializedRef = useRef(false)
 
   const initialFromUrl = useMemo(() => {
-    const symbol = normalizeSymbol(searchParams.get('symbol'))
-    const mt = searchParams.get('marketType')
-    const marketTypeParam: MarketType | null = mt === 'spot' || mt === 'futures' ? (mt as MarketType) : null
-    const agg = searchParams.get('agg')
+    const symbol = normalizeSymbol(searchParams?.get('symbol') ?? null)
+    const mt = searchParams?.get('marketType')
+    const marketTypeParam: MarketType | null =
+      mt === 'spot' || mt === 'futures' ? (mt as MarketType) : null
+    const agg = searchParams?.get('agg')
     const isAggParam = agg === '1' ? true : agg === '0' ? false : null
     return { symbol, marketType: marketTypeParam, isAggregated: isAggParam }
   }, [searchParams])
@@ -51,11 +52,12 @@ export default function TradingPageClient() {
       const lsAgg = localStorage.getItem('trade.isAggregated')
 
       const symbol = initialFromUrl.symbol ?? lsSymbol ?? 'BTCUSDT'
-      const mt = initialFromUrl.marketType ?? (lsMarketType === 'spot' || lsMarketType === 'futures' ? lsMarketType : null) ?? 'futures'
+      const mt =
+        initialFromUrl.marketType ??
+        (lsMarketType === 'spot' || lsMarketType === 'futures' ? lsMarketType : null) ??
+        'futures'
       const agg =
-        initialFromUrl.isAggregated ??
-        (lsAgg === '0' ? false : lsAgg === '1' ? true : null) ??
-        true
+        initialFromUrl.isAggregated ?? (lsAgg === '0' ? false : lsAgg === '1' ? true : null) ?? true
 
       /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect -- one-time hydration */
       setSelectedSymbol(symbol)
@@ -70,6 +72,7 @@ export default function TradingPageClient() {
   // If user navigates to the same page with different query params (e.g. via global search),
   // update state accordingly. Only apply when URL actually provides overrides.
   useEffect(() => {
+    if (!searchParams) return
     const hasOverrides =
       searchParams.has('symbol') || searchParams.has('marketType') || searchParams.has('agg')
     if (!hasOverrides) return
@@ -103,12 +106,12 @@ export default function TradingPageClient() {
   }, [isAggregated, marketType, selectedSymbol])
 
   return (
-    <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] overflow-hidden">
+    <div className="flex min-h-screen flex-col overflow-hidden bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <div className="flex-none">
         <Navbar />
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Top Bar fixed below Navbar */}
         <div className="flex-none">
           <TopBar
@@ -121,10 +124,10 @@ export default function TradingPageClient() {
           />
         </div>
 
-        <div className="flex-1 flex overflow-hidden p-4 md:p-8">
-          <div className="w-full max-w-[1440px] mx-auto flex overflow-hidden gap-4">
+        <div className="flex flex-1 overflow-hidden p-4 md:p-8">
+          <div className="mx-auto flex w-full max-w-[1440px] gap-4 overflow-hidden">
             {/* Left Panel - Fixed Width */}
-            <div className="w-[280px] flex-none flex flex-col min-h-0">
+            <div className="flex min-h-0 w-[280px] flex-none flex-col">
               <LeftTradePanel
                 symbol={selectedSymbol}
                 isAggregated={isAggregated}
@@ -133,8 +136,8 @@ export default function TradingPageClient() {
             </div>
 
             {/* Center Content (Chart + Bottom Area) */}
-            <div className="flex-1 flex flex-col min-w-0">
-              <div className="flex-1 flex min-h-0">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1">
                 {/* Main Chart Section */}
                 <CenterChartPanel
                   isAggregated={isAggregated}
@@ -151,7 +154,7 @@ export default function TradingPageClient() {
             </div>
 
             {/* Right Panel - Fixed Width */}
-            <div className="w-[320px] flex-none flex flex-col min-h-0">
+            <div className="flex min-h-0 w-[320px] flex-none flex-col">
               <RightPanel
                 isAggregated={isAggregated}
                 selectedExchange={selectedExchange}
@@ -167,5 +170,5 @@ export default function TradingPageClient() {
         <Footer />
       </div>
     </div>
-  );
+  )
 }
