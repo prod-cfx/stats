@@ -13,23 +13,35 @@ function loadSharedEnvironment() {
   let loadEnvironmentFn
   if (existsSync(distEntry)) {
     ;({ loadEnvironment: loadEnvironmentFn } = require(distEntry))
-  }
-  else {
+  } else {
     require('ts-node/register/transpile-only')
     ;({ loadEnvironment: loadEnvironmentFn } = require(resolve(pkgDir, 'src/index.ts')))
   }
 
   const repoRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..')
   const previousCwd = process.cwd()
+
+  // Next.js 16+ uses Turbopack workers where process.chdir() is not supported
+  let cwdChanged = false
   if (previousCwd !== repoRoot) {
-    process.chdir(repoRoot)
+    try {
+      process.chdir(repoRoot)
+      cwdChanged = true
+    } catch {
+      // Ignore ERR_WORKER_UNSUPPORTED_OPERATION in Turbopack workers
+      // Environment will be loaded from the current working directory
+    }
   }
+
   try {
     loadEnvironmentFn()
-  }
-  finally {
-    if (process.cwd() !== previousCwd) {
-      process.chdir(previousCwd)
+  } finally {
+    if (cwdChanged) {
+      try {
+        process.chdir(previousCwd)
+      } catch {
+        // Ignore errors when restoring directory
+      }
     }
   }
 }
@@ -134,7 +146,10 @@ const nextConfig = {
     // Proxy API calls in dev to local backend (avoid CORS + 404 from Next).
     // When backend is not available or returns empty data, front-end components
     // should fall back to mock data in development.
-    const apiServer = (process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+    const apiServer = (process.env.NEXT_PUBLIC_API_SERVER_URL || 'http://localhost:3000').replace(
+      /\/$/,
+      '',
+    )
     return [
       {
         source: '/api/v1/:path*',
