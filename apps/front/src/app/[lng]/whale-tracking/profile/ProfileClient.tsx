@@ -99,6 +99,7 @@ export function ProfileClient({ address }: { address: string }) {
               {/* Bottom Section: Tabs and Tables */}
               {positionsData && ordersData && (
                 <ProfileDataTabs
+                  address={address}
                   spotPositions={positionsData.spot}
                   perpPositions={positionsData.perp}
                   openOrders={ordersData.orders}

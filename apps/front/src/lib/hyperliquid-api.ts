@@ -200,6 +200,44 @@ interface HyperliquidUserFill {
 }
 
 /**
+ * Hyperliquid 历史委托（订单）条目
+ *
+ * Docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#retrieve-a-users-historical-orders
+ */
+export interface HyperliquidHistoricalOrder {
+  coin: string
+  side: 'A' | 'B'
+  limitPx: string
+  sz: string
+  oid: number
+  timestamp: number
+  triggerCondition?: string
+  isTrigger?: boolean
+  triggerPx?: string
+  children?: unknown[]
+  isPositionTpsl?: boolean
+  reduceOnly?: boolean
+  orderType?: string
+  origSz?: string
+  tif?: string
+  cloid?: string | null
+}
+
+export type HyperliquidHistoricalOrderStatus =
+  | 'open'
+  | 'filled'
+  | 'canceled'
+  | 'triggered'
+  | 'rejected'
+  | 'marginCanceled'
+
+export interface HyperliquidHistoricalOrderEntry {
+  order: HyperliquidHistoricalOrder
+  status: HyperliquidHistoricalOrderStatus
+  statusTimestamp: number
+}
+
+/**
  * Hyperliquid 投资组合时间序列数据点
  */
 type PortfolioDataPoint = [number, string] // [timestamp_ms, value]
@@ -365,8 +403,8 @@ const MAX_RETRIES = 3
  * 发送 POST 请求到 Hyperliquid API
  *
  * @param request - API 请求参数
- * @param request.type - Hyperliquid info type
- * @param request.user - 用户地址（可选）
+ * @param request.type - info endpoint 的请求类型
+ * @param request.user - 用户地址（可选，依赖 type）
  * @returns API 响应数据
  * @throws ApiError 当请求失败时
  */
@@ -1043,6 +1081,36 @@ export async function fetchUserFillsFromHyperliquid(
     return { fills }
   } catch (error) {
     logError('FETCH_USER_FILLS_FROM_HYPERLIQUID', error, { address, ...options })
+    throw error
+  }
+}
+
+export interface HyperliquidHistoricalOrdersResponse {
+  orders: HyperliquidHistoricalOrderEntry[]
+}
+
+/**
+ * 从 Hyperliquid 获取用户历史委托（订单）
+ *
+ * 注意：官方 API 当前返回“最多 2000 条最近历史委托”，无 cursor/limit 参数。
+ * UI 侧的“无限滚动”需要采用“单次拉取 + 渐进渲染”的方式实现。
+ */
+export async function fetchTraderHistoricalOrdersFromHyperliquid(
+  address: string,
+): Promise<HyperliquidHistoricalOrdersResponse> {
+  if (!isValidEthereumAddress(address)) {
+    throw new ApiError('Invalid Ethereum address format', 'INVALID_ADDRESS', 400)
+  }
+
+  try {
+    const orders = await postHyperliquidInfo<HyperliquidHistoricalOrderEntry[]>({
+      type: 'historicalOrders',
+      user: address,
+    })
+
+    return { orders }
+  } catch (error) {
+    logError('FETCH_TRADER_HISTORICAL_ORDERS_FROM_HYPERLIQUID', error, { address })
     throw error
   }
 }

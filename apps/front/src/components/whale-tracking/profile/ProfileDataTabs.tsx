@@ -1,10 +1,14 @@
 'use client'
 
 import { ArrowUpDown, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { fetchUserFillsFromHyperliquid } from '@/lib/hyperliquid-api'
+import {
+  fetchTraderHistoricalOrdersFromHyperliquid,
+  fetchUserFillsFromHyperliquid,
+  type HyperliquidHistoricalOrderEntry,
+} from '@/lib/hyperliquid-api'
 
 type AnyComponent = React.ComponentType<Record<string, unknown>>
 
@@ -63,6 +67,8 @@ interface ProfileDataTabsProps {
   perpPositions: PerpPositionDto[]
   openOrders: OpenOrderDto[]
   traderAddress: string
+  // Back-compat: caller still passes `address`.
+  address?: string
 }
 
 // 前端显示类型
@@ -174,6 +180,55 @@ export const ProfileDataTabs = ({
   traderAddress,
 }: ProfileDataTabsProps) => {
   const { t } = useTranslation()
+
+  const walletAddress = traderAddress
+
+  const HISTORY_RENDER_STEP = 50
+  const HISTORY_MIN_REFETCH_MS = 10_000
+
+  const mapHistoricalOrdersToHistoryOrders = (
+    entries: HyperliquidHistoricalOrderEntry[],
+  ): HistoryOrder[] => {
+    const formatDateLabel = (timestampMs: number) => {
+      return new Date(timestampMs).toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    }
+
+    const formatUsdFromString = (value: string) => {
+      const n = Number.parseFloat(value)
+      if (!Number.isFinite(n)) return '$ 0.00'
+      return `$ ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+    }
+
+    const normalizeOrderType = (raw: string | undefined) => {
+      const v = (raw ?? '').trim().toLowerCase()
+      if (v.includes('market')) return 'market'
+      // hyperliquid 可能出现: limit / post_only / ioc / fok / stop_limit 等
+      return 'limit'
+    }
+
+    return entries.map(entry => {
+      const order = entry.order
+      const isBuy = order.side === 'A'
+      const status = entry.status === 'canceled' ? 'cancelled' : entry.status
+      const trigger = order.isTrigger ? formatUsdFromString(order.triggerPx ?? '0') : '-'
+
+      return {
+        time: formatDateLabel(order.timestamp),
+        asset: order.coin,
+        type: normalizeOrderType(order.orderType),
+        side: isBuy ? 'Buy' : 'Sell',
+        amount: `${order.origSz ?? order.sz} ${order.coin}`,
+        price: formatUsdFromString(order.limitPx),
+        trigger,
+        status,
+        id: `# ${order.oid}`,
+      }
+    })
+  }
 
   // 数据转换函数
   const convertSpotToDisplay = (spots: SpotBalanceDto[]): SpotPosition[] => {
@@ -336,6 +391,42 @@ export const ProfileDataTabs = ({
   const [isFilterOpen, setIsAssetFilterOpen] = useState(false)
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(() => new Set())
 
+  const [historyOrdersAll, setHistoryOrdersAll] = useState<HistoryOrder[] | null>(null)
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(HISTORY_RENDER_STEP)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<Error | null>(null)
+  const lastHistoryFetchAtRef = useRef<number>(0)
+  const historySentinelRef = useRef<HTMLDivElement | null>(null)
+
+  const loadHistoryOrders = useCallback(async () => {
+    if (isHistoryLoading) return
+
+    const now = Date.now()
+    if (historyOrdersAll && now - lastHistoryFetchAtRef.current < HISTORY_MIN_REFETCH_MS) return
+
+    setIsHistoryLoading(true)
+    setHistoryError(null)
+
+    try {
+      const res = await fetchTraderHistoricalOrdersFromHyperliquid(walletAddress)
+      const mapped = mapHistoricalOrdersToHistoryOrders(res.orders)
+      setHistoryOrdersAll(mapped)
+      setHistoryVisibleCount(HISTORY_RENDER_STEP)
+      lastHistoryFetchAtRef.current = now
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error('Failed to load history orders')
+      setHistoryError(e)
+      setHistoryOrdersAll([])
+    } finally {
+      setIsHistoryLoading(false)
+    }
+  }, [walletAddress, historyOrdersAll, isHistoryLoading])
+
+  useEffect(() => {
+    if (activeTab !== 'delegation') return
+    if (historyOrdersAll !== null) return
+    void loadHistoryOrders()
+  }, [activeTab, historyOrdersAll, loadHistoryOrders])
   const [tradesState, setTradesState] = useState<TradesState>('idle')
   const [recentTrades, setRecentTrades] = useState<RecentTrade[]>([])
   const [tradesError, setTradesError] = useState<string | null>(null)
@@ -578,7 +669,39 @@ export const ProfileDataTabs = ({
     return getFilteredAndSortedData(recentTrades, sortField, sortOrder, assetFilter)
   }, [activeTab, assetFilter, recentTrades, sortField, sortOrder, tradesState])
   const filteredCompletedTrades = useMemo<CompletedTrade[]>(() => [], [])
-  const filteredHistoryOrders = useMemo<HistoryOrder[]>(() => [], [])
+
+  const allHistoryOrdersFiltered = useMemo(() => {
+    return getFilteredAndSortedData(historyOrdersAll ?? [], sortField, sortOrder, assetFilter)
+  }, [historyOrdersAll, assetFilter, sortField, sortOrder])
+
+  const filteredHistoryOrders = useMemo<HistoryOrder[]>(() => {
+    return allHistoryOrdersFiltered.slice(0, historyVisibleCount)
+  }, [allHistoryOrdersFiltered, historyVisibleCount])
+
+  const canLoadMoreHistory =
+    activeTab === 'delegation' &&
+    historyOrdersAll !== null &&
+    historyVisibleCount < allHistoryOrdersFiltered.length
+
+  useEffect(() => {
+    if (!canLoadMoreHistory) return
+    if (!historySentinelRef.current) return
+
+    const el = historySentinelRef.current
+    const observer = new IntersectionObserver(
+      entries => {
+        const hit = entries.some(e => e.isIntersecting)
+        if (!hit) return
+        setHistoryVisibleCount(c =>
+          Math.min(c + HISTORY_RENDER_STEP, allHistoryOrdersFiltered.length),
+        )
+      },
+      { root: null, rootMargin: '200px', threshold: 0 },
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [allHistoryOrdersFiltered.length, canLoadMoreHistory])
 
   const renderSideBadge = (side: string) => {
     const isLong = side === 'Long' || side === 'Buy'
@@ -1169,7 +1292,7 @@ export const ProfileDataTabs = ({
               filteredOpenOrders.map(order => {
                 const orderKey = getOpenOrderKey(order)
                 return (
-                  <React.Fragment key={orderKey}>
+                  <Fragment key={orderKey}>
                     <tr
                       className="cursor-pointer transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                       onClick={() => toggleOrderExpansion(orderKey)}
@@ -1258,7 +1381,7 @@ export const ProfileDataTabs = ({
                           <td className="px-6 py-3 text-right text-[10px]">{detail.id}</td>
                         </tr>
                       ))}
-                  </React.Fragment>
+                  </Fragment>
                 )
               })
             ) : activeTab === 'trades' ? (
@@ -1359,74 +1482,112 @@ export const ProfileDataTabs = ({
                 </tr>
               ))
             ) : activeTab === 'delegation' ? (
-              filteredHistoryOrders.map((order, idx) => (
-                <tr
-                  key={idx}
-                  className="transition-colors hover:bg-[color:var(--cf-surface-hover)]"
-                >
-                  <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
-                    {normalizeDateLabel(order.time)}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
-                    {order.asset}
-                  </td>
-                  <td className="px-6 py-4 text-xs font-medium text-[color:var(--cf-text-strong)]">
-                    {translateOrderType(order.type)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`rounded bg-green-500/20 px-1.5 py-0.5 text-[10px] font-extrabold text-green-500 uppercase dark:text-green-400`}
-                    >
-                      {order.side === 'Buy'
-                        ? t('whaleTracking.side.buy')
-                        : t('whaleTracking.side.sell')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
-                    {order.amount}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-medium text-[color:var(--cf-text-strong)]">
-                    {order.price}
-                  </td>
-                  <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)]">
-                    {order.trigger}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {order.status === 'filled' ? (
-                      <div className="flex items-center justify-end gap-1.5 text-green-500 dark:text-green-400">
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full border border-green-500 dark:border-green-400">
-                          <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor">
-                            <path d="M3.5 6.5l-2-2L1 5l2.5 2.5L9 2l-.5-.5L3.5 6.5z" />
-                          </svg>
-                        </div>
-                      </div>
-                    ) : order.status === 'cancelled' ? (
-                      <div className="flex items-center justify-end gap-1.5 text-[color:var(--cf-muted)]">
-                        <svg
-                          className="h-4 w-4"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="4.93" x2="19.07" y1="4.93" y2="19.07" />
-                        </svg>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-medium text-[color:var(--cf-muted)] uppercase">
-                        {translateOrderStatus(order.status)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
-                    {order.id}
+              isHistoryLoading && historyOrdersAll === null ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-6 py-10 text-center text-sm text-[color:var(--cf-muted)]"
+                  >
+                    {t('common.loading')}
                   </td>
                 </tr>
-              ))
+              ) : filteredHistoryOrders.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-6 py-10 text-center text-sm text-[color:var(--cf-muted)]"
+                  >
+                    <div className="flex items-center justify-center gap-3">
+                      <span>{t('common.noData')}</span>
+                      {historyError && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void loadHistoryOrders()
+                          }}
+                          className="rounded-md border border-[color:var(--cf-border)] px-3 py-1 text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+                        >
+                          {t('common.retry')}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredHistoryOrders.map((order, idx) => (
+                  <tr
+                    key={idx}
+                    className="transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+                  >
+                    <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
+                      {normalizeDateLabel(order.time)}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
+                      {order.asset}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-[color:var(--cf-text-strong)]">
+                      {order.type}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                          order.side === 'Buy'
+                            ? 'bg-green-500/20 text-green-500 dark:text-green-400'
+                            : 'bg-red-500/20 text-red-500 dark:text-red-400'
+                        }`}
+                      >
+                        {order.side === 'Buy'
+                          ? t('whaleTracking.side.buy')
+                          : t('whaleTracking.side.sell')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
+                      {order.amount}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[color:var(--cf-text-strong)]">
+                      {order.price}
+                    </td>
+                    <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)]">
+                      {order.trigger}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {order.status === 'filled' ? (
+                        <div className="flex items-center justify-end gap-1.5 text-green-500 dark:text-green-400">
+                          <div className="flex h-4 w-4 items-center justify-center rounded-full border border-green-500 dark:border-green-400">
+                            <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor">
+                              <path d="M3.5 6.5l-2-2L1 5l2.5 2.5L9 2l-.5-.5L3.5 6.5z" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : order.status === 'cancelled' ? (
+                        <div className="flex items-center justify-end gap-1.5 text-[color:var(--cf-muted)]">
+                          <svg
+                            className="h-4 w-4"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="4.93" x2="19.07" y1="4.93" y2="19.07" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-medium text-[color:var(--cf-muted)] uppercase">
+                          {translateOrderStatus(order.status)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
+                      {order.id}
+                    </td>
+                  </tr>
+                ))
+              )
             ) : null}
           </tbody>
         </table>
+        {canLoadMoreHistory && <div ref={historySentinelRef} className="h-1" />}
       </div>
     </div>
   )
