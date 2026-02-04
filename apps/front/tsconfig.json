@@ -3,7 +3,7 @@
     "incremental": true,
     "forceConsistentCasingInFileNames": true,
     "target": "ES2017",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "lib": [
       "dom",
       "dom.iterable",

@@ -50,6 +50,7 @@ loadSharedEnvironment()
 
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production'
+const isVercel = process.env.VERCEL === '1'
 
 const nextConfig = {
   // 设置构建输出目录
@@ -59,7 +60,8 @@ const nextConfig = {
   // Vercel 可以正确找到 dist/front/.next/trace，避免重新追踪导致的文件膨胀问题
   // 但开发模式下使用 distDir=dist/front/.next 会导致缓存/文件缺失问题（vendor-chunks、manifest 等）
   // 因此开发模式回退到默认 .next，确保 `next dev` 稳定运行。
-  distDir: isDev ? '.next' : '../../dist/front/.next',
+  // Vercel 运行时打包/trace 依赖 apps/front/.next；避免把产物写到 dist/ 导致函数缺依赖
+  distDir: isDev || isVercel ? '.next' : '../../dist/front/.next',
 
   images: {
     unoptimized: true, // 静态导出下禁用 Next.js 内置图片优化，改用懒加载与占位符
