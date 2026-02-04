@@ -729,6 +729,12 @@ const OpenOrderDto = z
 const TraderOpenOrdersResponseDto = z
   .object({ orders: z.array(OpenOrderDto) })
   .passthrough();
+const TraderDiscoverTagsResponseDto = z
+  .object({
+    tag: z.string().nullish(),
+    aiTags: z.array(WhaleDiscoverTraderAiTagDto),
+  })
+  .passthrough();
 const TradingPairConfigResponseDto = z
   .object({
     id: z.string(),
@@ -1041,6 +1047,7 @@ export const schemas = {
   TraderPositionsResponseDto,
   OpenOrderDto,
   TraderOpenOrdersResponseDto,
+  TraderDiscoverTagsResponseDto,
   TradingPairConfigResponseDto,
   LongShortRatioPointResponseDto,
   ExchangeLongShortRatioResponseDto,
@@ -3268,6 +3275,21 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/whale-tracking/traders/:address/discover-tags",
+    alias: "WhaleTrackingController_getTraderDiscoverTags",
+    description: `基于 Hyperliquid Whale Alert 近 lookbackDays（当前 7 天）的聚合统计，复用 Discover 的 AI 打标逻辑，为 Profile Header 提供 Discover 视角的标签。`,
+    requestFormat: "json",
+    parameters: [
+      {
+        name: "address",
+        type: "Path",
+        schema: z.string(),
+      },
+    ],
+    response: TraderDiscoverTagsResponseDto,
+  },
+  {
+    method: "get",
     path: "/whale-tracking/traders/:address/open-orders",
     alias: "WhaleTrackingController_getTraderOpenOrders",
     description: `通过 Hyperliquid API 实时查询指定地址的当前挂单列表，包括订单 ID、币种、方向、类型、限价、数量、订单价值、创建时间等信息。支持按币种筛选，默认缓存 5 秒。`,
@@ -3368,10 +3390,7 @@ const endpoints = makeApi([
   },
 ]);
 
-export const aiBackendClient = new Zodios(
-  "/api/v1",
-  endpoints
-);
+export const aiBackendClient = new Zodios("/api/v1", endpoints);
 
 export function createApiClient(baseUrl: string, options?: ZodiosOptions) {
   return new Zodios(baseUrl, endpoints, options);

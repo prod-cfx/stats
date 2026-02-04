@@ -73,13 +73,22 @@ export class WhaleTrackingService {
 
     const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
 
+    // E2E 环境中可能会有后台任务写入真实数据，discover 返回需保持可预期。
+    // 约定：E2E 测试数据写入 source='TEST'。
+    const isE2e = process.env.APP_ENV === 'e2e'
+
+    const baseWhere = {
+      createTime: {
+        gte: since,
+      },
+      ...(isE2e ? { source: 'TEST' as const } : {}),
+    }
+
     // 1. 先按 address 聚合出近 lookbackDays 内总持仓价值最高的一批鲸鱼
     const grouped = await client.hyperliquidWhaleAlert.groupBy({
       by: ['userAddress'],
       where: {
-        createTime: {
-          gte: since,
-        },
+        ...baseWhere,
       },
       _sum: {
         positionValueUsd: true,
@@ -96,6 +105,13 @@ export class WhaleTrackingService {
     })
 
     if (!grouped.length) {
+      // E2E 要求确定性：无数据就返回空
+      if (isE2e) {
+        return {
+          recommended: [],
+          details: [],
+        }
+      }
       // 本地/新环境下数据库可能尚未同步 whale alert 数据：
       // 按需求：有后端数据则返回真实数据；无数据则返回 mock，保证前端可正常渲染。
       this.logger.warn(
@@ -109,9 +125,7 @@ export class WhaleTrackingService {
     // 2. 拉取这些 address 在时间窗口内的所有预警，用于计算更丰富的统计（positions / 多空分布等）
     const alerts: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
       where: {
-        createTime: {
-          gte: since,
-        },
+        ...baseWhere,
         userAddress: {
           in: addresses,
         },
@@ -908,5 +922,67 @@ export class WhaleTrackingService {
     })
 
     return { orders }
+  }
+
+  async getTraderDiscoverTags(address: string): Promise<{
+    tag: string | null
+    aiTags: WhaleDiscoverTraderAiTagDto[]
+  }> {
+    const client = this.prisma.getClient()
+
+    const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
+    const isE2e = process.env.APP_ENV === 'e2e'
+
+    const where = {
+      userAddress: address,
+      createTime: {
+        gte: since,
+      },
+      ...(isE2e ? { source: 'TEST' as const } : {}),
+    }
+
+    const alerts: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
+      where,
+    })
+
+    if (!alerts.length) {
+      return {
+        tag: null,
+        aiTags: [],
+      }
+    }
+
+    const symbols = new Set<string>()
+
+    const stats: AggregatedWhaleStats = {
+      address,
+      totalValueUsd: 0,
+      trades: 0,
+      positions: 0,
+      longCount: 0,
+      shortCount: 0,
+    }
+
+    for (const alert of alerts) {
+      const positionValue = Number(alert.positionValueUsd ?? 0)
+      stats.totalValueUsd += Number.isFinite(positionValue) ? positionValue : 0
+      stats.trades += 1
+
+      symbols.add(alert.symbol)
+
+      const positionSize = Number(alert.positionSize ?? 0)
+      if (positionSize > 0) {
+        stats.longCount += 1
+      } else if (positionSize < 0) {
+        stats.shortCount += 1
+      }
+    }
+
+    stats.positions = symbols.size
+
+    return {
+      tag: this.buildTag(stats),
+      aiTags: this.buildAiTags(stats),
+    }
   }
 }

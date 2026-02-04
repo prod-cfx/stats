@@ -1,7 +1,7 @@
 'use client'
 
 import type {
-  TraderFullDataResponse,
+  TraderDiscoverTagsResponse,
   TraderOpenOrdersResponse,
   TraderPositionsResponse,
   TraderSnapshotResponse,
@@ -18,7 +18,7 @@ import { PositionProfile } from '@/components/whale-tracking/profile/PositionPro
 import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs'
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader'
 import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary'
-import { fetchTraderFullData } from '@/lib/api'
+import { fetchTraderDiscoverTags, fetchTraderFullData } from '@/lib/api'
 
 export function ProfileClient({ address }: { address: string }) {
   const { t } = useTranslation()
@@ -32,30 +32,38 @@ export function ProfileClient({ address }: { address: string }) {
   const [ordersData, setOrdersData] = useState<TraderOpenOrdersResponse | null>(null)
   const [portfolioData, setPortfolioData] = useState<UserPortfolioResponse | null>(null)
   const [fillsData, setFillsData] = useState<UserFillsResponse | null>(null)
+  const [discoverTags, setDiscoverTags] = useState<TraderDiscoverTagsResponse | null>(null)
 
-  const loadData = useCallback(async () => {
-    if (!isValidAddress) {
-      setLoading(false)
-      return
-    }
+  const loadData = useCallback(
+    async (options: { skipCache?: boolean } = {}) => {
+      if (!isValidAddress) {
+        setLoading(false)
+        return
+      }
 
-    setLoading(true)
-    setError(null)
+      setLoading(true)
+      setError(null)
 
-    try {
-      const fullData: TraderFullDataResponse = await fetchTraderFullData(address)
+      try {
+        const [fullData, discoverResp] = await Promise.all([
+          fetchTraderFullData(address),
+          fetchTraderDiscoverTags(address, { skipCache: options.skipCache }),
+        ])
 
-      setSnapshotData(fullData.snapshot)
-      setPositionsData(fullData.positions)
-      setOrdersData(fullData.orders)
-      setPortfolioData(fullData.portfolio)
-      setFillsData(fullData.fills)
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to load data'))
-    } finally {
-      setLoading(false)
-    }
-  }, [address, isValidAddress])
+        setSnapshotData(fullData.snapshot)
+        setPositionsData(fullData.positions)
+        setOrdersData(fullData.orders)
+        setPortfolioData(fullData.portfolio)
+        setFillsData(fullData.fills)
+        setDiscoverTags(discoverResp)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load data'))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [address, isValidAddress],
+  )
 
   useEffect(() => {
     loadData()
@@ -75,7 +83,12 @@ export function ProfileClient({ address }: { address: string }) {
           >
             <div className="animate-in fade-in space-y-10 duration-500">
               {/* Header */}
-              <ProfileHeader address={address} />
+              <ProfileHeader
+                address={address}
+                discoverTag={discoverTags?.tag}
+                aiTags={discoverTags?.aiTags}
+                onRefresh={() => loadData({ skipCache: true })}
+              />
 
               {/* Summary Stats */}
               {snapshotData && fillsData && portfolioData && (

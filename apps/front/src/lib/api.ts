@@ -70,6 +70,7 @@ export type PredictionMarketCardResponse = Infer<typeof schemas.PredictionMarket
 export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 export type WhaleTradeDto = Infer<typeof schemas.WhaleTradeDto>
 export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
+export type WhaleDiscoverTraderAiTag = Infer<typeof schemas.WhaleDiscoverTraderAiTagDto>
 
 interface BaseResponse<T> {
   data?: T
@@ -248,6 +249,76 @@ export interface FetchWhaleAddressPerformanceQuery {
   timeRangeDays?: number
   symbol?: string
   limit?: number
+}
+
+export type TraderDiscoverTagsResponse = Infer<typeof schemas.TraderDiscoverTagsResponseDto>
+
+export interface FetchTraderDiscoverTagsQuery {
+  skipCache?: boolean
+}
+
+function getTraderDiscoverTagsMethod(
+  apiClient: typeof client,
+): typeof client.WhaleTrackingController_getTraderDiscoverTags | undefined {
+  const candidate = apiClient as unknown as Partial<{
+    WhaleTrackingController_getTraderDiscoverTags: typeof client.WhaleTrackingController_getTraderDiscoverTags
+  }>
+  return typeof candidate.WhaleTrackingController_getTraderDiscoverTags === 'function'
+    ? candidate.WhaleTrackingController_getTraderDiscoverTags
+    : undefined
+}
+
+export async function fetchTraderDiscoverTags(
+  address: string,
+  query: FetchTraderDiscoverTagsQuery = {},
+): Promise<TraderDiscoverTagsResponse> {
+  return apiCall(async () => {
+    const params = new URLSearchParams()
+    if (typeof query.skipCache === 'boolean') {
+      params.set('skipCache', String(query.skipCache))
+    }
+
+    const search = params.toString()
+    const fallbackUrl =
+      search.length > 0
+        ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(
+            address,
+          )}/discover-tags?${search}`
+        : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/discover-tags`
+    const fallbackConfig = {
+      url: fallbackUrl,
+      options: {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...optionalAuthHeaders(),
+        },
+      },
+      validateResponse: (data: unknown) =>
+        unwrapResponse<TraderDiscoverTagsResponse>(
+          data as TraderDiscoverTagsResponse | BaseResponse<TraderDiscoverTagsResponse>,
+        ),
+    }
+
+    const method = getTraderDiscoverTagsMethod(client)
+
+    if (method) {
+      return safeApiCall(
+        () =>
+          method({
+            headers: optionalAuthHeaders(),
+            params: { address },
+          }),
+        fallbackConfig,
+      )
+    }
+
+    return safeApiCall(
+      () =>
+        Promise.reject(new Error('WhaleTrackingController_getTraderDiscoverTags is not available')),
+      fallbackConfig,
+    )
+  }, 'FETCH_TRADER_DISCOVER_TAGS')
 }
 
 export async function fetchWhaleAddressPerformance(

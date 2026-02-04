@@ -8,20 +8,12 @@ import {
   WhaleAddressPerformanceResponseDto,
 } from './dto/whale-address-performance.dto'
 // eslint-disable-next-line ts/consistent-type-imports
-import {
-  QueryTraderSnapshotDto,
-  TraderSnapshotResponseDto,
-} from './dto/trader-snapshot.dto'
+import { QueryTraderSnapshotDto, TraderSnapshotResponseDto } from './dto/trader-snapshot.dto'
 // eslint-disable-next-line ts/consistent-type-imports
-import {
-  QueryTraderPositionsDto,
-  TraderPositionsResponseDto,
-} from './dto/trader-positions.dto'
+import { QueryTraderPositionsDto, TraderPositionsResponseDto } from './dto/trader-positions.dto'
 // eslint-disable-next-line ts/consistent-type-imports
-import {
-  QueryTraderOpenOrdersDto,
-  TraderOpenOrdersResponseDto,
-} from './dto/trader-open-orders.dto'
+import { QueryTraderOpenOrdersDto, TraderOpenOrdersResponseDto } from './dto/trader-open-orders.dto'
+import { TraderDiscoverTagsResponseDto } from './dto/trader-discover-tags.dto'
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { EthereumAddressPipe } from '@/common/pipes/ethereum-address.pipe'
@@ -55,8 +47,8 @@ export class WhaleTrackingController {
   @ApiOperation({
     summary: '鲸鱼地址维度的历史交易与绩效统计',
     description:
-      '基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。'
-      + '当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。',
+      '基于 Hyperliquid Whale Alert 数据，对指定鲸鱼地址在给定时间窗口内的名义价值、方向分布等信息做聚合统计，并返回按币种与时间排序的预警明细。' +
+      '当前返回的 PnL 与胜率字段为占位统计值，仅用于可视化与排序，不代表真实历史盈亏/胜率。',
   })
   @ApiOkResponse({ type: WhaleAddressPerformanceResponseDto })
   async getTraderPerformance(
@@ -72,8 +64,8 @@ export class WhaleTrackingController {
   @ApiOperation({
     summary: '获取鲸鱼交易者账户快照',
     description:
-      '通过 Hyperliquid API 实时查询指定地址的账户快照数据，包括永续合约账户状态（账户价值、保证金使用率、杠杆倍数、未实现盈亏）与现货余额汇总。'
-      + '数据直接来源于 Hyperliquid 清算所状态，默认缓存 5 秒。',
+      '通过 Hyperliquid API 实时查询指定地址的账户快照数据，包括永续合约账户状态（账户价值、保证金使用率、杠杆倍数、未实现盈亏）与现货余额汇总。' +
+      '数据直接来源于 Hyperliquid 清算所状态，默认缓存 5 秒。',
   })
   @ApiOkResponse({ type: TraderSnapshotResponseDto })
   async getTraderSnapshot(
@@ -89,8 +81,8 @@ export class WhaleTrackingController {
   @ApiOperation({
     summary: '获取鲸鱼交易者持仓详情',
     description:
-      '通过 Hyperliquid API 实时查询指定地址的持仓详情，包括永续合约持仓（币种、方向、数量、入场价、标记价、清算价、未实现盈亏、杠杆信息）'
-      + '与现货余额（币种、总量、锁定量、可用量、价值）。支持按类型筛选（perp/spot/all），默认缓存 5 秒。',
+      '通过 Hyperliquid API 实时查询指定地址的持仓详情，包括永续合约持仓（币种、方向、数量、入场价、标记价、清算价、未实现盈亏、杠杆信息）' +
+      '与现货余额（币种、总量、锁定量、可用量、价值）。支持按类型筛选（perp/spot/all），默认缓存 5 秒。',
   })
   @ApiOkResponse({ type: TraderPositionsResponseDto })
   async getTraderPositions(
@@ -106,8 +98,8 @@ export class WhaleTrackingController {
   @ApiOperation({
     summary: '获取鲸鱼交易者挂单列表',
     description:
-      '通过 Hyperliquid API 实时查询指定地址的当前挂单列表，包括订单 ID、币种、方向、类型、限价、数量、订单价值、创建时间等信息。'
-      + '支持按币种筛选，默认缓存 5 秒。',
+      '通过 Hyperliquid API 实时查询指定地址的当前挂单列表，包括订单 ID、币种、方向、类型、限价、数量、订单价值、创建时间等信息。' +
+      '支持按币种筛选，默认缓存 5 秒。',
   })
   @ApiOkResponse({ type: TraderOpenOrdersResponseDto })
   async getTraderOpenOrders(
@@ -116,11 +108,19 @@ export class WhaleTrackingController {
   ): Promise<TraderOpenOrdersResponseDto> {
     return this.whaleTrackingService.getTraderOpenOrders(address, query)
   }
+
+  @Get('traders/:address/discover-tags')
+  @OptionalAccessControl()
+  @ReadAny(AppResource.WHALE_TRACKING)
+  @ApiOperation({
+    summary: '获取鲸鱼交易者 Discover 视角标签',
+    description:
+      '基于 Hyperliquid Whale Alert 近 lookbackDays（当前 7 天）的聚合统计，复用 Discover 的 AI 打标逻辑，为 Profile Header 提供 Discover 视角的标签。',
+  })
+  @ApiOkResponse({ type: TraderDiscoverTagsResponseDto })
+  async getTraderDiscoverTags(
+    @Param('address', EthereumAddressPipe) address: string,
+  ): Promise<TraderDiscoverTagsResponseDto> {
+    return this.whaleTrackingService.getTraderDiscoverTags(address)
+  }
 }
-
-
-
-
-
-
-
