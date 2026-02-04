@@ -1,13 +1,4 @@
-import type {
-  GetAggregatedLiquidationSummaryQueryDto,
-  GetExchangeLiquidationQueryDto,
-} from './dto/aggregated-liquidation.dto'
-import {
-  Controller,
-  Get,
-  HttpStatus,
-  Query,
-} from '@nestjs/common'
+import { Controller, Get, HttpStatus, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiExtraModels, ApiOperation, ApiQuery, ApiResponse, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
@@ -15,9 +6,13 @@ import { AppResource } from '@/modules/auth/rbac/permissions'
 // Nest 注入需要运行时引用 Service，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { AggregatedLiquidationService } from './aggregated-liquidation.service'
+// ValidationPipe(transform:true) 需要运行时可用的 DTO 类（反射 metatype），不能用 type-only import
+// eslint-disable-next-line ts/consistent-type-imports
 import {
   AggregatedLiquidationSummaryDto,
   ExchangeLiquidationResponseDto,
+  GetAggregatedLiquidationSummaryQueryDto,
+  GetExchangeLiquidationQueryDto,
   LIQUIDATION_TIMEFRAMES,
 } from './dto/aggregated-liquidation.dto'
 
@@ -102,10 +97,3 @@ export class AggregatedLiquidationController {
     return new BaseResponseDto(data)
   }
 }
-
-
-
-
-
-
-

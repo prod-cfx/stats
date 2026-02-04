@@ -37,9 +37,7 @@ interface OiOhlcApiResponse {
 }
 
 @Injectable()
-export class CoinglassOiOhlcAggregatedJob
-  implements DataPullJob<OiOhlcAggregatedMeta>
-{
+export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregatedMeta> {
   // Job key 作为前缀匹配，实际任务 key 格式为: coinglass-oi-ohlc-aggregated:${symbol}-${interval}
   readonly key = 'coinglass-oi-ohlc-aggregated'
   readonly name = 'Coinglass 聚合持仓量 OHLC 数据'
@@ -104,10 +102,12 @@ export class CoinglassOiOhlcAggregatedJob
     url.searchParams.set('limit', this.defaultLimit.toString())
 
     if (typeof lastTimestampMs === 'number') {
-      url.searchParams.set('start_time', Math.floor(lastTimestampMs / 1000).toString())
+      // Coinglass v4 文档示例：start_time 以毫秒为单位
+      url.searchParams.set('start_time', Math.floor(lastTimestampMs).toString())
     } else if (!ctx.cursor) {
       const backfillStart = Date.now() - this.backfillDays * 24 * 60 * 60 * 1000
-      url.searchParams.set('start_time', Math.floor(backfillStart / 1000).toString())
+      // Coinglass v4 文档示例：start_time 以毫秒为单位
+      url.searchParams.set('start_time', Math.floor(backfillStart).toString())
     }
 
     this.logger.log(
@@ -164,9 +164,10 @@ export class CoinglassOiOhlcAggregatedJob
     }
 
     // API 数据按时间升序排列，直接取最后一条的时间戳
-    const latestTimestampMs = pointsWithTimestamps.length > 0
-      ? pointsWithTimestamps[pointsWithTimestamps.length - 1].timestampMs
-      : lastTimestampMs ?? undefined
+    const latestTimestampMs =
+      pointsWithTimestamps.length > 0
+        ? pointsWithTimestamps[pointsWithTimestamps.length - 1].timestampMs
+        : (lastTimestampMs ?? undefined)
 
     const newCursor: OiOhlcAggregatedCursor = {
       lastTimestamp: latestTimestampMs,

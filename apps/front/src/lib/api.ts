@@ -37,6 +37,17 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
 
+function getHttpStatusFromError(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  if (!('response' in error)) return undefined
+
+  const response = (error as { response?: unknown }).response
+  if (!response || typeof response !== 'object') return undefined
+
+  const status = (response as { status?: unknown }).status
+  return typeof status === 'number' ? status : undefined
+}
+
 function shouldFallbackToMock(error: unknown): boolean {
   if (!IS_NON_PROD) return false
   // Auth errors should continue to bubble for UI to handle (e.g. show login prompt)
@@ -1127,14 +1138,17 @@ export async function fetchAggregatedLiquidationSummary(
   symbol: string,
 ): Promise<AggregatedLiquidationSummary> {
   try {
-    return await apiCall(async () => {
-      const response = await client.AggregatedLiquidationController_getSummary({
-        headers: optionalAuthHeaders(),
-        queries: { symbol },
-      })
-      return unwrapResponse(response) as AggregatedLiquidationSummary
-    }, 'FETCH_LIQUIDATION_SUMMARY')
+    const response = await client.AggregatedLiquidationController_getSummary({
+      headers: optionalAuthHeaders(),
+      queries: { symbol },
+    })
+    return unwrapResponse(response) as AggregatedLiquidationSummary
   } catch (error) {
+    const status = getHttpStatusFromError(error)
+    // 后端数据尚未同步时会返回 404；这不是“页面错误”，按空数据处理即可。
+    if (status === 404) {
+      return { symbol, items: [] }
+    }
     if (!shouldFallbackToMock(error)) throw error
     const rand = mulberry32(hashStringToSeed(`liq-summary:${symbol}`))
     const items: LiquidationSummaryItem[] = (['1h', '4h', '12h', '24h'] as const).map(tf => {
@@ -1153,14 +1167,32 @@ export async function fetchExchangeLiquidation(
   timeframe: '1h' | '4h' | '12h' | '24h',
 ): Promise<ExchangeLiquidationResponse> {
   try {
-    return await apiCall(async () => {
-      const response = await client.AggregatedLiquidationController_getExchanges({
-        headers: optionalAuthHeaders(),
-        queries: { symbol, timeframe },
-      })
-      return unwrapResponse(response) as ExchangeLiquidationResponse
-    }, 'FETCH_LIQUIDATION_EXCHANGES')
+    const response = await client.AggregatedLiquidationController_getExchanges({
+      headers: optionalAuthHeaders(),
+      queries: { symbol, timeframe },
+    })
+    return unwrapResponse(response) as ExchangeLiquidationResponse
   } catch (error) {
+    const status = getHttpStatusFromError(error)
+    // 后端无数据时返回 404；前端用 0 值占位，避免整块 UI 进入 error state。
+    if (status === 404) {
+      return {
+        symbol,
+        timeframe,
+        rows: [
+          {
+            exchange: 'TOTAL',
+            symbol,
+            timeframe,
+            amountUsd: 0,
+            longUsd: 0,
+            shortUsd: 0,
+            longShare: 0,
+            isTotal: true,
+          },
+        ],
+      }
+    }
     if (!shouldFallbackToMock(error)) throw error
     const rand = mulberry32(hashStringToSeed(`liq-ex:${symbol}:${timeframe}`))
     const venues = ['Binance', 'OKX', 'Bybit', 'Bitget', 'Deribit']
