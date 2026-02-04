@@ -71,11 +71,9 @@ export default function OrderbookConfigsPage() {
     try {
       const data = await fetchOrderbookConfigs()
       setConfigs(data)
-    }
-    catch (error: any) {
+    } catch (error: any) {
       message.error(error?.message ?? '获取配置失败')
-    }
-    finally {
+    } finally {
       setLoading(false)
     }
   }, [message])
@@ -85,11 +83,9 @@ export default function OrderbookConfigsPage() {
     try {
       const data = await fetchExchangeConfigs({ page: 1, limit: 100, enabled: true })
       setVenues(data.items)
-    }
-    catch (error: any) {
+    } catch (error: any) {
       message.error(error?.message ?? '获取交易所列表失败')
-    }
-    finally {
+    } finally {
       setVenueLoading(false)
       setVenuesLoaded(true)
     }
@@ -109,9 +105,11 @@ export default function OrderbookConfigsPage() {
       const book = await fetchOrderbookSnapshotByConfigId(config.id)
 
       // 如果在请求过程中用户已经关闭或切换了查看对象，则丢弃此次结果
-      if (viewRequestIdRef.current !== requestId)
-        return
-      if (!book || ((!book.bids || book.bids.length === 0) && (!book.asks || book.asks.length === 0))) {
+      if (viewRequestIdRef.current !== requestId) return
+      if (
+        !book ||
+        ((!book.bids || book.bids.length === 0) && (!book.asks || book.asks.length === 0))
+      ) {
         setViewError('当前没有该交易对的订单薄数据，请确认订单薄同步任务或快照任务是否已开启')
         return
       }
@@ -121,16 +119,15 @@ export default function OrderbookConfigsPage() {
         exchangeTs: book.exchangeTs ?? undefined,
         receivedTs: book.receivedTs,
       })
-    }
-    catch (error: any) {
+    } catch (error: any) {
       // 优先显示后端返回的友好提示信息，fallback 到通用错误消息
-      const errorMessage = error?.response?.data?.message || error?.message || '获取订单薄失败，请稍后重试'
+      const errorMessage =
+        error?.response?.data?.message || error?.message || '获取订单薄失败，请稍后重试'
       // 只有当前请求仍然是最新的才更新错误状态
       if (viewRequestIdRef.current === requestId) {
         setViewError(errorMessage)
       }
-    }
-    finally {
+    } finally {
       // 只有当前请求仍然是最新的才清除 loading 状态，避免旧请求影响新请求的 UI
       if (viewRequestIdRef.current === requestId) {
         setViewLoading(false)
@@ -147,7 +144,7 @@ export default function OrderbookConfigsPage() {
     // 只在 venues 真正加载完成后，且确认为空时，才切换到手动输入模式
     // 这里的 setUseCustomVenueInput 是依赖异步加载结果的「状态修正」，不会造成副作用循环
     if (venuesLoaded && venues.length === 0) {
-      setUseCustomVenueInput(true) // eslint-disable-line react-hooks-extra/no-direct-set-state-in-use-effect
+      setUseCustomVenueInput(true)
     }
   }, [venuesLoaded, venues.length])
 
@@ -158,19 +155,15 @@ export default function OrderbookConfigsPage() {
       setCreateModalOpen(false)
       createForm.resetFields()
       await loadConfigs()
-    }
-    catch (error: any) {
+    } catch (error: any) {
       const status = error?.response?.status
       if (status === 409) {
         message.error('该交易对ID已存在，请使用其他ID')
-      }
-      else if (status === 400) {
+      } else if (status === 400) {
         message.error('输入数据格式错误，请检查后重试')
-      }
-      else if (status === 403) {
+      } else if (status === 403) {
         message.error('没有权限执行此操作')
-      }
-      else {
+      } else {
         message.error(error?.message ?? '创建失败，请稍后重试')
       }
     }
@@ -192,26 +185,21 @@ export default function OrderbookConfigsPage() {
   const handleEditSubmit = async () => {
     try {
       const values = await editForm.validateFields()
-      if (!editingConfig)
-        return
+      if (!editingConfig) return
       await updateOrderbookConfig(editingConfig.id, values)
       message.success('配置已更新')
       setEditModalOpen(false)
       setEditingConfig(null)
       await loadConfigs()
-    }
-    catch (error: any) {
+    } catch (error: any) {
       const status = error?.response?.status
       if (status === 404) {
         message.error('配置不存在，可能已被删除')
-      }
-      else if (status === 400) {
+      } else if (status === 400) {
         message.error('输入数据格式错误，请检查后重试')
-      }
-      else if (status === 403) {
+      } else if (status === 403) {
         message.error('没有权限执行此操作')
-      }
-      else {
+      } else {
         message.error(error?.message ?? '更新失败，请稍后重试')
       }
     }
@@ -229,20 +217,16 @@ export default function OrderbookConfigsPage() {
           await deleteOrderbookConfig(config.id)
           message.success('删除成功')
           await loadConfigs()
-        }
-        catch (error: any) {
+        } catch (error: any) {
           const status = error?.response?.status
           if (status === 404) {
             message.error('配置不存在，可能已被删除')
             await loadConfigs() // Refresh list
-          }
-          else if (status === 409) {
+          } else if (status === 409) {
             message.error('无法删除：该配置正在被活跃任务使用')
-          }
-          else if (status === 403) {
+          } else if (status === 403) {
             message.error('没有权限执行此操作')
-          }
-          else {
+          } else {
             message.error(error?.message ?? '删除失败，请稍后重试')
           }
         }
@@ -255,11 +239,11 @@ export default function OrderbookConfigsPage() {
       <Space direction="vertical" size={24} style={{ width: '100%' }}>
         <Card
           title="订单薄数据拉取配置"
-          extra={(
+          extra={
             <Button type="primary" onClick={() => setCreateModalOpen(true)}>
               新建配置
             </Button>
-          )}
+          }
         >
           <Table<OrderbookPairConfigResponse>
             loading={loading}
@@ -288,9 +272,7 @@ export default function OrderbookConfigsPage() {
                 title: '类型',
                 dataIndex: 'venueType',
                 width: 80,
-                render: value => (
-                  <Tag color={value === 'CEX' ? 'blue' : 'green'}>{value}</Tag>
-                ),
+                render: value => <Tag color={value === 'CEX' ? 'blue' : 'green'}>{value}</Tag>,
               },
               {
                 title: '品种',
@@ -303,9 +285,7 @@ export default function OrderbookConfigsPage() {
                 dataIndex: 'enabled',
                 width: 80,
                 render: value => (
-                  <Tag color={value ? 'success' : 'default'}>
-                    {value ? '启用' : '禁用'}
-                  </Tag>
+                  <Tag color={value ? 'success' : 'default'}>{value ? '启用' : '禁用'}</Tag>
                 ),
               },
               {
@@ -338,18 +318,19 @@ export default function OrderbookConfigsPage() {
                 width: 210,
                 render: (_, record) => (
                   <Space>
-                    <Button type="link" size="small" onClick={() => { void openViewModal(record) }}>
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => {
+                        void openViewModal(record)
+                      }}
+                    >
                       查看
                     </Button>
                     <Button type="link" size="small" onClick={() => openEditModal(record)}>
                       编辑
                     </Button>
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      onClick={() => handleDelete(record)}
-                    >
+                    <Button type="link" size="small" danger onClick={() => handleDelete(record)}>
                       删除
                     </Button>
                   </Space>
@@ -369,11 +350,7 @@ export default function OrderbookConfigsPage() {
         okText="创建"
         width={700}
       >
-        <Form
-          layout="vertical"
-          form={createForm}
-          onFinish={handleCreateConfig}
-        >
+        <Form layout="vertical" form={createForm} onFinish={handleCreateConfig}>
           <Form.Item
             label="交易对ID"
             name="pairId"
@@ -381,7 +358,8 @@ export default function OrderbookConfigsPage() {
               { required: true, message: '请输入交易对ID' },
               {
                 pattern: /^[A-Z0-9]+\.[A-Z0-9_]+\.(SPOT|PERPETUAL|FUTURE)$/,
-                message: '格式应为: SYMBOL.VENUE.TYPE (如: BTCUSDT.BINANCE.SPOT, ETHUSDT.UNISWAP_V3.SPOT)',
+                message:
+                  '格式应为: SYMBOL.VENUE.TYPE (如: BTCUSDT.BINANCE.SPOT, ETHUSDT.UNISWAP_V3.SPOT)',
               },
             ]}
             tooltip="例如：BTCUSDT.BINANCE.SPOT 或 ETHUSDT.UNISWAP_V3.SPOT"
@@ -527,7 +505,9 @@ export default function OrderbookConfigsPage() {
             <Card size="small" title="基础信息">
               <Space direction="vertical" size={8} style={{ width: '100%' }}>
                 <Space size={24}>
-                  <span>交易对：{viewingConfig.baseAsset}/{viewingConfig.quoteAsset}</span>
+                  <span>
+                    交易对：{viewingConfig.baseAsset}/{viewingConfig.quoteAsset}
+                  </span>
                   <span>交易所：{viewingConfig.venue}</span>
                   <span>类型：{viewingConfig.instrumentType}</span>
                   <span>深度档位：{viewingConfig.depthLevels ?? '默认'}</span>
@@ -621,4 +601,3 @@ export default function OrderbookConfigsPage() {
     </div>
   )
 }
-

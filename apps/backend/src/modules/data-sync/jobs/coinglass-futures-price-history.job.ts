@@ -21,8 +21,12 @@ interface FuturesPriceCursor {
   /**
    * 合约类型，例如 PERPETUAL / CURRENT_QUARTER 等
    * 对应 Coinglass 文档中的 contractType 参数
+   *
+   * 约定：
+   * - null：表示现货（spot）
+   * - undefined：表示未指定（将使用默认期货合约类型）
    */
-  contractType?: string
+  contractType?: string | null
   /**
    * 时间粒度，例如 "4h"
    */
@@ -74,6 +78,21 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private readonly defaultInterval: MarketTimeframe = '4h'
   private readonly defaultLimit = 1000
 
+  private readonly allowedIntervals = [
+    '1m',
+    '3m',
+    '5m',
+    '15m',
+    '30m',
+    '1h',
+    '4h',
+    '6h',
+    '8h',
+    '12h',
+    '1d',
+    '1w',
+  ] as const satisfies readonly MarketTimeframe[]
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -82,11 +101,17 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
+    // 首次运行时（cursor 为空）允许用 task.meta 填充参数，避免 seed 配置不生效。
+    // 注意：只在没有 cursor 时合并，避免覆盖已有增量游标。
+    if (!ctx.cursor) {
+      this.applyMetaDefaults(cursor, ctx.meta)
+    }
+
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
 
     // 根据 contractType 动态选择 endpoint
     // contractType 为 null 时使用现货 API，否则使用期货 API
-    const isSpot = cursor.contractType === null || cursor.contractType === undefined
+    const isSpot = cursor.contractType === null
     const endpoint = isSpot
       ? 'https://open-api-v4.coinglass.com/api/spot/price/history'
       : 'https://open-api-v4.coinglass.com/api/futures/price/history'
@@ -130,7 +155,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
             `Backfilling history for ${cursor.symbol} ${interval}: from ${new Date(backfillTargetMs).toISOString()} to ${new Date(earliestMs).toISOString()}`,
           )
           return await this.runBackfill(
-            ctx,
             cursor,
             endpoint,
             apiKey,
@@ -161,6 +185,10 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     if (typeof lastTimestampMs === 'number') {
       // Coinglass 文档示例：start_time 以毫秒为单位
       url.searchParams.set('start_time', Math.floor(lastTimestampMs).toString())
+    } else {
+      // 空库首次拉取时，如果不传任何时间参数，Coinglass 可能返回 time error。
+      // 使用与回填深度一致的窗口作为初始 start_time。
+      url.searchParams.set('start_time', this.getBackfillTarget(interval).toString())
     }
 
     this.logger.log(
@@ -182,7 +210,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
         meta: {
           symbol: cursor.symbol,
           exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-          contractType: cursor.contractType ?? this.defaultContractType,
+          contractType:
+            cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
           interval,
           note: 'No futures price history data returned from API',
         },
@@ -244,7 +273,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const newCursor: FuturesPriceCursor = {
       symbol: cursor.symbol,
       exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-      contractType: cursor.contractType ?? this.defaultContractType ?? undefined,
+      contractType:
+        cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
       interval,
       lastTimestamp: latestTimestampMs,
       backfillCompleted: cursor.backfillCompleted,
@@ -257,7 +287,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       meta: {
         symbol: cursor.symbol,
         exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-        contractType: cursor.contractType ?? this.defaultContractType,
+        contractType:
+          cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
         interval,
         latestTime: latestTimestampMs ? new Date(latestTimestampMs).toISOString() : null,
         lastTimestamp: latestTimestampMs ?? null,
@@ -362,7 +393,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   }
 
   private async runBackfill(
-    ctx: DataPullJobContext,
     cursor: FuturesPriceCursor,
     endpoint: string,
     apiKey: string,
@@ -370,7 +400,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     targetMs: number,
     prismaInterval: string,
   ): Promise<JobRunResult> {
-    const isSpot = cursor.contractType === null || cursor.contractType === undefined
+    const isSpot = cursor.contractType === null
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
 
     const url = new URL(endpoint)
@@ -409,7 +439,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
         meta: {
           symbol: cursor.symbol,
           exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-          contractType: cursor.contractType ?? this.defaultContractType,
+          contractType:
+            cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
           interval: cursor.interval,
           note: 'Backfill complete - no more historical data',
         },
@@ -477,7 +508,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       meta: {
         symbol: cursor.symbol,
         exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-        contractType: cursor.contractType ?? this.defaultContractType,
+        contractType:
+          cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
         interval: cursor.interval,
         mode: 'backfill',
         oldestFetched: new Date(oldestFetched).toISOString(),
@@ -502,6 +534,46 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     return now - depth
   }
 
+  private applyMetaDefaults(cursor: FuturesPriceCursor, meta: unknown): void {
+    if (!this.isRecord(meta)) return
+
+    const symbol = this.getNonEmptyString(meta.symbol)
+    if (symbol) {
+      cursor.symbol = symbol
+    }
+
+    const exchangeCode = this.getNonEmptyString(meta.exchangeCode)
+    if (exchangeCode) {
+      cursor.exchangeCode = exchangeCode
+    }
+
+    const contractType = meta.contractType
+    if (typeof contractType === 'string') {
+      cursor.contractType = contractType.trim()
+    } else if (contractType === null) {
+      cursor.contractType = null
+    }
+
+    const interval = this.getNonEmptyString(meta.interval)
+    if (interval && this.isAllowedInterval(interval)) {
+      cursor.interval = interval
+    }
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  private getNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+
+  private isAllowedInterval(value: string): value is MarketTimeframe {
+    return (this.allowedIntervals as readonly string[]).includes(value)
+  }
+
   private parseCursor(currentCursor: string | null): FuturesPriceCursor {
     if (!currentCursor) {
       return {
@@ -523,10 +595,12 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       if (!parsed.exchangeCode) {
         parsed.exchangeCode = this.defaultExchangeCode
       }
-      if (!parsed.contractType && this.defaultContractType) {
+      // contractType 约定：null=spot；undefined=使用默认期货合约
+      if (parsed.contractType === undefined && this.defaultContractType) {
         parsed.contractType = this.defaultContractType
       }
-      if (!parsed.interval) {
+
+      if (!parsed.interval || !this.isAllowedInterval(parsed.interval as string)) {
         parsed.interval = this.defaultInterval
       }
       if (typeof parsed.lastTimestamp !== 'number') {

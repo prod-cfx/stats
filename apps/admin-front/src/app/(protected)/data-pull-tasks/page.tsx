@@ -200,7 +200,6 @@ export default function DataPullTasksPage() {
   useEffect(() => {
     void loadTasks(1, 20)
     void loadRegisteredJobs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -210,7 +209,6 @@ export default function DataPullTasksPage() {
     const nextKeys = selectedRowKeys.filter(id => taskIds.has(id))
 
     if (nextKeys.length === selectedRowKeys.length) return
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
     setSelectedRowKeys(nextKeys)
   }, [tasks, selectedRowKeys])
 

@@ -25,17 +25,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrate()
   }, [hydrate])
 
-  const value = useMemo<AuthContextValue>(() => ({
-    session,
-    initializing,
-    login: setSession,
-    logout: () => clearSession(),
-  }), [session, initializing, setSession, clearSession])
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session,
+      initializing,
+      login: setSession,
+      logout: () => clearSession(),
+    }),
+    [session, initializing, setSession, clearSession],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-// eslint-disable-next-line react-refresh/only-export-components -- 同文件需导出自定义 Hook 供组件消费
 export function useAuth() {
   const context = useContext(AuthContext)
   if (!context) {

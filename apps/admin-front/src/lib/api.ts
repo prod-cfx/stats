@@ -1,6 +1,6 @@
-/* eslint-disable perfectionist/sort-imports, perfectionist/sort-named-imports, ts/consistent-type-imports */
-import { z } from 'zod'
-import { schemas, createApiClient } from '@ai/api-contracts'
+import type { schemas } from '@ai/api-contracts'
+import type { z } from 'zod'
+import { createApiClient } from '@ai/api-contracts'
 
 import { useAuthStore } from './auth-store'
 import { getToken } from './session'
@@ -53,7 +53,10 @@ export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
 
 // 数据拉取任务相关类型
 export type DataPullTask = _DataPullTaskDto
-interface InterruptDataPullTaskResult { success: boolean; message: string }
+interface InterruptDataPullTaskResult {
+  success: boolean
+  message: string
+}
 
 interface _PaginationResult<T> {
   total: number
@@ -236,10 +239,8 @@ export async function fetchSystemPromptSettings(): Promise<SettingResponse[]> {
       queries: { category: SYSTEM_PROMPT_CATEGORY },
     })
     const data = unwrapResponse<SettingResponse[] | { items: SettingResponse[] }>(response as any)
-    if (Array.isArray(data))
-      return data
-    if (data && Array.isArray((data as any).items))
-      return (data as any).items
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray((data as any).items)) return (data as any).items
     return []
   })
 }
@@ -391,8 +392,8 @@ export async function fetchDataPullTasks(
     const data = unwrapResponse<any>(response)
     return {
       total: data.total ?? 0,
-      page: data.page ?? (query.page ?? 1),
-      limit: data.limit ?? (query.limit ?? 20),
+      page: data.page ?? query.page ?? 1,
+      limit: data.limit ?? query.limit ?? 20,
       items: Array.isArray(data.items) ? (data.items as DataPullTask[]) : [],
     }
   })
@@ -436,7 +437,9 @@ export interface CreateDataPullTaskPayload {
   meta?: Record<string, unknown> | null
 }
 
-export async function createDataPullTask(payload: CreateDataPullTaskPayload): Promise<DataPullTask> {
+export async function createDataPullTask(
+  payload: CreateDataPullTaskPayload,
+): Promise<DataPullTask> {
   return withAuthErrorHandling(async () => {
     const dto: _CreateDataPullTaskDto = {
       key: payload.key,
@@ -482,7 +485,10 @@ export interface UpdateDataPullTaskPayload {
   meta?: Record<string, unknown> | null
 }
 
-export async function updateDataPullTask(id: number, payload: UpdateDataPullTaskPayload): Promise<DataPullTask> {
+export async function updateDataPullTask(
+  id: number,
+  payload: UpdateDataPullTaskPayload,
+): Promise<DataPullTask> {
   return withAuthErrorHandling(async () => {
     const dto: _UpdateDataPullTaskDto = {}
     if (payload.name !== undefined) dto.name = payload.name
@@ -635,7 +641,9 @@ export interface GetLatestTradesParams {
   limit?: number
 }
 
-export async function getLatestTrades(params: GetLatestTradesParams): Promise<MarketTradeResponse[]> {
+export async function getLatestTrades(
+  params: GetLatestTradesParams,
+): Promise<MarketTradeResponse[]> {
   return withAuthErrorHandling(async () => {
     const response = await client.MarketsController_getLatestTrades({
       headers: requireAuthHeaders(),
@@ -687,7 +695,9 @@ export async function fetchExchangeConfigs(
   })
 }
 
-export async function createExchangeConfig(payload: CreateExchangeConfigPayload): Promise<ExchangeConfigResponse> {
+export async function createExchangeConfig(
+  payload: CreateExchangeConfigPayload,
+): Promise<ExchangeConfigResponse> {
   return withAuthErrorHandling(async () => {
     const response = await client.AdminExchangeConfigController_createConfig(payload, {
       headers: requireAuthHeaders(),
