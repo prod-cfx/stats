@@ -1,8 +1,4 @@
-import type {
-  PolymarketMarket as PolymarketMarketModel,
-  PolymarketOutcome as PolymarketOutcomeModel,
-  Prisma,
-} from '@prisma/client'
+import type { PolymarketMarket as PolymarketMarketModel, Prisma } from '@prisma/client'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -70,9 +66,11 @@ export interface OutcomeTokenRecord {
   outcomeTokenId: string
 }
 
-export interface PolymarketMarketWithOutcomes extends PolymarketMarketModel {
-  outcomes: PolymarketOutcomeModel[]
-}
+export type PolymarketMarketWithOutcomes = Prisma.PolymarketMarketGetPayload<{
+  include: {
+    outcomes: true
+  }
+}>
 
 @Injectable()
 export class PolymarketRepository {
@@ -231,6 +229,19 @@ export class PolymarketRepository {
     const limit = Math.max(1, Math.min(params.limit ?? 50, 500))
     const offset = Math.max(0, params.offset ?? 0)
 
+    type OutcomeRow = Prisma.PolymarketOutcomeGetPayload<{
+      include: {
+        market: {
+          select: {
+            id: true
+            marketId: true
+            category: true
+            isActive: true
+          }
+        }
+      }
+    }>
+
     // 标准化 category：确保与存储格式一致（小写 + trim）
     const normalizedCategory = params.category?.trim().toLowerCase()
 
@@ -264,13 +275,16 @@ export class PolymarketRepository {
     })
 
     return rows
-      .map(row => ({
+      .map((row: OutcomeRow) => ({
         marketDbId: row.market?.id ?? 0,
         marketExternalId: row.market?.marketId ?? '',
         outcomeDbId: row.id,
         outcomeTokenId: row.outcomeTokenId,
       }))
-      .filter(record => record.marketDbId > 0 && record.marketExternalId && record.outcomeTokenId)
+      .filter(
+        (record: OutcomeTokenRecord) =>
+          record.marketDbId > 0 && record.marketExternalId && record.outcomeTokenId,
+      )
   }
 
   async markMarketActivity(

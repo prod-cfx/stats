@@ -45,7 +45,7 @@ describe('Polymarket markets service (E2E)', () => {
     await client.polymarketOrderbookSnapshot.deleteMany({
       where: {
         marketExternalId: {
-          in: ['e2e-m-crypto', 'e2e-m-sports'],
+          in: ['e2e-m-crypto', 'e2e-m-crypto-missing-prob', 'e2e-m-sports'],
         },
       },
     })
@@ -53,7 +53,7 @@ describe('Polymarket markets service (E2E)', () => {
     await client.polymarketOutcome.deleteMany({
       where: {
         outcomeTokenId: {
-          in: ['e2e-token-yes', 'e2e-token-no'],
+          in: ['e2e-token-yes', 'e2e-token-no', 'e2e-token-missing-prob', 'e2e-token-suspect-zero'],
         },
       },
     })
@@ -61,7 +61,12 @@ describe('Polymarket markets service (E2E)', () => {
     await client.polymarketMarket.deleteMany({
       where: {
         marketId: {
-          in: ['e2e-m-crypto', 'e2e-m-sports'],
+          in: [
+            'e2e-m-crypto',
+            'e2e-m-crypto-missing-prob',
+            'e2e-m-crypto-suspect-zero',
+            'e2e-m-sports',
+          ],
         },
       },
     })
@@ -105,6 +110,54 @@ describe('Polymarket markets service (E2E)', () => {
           rawPayload: {},
         },
       ],
+    })
+
+    const cryptoMarketMissingProb = await client.polymarketMarket.create({
+      data: {
+        marketId: 'e2e-m-crypto-missing-prob',
+        question: 'E2E: Missing probability should fallback to price',
+        category: 'crypto',
+        status: 'open',
+        isActive: true,
+        rawPayload: {},
+      },
+    })
+
+    await client.polymarketOutcome.create({
+      data: {
+        marketId: cryptoMarketMissingProb.id,
+        outcomeTokenId: 'e2e-token-missing-prob',
+        name: 'Yes',
+        shortName: 'Yes',
+        side: 'YES',
+        price: '0.6',
+        probability: null,
+        rawPayload: {},
+      },
+    })
+
+    const cryptoMarketSuspectZero = await client.polymarketMarket.create({
+      data: {
+        marketId: 'e2e-m-crypto-suspect-zero',
+        question: 'E2E: Suspect probability=0 should be treated as missing',
+        category: 'crypto',
+        status: 'open',
+        isActive: true,
+        rawPayload: {},
+      },
+    })
+
+    await client.polymarketOutcome.create({
+      data: {
+        marketId: cryptoMarketSuspectZero.id,
+        outcomeTokenId: 'e2e-token-suspect-zero',
+        name: 'Yes',
+        shortName: 'Yes',
+        side: 'YES',
+        price: null,
+        probability: '0',
+        rawPayload: {},
+      },
     })
 
     await client.polymarketMarket.create({
@@ -157,7 +210,19 @@ describe('Polymarket markets service (E2E)', () => {
 
     expect(yes?.probability).toBe('0.6')
     expect(no?.probability).toBe('0.4')
+
+    const missingProbMarket = result.find(m => m.id === 'e2e-m-crypto-missing-prob')
+    expect(missingProbMarket).toBeDefined()
+    if (!missingProbMarket) return
+
+    const missingProbOption = missingProbMarket.options?.find(o => o.label === 'Yes')
+    expect(missingProbOption?.probability).toBe('0.6')
+
+    const suspectZeroMarket = result.find(m => m.id === 'e2e-m-crypto-suspect-zero')
+    expect(suspectZeroMarket).toBeDefined()
+    if (!suspectZeroMarket) return
+
+    const suspectZeroOption = suspectZeroMarket.options?.find(o => o.label === 'Yes')
+    expect(suspectZeroOption?.probability).toBe('')
   })
 })
-
-

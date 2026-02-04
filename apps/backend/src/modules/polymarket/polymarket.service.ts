@@ -16,6 +16,33 @@ import { PolymarketRepository } from './polymarket.repository'
 export class PolymarketService {
   constructor(private readonly repo: PolymarketRepository) {}
 
+  private isSuspectZeroProbability(input: {
+    probability?: string | null
+    price?: string | null
+    rawPayload: unknown
+  }): boolean {
+    if (!input.probability) return false
+
+    const probabilityNum = Number.parseFloat(input.probability)
+    if (Number.isNaN(probabilityNum) || probabilityNum !== 0) return false
+
+    const priceNum = input.price ? Number.parseFloat(input.price) : Number.NaN
+    const isPriceMissingOrZero = !input.price || (Number.isFinite(priceNum) && priceNum === 0)
+    if (!isPriceMissingOrZero) return false
+
+    const raw = input.rawPayload
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return true
+
+    const rawObject = raw as Record<string, unknown>
+    const hasAnySourceKey =
+      Object.prototype.hasOwnProperty.call(rawObject, 'probability') ||
+      Object.prototype.hasOwnProperty.call(rawObject, 'price') ||
+      Object.prototype.hasOwnProperty.call(rawObject, 'outcomePrice') ||
+      Object.prototype.hasOwnProperty.call(rawObject, 'outcome_price')
+
+    return !hasAnySourceKey
+  }
+
   /**
    * 列出用于前端展示的预测市场读模型。
    *
@@ -43,10 +70,22 @@ export class PolymarketService {
   private mapMarketToCard(market: PolymarketMarketWithOutcomes): PredictionMarketCardDto {
     const outcomes: PredictionMarketOutcomeDto[] | undefined = market.outcomes.length
       ? market.outcomes.map(outcome => {
-          const { probability } = convertDecimalsInObject(outcome, ['probability'])
+          const { probability, price } = convertDecimalsInObject(outcome, ['probability', 'price'])
+
+          // 最小兼容处理：只在“疑似历史兜底写 0 且无任何来源字段”的情况下将其视为缺失。
+          // 注意：真实概率为 0 的场景需要保留为 "0"。
+          const normalizedProbability = this.isSuspectZeroProbability({
+            probability,
+            price,
+            rawPayload: outcome.rawPayload,
+          })
+            ? ''
+            : probability
+
           return {
             label: outcome.shortName ?? outcome.name ?? outcome.outcomeTokenId,
-            probability: probability ?? '',
+            // 不要用 "0" 兜底：缺失数据会被前端展示为 0%，造成误导
+            probability: normalizedProbability ?? price ?? '',
           }
         })
       : undefined
@@ -71,7 +110,9 @@ export class PolymarketService {
     }
   }
 
-  private buildRulesFromMarket(market: PolymarketMarketWithOutcomes): PredictionMarketRulesDto | undefined {
+  private buildRulesFromMarket(
+    market: PolymarketMarketWithOutcomes,
+  ): PredictionMarketRulesDto | undefined {
     const paragraphs: string[] = []
 
     if (market.resolutionSource) {
@@ -98,5 +139,3 @@ export class PolymarketService {
     }
   }
 }
-
-
