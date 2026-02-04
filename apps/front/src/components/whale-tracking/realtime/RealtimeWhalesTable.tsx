@@ -84,8 +84,8 @@ export const RealtimeWhalesTable = () => {
     try {
       setLoading(true);
       const alerts = await fetchWhaleTradesRealtime({
-        // 默认展示名义价值 >= 100 万 USD 的最新 50 条记录
-        minTradeValueUsd: 1_000_000,
+        // 默认展示名义价值 >= 1 万 USD 的最新 50 条记录
+        minTradeValueUsd: 10000,
         limit: 50,
       });
 
@@ -101,8 +101,8 @@ export const RealtimeWhalesTable = () => {
         const positionValueUSD =
           Number.isFinite(positionValueNumber)
             ? `$${positionValueNumber.toLocaleString('en-US', {
-                maximumFractionDigits: 2,
-              })}`
+              maximumFractionDigits: 2,
+            })}`
             : '$-';
 
         const sizeNumber = Number(alert.trade_size);
@@ -116,8 +116,8 @@ export const RealtimeWhalesTable = () => {
         const entryPrice =
           Number.isFinite(entryPriceNumber)
             ? `$${entryPriceNumber.toLocaleString('en-US', {
-                maximumFractionDigits: 1,
-              })}`
+              maximumFractionDigits: 1,
+            })}`
             : '$-';
 
         const timestamp = new Date(alert.trade_time).getTime();
@@ -169,7 +169,7 @@ export const RealtimeWhalesTable = () => {
   // 首次挂载时立即拉取一次最新数据（避免 fetchNewData identity 变化导致重复拉取）
   useEffect(() => {
     void fetchNewDataRef.current?.();
-     
+
   }, []);
 
   useEffect(() => {
@@ -277,14 +277,13 @@ export const RealtimeWhalesTable = () => {
           <p className="text-[10px] md:text-xs text-[#8b949e]">{t('whaleTracking.realtime.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
-          <button 
+          <button
             type="button"
             onClick={() => setIsPaused(!isPaused)}
-            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 border rounded-full text-xs md:text-label font-bold transition-all active:scale-95 ${
-              isPaused 
-                ? 'bg-[#21262d] border-[#30363d] text-[#8b949e]' 
+            className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 border rounded-full text-xs md:text-label font-bold transition-all active:scale-95 ${isPaused
+                ? 'bg-[#21262d] border-[#30363d] text-[#8b949e]'
                 : 'bg-primary/10 border-primary text-primary shadow-lg shadow-primary/10'
-            }`}
+              }`}
           >
             <RefreshCw className={`w-3 h-3 md:w-3.5 md:h-3.5 ${!isPaused ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
             <span>{isPaused ? t('whaleTracking.realtime.paused') : t('whaleTracking.realtime.nextUpdate', { count: countdown })}</span>
@@ -294,7 +293,7 @@ export const RealtimeWhalesTable = () => {
 
       <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-xl overflow-hidden min-h-[600px] relative shadow-2xl">
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
-        
+
         <div className="overflow-x-auto cf-scrollbar">
           <table className="w-full border-collapse min-w-[1000px]">
             <thead>
@@ -342,15 +341,15 @@ export const RealtimeWhalesTable = () => {
                           {tx.address}
                           <div className="absolute top-full left-8 -translate-x-1/2 border-8 border-transparent border-t-black/90 dark:border-t-white/90" />
                         </div>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className={`transition-colors ${copiedAddress === tx.address ? 'text-green-500' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
                           onClick={(e) => { e.stopPropagation(); handleCopy(tx.address); }}
                         >
                           {copiedAddress === tx.address ? <Check className="w-3 h-3 md:w-3.5 md:h-3.5" /> : <Copy className="w-3 h-3 md:w-3.5 md:h-3.5" />}
                         </button>
                       </div>
-                      <span 
+                      <span
                         className="w-fit px-1.5 py-0.5 rounded text-[8px] md:text-[10px] font-bold uppercase"
                         style={{ color: tx.tagColor, backgroundColor: tx.tagBg }}
                       >
@@ -385,7 +384,7 @@ export const RealtimeWhalesTable = () => {
                     {formatRelativeTime(tx.timestamp)}
                   </td>
                   <td className="px-3 md:px-6 py-5 text-center">
-                    <button 
+                    <button
                       type="button"
                       className="w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded md:rounded-xl text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)] hover:border-primary/50 hover:bg-primary/5 active:scale-95 transition-all shadow-sm"
                       onClick={(e) => {
@@ -403,7 +402,7 @@ export const RealtimeWhalesTable = () => {
         </div>
       </div>
 
-      <WhaleTradingStatsModal 
+      <WhaleTradingStatsModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         address={selectedAddress || ''}
