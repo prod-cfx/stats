@@ -1,24 +1,24 @@
-'use client';
+'use client'
 
 /* eslint-disable perfectionist/sort-imports -- 按语义分组导入，保持与其他组件一致 */
 
-import type { PredictionCardProps, PredictionRulesMeta } from './PredictionCard';
-import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react';
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { LoadingState } from '@/components/ui/loading';
-import { Modal } from '@/components/ui/Modal';
-import type { PredictionMarketCardResponse } from '@/lib/api';
-import { fetchPredictionMarkets } from '@/lib/api';
-import { useMockData } from '@/hooks/use-mock-data';
-import { formatDateTimeFull, formatNumber } from '@/lib/formatters';
-import { PredictionCard } from './PredictionCard';
+import type { PredictionCardProps, PredictionRulesMeta } from './PredictionCard'
+import { Bitcoin, Coins, Globe, Landmark, Rocket, Shield } from 'lucide-react'
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { LoadingState } from '@/components/ui/loading'
+import { Modal } from '@/components/ui/Modal'
+import type { PredictionMarketCardResponse } from '@/lib/api'
+import { fetchPredictionMarkets } from '@/lib/api'
+import { useMockData } from '@/hooks/use-mock-data'
+import { formatDateTimeFull, formatNumber } from '@/lib/formatters'
+import { PredictionCard } from './PredictionCard'
 
 type PredictionMarketItem = PredictionCardProps & {
-  rules?: PredictionRulesMeta;
-};
+  rules?: PredictionRulesMeta
+}
 
-const ICONS = [Bitcoin, Rocket, Coins, Shield, Globe, Landmark] as const;
+const ICONS = [Bitcoin, Rocket, Coins, Shield, Globe, Landmark] as const
 const ICON_BG_CLASSES = [
   'bg-orange-500',
   'bg-primary',
@@ -26,44 +26,47 @@ const ICON_BG_CLASSES = [
   'bg-indigo-600',
   'bg-slate-600',
   'bg-purple-600',
-] as const;
+] as const
 
 function formatProbability(raw?: string | null): string | undefined {
-  if (!raw) return undefined;
-  const num = Number.parseFloat(raw);
-  if (Number.isNaN(num)) return raw;
-  const pct = num <= 1 ? num * 100 : num;
-  return `${pct.toFixed(0)}%`;
+  if (!raw) return undefined
+  const num = Number.parseFloat(raw)
+  if (Number.isNaN(num)) return raw
+  // 缺失数据在后端可能会传空字符串；0 视为真实 0 概率。
+  // 但也避免将几乎为 0 的噪声直接显示为 0%。
+  if (num > 0 && num < 0.005) return '<1%'
+  const pct = num <= 1 ? num * 100 : num
+  return `${pct.toFixed(0)}%`
 }
 
 function hashCode(str: string): number {
-  let hash = 0;
+  let hash = 0
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
   }
-  return Math.abs(hash);
+  return Math.abs(hash)
 }
 
-const ISO_DATE_REGEX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g;
+const ISO_DATE_REGEX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g
 
 function formatRuleText(text: string): string {
-  return text.replace(ISO_DATE_REGEX, match => formatDateTimeFull(match));
+  return text.replace(ISO_DATE_REGEX, match => formatDateTimeFull(match))
 }
 
 function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
-  const hash = hashCode(item.id);
-  const Icon = ICONS[hash % ICONS.length];
-  const iconBgColor = ICON_BG_CLASSES[hash % ICON_BG_CLASSES.length];
+  const hash = hashCode(item.id)
+  const Icon = ICONS[hash % ICONS.length]
+  const iconBgColor = ICON_BG_CLASSES[hash % ICON_BG_CLASSES.length]
 
   return {
     id: item.id,
     title: item.title,
-    icon: <Icon className="w-5 h-5 text-white" />,
+    icon: <Icon className="h-5 w-5 text-white" />,
     iconBgColor,
     options: item.options?.map(opt => ({
       label: opt.label,
-      probability: formatProbability(opt.probability) ?? '',
+      probability: formatProbability(opt.probability) ?? '-',
     })),
     probability: formatProbability(item.probability),
     status: item.status,
@@ -74,40 +77,49 @@ function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMark
           createdAt: item.rules.createdAt,
         }
       : undefined,
-  };
+  }
 }
 
 export const PredictionMarketGrid = () => {
-  const { t } = useTranslation();
-  const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null);
-  const [modalLoading, setModalLoading] = useState(false);
+  const { t } = useTranslation()
+  const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
 
-  const { data: predictions, loading, error, reload } = useMockData(
+  const {
+    data: predictions,
+    loading,
+    error,
+    reload,
+  } = useMockData(
     async () => {
-      const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48 });
-      return result.map(item => mapToPredictionItem(item));
+      const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48 })
+      return result.map(item => mapToPredictionItem(item))
     },
     [],
     {
       delay: 0,
       ignoreQueryOverrides: true,
     },
-  );
+  )
 
   const handleCardClick = (p: PredictionMarketItem) => {
-    setModalLoading(true);
-    setSelectedPrediction(p);
+    setModalLoading(true)
+    setSelectedPrediction(p)
     // Modal internal loading: 800-1200ms
-    setTimeout(() => setModalLoading(false), 1000);
-  };
+    setTimeout(() => setModalLoading(false), 1000)
+  }
 
   return (
     <div className="space-y-4 md:space-y-8">
       <div className="relative min-h-[400px]">
         <LoadingState isLoading={loading} error={error} onRetry={reload}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12 animate-in fade-in duration-500">
+          <div className="animate-in fade-in grid grid-cols-1 gap-4 pb-12 duration-500 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {predictions?.map(prediction => (
-              <div key={prediction.id} onClick={() => handleCardClick(prediction)} className="cursor-pointer">
+              <div
+                key={prediction.id}
+                onClick={() => handleCardClick(prediction)}
+                className="cursor-pointer"
+              >
                 <PredictionCard {...prediction} />
               </div>
             ))}
@@ -124,16 +136,26 @@ export const PredictionMarketGrid = () => {
         loading={modalLoading}
       >
         <div className="space-y-6">
-          <div className="flex gap-4 items-start pb-4 border-b border-[color:var(--cf-border)]">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}>
+          <div className="flex items-start gap-4 border-b border-[color:var(--cf-border)] pb-4">
+            <div
+              className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${selectedPrediction?.iconBgColor || 'bg-[#374151]'}`}
+            >
               {selectedPrediction?.icon}
             </div>
             <div>
-              <h3 className="text-xl font-bold text-[color:var(--cf-text-strong)] leading-tight">{selectedPrediction?.title}</h3>
-              <div className="flex gap-3 mt-2">
-                <span className="text-xs text-[color:var(--cf-muted)]">{t('predictionMarket.modal.volume')}: {selectedPrediction?.volume ?? '-'}</span>
-                <span className="text-xs text-[#f87171] font-bold">
-                  ● {t(`predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`, { defaultValue: selectedPrediction?.status || 'LIVE' })}
+              <h3 className="text-xl leading-tight font-bold text-[color:var(--cf-text-strong)]">
+                {selectedPrediction?.title}
+              </h3>
+              <div className="mt-2 flex gap-3">
+                <span className="text-xs text-[color:var(--cf-muted)]">
+                  {t('predictionMarket.modal.volume')}: {selectedPrediction?.volume ?? '-'}
+                </span>
+                <span className="text-xs font-bold text-[#f87171]">
+                  ●{' '}
+                  {t(
+                    `predictionMarket.status.${(selectedPrediction?.status || 'LIVE').toLowerCase()}`,
+                    { defaultValue: selectedPrediction?.status || 'LIVE' },
+                  )}
                 </span>
               </div>
             </div>
@@ -142,23 +164,31 @@ export const PredictionMarketGrid = () => {
           {/* Outcomes (read-only) */}
           {(selectedPrediction?.options?.length || selectedPrediction?.probability) && (
             <div className="space-y-3">
-              <p className="text-sm font-bold text-[color:var(--cf-muted)] uppercase tracking-wider">{t('predictionMarket.modal.outcomes')}</p>
+              <p className="text-sm font-bold tracking-wider text-[color:var(--cf-muted)] uppercase">
+                {t('predictionMarket.modal.outcomes')}
+              </p>
               {selectedPrediction?.options?.length ? (
                 <div className="space-y-3">
                   {selectedPrediction.options.map((opt, idx) => (
                     <div
                       key={`${opt.label}-${idx}`}
-                      className="w-full flex justify-between items-center p-4 bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-xl"
+                      className="flex w-full items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4"
                     >
-                      <span className="text-[color:var(--cf-text-strong)] font-bold">{opt.label}</span>
+                      <span className="font-bold text-[color:var(--cf-text-strong)]">
+                        {opt.label}
+                      </span>
                       <span className="text-primary font-bold">{opt.probability}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-8 text-center bg-[color:var(--cf-bg)] rounded-xl border border-[color:var(--cf-border)]">
-                  <p className="text-3xl font-bold text-[color:var(--cf-text-strong)] mb-1">{selectedPrediction?.probability}</p>
-                  <p className="text-[color:var(--cf-muted)] text-xs uppercase tracking-widest">{t('predictionMarket.modal.probability')}</p>
+                <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-8 text-center">
+                  <p className="mb-1 text-3xl font-bold text-[color:var(--cf-text-strong)]">
+                    {selectedPrediction?.probability}
+                  </p>
+                  <p className="text-xs tracking-widest text-[color:var(--cf-muted)] uppercase">
+                    {t('predictionMarket.modal.probability')}
+                  </p>
                 </div>
               )}
             </div>
@@ -166,20 +196,26 @@ export const PredictionMarketGrid = () => {
 
           {/* Rules */}
           <div className="space-y-4 pt-2">
-            <h4 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{t('predictionMarket.modal.rules')}</h4>
-            <div className="text-sm leading-relaxed text-[color:var(--cf-text)] px-1">
+            <h4 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+              {t('predictionMarket.modal.rules')}
+            </h4>
+            <div className="px-1 text-sm leading-relaxed text-[color:var(--cf-text)]">
               {(selectedPrediction?.rules?.paragraphs || []).map((p, idx) => (
                 <React.Fragment key={idx}>
                   <p>{formatRuleText(p)}</p>
-                  {idx !== (selectedPrediction?.rules?.paragraphs?.length ?? 0) - 1 && <div className="h-5" />}
+                  {idx !== (selectedPrediction?.rules?.paragraphs?.length ?? 0) - 1 && (
+                    <div className="h-5" />
+                  )}
                 </React.Fragment>
               ))}
             </div>
 
             {selectedPrediction?.rules?.createdAt && (
-              <div className="pt-6 border-t border-[color:var(--cf-border)] text-xs text-[color:var(--cf-muted)]">
+              <div className="border-t border-[color:var(--cf-border)] pt-6 text-xs text-[color:var(--cf-muted)]">
                 <span className="font-bold">
-                  {t('predictionMarket.modal.createdAt', { date: formatDateTimeFull(selectedPrediction.rules.createdAt) })}
+                  {t('predictionMarket.modal.createdAt', {
+                    date: formatDateTimeFull(selectedPrediction.rules.createdAt),
+                  })}
                 </span>
               </div>
             )}
@@ -187,6 +223,5 @@ export const PredictionMarketGrid = () => {
         </div>
       </Modal>
     </div>
-  );
-};
-
+  )
+}

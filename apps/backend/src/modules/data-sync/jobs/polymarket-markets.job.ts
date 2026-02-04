@@ -1,5 +1,9 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import type { PolymarketGammaEvent, PolymarketGammaMarket, PolymarketGammaOutcome } from '@/clients/polymarket/types'
+import type {
+  PolymarketGammaEvent,
+  PolymarketGammaMarket,
+  PolymarketGammaOutcome,
+} from '@/clients/polymarket/types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -57,7 +61,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 同时允许通过任务级 meta 覆盖（resolveCategory 中处理）。
     const rawCategory = cfg?.filters.category ?? 'crypto'
     this.defaultCategory = rawCategory ? rawCategory.trim().toLowerCase() : 'crypto'
-    
+
     // 计算实际请求的 limit（gamma-client 会 clamp 到 maxLimit）
     const maxLimit = cfg?.gamma.maxLimit ?? 200
     this.effectiveLimit = Math.min(this.batchSize, maxLimit)
@@ -96,8 +100,8 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     }
 
     const nextCursorValue = response.nextCursor ?? null
-    const apiReturned = response.markets.length  // API 实际返回的数量
-    
+    const apiReturned = response.markets.length // API 实际返回的数量
+
     // 计算下一次的 offset
     // 关键：必须基于 API 实际返回的数量（apiReturned），而不是过滤后的数量（processed）
     // 因为过滤后 crypto 市场可能只有个位数，会导致永远重置 offset=0，永远循环第一页
@@ -105,7 +109,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 因为 gamma-client 会将 limit clamp 到 POLYMARKET_GAMMA_LIMIT
     let nextOffset = 0
     let usedCursor = false
-    
+
     if (nextCursorValue) {
       // 有 cursor，进入 cursor 模式，offset 重置为 0
       nextOffset = 0
@@ -124,9 +128,11 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       // 在 offset 模式下，API 返回数据不满，说明到达末尾，重置为 0 开始新一轮
       nextOffset = 0
       usedCursor = false
-      this.logger.log(`Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`)
+      this.logger.log(
+        `Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`,
+      )
     }
-    
+
     const newCursor: PolymarketMarketsCursor = {
       nextCursor: nextCursorValue,
       offset: nextOffset,
@@ -155,19 +161,19 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // API 返回 events 数组，取第一个元素作为主事件
     const event = market.event ?? market.events?.[0]
     const m = market as any
-    
+
     // 统一 category 为小写并去除空格
     // 注意：不应该用配置的默认 category 回填，否则会将无分类的市场错误地标记为 crypto
     const rawCategory = market.category ?? event?.category ?? null
     const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
-    
+
     // 关键：Gamma API 的 category 参数不工作（忽略该查询参数），
     // 必须在本地过滤，否则会把所有历史市场全量 upsert 导致数据库膨胀
     if (configuredCategory && normalizedCategory !== configuredCategory) {
       // 不匹配配置的 category，跳过此市场
       return { skipped: true }
     }
-    
+
     const marketRecord = await this.repo.upsertMarket({
       marketId: market.id,
       eventExternalId: m.eventId ?? m.event_id ?? event?.id ?? null,
@@ -186,7 +192,9 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       resolutionSource: m.resolutionSource ?? m.resolution_source ?? null,
       resolutionTime: this.toDate(m.resolutionTime ?? m.resolution_time),
       startTradingAt: this.toDate(m.startDate ?? m.start_date ?? m.createdAt ?? m.created_at),
-      endTradingAt: this.toDate(m.endDate ?? m.end_date ?? m.closeDate ?? m.close_date ?? event?.endDate ?? event?.end_date),
+      endTradingAt: this.toDate(
+        m.endDate ?? m.end_date ?? m.closeDate ?? m.close_date ?? event?.endDate ?? event?.end_date,
+      ),
       lastUpdatedAt: this.toDate(m.updatedAt ?? m.updated_at),
       feeRate: this.toDecimal(m.feeRate ?? m.fee_rate),
       liquidity: this.toDecimal(market.liquidity ?? m.liquidityNum ?? m.liquidity_num),
@@ -206,7 +214,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     if (outcomeInputs.length) {
       await this.repo.upsertOutcomes(outcomeInputs)
     }
-    
+
     return { skipped: false }
   }
 
@@ -221,7 +229,9 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
           clobTokenIds = parsed.map(String)
         }
       } catch (error) {
-        this.logger.warn(`Failed to parse clobTokenIds JSON for market ${market.id}: ${String(error)}`)
+        this.logger.warn(
+          `Failed to parse clobTokenIds JSON for market ${market.id}: ${String(error)}`,
+        )
       }
     } else if (Array.isArray(rawClobTokenIds)) {
       clobTokenIds = rawClobTokenIds.map(String)
@@ -233,25 +243,40 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       try {
         const parsed = JSON.parse(rawOutcomePrices)
         if (Array.isArray(parsed)) {
-          outcomePrices = parsed.map(String)
+          // 使用 toDecimal 转换并过滤无效值（null/undefined/空串）
+          const validPrices = parsed
+            .map((v: unknown) => this.toDecimal(v))
+            .filter((v): v is string => v !== null)
+          outcomePrices = validPrices.length > 0 ? validPrices : undefined
         }
       } catch {
         // ignore parse error
       }
     } else if (Array.isArray(rawOutcomePrices)) {
-      outcomePrices = rawOutcomePrices.map(String)
+      // 使用 toDecimal 转换并过滤无效值（null/undefined/空串）
+      const validPrices = rawOutcomePrices
+        .map((v: unknown) => this.toDecimal(v))
+        .filter((v): v is string => v !== null)
+      outcomePrices = validPrices.length > 0 ? validPrices : undefined
     }
 
     // 1. 如果 outcomes 是数组，处理字符串数组或对象数组
     if (Array.isArray(market.outcomes)) {
-      if (market.outcomes.every((outcome) => typeof outcome === 'string')) {
+      if (market.outcomes.every(outcome => typeof outcome === 'string')) {
         // 注意：只有当有真实的 clobTokenIds 时才创建 outcome
         // 否则订单簿作业会对假 token_id 永远返回 404
         if (!clobTokenIds || clobTokenIds.length === 0) {
-          this.logger.debug(`Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`)
+          this.logger.debug(
+            `Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`,
+          )
           return []
         }
-        return this.buildOutcomesFromStringArray(market.id, market.outcomes, clobTokenIds, outcomePrices)
+        return this.buildOutcomesFromStringArray(
+          market.id,
+          market.outcomes,
+          clobTokenIds,
+          outcomePrices,
+        )
       }
       return market.outcomes
     }
@@ -265,7 +290,9 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
           // 注意：只有当有真实的 clobTokenIds 时才创建 outcome
           // 否则订单簿作业会对假 token_id 永远返回 404
           if (!clobTokenIds || clobTokenIds.length === 0) {
-            this.logger.debug(`Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`)
+            this.logger.debug(
+              `Market ${market.id} has outcomes but no clobTokenIds, skipping outcomes`,
+            )
             return []
           }
           return this.buildOutcomesFromStringArray(market.id, parsed, clobTokenIds, outcomePrices)
@@ -298,6 +325,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       .map((name, index) => {
         const tokenId = clobTokenIds[index]
         if (!tokenId) return null
+        // 缺失概率不要写入 0：0 会被前端当成 0% 展示，产生误导
         const probability = outcomePrices?.[index]
         return {
           id: `${marketId}-outcome-${index}`,
@@ -311,6 +339,10 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   private mapOutcome(outcome: PolymarketGammaOutcome, marketDbId: number) {
     if (!outcome.token_id) return null
+    // 约定：缺失概率的数据不入库（避免前端展示为 '-' 或误导性 0%）。
+    // 注意：若数据源既不提供 probability 也不提供 price，则该 outcome 直接跳过。
+    const probability = this.toDecimal(outcome.probability) ?? this.toDecimal(outcome.price)
+    if (!probability) return null
     return {
       marketDbId,
       outcomeTokenId: outcome.token_id,
@@ -318,7 +350,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       shortName: (outcome as Record<string, any>)?.short_name ?? null,
       side: outcome.side ?? null,
       price: this.toDecimal(outcome.price),
-      probability: this.toDecimal(outcome.probability),
+      probability,
       liquidity: this.toDecimal(outcome.liquidity),
       poolBalance: this.toDecimal(outcome.pool_balance),
       lastTradePrice: this.toDecimal(outcome.last_trade_price),
@@ -402,9 +434,13 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     return new Date(parsed)
   }
 
-  private toDecimal(value?: string | number | null): string | null {
+  private toDecimal(value?: unknown): string | null {
     if (value == null) return null
-    if (typeof value === 'string') return value
+    if (typeof value === 'string') {
+      // 空字符串视为无效值，避免阻断 price 兜底逻辑
+      if (value === '') return null
+      return value
+    }
     if (typeof value === 'number' && Number.isFinite(value)) return value.toString()
     return null
   }

@@ -11,6 +11,16 @@ export function useMockData<T>(
   const { data, loading, error, setData, setLoading, setError } = useViewState<T>()
   const searchParams = useSearchParams()
   const requestIdRef = useRef(0)
+  const fetcherRef = useRef(fetcher)
+  const searchParamsRef = useRef(searchParams)
+
+  useEffect(() => {
+    fetcherRef.current = fetcher
+  }, [fetcher])
+
+  useEffect(() => {
+    searchParamsRef.current = searchParams
+  }, [searchParams])
 
   const load = useCallback(
     async (isTransition = false) => {
@@ -29,10 +39,11 @@ export function useMockData<T>(
         // Global debug overrides via URL（可通过 options.ignoreQueryOverrides 禁用）
         const shouldUseQueryOverrides = !options.ignoreQueryOverrides
         const forceError =
-          (shouldUseQueryOverrides && searchParams?.get('mock_error') === '1') ||
+          (shouldUseQueryOverrides && searchParamsRef.current?.get('mock_error') === '1') ||
           options.shouldError
         const forceEmpty =
-          (shouldUseQueryOverrides && searchParams?.get('mock_empty') === '1') || options.isEmpty
+          (shouldUseQueryOverrides && searchParamsRef.current?.get('mock_empty') === '1') ||
+          options.isEmpty
 
         if (forceError) {
           throw new Error('数据加载失败（Mock）')
@@ -43,7 +54,7 @@ export function useMockData<T>(
             setData(null)
           }
         } else {
-          const result = await fetcher()
+          const result = await fetcherRef.current()
           if (requestId === requestIdRef.current) {
             setData(result)
           }
@@ -59,12 +70,10 @@ export function useMockData<T>(
       }
     },
     [
-      fetcher,
       options.delay,
       options.shouldError,
       options.isEmpty,
       options.ignoreQueryOverrides,
-      searchParams,
       setData,
       setError,
       setLoading,
@@ -72,8 +81,10 @@ export function useMockData<T>(
   )
 
   useEffect(() => {
-    load()
-  }, [dependencies, load])
+    void load()
+  }, [...dependencies, load])
 
-  return { data, loading, error, reload: () => load(true) }
+  const reload = useCallback(() => load(true), [load])
+
+  return { data, loading, error, reload }
 }
