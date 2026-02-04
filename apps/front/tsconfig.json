@@ -45,7 +45,8 @@
     "next-env.d.ts",
     "src/types/globals.d.ts",
     "../../dist/front/.next/types/**/*.ts",
-    "../../dist/front/.next/dev/types/**/*.ts"
+    "../../dist/front/.next/dev/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

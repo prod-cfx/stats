@@ -52,7 +52,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/front"],
       "options": {
-        "command": "next build --webpack && node scripts/post-build.js",
+        "command": "next build && node scripts/post-build.js",
         "cwd": "apps/front"
       }
     },
