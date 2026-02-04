@@ -724,13 +724,13 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         params,
       }
 
-      function scheduleNext() {
+      const scheduleNext = () => {
         subscriptionInfo.timer = setTimeout(async () => {
           await runOrderbookBroadcast()
         }, 1000) // 1 秒推送一次
       }
 
-      async function runOrderbookBroadcast(): Promise<void> {
+      const runOrderbookBroadcast = async (): Promise<void> => {
         if (subscriptionInfo.isRunning) {
           return
         }
@@ -986,18 +986,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const subInfo = this.orderbookIntervals.get(subscriptionKey)
     if (!subInfo) return
 
-    // 防止任务堆积
-    if (subInfo.isRunning) {
-      this.logger.warn({
-        message: 'Previous orderbook broadcast still running, skipping',
-        subscriptionKey,
-      })
-      return
-    }
-
     const startTime = Date.now()
-    subInfo.isRunning = true
-
     try {
       const { exchange, instrumentType, symbol, isAggregated, depth } = params
 
@@ -1119,7 +1108,6 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         error: error instanceof Error ? error.message : String(error),
       })
     } finally {
-      subInfo.isRunning = false
       const durationMs = Date.now() - startTime
       if (durationMs > 800) {
         this.logger.warn({

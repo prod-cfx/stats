@@ -40,7 +40,8 @@
     ".next/types/**/*.ts",
     "next-env.d.ts",
     "../../dist/admin-front/types/**/*.ts",
-    "../../dist/admin-front/dev/types/**/*.ts"
+    "../../dist/admin-front/dev/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
