@@ -10,10 +10,15 @@ import { MarketTradesRepository } from './repositories/market-trades.repository'
 import { FuturesPairsMarketRepository } from './repositories/futures-pairs-market.repository'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TakerBuySellVolumeRepository } from './repositories/taker-buy-sell-volume.repository'
-import type { ExchangeId, MarketInstrumentType, MarketTimeframe, TradingPairConfig, TradingVenueType } from '@ai/shared'
+import type {
+  ExchangeId,
+  MarketInstrumentType,
+  MarketTimeframe,
+  TradingPairConfig,
+  TradingVenueType,
+} from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
-import { Prisma } from '@prisma/client'
-import type { MarketTrade } from '@prisma/client'
+import type { MarketTrade, Prisma } from '@prisma/client'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -158,7 +163,9 @@ export class MarketsService {
   /**
    * 查询交易记录（分页）
    */
-  async getTrades(query: GetMarketTradesRequestDto): Promise<BasePaginationResponseDto<MarketTrade>> {
+  async getTrades(
+    query: GetMarketTradesRequestDto,
+  ): Promise<BasePaginationResponseDto<MarketTrade>> {
     const normalize = (value?: string) =>
       typeof value === 'string' ? value.trim().toUpperCase() : undefined
 
@@ -191,96 +198,46 @@ export class MarketsService {
 
   /**
    * 按交易所聚合的多空比快照
+   *
+   * 数据来源：TakerBuySellVolume 表
+   * - longPercent/shortPercent: buyRatio/sellRatio
+   * - longAmountUsd/shortAmountUsd: buyVolUsd/sellVolUsd
    */
   async getExchangeLongShortRatios(params: {
     symbol: string
     timeRange: ExchangeLongShortTimeRange
   }): Promise<ExchangeLongShortRatioResponseDto[]> {
-    const { symbol } = params
+    const { symbol, timeRange } = params
 
-    // 1. 从 FuturesPairsMarket 聚合各交易所持仓量
-    const oiByExchange = await this.futuresPairsMarketRepository.aggregateOIByExchange({
+    const takerVolumeData = await this.takerVolumeRepository.findLatestBySymbol({
       symbol: symbol.toUpperCase(),
+      range: timeRange,
     })
 
-    if (oiByExchange.length === 0) {
-      // 如果没有数据，返回空数组
+    if (takerVolumeData.length === 0) {
       return []
     }
 
-    // 2. 从 TakerBuySellVolume 获取最新多空比例
-    // 注意：Coinglass taker-volume 统一使用 24h 数据，忽略前端传入的 timeRange
-    // symbol 使用基础币种（BTC/ETH），不含 USDT 后缀
-    const takerVolumeData = await this.takerVolumeRepository.findLatestBySymbol({
-      symbol: symbol.toUpperCase(),
-      range: '24h',
-    })
+    // 直接使用 TakerBuySellVolume 的数据
+    const results = takerVolumeData.map(item => {
+      const buyVolUsd = this.toNumber(item.buyVolUsd)
+      const sellVolUsd = this.toNumber(item.sellVolUsd)
+      const totalVolUsd = buyVolUsd + sellVolUsd
 
-    // 构建 exchange -> ratio 映射
-    const ratioByExchange = new Map<string, { longPercent: number; shortPercent: number }>()
-    for (const item of takerVolumeData) {
-      ratioByExchange.set(item.exchange, {
+      return {
+        name: item.exchange,
+        logoUrl: this.getExchangeLogo(item.exchange),
         longPercent: Number(item.buyRatio),
         shortPercent: Number(item.sellRatio),
-      })
-    }
-
-    // 3. 处理 Hyperliquid（从 HyperliquidWhaleAlert 聚合）
-    const hyperliquidData = await this.getHyperliquidPositions(symbol.toUpperCase())
-
-    // 4. 计算多空持仓金额
-    const results: Array<{
-      name: string
-      logoUrl?: string
-      longPercent: number
-      shortPercent: number
-      longAmountUsd: number
-      shortAmountUsd: number
-      totalOI: number
-    }> = []
-
-    for (const oi of oiByExchange) {
-      const ratio = ratioByExchange.get(oi.exchange)
-      // 如果没有多空比例数据，使用默认 50/50
-      const longPercent = ratio?.longPercent ?? 50
-      const shortPercent = ratio?.shortPercent ?? 50
-
-      const longAmount = (oi.openInterestUsd * longPercent) / 100
-      const shortAmount = (oi.openInterestUsd * shortPercent) / 100
-
-      results.push({
-        name: oi.exchange,
-        logoUrl: this.getExchangeLogo(oi.exchange),
-        longPercent,
-        shortPercent,
-        longAmountUsd: longAmount,
-        shortAmountUsd: shortAmount,
-        totalOI: oi.openInterestUsd,
-      })
-    }
-
-    // 5. 添加 Hyperliquid 数据（仅当 FuturesPairsMarket 中没有时）
-    const hasHyperliquid = oiByExchange.some(
-      e => e.exchange.toLowerCase() === 'hyperliquid',
-    )
-    if (!hasHyperliquid && hyperliquidData) {
-      const totalOI = hyperliquidData.longPositionUsd + hyperliquidData.shortPositionUsd
-      if (totalOI > 0) {
-        results.push({
-          name: 'Hyperliquid',
-          logoUrl: this.getExchangeLogo('Hyperliquid'),
-          longPercent: (hyperliquidData.longPositionUsd / totalOI) * 100,
-          shortPercent: (hyperliquidData.shortPositionUsd / totalOI) * 100,
-          longAmountUsd: hyperliquidData.longPositionUsd,
-          shortAmountUsd: hyperliquidData.shortPositionUsd,
-          totalOI,
-        })
+        longAmountUsd: buyVolUsd,
+        shortAmountUsd: sellVolUsd,
+        totalVolUsd,
       }
-    }
+    })
 
-    // 6. 按总持仓排序并分配 rank
+    // 按总成交量排序并分配 rank
     return results
-      .sort((a, b) => b.totalOI - a.totalOI)
+      .sort((a, b) => b.totalVolUsd - a.totalVolUsd)
       .map((row, index) => ({
         rank: index + 1,
         name: row.name,
@@ -396,53 +353,5 @@ export class MarketsService {
     if (typeof value === 'number') return value
     if (typeof value === 'string') return Number(value)
     return value.toNumber()
-  }
-
-  private async getHyperliquidPositions(symbol: string): Promise<{
-    longPositionUsd: number
-    shortPositionUsd: number
-  } | null> {
-    const client = this.prisma.getClient()
-
-    const rows = await client.$queryRaw(Prisma.sql`
-      WITH latest_positions AS (
-        SELECT DISTINCT ON (user_address, symbol)
-          user_address,
-          symbol,
-          position_size,
-          position_value_usd,
-          position_action,
-          create_time
-        FROM hyperliquid_whale_alerts
-        WHERE symbol = ${symbol}
-        ORDER BY user_address, symbol, create_time DESC
-      )
-      SELECT
-        COALESCE(SUM(CASE WHEN position_action = 1 AND position_size > 0 THEN position_value_usd ELSE 0 END), 0)
-          AS "longPositionUsd",
-        COALESCE(SUM(CASE WHEN position_action = 1 AND position_size < 0 THEN position_value_usd ELSE 0 END), 0)
-          AS "shortPositionUsd"
-      FROM latest_positions;
-    `) as Array<{
-      longPositionUsd: Prisma.Decimal | null
-      shortPositionUsd: Prisma.Decimal | null
-    }>
-
-    if (!rows.length) {
-      return null
-    }
-
-    const row = rows[0]
-    const longPositionUsd = this.toNumber(row.longPositionUsd)
-    const shortPositionUsd = this.toNumber(row.shortPositionUsd)
-
-    if (!Number.isFinite(longPositionUsd) && !Number.isFinite(shortPositionUsd)) {
-      return null
-    }
-
-    return {
-      longPositionUsd,
-      shortPositionUsd,
-    }
   }
 }

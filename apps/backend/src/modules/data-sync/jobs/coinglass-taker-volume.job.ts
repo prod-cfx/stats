@@ -1,31 +1,33 @@
-import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+import type {
+  DataPullJob,
+  DataPullJobContext,
+  JobMetaSchema,
+  JobRunResult,
+} from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TakerBuySellVolumeRepository } from '@/modules/markets/repositories/taker-buy-sell-volume.repository'
 
-interface TakerVolumeCursor {
-  /**
-   * 币种符号，例如 BTC / ETH
-   */
+const SUPPORTED_RANGES = ['5m', '15m', '30m', '1h', '4h', '12h', '24h'] as const
+type SupportedRange = (typeof SUPPORTED_RANGES)[number]
+
+interface TakerVolumeMeta {
   symbol: string
-  /**
-   * 时间范围，例如 24h / 1d / 1
-   */
-  range: string
-  /**
-   * 最新一次成功写入的数据时间戳（毫秒）
-   */
+  range: SupportedRange
+}
+
+interface TakerVolumeCursor {
   lastTimestamp?: number
 }
 
 interface CoinglassExchangeTakerData {
   exchange: string
-  buy_ratio: number
-  sell_ratio: number
-  buy_vol_usd: number
-  sell_vol_usd: number
+  buy_ratio: number | null
+  sell_ratio: number | null
+  buy_vol_usd: number | null
+  sell_vol_usd: number | null
 }
 
 interface CoinglassTakerVolumeApiResponse {
@@ -34,28 +36,48 @@ interface CoinglassTakerVolumeApiResponse {
   success?: boolean
   data?: {
     symbol: string
-    buy_ratio: number
-    sell_ratio: number
-    buy_vol_usd: number
-    sell_vol_usd: number
+    buy_ratio: number | null
+    sell_ratio: number | null
+    buy_vol_usd: number | null
+    sell_vol_usd: number | null
     exchange_list: CoinglassExchangeTakerData[]
   }
 }
 
 @Injectable()
-export class CoinglassTakerVolumeJob implements DataPullJob {
+export class CoinglassTakerVolumeJob implements DataPullJob<TakerVolumeMeta> {
   readonly key = 'coinglass-taker-volume'
   private readonly logger = new Logger(CoinglassTakerVolumeJob.name)
   private readonly requestTimeoutMs = 10_000
-  private readonly maxAttempts = 2
+
+  readonly metaSchema: JobMetaSchema = {
+    description: 'Coinglass Taker Buy/Sell Volume 任务配置',
+    fields: [
+      {
+        name: 'symbol',
+        type: 'string',
+        required: true,
+        description: '币种符号，例如 BTC / ETH / SOL',
+      },
+      {
+        name: 'range',
+        type: 'string',
+        required: true,
+        description: '时间范围',
+        options: [...SUPPORTED_RANGES],
+        defaultValue: '24h',
+      },
+    ],
+    example: { symbol: 'BTC', range: '24h' },
+  }
 
   constructor(
     private readonly configService: ConfigService,
     private readonly takerVolumeRepo: TakerBuySellVolumeRepository,
   ) {}
 
-  async run(ctx: DataPullJobContext): Promise<JobRunResult> {
-    const cursor = this.parseCursor(ctx.cursor)
+  async run(ctx: DataPullJobContext<TakerVolumeMeta>): Promise<JobRunResult> {
+    const { symbol, range } = this.parseMeta(ctx.meta)
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
 
     if (!apiKey) {
@@ -65,12 +87,10 @@ export class CoinglassTakerVolumeJob implements DataPullJob {
     const url = new URL(
       'https://open-api-v4.coinglass.com/api/futures/taker-buy-sell-volume/exchange-list',
     )
-    url.searchParams.set('symbol', cursor.symbol)
-    url.searchParams.set('range', cursor.range)
+    url.searchParams.set('symbol', symbol)
+    url.searchParams.set('range', range)
 
-    this.logger.log(
-      `Fetching Coinglass Taker Buy/Sell Volume: ${cursor.symbol} ${cursor.range}`,
-    )
+    this.logger.log(`Fetching Coinglass Taker Buy/Sell Volume: ${symbol} ${range}`)
 
     const json = await this.fetchTakerVolumeJson(url, apiKey)
 
@@ -83,45 +103,74 @@ export class CoinglassTakerVolumeJob implements DataPullJob {
     if (json.data.exchange_list.length === 0) {
       return {
         fetchedCount: 0,
-        newCursor: JSON.stringify(cursor),
+        newCursor: ctx.cursor,
         meta: {
-          symbol: cursor.symbol,
-          range: cursor.range,
+          symbol,
+          range,
           note: 'No exchange data returned from API',
         },
       }
     }
 
-    // 使用当前时间作为数据时间戳（Coinglass 该端点不返回时间戳）
     const timestamp = new Date()
 
-    // 转换并存储数据
-    const dataToUpsert = json.data.exchange_list.map(item => ({
-      exchange: item.exchange,
-      symbol: cursor.symbol,
-      range: cursor.range,
-      timestamp,
-      buyRatio: item.buy_ratio,
-      sellRatio: item.sell_ratio,
-      buyVolUsd: item.buy_vol_usd,
-      sellVolUsd: item.sell_vol_usd,
-    }))
+    const skippedExchanges: string[] = []
+    const dataToUpsert = json.data.exchange_list.flatMap(item => {
+      const hasNullMetrics =
+        item.buy_ratio === null ||
+        item.sell_ratio === null ||
+        item.buy_vol_usd === null ||
+        item.sell_vol_usd === null
+
+      if (hasNullMetrics) {
+        skippedExchanges.push(item.exchange)
+        return []
+      }
+
+      return [
+        {
+          exchange: item.exchange,
+          symbol,
+          range,
+          timestamp,
+          buyRatio: item.buy_ratio,
+          sellRatio: item.sell_ratio,
+          buyVolUsd: item.buy_vol_usd,
+          sellVolUsd: item.sell_vol_usd,
+        },
+      ]
+    })
+
+    if (skippedExchanges.length > 0) {
+      this.logger.warn(
+        `Skipped ${skippedExchanges.length} exchanges with null metrics: ${skippedExchanges.join(', ')}`,
+      )
+    }
+
+    if (dataToUpsert.length === 0) {
+      return {
+        fetchedCount: 0,
+        newCursor: ctx.cursor,
+        meta: {
+          symbol,
+          range,
+          note: 'All exchange records contain null metrics and were skipped',
+        },
+      }
+    }
 
     const upsertedCount = await this.takerVolumeRepo.upsertMany(dataToUpsert)
 
-    this.logger.log(
-      `Upserted ${upsertedCount} taker volume records for ${cursor.symbol} ${cursor.range}`,
-    )
+    this.logger.log(`Upserted ${upsertedCount} taker volume records for ${symbol} ${range}`)
 
     return {
       fetchedCount: upsertedCount,
       newCursor: JSON.stringify({
-        ...cursor,
         lastTimestamp: timestamp.getTime(),
       } satisfies TakerVolumeCursor),
       meta: {
-        symbol: cursor.symbol,
-        range: cursor.range,
+        symbol,
+        range,
         exchanges: json.data.exchange_list.length,
         timestamp: timestamp.toISOString(),
       },
@@ -153,21 +202,18 @@ export class CoinglassTakerVolumeJob implements DataPullJob {
     }
   }
 
-  private parseCursor(cursorJson: string | null): TakerVolumeCursor {
-    if (!cursorJson) {
-      return { symbol: 'BTC', range: '24h' }
+  private parseMeta(meta: TakerVolumeMeta | null): TakerVolumeMeta {
+    if (!meta || !meta.symbol || !meta.range) {
+      throw new Error('meta.symbol and meta.range are required')
     }
 
-    try {
-      const parsed = JSON.parse(cursorJson) as TakerVolumeCursor
-      return {
-        symbol: parsed.symbol ?? 'BTC',
-        range: parsed.range ?? '24h',
-        lastTimestamp: parsed.lastTimestamp,
-      }
-    } catch {
-      this.logger.warn(`Invalid cursor JSON: ${cursorJson}, using defaults`)
-      return { symbol: 'BTC', range: '24h' }
+    if (!SUPPORTED_RANGES.includes(meta.range)) {
+      throw new Error(`Invalid range: ${meta.range}. Supported: ${SUPPORTED_RANGES.join(', ')}`)
+    }
+
+    return {
+      symbol: meta.symbol.toUpperCase(),
+      range: meta.range,
     }
   }
 }

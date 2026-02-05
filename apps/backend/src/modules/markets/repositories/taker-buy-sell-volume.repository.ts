@@ -1,6 +1,6 @@
-import type {TakerBuySellVolume} from '@prisma/client';
+import type { TakerBuySellVolume } from '@prisma/client'
 import { Inject, Injectable } from '@nestjs/common'
-import { Prisma  } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
@@ -27,11 +27,18 @@ export class TakerBuySellVolumeRepository {
     }>,
   ): Promise<number> {
     const client = this.prisma.getClient()
+    const batchSize = 20
+    const batchConcurrency = 3
+    let processedCount = 0
 
-    // 使用 Promise.all 并行执行所有 upsert
-    const results = await Promise.all(
-      data.map(item =>
-        client.takerBuySellVolume.upsert({
+    const batches: (typeof data)[] = []
+    for (let i = 0; i < data.length; i += batchSize) {
+      batches.push(data.slice(i, i + batchSize))
+    }
+
+    const processBatch = async (batch: typeof data): Promise<void> => {
+      for (const item of batch) {
+        await client.takerBuySellVolume.upsert({
           where: {
             exchange_symbol_range_timestamp: {
               exchange: item.exchange,
@@ -58,11 +65,17 @@ export class TakerBuySellVolumeRepository {
             sellVolUsd: item.sellVolUsd,
             source: item.source ?? 'COINGLASS',
           },
-        }),
-      ),
-    )
+        })
+      }
+    }
 
-    return results.length
+    for (let i = 0; i < batches.length; i += batchConcurrency) {
+      const group = batches.slice(i, i + batchConcurrency)
+      await Promise.all(group.map(batch => processBatch(batch)))
+      processedCount += group.reduce((total, batch) => total + batch.length, 0)
+    }
+
+    return processedCount
   }
 
   /**
@@ -123,7 +136,7 @@ export class TakerBuySellVolumeRepository {
         where: {
           symbol: params.symbol,
           range: params.range,
-          OR: latestTimestamp.map((item): { exchange: string, timestamp: Date } => ({
+          OR: latestTimestamp.map((item): { exchange: string; timestamp: Date } => ({
             exchange: item.exchange,
             timestamp: item._max.timestamp!,
           })),
@@ -136,28 +149,47 @@ export class TakerBuySellVolumeRepository {
     }
   }
 
-  private generateMockVolumes(params: { symbol: string, range: string }): TakerBuySellVolume[] {
+  private generateMockVolumes(params: { symbol: string; range: string }): TakerBuySellVolume[] {
     const exchanges = ['Binance', 'OKX', 'Bybit', 'KuCoin', 'Gate', 'Bitget']
     const results: TakerBuySellVolume[] = []
     const now = new Date()
-    for (const exchange of exchanges) {
-      const buyRatio = 45 + Math.random() * 10
+
+    // 使用确定性种子生成伪随机数，确保相同参数下结果一致
+    const seed = this.hashCode(`${params.symbol}-${params.range}`)
+    let state = seed
+    const nextRandom = (): number => {
+      state = (state * 1103515245 + 12345) & 0x7fffffff
+      return state / 0x7fffffff
+    }
+
+    for (const [idx, exchange] of exchanges.entries()) {
+      const buyRatio = 45 + nextRandom() * 10
       const sellRatio = 100 - buyRatio
       results.push({
-        id: Math.floor(Math.random() * 1000000),
+        id: idx + 1,
         exchange,
         symbol: params.symbol,
         range: params.range,
         timestamp: now,
         buyRatio: new Prisma.Decimal(buyRatio.toFixed(2)),
         sellRatio: new Prisma.Decimal(sellRatio.toFixed(2)),
-        buyVolUsd: new Prisma.Decimal((500000 + Math.random() * 500000).toFixed(2)),
-        sellVolUsd: new Prisma.Decimal((500000 + Math.random() * 500000).toFixed(2)),
+        buyVolUsd: new Prisma.Decimal((500000 + nextRandom() * 500000).toFixed(2)),
+        sellVolUsd: new Prisma.Decimal((500000 + nextRandom() * 500000).toFixed(2)),
         source: 'MOCK',
         createdAt: now,
         updatedAt: now,
       })
     }
     return results
+  }
+
+  private hashCode(str: string): number {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = (hash << 5) - hash + char
+      hash = hash & hash
+    }
+    return Math.abs(hash) || 1
   }
 }

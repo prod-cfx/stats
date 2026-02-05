@@ -93,10 +93,9 @@ describe('Markets HTTP - exchange long/short ratio snapshot (E2E)', () => {
 
     expect(first.length).toBeGreaterThanOrEqual(5)
 
-    // 应包含特定的核心交易所与 DEX 汇总
+    // 应包含特定的核心交易所（数据来自 TakerBuySellVolume 表）
     const names = first.map(item => item.name)
     expect(names).toContain('Binance')
-    expect(names).toContain('DEX')
 
     // rank 应从 1 开始递增
     const ranks = first.map(item => item.rank)
@@ -134,4 +133,3 @@ describe('Markets HTTP - exchange long/short ratio snapshot (E2E)', () => {
     expect(res.body).toBeTruthy()
   })
 })
-

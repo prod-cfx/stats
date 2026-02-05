@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client'
 import { OI_SYMBOLS } from '@ai/shared'
 
+const COINGLASS_TAKER_VOLUME_RANGES = ['5m', '15m', '30m', '1h', '4h', '12h', '24h'] as const
+
 /**
  * 数据拉取任务种子数据
  *
@@ -281,18 +283,52 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       cursor: JSON.stringify({ symbol }),
       meta: { symbol },
     })),
-    // Coinglass Taker Buy/Sell Volume - 各币种主动买卖成交量
-    // 一次 API 调用返回所有交易所的数据
-    ...['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].map(symbol => ({
-      key: `coinglass-taker-volume:${symbol}`,
-      name: `Coinglass Taker Volume - ${symbol}`,
-      source: 'COINGLASS',
-      type: 'taker-volume',
-      intervalSeconds: 300, // 每5分钟
-      enabled: true,
-      cursor: JSON.stringify({ symbol, range: '24h' }),
-      meta: { symbol, range: '24h' },
-    })),
+    // Coinglass Taker Buy/Sell Volume - 各币种各时间范围主动买卖成交量
+    // 为每个 symbol + range 组合创建独立任务
+    ...(() => {
+      const symbols = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'] as const
+      const ranges = COINGLASS_TAKER_VOLUME_RANGES
+      const rangeIntervals = {
+        '5m': 300,
+        '15m': 900,
+        '30m': 1800,
+        '1h': 3600,
+        '4h': 7200,
+        '12h': 21600,
+        '24h': 43200,
+      } as const
+
+      const tasks: Array<{
+        key: string
+        name: string
+        source: string
+        type: string
+        intervalSeconds: number
+        enabled: boolean
+        cursor: string | null
+        meta: { symbol: string; range: string }
+      }> = []
+
+      let delayOffset = 0
+      for (const symbol of symbols) {
+        for (const range of ranges) {
+          const baseIntervalSeconds = rangeIntervals[range]
+          tasks.push({
+            key: `coinglass-taker-volume:${symbol}:${range}`,
+            name: `Coinglass Taker Volume - ${symbol} ${range}`,
+            source: 'COINGLASS',
+            type: 'taker-volume',
+            intervalSeconds: baseIntervalSeconds + delayOffset,
+            enabled: true,
+            cursor: null,
+            meta: { symbol, range },
+          })
+          delayOffset = (delayOffset + 10) % 120
+        }
+      }
+
+      return tasks
+    })(),
     // Coinglass OI OHLC Aggregated History - 聚合持仓量 K 线数据
     // 为每个币种和时间粒度创建独立任务
     ...(() => {
@@ -397,6 +433,25 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       },
     },
   ] as const
+
+  for (const task of tasks) {
+    if (task.type !== 'taker-volume') {
+      continue
+    }
+
+    const meta = 'meta' in task ? task.meta : null
+    if (!meta || !meta.symbol || !meta.range) {
+      throw new Error(`Invalid taker-volume task meta for key=${task.key}`)
+    }
+
+    if (
+      !COINGLASS_TAKER_VOLUME_RANGES.includes(
+        meta.range as (typeof COINGLASS_TAKER_VOLUME_RANGES)[number],
+      )
+    ) {
+      throw new Error(`Invalid taker-volume range for key=${task.key}: ${meta.range}`)
+    }
+  }
 
   let createdCount = 0
   let skippedCount = 0
