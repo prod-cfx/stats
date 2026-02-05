@@ -7,7 +7,7 @@ import { ChevronDown, Info, Search } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
-import { fetchKlineData, fetchTicker } from '@/lib/api'
+import { fetchKlineData } from '@/lib/api'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { getWsBaseUrl } from '@/lib/ws'
 import { logger } from '@/utils/logger'
@@ -33,6 +33,24 @@ interface MarketItem {
 }
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+// 交易所名称映射
+const EXCHANGE_MAP: Record<DataSource, string> = {
+  binance: 'BINANCE',
+  okx: 'OKX',
+  bybit: 'BYBIT',
+}
+
+const QUOTE_CURRENCIES = ['USDT', 'USDC', 'BUSD', 'USD', 'EUR', 'BTC', 'ETH'] as const
+
+function extractBaseSymbol(symbol: string): string {
+  for (const quote of QUOTE_CURRENCIES) {
+    if (symbol.endsWith(quote)) {
+      return symbol.slice(0, -quote.length)
+    }
+  }
+  return symbol
+}
 
 // NOTE: 价格/涨跌幅的纯计算逻辑在 ./price-change.ts，避免测试引入 UI 依赖。
 
@@ -108,10 +126,8 @@ export const TopBar = ({
   const formatPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
 
   const selectedBase = useMemo(() => {
-    // BTCUSDT -> BTC, ETHUSDT -> ETH
-    if (!selectedSymbol) return 'BTC' // 默认值
-    if (selectedSymbol.endsWith('USDT')) return selectedSymbol.slice(0, -4)
-    return selectedSymbol
+    if (!selectedSymbol) return 'BTC'
+    return extractBaseSymbol(selectedSymbol)
   }, [selectedSymbol])
 
   useEffect(() => {
@@ -120,27 +136,6 @@ export const TopBar = ({
       exchange: isAggregated ? undefined : selectedExchange,
     }
   }, [selectedSymbol, isAggregated, selectedExchange])
-
-  // Fetch ticker data from API
-  useEffect(() => {
-    if (!selectedBase) return
-
-    const fetchData = async () => {
-      try {
-        const exchange = isAggregated ? undefined : selectedExchange
-        const data = await fetchTicker(selectedBase, exchange)
-        setTickerData(data)
-      } catch (error) {
-        logger.error('Failed to fetch ticker data:', error)
-        setTickerData(null)
-      }
-    }
-
-    fetchData()
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000)
-    return () => clearInterval(interval)
-  }, [selectedBase, isAggregated, selectedExchange])
 
   const fetchLatestKline = async (params: { symbol: string; exchange?: DataSource }) => {
     if (!params.symbol) return
@@ -196,8 +191,19 @@ export const TopBar = ({
         setWsStatus('connected')
         // 使用闭包中的 selectedSymbol,因为 prevSymbolRef.current 在首次连接时还未设置
         if (selectedSymbol) {
+          // 订阅 K线
           socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
           logger.debug(`[TopBar] Subscribed to kline: ${selectedSymbol}`)
+
+          // 订阅 Ticker
+          const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
+          const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+          socket.emit('subscribeTicker', {
+            symbol: selectedBase,
+            exchange: isAggregated ? undefined : exchange,
+            instrumentType: isAggregated ? undefined : instrumentType,
+          })
+          logger.debug(`[TopBar] Subscribed to ticker: ${selectedBase}`)
         }
         fetchLatestKline(klineParamsRef.current)
       })
@@ -259,40 +265,137 @@ export const TopBar = ({
         logger.error('[TopBar] WebSocket error:', error)
         setWsStatus('error')
       })
+
+      // Ticker WebSocket 事件监听器
+      socket.on(
+        'tickerSubscribed',
+        (data: {
+          exchange: string
+          instrumentType: string
+          symbol: string
+          subscriptionKey: string
+        }) => {
+          logger.debug('[TopBar] Ticker subscribed:', data)
+        },
+      )
+
+      socket.on(
+        'ticker',
+        (data: {
+          symbol: string
+          currentPrice: number | null
+          indexPrice: number | null
+          fundingRate: number | null
+          priceChangePercent24h: number | null
+          volumeUsd: number | null
+          openInterestUsd: number | null
+          timestamp: number
+        }) => {
+          logger.debug('[TopBar] Received ticker data:', data)
+
+          // Use ref to avoid stale closure
+          const currentSymbol = selectedSymbolRef.current
+          let currentBase = 'BTC'
+          if (currentSymbol) {
+            currentBase = extractBaseSymbol(currentSymbol)
+          }
+
+          // 验证 symbol 是否匹配当前订阅
+          if (data.symbol !== currentBase) {
+            logger.debug(`[TopBar] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
+            return
+          }
+
+          // 更新 tickerData
+          setTickerData({
+            symbol: data.symbol,
+            currentPrice: data.currentPrice?.toString() ?? '0',
+            indexPrice: data.indexPrice?.toString() ?? undefined,
+            fundingRate: data.fundingRate?.toString() ?? undefined,
+            priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
+            volumeUsd: data.volumeUsd?.toString() ?? '0',
+            openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+          })
+        },
+      )
+
+      socket.on(
+        'tickerUnsubscribed',
+        (data: {
+          exchange: string
+          instrumentType: string
+          symbol: string
+          subscriptionKey: string
+        }) => {
+          logger.debug('[TopBar] Ticker unsubscribed:', data)
+        },
+      )
     }
 
     const socket = socketRef.current
     const prevSymbol = prevSymbolRef.current
 
     if (prevSymbol && prevSymbol !== selectedSymbol) {
+      // 取消订阅旧的 K线
       socket.emit('unsubscribe', { symbol: prevSymbol, interval: '1m' })
+
+      // 取消订阅旧的 Ticker
+      const prevBase = extractBaseSymbol(prevSymbol)
+      const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
+      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+      socket.emit('unsubscribeTicker', {
+        symbol: prevBase,
+        exchange: isAggregated ? undefined : exchange,
+        instrumentType: isAggregated ? undefined : instrumentType,
+      })
     }
 
     prevSymbolRef.current = selectedSymbol
     lastKlineUpdateTimeRef.current = 0
 
     if (socket.connected) {
+      // 订阅新的 K线
       socket.emit('subscribe', { symbol: selectedSymbol, interval: '1m' })
+
+      // 订阅新的 Ticker
+      const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
+      const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+      socket.emit('subscribeTicker', {
+        symbol: selectedBase,
+        exchange: isAggregated ? undefined : exchange,
+        instrumentType: isAggregated ? undefined : instrumentType,
+      })
     } else {
       setWsStatus('connecting')
     }
 
     return () => {}
-  }, [selectedSymbol, setWsStatus])
+  }, [selectedSymbol, setWsStatus, selectedExchange, marketType, isAggregated, selectedBase])
 
   useEffect(() => {
     return () => {
       if (!socketRef.current) return
       if (prevSymbolRef.current) {
+        // 取消订阅 K线
         socketRef.current.emit('unsubscribe', {
           symbol: prevSymbolRef.current,
           interval: '1m',
+        })
+
+        // 取消订阅 Ticker
+        const prevBase = extractBaseSymbol(prevSymbolRef.current)
+        const exchange = EXCHANGE_MAP[selectedExchange] ?? 'BINANCE'
+        const instrumentType = marketType === 'spot' ? 'SPOT' : 'PERPETUAL'
+        socketRef.current.emit('unsubscribeTicker', {
+          symbol: prevBase,
+          exchange: isAggregated ? undefined : exchange,
+          instrumentType: isAggregated ? undefined : instrumentType,
         })
       }
       socketRef.current.disconnect()
       socketRef.current = null
     }
-  }, [])
+  }, [selectedExchange, marketType, isAggregated])
 
   // Mock raw values (keep as numbers so locale switching works)
   const basePriceByAsset: Record<string, number> = {

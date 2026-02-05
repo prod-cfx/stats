@@ -9,7 +9,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { io } from 'socket.io-client'
 import { Spinner } from '@/components/ui/loading'
-import { fetchTicker } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { getMockBasePrice, getMockTickSize } from '@/lib/mock/market'
 import { getWsBaseUrl } from '@/lib/ws'
@@ -24,6 +23,17 @@ const EXCHANGE_MAP: Record<DataSource, string> = {
   binance: 'BINANCE',
   okx: 'OKX',
   bybit: 'BYBIT',
+}
+
+const QUOTE_CURRENCIES = ['USDT', 'USDC', 'BUSD', 'USD', 'EUR', 'BTC', 'ETH'] as const
+
+function extractBaseSymbol(symbol: string): string {
+  for (const quote of QUOTE_CURRENCIES) {
+    if (symbol.endsWith(quote)) {
+      return symbol.slice(0, -quote.length)
+    }
+  }
+  return symbol
 }
 
 // WebSocket 事件数据类型定义
@@ -108,11 +118,9 @@ function formatHmsLocal(ts: number) {
 }
 
 function getBaseAssetFromSymbol(symbol: string | undefined | null) {
-  if (!symbol) return 'BTC' // 默认值
-  // spot display may be "BTC/USDT"; internal may be "BTCUSDT"
+  if (!symbol) return 'BTC'
   if (symbol.includes('/')) return symbol.split('/')[0] || symbol
-  if (symbol.endsWith('USDT')) return symbol.slice(0, -4)
-  return symbol
+  return extractBaseSymbol(symbol)
 }
 
 function hashStringToSeed(input: string | undefined | null) {
@@ -253,35 +261,6 @@ export const RightPanel = ({
   const [lastPrice, setLastPrice] = useState<number | null>(null) // 最新成交价
   const [tickerData, setTickerData] = useState<TickerData | null>(null) // 24h 统计数据
 
-  // Fetch ticker data for 24h statistics
-  useEffect(() => {
-    let isMounted = true
-    const selectedBase = symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol
-
-    const fetchData = async () => {
-      try {
-        const exchange = isAggregated ? undefined : selectedExchange
-        const data = await fetchTicker(selectedBase, exchange)
-        if (isMounted) {
-          setTickerData(data)
-        }
-      } catch (error) {
-        logger.error('[RightPanel] Failed to fetch ticker data:', error)
-        if (isMounted) {
-          setTickerData(null)
-        }
-      }
-    }
-
-    fetchData()
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000)
-    return () => {
-      isMounted = false
-      clearInterval(interval)
-    }
-  }, [symbol, isAggregated, selectedExchange])
-
   // Close decimal menu when clicking outside
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -346,6 +325,15 @@ export const RightPanel = ({
           isAggregated,
           depth: 60,
         })
+
+        // 发送 Ticker 订阅请求
+        const selectedBase = extractBaseSymbol(symbol)
+        socket?.emit('subscribeTicker', {
+          symbol: selectedBase,
+          exchange: isAggregated ? undefined : exchange,
+          instrumentType: isAggregated ? undefined : instrumentType,
+        })
+        logger.debug(`[RightPanel] Subscribed to ticker: ${selectedBase}`)
       })
 
       // 监听订阅确认
@@ -471,6 +459,66 @@ export const RightPanel = ({
         logger.debug('[RightPanel] Orderbook unsubscribed:', data)
       })
 
+      // Ticker WebSocket 事件监听器
+      socket.on(
+        'tickerSubscribed',
+        (data: {
+          exchange: string
+          instrumentType: string
+          symbol: string
+          subscriptionKey: string
+        }) => {
+          logger.debug('[RightPanel] Ticker subscribed:', data)
+        },
+      )
+
+      socket.on(
+        'ticker',
+        (data: {
+          symbol: string
+          currentPrice: number | null
+          indexPrice: number | null
+          fundingRate: number | null
+          priceChangePercent24h: number | null
+          volumeUsd: number | null
+          openInterestUsd: number | null
+          timestamp: number
+        }) => {
+          logger.debug('[RightPanel] Received ticker data:', data)
+
+          const currentBase = extractBaseSymbol(symbol)
+
+          // 验证 symbol 是否匹配当前订阅
+          if (data.symbol !== currentBase) {
+            logger.debug(`[RightPanel] Ignoring ticker for ${data.symbol}, current: ${currentBase}`)
+            return
+          }
+
+          // 更新 tickerData
+          setTickerData({
+            symbol: data.symbol,
+            currentPrice: data.currentPrice?.toString() ?? '0',
+            indexPrice: data.indexPrice?.toString() ?? undefined,
+            fundingRate: data.fundingRate?.toString() ?? undefined,
+            priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
+            volumeUsd: data.volumeUsd?.toString() ?? '0',
+            openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+          })
+        },
+      )
+
+      socket.on(
+        'tickerUnsubscribed',
+        (data: {
+          exchange: string
+          instrumentType: string
+          symbol: string
+          subscriptionKey: string
+        }) => {
+          logger.debug('[RightPanel] Ticker unsubscribed:', data)
+        },
+      )
+
       // 监听连接错误
       socket.on('connect_error', error => {
         logger.error('[RightPanel] Socket.IO connection error:', error)
@@ -508,6 +556,15 @@ export const RightPanel = ({
           isAggregated,
           depth: 60,
         })
+
+        // 发送 Ticker 取消订阅请求
+        const selectedBase = extractBaseSymbol(symbol)
+        socket.emit('unsubscribeTicker', {
+          symbol: selectedBase,
+          exchange: isAggregated ? undefined : exchange,
+          instrumentType: isAggregated ? undefined : instrumentType,
+        })
+        logger.debug(`[RightPanel] Unsubscribed from ticker: ${selectedBase}`)
 
         // 断开连接
         socket.disconnect()
