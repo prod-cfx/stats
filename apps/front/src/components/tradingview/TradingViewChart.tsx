@@ -165,7 +165,7 @@ interface TradingViewWidgetConfig {
   library_path: string
   locale: string
   theme: 'Dark' | 'Light'
-  custom_indicators_getter?: (PineJS: PineJS) => CustomIndicator[]
+  custom_indicators_getter?: (PineJS: PineJS) => Promise<CustomIndicator[]>
   enabled_features?: string[]
   disabled_features?: string[]
   [key: string]: unknown
@@ -227,7 +227,7 @@ function resolveMaybePromiseId(maybe: any, onResolved: (id: string) => void) {
         if (id) onResolved(String(id))
       })
       .catch(() => {
-        // ignore
+        // ignore promise rejection
       })
     return
   }
@@ -566,7 +566,7 @@ function createCustomIndicatorsGetter(opts?: {
   interval?: string
 }) {
   // Charting Library custom studies: register indicator definitions at widget init time.
-  return function custom_indicators_getter(PineJS: PineJS): CustomIndicator[] {
+  return function custom_indicators_getter(PineJS: PineJS): Promise<CustomIndicator[]> {
     const theme = opts?.theme ?? 'Light'
     const tFunc = (opts?.t ?? ((k: string) => k)) as (key: string) => string
     const instanceId = opts?.containerId
@@ -1131,7 +1131,9 @@ function createCustomIndicatorsGetter(opts?: {
       constructor: liquidationMapLegendConstructor,
     }
 
-    return [IND_LS, IND_OI, IND_VOL, IND_LIQ, IND_LIQ_MAP_LEGEND]
+    const indicators = [IND_LS, IND_OI, IND_VOL, IND_LIQ, IND_LIQ_MAP_LEGEND]
+    // TradingView expects a Promise from custom_indicators_getter
+    return Promise.resolve(indicators)
   }
 }
 
@@ -1653,9 +1655,11 @@ export const TradingViewChart = forwardRef(
           const name = CUSTOM_STUDY_NAME_BY_ID[id]
           if (!name) return
           // Prevent duplicate createStudy calls (toggle + sync effect, or rapid clicks).
-          if (customStudyIdsRef.current[id]) return
+          if (customStudyIdsRef.current[id]) {
+            return
+          }
           // If the study already exists (e.g. from earlier buggy double-creates), reuse the first one and
-          // delete the duplicates to restore the expected “only one pane per indicator” behavior.
+          // delete the duplicates to restore the expected "only one pane per indicator" behavior.
           const existingId = findAndDedupeStudyByName(chart, name)
           if (existingId) {
             customStudyIdsRef.current[id] = existingId
@@ -1667,8 +1671,8 @@ export const TradingViewChart = forwardRef(
             resolveMaybePromiseId(maybe, sid => {
               customStudyIdsRef.current[id] = sid
             })
-          } catch {
-            // ignore
+          } catch (err) {
+            console.error('[TradingView] createStudy failed for', name, err)
             customStudyIdsRef.current[id] = null
           }
         },
@@ -1859,13 +1863,12 @@ export const TradingViewChart = forwardRef(
           widgetRef.current = null
 
           // 同时设置 container_id + container：
-          // - 你要求的关键参数是 container_id
-          // - 但当前 charting_library.js 内部实现读取的是 options.container
-          // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
-          const widget = new TradingView.widget({
+          // - 当前打包的 charting_library.js 实测读取的是 options.container（字符串 ID）
+          // - 若未来版本要求 DOM 元素，则退化为 containerEl 初始化
+          const widgetOptions = {
             container_id: containerId,
-            // 用真实 DOM 节点更稳（避免内部 query 时机差）
-            container: containerEl,
+            // Use string ID instead of DOM element - required for custom_indicators_getter to work
+            container: containerId,
 
             library_path: LIBRARY_PATH, // 必须严格使用 '/tradingview/charting_library/'
             locale: i18n.language.startsWith('zh') ? 'zh' : 'en',
@@ -1897,7 +1900,45 @@ export const TradingViewChart = forwardRef(
             ],
             // Keep disabled to avoid incompatible persisted settings schema warnings.
             disabled_features: ['use_localstorage_for_settings'],
-          }) as TradingViewWidget
+          }
+
+          let widget: TradingViewWidget
+          try {
+            // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
+            widget = new TradingView.widget(widgetOptions) as TradingViewWidget
+          } catch (error) {
+            // CLD-009: Cleanup potential side effects before fallback
+            if (containerEl) containerEl.innerHTML = ''
+
+            const isContainerError =
+              error instanceof Error &&
+              (error.message.includes('container') || error.message.includes('element'))
+
+            if (!isContainerError) {
+              console.error('[TradingView] Widget init failed:', error)
+              throw new Error('Failed to initialize TradingView widget')
+            }
+
+            // CLD-009: Verify container validity before fallback
+            if (!containerEl.isConnected) {
+              console.warn('[TradingView] Container disconnected, aborting fallback')
+              throw new Error('Chart container is no longer connected')
+            }
+
+            try {
+              // eslint-disable-next-line new-cap -- TradingView Charting Library API is `new TradingView.widget(...)`
+              widget = new TradingView.widget({
+                ...widgetOptions,
+                container: containerEl,
+              }) as TradingViewWidget
+            } catch (fallbackError) {
+              console.error('[TradingView] Widget init failed (primary + fallback):', {
+                primary: error,
+                fallback: fallbackError,
+              })
+              throw new Error('Failed to initialize TradingView widget')
+            }
+          }
 
           widgetRef.current = widget
           setIsReady(true)
@@ -2035,7 +2076,7 @@ export const TradingViewChart = forwardRef(
               aggLabel.onclick = onAggLabelClick
 
               // 精选指标（打开你们原来的弹窗）
-              const indicatorBtn = widget.createButton({ align: 'right' })
+              const indicatorBtn = widget.createButton({ align: 'left' })
               indicatorBtn.classList.add('tv-custom-btn')
               const indicatorLabel = t('chart.toolbar.featuredIndicators')
               indicatorBtn.textContent = indicatorLabel

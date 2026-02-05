@@ -3,7 +3,6 @@
 import type { Ref } from 'react'
 import type { TradingViewChartRef as ChartingLibraryChartRef } from '@/components/tradingview/TradingViewChart'
 import type { DataSource, MarketType } from '@/types/trading'
-import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { TradingViewChart as ChartingLibraryChart } from '@/components/tradingview/TradingViewChart'
@@ -37,7 +36,6 @@ interface TradingViewChartProps {
 export function TradingViewChart(props: TradingViewChartProps) {
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const { ref, ...rest } = props
 
   // 将页面的 interval（如 15m/1h）映射到 TradingView resolution（如 15/60）
   const mapIntervalToResolution = (value: string): string => {
@@ -63,26 +61,26 @@ export function TradingViewChart(props: TradingViewChartProps) {
     }
   }
 
-  const resolution = mapIntervalToResolution(rest.interval)
+  const resolution = mapIntervalToResolution(props.interval)
 
   return (
     <div className="h-full min-h-[500px] w-full bg-[color:var(--cf-bg)]">
       <ChartingLibraryChart
-        ref={ref}
-        symbol={rest.symbol}
+        ref={props.ref}
+        symbol={props.symbol}
         interval={resolution}
         theme={theme === 'dark' ? 'Dark' : 'Light'}
-        isAggregated={rest.isAggregated}
-        selectedExchange={rest.selectedExchange === 'bybit' ? 'binance' : rest.selectedExchange}
-        onSelectExchange={rest.onSelectExchange}
-        onToggleAggregate={rest.onToggleAggregate}
-        onOpenIndicator={rest.onOpenIndicator}
-        onOpenDataIndicator={rest.onOpenDataIndicator}
-        activeIndicators={rest.activeIndicators}
-        onRemoveIndicator={rest.onRemoveIndicator}
+        isAggregated={props.isAggregated}
+        selectedExchange={props.selectedExchange === 'bybit' ? 'binance' : props.selectedExchange}
+        onSelectExchange={props.onSelectExchange}
+        onToggleAggregate={props.onToggleAggregate}
+        onOpenIndicator={props.onOpenIndicator}
+        onOpenDataIndicator={props.onOpenDataIndicator}
+        activeIndicators={props.activeIndicators}
+        onRemoveIndicator={props.onRemoveIndicator}
       />
 
-      {/* 保留原有“加载引擎”文案风格：当 Charting Library 还未加载脚本时会显示 Loading chart... */}
+      {/* 保留原有"加载引擎"文案风格：当 Charting Library 还未加载脚本时会显示 Loading chart... */}
       <noscript>
         <div className="flex h-full min-h-[500px] w-full items-center justify-center text-[color:var(--cf-muted)]">
           {t('chart.loadingEngine')}
@@ -91,3 +89,5 @@ export function TradingViewChart(props: TradingViewChartProps) {
     </div>
   )
 }
+
+TradingViewChart.displayName = 'TradingViewChart'

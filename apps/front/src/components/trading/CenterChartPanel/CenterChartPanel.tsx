@@ -82,7 +82,7 @@ export const CenterChartPanel = ({
       return
     }
 
-    // Coinflux 自定义“精选指标”：用 Charting Library 的 custom studies 融合进 TV
+    // Coinflux 自定义"精选指标"：用 Charting Library 的 custom studies 融合进 TV
     if (
       id === 'long-short-ratio' ||
       id === 'aggregated-open-interest' ||
@@ -90,8 +90,8 @@ export const CenterChartPanel = ({
       id === 'liquidation-data'
     ) {
       // IMPORTANT:
-      // - 不要在这里直接 ensure/remove，否则会与下面的 useEffect 同步逻辑“双触发”
-      //   => 造成同一个指标被 createStudy 两次（你看到的“点一次出现两条/两个 pane”）
+      // - 不要在这里直接 ensure/remove，否则会与下面的 useEffect 同步逻辑"双触发"
+      //   => 造成同一个指标被 createStudy 两次（你看到的"点一次出现两条/两个 pane"）
       setActiveIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
       return
     }
@@ -103,12 +103,13 @@ export const CenterChartPanel = ({
   useEffect(() => {
     const chart = tvChartRef.current
     if (!chart) return
-    const ids: Array<
-      'long-short-ratio' | 'aggregated-open-interest' | 'aggregated-volume' | 'liquidation-data'
-    > = ['long-short-ratio', 'aggregated-open-interest', 'aggregated-volume', 'liquidation-data']
+    const ids = ['long-short-ratio', 'aggregated-open-interest', 'aggregated-volume', 'liquidation-data'] as const
     ids.forEach(id => {
-      if (activeIds.includes(id)) chart.ensureCustomIndicator(id)
-      else chart.removeCustomIndicator(id)
+      if (activeIds.includes(id)) {
+        chart.ensureCustomIndicator(id)
+      } else {
+        chart.removeCustomIndicator(id)
+      }
     })
   }, [activeIds])
 
