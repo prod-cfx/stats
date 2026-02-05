@@ -685,12 +685,19 @@ export default function DataPullTasksPage() {
         }
       >
         <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Input
-            placeholder="按 key 搜索"
+          <Select
             allowClear
-            style={{ width: 200 }}
+            showSearch
+            optionFilterProp="label"
+            placeholder="按 key 搜索"
+            style={{ width: 280 }}
             value={queryKey}
-            onChange={e => setQueryKey(e.target.value || undefined)}
+            onChange={value => setQueryKey(value || undefined)}
+            loading={jobsLoading}
+            options={registeredJobs.map(job => ({
+              value: job.key,
+              label: job.name ? `${job.name} (${job.key})` : job.key,
+            }))}
           />
           <Input
             placeholder="按名称搜索"
