@@ -1846,10 +1846,15 @@ export interface TickerData {
   nextFundingTime?: string
 }
 
-export async function fetchTicker(_symbol: string, _exchange?: string): Promise<TickerData | null> {
+export async function fetchTicker(symbol: string, exchange?: string): Promise<TickerData | null> {
   try {
     return await apiCall(async () => {
-      const response = await client.MarketsController_getTicker({})
+      const response = await client.MarketsController_getTicker({
+        queries: {
+          symbol,
+          ...(exchange ? { exchange } : {}),
+        },
+      })
       return unwrapResponse(response) as TickerData | null
     }, 'FETCH_TICKER')
   } catch (error) {

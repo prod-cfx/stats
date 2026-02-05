@@ -15,7 +15,8 @@ import {
 } from './dto/requests/get-market-trades.request.dto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
-import type { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
+// eslint-disable-next-line ts/consistent-type-imports
+import { GetTickerRequestDto } from './dto/requests/get-ticker.request.dto'
 import { Controller, Get, Query } from '@nestjs/common'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import {
@@ -29,7 +30,11 @@ import {
 } from '@nestjs/swagger'
 import { convertDecimalsInObject } from '@/common/utils/decimal-converter'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
-import { OptionalAccessControl, ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
+import {
+  OptionalAccessControl,
+  ReadAny,
+  RequireAuth,
+} from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { ExchangeLongShortRatioResponseDto } from './dto/responses/exchange-long-short-ratio.response.dto'
@@ -131,7 +136,9 @@ export class MarketsController {
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取交易对的多空比时间序列' })
   @ApiOkResponse({ type: LongShortRatioPointResponseDto, isArray: true })
-  async getLongShortRatio(@Query() query: GetLongShortRatioRequestDto): Promise<LongShortRatioPointResponseDto[]> {
+  async getLongShortRatio(
+    @Query() query: GetLongShortRatioRequestDto,
+  ): Promise<LongShortRatioPointResponseDto[]> {
     const { tradingPairId, interval } = query
 
     const from = query.from ? new Date(query.from) : undefined
@@ -201,10 +208,17 @@ export class MarketsController {
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取最新成交记录' })
   @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
-  async getLatestTrades(@Query() query: GetLatestTradesRequestDto): Promise<MarketTradeResponseDto[]> {
+  async getLatestTrades(
+    @Query() query: GetLatestTradesRequestDto,
+  ): Promise<MarketTradeResponseDto[]> {
     const { exchange, instrumentType, symbol, limit = 50 } = query
 
-    const trades = await this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit)
+    const trades = await this.marketsService.getLatestTrades(
+      exchange,
+      instrumentType,
+      symbol,
+      limit,
+    )
 
     return trades.map(trade => ({
       id: trade.id,
@@ -227,10 +241,18 @@ export class MarketsController {
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取大额成交记录' })
   @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
-  async getLargeTrades(@Query() query: GetLargeTradesRequestDto): Promise<MarketTradeResponseDto[]> {
+  async getLargeTrades(
+    @Query() query: GetLargeTradesRequestDto,
+  ): Promise<MarketTradeResponseDto[]> {
     const { exchange, instrumentType, symbol, minValue = 100000, limit = 50 } = query
 
-    const trades = await this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit)
+    const trades = await this.marketsService.getLargeTrades(
+      exchange,
+      instrumentType,
+      symbol,
+      minValue,
+      limit,
+    )
 
     return trades.map(trade => ({
       id: trade.id,
@@ -320,6 +342,16 @@ export class MarketsController {
   @Get('ticker')
   @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
+  @ApiQuery({
+    name: 'symbol',
+    required: true,
+    description: '币种符号，如 BTC、ETH',
+  })
+  @ApiQuery({
+    name: 'exchange',
+    required: false,
+    description: '交易所名称，如 Binance、OKX。不传则返回聚合数据',
+  })
   @ApiOperation({ summary: '获取币种市场行情数据（Ticker）' })
   @ApiOkResponse({ type: TickerResponseDto })
   async getTicker(@Query() query: GetTickerRequestDto): Promise<TickerResponseDto | null> {

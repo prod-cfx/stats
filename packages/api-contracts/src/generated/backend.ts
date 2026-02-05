@@ -2417,14 +2417,14 @@ const endpoints = makeApi([
     requestFormat: "json",
     parameters: [
       {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
         name: "timeframe",
         type: "Query",
         schema: z.enum(["1h", "4h", "12h", "24h"]),
-      },
-      {
-        name: "symbol",
-        type: "Query",
-        schema: z.unknown(),
       },
     ],
     response: BaseResponseDto.and(
@@ -2441,7 +2441,7 @@ const endpoints = makeApi([
       {
         name: "symbol",
         type: "Query",
-        schema: z.unknown(),
+        schema: z.string(),
       },
     ],
     response: BaseResponseDto.and(
@@ -2767,6 +2767,18 @@ const endpoints = makeApi([
     path: "/markets/ticker",
     alias: "MarketsController_getTicker",
     requestFormat: "json",
+    parameters: [
+      {
+        name: "symbol",
+        type: "Query",
+        schema: z.string(),
+      },
+      {
+        name: "exchange",
+        type: "Query",
+        schema: z.string().optional(),
+      },
+    ],
     response: TickerResponseDto,
   },
   {
