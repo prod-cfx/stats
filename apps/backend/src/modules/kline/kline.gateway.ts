@@ -1195,6 +1195,22 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const socketsCollection = this.getSocketsCollection()
     const handleSocket = (socket: Socket): void => {
       try {
+        // NOTE:
+        // lastActivity 目前只会在「客户端 -> 服务端」的事件中更新（subscribe/unsubscribe 等）。
+        // 对于只订阅并被动接收推送的正常连接，如果用 lastActivity 作为唯一依据，会被误判为 stale。
+        // 因此 stale 清理只应针对“真正闲置”的连接（无任何订阅且未加入业务 room）。
+        if (!this.isSocketEffectivelyIdle(socket)) {
+          this.logger.debug({
+            message: 'Skipping stale disconnect (socket has active subscriptions/rooms)',
+            clientId: socket.id,
+            rooms: this.getBusinessRoomCount(socket),
+            klineSubs: this.clientSubscriptions.get(socket.id)?.size ?? 0,
+            tradesSubs: this.clientTradesSubscriptions.get(socket.id)?.size ?? 0,
+            orderbookSubs: this.clientOrderbookSubscriptions.get(socket.id)?.size ?? 0,
+          })
+          return
+        }
+
         const lastActivity = this.getLastActivity(socket)
         if (now - lastActivity > STALE_CONNECTION_THRESHOLD_MS) {
           this.logger.warn({
@@ -1280,5 +1296,36 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     return Date.now()
+  }
+
+  private hasAnyActiveSubscriptions(clientId: string): boolean {
+    const klineSubs = this.clientSubscriptions.get(clientId)
+    if (klineSubs && klineSubs.size > 0) return true
+
+    const tradesSubs = this.clientTradesSubscriptions.get(clientId)
+    if (tradesSubs && tradesSubs.size > 0) return true
+
+    const orderbookSubs = this.clientOrderbookSubscriptions.get(clientId)
+    if (orderbookSubs && orderbookSubs.size > 0) return true
+
+    return false
+  }
+
+  private getBusinessRoomCount(socket: Socket): number {
+    // socket.rooms 始终包含自身的 room（socket.id）。
+    // 当 size > 1 时，说明加入了至少一个业务 room（如 trades/orderbook）。
+    const rooms = socket.rooms
+    if (!rooms || typeof (rooms as unknown as { size?: unknown }).size !== 'number') {
+      return 0
+    }
+    const size = rooms.size
+    return Math.max(0, size - 1)
+  }
+
+  private isSocketEffectivelyIdle(socket: Socket): boolean {
+    // 只要加入了业务 room 或存在任何订阅，就认为是活跃连接，不应被 stale 清理踢下线。
+    if (this.getBusinessRoomCount(socket) > 0) return false
+    if (this.hasAnyActiveSubscriptions(socket.id)) return false
+    return true
   }
 }
