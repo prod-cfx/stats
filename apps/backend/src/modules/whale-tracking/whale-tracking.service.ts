@@ -768,6 +768,7 @@ export class WhaleTrackingService {
       leverage: { type: 'cross' | 'isolated'; value: number }
       unrealizedPnl: number
       unrealizedPnlPercent: number
+      fundingRate?: number
       roi: number
     }
 
@@ -801,6 +802,9 @@ export class WhaleTrackingService {
         const unrealizedPnlPercent = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
         const roi = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
 
+        const cumFunding = position.cumFunding
+        const fundingRate = cumFunding ? safeParseFloat(cumFunding.sinceOpen) : undefined
+
         const leverage = position.leverage || { type: 'cross' as const, value: 1 }
         const leverageType: 'cross' | 'isolated' =
           leverage.type === 'isolated' ? 'isolated' : 'cross'
@@ -821,6 +825,7 @@ export class WhaleTrackingService {
           },
           unrealizedPnl: Number(unrealizedPnl.toFixed(2)),
           unrealizedPnlPercent: Number(unrealizedPnlPercent.toFixed(2)),
+          fundingRate: fundingRate !== undefined ? Number(fundingRate.toFixed(2)) : undefined,
           roi: Number(roi.toFixed(2)),
         })
       }

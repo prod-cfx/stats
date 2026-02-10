@@ -131,6 +131,12 @@ export interface HyperliquidPosition {
   unrealizedPnl: string
   liquidationPx: string | null
   leverage: HyperliquidLeverage
+  returnOnEquity: string
+  cumFunding: {
+    allTime: string
+    sinceChange: string
+    sinceOpen: string
+  }
 }
 
 /**

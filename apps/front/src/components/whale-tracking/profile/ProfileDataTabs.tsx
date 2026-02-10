@@ -307,9 +307,10 @@ export const ProfileDataTabs = ({
         markPrice: `$ ${perp.markPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
         liqPrice: `$ ${perp.liquidationPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
         margin: `$ ${perp.marginUsed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        fundingFee: perp.fundingRate
-          ? `$ ${Math.abs(perp.fundingRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          : '$ 0.00',
+        fundingFee:
+          perp.fundingRate != null
+            ? `${perp.fundingRate >= 0 ? '+' : '-'} $ ${Math.abs(perp.fundingRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : '$ 0.00',
       }
     })
   }
@@ -877,6 +878,9 @@ export const ProfileDataTabs = ({
                   </>
                 ) : activeTab === 'perpetual' ? (
                   <>
+                    <th className="px-6 py-4 text-left whitespace-nowrap">
+                      {t('whaleTracking.profile.columns.side')}
+                    </th>
                     <th className="px-6 py-4 text-right">
                       <button
                         type="button"
@@ -1189,6 +1193,7 @@ export const ProfileDataTabs = ({
                         </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4">{renderSideBadge(pos.side)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-[color:var(--cf-text-strong)]">
@@ -1225,7 +1230,9 @@ export const ProfileDataTabs = ({
                     <td className="px-6 py-4 text-right text-sm font-medium text-[color:var(--cf-text-strong)]">
                       {pos.margin}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm font-medium text-green-500 dark:text-green-400">
+                    <td
+                      className={`px-6 py-4 text-right text-sm font-medium ${pos.fundingFee.includes('+') ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+                    >
                       {pos.fundingFee}
                     </td>
                     <td className="px-6 py-4 text-center text-sm font-medium text-[color:var(--cf-muted)]">

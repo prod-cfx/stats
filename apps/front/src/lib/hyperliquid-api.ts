@@ -715,8 +715,8 @@ function transformToTraderPositions(
           // 注意：当 liquidationPx 为 null 时使用 0，实际上全仓模式可能不适用清算价
           const liquidationPrice = pos.liquidationPx ? safeParseFloat(pos.liquidationPx) : 0
 
-          // 计算未实现盈亏百分比
           const unrealizedPnlPercent = marginUsed > 0 ? (unrealizedPnl / marginUsed) * 100 : 0
+          const fundingRate = safeParseFloat(pos.cumFunding.sinceOpen)
 
           return {
             coin: pos.coin,
@@ -734,6 +734,7 @@ function transformToTraderPositions(
             unrealizedPnl,
             unrealizedPnlPercent,
             roi,
+            fundingRate,
           }
         })
 
