@@ -5,6 +5,7 @@ import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next'
 
 import type { UserFillsResponse } from '@/lib/api'
+import { getRelativeTimeParams } from '@/lib/formatters'
 import {
   fetchTraderHistoricalOrdersFromHyperliquid,
   fetchUserFillsFromHyperliquid,
@@ -101,6 +102,7 @@ interface PerpetualPosition {
 
 interface OrderDetail {
   time: string
+  timestamp: number
   type: string
   value: string
   amount: string
@@ -116,6 +118,7 @@ interface OpenOrder {
    */
   id?: string
   time: string
+  timestamp: number
   asset: string
   side: 'Buy' | 'Sell'
   count: number
@@ -141,6 +144,7 @@ function getOpenOrderKey(order: OpenOrder): string {
 
 interface RecentTrade {
   time: string
+  timestamp: number
   asset: string
   action: string
   amount: string
@@ -155,6 +159,7 @@ type TradesState = 'idle' | 'loading' | 'success' | 'empty' | 'error'
 
 interface HistoryOrder {
   time: string
+  timestamp: number
   asset: string
   type: string
   side: 'Buy' | 'Sell'
@@ -178,6 +183,17 @@ export const ProfileDataTabs = ({
 
   const HISTORY_RENDER_STEP = 50
   const HISTORY_MIN_REFETCH_MS = 10_000
+
+  const formatRelativeTime = useCallback(
+    (timestamp: number) => {
+      const result = getRelativeTimeParams(timestamp)
+      if (result.key === 'date') {
+        return result.params.date ?? '-'
+      }
+      return t(`whaleTracking.time.${result.key}`, result.params)
+    },
+    [t],
+  )
 
   const mapHistoricalOrdersToHistoryOrders = (
     entries: HyperliquidHistoricalOrderEntry[],
@@ -211,6 +227,7 @@ export const ProfileDataTabs = ({
 
       return {
         time: formatDateLabel(order.timestamp),
+        timestamp: order.timestamp,
         asset: order.coin,
         type: normalizeOrderType(order.orderType),
         side: isBuy ? 'Buy' : 'Sell',
@@ -300,12 +317,11 @@ export const ProfileDataTabs = ({
   const convertOrdersToDisplay = (orders: OpenOrderDto[]): OpenOrder[] => {
     if (!orders || orders.length === 0) return []
 
-    // 按 coin + side + date 分组
     type GroupKey = string
     const groups = new Map<GroupKey, OpenOrderDto[]>()
 
     orders.forEach(order => {
-      const date = new Date(order.timestamp).toISOString().split('T')[0] // YYYY-MM-DD
+      const date = new Date(order.timestamp).toISOString().split('T')[0]
       const key = `${order.coin}:${order.side}:${date}`
 
       if (!groups.has(key)) {
@@ -314,9 +330,9 @@ export const ProfileDataTabs = ({
       groups.get(key)!.push(order)
     })
 
-    // 将每组转换为一个 OpenOrder
     return Array.from(groups.entries()).map(([_, groupOrders]) => {
       const first = groupOrders[0]
+      const firstTimestamp = new Date(first.timestamp).getTime()
       const totalValue = groupOrders.reduce((sum, o) => sum + o.value, 0)
       const totalSize = groupOrders.reduce((sum, o) => sum + o.size, 0)
       const prices = groupOrders.map(o => o.price)
@@ -336,22 +352,27 @@ export const ProfileDataTabs = ({
       return {
         id: `group-${first.coin}-${first.side}-${first.timestamp}`,
         time: displayDate,
+        timestamp: firstTimestamp,
         asset: first.coin,
         side: first.side === 'BUY' ? 'Buy' : 'Sell',
         count: groupOrders.length,
         value: `$ ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
         amount: `${totalSize.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 4 })} ${first.coin}`,
         price: priceRange,
-        details: groupOrders.map(order => ({
-          time: displayDate,
-          type: order.type,
-          value: `$ ${order.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          amount: `${order.size} ${order.coin}`,
-          price: `$ ${order.price.toFixed(2)}`,
-          trigger: order.triggerPrice ? `$ ${order.triggerPrice.toFixed(2)}` : '-',
-          status: 'open', // Hyperliquid API 返回的都是 open orders
-          id: `# ${order.orderId}`,
-        })),
+        details: groupOrders.map(order => {
+          const orderTimestamp = new Date(order.timestamp).getTime()
+          return {
+            time: displayDate,
+            timestamp: orderTimestamp,
+            type: order.type,
+            value: `$ ${order.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            amount: `${order.size} ${order.coin}`,
+            price: `$ ${order.price.toFixed(2)}`,
+            trigger: order.triggerPrice ? `$ ${order.triggerPrice.toFixed(2)}` : '-',
+            status: 'open',
+            id: `# ${order.orderId}`,
+          }
+        }),
       }
     })
   }
@@ -448,6 +469,7 @@ export const ProfileDataTabs = ({
             month: 'long',
             day: 'numeric',
           }),
+          timestamp: fill.time,
           asset: fill.coin,
           action: mapFillDirectionToTradeActionKey(fill.direction),
           amount: `${fill.size.toLocaleString('en-US', {
@@ -480,15 +502,6 @@ export const ProfileDataTabs = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
-
-  const normalizeDateLabel = (value: string) => {
-    // 2025年12月19日 -> 2025-12-19 (language-agnostic)
-    return value.replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/g, (_, y, m, d) => {
-      const mm = String(m).padStart(2, '0')
-      const dd = String(d).padStart(2, '0')
-      return `${y}-${mm}-${dd}`
-    })
-  }
 
   const formatDurationLabel = (value: string) => {
     // 925小时 35分 -> 925h 35m (English-friendly), keep as-is if unknown format
@@ -1230,7 +1243,7 @@ export const ProfileDataTabs = ({
                         onClick={() => toggleOrderExpansion(orderKey)}
                       >
                         <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
-                          {normalizeDateLabel(order.time)}
+                          {formatRelativeTime(order.timestamp)}
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
@@ -1284,7 +1297,7 @@ export const ProfileDataTabs = ({
                             className="bg-[color:var(--cf-bg)]/30 text-[color:var(--cf-muted)]"
                           >
                             <td className="px-6 py-3 pl-12 text-xs">
-                              {normalizeDateLabel(detail.time)}
+                              {formatRelativeTime(detail.timestamp)}
                             </td>
                             <td className="px-6 py-3 text-xs font-bold text-[color:var(--cf-text-strong)]/70 uppercase">
                               {order.asset}
@@ -1325,7 +1338,7 @@ export const ProfileDataTabs = ({
                     className="transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                   >
                     <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
-                      {normalizeDateLabel(trade.time)}
+                      {formatRelativeTime(trade.timestamp)}
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
                       {trade.asset}
@@ -1416,7 +1429,7 @@ export const ProfileDataTabs = ({
                       className="transition-colors hover:bg-[color:var(--cf-surface-hover)]"
                     >
                       <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
-                        {normalizeDateLabel(order.time)}
+                        {formatRelativeTime(order.timestamp)}
                       </td>
                       <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
                         {order.asset}

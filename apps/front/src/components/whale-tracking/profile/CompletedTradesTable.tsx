@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { UserFillsResponse } from '@/lib/api'
+import { getRelativeTimeParams } from '@/lib/formatters'
 
 const SortIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -79,6 +80,17 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
 
   const [historyPage, setHistoryPage] = useState(0)
   const HISTORY_PAGE_SIZE = 50
+
+  const formatRelativeTime = useCallback(
+    (timestamp: number) => {
+      const result = getRelativeTimeParams(timestamp)
+      if (result.key === 'date') {
+        return result.params.date ?? '-'
+      }
+      return t(`whaleTracking.time.${result.key}`, result.params)
+    },
+    [t],
+  )
 
   const formatDuration = (durationMs: number) => {
     if (!Number.isFinite(durationMs) || durationMs < 0) return '-'
@@ -158,15 +170,6 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
     const endIndex = (historyPage + 1) * HISTORY_PAGE_SIZE
     return sortedCompletedTrades.slice(0, endIndex)
   }, [sortedCompletedTrades, historyPage])
-
-  const normalizeDateLabel = (value: string) => {
-    // 2025年12月19日 -> 2025-12-19 (language-agnostic)
-    return value.replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/g, (_, y, m, d) => {
-      const mm = String(m).padStart(2, '0')
-      const dd = String(d).padStart(2, '0')
-      return `${y}-${mm}-${dd}`
-    })
-  }
 
   const formatDurationLabel = (value: string) => {
     // 925小时 35分 -> 925h 35m (English-friendly), keep as-is if unknown format
@@ -278,7 +281,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           ...paginatedCompletedTrades.map((trade, idx) => (
             <tr key={idx} className="transition-colors hover:bg-[color:var(--cf-surface-hover)]">
               <td className="px-6 py-4 text-sm font-medium whitespace-nowrap text-[color:var(--cf-muted)]">
-                {normalizeDateLabel(trade.endTime)}
+                {formatRelativeTime(trade.fillTime)}
               </td>
               <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
                 {trade.asset}

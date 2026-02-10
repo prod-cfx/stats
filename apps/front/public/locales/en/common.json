@@ -470,6 +470,8 @@
       "justNow": "just now",
       "minutesAgo": "{{count}} min ago",
       "hoursAgo": "{{count}} h ago",
+      "today": "Today",
+      "yesterday": "Yesterday",
       "daysAgo": "{{count}} d ago",
       "weeksAgo": "{{count}} w ago",
       "monthsAgo": "{{count}} mo ago",
