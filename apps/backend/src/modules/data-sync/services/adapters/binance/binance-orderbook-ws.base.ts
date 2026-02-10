@@ -59,8 +59,8 @@ interface BookState {
  * 桶容量：100（允许短时突发，覆盖冷启动场景）
  */
 const binanceRestApiRateLimiter = new TokenBucketRateLimiter(
-  100,    // maxTokens: 允许 100 次突发请求（应对冷启动）
-  33.33,  // refillRate: 每秒补充 33.33 个令牌（约 2000/min）
+  100, // maxTokens: 允许 100 次突发请求（应对冷启动）
+  33.33, // refillRate: 每秒补充 33.33 个令牌（约 2000/min）
 )
 
 /**
@@ -113,10 +113,11 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
 
   async syncTargetConfigs(configs: OrderbookPairConfig[]): Promise<void> {
     const targets = configs
-      .filter(cfg =>
-        cfg.venue.toUpperCase() === 'BINANCE' &&
-        cfg.venueType === 'CEX' &&
-        cfg.instrumentType === this.instrumentType,
+      .filter(
+        cfg =>
+          cfg.venue.toUpperCase() === 'BINANCE' &&
+          cfg.venueType === 'CEX' &&
+          cfg.instrumentType === this.instrumentType,
       )
       .sort((a, b) => a.priority - b.priority)
 
@@ -162,8 +163,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     await this.reconcileSubscriptions([...targetSymbols.keys()])
 
     // 2) 再初始化 snapshot
-    const maxInitPerTick =
-      this.configService.get<number>('ORDERBOOK_WS_MAX_INIT_PER_TICK') ?? 10
+    const maxInitPerTick = this.configService.get<number>('ORDERBOOK_WS_MAX_INIT_PER_TICK') ?? 10
     const now = Date.now()
     const initQueue: string[] = []
     for (const cfg of targets) {
@@ -215,7 +215,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
         this.configService,
         this.logger,
         () => this.getWsBaseUrl(),
-        (raw) => this.onMessage(raw),
+        raw => this.onMessage(raw),
       )
       this.connections.push(conn)
     }
@@ -231,9 +231,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
   private async reconcileSubscriptions(symbols: string[]): Promise<void> {
     const perConn = Math.max(50, Math.floor(this.getMaxStreamsPerConnection()))
 
-    const streams = symbols
-      .map(s => this.streamNameForSymbol(s))
-      .sort((a, b) => a.localeCompare(b))
+    const streams = symbols.map(s => this.streamNameForSymbol(s)).sort((a, b) => a.localeCompare(b))
 
     const chunks: string[][] = []
     for (let i = 0; i < streams.length; i += perConn) {
@@ -330,7 +328,11 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     }
   }
 
-  private async applyUpdate(symbol: string, state: BookState, evt: BinanceDepthUpdateEvent): Promise<void> {
+  private async applyUpdate(
+    symbol: string,
+    state: BookState,
+    evt: BinanceDepthUpdateEvent,
+  ): Promise<void> {
     if (evt.u <= state.lastUpdateId) return
     const expected = state.lastUpdateId + 1
     if (!(evt.U <= expected && expected <= evt.u)) {
@@ -342,15 +344,26 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       const lastResync = this.lastResyncAt.get(symbol) ?? 0
       // 断档 resync 防抖：短时间内只允许触发一次 REST 重同步
       if (now - lastResync < resyncDebounceMs) {
-        // 防抖期间跳过 resync，降噪日志避免刷屏
+        // 防抖期间跳过 resync，但继续应用更新以保持数据流动性
+        // 数据可能有小 gap，但比完全停滞好；下次 resync 会修正
         const lastWarn = this.lastGapWarnAt.get(symbol) ?? 0
         if (now - lastWarn >= intervalMs) {
           this.lastGapWarnAt.set(symbol, now)
           this.logger.warn(
-            `Depth gap resync skipped for ${symbol}: debounce ${resyncDebounceMs}ms not elapsed (last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u})`,
+            `Depth gap resync skipped for ${symbol}: debounce ${resyncDebounceMs}ms not elapsed (last=${state.lastUpdateId}, U=${evt.U}, u=${evt.u}), continuing with partial update`,
           )
         }
-        state.isStale = true
+        // 不设置 isStale，继续应用更新（跳过 gap 继续）
+        this.applyLevelsToMap(state.bids, evt.b)
+        this.applyLevelsToMap(state.asks, evt.a)
+        state.lastUpdateId = evt.u
+        // 继续发布
+        const publishIntervalMs =
+          this.configService.get<number>('ORDERBOOK_WS_PUBLISH_INTERVAL_MS') ?? 250
+        if (now - state.lastPublishTs >= publishIntervalMs) {
+          state.lastPublishTs = now
+          await this.publish(symbol, state, evt.E)
+        }
         return
       }
 
@@ -376,7 +389,8 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     this.applyLevelsToMap(state.asks, evt.a)
     state.lastUpdateId = evt.u
 
-    const publishIntervalMs = this.configService.get<number>('ORDERBOOK_WS_PUBLISH_INTERVAL_MS') ?? 250
+    const publishIntervalMs =
+      this.configService.get<number>('ORDERBOOK_WS_PUBLISH_INTERVAL_MS') ?? 250
     const now = Date.now()
     if (now - state.lastPublishTs >= publishIntervalMs) {
       state.lastPublishTs = now
@@ -424,7 +438,9 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     const redisKey = this.buildRedisKey(this.venueId, state.marketKey)
     try {
       await this.redis.del(redisKey)
-      this.logger.log(`Orderbook snapshot deleted due to config removal: symbol=${symbol}, key=${redisKey}`)
+      this.logger.log(
+        `Orderbook snapshot deleted due to config removal: symbol=${symbol}, key=${redisKey}`,
+      )
     } catch (error) {
       this.logger.warn(
         `Failed to delete orderbook snapshot for ${symbol}: ${error instanceof Error ? error.message : String(error)}`,
@@ -457,7 +473,9 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
           const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
           if (!res.ok) {
             const text = await res.text().catch(() => '')
-            const error = new TypeError(`HTTP ${res.status} ${res.statusText} body=${text.slice(0, 200)}`)
+            const error = new TypeError(
+              `HTTP ${res.status} ${res.statusText} body=${text.slice(0, 200)}`,
+            )
 
             // 429 Too Many Requests: 指数退避重试
             if (res.status === 429 && attempt < maxRetries) {
@@ -552,7 +570,9 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     }
   }
 
-  private toMarketIdFromConfig(cfg: Pick<OrderbookPairConfig, 'baseAsset' | 'quoteAsset' | 'instrumentType'>): MarketId {
+  private toMarketIdFromConfig(
+    cfg: Pick<OrderbookPairConfig, 'baseAsset' | 'quoteAsset' | 'instrumentType'>,
+  ): MarketId {
     const base = cfg.baseAsset.toUpperCase()
     const quote = cfg.quoteAsset.toUpperCase()
     const venueType: MarketId['venueType'] =
@@ -651,7 +671,7 @@ class BinanceWsConnection {
       void this.resyncOnOpen()
     })
 
-    this.ws.on('message', (data) => {
+    this.ws.on('message', data => {
       this.onMessage(data)
     })
 
@@ -667,11 +687,13 @@ class BinanceWsConnection {
       this.scheduleReconnect()
     })
 
-    this.ws.on('error', (err) => {
+    this.ws.on('error', err => {
       this.open = false
       this.active.clear()
       this.stopHeartbeat()
-      logger.error(`Binance WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`)
+      logger.error(
+        `Binance WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`,
+      )
       this.scheduleReconnect()
     })
   }
@@ -688,31 +710,38 @@ class BinanceWsConnection {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
     const delayMs = this.configService.get<number>('marketData.wsReconnectDelayMs') ?? 5_000
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      void this.connect()
-    }, Math.max(1_000, delayMs))
+    this.reconnectTimer = setTimeout(
+      () => {
+        this.reconnectTimer = null
+        void this.connect()
+      },
+      Math.max(1_000, delayMs),
+    )
   }
 
   private startHeartbeat(): void {
     this.stopHeartbeat()
-    const intervalMs = this.configService.get<number>('ORDERBOOK_WS_HEARTBEAT_INTERVAL_MS') ?? 15_000
+    const intervalMs =
+      this.configService.get<number>('ORDERBOOK_WS_HEARTBEAT_INTERVAL_MS') ?? 15_000
     const timeoutMs = this.configService.get<number>('ORDERBOOK_WS_HEARTBEAT_TIMEOUT_MS') ?? 45_000
 
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.ws) return
-      const now = Date.now()
-      if (now - this.lastPongTs > timeoutMs) {
+    this.heartbeatTimer = setInterval(
+      () => {
+        if (!this.ws) return
+        const now = Date.now()
+        if (now - this.lastPongTs > timeoutMs) {
+          try {
+            this.baseLogger.warn(`Binance WS#${this.index} heartbeat timeout, terminating`)
+            this.ws.terminate()
+          } catch {}
+          return
+        }
         try {
-          this.baseLogger.warn(`Binance WS#${this.index} heartbeat timeout, terminating`)
-          this.ws.terminate()
+          this.ws.ping()
         } catch {}
-        return
-      }
-      try {
-        this.ws.ping()
-      } catch {}
-    }, Math.max(5_000, intervalMs))
+      },
+      Math.max(5_000, intervalMs),
+    )
   }
 
   private stopHeartbeat(): void {
