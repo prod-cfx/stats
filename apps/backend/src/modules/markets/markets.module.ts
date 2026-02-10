@@ -20,7 +20,6 @@ import { TakerBuySellVolumeRepository } from './repositories/taker-buy-sell-volu
     CleanupOldTradesJob,
   ],
   controllers: [MarketsController],
-  exports: [MarketsService, TakerBuySellVolumeRepository],
+  exports: [MarketsService, TakerBuySellVolumeRepository, MarketTradesRepository],
 })
 export class MarketsModule {}
-

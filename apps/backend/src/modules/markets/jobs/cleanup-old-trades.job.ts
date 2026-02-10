@@ -6,10 +6,8 @@ import { Cron } from '@nestjs/schedule'
 // eslint-disable-next-line ts/consistent-type-imports
 import { MarketTradesRepository } from '../repositories/market-trades.repository'
 
-/**
- * 定时清理旧交易记录
- * 默认保留最近7天的数据（可通过 TRADES_RETENTION_DAYS 环境变量配置）
- */
+const DEFAULT_MAX_COUNT_PER_SYMBOL = 5000
+
 @Injectable()
 export class CleanupOldTradesJob {
   private readonly logger = new Logger(CleanupOldTradesJob.name)
@@ -19,51 +17,99 @@ export class CleanupOldTradesJob {
     private readonly configService: ConfigService,
   ) {}
 
-  /**
-   * 获取保留天数配置
-   * 从环境变量 TRADES_RETENTION_DAYS 读取，默认为 7 天
-   */
-  private getRetentionDays(): number {
-    const raw = this.configService.get<string>('TRADES_RETENTION_DAYS')
+  private getMaxCountPerSymbol(): number {
+    const raw = this.configService.get<string>('TRADES_MAX_COUNT_PER_SYMBOL')
     const parsed = raw != null ? Number(raw) : Number.NaN
 
     if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
+      return Math.floor(parsed)
     }
 
-    return 7 // 默认 7 天
+    return DEFAULT_MAX_COUNT_PER_SYMBOL
   }
 
-  @Cron('0 3 * * *') // 每天凌晨3点执行
+  @Cron('0 3 * * *')
   async handleCron() {
-    const retentionDays = this.getRetentionDays()
-    this.logger.log(`Starting cleanup of old trades (retention: ${retentionDays} days)...`)
+    const maxCount = this.getMaxCountPerSymbol()
+    this.logger.log(`Starting cleanup of excess trades (max ${maxCount} per symbol)...`)
 
     try {
-      const now = Date.now()
-      const retentionMs = retentionDays * 24 * 60 * 60 * 1000
-      const cutoffTimestamp = BigInt(now - retentionMs)
-
-      // 获取清理前的统计
       const totalBefore = await this.marketTradesRepository.getTradeCount()
-      const oldestBefore = await this.marketTradesRepository.getOldestTradeTimestamp()
+      const symbolGroups = await this.marketTradesRepository.getDistinctSymbolGroups()
 
-      // 执行清理
-      const deletedCount = await this.marketTradesRepository.deleteOldTrades(cutoffTimestamp)
+      let totalDeleted = 0
+      let successCount = 0
+      let failCount = 0
+      let consecutiveFailures = 0
+      const failedSymbols: string[] = []
 
-      // 获取清理后的统计
+      const BATCH_SIZE = 10
+
+      for (let i = 0; i < symbolGroups.length; i += BATCH_SIZE) {
+        if (consecutiveFailures >= 5) {
+          this.logger.error(
+            `Cleanup circuit breaker opened after ${consecutiveFailures} consecutive failures, stopping remaining cleanup`,
+          )
+          break
+        }
+
+        const batch = symbolGroups.slice(i, i + BATCH_SIZE)
+        const results = await Promise.allSettled(
+          batch.map(async ({ exchange, instrumentType, symbol }) => {
+            const deleted = await this.marketTradesRepository.deleteExcessTrades(
+              exchange,
+              instrumentType,
+              symbol,
+              maxCount,
+            )
+            return { exchange, instrumentType, symbol, deleted }
+          }),
+        )
+
+        for (let j = 0; j < results.length; j++) {
+          const group = batch[j]
+          const result = results[j]
+
+          if (result.status === 'fulfilled') {
+            const { exchange, instrumentType, symbol, deleted } = result.value
+            if (deleted > 0) {
+              totalDeleted += deleted
+              this.logger.debug(
+                `Deleted ${deleted} excess trades for ${exchange}/${instrumentType}/${symbol}`,
+              )
+            }
+            successCount++
+            consecutiveFailures = 0
+          } else {
+            const { exchange, instrumentType, symbol } = group
+            failCount++
+            consecutiveFailures++
+            failedSymbols.push(`${exchange}/${instrumentType}/${symbol}`)
+            this.logger.error(
+              `Trade cleanup failed for ${exchange}/${instrumentType}/${symbol}: ${
+                result.reason instanceof Error ? result.reason.message : String(result.reason)
+              }`,
+            )
+          }
+        }
+      }
+
       const totalAfter = await this.marketTradesRepository.getTradeCount()
-      const oldestAfter = await this.marketTradesRepository.getOldestTradeTimestamp()
+
+      if (failedSymbols.length) {
+        this.logger.warn(
+          `Cleanup completed with failures for symbols (${failedSymbols.length}): ${failedSymbols.join(', ')}`,
+        )
+      }
 
       this.logger.log(
-        `Cleanup completed: deleted ${deletedCount} trades older than ${retentionDays} days. ` +
-        `Total: ${totalBefore} -> ${totalAfter}. ` +
-        `Oldest: ${oldestBefore ? new Date(Number(oldestBefore)).toISOString() : 'N/A'} -> ${oldestAfter ? new Date(Number(oldestAfter)).toISOString() : 'N/A'}`
+        `Cleanup completed: ${successCount} success, ${failCount} failed. ` +
+          `Deleted ${totalDeleted} trades. Total: ${totalBefore} -> ${totalAfter}.`,
       )
     } catch (error) {
-      this.logger.error(`Failed to cleanup old trades: ${error instanceof Error ? error.message : String(error)}`)
+      this.logger.error(
+        `Failed to cleanup trades: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 }
-
-

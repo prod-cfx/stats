@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
 import { PrismaService } from '@/prisma/prisma.service'
+import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 import type { TradeEvent } from '@/modules/kline/interfaces/trade-event.interface'
 import { TRADE_RECEIVED_EVENT } from '@/modules/kline/interfaces/trade-event.interface'
 
@@ -53,6 +54,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
   private readonly states = new Map<string, TradeState>() // symbol -> state
   private flushTicker: NodeJS.Timeout | null = null
   private flushTickRunning = false
+  private readonly maxTradesPerSymbol: number
+  private readonly lastTrimTime = new Map<string, number>()
+  private readonly retryCount = new Map<string, number>()
+  private readonly TRIM_THROTTLE_MS = 300_000
 
   constructor(
     @Inject(ConfigService)
@@ -61,7 +66,13 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     protected readonly prismaService: PrismaService,
     @Inject(EventEmitter2)
     protected readonly eventEmitter: EventEmitter2,
-  ) {}
+    @Inject(MarketTradesRepository)
+    protected readonly marketTradesRepository: MarketTradesRepository,
+  ) {
+    const raw = this.configService.get<string>('TRADES_MAX_COUNT_PER_SYMBOL')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+    this.maxTradesPerSymbol = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 5000
+  }
 
   async ensureConnected(): Promise<void> {
     await this.ensureConnections(1)
@@ -70,9 +81,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
 
   async syncTargetConfigs(configs: TradesConfig[]): Promise<void> {
     const targets = configs
-      .filter(cfg =>
-        cfg.exchange.toUpperCase() === 'BINANCE' &&
-        cfg.instrumentType === this.instrumentType,
+      .filter(
+        cfg =>
+          cfg.exchange.toUpperCase() === 'BINANCE' && cfg.instrumentType === this.instrumentType,
       )
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
 
@@ -91,10 +102,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       if (existing) {
         this.logger.error(
           `Duplicate Binance symbol mapping detected for symbol=${upper}, keep first config ` +
-          `(exchange=${existing.exchange}, instrumentType=${existing.instrumentType}, symbol=${existing.symbol}, ` +
-          `baseAsset=${existing.baseAsset}, quoteAsset=${existing.quoteAsset}) and skip ` +
-          `(exchange=${cfg.exchange}, instrumentType=${cfg.instrumentType}, symbol=${cfg.symbol}, ` +
-          `baseAsset=${cfg.baseAsset}, quoteAsset=${cfg.quoteAsset})`,
+            `(exchange=${existing.exchange}, instrumentType=${existing.instrumentType}, symbol=${existing.symbol}, ` +
+            `baseAsset=${existing.baseAsset}, quoteAsset=${existing.quoteAsset}) and skip ` +
+            `(exchange=${cfg.exchange}, instrumentType=${cfg.instrumentType}, symbol=${cfg.symbol}, ` +
+            `baseAsset=${cfg.baseAsset}, quoteAsset=${cfg.quoteAsset})`,
         )
         continue
       }
@@ -127,7 +138,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       })
 
       if (hadFlushError) {
-        throw new Error('Failed to flush one or more stale Binance trades states when syncing configs')
+        throw new Error(
+          'Failed to flush one or more stale Binance trades states when syncing configs',
+        )
       }
     }
 
@@ -248,7 +261,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     })
 
     if (hadError) {
-      throw new Error('Failed to reconcile Binance trades WS subscriptions for one or more connections')
+      throw new Error(
+        'Failed to reconcile Binance trades WS subscriptions for one or more connections',
+      )
     }
   }
 
@@ -266,13 +281,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     if (typeof plain.code === 'number' && typeof plain.msg === 'string') {
       const idPart = typeof plain.id === 'number' ? ` id=${plain.id}` : ''
       const message = String(plain.msg)
-      this.logger.warn(
-        `Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`,
-      )
+      this.logger.warn(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`)
       conn.handleAckError(
-        new Error(
-          `Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`,
-        ),
+        new Error(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`),
       )
       return
     }
@@ -350,7 +361,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     const BUFFER_SIZE_THRESHOLD = 100
     const FLUSH_INTERVAL_MS = 5_000
 
-    if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
+    if (
+      state.buffer.length >= BUFFER_SIZE_THRESHOLD ||
+      now - state.lastFlushAt >= FLUSH_INTERVAL_MS
+    ) {
       await this.flushBuffer(state)
     }
   }
@@ -370,7 +384,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
 
       for (const state of this.states.values()) {
         if (state.buffer.length === 0) continue
-        if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
+        if (
+          state.buffer.length >= BUFFER_SIZE_THRESHOLD ||
+          now - state.lastFlushAt >= FLUSH_INTERVAL_MS
+        ) {
           targets.push(state)
         }
       }
@@ -381,8 +398,11 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
         results.forEach((result, index) => {
           if (result.status === 'rejected') {
             const state = targets[index]
-            const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
-            this.logger.warn(`Binance trades flush ticker failed for symbol=${state.symbol}: ${reason}`)
+            const reason =
+              result.reason instanceof Error ? result.reason.message : String(result.reason)
+            this.logger.warn(
+              `Binance trades flush ticker failed for symbol=${state.symbol}: ${reason}`,
+            )
           }
         })
       })().finally(() => {
@@ -422,6 +442,8 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       if (hadError) {
         throw new Error(`Flush buffer failed for symbol=${state.symbol}`)
       }
+
+      this.trimExcessTrades(state)
 
       return true
     })()
@@ -475,8 +497,7 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     const quote = cfg.quoteAsset.trim().toUpperCase()
 
     // 优先使用配置自身的 symbol 字段（admin 后台已约定该字段保存交易所原生合约 ID）
-    const rawSymbol =
-      typeof cfg.symbol === 'string' ? cfg.symbol.trim().toUpperCase() : ''
+    const rawSymbol = typeof cfg.symbol === 'string' ? cfg.symbol.trim().toUpperCase() : ''
     if (rawSymbol.length) {
       return rawSymbol
     }
@@ -513,6 +534,33 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     }
     return null
   }
+
+  private trimExcessTrades(state: TradeState): void {
+    const key = `${this.exchange}/${this.instrumentType}/${state.symbol}`
+    const now = Date.now()
+    const lastTrim = this.lastTrimTime.get(key) || 0
+
+    const retries = this.retryCount.get(key) ?? 0
+    const backoffMs = Math.min(this.TRIM_THROTTLE_MS * 2 ** retries, 600_000)
+
+    if (now - lastTrim < backoffMs) return
+
+    this.lastTrimTime.set(key, now)
+
+    this.marketTradesRepository
+      .deleteExcessTrades(this.exchange, this.instrumentType, state.symbol, this.maxTradesPerSymbol)
+      .then(() => {
+        this.retryCount.delete(key)
+      })
+      .catch(err => {
+        this.retryCount.set(key, retries + 1)
+        this.logger.warn(
+          `Failed to trim excess trades for ${key}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      })
+  }
 }
 
 class BinanceTradesWsConnection {
@@ -530,14 +578,12 @@ class BinanceTradesWsConnection {
    * 当收到 Binance 的错误响应（code/msg 或 error）或在超时时间内未收到成功 ACK 时会触发 reject，
    * 使得 syncDesiredStreams 失败并让上层感知订阅未成功。
    */
-  private pendingSync:
-    | {
-        promise: Promise<void>
-        resolve: () => void
-        reject: (err: Error) => void
-        remainingAcks: number
-      }
-    | null = null
+  private pendingSync: {
+    promise: Promise<void>
+    resolve: () => void
+    reject: (err: Error) => void
+    remainingAcks: number
+  } | null = null
 
   constructor(
     private readonly index: number,
@@ -628,7 +674,7 @@ class BinanceTradesWsConnection {
       void this.resyncOnOpen()
     })
 
-    this.ws.on('message', (data) => {
+    this.ws.on('message', data => {
       void this.onTradesMessage(data, this).catch(err => {
         const reason = err instanceof Error ? err.message : String(err)
 
@@ -644,9 +690,7 @@ class BinanceTradesWsConnection {
         }
 
         // 否则视为运行期处理 trades 时的异常，仅记录日志以便排查
-        this.baseLogger.error(
-          `Binance Trades WS#${this.index} onTradesMessage error: ${reason}`,
-        )
+        this.baseLogger.error(`Binance Trades WS#${this.index} onTradesMessage error: ${reason}`)
       })
     })
 
@@ -658,15 +702,19 @@ class BinanceTradesWsConnection {
       this.open = false
       this.active.clear()
       this.stopHeartbeat()
-      logger.warn(`Binance Trades WS#${this.index} closed: code=${code} reason=${reason.toString()}`)
+      logger.warn(
+        `Binance Trades WS#${this.index} closed: code=${code} reason=${reason.toString()}`,
+      )
       this.scheduleReconnect()
     })
 
-    this.ws.on('error', (err) => {
+    this.ws.on('error', err => {
       this.open = false
       this.active.clear()
       this.stopHeartbeat()
-      logger.error(`Binance Trades WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`)
+      logger.error(
+        `Binance Trades WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`,
+      )
       this.scheduleReconnect()
     })
   }
@@ -683,10 +731,13 @@ class BinanceTradesWsConnection {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
     const delayMs = this.configService.get<number>('marketData.wsReconnectDelayMs') ?? 5_000
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      void this.connect()
-    }, Math.max(1_000, delayMs))
+    this.reconnectTimer = setTimeout(
+      () => {
+        this.reconnectTimer = null
+        void this.connect()
+      },
+      Math.max(1_000, delayMs),
+    )
   }
 
   private startHeartbeat(): void {
@@ -694,20 +745,23 @@ class BinanceTradesWsConnection {
     const intervalMs = this.configService.get<number>('TRADES_WS_HEARTBEAT_INTERVAL_MS') ?? 15_000
     const timeoutMs = this.configService.get<number>('TRADES_WS_HEARTBEAT_TIMEOUT_MS') ?? 45_000
 
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.ws) return
-      const now = Date.now()
-      if (now - this.lastPongTs > timeoutMs) {
+    this.heartbeatTimer = setInterval(
+      () => {
+        if (!this.ws) return
+        const now = Date.now()
+        if (now - this.lastPongTs > timeoutMs) {
+          try {
+            this.baseLogger.warn(`Binance Trades WS#${this.index} heartbeat timeout, terminating`)
+            this.ws.terminate()
+          } catch {}
+          return
+        }
         try {
-          this.baseLogger.warn(`Binance Trades WS#${this.index} heartbeat timeout, terminating`)
-          this.ws.terminate()
+          this.ws.ping()
         } catch {}
-        return
-      }
-      try {
-        this.ws.ping()
-      } catch {}
-    }, Math.max(5_000, intervalMs))
+      },
+      Math.max(5_000, intervalMs),
+    )
   }
 
   private stopHeartbeat(): void {
@@ -751,8 +805,7 @@ class BinanceTradesWsConnection {
     let resolve!: () => void
     let reject!: (err: Error) => void
 
-    const timeoutMs =
-      this.configService.get<number>('TRADES_WS_SUBSCRIBE_TIMEOUT_MS') ?? 5_000
+    const timeoutMs = this.configService.get<number>('TRADES_WS_SUBSCRIBE_TIMEOUT_MS') ?? 5_000
 
     let timeout: NodeJS.Timeout | null = null
 
@@ -767,18 +820,20 @@ class BinanceTradesWsConnection {
       }
     })
 
-    timeout = setTimeout(() => {
-      this.baseLogger.warn(
-        `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms without receiving all ACKs`,
-      )
-      reject(
-        new Error(
-          `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
-        ),
-      )
-    }, Math.max(1_000, timeoutMs))
+    timeout = setTimeout(
+      () => {
+        this.baseLogger.warn(
+          `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms without receiving all ACKs`,
+        )
+        reject(
+          new Error(
+            `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
+          ),
+        )
+      },
+      Math.max(1_000, timeoutMs),
+    )
 
     return { promise, resolve, reject, remainingAcks: expectedAcks }
   }
 }
-

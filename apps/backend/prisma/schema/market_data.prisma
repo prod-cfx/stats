@@ -399,6 +399,7 @@ model MarketTrade {
   // 索引
   @@unique([exchange, instrumentType, symbol, tradeId], name: "market_trade_exchange_instrument_symbol_tradeid_key")
   @@index([exchange, instrumentType, symbol, tradeTimestamp], name: "idx_trade_exchange_instrument_symbol_time")
+  @@index([exchange, instrumentType, symbol, tradeTimestamp(sort: Desc), id(sort: Desc)], name: "idx_trade_cleanup_order")
   @@index([tradeTimestamp], name: "idx_trade_timestamp")
   @@index([baseAsset, quoteAsset, tradeTimestamp], name: "idx_trade_assets_time")
   @@map("market_trades")

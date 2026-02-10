@@ -4,6 +4,7 @@ import type { TradesAdapterKey } from '../trades-ws-adapter'
 import type { ConfigService } from '@nestjs/config'
 import { Injectable } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
+import type { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 import { OkxTradesWsAdapterBase } from './okx/okx-trades-ws.base'
 
 @Injectable()
@@ -15,8 +16,9 @@ export class OkxCexFutureTradesWsAdapter extends OkxTradesWsAdapterBase {
   constructor(
     configService: ConfigService,
     prismaService: PrismaService,
+    marketTradesRepository: MarketTradesRepository,
   ) {
-    super(configService, prismaService)
+    super(configService, prismaService, marketTradesRepository)
   }
 
   protected getWsBaseUrl(): string {
@@ -35,10 +37,3 @@ export class OkxCexFutureTradesWsAdapter extends OkxTradesWsAdapterBase {
     return Number.isFinite(parsed) ? parsed : 100
   }
 }
-
-
-
-
-
-
-

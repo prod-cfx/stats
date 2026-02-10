@@ -28,7 +28,12 @@ export class MarketTradesRepository {
    */
   async findTrades(options: FindTradesOptions): Promise<MarketTrade[]> {
     if (process.env.USE_MOCK_DATA === 'true') {
-      return this.generateMockTrades(options.exchange || 'Binance', options.instrumentType || 'FUTURES', options.symbol || 'BTCUSDT', options.limit || 50)
+      return this.generateMockTrades(
+        options.exchange || 'Binance',
+        options.instrumentType || 'FUTURES',
+        options.symbol || 'BTCUSDT',
+        options.limit || 50,
+      )
     }
     try {
       const where: Prisma.MarketTradeWhereInput = {}
@@ -70,21 +75,28 @@ export class MarketTradesRepository {
       const trades = await this.prisma.marketTrade.findMany({
         where,
         // 增加确定性的二级排序，避免同毫秒成交导致分页 skip/take 不稳定
-        orderBy: [
-          { tradeTimestamp: options.orderBy ?? 'desc' },
-          { id: options.orderBy ?? 'desc' },
-        ],
+        orderBy: [{ tradeTimestamp: options.orderBy ?? 'desc' }, { id: options.orderBy ?? 'desc' }],
         take: options.limit ?? 100,
         skip: options.offset ?? 0,
       })
 
       if (trades.length === 0) {
-        return this.generateMockTrades(options.exchange || 'Binance', options.instrumentType || 'FUTURES', options.symbol || 'BTCUSDT', options.limit || 50)
+        return this.generateMockTrades(
+          options.exchange || 'Binance',
+          options.instrumentType || 'FUTURES',
+          options.symbol || 'BTCUSDT',
+          options.limit || 50,
+        )
       }
       return trades
     } catch (error) {
       console.error('Database error in findTrades, falling back to mock data', error)
-      return this.generateMockTrades(options.exchange || 'Binance', options.instrumentType || 'FUTURES', options.symbol || 'BTCUSDT', options.limit || 50)
+      return this.generateMockTrades(
+        options.exchange || 'Binance',
+        options.instrumentType || 'FUTURES',
+        options.symbol || 'BTCUSDT',
+        options.limit || 50,
+      )
     }
   }
 
@@ -195,7 +207,9 @@ export class MarketTradesRepository {
   /**
    * 统计交易记录数量
    */
-  async countTrades(options: Omit<FindTradesOptions, 'limit' | 'offset' | 'orderBy'>): Promise<number> {
+  async countTrades(
+    options: Omit<FindTradesOptions, 'limit' | 'offset' | 'orderBy'>,
+  ): Promise<number> {
     const where: Prisma.MarketTradeWhereInput = {}
 
     if (options.exchange) {
@@ -271,11 +285,69 @@ export class MarketTradesRepository {
     })
     return oldest?.tradeTimestamp ?? null
   }
+
+  /**
+   * 获取所有交易对组合 (exchange, instrumentType, symbol)
+   */
+  async getDistinctSymbolGroups(): Promise<
+    Array<{ exchange: string; instrumentType: string; symbol: string }>
+  > {
+    const groups = await this.prisma.marketTrade.findMany({
+      distinct: ['exchange', 'instrumentType', 'symbol'],
+      select: {
+        exchange: true,
+        instrumentType: true,
+        symbol: true,
+      },
+    })
+    return groups
+  }
+
+  /**
+   * 获取指定交易对的记录数量
+   */
+  async getTradeCountBySymbol(
+    exchange: string,
+    instrumentType: string,
+    symbol: string,
+  ): Promise<number> {
+    return this.prisma.marketTrade.count({
+      where: { exchange, instrumentType, symbol },
+    })
+  }
+
+  /**
+   * 删除指定交易对超出保留数量的旧记录
+   * 使用 CTE + NOT EXISTS 替代 NOT IN，性能从 O(n²) 降到 O(n log n)
+   */
+  async deleteExcessTrades(
+    exchange: string,
+    instrumentType: string,
+    symbol: string,
+    maxCount: number,
+  ): Promise<number> {
+    if (!Number.isFinite(maxCount) || maxCount <= 0) {
+      return 0
+    }
+
+    const result = await this.prisma.$executeRaw`
+      WITH to_keep AS (
+        SELECT "id"
+        FROM "market_trades"
+        WHERE "exchange" = ${exchange}
+          AND "instrument_type" = ${instrumentType}
+          AND "symbol" = ${symbol}
+        ORDER BY "trade_timestamp" DESC, "id" DESC
+        LIMIT ${maxCount}
+      )
+      DELETE FROM "market_trades" mt
+      WHERE mt."exchange" = ${exchange}
+        AND mt."instrument_type" = ${instrumentType}
+        AND mt."symbol" = ${symbol}
+        AND NOT EXISTS (
+          SELECT 1 FROM to_keep tk WHERE tk."id" = mt."id"
+        )
+    `
+    return result
+  }
 }
-
-
-
-
-
-
-

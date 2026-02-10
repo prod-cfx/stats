@@ -5,6 +5,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
 import { PrismaService } from '@/prisma/prisma.service'
+import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 
 interface OkxTradeData {
   instId: string
@@ -58,13 +59,23 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   private readonly states = new Map<string, TradeState>() // instId -> state
   private flushTicker: NodeJS.Timeout | null = null
   private flushTickRunning = false
+  private readonly maxTradesPerSymbol: number
+  private readonly lastTrimTime = new Map<string, number>()
+  private readonly retryCount = new Map<string, number>()
+  private readonly TRIM_THROTTLE_MS = 300_000
 
   constructor(
     @Inject(ConfigService)
     protected readonly configService: ConfigService,
     @Inject(PrismaService)
     protected readonly prismaService: PrismaService,
-  ) {}
+    @Inject(MarketTradesRepository)
+    protected readonly marketTradesRepository: MarketTradesRepository,
+  ) {
+    const raw = this.configService.get<string>('TRADES_MAX_COUNT_PER_SYMBOL')
+    const parsed = raw != null ? Number(raw) : Number.NaN
+    this.maxTradesPerSymbol = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 5000
+  }
 
   async ensureConnected(): Promise<void> {
     await this.ensureConnections(1)
@@ -73,9 +84,8 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
   async syncTargetConfigs(configs: TradesConfig[]): Promise<void> {
     const targets = configs
-      .filter(cfg =>
-        cfg.exchange.toUpperCase() === 'OKX' &&
-        cfg.instrumentType === this.instrumentType,
+      .filter(
+        cfg => cfg.exchange.toUpperCase() === 'OKX' && cfg.instrumentType === this.instrumentType,
       )
       // 优先级越小越靠前，避免重复 instId 时高优先级配置被后者覆盖
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
@@ -93,10 +103,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         // 避免同一个 instId 被多个配置静默覆盖，保留优先级更高（排在前面）的配置，其余显式告警并跳过
         this.logger.error(
           `Duplicate OKX instId mapping detected for instId=${instId}, keep first config ` +
-          `(exchange=${existing.exchange}, instrumentType=${existing.instrumentType}, symbol=${existing.symbol}, ` +
-          `baseAsset=${existing.baseAsset}, quoteAsset=${existing.quoteAsset}) and skip ` +
-          `(exchange=${cfg.exchange}, instrumentType=${cfg.instrumentType}, symbol=${cfg.symbol}, ` +
-          `baseAsset=${cfg.baseAsset}, quoteAsset=${cfg.quoteAsset})`,
+            `(exchange=${existing.exchange}, instrumentType=${existing.instrumentType}, symbol=${existing.symbol}, ` +
+            `baseAsset=${existing.baseAsset}, quoteAsset=${existing.quoteAsset}) and skip ` +
+            `(exchange=${cfg.exchange}, instrumentType=${cfg.instrumentType}, symbol=${cfg.symbol}, ` +
+            `baseAsset=${cfg.baseAsset}, quoteAsset=${cfg.quoteAsset})`,
         )
         continue
       }
@@ -213,7 +223,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         this.configService,
         this.logger,
         () => this.getWsBaseUrl(),
-        (msg) => this.onMessage(msg),
+        msg => this.onMessage(msg),
         () => this.getWsChannel(),
       )
       this.connections.push(conn)
@@ -271,7 +281,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
     const FLUSH_INTERVAL_MS = 5_000 // 至少每 5 秒刷一次，防止低频成交长期堆积
 
     // 当缓冲区达到一定条数，或距离上次 flush 已超过阈值时，批量插入
-    if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
+    if (
+      state.buffer.length >= BUFFER_SIZE_THRESHOLD ||
+      now - state.lastFlushAt >= FLUSH_INTERVAL_MS
+    ) {
       await this.flushBuffer(state)
     }
   }
@@ -291,7 +304,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
       for (const state of this.states.values()) {
         if (state.buffer.length === 0) continue
-        if (state.buffer.length >= BUFFER_SIZE_THRESHOLD || now - state.lastFlushAt >= FLUSH_INTERVAL_MS) {
+        if (
+          state.buffer.length >= BUFFER_SIZE_THRESHOLD ||
+          now - state.lastFlushAt >= FLUSH_INTERVAL_MS
+        ) {
           targets.push(state)
         }
       }
@@ -302,7 +318,8 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         results.forEach((result, index) => {
           if (result.status === 'rejected') {
             const state = targets[index]
-            const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+            const reason =
+              result.reason instanceof Error ? result.reason.message : String(result.reason)
             this.logger.warn(`Flush ticker failed for instId=${state.instId}: ${reason}`)
           }
         })
@@ -354,6 +371,8 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         throw new Error(`Flush buffer failed for instId=${state.instId}`)
       }
 
+      this.trimExcessTrades(state)
+
       return true
     })()
 
@@ -397,7 +416,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
           this.prismaService.marketTrade.createMany({
             data: records,
             skipDuplicates: true, // 跳过重复记录
-          })
+          }),
         )
       }
 
@@ -460,6 +479,33 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
       }
     }
     return null
+  }
+
+  private trimExcessTrades(state: TradeState): void {
+    const key = `${this.exchange}/${this.instrumentType}/${state.instId}`
+    const now = Date.now()
+    const lastTrim = this.lastTrimTime.get(key) || 0
+
+    const retries = this.retryCount.get(key) ?? 0
+    const backoffMs = Math.min(this.TRIM_THROTTLE_MS * 2 ** retries, 600_000)
+
+    if (now - lastTrim < backoffMs) return
+
+    this.lastTrimTime.set(key, now)
+
+    this.marketTradesRepository
+      .deleteExcessTrades(this.exchange, this.instrumentType, state.instId, this.maxTradesPerSymbol)
+      .then(() => {
+        this.retryCount.delete(key)
+      })
+      .catch(err => {
+        this.retryCount.set(key, retries + 1)
+        this.logger.warn(
+          `Failed to trim excess trades for ${key}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      })
   }
 }
 
@@ -559,11 +605,13 @@ class OkxWsConnection {
       this.scheduleReconnect()
     })
 
-    this.ws.on('error', (err) => {
+    this.ws.on('error', err => {
       this.open = false
       this.active.clear()
       this.stopHeartbeat()
-      logger.error(`OKX Trades WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`)
+      logger.error(
+        `OKX Trades WS#${this.index} error: ${err instanceof Error ? err.message : String(err)}`,
+      )
       this.scheduleReconnect()
     })
   }
@@ -580,10 +628,13 @@ class OkxWsConnection {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
     const delayMs = this.configService.get<number>('marketData.wsReconnectDelayMs') ?? 5_000
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      void this.connect()
-    }, Math.max(1_000, delayMs))
+    this.reconnectTimer = setTimeout(
+      () => {
+        this.reconnectTimer = null
+        void this.connect()
+      },
+      Math.max(1_000, delayMs),
+    )
   }
 
   private startHeartbeat(): void {
@@ -591,20 +642,23 @@ class OkxWsConnection {
     const intervalMs = 15_000
     const timeoutMs = 45_000
 
-    this.heartbeatTimer = setInterval(() => {
-      if (!this.ws) return
-      const now = Date.now()
-      if (now - this.lastPongTs > timeoutMs) {
+    this.heartbeatTimer = setInterval(
+      () => {
+        if (!this.ws) return
+        const now = Date.now()
+        if (now - this.lastPongTs > timeoutMs) {
+          try {
+            this.baseLogger.warn(`OKX Trades WS#${this.index} heartbeat timeout, terminating`)
+            this.ws.terminate()
+          } catch {}
+          return
+        }
         try {
-          this.baseLogger.warn(`OKX Trades WS#${this.index} heartbeat timeout, terminating`)
-          this.ws.terminate()
+          this.ws.send('ping')
         } catch {}
-        return
-      }
-      try {
-        this.ws.send('ping')
-      } catch {}
-    }, Math.max(5_000, intervalMs))
+      },
+      Math.max(5_000, intervalMs),
+    )
   }
 
   private stopHeartbeat(): void {
@@ -614,7 +668,10 @@ class OkxWsConnection {
     }
   }
 
-  private async sendSubscription(op: 'subscribe' | 'unsubscribe', instIds: string[]): Promise<void> {
+  private async sendSubscription(
+    op: 'subscribe' | 'unsubscribe',
+    instIds: string[],
+  ): Promise<void> {
     if (!this.ws || !this.open || !instIds.length) return
     const channel = this.getChannel()
     const chunkSize = 20
@@ -658,7 +715,9 @@ class OkxWsConnection {
     }
 
     if (msg.event === 'error') {
-      this.baseLogger.warn(`OKX Trades WS#${this.index} error event: code=${msg.code} msg=${msg.msg}`)
+      this.baseLogger.warn(
+        `OKX Trades WS#${this.index} error event: code=${msg.code} msg=${msg.msg}`,
+      )
       return
     }
     if (msg.event === 'subscribe' || msg.event === 'unsubscribe' || msg.event === 'pong') {
@@ -675,10 +734,3 @@ class OkxWsConnection {
     }
   }
 }
-
-
-
-
-
-
-
