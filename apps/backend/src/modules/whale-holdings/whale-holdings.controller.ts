@@ -35,9 +35,9 @@ export class WhaleHoldingsController {
   @OptionalAccessControl()
   @ReadAny(AppResource.WHALE_TRACKING)
   @ApiOperation({
-    summary: '获取当前鲸鱼持仓列表（基于 Hyperliquid Whale Alert 数据）',
+    summary: '获取当前鲸鱼持仓列表（基于 Hyperliquid Whale Position 快照）',
     description:
-      '以 (user_address, symbol) 维度选取最新一条开仓记录，近似表示当前持仓，仅返回名义价值较大的鲸鱼持仓。',
+      '返回 Hyperliquid 平台上持仓价值超过指定阈值的鲸鱼实时持仓快照，每个用户+币种只有最新状态。',
   })
   @ApiOkResponse({ type: WhaleHoldingDto, isArray: true })
   async getWhaleHoldings(

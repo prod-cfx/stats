@@ -45,7 +45,7 @@ describe('WhaleHoldingsService (E2E)', () => {
 
     // 清理历史测试数据，避免断言被污染
     const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await client.hyperliquidWhalePosition.deleteMany({})
   })
 
   afterAll(async () => {
@@ -60,11 +60,11 @@ describe('WhaleHoldingsService (E2E)', () => {
     const now = new Date()
     const minutes = (n: number) => new Date(now.getTime() - n * 60 * 1000)
 
-    // 准备测试数据：
-    // - user1/BTC: 先开仓再平仓 => 不应出现在当前持仓结果中
-    // - user2/BTC: 仅开仓 => 应作为当前持仓返回
-    // - user3/ETH: 仅开仓，名义价值较小 => 在较低 minPositionValueUsd 下才会返回
-    await client.hyperliquidWhaleAlert.createMany({
+    // 准备测试数据（HyperliquidWhalePosition 使用 (userAddress, symbol) 唯一约束）：
+    // - user1/BTC: 持仓价值 500k（低于 1M 阈值）
+    // - user2/BTC: 持仓价值 1.2M（高于 1M 阈值）
+    // - user3/ETH: 持仓价值 200k（低于 1M 但高于 100k 阈值）
+    await client.hyperliquidWhalePosition.createMany({
       data: [
         {
           userAddress: '0xWhaleAddress1',
@@ -72,20 +72,10 @@ describe('WhaleHoldingsService (E2E)', () => {
           positionSize: '10',
           entryPrice: '50000',
           liquidationPrice: '45000',
-          positionValueUsd: '500000', // 50w
-          positionAction: 1, // 开仓
-          createTime: minutes(30),
-          source: 'TEST',
-        },
-        {
-          userAddress: '0xWhaleAddress1',
-          symbol: 'BTC',
-          positionSize: '0',
-          entryPrice: '50000',
-          liquidationPrice: '45000',
-          positionValueUsd: '0',
-          positionAction: 2, // 平仓（最新一条，会被 DISTINCT 选中，然后在外层被过滤掉）
-          createTime: minutes(10),
+          positionValueUsd: '500000', // 50w - below 1M threshold
+          pnl: '5000',
+          roe: '0.01',
+          snapshotTime: minutes(30),
           source: 'TEST',
         },
         {
@@ -94,9 +84,10 @@ describe('WhaleHoldingsService (E2E)', () => {
           positionSize: '20',
           entryPrice: '60000',
           liquidationPrice: '55000',
-          positionValueUsd: '1200000', // 120w
-          positionAction: 1, // 开仓
-          createTime: minutes(5),
+          positionValueUsd: '1200000', // 120w - above 1M threshold
+          pnl: '50000',
+          roe: '0.04',
+          snapshotTime: minutes(5),
           source: 'TEST',
         },
         {
@@ -105,9 +96,10 @@ describe('WhaleHoldingsService (E2E)', () => {
           positionSize: '5',
           entryPrice: '3000',
           liquidationPrice: '2500',
-          positionValueUsd: '200000', // 20w
-          positionAction: 1, // 开仓
-          createTime: minutes(3),
+          positionValueUsd: '200000', // 20w - below 1M but above 100k
+          pnl: '-1000',
+          roe: '-0.005',
+          snapshotTime: minutes(3),
           source: 'TEST',
         },
       ],
@@ -117,7 +109,6 @@ describe('WhaleHoldingsService (E2E)', () => {
     const btcHoldings = await whaleHoldingsService.getCurrentHoldings({
       symbol: 'BTC',
       minPositionValueUsd: 1_000_000,
-      timeRangeHours: 24,
       limit: 10,
     })
 
@@ -131,7 +122,6 @@ describe('WhaleHoldingsService (E2E)', () => {
     // 2）不传 symbol，降低 minPositionValueUsd，应包含 BTC 与 ETH 两个地址
     const allHoldings = await whaleHoldingsService.getCurrentHoldings({
       minPositionValueUsd: 100_000,
-      timeRangeHours: 24,
       limit: 10,
     })
 

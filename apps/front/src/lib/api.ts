@@ -198,7 +198,7 @@ export type WhaleHoldingApiItem = Infer<typeof schemas.WhaleHoldingDto>
 export interface FetchWhaleHoldingsQuery {
   symbol?: string
   minPositionValueUsd?: number
-  timeRangeHours?: number
+  // timeRangeHours 已不再使用，因为 HyperliquidWhalePosition 表只保留最新快照
   limit?: number
 }
 
@@ -232,7 +232,10 @@ export async function fetchWhaleHoldings(
       const positionSize = positionValueUsd / entryPrice
       const liquidationPrice =
         entryPrice * (side === 'LONG' ? 0.75 + rand() * 0.15 : 1.15 + rand() * 0.25)
-      const createdAt = new Date(Date.now() - Math.floor(rand() * 24 * 60) * 60_000).toISOString()
+      // 生成模拟的 pnl 和 roe
+      const pnl = (rand() * 2 - 1) * positionValueUsd * 0.1 // [-10%, +10%) 的盈亏
+      const roe = pnl / positionValueUsd
+      const snapshotTime = new Date(Date.now() - Math.floor(rand() * 24 * 60) * 60_000).toISOString()
       return {
         userAddress: `0x${Math.floor(rand() * 1e16)
           .toString(16)
@@ -243,13 +246,14 @@ export async function fetchWhaleHoldings(
         positionSize,
         entryPrice,
         liquidationPrice,
-        createTime: createdAt,
+        pnl,
+        roe,
+        snapshotTime,
       } as any as WhaleHoldingApiItem
     })
     return items
   }
 }
-
 // ===== 鲸鱼地址维度历史交易 / 绩效 API =====
 
 export type WhaleAddressPerformanceResponse = Infer<

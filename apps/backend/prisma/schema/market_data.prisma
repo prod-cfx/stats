@@ -314,6 +314,7 @@ model HyperliquidWhalePosition {
   @@index([userAddress], map: "idx_whale_position_user_address")
   @@index([symbol], map: "idx_whale_position_symbol")
   @@index([positionValueUsd], map: "idx_whale_position_value")
+  @@index([symbol, positionValueUsd(sort: Desc)], map: "idx_whale_position_symbol_value_desc")
   @@index([snapshotTime], map: "idx_whale_position_snapshot_time")
   @@map("hyperliquid_whale_positions")
 }

@@ -28,7 +28,7 @@ export class WhaleHoldingDto {
   side: 'LONG' | 'SHORT'
 
   @ApiProperty({
-    description: '持仓大小（原始数值，正数=多头，负数=空头）',
+    description: '持仓大小绝对值（方向由 side 字段表示）',
     example: 123.456,
   })
   @IsNumber()
@@ -49,18 +49,38 @@ export class WhaleHoldingDto {
   entryPrice: number
 
   @ApiProperty({
-    description: '清算价格',
+    description: '清算价格（可能为 null）',
     example: 45000,
+    nullable: true,
   })
   @IsNumber()
-  liquidationPrice: number
+  @IsOptional()
+  liquidationPrice: number | null
 
   @ApiProperty({
-    description: '该持仓最近一次变动时间（来自 create_time）',
+    description: '未实现盈亏（USD），来自 API 的 pnl 字段',
+    example: 12345.67,
+    nullable: true,
+  })
+  @IsNumber()
+  @IsOptional()
+  pnl: number | null
+
+  @ApiProperty({
+    description: '收益率（ROE），小数形式，如 0.05 表示 5%',
+    example: 0.05,
+    nullable: true,
+  })
+  @IsNumber()
+  @IsOptional()
+  roe: number | null
+
+  @ApiProperty({
+    description: '数据快照时间',
     example: '2025-01-01T00:00:00.000Z',
   })
   @IsDateString()
-  createTime: string
+  snapshotTime: string
 }
 
 export class QueryWhaleHoldingsDto {
@@ -84,19 +104,7 @@ export class QueryWhaleHoldingsDto {
   @Min(0)
   minPositionValueUsd?: number
 
-  @ApiProperty({
-    description: '回溯时间范围（小时），默认 24 小时，最大 168 小时',
-    required: false,
-    example: 24,
-    minimum: 1,
-    maximum: 168,
-  })
-  @Type(() => Number)
-  @IsInt()
-  @IsOptional()
-  @Min(1)
-  @Max(168)
-  timeRangeHours?: number
+  // timeRangeHours 已不再需要，因为 HyperliquidWhalePosition 表只保留最新快照
 
   @ApiProperty({
     description: '最大返回记录数，默认 100，最大 500',

@@ -974,8 +974,10 @@ const WhaleHoldingDto = z
     positionSize: z.number(),
     positionValueUsd: z.number(),
     entryPrice: z.number(),
-    liquidationPrice: z.number(),
-    createTime: z.string(),
+    liquidationPrice: z.number().nullable(),
+    pnl: z.number().nullable(),
+    roe: z.number().nullable(),
+    snapshotTime: z.string(),
   })
   .passthrough();
 
@@ -3251,7 +3253,7 @@ const endpoints = makeApi([
     method: "get",
     path: "/whale-holdings",
     alias: "WhaleHoldingsController_getWhaleHoldings",
-    description: `以 (user_address, symbol) 维度选取最新一条开仓记录，近似表示当前持仓，仅返回名义价值较大的鲸鱼持仓。`,
+    description: `返回 Hyperliquid 平台上持仓价值超过指定阈值的鲸鱼实时持仓快照，每个用户+币种只有最新状态。`,
     requestFormat: "json",
     parameters: [
       {
@@ -3263,11 +3265,6 @@ const endpoints = makeApi([
         name: "minPositionValueUsd",
         type: "Query",
         schema: z.number().optional(),
-      },
-      {
-        name: "timeRangeHours",
-        type: "Query",
-        schema: z.number().gte(1).lte(168).optional(),
       },
       {
         name: "limit",

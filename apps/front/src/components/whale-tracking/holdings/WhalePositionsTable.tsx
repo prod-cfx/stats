@@ -43,19 +43,10 @@ export const WhalePositionsTable = () => {
   const [sideFilter, setSideFilter] = useState<'ALL' | 'Long' | 'Short'>('ALL')
   const [pnlFilter, setPnlFilter] = useState<'ALL' | 'PROFIT' | 'LOSS'>('ALL')
   const [sortField, setSortField] = useState<
-    'positionValue' | 'pnl' | 'margin' | 'winRate' | 'createdTime' | null
+    'positionValue' | 'pnl' | 'margin' | 'createdTime' | null
   >('positionValue')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>('desc')
 
-  const seededNumber = (input: string): number => {
-    // simple non-cryptographic hash → [0, 1)
-    let hash = 2166136261
-    for (let i = 0; i < input.length; i++) {
-      hash ^= input.charCodeAt(i)
-      hash = Math.imul(hash, 16777619)
-    }
-    return (hash >>> 0) / 2 ** 32
-  }
 
   const formatRelativeMinutes = (mins: number) => {
     if (mins <= 0) return t('whaleTracking.time.justNow')
@@ -75,7 +66,6 @@ export const WhalePositionsTable = () => {
         symbol: assetFilter !== 'ALL' ? assetFilter : undefined,
         // 仅保留名义价值较大的鲸鱼单子
         minPositionValueUsd: 1_000_000,
-        timeRangeHours: 24,
         limit: 200,
       })
     },
@@ -98,19 +88,18 @@ export const WhalePositionsTable = () => {
     const now = Date.now()
 
     // 先在数值层面做过滤和排序，最后再做格式化，避免 locale 相关的字符串互转问题
-    const enriched = rawHoldings.map(h => {
-      const createdAt = new Date(h.createTime).getTime()
-      const createdMinutesAgo = Math.max(0, Math.floor((now - createdAt) / 60_000))
+    const enriched = rawHoldings.map((h) => {
+      // snapshotTime 来自新的 HyperliquidWhalePosition 数据源
+      const snapshotAt = new Date(h.snapshotTime).getTime()
+      const createdMinutesAgo = Math.max(0, Math.floor((now - snapshotAt) / 60_000))
 
       const positionValueUsd = h.positionValueUsd
       const marginValue = positionValueUsd / 10 // 简单估算，仅用于展示
       const side: 'Long' | 'Short' = h.side === 'LONG' ? 'Long' : 'Short'
 
-      // 后端暂未提供未实现盈亏 & 胜率，先用“稳定伪随机”生成展示值（基于 address+symbol，不会抖动）
-      const seedBase = `${h.userAddress}-${h.symbol}`
-      const pnlPct = (seededNumber(seedBase) * 2 - 1) * 0.12 // [-12%, +12%)
-      const pnlUsd = positionValueUsd * pnlPct
-      const winRatePct = 45 + seededNumber(`${seedBase}-wr`) * 40 // [45, 85)
+      // 使用 API 返回的真实 pnl 和 roe 数据
+      const pnlUsd = h.pnl ?? 0
+      const pnlPct = h.roe ?? 0
 
       return {
         raw: h,
@@ -120,7 +109,6 @@ export const WhalePositionsTable = () => {
         side,
         pnlUsd,
         pnlPct,
-        winRatePct,
       }
     })
 
@@ -153,10 +141,6 @@ export const WhalePositionsTable = () => {
                 valA = a.marginValue
                 valB = b.marginValue
                 break
-              case 'winRate':
-                valA = a.winRatePct
-                valB = b.winRatePct
-                break
               case 'createdTime': {
                 valA = a.createdMinutesAgo
                 valB = b.createdMinutesAgo
@@ -180,7 +164,6 @@ export const WhalePositionsTable = () => {
         side,
         pnlUsd,
         pnlPct,
-        winRatePct,
       } = item
 
       const positionValueUSD = `$${positionValueUsd.toLocaleString(undefined, {
@@ -197,15 +180,22 @@ export const WhalePositionsTable = () => {
         maximumFractionDigits: 2,
       })}`
 
-      const liqPrice = `$${raw.liquidationPrice.toLocaleString(undefined, {
-        maximumFractionDigits: 2,
-      })}`
+      const liqPrice = raw.liquidationPrice != null
+        ? `$${raw.liquidationPrice.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          })}`
+        : '--'
 
-      const pnlUSD = `${pnlUsd >= 0 ? '+' : '-'}$${Math.abs(pnlUsd).toLocaleString(undefined, {
-        maximumFractionDigits: 0,
-      })}`
-      const pnlPercent = `${pnlPct >= 0 ? '+' : '-'}${Math.abs(pnlPct * 100).toFixed(2)}%`
-      const winRate = `${winRatePct.toFixed(0)}%`
+      const pnlUSD = pnlUsd != null
+        ? `${pnlUsd >= 0 ? '+' : '-'}$${Math.abs(pnlUsd).toLocaleString(undefined, {
+            maximumFractionDigits: 0,
+          })}`
+        : '--'
+      const pnlPercent = pnlPct != null
+        ? `${pnlPct >= 0 ? '+' : '-'}${Math.abs(pnlPct * 100).toFixed(2)}%`
+        : '--'
+      // winRate 字段已不再由 API 提供，显示为 '--'
+      const winRate = '--'
 
       const tags: WhalePosition['tags'] = [{ key: 'whale', color: '#c084fc', bg: '#a855f733' }]
 
@@ -361,14 +351,7 @@ export const WhalePositionsTable = () => {
                     {t('whaleTracking.holdings.table.liqPrice')}
                   </th>
                   <th className="px-6 py-4 text-left whitespace-nowrap">
-                    <button
-                      type="button"
-                      className="group flex cursor-pointer items-center select-none"
-                      onClick={() => handleSort('winRate')}
-                    >
-                      {t('whaleTracking.holdings.table.winRate')}
-                      {renderSortIcon('winRate')}
-                    </button>
+                    {t('whaleTracking.holdings.table.winRate')}
                   </th>
                   <th
                     className="group cursor-pointer px-6 py-4 text-left whitespace-nowrap select-none"
