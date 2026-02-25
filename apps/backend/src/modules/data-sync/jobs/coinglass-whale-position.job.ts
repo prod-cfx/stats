@@ -27,14 +27,26 @@ interface WhalePositionDataPoint {
   position_size: number
   /** 入场价格 */
   entry_price: number
+  /** 当前标记价格 */
+  mark_price: number
   /** 清算价格 */
   liq_price: number | null
+  /** 杠杆倍数 */
+  leverage: number
+  /** 保证金余额（USD） */
+  margin_balance: number
   /** 持仓价值（USD） */
   position_value_usd: number
-  /** 盈亏（USD） */
-  pnl?: number
-  /** 盈亏百分比（ROE） */
-  roe?: number
+  /** 未实现盈亏（USD） */
+  unrealized_pnl: number
+  /** 资金费（USD） */
+  funding_fee: number
+  /** 保证金模式 (cross / isolated) */
+  margin_mode: string
+  /** 开仓时间（毫秒时间戳） */
+  create_time: number
+  /** 最后更新时间（毫秒时间戳） */
+  update_time: number
 }
 
 interface WhalePositionApiResponse {
@@ -100,33 +112,58 @@ export class CoinglassWhalePositionJob implements DataPullJob {
 
     // 使用 upsert 模式：同一用户+币种的持仓会被更新
     // 分批执行事务，避免大数据量时事务超时（Prisma P2028）
-    const operations = json.data.map((point) => {
+    const operations = json.data.flatMap(point => {
       // 空值保护：外部 API 可能返回意外的 null/undefined
+      const hasValidMarginBalance =
+        Number.isFinite(point.margin_balance) && point.margin_balance !== 0
+      const hasValidUnrealizedPnl = Number.isFinite(point.unrealized_pnl)
+      const hasValidRequiredNumbers =
+        Number.isFinite(point.position_size) &&
+        Number.isFinite(point.entry_price) &&
+        Number.isFinite(point.position_value_usd)
+
+      if (!hasValidRequiredNumbers) {
+        this.logger.warn(
+          `Skip invalid whale position payload: user=${point.user}, symbol=${point.symbol}`,
+        )
+        return []
+      }
+
       const commonData = {
-        positionSize: point.position_size?.toString() ?? '0',
-        entryPrice: point.entry_price?.toString() ?? '0',
+        positionSize: point.position_size.toString(),
+        entryPrice: point.entry_price.toString(),
         liquidationPrice: point.liq_price?.toString() ?? null,
-        positionValueUsd: point.position_value_usd?.toString() ?? '0',
-        pnl: point.pnl?.toString() ?? null,
-        roe: point.roe?.toString() ?? null,
+        positionValueUsd: point.position_value_usd.toString(),
+        pnl: hasValidUnrealizedPnl ? point.unrealized_pnl.toString() : null,
+        // 计算 ROE: unrealized_pnl / margin_balance (收益率 = 未实现盈亏 / 保证金余额)
+        roe: (() => {
+          if (!hasValidMarginBalance || !hasValidUnrealizedPnl) {
+            return null
+          }
+
+          const roeValue = point.unrealized_pnl / point.margin_balance
+          return Number.isFinite(roeValue) ? roeValue.toString() : null
+        })(),
         snapshotTime: now,
         source: 'COINGLASS' as const,
       }
 
-      return client.hyperliquidWhalePosition.upsert({
-        where: {
-          userAddress_symbol: {
+      return [
+        client.hyperliquidWhalePosition.upsert({
+          where: {
+            userAddress_symbol: {
+              userAddress: point.user,
+              symbol: point.symbol,
+            },
+          },
+          update: commonData,
+          create: {
             userAddress: point.user,
             symbol: point.symbol,
+            ...commonData,
           },
-        },
-        update: commonData,
-        create: {
-          userAddress: point.user,
-          symbol: point.symbol,
-          ...commonData,
-        },
-      })
+        }),
+      ]
     })
 
     // 分批提交事务
