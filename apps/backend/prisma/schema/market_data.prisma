@@ -264,6 +264,60 @@ model HyperliquidWhaleAlert {
   @@map("hyperliquid_whale_alerts")
 }
 
+/// Hyperliquid 鲸鱼持仓快照（Whale Position）
+///
+/// 参考文档：
+/// https://docs.coinglass.com/v4.0-zh/reference/hyperliquid-whale-position
+///
+/// 设计说明：
+/// - 记录 Hyperliquid 平台上价值超过 100 万美元的鲸鱼持仓快照
+/// - 使用 upsert 模式：同一用户+币种的持仓会被更新而非追加
+/// - 与 HyperliquidWhaleAlert（历史事件）不同，这是当前持仓状态
+model HyperliquidWhalePosition {
+  id Int @id @default(autoincrement())
+
+  /// 用户地址（hash address）
+  userAddress String @map("user_address")
+
+  /// 币种符号，如 BTC / ETH
+  symbol String
+
+  /// 持仓大小（正数=多头，负数=空头）
+  positionSize Decimal @map("position_size") @db.Decimal(30, 10)
+
+  /// 入场价格
+  entryPrice Decimal @map("entry_price") @db.Decimal(30, 10)
+
+  /// 清算价格
+  liquidationPrice Decimal? @map("liquidation_price") @db.Decimal(30, 10)
+
+  /// 持仓价值（USD）
+  positionValueUsd Decimal @map("position_value_usd") @db.Decimal(30, 10)
+
+  /// 盈亏（USD）- API 返回的 pnl 字段
+  pnl Decimal? @db.Decimal(30, 10)
+
+  /// 盈亏百分比 - API 返回的 roe 字段
+  roe Decimal? @db.Decimal(18, 8)
+
+  /// 数据来源，默认 'COINGLASS'
+  source String @default("COINGLASS")
+
+  /// 数据快照时间
+  snapshotTime DateTime @map("snapshot_time")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// 联合唯一约束：同一用户+币种只保留最新持仓
+  @@unique([userAddress, symbol], map: "uniq_whale_position_user_symbol")
+  @@index([userAddress], map: "idx_whale_position_user_address")
+  @@index([symbol], map: "idx_whale_position_symbol")
+  @@index([positionValueUsd], map: "idx_whale_position_value")
+  @@index([snapshotTime], map: "idx_whale_position_snapshot_time")
+  @@map("hyperliquid_whale_positions")
+}
+
 /// 加密股票报价数据模型 - 记录加密货币相关股票的实时报价信息
 ///
 /// 设计说明：

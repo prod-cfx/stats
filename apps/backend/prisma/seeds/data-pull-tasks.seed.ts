@@ -38,6 +38,16 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       enabled: false,
       cursor: null,
     },
+    {
+      key: 'coinglass-hyperliquid-whale-position',
+      name: 'Hyperliquid 鲸鱼持仓快照',
+      source: 'coinglass',
+      type: 'whale-position',
+      // 每 5 分钟同步一次
+      intervalSeconds: 300,
+      enabled: false,
+      cursor: null,
+    },
     // Coinglass Futures Price History - 主流币种多时间粒度 K线同步
     // 为每个币种和时间粒度创建独立任务，避免单个任务过载
     ...(() => {

@@ -35,6 +35,7 @@ import { CoinglassLongShortRatioJob } from './jobs/coinglass-long-short-ratio.jo
 import { CoinglassPairsMarketsJob } from './jobs/coinglass-pairs-markets.job'
 import { CoinglassTakerVolumeJob } from './jobs/coinglass-taker-volume.job'
 import { CoinglassWhaleAlertJob } from './jobs/coinglass-whale-alert.job'
+import { CoinglassWhalePositionJob } from './jobs/coinglass-whale-position.job'
 import { ExampleKlineJob } from './jobs/example-kline.job'
 import { ExampleNewsJob } from './jobs/example-news.job'
 import { ExampleOrderbookJob } from './jobs/example-orderbook.job'
@@ -102,6 +103,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     ExampleNewsJob,
     CoinglassHeatmapJob,
     CoinglassWhaleAlertJob,
+    CoinglassWhalePositionJob,
     CoinglassCoinsPriceChangeJob,
     CoinglassFuturesPriceHistoryJob,
     ExampleOrderbookJob,
@@ -130,6 +132,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         exampleNewsJob: ExampleNewsJob,
         coinglassHeatmapJob: CoinglassHeatmapJob,
         coinglassWhaleAlertJob: CoinglassWhaleAlertJob,
+        coinglassWhalePositionJob: CoinglassWhalePositionJob,
         coinglassCoinsPriceChangeJob: CoinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob: CoinglassFuturesPriceHistoryJob,
         binanceKlineHistoryJob: BinanceKlineHistoryJob,
@@ -152,6 +155,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         exampleNewsJob,
         coinglassHeatmapJob,
         coinglassWhaleAlertJob,
+        coinglassWhalePositionJob,
         coinglassCoinsPriceChangeJob,
         coinglassFuturesPriceHistoryJob,
         binanceKlineHistoryJob,
@@ -175,6 +179,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
         ExampleNewsJob,
         CoinglassHeatmapJob,
         CoinglassWhaleAlertJob,
+        CoinglassWhalePositionJob,
         CoinglassCoinsPriceChangeJob,
         CoinglassFuturesPriceHistoryJob,
         BinanceKlineHistoryJob,
