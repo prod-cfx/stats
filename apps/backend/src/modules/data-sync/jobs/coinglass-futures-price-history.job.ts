@@ -5,6 +5,7 @@ import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { INTERVAL_MS } from '@/modules/kline/utils/kline-time.utils'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -68,8 +69,12 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private readonly requestTimeoutMs = 10_000
   private readonly maxAttempts = 2
   private readonly BATCH_INSERT_SIZE = 500
+  // Coinglass 增量拉取使用毫秒级递增，避免重复拉取最后一条
+  private readonly TIMESTAMP_INCREMENT_MS = 1
   // 回填完成后的复查间隔（90 天）
   private readonly BACKFILL_RECHECK_WINDOW_MS = 90 * 24 * 60 * 60 * 1000
+  // 单个缺口最大分页次数，防止 API 异常导致无限循环
+  private readonly MAX_PAGES_PER_GAP = 100
 
   // 默认配置：BTCUSDT.BINANCE.PERP & 4h 粒度
   private readonly defaultSymbol = 'BTCUSDT'
@@ -92,7 +97,6 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     '1d',
     '1w',
   ] as const satisfies readonly MarketTimeframe[]
-
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -171,6 +175,29 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       }
     }
 
+    // 在增量拉取前，检测并回填数据缺口
+    if (typeof lastTimestampMs === 'number') {
+      const gapCheckFromMs = this.getBackfillTarget(interval)
+      const gapCheckToMs = lastTimestampMs
+
+      if (gapCheckToMs > gapCheckFromMs) {
+        const gaps = await this.detectGaps(
+          cursor.symbol,
+          cursor.exchangeCode ?? this.defaultExchangeCode,
+          contractType,
+          interval,
+          gapCheckFromMs,
+          gapCheckToMs,
+        )
+
+        if (gaps.length > 0) {
+          this.logger.log(`Detected ${gaps.length} gaps in data, filling...`)
+          const filledCount = await this.fillGaps(gaps, cursor, endpoint, apiKey)
+          this.logger.log(`Filled ${filledCount} records from ${gaps.length} gaps`)
+        }
+      }
+    }
+
     const url = new URL(endpoint)
     url.searchParams.set('symbol', cursor.symbol)
     url.searchParams.set('interval', interval)
@@ -184,7 +211,11 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     }
     if (typeof lastTimestampMs === 'number') {
       // Coinglass 文档示例：start_time 以毫秒为单位
-      url.searchParams.set('start_time', Math.floor(lastTimestampMs).toString())
+      // 加 1ms 避免重复拉取最后一条记录（与 Binance Job 保持一致）
+      url.searchParams.set(
+        'start_time',
+        Math.floor(lastTimestampMs + this.TIMESTAMP_INCREMENT_MS).toString(),
+      )
     } else {
       // 空库首次拉取时，如果不传任何时间参数，Coinglass 可能返回 time error。
       // 使用与回填深度一致的窗口作为初始 start_time。
@@ -532,6 +563,233 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     }
     const depth = depthMap[interval] ?? 90 * 24 * 60 * 60 * 1000
     return now - depth
+  }
+
+  /**
+   * 检测数据库中的 K 线数据缺口
+   * 返回缺失数据段的时间范围列表
+   *
+   * @param symbol 交易对符号
+   * @param exchangeCode 交易所代码
+   * @param contractType 合约类型（null 表示现货）
+   * @param interval 时间粒度
+   * @param fromMs 检查起始时间（毫秒）
+   * @param toMs 检查结束时间（毫秒）
+   * @returns 缺口列表，每个缺口包含 start 和 end 时间戳
+   */
+  private async detectGaps(
+    symbol: string,
+    exchangeCode: string,
+    contractType: string | null,
+    interval: string,
+    fromMs: number,
+    toMs: number,
+  ): Promise<Array<{ start: number; end: number }>> {
+    const intervalMs = INTERVAL_MS[interval]
+    if (!intervalMs) {
+      this.logger.warn(`Unknown interval ${interval}, skipping gap detection`)
+      return []
+    }
+
+    const dbClient = this.prisma.getClient()
+    const prismaInterval = mapTimeframe(interval as MarketTimeframe)
+
+    // 使用分块查询避免大数据量场景下的内存爆炸
+    const CHUNK_SIZE = 10000
+    const gaps: Array<{ start: number; end: number }> = []
+    let prevTs = fromMs - intervalMs // 初始化为 fromMs 前一个周期
+    let cursor: Date | undefined
+    let hasMoreData = true
+
+    while (hasMoreData) {
+      const records = await dbClient.futuresPriceHistory.findMany({
+        where: {
+          symbol,
+          exchangeCode,
+          contractType,
+          interval: prismaInterval,
+          source: 'COINGLASS',
+          timestamp: cursor
+            ? { gt: cursor, lte: new Date(toMs) }
+            : { gte: new Date(fromMs), lte: new Date(toMs) },
+        },
+        orderBy: { timestamp: 'asc' },
+        take: CHUNK_SIZE,
+        select: { timestamp: true },
+      })
+
+      if (records.length === 0) {
+        hasMoreData = false
+        break
+      }
+
+      for (const record of records) {
+        const currTs = record.timestamp.getTime()
+        const expectedNext = prevTs + intervalMs
+
+        // 如果当前时间戳与预期差距超过一个周期，说明有缺口
+        if (currTs > expectedNext) {
+          gaps.push({ start: expectedNext, end: currTs - intervalMs })
+        }
+        prevTs = currTs
+      }
+
+      cursor = records[records.length - 1].timestamp
+      hasMoreData = records.length === CHUNK_SIZE
+    }
+
+    // 检查结尾是否有缺口（prevTs 是最后一条记录的时间戳）
+    if (prevTs < toMs - intervalMs && prevTs >= fromMs) {
+      gaps.push({ start: prevTs + intervalMs, end: toMs - intervalMs })
+    }
+
+    // 特殊情况：完全没有数据时，整个范围都是缺口
+    if (prevTs === fromMs - intervalMs) {
+      return [{ start: fromMs, end: toMs - intervalMs }]
+    }
+
+    return gaps
+  }
+
+  /**
+   * 回填检测到的数据缺口
+   *
+   * @param gaps 缺口列表
+   * @param cursor 当前游标
+   * @param endpoint API 端点
+   * @param apiKey API 密钥
+   * @returns 插入的记录数
+   */
+  private async fillGaps(
+    gaps: Array<{ start: number; end: number }>,
+    cursor: FuturesPriceCursor,
+    endpoint: string,
+    apiKey: string,
+  ): Promise<number> {
+    if (gaps.length === 0) {
+      return 0
+    }
+
+    const isSpot = cursor.contractType === null
+    const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
+    const interval = cursor.interval ?? this.defaultInterval
+    const prismaInterval = mapTimeframe(interval as MarketTimeframe)
+    const dbClient = this.prisma.getClient()
+
+    let totalInserted = 0
+
+    for (const gap of gaps) {
+      this.logger.log(
+        `Filling gap for ${cursor.symbol} ${interval}: ${new Date(gap.start).toISOString()} to ${new Date(gap.end).toISOString()}`,
+      )
+
+      // 使用分页拉取处理大缺口，避免超过 API limit 导致数据不完整
+      let currentStart = gap.start
+      let gapInserted = 0
+      let pageCount = 0
+
+      while (currentStart <= gap.end && pageCount < this.MAX_PAGES_PER_GAP) {
+        pageCount++
+        const url = new URL(endpoint)
+        url.searchParams.set('symbol', cursor.symbol)
+        url.searchParams.set('interval', interval)
+        url.searchParams.set('limit', this.defaultLimit.toString())
+        if (cursor.exchangeCode) {
+          url.searchParams.set('exchange', cursor.exchangeCode)
+        }
+        if (!isSpot && (cursor.contractType ?? this.defaultContractType)) {
+          url.searchParams.set('contractType', cursor.contractType ?? this.defaultContractType!)
+        }
+        url.searchParams.set('start_time', currentStart.toString())
+        url.searchParams.set('end_time', gap.end.toString())
+
+        try {
+          const json = await this.fetchFuturesPriceJson(url, apiKey)
+
+          if (json.code !== '0' || !json.data || json.data.length === 0) {
+            // 没有更多数据，退出当前缺口的分页循环
+            break
+          }
+
+          const pointsWithTimestamps = json.data.map(point => {
+            const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
+            return {
+              ...point,
+              timestampMs,
+            }
+          })
+
+          // 过滤只保留缺口范围内的数据
+          const filteredPoints = pointsWithTimestamps.filter(
+            point => point.timestampMs >= gap.start && point.timestampMs <= gap.end,
+          )
+
+          if (filteredPoints.length === 0) {
+            break
+          }
+
+          const rows = filteredPoints.map(point => ({
+            symbol: cursor.symbol,
+            exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
+            contractType,
+            interval: prismaInterval,
+            timestamp: new Date(point.timestampMs),
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            volumeUsd: point.volume_usd ?? null,
+            source: 'COINGLASS',
+          }))
+
+          for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
+            const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
+            const result = await dbClient.futuresPriceHistory.createMany({
+              data: batch,
+              skipDuplicates: true,
+            })
+            gapInserted += result.count
+          }
+
+          // 计算下一轮起始时间：取本次返回数据的最大时间戳 + 1ms
+          const maxTimestamp = Math.max(...filteredPoints.map(p => p.timestampMs))
+          const newStart = maxTimestamp + this.TIMESTAMP_INCREMENT_MS
+
+          // 检测进度停滞（API 返回相同数据），防止无限循环
+          if (newStart <= currentStart) {
+            this.logger.warn(
+              `Gap fill progress stalled at ${new Date(currentStart).toISOString()}, breaking`,
+            )
+            break
+          }
+          currentStart = newStart
+
+          // 如果返回数据量小于 limit，说明已经拉取完毕
+          if (json.data.length < this.defaultLimit) {
+            break
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to fill gap page: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          // 发生错误时退出当前缺口，继续处理下一个缺口
+          break
+        }
+      }
+
+      if (pageCount >= this.MAX_PAGES_PER_GAP) {
+        this.logger.warn(
+          `Gap fill for ${cursor.symbol} ${interval} exceeded max pages (${this.MAX_PAGES_PER_GAP}), some data may be missing`,
+        )
+      }
+
+      if (gapInserted > 0) {
+        this.logger.log(`Filled ${gapInserted} points for gap`)
+      }
+      totalInserted += gapInserted
+    }
+
+    return totalInserted
   }
 
   private applyMetaDefaults(cursor: FuturesPriceCursor, meta: unknown): void {
