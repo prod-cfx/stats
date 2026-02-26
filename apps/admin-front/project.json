@@ -30,7 +30,8 @@
       "options": {
         "command": "next dev -H 0.0.0.0 -p 3500",
         "cwd": "apps/admin-front"
-      }
+      },
+      "dependsOn": ["^build"]
     },
     "serve": {
       "executor": "nx:run-commands",
@@ -38,7 +39,8 @@
       "options": {
         "command": "next dev -H 0.0.0.0 -p 3500",
         "cwd": "apps/admin-front"
-      }
+      },
+      "dependsOn": ["^build"]
     },
     "start": {
       "executor": "nx:run-commands",
