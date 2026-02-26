@@ -48,6 +48,10 @@ function hashCode(str: string): number {
   return Math.abs(hash)
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
+
 const ISO_DATE_REGEX = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g
 
 function formatRuleText(text: string): string {
@@ -55,12 +59,23 @@ function formatRuleText(text: string): string {
 }
 
 function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMarketItem {
-  const hash = hashCode(item.id)
+  const seed = [
+    nonEmptyString((item as any).id),
+    nonEmptyString((item as any).title),
+    nonEmptyString((item as any).status),
+    nonEmptyString((item as any).probability),
+    (item as any).volume24h != null ? String((item as any).volume24h) : undefined,
+  ]
+    .filter(Boolean)
+    .join('|')
+
+  const safeId = nonEmptyString((item as any).id) ?? `pm-${hashCode(seed || 'unknown')}`
+  const hash = hashCode(safeId)
   const Icon = ICONS[hash % ICONS.length]
   const iconBgColor = ICON_BG_CLASSES[hash % ICON_BG_CLASSES.length]
 
   return {
-    id: item.id,
+    id: safeId,
     title: item.title,
     icon: <Icon className="h-5 w-5 text-white" />,
     iconBgColor,

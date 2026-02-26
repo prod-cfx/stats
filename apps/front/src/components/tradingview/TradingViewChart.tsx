@@ -1546,9 +1546,29 @@ export const TradingViewChart = forwardRef(
       onToggleAggregate,
     ])
 
+    // 追踪上一次的数据源状态，用于判断是否需要刷新 K 线数据
+    const prevContextKeyRef = useRef(() => {
+      // 使用 contextKey 统一标识数据源：聚合模式与单一交易所模式的 key 不同
+      return isAggregated ? 'agg' : selectedExchange
+    })
+
     useEffect(() => {
       datafeedRef.current.setContext({ isAggregated, exchange: selectedExchange })
       stateRef.current = { isAggregated, selectedExchange }
+
+      // 计算当前数据源 contextKey
+      const currentContextKey = isAggregated ? 'agg' : selectedExchange
+      const prevContextKey = prevContextKeyRef.current()
+
+      // 当数据源变化时（exchange 或 isAggregated 变化），通知 TradingView 重置缓存
+      const contextChanged = prevContextKey !== currentContextKey
+      prevContextKeyRef.current = () => currentContextKey
+
+      if (contextChanged && chartReadyRef.current) {
+        // 调用 resetCache 触发 TradingView 的 onResetCacheNeededCallback
+        // 这会让 TradingView 清除缓存并重新调用 getBars 获取数据
+        datafeedRef.current.resetCache()
+      }
     }, [isAggregated, selectedExchange])
 
     const headerElsRef = useRef<{

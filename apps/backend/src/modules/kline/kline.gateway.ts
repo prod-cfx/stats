@@ -815,7 +815,7 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
-      // eslint-disable-next-line prefer-const -- needs to be reassigned for mutual recursion
+       
       scheduleNext = () => {
         subscriptionInfo.timer = setTimeout(async () => {
           await runOrderbookBroadcast()

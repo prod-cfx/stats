@@ -4,13 +4,48 @@ import { IsEnum, IsInt, IsOptional, IsString, Min, Validate, ValidatorConstraint
 
 @ValidatorConstraint({ name: 'timeRangeValidator', async: false })
 class TimeRangeValidator implements ValidatorConstraintInterface {
+  private getMaxRangeByInterval(interval: string): number {
+    const DAY = 24 * 60 * 60
+    switch (interval) {
+      case '1m':
+      case '5m':
+      case '15m':
+        return 7 * DAY // 7 天
+      case '1h':
+        return 30 * DAY // 30 天
+      case '4h':
+        return 90 * DAY // 90 天
+      case '1d':
+        return 365 * DAY // 365 天
+      default:
+        return 7 * DAY // 默认 7 天
+    }
+  }
+
+  private getMaxRangeDays(interval: string): number {
+    switch (interval) {
+      case '1m':
+      case '5m':
+      case '15m':
+        return 7
+      case '1h':
+        return 30
+      case '4h':
+        return 90
+      case '1d':
+        return 365
+      default:
+        return 7
+    }
+  }
+
   validate(to: number, args: ValidationArguments) {
     const obj = args.object as QueryKlineDto
-    const maxRange = 7 * 24 * 60 * 60 // 7 天（秒）
     if (to < obj.from) {
       return false
     }
 
+    const maxRange = this.getMaxRangeByInterval(obj.interval)
     return to - obj.from <= maxRange
   }
 
@@ -22,7 +57,8 @@ class TimeRangeValidator implements ValidatorConstraintInterface {
       return 'End time must be greater than or equal to start time'
     }
 
-    return 'Time range exceeds 7 days'
+    const maxDays = this.getMaxRangeDays(obj.interval)
+    return `Time range exceeds ${maxDays} days for interval ${obj.interval}`
   }
 }
 

@@ -80,6 +80,7 @@ interface Subscription {
   symbolInfo: Record<string, unknown>
   resolution: string
   onRealtimeCallback: SubscribeCallback
+  onResetCacheNeededCallback?: () => void
   subscribeUID: string
   lastBar: TvBar | null
   isInitialized: boolean
@@ -395,6 +396,7 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
         symbolInfo,
         resolution,
         onRealtimeCallback,
+        onResetCacheNeededCallback: _onResetCacheNeededCallback,
         subscribeUID,
         lastBar: null,
         isInitialized: false,
@@ -577,6 +579,18 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
 
     unsubscribeBars(subscribeUID: string) {
       unsubscribeBarsInternal(subscribeUID)
+    },
+
+    /**
+     * 通知所有订阅重置缓存，触发 TradingView 重新请求数据
+     * 用于 exchange 切换等场景，需要刷新 K 线数据
+     */
+    resetCache() {
+      subscriptions.forEach((subscription) => {
+        if (subscription.onResetCacheNeededCallback) {
+          subscription.onResetCacheNeededCallback()
+        }
+      })
     },
   }
 }
