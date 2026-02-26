@@ -75,6 +75,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private readonly BACKFILL_RECHECK_WINDOW_MS = 90 * 24 * 60 * 60 * 1000
   // 单个缺口最大分页次数，防止 API 异常导致无限循环
   private readonly MAX_PAGES_PER_GAP = 100
+  // Gap 检测窗口上限（7 天），防止首次运行时扫描过大范围
+  private readonly MAX_GAP_CHECK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
   // 默认配置：BTCUSDT.BINANCE.PERP & 4h 粒度
   private readonly defaultSymbol = 'BTCUSDT'
@@ -178,9 +180,18 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     // 在增量拉取前，检测并回填数据缺口
     if (typeof lastTimestampMs === 'number') {
       const gapCheckFromMs = this.getBackfillTarget(interval)
-      const gapCheckToMs = lastTimestampMs
+      const now = Date.now()
+      // Bug fix: 之前用 lastTimestampMs 作为终点，导致 lastTimestamp 之后的缺口永远不会被检测到
+      // 现在改为当前时间，但限制最大检测窗口，防止首次运行时扫描过大范围
+      // 超出窗口的缺口会在后续运行中逐步检测
+      const gapCheckToMs = Math.min(now, lastTimestampMs + this.MAX_GAP_CHECK_WINDOW_MS)
 
       if (gapCheckToMs > gapCheckFromMs) {
+        if (now > gapCheckToMs) {
+          this.logger.log(
+            `Gap detection limited to ${this.MAX_GAP_CHECK_WINDOW_MS / INTERVAL_MS['1d']} days window, remaining gaps will be checked in subsequent runs`,
+          )
+        }
         const gaps = await this.detectGaps(
           cursor.symbol,
           cursor.exchangeCode ?? this.defaultExchangeCode,
@@ -235,16 +246,22 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     }
 
     if (json.data.length === 0) {
+      // Bug fix: API 返回空数据时，也要更新 lastTimestamp 到当前时间
+      // 否则这段时间的缺口会被反复检测，且永远无法被标记为已处理
+      const updatedCursor: FuturesPriceCursor = {
+        ...cursor,
+        lastTimestamp: Date.now(),
+      }
       return {
         fetchedCount: 0,
-        newCursor: JSON.stringify(cursor),
+        newCursor: JSON.stringify(updatedCursor),
         meta: {
           symbol: cursor.symbol,
           exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
           contractType:
             cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
           interval,
-          note: 'No futures price history data returned from API',
+          note: 'No futures price history data returned from API, cursor updated to current time',
         },
       }
     }
