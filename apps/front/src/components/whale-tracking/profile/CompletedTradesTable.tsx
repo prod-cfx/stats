@@ -63,7 +63,6 @@ interface CompletedTrade {
   fillTime: number
   endTime: string
   asset: string
-  type: 'perp' | 'spot'
   side: 'Long' | 'Short'
   duration: string
   netPnl: string
@@ -75,10 +74,6 @@ interface CompletedTrade {
 interface CompletedTradesTableProps {
   fillsData: UserFillsResponse | null
 }
-
-const isSpotDirection = (direction: string) => direction === 'Buy' || direction === 'Sell'
-
-const isLongDirection = (direction: string) => direction.includes('Long') || direction === 'Buy'
 
 export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) => {
   const { t } = useTranslation()
@@ -110,27 +105,21 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
 
     const makeFillId = (fill: UserFillsResponse['fills'][number]) => `${fill.hash}:${fill.time}`
 
-    // Duration rule (MVP): close/liquidation time - latest open time for same coin + side.
-    // This intentionally tracks only the latest open record (no FIFO/average holding-time model).
+    // Duration: closeTime - lastOpenTime for same coin + side
     const lastOpenTimeByKey = new Map<string, number>()
     const durationByFillId = new Map<string, string>()
 
     const fillsAsc = [...data.fills].sort((a, b) => a.time - b.time)
     for (const fill of fillsAsc) {
-      const dir = fill.direction
-      // 现货交易（Buy/Sell）没有开仓/平仓概念，跳过
-      if (isSpotDirection(dir)) continue
-
-      const side = dir.includes('Long') ? 'Long' : 'Short'
+      const side = fill.direction.includes('Long') ? 'Long' : 'Short'
       const key = `${fill.coin}:${side}`
 
-      if (dir.startsWith('Open')) {
+      if (fill.direction.startsWith('Open')) {
         lastOpenTimeByKey.set(key, fill.time)
         continue
       }
 
-      // Close 或 Liquidated 都按上述规则计算持续时间
-      if (dir.startsWith('Close') || dir.startsWith('Liquidated')) {
+      if (fill.direction.startsWith('Close')) {
         const openTime = lastOpenTimeByKey.get(key)
         if (typeof openTime === 'number' && fill.time >= openTime) {
           durationByFillId.set(makeFillId(fill), formatDuration(fill.time - openTime))
@@ -139,14 +128,9 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
     }
 
     return data.fills
-      .filter(fill => {
-        // 已完成交易包括：Close Long/Short、清算（Liquidated）、现货交易（Buy/Sell）
-        const dir = fill.direction
-        return dir.startsWith('Close') || dir.startsWith('Liquidated') || isSpotDirection(dir)
-      })
+      .filter(fill => fill.direction.startsWith('Close'))
       .map(fill => {
-        // 判断方向：包含 Long 或为 Buy 则为多头
-        const isLong = isLongDirection(fill.direction)
+        const isLong = fill.direction.includes('Long')
         const endTime = new Date(fill.time)
           .toLocaleString('zh-CN', {
             year: 'numeric',
@@ -167,7 +151,6 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           fillTime: fill.time,
           endTime,
           asset: fill.coin,
-          type: isSpotDirection(fill.direction) ? 'spot' : 'perp',
           side: isLong ? 'Long' : 'Short',
           duration: durationByFillId.get(makeFillId(fill)) ?? '-',
           netPnl,
@@ -244,9 +227,6 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
             <span>{t('whaleTracking.profile.columns.asset')}</span>
           </th>
           <th className="px-6 py-4 text-left whitespace-nowrap">
-            {t('whaleTracking.profile.columns.type', 'Type')}
-          </th>
-          <th className="px-6 py-4 text-left whitespace-nowrap">
             {t('whaleTracking.profile.columns.side')}
           </th>
           <th className="px-6 py-4 text-right">
@@ -306,9 +286,6 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
               <td className="px-6 py-4 text-sm font-bold text-[color:var(--cf-text-strong)] uppercase">
                 {trade.asset}
               </td>
-              <td className="px-6 py-4 text-xs font-semibold text-[color:var(--cf-muted)] uppercase">
-                {trade.type}
-              </td>
               <td className="px-6 py-4">{renderSideBadge(trade.side)}</td>
               <td className="px-6 py-4 text-right text-xs font-medium text-[color:var(--cf-muted)] uppercase">
                 {formatDurationLabel(trade.duration)}
@@ -337,7 +314,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           )),
           paginatedCompletedTrades.length === 0 ? (
             <tr key="empty">
-              <td colSpan={9} className="px-6 py-12 text-center">
+              <td colSpan={8} className="px-6 py-12 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="text-4xl opacity-20">📊</div>
                   <p className="text-sm text-[color:var(--cf-muted)]">
@@ -352,7 +329,7 @@ export const CompletedTradesTable = ({ fillsData }: CompletedTradesTableProps) =
           paginatedCompletedTrades.length > 0 &&
           (historyPage + 1) * HISTORY_PAGE_SIZE < sortedCompletedTrades.length ? (
             <tr key="load-more">
-              <td colSpan={9} className="px-6 py-4">
+              <td colSpan={8} className="px-6 py-4">
                 <div className="flex justify-center">
                   <button
                     type="button"

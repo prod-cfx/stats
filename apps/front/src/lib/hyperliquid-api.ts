@@ -53,17 +53,7 @@ export interface UserFill {
   size: number
   side: 'BUY' | 'SELL'
   time: number
-  direction:
-    | 'Open Long'
-    | 'Close Long'
-    | 'Open Short'
-    | 'Close Short'
-    | 'Liquidated Cross Long'
-    | 'Liquidated Cross Short'
-    | 'Liquidated Isolated Long'
-    | 'Liquidated Isolated Short'
-    | 'Buy'
-    | 'Sell'
+  direction: 'Open Long' | 'Close Long' | 'Open Short' | 'Close Short'
   startPosition: number
   closedPnl: number
   fee: number
@@ -310,33 +300,8 @@ type ValidPeriod = (typeof VALID_PERIODS)[number]
 
 /**
  * 有效的成交方向（用于 fills 数据转换）
- *
- * 永续合约方向：
- * - Open Long / Close Long / Open Short / Close Short
- *
- * 清算方向（Liquidation）：
- * - Liquidated Cross Long / Liquidated Cross Short
- * - Liquidated Isolated Long / Liquidated Isolated Short
- *
- * 现货交易方向：
- * - Buy / Sell
  */
-const VALID_DIRECTIONS = [
-  // 永续合约
-  'Open Long',
-  'Close Long',
-  'Open Short',
-  'Close Short',
-  // 清算（Cross）
-  'Liquidated Cross Long',
-  'Liquidated Cross Short',
-  // 清算（Isolated）
-  'Liquidated Isolated Long',
-  'Liquidated Isolated Short',
-  // 现货
-  'Buy',
-  'Sell',
-] as const
+const VALID_DIRECTIONS = ['Open Long', 'Close Long', 'Open Short', 'Close Short'] as const
 type ValidDirection = (typeof VALID_DIRECTIONS)[number]
 
 // ============================================================================
@@ -1090,27 +1055,28 @@ export async function fetchUserFillsFromHyperliquid(
       aggregateByTime,
     })
 
-    const fills: UserFill[] = rawFills.flatMap(fill => {
+    const fills: UserFill[] = rawFills.map(fill => {
+      const direction: ValidDirection = VALID_DIRECTIONS.includes(fill.dir as ValidDirection)
+        ? (fill.dir as ValidDirection)
+        : 'Open Long' // 默认值，避免类型错误
+
       if (!VALID_DIRECTIONS.includes(fill.dir as ValidDirection)) {
-        logger.warn('Unknown fill direction, dropping fill', { dir: fill.dir, hash: fill.hash })
-        return []
+        logger.warn('Unknown fill direction', { dir: fill.dir, hash: fill.hash })
       }
 
-      return [
-        {
-          coin: fill.coin,
-          price: safeParseFloat(fill.px),
-          size: safeParseFloat(fill.sz),
-          side: fill.side === 'A' ? 'BUY' : 'SELL',
-          time: fill.time,
-          direction: fill.dir as ValidDirection,
-          startPosition: safeParseFloat(fill.startPosition),
-          closedPnl: safeParseFloat(fill.closedPnl),
-          fee: safeParseFloat(fill.fee),
-          feeToken: fill.feeToken,
-          hash: fill.hash,
-        },
-      ]
+      return {
+        coin: fill.coin,
+        price: safeParseFloat(fill.px),
+        size: safeParseFloat(fill.sz),
+        side: fill.side === 'A' ? 'BUY' : 'SELL',
+        time: fill.time,
+        direction,
+        startPosition: safeParseFloat(fill.startPosition),
+        closedPnl: safeParseFloat(fill.closedPnl),
+        fee: safeParseFloat(fill.fee),
+        feeToken: fill.feeToken,
+        hash: fill.hash,
+      }
     })
 
     return { fills }
@@ -1240,27 +1206,28 @@ export async function fetchTraderFullData(
       }
     }
 
-    const fills: UserFill[] = rawFills.flatMap(fill => {
+    const fills: UserFill[] = rawFills.map(fill => {
+      const direction: ValidDirection = VALID_DIRECTIONS.includes(fill.dir as ValidDirection)
+        ? (fill.dir as ValidDirection)
+        : 'Open Long'
+
       if (!VALID_DIRECTIONS.includes(fill.dir as ValidDirection)) {
-        logger.warn('Unknown fill direction, dropping fill', { dir: fill.dir, hash: fill.hash })
-        return []
+        logger.warn('Unknown fill direction', { dir: fill.dir, hash: fill.hash })
       }
 
-      return [
-        {
-          coin: fill.coin,
-          price: safeParseFloat(fill.px),
-          size: safeParseFloat(fill.sz),
-          side: fill.side === 'A' ? 'BUY' : 'SELL',
-          time: fill.time,
-          direction: fill.dir as ValidDirection,
-          startPosition: safeParseFloat(fill.startPosition),
-          closedPnl: safeParseFloat(fill.closedPnl),
-          fee: safeParseFloat(fill.fee),
-          feeToken: fill.feeToken,
-          hash: fill.hash,
-        },
-      ]
+      return {
+        coin: fill.coin,
+        price: safeParseFloat(fill.px),
+        size: safeParseFloat(fill.sz),
+        side: fill.side === 'A' ? 'BUY' : 'SELL',
+        time: fill.time,
+        direction,
+        startPosition: safeParseFloat(fill.startPosition),
+        closedPnl: safeParseFloat(fill.closedPnl),
+        fee: safeParseFloat(fill.fee),
+        feeToken: fill.feeToken,
+        hash: fill.hash,
+      }
     })
 
     const mergedPerpData: HyperliquidClearinghouseStateResponse = {
