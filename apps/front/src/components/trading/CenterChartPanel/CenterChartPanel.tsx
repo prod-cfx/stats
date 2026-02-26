@@ -60,7 +60,10 @@ export const CenterChartPanel = ({
       kind: x.kind as 'chartSeries' | 'chartOverlay',
     }))
 
-  const featuredIndicators = chartIndicatorItems.filter(x => x.group === 'featured')
+  // 临时隐藏：清算地图、聚合爆仓（需要时再恢复展示）
+  const featuredIndicators = chartIndicatorItems
+    .filter(x => x.group === 'featured')
+    .filter(x => x.id !== 'liquidation-map' && x.id !== 'liquidation-data')
   const visibleIndicators = featuredIndicators.filter(x => {
     const q = indicatorSearch.trim().toLowerCase()
     if (!q) return true
