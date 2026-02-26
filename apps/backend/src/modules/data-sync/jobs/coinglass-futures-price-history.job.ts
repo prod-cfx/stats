@@ -1,5 +1,6 @@
-import type { MarketTimeframe } from '@ai/shared'
+import type { CoinglassContractType, MarketTimeframe } from '@ai/shared'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
+import { toCoinglassSymbol } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -210,7 +211,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     }
 
     const url = new URL(endpoint)
-    url.searchParams.set('symbol', cursor.symbol)
+    url.searchParams.set('symbol', this.getApiSymbol(cursor))
     url.searchParams.set('interval', interval)
     url.searchParams.set('limit', this.defaultLimit.toString())
     if (cursor.exchangeCode) {
@@ -452,7 +453,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
 
     const url = new URL(endpoint)
-    url.searchParams.set('symbol', cursor.symbol)
+    url.searchParams.set('symbol', this.getApiSymbol(cursor))
     url.searchParams.set('interval', cursor.interval)
     url.searchParams.set('limit', this.defaultLimit.toString())
     if (cursor.exchangeCode) {
@@ -708,7 +709,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       while (currentStart <= gap.end && pageCount < this.MAX_PAGES_PER_GAP) {
         pageCount++
         const url = new URL(endpoint)
-        url.searchParams.set('symbol', cursor.symbol)
+        url.searchParams.set('symbol', this.getApiSymbol(cursor))
         url.searchParams.set('interval', interval)
         url.searchParams.set('limit', this.defaultLimit.toString())
         if (cursor.exchangeCode) {
@@ -848,6 +849,24 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private isAllowedInterval(value: string): value is MarketTimeframe {
     return (this.allowedIntervals as readonly string[]).includes(value)
   }
+
+  /**
+   * 将内部统一 symbol 转换为 Coinglass API 所需的交易所特定格式
+   *
+   * 不同交易所在 Coinglass API 中使用不同的 symbol 格式：
+   * - Binance: BTCUSDT
+   * - OKX: BTC-USDT-SWAP（永续）/ BTC-USDT（现货）
+   */
+  private getApiSymbol(cursor: FuturesPriceCursor): string {
+    const exchangeCode = cursor.exchangeCode ?? this.defaultExchangeCode
+    const contractType = cursor.contractType === null
+      ? 'SPOT'
+      : cursor.contractType === undefined
+        ? (this.defaultContractType as CoinglassContractType)
+        : (cursor.contractType as CoinglassContractType)
+    return toCoinglassSymbol(cursor.symbol, exchangeCode, contractType)
+  }
+
 
   private parseCursor(currentCursor: string | null): FuturesPriceCursor {
     if (!currentCursor) {

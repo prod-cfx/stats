@@ -12,6 +12,7 @@ export const buildHealthPayload = (service: string, status: HealthStatus = 'ok')
   timestamp: new Date().toISOString(),
 })
 
+export * from './constants/coinglass-symbol-mapping'
 export * from './constants/error-codes'
 export * from './constants/trading-pairs'
 export * from './constants/trading-symbols'

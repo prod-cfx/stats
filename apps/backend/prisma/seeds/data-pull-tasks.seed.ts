@@ -116,6 +116,74 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
 
       return tasks
     })(),
+    // Coinglass Futures Price History - OKX 交易所主流币种多时间粒度 K线同步
+    // 与 Binance 配置保持一致的结构，使用 OKX 交易所代码
+    ...(() => {
+      // OKX 使用统一格式存储（BTCUSDT）；API 请求时自动转换为 OKX 格式（如 BTC-USDT-SWAP）
+      const symbols = [
+        'BTCUSDT',
+        'ETHUSDT',
+        'SOLUSDT',
+        'XRPUSDT',
+        'DOGEUSDT',
+        'BNBUSDT',
+        'HYPEUSDT',
+      ] as const
+      const intervals = [
+        { interval: '1m' as const, syncSeconds: 120, priority: 3 }, // 1分钟粒度，每2分钟同步（低优先级）
+        { interval: '5m' as const, syncSeconds: 300, priority: 1 }, // 5分钟粒度，每5分钟同步（高优先级）✅
+        { interval: '15m' as const, syncSeconds: 600, priority: 1 }, // 15分钟粒度，每10分钟同步（高优先级）
+        { interval: '30m' as const, syncSeconds: 900, priority: 2 }, // 30分钟粒度，每15分钟同步（中优先级）
+        { interval: '1h' as const, syncSeconds: 1800, priority: 1 }, // 1小时粒度，每30分钟同步（高优先级）
+        { interval: '4h' as const, syncSeconds: 3600, priority: 1 }, // 4小时粒度，每1小时同步（高优先级）
+        { interval: '1d' as const, syncSeconds: 7200, priority: 1 }, // 1天粒度，每2小时同步（高优先级）
+      ] as const
+
+      const contractTypes = [
+        { type: 'PERPETUAL', label: '永续', priority: 1 }, // 高优先级
+        { type: null, label: '现货', priority: 2 }, // 低优先级（可选）
+      ] as const
+
+      const tasks: Array<{
+        key: string
+        name: string
+        source: string
+        type: string
+        intervalSeconds: number
+        enabled: boolean
+        cursor: string
+      }> = []
+
+      let delayOffset = 0
+      for (const symbol of symbols) {
+        for (const { type: contractType, label, priority: typePriority } of contractTypes) {
+          for (const { interval, syncSeconds, priority: intervalPriority } of intervals) {
+            // 每个任务错开 10 秒执行，避免并发触发 API 速率限制
+            const keyType = contractType ?? 'SPOT'
+            // 只启用高优先级任务（永续合约 + 15m/1h/4h/1d）
+            const isHighFrequency = interval === '1m' || interval === '3m' || interval === '5m'
+            const enabled = intervalPriority === 1 && typePriority === 1 && !isHighFrequency
+            tasks.push({
+              key: `coinglass-futures-price-history:${symbol}:OKX:${keyType}:${interval}`,
+              name: `Coinglass K线 (OKX) - ${symbol} ${label} ${interval}`,
+              source: 'coinglass',
+              type: 'futures-price-history',
+              intervalSeconds: syncSeconds + delayOffset,
+              enabled,
+              cursor: JSON.stringify({
+                symbol,
+                exchangeCode: 'OKX',
+                contractType,
+                interval,
+              }),
+            })
+            delayOffset = (delayOffset + 10) % 120 // 错开 10 秒，120 秒循环
+          }
+        }
+      }
+
+      return tasks
+    })(),
     // Coinglass Long/Short Ratio - 多空比历史数据（聚合多空比指标）
     // 为主流交易对 + 时间粒度创建独立任务，支持 TradingView 指标展示
     ...(() => {
