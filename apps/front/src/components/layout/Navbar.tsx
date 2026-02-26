@@ -71,10 +71,8 @@ export const Navbar = () => {
     'nav-public-companies',
   ]
 
-  // 临时隐藏：清算地图、爆仓数据（需要时再恢复展示）
-  const dataNavHiddenIds = ['nav-liquidation-map', 'nav-liquidation-data']
   const dataChildren = catalogItems
-    .filter(x => x.kind === 'nav' && x.href && !dataNavHiddenIds.includes(x.id))
+    .filter(x => x.kind === 'nav' && x.href)
     .slice()
     .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
     .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
@@ -85,7 +83,6 @@ export const Navbar = () => {
     { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
   ]
 
-  // 临时隐藏看板，需要时再恢复
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
     {
@@ -98,7 +95,7 @@ export const Navbar = () => {
       href: '#',
       children: whaleChildren,
     },
-    // { name: t('nav.dashboard'), href: withLng('/dashboard') },
+    { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ]
 
   // 获取热门搜索建议（示例）
@@ -109,7 +106,15 @@ export const Navbar = () => {
     const q = searchQuery.toLowerCase()
     const results: SearchEntry[] = []
 
-    // 1. Pages（看板已临时隐藏，不再出现在搜索建议中）
+    // 1. Pages
+    if ('dashboard'.includes(q) || '看板'.includes(q)) {
+      results.push({
+        id: 'p-dash',
+        type: 'page',
+        label: t('nav.dashboard'),
+        href: withLng('/dashboard'),
+      })
+    }
     if ('liquidation'.includes(q) || 'map'.includes(q) || '清算'.includes(q)) {
       results.push({
         id: 'p-liq',

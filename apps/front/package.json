@@ -4,9 +4,7 @@
   "version": "0.2.6-beta.3",
   "private": true,
   "scripts": {
-    "prestart:dev": "pnpm --filter @ai/shared run build",
     "start:dev": "next dev -H 0.0.0.0 -p 3001",
-    "predev:mock": "pnpm --filter @ai/shared run build",
     "dev:mock": "NEXT_PUBLIC_API_SERVER_URL=http://localhost:3000 APP_ENV=development NEXT_PUBLIC_APP_ENV=development next dev -H 0.0.0.0 -p 3001",
     "check-env": "node scripts/check-env.js",
     "build": "next build",
