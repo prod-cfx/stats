@@ -117,7 +117,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     const translationMap = await this.batchTranslateMarkets(marketsToProcess)
 
     for (const market of marketsToProcess) {
-      const result = await this.processMarket(market, category, translationMap)
+      const result = await this.processMarket(market, translationMap)
       if (result.skipped) {
         skipped += 1
       } else {
@@ -182,7 +182,6 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   private async processMarket(
     market: PolymarketGammaMarket,
-    configuredCategory: string | null,
     translationMap: TranslationMap,
   ): Promise<{ skipped: boolean }> {
     // API 返回 events 数组，取第一个元素作为主事件
@@ -193,13 +192,6 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 注意：不应该用配置的默认 category 回填，否则会将无分类的市场错误地标记为 crypto
     const rawCategory = market.category ?? event?.category ?? null
     const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
-
-    // 关键：Gamma API 的 category 参数不工作（忽略该查询参数），
-    // 必须在本地过滤，否则会把所有历史市场全量 upsert 导致数据库膨胀
-    if (configuredCategory && normalizedCategory !== configuredCategory) {
-      // 不匹配配置的 category，跳过此市场
-      return { skipped: true }
-    }
 
     const translations = translationMap.get(market.id) ?? null
 
@@ -296,7 +288,11 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
         }
         if (shortName?.trim()) {
           allTexts.push(shortName)
-          textMeta.push({ kind: 'outcomeShortName', marketId: market.id, tokenId: outcome.token_id })
+          textMeta.push({
+            kind: 'outcomeShortName',
+            marketId: market.id,
+            tokenId: outcome.token_id,
+          })
         }
       }
     }
