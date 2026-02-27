@@ -251,6 +251,45 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
     if (cfg?.translation?.enabled === false) return result
 
+    const existingMarkets = await this.repo.findMarketsForTranslation(
+      markets.map(market => market.id),
+    )
+    const existingByMarketId = new Map(existingMarkets.map(market => [market.marketId, market]))
+
+    const marketsForTranslation = markets.filter(market => {
+      const existing = existingByMarketId.get(market.id)
+      if (!existing) return true
+
+      const event = market.event ?? market.events?.[0]
+      const currentQuestion = market.question ?? market.title ?? null
+      const currentEventTitle = event?.title ?? null
+
+      const questionUnchanged = (existing.question ?? null) === (currentQuestion ?? null)
+      const eventTitleUnchanged = (existing.eventTitle ?? null) === (currentEventTitle ?? null)
+      const questionAlreadyTranslated =
+        !currentQuestion?.trim() || Boolean(existing.questionZh?.trim())
+      const eventTitleAlreadyTranslated =
+        !currentEventTitle?.trim() || Boolean(existing.eventTitleZh?.trim())
+
+      if (
+        questionUnchanged &&
+        eventTitleUnchanged &&
+        questionAlreadyTranslated &&
+        eventTitleAlreadyTranslated
+      ) {
+        result.set(market.id, {
+          questionZh: existing.questionZh,
+          eventTitleZh: existing.eventTitleZh,
+          outcomes: {},
+        })
+        return false
+      }
+
+      return true
+    })
+
+    if (!marketsForTranslation.length) return result
+
     // ---- 1. 收集所有文本，记录 (marketId, field, tokenId) 索引 ----
     type TextRecord =
       | { kind: 'question'; marketId: string }
@@ -261,7 +300,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     const allTexts: string[] = []
     const textMeta: TextRecord[] = []
 
-    for (const market of markets) {
+    for (const market of marketsForTranslation) {
       const event = market.event ?? market.events?.[0]
       const question = market.question ?? market.title
       const eventTitle = event?.title ?? null

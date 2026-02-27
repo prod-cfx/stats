@@ -75,6 +75,14 @@ export interface OutcomeTokenRecord {
   outcomeTokenId: string
 }
 
+export interface MarketTranslationSnapshot {
+  marketId: string
+  question: string | null
+  questionZh: string | null
+  eventTitle: string | null
+  eventTitleZh: string | null
+}
+
 export type PolymarketMarketWithOutcomes = Prisma.PolymarketMarketGetPayload<{
   include: {
     outcomes: true
@@ -381,6 +389,26 @@ export class PolymarketRepository {
       take: limit,
       orderBy: {
         lastUpdatedAt: 'desc',
+      },
+    })
+  }
+
+  async findMarketsForTranslation(ids: string[]): Promise<MarketTranslationSnapshot[]> {
+    if (!ids.length) return []
+
+    const client = this.getClient()
+    return client.polymarketMarket.findMany({
+      where: {
+        marketId: {
+          in: ids,
+        },
+      },
+      select: {
+        marketId: true,
+        question: true,
+        questionZh: true,
+        eventTitle: true,
+        eventTitleZh: true,
       },
     })
   }
