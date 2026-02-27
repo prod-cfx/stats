@@ -3177,6 +3177,11 @@ const endpoints = makeApi([
         type: "Query",
         schema: z.boolean().optional().default(true),
       },
+      {
+        name: "locale",
+        type: "Query",
+        schema: z.string().optional(),
+      },
     ],
     response: z.array(PredictionMarketCardDto),
   },

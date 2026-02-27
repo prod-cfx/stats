@@ -16,11 +16,9 @@ export class GetPolymarketMarketsRequestDto extends BasePaginationRequestDto {
   )
   @IsOptional()
   onlyActive?: boolean
+
+  @ApiPropertyOptional({ description: '语言（如 zh、zh-CN），不传时返回英文' })
+  @IsOptional()
+  @IsString()
+  locale?: string
 }
-
-
-
-
-
-
-

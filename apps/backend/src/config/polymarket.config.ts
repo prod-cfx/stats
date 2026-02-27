@@ -20,6 +20,19 @@ export interface PolymarketConfig {
     category?: string
     tags: string[]
   }
+  translation: {
+    /** LLM API key（兼容 OpenAI 格式的任意 provider）*/
+    apiKey?: string
+    /** LLM API base URL，默认 https://api.openai.com */
+    baseUrl: string
+    /** 使用的模型名，默认 gpt-4o-mini */
+    model: string
+    timeoutMs: number
+    /** 目标语言列表，默认 ['zh-CN'] */
+    targetLocales: string[]
+    /** 是否启用翻译，false 时跳过所有翻译请求 */
+    enabled: boolean
+  }
 }
 
 const parseStringList = (value: string | undefined): string[] =>
@@ -54,6 +67,16 @@ export const polymarketConfig = registerAs('polymarket', (): PolymarketConfig =>
     filters: {
       category: normalizedCategory,
       tags: parseStringList(env.str('POLYMARKET_TAGS')),
+    },
+    translation: {
+      apiKey: env.str('TRANSLATE_LLM_API_KEY'),
+      baseUrl: env.str('TRANSLATE_LLM_BASE_URL', 'https://api.openai.com'),
+      model: env.str('TRANSLATE_LLM_MODEL', 'gpt-4o-mini'),
+      timeoutMs: parsePositiveInt(env.str('TRANSLATE_LLM_TIMEOUT_MS'), 30_000),
+      targetLocales: parseStringList(env.str('POLYMARKET_TRANSLATE_LOCALES', 'Simplified Chinese')).length
+        ? parseStringList(env.str('POLYMARKET_TRANSLATE_LOCALES', 'Simplified Chinese'))
+        : ['Simplified Chinese'],
+      enabled: env.str('POLYMARKET_TRANSLATE_ENABLED', 'true') !== 'false',
     },
   }
 })

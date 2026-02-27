@@ -56,6 +56,7 @@ export class PolymarketService {
     onlyActive?: boolean
     offset?: number
     limit?: number
+    locale?: string
   }): Promise<PredictionMarketCardDto[]> {
     const markets = await this.repo.listMarketsWithOutcomes({
       category: params.category,
@@ -64,15 +65,19 @@ export class PolymarketService {
       limit: params.limit,
     })
 
-    return markets.map(market => this.mapMarketToCard(market))
+    return markets.map(market => this.mapMarketToCard(market, params.locale))
   }
 
-  private mapMarketToCard(market: PolymarketMarketWithOutcomes): PredictionMarketCardDto {
+  private mapMarketToCard(
+    market: PolymarketMarketWithOutcomes,
+    locale?: string,
+  ): PredictionMarketCardDto {
+    const useZh = locale?.toLowerCase().startsWith('zh')
     const outcomes: PredictionMarketOutcomeDto[] | undefined = market.outcomes.length
       ? market.outcomes.map(outcome => {
           const { probability, price } = convertDecimalsInObject(outcome, ['probability', 'price'])
 
-          // 最小兼容处理：只在“疑似历史兜底写 0 且无任何来源字段”的情况下将其视为缺失。
+          // 最小兼容处理：只在"疑似历史兜底写 0 且无任何来源字段"的情况下将其视为缺失。
           // 注意：真实概率为 0 的场景需要保留为 "0"。
           const normalizedProbability = this.isSuspectZeroProbability({
             probability,
@@ -82,8 +87,12 @@ export class PolymarketService {
             ? ''
             : probability
 
+          const label = useZh
+            ? (outcome.shortNameZh ?? outcome.nameZh ?? outcome.shortName ?? outcome.name ?? outcome.outcomeTokenId)
+            : (outcome.shortName ?? outcome.name ?? outcome.outcomeTokenId)
+
           return {
-            label: outcome.shortName ?? outcome.name ?? outcome.outcomeTokenId,
+            label,
             // 不要用 "0" 兜底：缺失数据会被前端展示为 0%，造成误导
             probability: normalizedProbability ?? price ?? '',
           }
@@ -97,10 +106,13 @@ export class PolymarketService {
     ])
 
     const rules = this.buildRulesFromMarket(market)
+    const title = useZh
+      ? (market.questionZh ?? market.question ?? market.eventTitleZh ?? market.eventTitle ?? market.slug ?? market.marketId)
+      : (market.question ?? market.eventTitle ?? market.slug ?? market.marketId)
 
     return {
       id: market.marketId,
-      title: market.question ?? market.eventTitle ?? market.slug ?? market.marketId,
+      title,
       options: outcomes,
       status: market.status ? market.status.toUpperCase() : undefined,
       volume24h: volume24h ?? undefined,

@@ -31,6 +31,7 @@ export class PolymarketController {
       onlyActive: query.onlyActive ?? true,
       offset,
       limit,
+      locale: query.locale,
     })
   }
 }

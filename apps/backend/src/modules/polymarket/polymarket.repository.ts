@@ -8,10 +8,12 @@ export interface PolymarketMarketWriteInput {
   eventExternalId?: string | null
   eventSlug?: string | null
   eventTitle?: string | null
+  eventTitleZh?: string | null
   eventStartTime?: Date | null
   eventEndTime?: Date | null
   slug?: string | null
   question?: string | null
+  questionZh?: string | null
   category?: string | null
   tags?: string[]
   outcomeType?: string | null
@@ -35,6 +37,8 @@ export interface PolymarketOutcomeWriteInput {
   outcomeTokenId: string
   name?: string | null
   shortName?: string | null
+  nameZh?: string | null
+  shortNameZh?: string | null
   side?: string | null
   price?: string | null
   probability?: string | null
@@ -89,10 +93,12 @@ export class PolymarketRepository {
         eventExternalId: market.eventExternalId,
         eventSlug: market.eventSlug,
         eventTitle: market.eventTitle,
+        eventTitleZh: market.eventTitleZh,
         eventStartTime: market.eventStartTime ?? undefined,
         eventEndTime: market.eventEndTime ?? undefined,
         slug: market.slug,
         question: market.question,
+        questionZh: market.questionZh,
         category: market.category,
         tags: market.tags ?? [],
         outcomeType: market.outcomeType,
@@ -114,10 +120,12 @@ export class PolymarketRepository {
         eventExternalId: market.eventExternalId,
         eventSlug: market.eventSlug,
         eventTitle: market.eventTitle,
+        eventTitleZh: market.eventTitleZh,
         eventStartTime: market.eventStartTime ?? undefined,
         eventEndTime: market.eventEndTime ?? undefined,
         slug: market.slug,
         question: market.question,
+        questionZh: market.questionZh,
         category: market.category,
         tags: market.tags ?? [],
         outcomeType: market.outcomeType,
@@ -150,6 +158,8 @@ export class PolymarketRepository {
             outcomeTokenId: outcome.outcomeTokenId,
             name: outcome.name,
             shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
             side: outcome.side,
             price: outcome.price ?? undefined,
             probability: outcome.probability ?? undefined,
@@ -163,6 +173,8 @@ export class PolymarketRepository {
             marketId: outcome.marketDbId,
             name: outcome.name,
             shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
             side: outcome.side,
             price: outcome.price ?? undefined,
             probability: outcome.probability ?? undefined,

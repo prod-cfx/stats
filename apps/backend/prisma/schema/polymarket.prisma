@@ -7,10 +7,12 @@ model PolymarketMarket {
   eventExternalId  String?
   eventSlug        String?
   eventTitle       String?
+  eventTitleZh     String?
   eventStartTime   DateTime?
   eventEndTime     DateTime?
   slug             String?
   question         String?
+  questionZh       String?
   category         String?
   tags             String[]  @default([])
   outcomeType      String?
@@ -42,7 +44,9 @@ model PolymarketOutcome {
   marketId       Int
   outcomeTokenId String    @unique
   name           String?
+  nameZh         String?
   shortName      String?
+  shortNameZh    String?
   side           String?
   price          Decimal?  @db.Decimal(32, 16)
   probability    Decimal?  @db.Decimal(32, 16)
