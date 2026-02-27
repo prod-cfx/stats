@@ -27,4 +27,10 @@ export class TickerResponseDto {
 
   @ApiProperty({ description: '下次资金费率时间（毫秒时间戳）', example: '1706000000000', required: false })
   nextFundingTime?: string
+
+  @ApiProperty({ description: '24小时最高价', example: '87500.00', required: false })
+  high24h?: string
+
+  @ApiProperty({ description: '24小时最低价', example: '86000.00', required: false })
+  low24h?: string
 }

@@ -132,6 +132,12 @@ describeIf('KlineGateway - Ticker WebSocket (E2E)', () => {
     expect(tickerEvent.symbol).toBe('BTC')
     expect(typeof tickerEvent.timestamp).toBe('number')
     expect(tickerEvent.timestamp).toBeGreaterThan(0)
+
+    const high24h = tickerEvent.high24h
+    expect(high24h === null || typeof high24h === 'number').toBe(true)
+
+    const low24h = tickerEvent.low24h
+    expect(low24h === null || typeof low24h === 'number').toBe(true)
   })
 
   it('should stop receiving data after unsubscribe', async () => {

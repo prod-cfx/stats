@@ -28,4 +28,10 @@ export class TickerBroadcastDto {
 
   @ApiProperty({ example: 1704067200000, description: '时间戳（毫秒）' })
   timestamp: number
+
+  @ApiProperty({ example: 87500.0, description: '24小时最高价', nullable: true })
+  high24h: number | null
+
+  @ApiProperty({ example: 86000.0, description: '24小时最低价', nullable: true })
+  low24h: number | null
 }

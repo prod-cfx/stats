@@ -482,6 +482,8 @@ export const RightPanel = ({
           priceChangePercent24h: number | null
           volumeUsd: number | null
           openInterestUsd: number | null
+          high24h: number | null
+          low24h: number | null
           timestamp: number
         }) => {
           logger.debug('[RightPanel] Received ticker data:', data)
@@ -503,6 +505,8 @@ export const RightPanel = ({
             priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
             volumeUsd: data.volumeUsd?.toString() ?? '0',
             openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+            high24h: data.high24h?.toString() ?? undefined,
+            low24h: data.low24h?.toString() ?? undefined,
           })
         },
       )
@@ -611,9 +615,13 @@ export const RightPanel = ({
     (isAggregated ? -0.05 : selectedExchange === 'binance' ? -0.03 : -0.02) * turnoverVal,
   )
   const highVal =
-    basePriceForStats * (isAggregated ? 1.01 : selectedExchange === 'binance' ? 1.008 : 1.006)
+    tickerData?.high24h
+      ? Number.parseFloat(tickerData.high24h)
+      : basePriceForStats * (isAggregated ? 1.01 : selectedExchange === 'binance' ? 1.008 : 1.006)
   const lowVal =
-    basePriceForStats * (isAggregated ? 0.99 : selectedExchange === 'binance' ? 0.992 : 0.994)
+    tickerData?.low24h
+      ? Number.parseFloat(tickerData.low24h)
+      : basePriceForStats * (isAggregated ? 0.99 : selectedExchange === 'binance' ? 0.992 : 0.994)
 
   // Calculate mid price from real-time data
   // 业内标准：优先使用 Last Price（最新成交价），降级到 Mid Price

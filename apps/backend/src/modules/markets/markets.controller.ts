@@ -373,6 +373,8 @@ export class MarketsController {
       openInterestUsd: ticker.openInterestUsd?.toString(),
       fundingRate: ticker.fundingRate?.toString(),
       nextFundingTime: ticker.nextFundingTime?.toString(),
+      high24h: ticker.high24h?.toString(),
+      low24h: ticker.low24h?.toString(),
     }
   }
 }

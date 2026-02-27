@@ -839,6 +839,8 @@ const TickerResponseDto = z
     openInterestUsd: z.string().optional(),
     fundingRate: z.string().optional(),
     nextFundingTime: z.string().optional(),
+    high24h: z.string().optional(),
+    low24h: z.string().optional(),
   })
   .passthrough();
 const LiquidationSummaryItemDto = z

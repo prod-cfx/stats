@@ -1179,6 +1179,8 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           : null,
         volumeUsd: dbTicker?.volumeUsd ? Number(dbTicker.volumeUsd) : null,
         openInterestUsd: dbTicker?.openInterestUsd ? Number(dbTicker.openInterestUsd) : null,
+        high24h: dbTicker?.high24h ? Number(dbTicker.high24h) : null,
+        low24h: dbTicker?.low24h ? Number(dbTicker.low24h) : null,
         timestamp: Date.now(),
       }
 

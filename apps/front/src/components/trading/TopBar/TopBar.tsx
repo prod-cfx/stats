@@ -289,6 +289,8 @@ export const TopBar = ({
           priceChangePercent24h: number | null
           volumeUsd: number | null
           openInterestUsd: number | null
+          high24h: number | null
+          low24h: number | null
           timestamp: number
         }) => {
           logger.debug('[TopBar] Received ticker data:', data)
@@ -315,6 +317,8 @@ export const TopBar = ({
             priceChangePercent24h: data.priceChangePercent24h?.toString() ?? undefined,
             volumeUsd: data.volumeUsd?.toString() ?? '0',
             openInterestUsd: data.openInterestUsd?.toString() ?? undefined,
+            high24h: data.high24h?.toString() ?? undefined,
+            low24h: data.low24h?.toString() ?? undefined,
           })
         },
       )
@@ -461,9 +465,9 @@ export const TopBar = ({
   const fundingRatePct =
     tickerData && tickerData.fundingRate ? Number.parseFloat(tickerData.fundingRate) * 100 : 0.004
 
-  // 24h high/low - fallback to mock calculation
-  const low24h = lastPrice * 0.994
-  const high24h = lastPrice * 1.012
+  // 24h high/low - use real ticker data, fallback to mock calculation
+  const low24h = tickerData?.low24h ? Number.parseFloat(tickerData.low24h) : lastPrice * 0.994
+  const high24h = tickerData?.high24h ? Number.parseFloat(tickerData.high24h) : lastPrice * 1.012
 
   // Open interest / volume should match the selected base asset (not hardcoded BTC)
   const openInterestByAsset: Record<string, number> = {

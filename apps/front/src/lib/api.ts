@@ -1848,6 +1848,8 @@ export interface TickerData {
   openInterestUsd?: string
   fundingRate?: string
   nextFundingTime?: string
+  high24h?: string
+  low24h?: string
 }
 
 export async function fetchTicker(symbol: string, exchange?: string): Promise<TickerData | null> {
