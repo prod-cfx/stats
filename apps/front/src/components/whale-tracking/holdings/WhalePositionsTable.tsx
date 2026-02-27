@@ -27,7 +27,6 @@ interface WhalePosition {
   margin: string
   entryPrice: string
   liqPrice: string
-  winRate: string
   createdMinutesAgo: number // 0 => just now
   remark: string
 }
@@ -194,8 +193,6 @@ export const WhalePositionsTable = () => {
       const pnlPercent = pnlPct != null
         ? `${pnlPct >= 0 ? '+' : '-'}${Math.abs(pnlPct * 100).toFixed(2)}%`
         : '--'
-      // winRate 字段已不再由 API 提供，显示为 '--'
-      const winRate = '--'
 
       const tags: WhalePosition['tags'] = [{ key: 'whale', color: '#c084fc', bg: '#a855f733' }]
 
@@ -213,7 +210,6 @@ export const WhalePositionsTable = () => {
         margin,
         entryPrice,
         liqPrice,
-        winRate,
         createdMinutesAgo,
         remark: '',
       }
@@ -350,9 +346,6 @@ export const WhalePositionsTable = () => {
                   <th className="px-6 py-4 text-left">
                     {t('whaleTracking.holdings.table.liqPrice')}
                   </th>
-                  <th className="px-6 py-4 text-left whitespace-nowrap">
-                    {t('whaleTracking.holdings.table.winRate')}
-                  </th>
                   <th
                     className="group cursor-pointer px-6 py-4 text-left whitespace-nowrap select-none"
                     onClick={() => handleSort('createdTime')}
@@ -472,17 +465,6 @@ export const WhalePositionsTable = () => {
                       {pos.entryPrice}
                     </td>
                     <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">{pos.liqPrice}</td>
-                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">
-                      <span
-                        className={
-                          pos.winRate !== '--' && Number.parseInt(pos.winRate) > 70
-                            ? 'text-[#4ade80]'
-                            : ''
-                        }
-                      >
-                        {pos.winRate}
-                      </span>
-                    </td>
                     <td className="px-6 py-4 text-[color:var(--cf-muted)]">
                       {formatRelativeMinutes(pos.createdMinutesAgo)}
                     </td>
