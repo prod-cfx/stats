@@ -327,11 +327,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): void {
     this.updateClientActivity(client)
-    const { symbol, interval } = data
+    const { symbol, interval, exchange: clientExchange, instrumentType: clientInstrumentType } = data
 
-    // 默认使用 BINANCE PERPETUAL (可以从配置或请求参数获取)
-    const exchange = 'BINANCE'
-    const instrumentType = 'PERPETUAL'
+    // 使用客户端传的 exchange，默认 BINANCE
+    const exchange = clientExchange?.toUpperCase() || 'BINANCE'
+    const instrumentType = clientInstrumentType?.toUpperCase() || 'PERPETUAL'
 
     const subscriptionKey = this.getSubscriptionKey(exchange, instrumentType, symbol, interval)
 
@@ -438,11 +438,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ): void {
     this.updateClientActivity(client)
-    const { symbol, interval } = data
+    const { symbol, interval, exchange: clientExchange, instrumentType: clientInstrumentType } = data
 
-    // 默认使用 BINANCE PERPETUAL
-    const exchange = 'BINANCE'
-    const instrumentType = 'PERPETUAL'
+    // 使用客户端传的 exchange，默认 BINANCE
+    const exchange = clientExchange?.toUpperCase() || 'BINANCE'
+    const instrumentType = clientInstrumentType?.toUpperCase() || 'PERPETUAL'
 
     const subscriptionKey = this.getSubscriptionKey(exchange, instrumentType, symbol, interval)
 

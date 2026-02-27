@@ -95,6 +95,7 @@ interface Subscription {
 interface ChannelSubscription {
   symbol: string
   interval: string
+  exchange?: string
   socket: Socket
   subscribers: Map<string, Subscription>
   isSubscribed: boolean
@@ -181,6 +182,7 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
           channel.socket.emit('unsubscribe', {
             symbol: channel.symbol,
             interval: channel.interval,
+            exchange: channel.exchange,
           })
           channel.socket.disconnect()
           channelSubscriptions.delete(subscription.channelKey)
@@ -328,7 +330,8 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
       // 提取 symbol
       const ticker = getTickerFromSymbolInfo(symbolInfo)
       const symbol = normalizeSymbol(ticker)
-      const channelKey = `${symbol}:${interval}`
+      const exchange = resolveExchange()
+      const channelKey = `${symbol}:${interval}:${exchange ?? 'all'}`
 
       // 获取 WebSocket URL（从环境变量或使用默认值）
       const wsBaseUrl = getWsBaseUrl()
@@ -346,6 +349,7 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
         channel = {
           symbol,
           interval,
+          exchange,
           socket,
           subscribers: new Map<string, Subscription>(),
           isSubscribed: false,
@@ -560,6 +564,7 @@ export function createMockDatafeed(initialContext: DatafeedContext = DEFAULT_DAT
           channel!.socket.emit('subscribe', {
             symbol,
             interval,
+            exchange,
           })
         }
       }

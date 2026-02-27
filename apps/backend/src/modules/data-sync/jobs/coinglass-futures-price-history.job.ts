@@ -46,6 +46,12 @@ interface FuturesPriceCursor {
    * 回填完成时间戳（毫秒）
    */
   backfillCompletedAt?: number
+  /**
+   * Gap 审计窗口游标（毫秒）
+   * 记录上次 gap 检测扫描到的终点，下次从此处继续向前推进。
+   * 未设置时从 backfillTarget 起扫；到达 now 后重置，循环审计。
+   */
+  gapAuditCursorMs?: number
 }
 
 interface CoinglassFuturesPricePoint {
@@ -74,6 +80,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private readonly TIMESTAMP_INCREMENT_MS = 1
   // 回填完成后的复查间隔（90 天）
   private readonly BACKFILL_RECHECK_WINDOW_MS = 90 * 24 * 60 * 60 * 1000
+  // 单次 tick 内最多连续回填的页数，防止长时间占用调度线程
+  private readonly MAX_BACKFILL_PAGES_PER_RUN = 50
   // 单个缺口最大分页次数，防止 API 异常导致无限循环
   private readonly MAX_PAGES_PER_GAP = 100
   // Gap 检测窗口上限（7 天），防止首次运行时扫描过大范围
@@ -131,6 +139,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const interval = cursor.interval ?? this.defaultInterval
     const lastTimestampMs = cursor.lastTimestamp ?? null
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
+    const now = Date.now()
     const shouldSkipBackfillCheck =
       cursor.backfillCompleted &&
       typeof cursor.backfillCompletedAt === 'number' &&
@@ -181,11 +190,13 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     // 在增量拉取前，检测并回填数据缺口
     if (typeof lastTimestampMs === 'number') {
       const gapCheckFromMs = this.getBackfillTarget(interval)
-      const now = Date.now()
-      // Bug fix: 之前用 lastTimestampMs 作为终点，导致 lastTimestamp 之后的缺口永远不会被检测到
-      // 现在改为当前时间，但限制最大检测窗口，防止首次运行时扫描过大范围
-      // 超出窗口的缺口会在后续运行中逐步检测
-      const gapCheckToMs = Math.min(now, lastTimestampMs + this.MAX_GAP_CHECK_WINDOW_MS)
+      // gap 审计窗口：使用持久化游标 gapAuditCursorMs 作为滑动起点，
+      // 每次推进 MAX_GAP_CHECK_WINDOW_MS，真正逐步覆盖从 backfillTarget 到 now 的全历史。
+      // 游标到达 now 后重置为 backfillTarget，实现循环审计。
+      const auditFrom = cursor.gapAuditCursorMs ?? gapCheckFromMs
+      // 如果游标已越过回填范围起点（now - depth 随时间前移），重置为新起点
+      const effectiveAuditFrom = Math.max(auditFrom, gapCheckFromMs)
+      const gapCheckToMs = Math.min(now, effectiveAuditFrom + this.MAX_GAP_CHECK_WINDOW_MS)
 
       if (gapCheckToMs > gapCheckFromMs) {
         if (now > gapCheckToMs) {
@@ -198,7 +209,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
           cursor.exchangeCode ?? this.defaultExchangeCode,
           contractType,
           interval,
-          gapCheckFromMs,
+          effectiveAuditFrom,
           gapCheckToMs,
         )
 
@@ -319,6 +330,21 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const latestTimestampMs =
       latestTimestampCandidates.length > 0 ? Math.max(...latestTimestampCandidates) : undefined
 
+    // 推进 gap 审计游标：本次扫到 gapCheckToMs，下次从此继续
+    // 若 gapCheckToMs 已接近 now（在 1 个 interval 内），则重置游标触发新一轮循环
+    const intervalMs = INTERVAL_MS[interval] ?? 0
+    const nextGapAuditCursor =
+      typeof lastTimestampMs === 'number'
+        ? (() => {
+            const gapCheckFromMs = this.getBackfillTarget(interval)
+            const auditFrom = cursor.gapAuditCursorMs ?? gapCheckFromMs
+            const effectiveAuditFrom = Math.max(auditFrom, gapCheckFromMs)
+            const gapCheckToMs = Math.min(now, effectiveAuditFrom + this.MAX_GAP_CHECK_WINDOW_MS)
+            // 仅在真正到达 now 时重置，避免临界值提前重置导致审计窗口遗漏
+            return gapCheckToMs >= now ? undefined : gapCheckToMs
+          })()
+        : cursor.gapAuditCursorMs
+
     const newCursor: FuturesPriceCursor = {
       symbol: cursor.symbol,
       exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
@@ -328,6 +354,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       lastTimestamp: latestTimestampMs,
       backfillCompleted: cursor.backfillCompleted,
       backfillCompletedAt: cursor.backfillCompletedAt,
+      gapAuditCursorMs: nextGapAuditCursor,
     }
 
     return {
@@ -450,95 +477,91 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   ): Promise<JobRunResult> {
     const isSpot = cursor.contractType === null
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
-
-    const url = new URL(endpoint)
-    url.searchParams.set('symbol', this.getApiSymbol(cursor))
-    url.searchParams.set('interval', cursor.interval)
-    url.searchParams.set('limit', this.defaultLimit.toString())
-    if (cursor.exchangeCode) {
-      url.searchParams.set('exchange', cursor.exchangeCode)
-    }
-    if (!isSpot && (cursor.contractType ?? this.defaultContractType)) {
-      url.searchParams.set('contractType', cursor.contractType ?? this.defaultContractType!)
-    }
-    const backfillEndTimeMs = Math.max(earliestMs - 1000, 0)
-    url.searchParams.set('end_time', Math.floor(backfillEndTimeMs).toString())
-
-    this.logger.log(`Backfill request: ${url.toString()}`)
-
-    const json = await this.fetchFuturesPriceJson(url, apiKey)
-
-    const hasNoData = json.code === '0' && (!json.data || json.data.length === 0)
-    if (json.code !== '0' || !json.data || json.data.length === 0) {
-      const backfillCompleted = hasNoData ? true : cursor.backfillCompleted
-      const backfillCompletedAt = hasNoData ? Date.now() : cursor.backfillCompletedAt
-      const newCursor: FuturesPriceCursor = {
-        symbol: cursor.symbol,
-        exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-        contractType: cursor.contractType,
-        interval: cursor.interval,
-        lastTimestamp: cursor.lastTimestamp,
-        backfillCompleted,
-        backfillCompletedAt,
-      }
-      return {
-        fetchedCount: 0,
-        newCursor: JSON.stringify(newCursor),
-        meta: {
-          symbol: cursor.symbol,
-          exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-          contractType:
-            cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
-          interval: cursor.interval,
-          note: 'Backfill complete - no more historical data',
-        },
-      }
-    }
-
     const dbClient = this.prisma.getClient()
 
-    const pointsWithTimestamps = json.data.map(point => {
-      const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
-      return {
-        ...point,
-        timestampMs,
-      }
-    })
-
-    const filteredPoints = pointsWithTimestamps.filter(point => point.timestampMs < earliestMs)
-    const rows = filteredPoints.map(point => ({
-      symbol: cursor.symbol,
-      exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
-      contractType,
-      interval: prismaInterval,
-      timestamp: new Date(point.timestampMs),
-      open: point.open,
-      high: point.high,
-      low: point.low,
-      close: point.close,
-      volumeUsd: point.volume_usd ?? null,
-      source: 'COINGLASS',
-    }))
-
-    let insertedCount = 0
-    for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
-      const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
-      const result = await dbClient.futuresPriceHistory.createMany({
-        data: batch,
-        skipDuplicates: true,
-      })
-      insertedCount += result.count
+    const baseUrl = new URL(endpoint)
+    baseUrl.searchParams.set('symbol', this.getApiSymbol(cursor))
+    baseUrl.searchParams.set('interval', cursor.interval)
+    baseUrl.searchParams.set('limit', this.defaultLimit.toString())
+    if (cursor.exchangeCode) {
+      baseUrl.searchParams.set('exchange', cursor.exchangeCode)
+    }
+    if (!isSpot && (cursor.contractType ?? this.defaultContractType)) {
+      baseUrl.searchParams.set('contractType', cursor.contractType ?? this.defaultContractType!)
     }
 
-    const oldestFetched =
-      filteredPoints.length > 0 ? Math.min(...filteredPoints.map(p => p.timestampMs)) : earliestMs
+    let currentEarliestMs = earliestMs
+    let totalInserted = 0
+    let backfillCompleted = cursor.backfillCompleted ?? false
+    let backfillCompletedAt = cursor.backfillCompletedAt
 
-    const backfillCompleted = oldestFetched <= targetMs
-    const backfillCompletedAt = backfillCompleted ? Date.now() : cursor.backfillCompletedAt
+    for (let page = 0; page < this.MAX_BACKFILL_PAGES_PER_RUN; page++) {
+      const backfillEndTimeMs = Math.max(currentEarliestMs - 1000, 0)
+      const url = new URL(baseUrl.toString())
+      url.searchParams.set('end_time', Math.floor(backfillEndTimeMs).toString())
+
+      this.logger.log(`Backfill request (page ${page + 1}/${this.MAX_BACKFILL_PAGES_PER_RUN}): ${url.toString()}`)
+
+      const json = await this.fetchFuturesPriceJson(url, apiKey)
+
+      const hasNoData = json.code === '0' && (!json.data || json.data.length === 0)
+      if (json.code !== '0' || !json.data || json.data.length === 0) {
+        if (hasNoData) {
+          backfillCompleted = true
+          backfillCompletedAt = Date.now()
+        }
+        break
+      }
+
+      const pointsWithTimestamps = json.data.map(point => {
+        const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
+        return { ...point, timestampMs }
+      })
+
+      const filteredPoints = pointsWithTimestamps.filter(point => point.timestampMs < currentEarliestMs)
+      if (filteredPoints.length === 0) {
+        // API 返回的数据没有比当前最早记录更早的，无法继续
+        backfillCompleted = true
+        backfillCompletedAt = Date.now()
+        break
+      }
+
+      const rows = filteredPoints.map(point => ({
+        symbol: cursor.symbol,
+        exchangeCode: cursor.exchangeCode ?? this.defaultExchangeCode,
+        contractType,
+        interval: prismaInterval,
+        timestamp: new Date(point.timestampMs),
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+        volumeUsd: point.volume_usd ?? null,
+        source: 'COINGLASS',
+      }))
+
+      for (let start = 0; start < rows.length; start += this.BATCH_INSERT_SIZE) {
+        const batch = rows.slice(start, start + this.BATCH_INSERT_SIZE)
+        const result = await dbClient.futuresPriceHistory.createMany({
+          data: batch,
+          skipDuplicates: true,
+        })
+        totalInserted += result.count
+      }
+
+      const oldestFetched = Math.min(...filteredPoints.map(p => p.timestampMs))
+      currentEarliestMs = oldestFetched
+
+      if (oldestFetched <= targetMs) {
+        backfillCompleted = true
+        backfillCompletedAt = Date.now()
+        break
+      }
+    }
 
     const denominator = earliestMs - targetMs
     const backfillProgress =
-      denominator === 0 ? 100 : Math.round(((earliestMs - oldestFetched) / denominator) * 100)
+      denominator === 0 ? 100 : Math.round(((earliestMs - currentEarliestMs) / denominator) * 100)
 
     const newCursor: FuturesPriceCursor = {
       symbol: cursor.symbol,
@@ -551,7 +574,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     }
 
     return {
-      fetchedCount: insertedCount,
+      fetchedCount: totalInserted,
       newCursor: JSON.stringify(newCursor),
       meta: {
         symbol: cursor.symbol,
@@ -560,9 +583,9 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
           cursor.contractType === undefined ? this.defaultContractType : cursor.contractType,
         interval: cursor.interval,
         mode: 'backfill',
-        oldestFetched: new Date(oldestFetched).toISOString(),
+        oldestFetched: new Date(currentEarliestMs).toISOString(),
         backfillProgress: `${backfillProgress}%`,
-        insertedCount,
+        insertedCount: totalInserted,
       },
     }
   }
@@ -896,14 +919,17 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       if (!parsed.interval || !this.isAllowedInterval(parsed.interval as string)) {
         parsed.interval = this.defaultInterval
       }
-      if (typeof parsed.lastTimestamp !== 'number') {
+      if (typeof parsed.lastTimestamp !== 'number' || !Number.isFinite(parsed.lastTimestamp) || parsed.lastTimestamp < 0) {
         delete parsed.lastTimestamp
       }
       if (typeof parsed.backfillCompleted !== 'boolean') {
         delete parsed.backfillCompleted
       }
-      if (typeof parsed.backfillCompletedAt !== 'number') {
+      if (typeof parsed.backfillCompletedAt !== 'number' || !Number.isFinite(parsed.backfillCompletedAt) || parsed.backfillCompletedAt < 0) {
         delete parsed.backfillCompletedAt
+      }
+      if (typeof parsed.gapAuditCursorMs !== 'number' || !Number.isFinite(parsed.gapAuditCursorMs) || parsed.gapAuditCursorMs < 0) {
+        delete parsed.gapAuditCursorMs
       }
       return parsed as FuturesPriceCursor
     } catch {
