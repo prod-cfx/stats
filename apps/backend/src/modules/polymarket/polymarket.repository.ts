@@ -146,42 +146,44 @@ export class PolymarketRepository {
 
       if (!outcomes.length) return
 
-      for (const outcome of outcomes) {
-        await tx.polymarketOutcome.upsert({
-          where: { outcomeTokenId: outcome.outcomeTokenId },
-          create: {
-            marketId: marketRecord.id,
-            outcomeTokenId: outcome.outcomeTokenId,
-            name: outcome.name,
-            shortName: outcome.shortName,
-            nameZh: outcome.nameZh,
-            shortNameZh: outcome.shortNameZh,
-            side: outcome.side,
-            price: outcome.price ?? undefined,
-            probability: outcome.probability ?? undefined,
-            liquidity: outcome.liquidity ?? undefined,
-            poolBalance: outcome.poolBalance ?? undefined,
-            lastTradePrice: outcome.lastTradePrice ?? undefined,
-            lastTradeAt: outcome.lastTradeAt ?? undefined,
-            rawPayload: outcome.rawPayload,
-          },
-          update: {
-            marketId: marketRecord.id,
-            name: outcome.name,
-            shortName: outcome.shortName,
-            nameZh: outcome.nameZh,
-            shortNameZh: outcome.shortNameZh,
-            side: outcome.side,
-            price: outcome.price ?? undefined,
-            probability: outcome.probability ?? undefined,
-            liquidity: outcome.liquidity ?? undefined,
-            poolBalance: outcome.poolBalance ?? undefined,
-            lastTradePrice: outcome.lastTradePrice ?? undefined,
-            lastTradeAt: outcome.lastTradeAt ?? undefined,
-            rawPayload: outcome.rawPayload,
-          },
-        })
-      }
+      await Promise.all(
+        outcomes.map(outcome =>
+          tx.polymarketOutcome.upsert({
+            where: { outcomeTokenId: outcome.outcomeTokenId },
+            create: {
+              marketId: marketRecord.id,
+              outcomeTokenId: outcome.outcomeTokenId,
+              name: outcome.name,
+              shortName: outcome.shortName,
+              nameZh: outcome.nameZh,
+              shortNameZh: outcome.shortNameZh,
+              side: outcome.side,
+              price: outcome.price ?? undefined,
+              probability: outcome.probability ?? undefined,
+              liquidity: outcome.liquidity ?? undefined,
+              poolBalance: outcome.poolBalance ?? undefined,
+              lastTradePrice: outcome.lastTradePrice ?? undefined,
+              lastTradeAt: outcome.lastTradeAt ?? undefined,
+              rawPayload: outcome.rawPayload,
+            },
+            update: {
+              marketId: marketRecord.id,
+              name: outcome.name,
+              shortName: outcome.shortName,
+              nameZh: outcome.nameZh,
+              shortNameZh: outcome.shortNameZh,
+              side: outcome.side,
+              price: outcome.price ?? undefined,
+              probability: outcome.probability ?? undefined,
+              liquidity: outcome.liquidity ?? undefined,
+              poolBalance: outcome.poolBalance ?? undefined,
+              lastTradePrice: outcome.lastTradePrice ?? undefined,
+              lastTradeAt: outcome.lastTradeAt ?? undefined,
+              rawPayload: outcome.rawPayload,
+            },
+          }),
+        ),
+      )
     })
   }
 
