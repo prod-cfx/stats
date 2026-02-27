@@ -571,7 +571,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   private getBackfillTarget(interval: string): number {
     const now = Date.now()
     const depthMap: Record<string, number> = {
-      '1m': 7 * 24 * 60 * 60 * 1000,
+      '1m': 2 * 24 * 60 * 60 * 1000, // Coinglass 1m 数据只支持最近 2 天
       '5m': 30 * 24 * 60 * 60 * 1000,
       '15m': 90 * 24 * 60 * 60 * 1000,
       '30m': 180 * 24 * 60 * 60 * 1000,
