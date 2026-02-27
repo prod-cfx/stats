@@ -448,7 +448,7 @@ export const ProfileDataTabs = ({
     setTradesError(null)
 
     try {
-      const res = await fetchUserFillsFromHyperliquid(traderAddress, { aggregateByTime: false })
+      const res = await fetchUserFillsFromHyperliquid(traderAddress, { aggregateByTime: true })
       const fills = res.fills
 
       if (!fills.length) {
