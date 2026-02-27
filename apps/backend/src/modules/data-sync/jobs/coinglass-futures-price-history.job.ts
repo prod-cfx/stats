@@ -103,7 +103,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
@@ -376,9 +376,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
           const body = await this.safeReadText(response)
           const snippet = body ? body.slice(0, 500) : ''
 
-          const failure = `status=${response.status} ${response.statusText}${
-            snippet ? ` body=${JSON.stringify(snippet)}` : ''
-          }`
+          const failure = `status=${response.status} ${response.statusText}${snippet ? ` body=${JSON.stringify(snippet)}` : ''
+            }`
           lastFailure = failure
 
           const retryable = response.status >= 500 || response.status === 429
@@ -576,8 +575,8 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       '15m': 90 * 24 * 60 * 60 * 1000,
       '30m': 180 * 24 * 60 * 60 * 1000,
       '1h': 365 * 24 * 60 * 60 * 1000,
-      '4h': 2 * 365 * 24 * 60 * 60 * 1000,
-      '1d': 5 * 365 * 24 * 60 * 60 * 1000,
+      '4h': 1 * 365 * 24 * 60 * 60 * 1000,
+      '1d': 1 * 365 * 24 * 60 * 60 * 1000,
     }
     const depth = depthMap[interval] ?? 90 * 24 * 60 * 60 * 1000
     return now - depth
