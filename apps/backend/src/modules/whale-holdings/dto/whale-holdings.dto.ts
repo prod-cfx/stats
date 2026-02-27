@@ -76,6 +76,15 @@ export class WhaleHoldingDto {
   roe: number | null
 
   @ApiProperty({
+    description: '杠杆倍数，如 10 表示 10x 杠杆',
+    example: 10,
+    nullable: true,
+  })
+  @IsNumber()
+  @IsOptional()
+  leverage: number | null
+
+  @ApiProperty({
     description: '数据快照时间',
     example: '2025-01-01T00:00:00.000Z',
   })

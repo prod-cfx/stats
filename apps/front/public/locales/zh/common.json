@@ -553,6 +553,7 @@
       "table": {
         "address": "地址",
         "asset": "币种",
+        "leverage": "杠杆",
         "positionValue": "持仓价值",
         "unrealizedPnl": "未实现盈亏",
         "margin": "保证金",

@@ -300,6 +300,9 @@ model HyperliquidWhalePosition {
   /// 盈亏百分比 - API 返回的 roe 字段
   roe Decimal? @db.Decimal(18, 8)
 
+  /// 杠杆倍数 - API 返回的 leverage 字段
+  leverage Decimal? @db.Decimal(10, 2)
+
   /// 数据来源，默认 'COINGLASS'
   source String @default("COINGLASS")
 

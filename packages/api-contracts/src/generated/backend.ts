@@ -979,6 +979,7 @@ const WhaleHoldingDto = z
     liquidationPrice: z.number().nullable(),
     pnl: z.number().nullable(),
     roe: z.number().nullable(),
+    leverage: z.number().nullable(),
     snapshotTime: z.string(),
   })
   .passthrough();

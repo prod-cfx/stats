@@ -65,6 +65,7 @@ export class WhaleHoldingsService {
         liquidationPrice,
         pnl,
         roe,
+        leverage: row.leverage ? Number(row.leverage) : null,
         snapshotTime: row.snapshotTime.toISOString(),
       }
 

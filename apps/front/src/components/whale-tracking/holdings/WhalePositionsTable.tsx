@@ -201,7 +201,7 @@ export const WhalePositionsTable = () => {
         tags,
         asset: raw.symbol,
         side,
-        leverage: '—',
+        leverage: raw.leverage != null ? `${raw.leverage}x` : '—',
         marginType: 'Cross',
         positionValueUSD,
         positionValueAsset,
@@ -318,6 +318,7 @@ export const WhalePositionsTable = () => {
                     {t('whaleTracking.holdings.table.address')}
                   </th>
                   <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.asset')}</th>
+                  <th className="px-6 py-4 text-left">{t('whaleTracking.holdings.table.leverage')}</th>
                   <th
                     className="group cursor-pointer px-6 py-4 text-left select-none"
                     onClick={() => handleSort('positionValue')}
@@ -430,12 +431,12 @@ export const WhalePositionsTable = () => {
                           <span className="text-caption text-[color:var(--cf-muted)]">
                             {pos.marginType === 'Cross'
                               ? t('whaleTracking.margin.cross')
-                              : t('whaleTracking.margin.isolated')}{' '}
-                            {pos.leverage}
+                              : t('whaleTracking.margin.isolated')}
                           </span>
                         </div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-[color:var(--cf-text-strong)]">{pos.leverage}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-body font-medium text-[color:var(--cf-text-strong)]">

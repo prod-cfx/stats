@@ -543,6 +543,7 @@
       "table": {
         "address": "Address",
         "asset": "Asset",
+        "leverage": "Leverage",
         "positionValue": "Position Value",
         "unrealizedPnl": "Unrealized PnL",
         "margin": "Margin",

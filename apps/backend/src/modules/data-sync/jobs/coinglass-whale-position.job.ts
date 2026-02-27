@@ -144,6 +144,17 @@ export class CoinglassWhalePositionJob implements DataPullJob {
           const roeValue = point.unrealized_pnl / point.margin_balance
           return Number.isFinite(roeValue) ? roeValue.toString() : null
         })(),
+        // 杠杆倍数
+        leverage: (() => {
+          if (point.leverage == null) return null
+          if (!Number.isFinite(point.leverage)) {
+            this.logger.warn(
+              `Invalid leverage value: user=${point.user}, symbol=${point.symbol}, leverage=${point.leverage}`,
+            )
+            return null
+          }
+          return point.leverage.toString()
+        })(),
         snapshotTime: now,
         source: 'COINGLASS' as const,
       }

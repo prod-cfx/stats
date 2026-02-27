@@ -332,7 +332,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
 
     // 推进 gap 审计游标：本次扫到 gapCheckToMs，下次从此继续
     // 若 gapCheckToMs 已接近 now（在 1 个 interval 内），则重置游标触发新一轮循环
-    const intervalMs = INTERVAL_MS[interval] ?? 0
+    const _intervalMs = INTERVAL_MS[interval] ?? 0
     const nextGapAuditCursor =
       typeof lastTimestampMs === 'number'
         ? (() => {
