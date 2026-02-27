@@ -195,7 +195,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
     const translations = translationMap.get(market.id) ?? null
 
-    const marketRecord = await this.repo.upsertMarket({
+    const marketInput = {
       marketId: market.id,
       eventExternalId: m.eventId ?? m.event_id ?? event?.id ?? null,
       eventSlug: event?.slug ?? null,
@@ -226,18 +226,16 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       openInterest: this.toDecimal(m.openInterest ?? m.open_interest),
       isActive: m.active !== false && m.closed !== true,
       rawPayload: market as Record<string, unknown>,
-    })
+    }
 
     // 处理 outcomes 字段的多种格式
     const outcomes = this.parseOutcomes(market)
     const outcomeTranslations = translations?.outcomes ?? {}
     const outcomeInputs = outcomes
-      .map(outcome => this.mapOutcome(outcome, marketRecord.id, outcomeTranslations))
+      .map(outcome => this.mapOutcome(outcome, outcomeTranslations))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
 
-    if (outcomeInputs.length) {
-      await this.repo.upsertOutcomes(outcomeInputs)
-    }
+    await this.repo.upsertMarketWithOutcomes(marketInput, outcomeInputs)
 
     return { skipped: false }
   }
@@ -455,7 +453,6 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   private mapOutcome(
     outcome: PolymarketGammaOutcome,
-    marketDbId: number,
     outcomeTranslations: Record<string, { nameZh: string | null; shortNameZh: string | null }> = {},
   ) {
     if (!outcome.token_id) return null
@@ -465,7 +462,6 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     if (!probability) return null
     const ozh = outcomeTranslations[outcome.token_id] ?? null
     return {
-      marketDbId,
       outcomeTokenId: outcome.token_id,
       name: outcome.name ?? outcome.side ?? null,
       nameZh: ozh?.nameZh ?? null,

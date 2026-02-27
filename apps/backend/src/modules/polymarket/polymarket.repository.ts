@@ -49,6 +49,11 @@ export interface PolymarketOutcomeWriteInput {
   rawPayload: Record<string, unknown>
 }
 
+export type PolymarketOutcomeWriteWithoutMarketInput = Omit<
+  PolymarketOutcomeWriteInput,
+  'marketDbId'
+>
+
 export interface PolymarketOrderbookSnapshotInput {
   marketDbId?: number | null
   outcomeDbId?: number | null
@@ -84,65 +89,99 @@ export class PolymarketRepository {
     return this.prisma.getClient()
   }
 
+  private toMarketUpsertData(market: PolymarketMarketWriteInput) {
+    return {
+      marketId: market.marketId,
+      eventExternalId: market.eventExternalId,
+      eventSlug: market.eventSlug,
+      eventTitle: market.eventTitle,
+      eventTitleZh: market.eventTitleZh,
+      eventStartTime: market.eventStartTime ?? undefined,
+      eventEndTime: market.eventEndTime ?? undefined,
+      slug: market.slug,
+      question: market.question,
+      questionZh: market.questionZh,
+      category: market.category,
+      tags: market.tags ?? [],
+      outcomeType: market.outcomeType,
+      status: market.status,
+      resolutionSource: market.resolutionSource,
+      resolutionTime: market.resolutionTime,
+      startTradingAt: market.startTradingAt,
+      endTradingAt: market.endTradingAt,
+      lastUpdatedAt: market.lastUpdatedAt,
+      feeRate: market.feeRate ?? undefined,
+      liquidity: market.liquidity ?? undefined,
+      volume24h: market.volume24h ?? undefined,
+      volumeTotal: market.volumeTotal ?? undefined,
+      openInterest: market.openInterest ?? undefined,
+      isActive: market.isActive ?? true,
+      rawPayload: market.rawPayload,
+    }
+  }
+
   async upsertMarket(market: PolymarketMarketWriteInput): Promise<PolymarketMarketModel> {
     const client = this.getClient()
+    const marketData = this.toMarketUpsertData(market)
     return client.polymarketMarket.upsert({
       where: { marketId: market.marketId },
-      create: {
-        marketId: market.marketId,
-        eventExternalId: market.eventExternalId,
-        eventSlug: market.eventSlug,
-        eventTitle: market.eventTitle,
-        eventTitleZh: market.eventTitleZh,
-        eventStartTime: market.eventStartTime ?? undefined,
-        eventEndTime: market.eventEndTime ?? undefined,
-        slug: market.slug,
-        question: market.question,
-        questionZh: market.questionZh,
-        category: market.category,
-        tags: market.tags ?? [],
-        outcomeType: market.outcomeType,
-        status: market.status,
-        resolutionSource: market.resolutionSource,
-        resolutionTime: market.resolutionTime,
-        startTradingAt: market.startTradingAt,
-        endTradingAt: market.endTradingAt,
-        lastUpdatedAt: market.lastUpdatedAt,
-        feeRate: market.feeRate ?? undefined,
-        liquidity: market.liquidity ?? undefined,
-        volume24h: market.volume24h ?? undefined,
-        volumeTotal: market.volumeTotal ?? undefined,
-        openInterest: market.openInterest ?? undefined,
-        isActive: market.isActive ?? true,
-        rawPayload: market.rawPayload,
-      },
-      update: {
-        eventExternalId: market.eventExternalId,
-        eventSlug: market.eventSlug,
-        eventTitle: market.eventTitle,
-        eventTitleZh: market.eventTitleZh,
-        eventStartTime: market.eventStartTime ?? undefined,
-        eventEndTime: market.eventEndTime ?? undefined,
-        slug: market.slug,
-        question: market.question,
-        questionZh: market.questionZh,
-        category: market.category,
-        tags: market.tags ?? [],
-        outcomeType: market.outcomeType,
-        status: market.status,
-        resolutionSource: market.resolutionSource,
-        resolutionTime: market.resolutionTime,
-        startTradingAt: market.startTradingAt,
-        endTradingAt: market.endTradingAt,
-        lastUpdatedAt: market.lastUpdatedAt,
-        feeRate: market.feeRate ?? undefined,
-        liquidity: market.liquidity ?? undefined,
-        volume24h: market.volume24h ?? undefined,
-        volumeTotal: market.volumeTotal ?? undefined,
-        openInterest: market.openInterest ?? undefined,
-        isActive: market.isActive ?? true,
-        rawPayload: market.rawPayload,
-      },
+      create: marketData,
+      update: marketData,
+    })
+  }
+
+  async upsertMarketWithOutcomes(
+    market: PolymarketMarketWriteInput,
+    outcomes: PolymarketOutcomeWriteWithoutMarketInput[],
+  ): Promise<void> {
+    const client = this.getClient()
+    const marketData = this.toMarketUpsertData(market)
+
+    await client.$transaction(async tx => {
+      const marketRecord = await tx.polymarketMarket.upsert({
+        where: { marketId: market.marketId },
+        create: marketData,
+        update: marketData,
+      })
+
+      if (!outcomes.length) return
+
+      for (const outcome of outcomes) {
+        await tx.polymarketOutcome.upsert({
+          where: { outcomeTokenId: outcome.outcomeTokenId },
+          create: {
+            marketId: marketRecord.id,
+            outcomeTokenId: outcome.outcomeTokenId,
+            name: outcome.name,
+            shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
+            side: outcome.side,
+            price: outcome.price ?? undefined,
+            probability: outcome.probability ?? undefined,
+            liquidity: outcome.liquidity ?? undefined,
+            poolBalance: outcome.poolBalance ?? undefined,
+            lastTradePrice: outcome.lastTradePrice ?? undefined,
+            lastTradeAt: outcome.lastTradeAt ?? undefined,
+            rawPayload: outcome.rawPayload,
+          },
+          update: {
+            marketId: marketRecord.id,
+            name: outcome.name,
+            shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
+            side: outcome.side,
+            price: outcome.price ?? undefined,
+            probability: outcome.probability ?? undefined,
+            liquidity: outcome.liquidity ?? undefined,
+            poolBalance: outcome.poolBalance ?? undefined,
+            lastTradePrice: outcome.lastTradePrice ?? undefined,
+            lastTradeAt: outcome.lastTradeAt ?? undefined,
+            rawPayload: outcome.rawPayload,
+          },
+        })
+      }
     })
   }
 
