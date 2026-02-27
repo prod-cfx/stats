@@ -111,7 +111,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
@@ -403,8 +403,9 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
           const body = await this.safeReadText(response)
           const snippet = body ? body.slice(0, 500) : ''
 
-          const failure = `status=${response.status} ${response.statusText}${snippet ? ` body=${JSON.stringify(snippet)}` : ''
-            }`
+          const failure = `status=${response.status} ${response.statusText}${
+            snippet ? ` body=${JSON.stringify(snippet)}` : ''
+          }`
           lastFailure = failure
 
           const retryable = response.status >= 500 || response.status === 429
@@ -500,7 +501,9 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       const url = new URL(baseUrl.toString())
       url.searchParams.set('end_time', Math.floor(backfillEndTimeMs).toString())
 
-      this.logger.log(`Backfill request (page ${page + 1}/${this.MAX_BACKFILL_PAGES_PER_RUN}): ${url.toString()}`)
+      this.logger.log(
+        `Backfill request (page ${page + 1}/${this.MAX_BACKFILL_PAGES_PER_RUN}): ${url.toString()}`,
+      )
 
       const json = await this.fetchFuturesPriceJson(url, apiKey)
 
@@ -518,7 +521,9 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
         return { ...point, timestampMs }
       })
 
-      const filteredPoints = pointsWithTimestamps.filter(point => point.timestampMs < currentEarliestMs)
+      const filteredPoints = pointsWithTimestamps.filter(
+        point => point.timestampMs < currentEarliestMs,
+      )
       if (filteredPoints.length === 0) {
         // API 返回的数据没有比当前最早记录更早的，无法继续
         backfillCompleted = true
@@ -881,14 +886,14 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
    */
   private getApiSymbol(cursor: FuturesPriceCursor): string {
     const exchangeCode = cursor.exchangeCode ?? this.defaultExchangeCode
-    const contractType = cursor.contractType === null
-      ? 'SPOT'
-      : cursor.contractType === undefined
-        ? (this.defaultContractType as CoinglassContractType)
-        : (cursor.contractType as CoinglassContractType)
+    const contractType =
+      cursor.contractType === null
+        ? 'SPOT'
+        : cursor.contractType === undefined
+          ? (this.defaultContractType as CoinglassContractType)
+          : (cursor.contractType as CoinglassContractType)
     return toCoinglassSymbol(cursor.symbol, exchangeCode, contractType)
   }
-
 
   private parseCursor(currentCursor: string | null): FuturesPriceCursor {
     if (!currentCursor) {
@@ -919,16 +924,28 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       if (!parsed.interval || !this.isAllowedInterval(parsed.interval as string)) {
         parsed.interval = this.defaultInterval
       }
-      if (typeof parsed.lastTimestamp !== 'number' || !Number.isFinite(parsed.lastTimestamp) || parsed.lastTimestamp < 0) {
+      if (
+        typeof parsed.lastTimestamp !== 'number' ||
+        !Number.isFinite(parsed.lastTimestamp) ||
+        parsed.lastTimestamp < 0
+      ) {
         delete parsed.lastTimestamp
       }
       if (typeof parsed.backfillCompleted !== 'boolean') {
         delete parsed.backfillCompleted
       }
-      if (typeof parsed.backfillCompletedAt !== 'number' || !Number.isFinite(parsed.backfillCompletedAt) || parsed.backfillCompletedAt < 0) {
+      if (
+        typeof parsed.backfillCompletedAt !== 'number' ||
+        !Number.isFinite(parsed.backfillCompletedAt) ||
+        parsed.backfillCompletedAt < 0
+      ) {
         delete parsed.backfillCompletedAt
       }
-      if (typeof parsed.gapAuditCursorMs !== 'number' || !Number.isFinite(parsed.gapAuditCursorMs) || parsed.gapAuditCursorMs < 0) {
+      if (
+        typeof parsed.gapAuditCursorMs !== 'number' ||
+        !Number.isFinite(parsed.gapAuditCursorMs) ||
+        parsed.gapAuditCursorMs < 0
+      ) {
         delete parsed.gapAuditCursorMs
       }
       return parsed as FuturesPriceCursor

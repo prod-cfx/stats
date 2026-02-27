@@ -288,7 +288,9 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       this.logger.log(
         `BBX list API totals: total=${listResult.totalCount}, items=${listResult.items.length}, >=1B=${listResult.filteredCount}, sortCheck=${listResult.sortCheckPassed ? 'pass' : 'local-sort'}`,
       )
-      this.logger.log(`BBX list API >=1B raw count: ${listResult.filteredTotalCount}`)
+      this.logger.log(
+        `BBX list API >=1B raw count (before holdingValue filter): ${listResult.filteredTotalCount}`,
+      )
       if (!listResult.fetchSucceeded || listResult.items.length === 0) {
         this.logger.warn('BBX list API failed or returned empty list')
         return {
@@ -324,6 +326,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       }
 
       const domEnrichmentEnabled = process.env.BBX_SCRAPER_DOM_ENRICH === '1'
+      let domQuotesBySymbol: Map<string, BbxScrapedQuote> | undefined
       if (domEnrichmentEnabled) {
         this.logger.warn('BBX DOM enrichment enabled via BBX_SCRAPER_DOM_ENRICH=1')
         const symbols = topItems.map(item => item.symbol)
@@ -341,29 +344,24 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
             2,
           )}%, total=${domResult.stats.totalCount}, success=${domResult.stats.successCount}, fail=${domResult.stats.failCount}`,
         )
-        this.getFirstBoolean({ enabled: true }, ['enabled'])
+        domQuotesBySymbol = new Map(domResult.quotes.map(quote => [quote.symbol, quote]))
       }
 
       const quotes: BbxScrapedQuote[] = topItems.map(item => {
-        const holdingsDefaulted =
-          item.mNav == null || item.holdingValue == null || item.holdingQuantity == null
-        const rawData = holdingsDefaulted
-          ? { ...(item.rawData ?? {}), holdingsDefaulted: true }
-          : item.rawData
-
+        const enriched = domQuotesBySymbol?.get(item.symbol)
         return {
           symbol: item.symbol,
-          name: item.name ?? item.symbol,
-          exchange: item.exchange ?? 'UNKNOWN',
-          companyType: item.companyType,
-          mNav: holdingsDefaulted ? 0 : item.mNav,
-          marketCap: item.marketCap,
-          holdingValue: holdingsDefaulted ? 0 : item.holdingValue,
-          holdingQuantity: holdingsDefaulted ? 0 : item.holdingQuantity,
-          holdingCoin: item.holdingCoin,
-          price: item.price ?? 0,
-          priceChangePercent: item.priceChangePercent,
-          rawData,
+          name: enriched?.name ?? item.name ?? item.symbol,
+          exchange: enriched?.exchange ?? item.exchange ?? 'UNKNOWN',
+          companyType: enriched?.companyType ?? item.companyType,
+          mNav: enriched?.mNav ?? item.mNav ?? 0,
+          marketCap: enriched?.marketCap ?? item.marketCap,
+          holdingValue: enriched?.holdingValue ?? item.holdingValue ?? 0,
+          holdingQuantity: enriched?.holdingQuantity ?? item.holdingQuantity ?? 0,
+          holdingCoin: enriched?.holdingCoin ?? item.holdingCoin,
+          price: enriched?.price ?? item.price ?? 0,
+          priceChangePercent: enriched?.priceChangePercent ?? item.priceChangePercent,
+          rawData: item.rawData,
         }
       })
 
@@ -384,7 +382,6 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       const failures: BbxEnrichmentFailure[] = []
       const successQuotes: BbxScrapedQuote[] = []
       const reasonCounts = new Map<string, number>()
-      const defaultedHoldingsSymbols: string[] = []
       const missingPriceChangeSymbols: string[] = []
 
       for (const quote of quotes) {
@@ -401,24 +398,39 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         if (quote.priceChangePercent == null) missingPriceChangeSymbols.push(quote.symbol)
       }
 
-      for (const quote of quotes) {
-        const rawData = quote.rawData as Record<string, unknown> | undefined
-        if (rawData?.holdingsDefaulted === true) defaultedHoldingsSymbols.push(quote.symbol)
-      }
-
       const totalCount = quotes.length
-      const successCount = successQuotes.length
+      // 过滤掉 holdingValue 为 null 或 ≤0 的记录，前置到 successRate 计算，确保指标真实反映可写入数据
+      const writableFilterFailures: BbxEnrichmentFailure[] = []
+      const writableQuotes: BbxScrapedQuote[] = []
+      for (const quote of successQuotes) {
+        const isWritable = quote.holdingValue != null && quote.holdingValue > 0
+        if (isWritable) {
+          writableQuotes.push(quote)
+        } else {
+          writableFilterFailures.push({ symbol: quote.symbol, reason: 'invalid-holdingValue' })
+        }
+      }
+      if (writableFilterFailures.length > 0) {
+        failures.push(...writableFilterFailures)
+        reasonCounts.set(
+          'invalid-holdingValue',
+          (reasonCounts.get('invalid-holdingValue') ?? 0) + writableFilterFailures.length,
+        )
+        this.logger.log(
+          `BBX write filter: ${successQuotes.length} -> ${writableQuotes.length} (removed ${successQuotes.length - writableQuotes.length} with null/zero holdingValue)`,
+        )
+      }
+      const successCount = writableQuotes.length
       const failCount = failures.length
       const successRate = totalCount > 0 ? successCount / totalCount : 0
       const failureListSample = failures.slice(0, 20)
       const failureSummary = JSON.stringify(failureListSample)
       const reasonSummary = JSON.stringify(Object.fromEntries(reasonCounts.entries()))
-      const defaultedHoldingsSample = JSON.stringify(defaultedHoldingsSymbols.slice(0, 20))
       const missingPriceChangeSample = JSON.stringify(missingPriceChangeSymbols.slice(0, 20))
 
       this.logger.log(`Extracted ${quotes.length} quotes from BBX list API`)
       this.logger.log(
-        `BBX validation: successRate=${(successRate * 100).toFixed(2)}%, total=${totalCount}, success=${successCount}, fail=${failCount}, reasons=${reasonSummary}, defaultedHoldings=${defaultedHoldingsSymbols.length}, defaultedHoldingsSample=${defaultedHoldingsSample}, missingPriceChange=${missingPriceChangeSymbols.length}, missingPriceChangeSample=${missingPriceChangeSample}, sampleFailures=${failureSummary}`,
+        `BBX validation: successRate=${(successRate * 100).toFixed(2)}%, total=${totalCount}, success=${successCount}, fail=${failCount}, reasons=${reasonSummary}, missingPriceChange=${missingPriceChangeSymbols.length}, missingPriceChangeSample=${missingPriceChangeSample}, sampleFailures=${failureSummary}`,
       )
 
       if (successRate < 0.95) {
@@ -442,10 +454,17 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         }
       }
 
-      // 写入数据库
       const quoteTimestamp = new Date()
+      if (writableQuotes.length === 0) {
+        this.logger.warn('BBX write skipped: no writable quotes after holdingValue filter')
+        return {
+          fetchedCount: 0,
+          newCursor: JSON.stringify({ ...cursor, lastFetchTime: quoteTimestamp.toISOString() }),
+          meta: { note: 'no writable quotes after holdingValue filter' },
+        }
+      }
       const count = await this.repo.upsertBbxScraperQuotesBySymbolReplace(
-        successQuotes.map(quote => ({
+        writableQuotes.map(quote => ({
           symbol: quote.symbol,
           name: quote.name,
           exchange: quote.exchange,
@@ -1583,6 +1602,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
           items.push(...extracted.items)
           totalCount = extracted.totalCount ?? items.length
           fetchedAnyPage = true
+          this.logger.log(`BBX list API: got ${extracted.items.length} items`)
         }
       }
     } catch (error) {
@@ -1605,7 +1625,8 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
     const sortedFiltered = filteredRaw
       .slice()
       .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
-    const usedItems = sortedFiltered.slice(0, Math.min(30, sortedFiltered.length))
+
+    const usedItems = sortedFiltered.slice(0, 30)
 
     totalCount = totalCount || items.length
 
