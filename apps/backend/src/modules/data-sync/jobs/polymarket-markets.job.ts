@@ -9,9 +9,18 @@ import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 // eslint-disable-next-line ts/consistent-type-imports
+import { GoogleTranslateClient } from '@/clients/google-translate/google-translate.client'
+// eslint-disable-next-line ts/consistent-type-imports
 import { PolymarketGammaClient } from '@/clients/polymarket/gamma-client'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PolymarketRepository } from '@/modules/polymarket/polymarket.repository'
+
+interface MarketTranslations {
+  questionZh: string | null
+  eventTitleZh: string | null
+  outcomes: Record<string, { nameZh: string | null; shortNameZh: string | null }>
+}
+type TranslationMap = Map<string, MarketTranslations>
 
 interface PolymarketMarketsCursor {
   nextCursor?: string | null
@@ -55,6 +64,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     private readonly gammaClient: PolymarketGammaClient,
     private readonly repo: PolymarketRepository,
     private readonly configService: ConfigService,
+    private readonly translateClient: GoogleTranslateClient,
   ) {
     const cfg = this.configService.get<PolymarketConfig>('polymarket')
     // 默认 category 仍然来源于全局 config/env（兼容历史行为），
@@ -90,8 +100,24 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     let processed = 0
     let skipped = 0
 
+    // 先过滤出需要处理的 markets（本地 category 过滤）
+    const marketsToProcess: PolymarketGammaMarket[] = []
     for (const market of response.markets) {
-      const result = await this.processMarket(market, category)
+      const event = market.event ?? market.events?.[0]
+      const rawCategory = market.category ?? event?.category ?? null
+      const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+      if (category && normalizedCategory !== category) {
+        skipped += 1
+        continue
+      }
+      marketsToProcess.push(market)
+    }
+
+    // 批量翻译：收集所有需要翻译的文本，一次性发送减少 API 调用次数
+    const translationMap = await this.batchTranslateMarkets(marketsToProcess)
+
+    for (const market of marketsToProcess) {
+      const result = await this.processMarket(market, translationMap)
       if (result.skipped) {
         skipped += 1
       } else {
@@ -156,7 +182,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
 
   private async processMarket(
     market: PolymarketGammaMarket,
-    configuredCategory: string | null,
+    translationMap: TranslationMap,
   ): Promise<{ skipped: boolean }> {
     // API 返回 events 数组，取第一个元素作为主事件
     const event = market.event ?? market.events?.[0]
@@ -167,23 +193,20 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     const rawCategory = market.category ?? event?.category ?? null
     const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
 
-    // 关键：Gamma API 的 category 参数不工作（忽略该查询参数），
-    // 必须在本地过滤，否则会把所有历史市场全量 upsert 导致数据库膨胀
-    if (configuredCategory && normalizedCategory !== configuredCategory) {
-      // 不匹配配置的 category，跳过此市场
-      return { skipped: true }
-    }
+    const translations = translationMap.get(market.id) ?? null
 
-    const marketRecord = await this.repo.upsertMarket({
+    const marketInput = {
       marketId: market.id,
       eventExternalId: m.eventId ?? m.event_id ?? event?.id ?? null,
       eventSlug: event?.slug ?? null,
       eventTitle: event?.title ?? null,
+      eventTitleZh: translations?.eventTitleZh ?? undefined,
       // API 返回 camelCase，兼容 snake_case
       eventStartTime: this.toDate(event?.startDate ?? event?.start_date),
       eventEndTime: this.toDate(event?.endDate ?? event?.end_date),
       slug: market.slug,
       question: market.question ?? market.title,
+      questionZh: translations?.questionZh ?? undefined,
       category: normalizedCategory,
       tags: this.extractTags(market, event),
       outcomeType: market.outcomeType ?? m.outcome_type ?? null,
@@ -203,19 +226,149 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       openInterest: this.toDecimal(m.openInterest ?? m.open_interest),
       isActive: m.active !== false && m.closed !== true,
       rawPayload: market as Record<string, unknown>,
-    })
+    }
 
     // 处理 outcomes 字段的多种格式
     const outcomes = this.parseOutcomes(market)
+    const outcomeTranslations = translations?.outcomes ?? {}
     const outcomeInputs = outcomes
-      .map(outcome => this.mapOutcome(outcome, marketRecord.id))
+      .map(outcome => this.mapOutcome(outcome, outcomeTranslations))
       .filter((value): value is NonNullable<typeof value> => Boolean(value))
 
-    if (outcomeInputs.length) {
-      await this.repo.upsertOutcomes(outcomeInputs)
-    }
+    await this.repo.upsertMarketWithOutcomes(marketInput, outcomeInputs)
 
     return { skipped: false }
+  }
+
+  /**
+   * 批量收集一批市场的所有待翻译文本，调用翻译 API，返回 marketId → translations 映射。
+   * 未启用翻译、或翻译失败时返回空 Map（主链路不中断）。
+   */
+  private async batchTranslateMarkets(markets: PolymarketGammaMarket[]): Promise<TranslationMap> {
+    const result: TranslationMap = new Map()
+    if (!markets.length) return result
+
+    const cfg = this.configService.get<PolymarketConfig>('polymarket')
+    if (cfg?.translation?.enabled === false) return result
+
+    const existingMarkets = await this.repo.findMarketsForTranslation(
+      markets.map(market => market.id),
+    )
+    const existingByMarketId = new Map(existingMarkets.map(market => [market.marketId, market]))
+
+    const marketsForTranslation = markets.filter(market => {
+      const existing = existingByMarketId.get(market.id)
+      if (!existing) return true
+
+      const event = market.event ?? market.events?.[0]
+      const currentQuestion = market.question ?? market.title ?? null
+      const currentEventTitle = event?.title ?? null
+
+      const questionUnchanged = (existing.question ?? null) === (currentQuestion ?? null)
+      const eventTitleUnchanged = (existing.eventTitle ?? null) === (currentEventTitle ?? null)
+      const questionAlreadyTranslated =
+        !currentQuestion?.trim() || Boolean(existing.questionZh?.trim())
+      const eventTitleAlreadyTranslated =
+        !currentEventTitle?.trim() || Boolean(existing.eventTitleZh?.trim())
+
+      if (
+        questionUnchanged &&
+        eventTitleUnchanged &&
+        questionAlreadyTranslated &&
+        eventTitleAlreadyTranslated
+      ) {
+        result.set(market.id, {
+          questionZh: existing.questionZh,
+          eventTitleZh: existing.eventTitleZh,
+          outcomes: {},
+        })
+        return false
+      }
+
+      return true
+    })
+
+    if (!marketsForTranslation.length) return result
+
+    // ---- 1. 收集所有文本，记录 (marketId, field, tokenId) 索引 ----
+    type TextRecord =
+      | { kind: 'question'; marketId: string }
+      | { kind: 'eventTitle'; marketId: string }
+      | { kind: 'outcomeName'; marketId: string; tokenId: string }
+      | { kind: 'outcomeShortName'; marketId: string; tokenId: string }
+
+    const allTexts: string[] = []
+    const textMeta: TextRecord[] = []
+
+    for (const market of marketsForTranslation) {
+      const event = market.event ?? market.events?.[0]
+      const question = market.question ?? market.title
+      const eventTitle = event?.title ?? null
+
+      if (question?.trim()) {
+        allTexts.push(question)
+        textMeta.push({ kind: 'question', marketId: market.id })
+      }
+      if (eventTitle?.trim()) {
+        allTexts.push(eventTitle)
+        textMeta.push({ kind: 'eventTitle', marketId: market.id })
+      }
+
+      const outcomes = this.parseOutcomes(market)
+      for (const outcome of outcomes) {
+        if (!outcome.token_id) continue
+        const name = outcome.name ?? outcome.side
+        const shortName = (outcome as Record<string, any>)?.short_name
+        if (name?.trim()) {
+          allTexts.push(name)
+          textMeta.push({ kind: 'outcomeName', marketId: market.id, tokenId: outcome.token_id })
+        }
+        if (shortName?.trim()) {
+          allTexts.push(shortName)
+          textMeta.push({
+            kind: 'outcomeShortName',
+            marketId: market.id,
+            tokenId: outcome.token_id,
+          })
+        }
+      }
+    }
+
+    if (!allTexts.length) return result
+
+    // ---- 2. 批量翻译 ----
+    let translated: (string | null)[]
+    try {
+      translated = await this.translateClient.translateBatch(allTexts)
+    } catch (err) {
+      this.logger.warn(`batchTranslateMarkets: translate failed, skipping. ${String(err)}`)
+      return result
+    }
+
+    // ---- 3. 将翻译结果回填到 Map ----
+    for (let i = 0; i < textMeta.length; i++) {
+      const meta = textMeta[i]
+      const translatedText = translated[i] ?? null
+
+      if (!result.has(meta.marketId)) {
+        result.set(meta.marketId, { questionZh: null, eventTitleZh: null, outcomes: {} })
+      }
+      const entry = result.get(meta.marketId)!
+
+      if (meta.kind === 'question') {
+        entry.questionZh = translatedText
+      } else if (meta.kind === 'eventTitle') {
+        entry.eventTitleZh = translatedText
+      } else if (meta.kind === 'outcomeName') {
+        entry.outcomes[meta.tokenId] ??= { nameZh: null, shortNameZh: null }
+        entry.outcomes[meta.tokenId].nameZh = translatedText
+      } else if (meta.kind === 'outcomeShortName') {
+        entry.outcomes[meta.tokenId] ??= { nameZh: null, shortNameZh: null }
+        entry.outcomes[meta.tokenId].shortNameZh = translatedText
+      }
+    }
+
+    return result
   }
 
   private parseOutcomes(market: PolymarketGammaMarket): PolymarketGammaOutcome[] {
@@ -337,17 +490,22 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       .filter((outcome): outcome is NonNullable<typeof outcome> => outcome !== null)
   }
 
-  private mapOutcome(outcome: PolymarketGammaOutcome, marketDbId: number) {
+  private mapOutcome(
+    outcome: PolymarketGammaOutcome,
+    outcomeTranslations: Record<string, { nameZh: string | null; shortNameZh: string | null }> = {},
+  ) {
     if (!outcome.token_id) return null
     // 约定：缺失概率的数据不入库（避免前端展示为 '-' 或误导性 0%）。
     // 注意：若数据源既不提供 probability 也不提供 price，则该 outcome 直接跳过。
     const probability = this.toDecimal(outcome.probability) ?? this.toDecimal(outcome.price)
     if (!probability) return null
+    const ozh = outcomeTranslations[outcome.token_id] ?? null
     return {
-      marketDbId,
       outcomeTokenId: outcome.token_id,
       name: outcome.name ?? outcome.side ?? null,
+      nameZh: ozh?.nameZh ?? undefined,
       shortName: (outcome as Record<string, any>)?.short_name ?? null,
+      shortNameZh: ozh?.shortNameZh ?? undefined,
       side: outcome.side ?? null,
       price: this.toDecimal(outcome.price),
       probability,

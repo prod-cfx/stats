@@ -8,10 +8,12 @@ export interface PolymarketMarketWriteInput {
   eventExternalId?: string | null
   eventSlug?: string | null
   eventTitle?: string | null
+  eventTitleZh?: string | null
   eventStartTime?: Date | null
   eventEndTime?: Date | null
   slug?: string | null
   question?: string | null
+  questionZh?: string | null
   category?: string | null
   tags?: string[]
   outcomeType?: string | null
@@ -35,6 +37,8 @@ export interface PolymarketOutcomeWriteInput {
   outcomeTokenId: string
   name?: string | null
   shortName?: string | null
+  nameZh?: string | null
+  shortNameZh?: string | null
   side?: string | null
   price?: string | null
   probability?: string | null
@@ -44,6 +48,11 @@ export interface PolymarketOutcomeWriteInput {
   lastTradeAt?: Date | null
   rawPayload: Record<string, unknown>
 }
+
+export type PolymarketOutcomeWriteWithoutMarketInput = Omit<
+  PolymarketOutcomeWriteInput,
+  'marketDbId'
+>
 
 export interface PolymarketOrderbookSnapshotInput {
   marketDbId?: number | null
@@ -66,6 +75,14 @@ export interface OutcomeTokenRecord {
   outcomeTokenId: string
 }
 
+export interface MarketTranslationSnapshot {
+  marketId: string
+  question: string | null
+  questionZh: string | null
+  eventTitle: string | null
+  eventTitleZh: string | null
+}
+
 export type PolymarketMarketWithOutcomes = Prisma.PolymarketMarketGetPayload<{
   include: {
     outcomes: true
@@ -80,61 +97,101 @@ export class PolymarketRepository {
     return this.prisma.getClient()
   }
 
+  private toMarketUpsertData(market: PolymarketMarketWriteInput) {
+    return {
+      marketId: market.marketId,
+      eventExternalId: market.eventExternalId,
+      eventSlug: market.eventSlug,
+      eventTitle: market.eventTitle,
+      eventTitleZh: market.eventTitleZh,
+      eventStartTime: market.eventStartTime ?? undefined,
+      eventEndTime: market.eventEndTime ?? undefined,
+      slug: market.slug,
+      question: market.question,
+      questionZh: market.questionZh,
+      category: market.category,
+      tags: market.tags ?? [],
+      outcomeType: market.outcomeType,
+      status: market.status,
+      resolutionSource: market.resolutionSource,
+      resolutionTime: market.resolutionTime,
+      startTradingAt: market.startTradingAt,
+      endTradingAt: market.endTradingAt,
+      lastUpdatedAt: market.lastUpdatedAt,
+      feeRate: market.feeRate ?? undefined,
+      liquidity: market.liquidity ?? undefined,
+      volume24h: market.volume24h ?? undefined,
+      volumeTotal: market.volumeTotal ?? undefined,
+      openInterest: market.openInterest ?? undefined,
+      isActive: market.isActive ?? true,
+      rawPayload: market.rawPayload,
+    }
+  }
+
   async upsertMarket(market: PolymarketMarketWriteInput): Promise<PolymarketMarketModel> {
     const client = this.getClient()
+    const marketData = this.toMarketUpsertData(market)
     return client.polymarketMarket.upsert({
       where: { marketId: market.marketId },
-      create: {
-        marketId: market.marketId,
-        eventExternalId: market.eventExternalId,
-        eventSlug: market.eventSlug,
-        eventTitle: market.eventTitle,
-        eventStartTime: market.eventStartTime ?? undefined,
-        eventEndTime: market.eventEndTime ?? undefined,
-        slug: market.slug,
-        question: market.question,
-        category: market.category,
-        tags: market.tags ?? [],
-        outcomeType: market.outcomeType,
-        status: market.status,
-        resolutionSource: market.resolutionSource,
-        resolutionTime: market.resolutionTime,
-        startTradingAt: market.startTradingAt,
-        endTradingAt: market.endTradingAt,
-        lastUpdatedAt: market.lastUpdatedAt,
-        feeRate: market.feeRate ?? undefined,
-        liquidity: market.liquidity ?? undefined,
-        volume24h: market.volume24h ?? undefined,
-        volumeTotal: market.volumeTotal ?? undefined,
-        openInterest: market.openInterest ?? undefined,
-        isActive: market.isActive ?? true,
-        rawPayload: market.rawPayload,
-      },
-      update: {
-        eventExternalId: market.eventExternalId,
-        eventSlug: market.eventSlug,
-        eventTitle: market.eventTitle,
-        eventStartTime: market.eventStartTime ?? undefined,
-        eventEndTime: market.eventEndTime ?? undefined,
-        slug: market.slug,
-        question: market.question,
-        category: market.category,
-        tags: market.tags ?? [],
-        outcomeType: market.outcomeType,
-        status: market.status,
-        resolutionSource: market.resolutionSource,
-        resolutionTime: market.resolutionTime,
-        startTradingAt: market.startTradingAt,
-        endTradingAt: market.endTradingAt,
-        lastUpdatedAt: market.lastUpdatedAt,
-        feeRate: market.feeRate ?? undefined,
-        liquidity: market.liquidity ?? undefined,
-        volume24h: market.volume24h ?? undefined,
-        volumeTotal: market.volumeTotal ?? undefined,
-        openInterest: market.openInterest ?? undefined,
-        isActive: market.isActive ?? true,
-        rawPayload: market.rawPayload,
-      },
+      create: marketData,
+      update: marketData,
+    })
+  }
+
+  async upsertMarketWithOutcomes(
+    market: PolymarketMarketWriteInput,
+    outcomes: PolymarketOutcomeWriteWithoutMarketInput[],
+  ): Promise<void> {
+    const client = this.getClient()
+    const marketData = this.toMarketUpsertData(market)
+
+    await client.$transaction(async tx => {
+      const marketRecord = await tx.polymarketMarket.upsert({
+        where: { marketId: market.marketId },
+        create: marketData,
+        update: marketData,
+      })
+
+      if (!outcomes.length) return
+
+      await Promise.all(
+        outcomes.map(outcome =>
+          tx.polymarketOutcome.upsert({
+            where: { outcomeTokenId: outcome.outcomeTokenId },
+            create: {
+              marketId: marketRecord.id,
+              outcomeTokenId: outcome.outcomeTokenId,
+              name: outcome.name,
+              shortName: outcome.shortName,
+              nameZh: outcome.nameZh,
+              shortNameZh: outcome.shortNameZh,
+              side: outcome.side,
+              price: outcome.price ?? undefined,
+              probability: outcome.probability ?? undefined,
+              liquidity: outcome.liquidity ?? undefined,
+              poolBalance: outcome.poolBalance ?? undefined,
+              lastTradePrice: outcome.lastTradePrice ?? undefined,
+              lastTradeAt: outcome.lastTradeAt ?? undefined,
+              rawPayload: outcome.rawPayload,
+            },
+            update: {
+              marketId: marketRecord.id,
+              name: outcome.name,
+              shortName: outcome.shortName,
+              nameZh: outcome.nameZh,
+              shortNameZh: outcome.shortNameZh,
+              side: outcome.side,
+              price: outcome.price ?? undefined,
+              probability: outcome.probability ?? undefined,
+              liquidity: outcome.liquidity ?? undefined,
+              poolBalance: outcome.poolBalance ?? undefined,
+              lastTradePrice: outcome.lastTradePrice ?? undefined,
+              lastTradeAt: outcome.lastTradeAt ?? undefined,
+              rawPayload: outcome.rawPayload,
+            },
+          }),
+        ),
+      )
     })
   }
 
@@ -150,6 +207,8 @@ export class PolymarketRepository {
             outcomeTokenId: outcome.outcomeTokenId,
             name: outcome.name,
             shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
             side: outcome.side,
             price: outcome.price ?? undefined,
             probability: outcome.probability ?? undefined,
@@ -163,6 +222,8 @@ export class PolymarketRepository {
             marketId: outcome.marketDbId,
             name: outcome.name,
             shortName: outcome.shortName,
+            nameZh: outcome.nameZh,
+            shortNameZh: outcome.shortNameZh,
             side: outcome.side,
             price: outcome.price ?? undefined,
             probability: outcome.probability ?? undefined,
@@ -328,6 +389,26 @@ export class PolymarketRepository {
       take: limit,
       orderBy: {
         lastUpdatedAt: 'desc',
+      },
+    })
+  }
+
+  async findMarketsForTranslation(ids: string[]): Promise<MarketTranslationSnapshot[]> {
+    if (!ids.length) return []
+
+    const client = this.getClient()
+    return client.polymarketMarket.findMany({
+      where: {
+        marketId: {
+          in: ids,
+        },
+      },
+      select: {
+        marketId: true,
+        question: true,
+        questionZh: true,
+        eventTitle: true,
+        eventTitleZh: true,
       },
     })
   }

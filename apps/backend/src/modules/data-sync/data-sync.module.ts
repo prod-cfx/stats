@@ -1,5 +1,6 @@
 import type { DataPullJob } from './contracts/data-pull-job'
 import { forwardRef, Module } from '@nestjs/common'
+import { GoogleTranslateClient } from '@/clients/google-translate/google-translate.client'
 import { PolymarketClobClient, PolymarketGammaClient } from '@/clients/polymarket'
 import { AuthModule } from '@/modules/auth/auth.module'
 import { CryptoStockQuotesModule } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.module'
@@ -124,6 +125,7 @@ import { TradesWsSyncManager } from './services/trades-ws-sync-manager.service'
     PolymarketGammaClient,
     PolymarketClobClient,
     PolymarketRepository,
+    GoogleTranslateClient,
     // Job registry，将多个 Job 注入为一个数组
     {
       provide: DATA_PULL_JOB_REGISTRY,
