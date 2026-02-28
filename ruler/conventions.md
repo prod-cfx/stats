@@ -3,12 +3,13 @@
 ## 1) 输出与命令
 
 - 输出语言：中文
-- 命令入口：本地与 CI 统一走 `dx`（从仓库根目录执行）
+- 运行时基线：Node.js `>=20.19.0`，pnpm `10.28.2`
+- 命令入口：本地与 CI 统一走 `dx`（所有命令从仓库根目录执行）
 - dx 安装：`pnpm add -g @ranger1/dx@latest`
-- pnpm 规则：允许 `pnpm install`；允许仓库预置的 `pnpm *:ci`（CI/脚本用途）；除此之外禁止用 pnpm 直接 build/start/db/migrate
+- pnpm 规则：允许 `pnpm install`；允许仓库脚本内部/`dx` 内部使用 `pnpm --filter ...`；日常开发禁止绕过 `dx` 直接执行 build/start/db/test/lint 流程
 - 环境文件：禁止创建根目录 `.env` / `.env.local`（存在会直接报错）；禁止提交任何 `.env.*.local`
-- 环境模板：允许提交 `.env.<env>`（必须使用占位符 `__SET_IN_env.local__`，真实值仅放在 `.env.<env>.local`）
-- dx 配置：`dx/config/env-policy.jsonc` 为必需（新 env 校验规则）
+- 环境模板：允许提交 `.env.<env>`（支持 `development|staging|production|test|e2e`，且必须使用占位符 `__SET_IN_env.local__`，真实值仅放在 `.env.<env>.local`）
+- dx 环境策略：`dx/config/env-policy.jsonc` 为必需（新增/调整环境变量时必须同步）
 
 ## 2) 代码风格与类型
 
@@ -26,6 +27,7 @@
 - 当前用户：`@CurrentUser('id') userId`；需要多字段用 `@CurrentUser() user: AuthenticatedUser`
 - Prisma schema：`apps/backend/prisma/schema/*.prisma`
 - Prisma 工作流：改 schema -> `dx db format` -> `dx db generate` -> `dx db migrate --dev --name <name>`（仅创建迁移）-> `dx db deploy --<env>`（应用迁移）
+- 后端 DTO/API 变更后：执行 `dx build contracts --dev` 更新 `@ai/api-contracts`
 
 ## 5) 事务规范（Issue #465）
 
@@ -35,9 +37,9 @@
 
 ## 6) 测试约定
 
-- 主要门禁：后端 E2E（`apps/backend/e2e/`），按文件/目录逐个运行，禁止无参全量执行
-- 命令：`dx test e2e backend <file-or-dir> [-t "case name"]`
-- 单测现状：仓库存在并维护 Jest spec（典型：`apps/backend/src/modules/**/exceptions/*.spec.ts`）；常规流程不要求全量跑单测，按需按文件运行即可
+- 主要门禁：后端 E2E（`apps/backend/e2e/`），默认按文件/目录逐个运行，避免无参全量执行（仅在必要时全量）
+- 命令：`dx test e2e backend`（全量）或 `dx test e2e backend <file-or-dir> [-t "case name"]`（推荐，按影响范围执行）
+- 单测现状：后端维护 Jest spec（典型：`apps/backend/src/modules/**/exceptions/*.spec.ts`）；常规流程不要求全量跑单测，按需按文件运行
 
 ## 7) 错误处理（统一错误码）
 

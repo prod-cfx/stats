@@ -3,7 +3,9 @@
 ## 1) Issue 与分支（强制）
 
 - 提交/发 PR 前必须有 Issue ID（无则先创建或指定）
-- 提交必须在 Issue 分支：`feat/<id>-*` / `fix/<id>-*` / `refactor/<id>-*`
+- 提交必须在 Issue 分支：
+  - 标准：`feat/<id>-*` / `fix/<id>-*` / `refactor/<id>-*` / `docs/<id>-*` / `chore/<id>-*` / `test/<id>-*`
+  - Codex 会话兼容：`codex/feat/<id>-*` / `codex/fix/<id>-*` / `codex/refactor/<id>-*` / `codex/docs/<id>-*` / `codex/chore/<id>-*` / `codex/test/<id>-*`
 - 禁止直接提交到 `main/master`
 
 ## 2) 提交格式
