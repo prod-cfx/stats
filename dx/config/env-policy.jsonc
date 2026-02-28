@@ -24,7 +24,8 @@
       "VERCEL_TOKEN",
       "VERCEL_GIT_COMMIT_AUTHOR_EMAIL",
       "BBX_ACCESS_KEY_ID",
-      "BBX_ACCESS_SECRET"
+      "BBX_ACCESS_SECRET",
+      "TRANSLATE_LLM_API_KEY"
     ],
     "localOnly": [],
     "localOverride": [
@@ -170,7 +171,9 @@
       "JWT_ACCESS_EXPIRATION",
       "HTTP_TRUST_PROXY",
       "HTTP_TRUST_PROXY_HOPS",
-      "TRUST_PROXY"
+      "TRUST_PROXY",
+      "TRANSLATE_LLM_BASE_URL",
+      "TRANSLATE_LLM_MODEL"
     ]
   },
   "appToTarget": {
