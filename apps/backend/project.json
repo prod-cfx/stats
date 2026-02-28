@@ -15,7 +15,7 @@
     "build": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/apps/backend/dist"],
-      "dependsOn": ["prisma:generate"],
+      "dependsOn": ["^build", "prisma:generate"],
       "options": {
         "command": "pnpm --filter @net/backend run build"
       }

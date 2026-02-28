@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",
-    "@prisma/client": "^7.0.1",
+    "@prisma/client": "^7.4.2",
     "@types/cron": "^2.4.3",
     "async-mutex": "^0.5.0",
     "cron": "^4.3.4",
@@ -41,6 +41,7 @@
     "@nx/eslint": "19.8.14",
     "@nx/jest": "19.8.14",
     "@nx/webpack": "19.8.14",
+    "@ranger1/dx": "0.1.9",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.7.5",
@@ -63,15 +64,14 @@
     "postcss": "^8.4.32",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.8",
-    "prisma": "^7.0.1",
+    "prisma": "^7.4.2",
     "tailwindcss": "^4.0.6",
     "tailwindcss-animate": "^1.0.7",
     "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
     "tslib": "^2.8.1",
     "typescript": "^5.9.2",
-    "yaml": "^2.6.0",
-    "@ranger1/dx": "0.1.9"
+    "yaml": "^2.6.0"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
@@ -116,7 +116,7 @@
         "typescript": "5.9.2",
         "react": "18.2.0 || 18.3.1 || 19.0.0 || 19.1.0 || 19.2.0 || 19.2.4",
         "react-dom": "18.2.0 || 18.3.1 || 19.0.0 || 19.1.0 || 19.2.0 || 19.2.4",
-        "@prisma/client": "7.0.1"
+        "@prisma/client": "7.4.2"
       }
     },
     "onlyBuiltDependencies": [
