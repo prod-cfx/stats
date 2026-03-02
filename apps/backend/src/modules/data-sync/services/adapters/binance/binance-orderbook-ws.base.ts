@@ -280,7 +280,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     const cfg = state.cfg
     const restBaseUrl = this.getRestBaseUrl()
     const timeoutMs = this.configService.get<number>('marketData.restTimeoutMs') ?? 10_000
-    const limit = cfg.depthLevels ?? 100
+    const limit = this.resolveEffectiveDepthLevels(cfg)
     const retryBaseMs =
       this.configService.get<number>('ORDERBOOK_WS_SNAPSHOT_RETRY_BASE_MS') ?? 60_000
     const retryMaxMs =
@@ -408,7 +408,7 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
       return
     }
 
-    const depthLevels = state.cfg.depthLevels ?? 100
+    const depthLevels = this.resolveEffectiveDepthLevels(state.cfg)
     this.trimMap(state.bids, 'bids', depthLevels)
     this.trimMap(state.asks, 'asks', depthLevels)
 
@@ -568,6 +568,19 @@ export abstract class BinanceOrderbookWsAdapterBase implements OrderbookWsAdapte
     for (const key of map.keys()) {
       if (!keep.has(key)) map.delete(key)
     }
+  }
+
+  private resolveEffectiveDepthLevels(cfg: OrderbookPairConfig): number {
+    const configured = cfg.depthLevels ?? 100
+    // ETH/BTC 永续在 500 档下价格覆盖通常偏窄，默认提升到 1000 档。
+    if (
+      cfg.instrumentType === 'PERPETUAL'
+      && (cfg.baseAsset === 'BTC' || cfg.baseAsset === 'ETH')
+      && configured < 1000
+    ) {
+      return 1000
+    }
+    return configured
   }
 
   private toMarketIdFromConfig(

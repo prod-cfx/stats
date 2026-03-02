@@ -11,8 +11,8 @@ import { LoadingState } from '@/components/ui/loading'
 import { fetchAggregatedOrderbook } from '@/lib/api'
 
 // 后端支持的交易所
-const FUTURES_EXCHANGES = ['bybit', 'binance', 'okx']
-const SPOT_EXCHANGES = ['binance', 'okx', 'bybit']
+const FUTURES_EXCHANGES = ['bybit', 'binance', 'bitmax', 'okx']
+const SPOT_EXCHANGES = ['binance', 'okx', 'bybit', 'bitmax']
 
 // 刷新间隔（毫秒）
 const REFRESH_INTERVAL = 3000
@@ -149,24 +149,15 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
         tickSize: Number.parseFloat(tickSize), // 用户选择的价格聚合档位
       })
 
-      // 显示限制：both 模式下每边最多 13 条
-      const displayLimit = 13
-
-      // 先切片到显示数量，再计算累计
-      // Asks: 后端返回 low→high，取前 displayLimit 条（最接近盘口的低价）
-      // Bids: 后端返回 high→low，取前 displayLimit 条（最接近盘口的高价）
-      const slicedAsks = data.asks.slice(0, displayLimit)
-      const slicedBids = data.bids.slice(0, displayLimit)
-
-      // 计算最大 size 用于深度百分比（基于切片后的数据）
-      const allSizes = [...slicedAsks, ...slicedBids].map(l => l.sizeTotal)
+      // 保留后端返回的完整深度，展示层再按模式做采样。
+      const allSizes = [...data.asks, ...data.bids].map(l => l.sizeTotal)
       const maxSize = Math.max(...allSizes, 1)
 
       // 转换数据格式
       // Asks: 累计从最低价（最佳卖价）开始，不需要反向
       // Bids: 累计从最高价（最佳买价）开始
-      const transformedAsks = transformOrderbookData(slicedAsks, maxSize, false)
-      const transformedBids = transformOrderbookData(slicedBids, maxSize, false)
+      const transformedAsks = transformOrderbookData(data.asks, maxSize, false)
+      const transformedBids = transformOrderbookData(data.bids, maxSize, false)
 
       setOrderbook({
         asks: transformedAsks,

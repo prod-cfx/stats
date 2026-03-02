@@ -15,6 +15,7 @@ const VENUE_MAPPING: Record<string, Record<string, string>> = {
   binance: { spot: 'binance-spot', perp: 'binance-perp' },
   okx: { spot: 'okx-spot', perp: 'okx-perp' },
   bybit: { spot: 'bybit-spot', perp: 'bybit-perp' },
+  bitmax: { spot: 'bitmax-spot', perp: 'bitmax-perp' },
 }
 
 interface AggregatedLevel {
