@@ -178,7 +178,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     for (const market of markets) {
       const event = market.event ?? market.events?.[0]
       const rawCategory = market.category ?? event?.category ?? null
-      const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+      const normalizedCategory = this.normalizeCategory(rawCategory)
       // 上游返回 category=null 时，做一次保守判定：
       // 仅放行“明显属于目标分类”的市场，避免混入无关数据。
       if (category && normalizedCategory && normalizedCategory !== category) {
@@ -318,7 +318,7 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 统一 category 为小写并去除空格
     // 注意：不应该用配置的默认 category 回填，否则会将无分类的市场错误地标记为 crypto
     const rawCategory = market.category ?? event?.category ?? null
-    const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+    const normalizedCategory = this.normalizeCategory(rawCategory)
 
     const translations = translationMap.get(market.id) ?? null
 
@@ -711,8 +711,13 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     // 如果 defaultCategory 为空字符串且无 meta 覆盖，也返回 null
     if (fromMeta === undefined && this.defaultCategory === '') return null
     const value = fromMeta ?? this.defaultCategory ?? 'crypto'
-    if (!value) return null
-    return value.trim().toLowerCase()
+    return this.normalizeCategory(value)
+  }
+
+  private normalizeCategory(category: string | null | undefined): string | null {
+    if (!category) return null
+    const normalized = category.trim().toLowerCase()
+    return normalized || null
   }
 
   private resolveTags(meta: PolymarketTaskMeta | null): string[] | null {
