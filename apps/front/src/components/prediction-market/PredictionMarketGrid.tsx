@@ -13,6 +13,7 @@ import { fetchPredictionMarkets } from '@/lib/api'
 import { useMockData } from '@/hooks/use-mock-data'
 import { formatDateTimeFull, formatNumber } from '@/lib/formatters'
 import { PredictionCard } from './PredictionCard'
+import { toPolymarketLocale } from './locale'
 
 type PredictionMarketItem = PredictionCardProps & {
   rules?: PredictionRulesMeta
@@ -96,9 +97,10 @@ function mapToPredictionItem(item: PredictionMarketCardResponse): PredictionMark
 }
 
 export const PredictionMarketGrid = () => {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [selectedPrediction, setSelectedPrediction] = useState<PredictionMarketItem | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
+  const locale = toPolymarketLocale(i18n.language)
 
   const {
     data: predictions,
@@ -107,10 +109,10 @@ export const PredictionMarketGrid = () => {
     reload,
   } = useMockData(
     async () => {
-      const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48 })
+      const result = await fetchPredictionMarkets({ onlyActive: true, limit: 48, locale })
       return result.map(item => mapToPredictionItem(item))
     },
-    [],
+    [locale],
     {
       delay: 0,
       ignoreQueryOverrides: true,
