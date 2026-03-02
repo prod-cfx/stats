@@ -26,6 +26,7 @@ interface PolymarketMarketsCursor {
   nextCursor?: string | null
   offset?: number // offset 分页：用于持续轮询所有市场
   usedCursor?: boolean // 上一轮是否使用了 cursor 模式（用于状态转换判断）
+  filterSignature?: string
 }
 
 export interface PolymarketTaskMeta {
@@ -53,6 +54,9 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
   readonly key = 'polymarket-markets-crypto'
   private readonly logger = new Logger(PolymarketMarketsJob.name)
   private readonly batchSize = 100
+  private readonly maxPagesPerRun = 10
+  private readonly cryptoSignalRegex =
+    /\b(crypto|bitcoin|btc|ethereum|eth|solana|sol|xrp|doge|binance|bnb|defi|uniswap|onchain|blockchain|stablecoin|tvl|airdrop|web3|altcoin)\b/i
   /**
    * 默认 category（已标准化为小写、去掉首尾空格）
    * 实际使用时会与任务级 meta 合并，允许按任务覆盖。
@@ -78,108 +82,149 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
   }
 
   async run(ctx: DataPullJobContext<PolymarketTaskMeta>): Promise<JobRunResult> {
-    const cursor = this.parseCursor(ctx.cursor)
+    const parsedCursor = this.parseCursor(ctx.cursor)
 
     const category = this.resolveCategory(ctx.meta)
     const tags = this.resolveTags(ctx.meta)
-
-    // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
-    // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
     const onlyActive = ctx.meta?.onlyActive ?? false
-    const response = await this.gammaClient.listMarkets({
-      limit: this.batchSize,
-      cursor: cursor.nextCursor ?? null,
-      offset: cursor.offset ?? 0,
-      updatedSince: null, // API 不支持，保持 null
-      category: category ?? null,
-      tags: tags ?? undefined,
-      // 当 onlyActive=true 时，仅获取未关闭的市场，跳过海量历史数据
-      closed: onlyActive ? false : undefined,
+    const filterSignature = this.buildFilterSignature({
+      category,
+      tags,
+      onlyActive,
     })
+    const cursor = this.normalizeCursorForCurrentFilter(parsedCursor, filterSignature)
 
     let processed = 0
     let skipped = 0
+    let total = 0
+    let scannedPages = 0
+    let loopCursor: PolymarketMarketsCursor = cursor
 
-    // 先过滤出需要处理的 markets（本地 category 过滤）
-    const marketsToProcess: PolymarketGammaMarket[] = []
-    for (const market of response.markets) {
-      const event = market.event ?? market.events?.[0]
-      const rawCategory = market.category ?? event?.category ?? null
-      const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
-      // Gamma 近期大量返回 category=null；此时不能做严格本地过滤，
-      // 否则会把 meta.category=crypto 的任务全部跳过。
-      // 仅在上游明确返回了 category 且不匹配时才跳过。
-      if (category && normalizedCategory && normalizedCategory !== category) {
-        skipped += 1
-        continue
+    // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
+    // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
+    for (let page = 0; page < this.maxPagesPerRun; page += 1) {
+      const response = await this.gammaClient.listMarkets({
+        limit: this.batchSize,
+        cursor: loopCursor.nextCursor ?? null,
+        offset: loopCursor.offset ?? 0,
+        updatedSince: null, // API 不支持，保持 null
+        category: category ?? null,
+        tags: tags ?? undefined,
+        // 当 onlyActive=true 时，仅获取未关闭的市场，跳过海量历史数据
+        closed: onlyActive ? false : undefined,
+      })
+
+      scannedPages += 1
+      total += response.markets.length
+
+      // 先过滤出需要处理的 markets（本地 category 过滤）
+      const marketsToProcess: PolymarketGammaMarket[] = []
+      for (const market of response.markets) {
+        const event = market.event ?? market.events?.[0]
+        const rawCategory = market.category ?? event?.category ?? null
+        const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+        // 上游返回 category=null 时，做一次保守判定：
+        // 仅放行“明显属于目标分类”的市场，避免混入无关数据。
+        if (category && normalizedCategory && normalizedCategory !== category) {
+          skipped += 1
+          continue
+        }
+        if (
+          category &&
+          !normalizedCategory &&
+          !this.isLikelyCategoryMatchWhenCategoryMissing(market, event, category)
+        ) {
+          skipped += 1
+          continue
+        }
+        marketsToProcess.push(market)
       }
-      marketsToProcess.push(market)
-    }
 
-    // 批量翻译：收集所有需要翻译的文本，一次性发送减少 API 调用次数
-    const translationMap = await this.batchTranslateMarkets(marketsToProcess)
+      // 批量翻译：收集所有需要翻译的文本，一次性发送减少 API 调用次数
+      const translationMap = await this.batchTranslateMarkets(marketsToProcess)
 
-    for (const market of marketsToProcess) {
-      const result = await this.processMarket(market, translationMap)
-      if (result.skipped) {
-        skipped += 1
-      } else {
-        processed += 1
+      for (const market of marketsToProcess) {
+        const result = await this.processMarket(market, translationMap)
+        if (result.skipped) {
+          skipped += 1
+        } else {
+          processed += 1
+        }
       }
-    }
 
-    const nextCursorValue = response.nextCursor ?? null
-    const apiReturned = response.markets.length // API 实际返回的数量
-
-    // 计算下一次的 offset
-    // 关键：必须基于 API 实际返回的数量（apiReturned），而不是过滤后的数量（processed）
-    // 因为过滤后 crypto 市场可能只有个位数，会导致永远重置 offset=0，永远循环第一页
-    // 注意：使用 effectiveLimit 而不是 batchSize 来判断，
-    // 因为 gamma-client 会将 limit clamp 到 POLYMARKET_GAMMA_LIMIT
-    let nextOffset = 0
-    let usedCursor = false
-
-    if (nextCursorValue) {
-      // 有 cursor，进入 cursor 模式，offset 重置为 0
-      nextOffset = 0
-      usedCursor = true
-    } else if (cursor.usedCursor) {
-      // 上一轮使用了 cursor，但这一轮没有 nextCursor，说明 cursor 模式结束
-      // 必须重置 offset=0 重新开始 offset 模式，否则会跳过前面的数据
-      nextOffset = 0
-      usedCursor = false
-      this.logger.log(`Cursor mode ended, resetting offset to 0 for next cycle`)
-    } else if (apiReturned >= this.effectiveLimit) {
-      // 在 offset 模式下，API 返回了满批数据，继续下一页
-      nextOffset = (cursor.offset ?? 0) + apiReturned
-      usedCursor = false
-    } else {
-      // 在 offset 模式下，API 返回数据不满，说明到达末尾，重置为 0 开始新一轮
-      nextOffset = 0
-      usedCursor = false
-      this.logger.log(
-        `Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`,
-      )
-    }
-
-    const newCursor: PolymarketMarketsCursor = {
-      nextCursor: nextCursorValue,
-      offset: nextOffset,
-      usedCursor,
+      const next = this.computeNextCursor(loopCursor, response.nextCursor ?? null, response.markets.length)
+      loopCursor = {
+        ...next.cursor,
+        filterSignature,
+      }
+      if (next.reachedEnd) break
     }
 
     return {
       fetchedCount: processed,
-      newCursor: JSON.stringify(newCursor),
+      newCursor: JSON.stringify(loopCursor),
       meta: {
         markets: processed,
         skipped,
-        total: response.markets.length,
-        nextCursor: response.nextCursor ?? null,
-        offset: nextOffset,
+        total,
+        pages: scannedPages,
+        nextCursor: loopCursor.nextCursor ?? null,
+        offset: loopCursor.offset ?? 0,
         category,
         tags,
       },
+    }
+  }
+
+  private computeNextCursor(
+    currentCursor: PolymarketMarketsCursor,
+    nextCursorValue: string | null,
+    apiReturned: number,
+  ): { cursor: PolymarketMarketsCursor; reachedEnd: boolean } {
+    if (nextCursorValue) {
+      return {
+        cursor: {
+          nextCursor: nextCursorValue,
+          offset: 0,
+          usedCursor: true,
+        },
+        reachedEnd: false,
+      }
+    }
+
+    if (currentCursor.usedCursor) {
+      this.logger.log(`Cursor mode ended, resetting offset to 0 for next cycle`)
+      return {
+        cursor: {
+          nextCursor: null,
+          offset: 0,
+          usedCursor: false,
+        },
+        reachedEnd: true,
+      }
+    }
+
+    if (apiReturned >= this.effectiveLimit) {
+      return {
+        cursor: {
+          nextCursor: null,
+          offset: (currentCursor.offset ?? 0) + apiReturned,
+          usedCursor: false,
+        },
+        reachedEnd: false,
+      }
+    }
+
+    this.logger.log(
+      `Reached end of markets (apiReturned=${apiReturned} < effectiveLimit=${this.effectiveLimit}), will restart from offset 0 on next run`,
+    )
+    return {
+      cursor: {
+        nextCursor: null,
+        offset: 0,
+        usedCursor: false,
+      },
+      reachedEnd: true,
     }
   }
 
@@ -546,6 +591,40 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     }
   }
 
+  private buildFilterSignature(input: {
+    category: string | null
+    tags: string[] | null
+    onlyActive: boolean
+  }): string {
+    const normalizedTags = (input.tags ?? [])
+      .map(tag => tag.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+    return JSON.stringify({
+      category: input.category ?? null,
+      tags: normalizedTags,
+      onlyActive: input.onlyActive,
+    })
+  }
+
+  private normalizeCursorForCurrentFilter(
+    cursor: PolymarketMarketsCursor,
+    filterSignature: string,
+  ): PolymarketMarketsCursor {
+    if (cursor.filterSignature === filterSignature) return cursor
+
+    const hadProgress =
+      (cursor.offset != null && cursor.offset > 0) || Boolean(cursor.nextCursor) || cursor.usedCursor
+    if (hadProgress) {
+      this.logger.log(
+        `Filter changed (or cursor from legacy version), resetting cursor to first page`,
+      )
+    }
+    return {
+      filterSignature,
+    }
+  }
+
   private resolveCategory(meta: PolymarketTaskMeta | null): string | null {
     const fromMeta = meta?.category
     // 如果 meta.category 显式设置为空字符串，返回 null（不过滤 category）
@@ -581,6 +660,30 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
     if (!tags.length) return null
     // 去重
     return Array.from(new Set(tags))
+  }
+
+  private isLikelyCategoryMatchWhenCategoryMissing(
+    market: PolymarketGammaMarket,
+    event: PolymarketGammaEvent | undefined,
+    category: string,
+  ): boolean {
+    // 当前仅为 crypto 提供兜底判定；其他分类在 category 缺失时默认不放行
+    if (category !== 'crypto') return false
+
+    const signals = [
+      market.question,
+      market.title,
+      market.slug,
+      ...(market.tags ?? []),
+      event?.title,
+      event?.slug,
+      ...(event?.tags ?? []),
+    ]
+
+    return signals.some(signal => {
+      if (!signal || typeof signal !== 'string') return false
+      return this.cryptoSignalRegex.test(signal.toLowerCase())
+    })
   }
 
   private toDate(value?: string | number | Date | null): Date | null {
