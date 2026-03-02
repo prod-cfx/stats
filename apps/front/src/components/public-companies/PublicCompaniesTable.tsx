@@ -11,6 +11,8 @@ import { useAsync } from '@/hooks/use-async'
 import { fetchCryptoStockQuotesLatest } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
 import { formatNumber } from '@/lib/formatters'
+import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
+import { mergeQuotesBySymbol } from './merge-quotes'
 
 interface CompanyData {
   asset: string
@@ -197,16 +199,25 @@ export const PublicCompaniesTable = () => {
     loading,
     error,
     execute: reload,
-  } = useAsync<CryptoStockQuoteLatest[]>(async () => fetchCryptoStockQuotesLatest(), {
-    onSuccess: () => {
-      setIsAuthError(false)
+  } = useAsync<CryptoStockQuoteLatest[]>(
+    async () => {
+      const [holdingsQuotes, priceQuotes] = await Promise.all([
+        fetchCryptoStockQuotesLatest({ source: 'BBX_SCRAPER' }),
+        fetchCryptoStockQuotesLatest({ source: 'BBX' }),
+      ])
+      return mergeQuotesBySymbol(holdingsQuotes, priceQuotes)
     },
-    onError: err => {
-      if (err instanceof AuthenticationError) {
-        setIsAuthError(true)
-      }
+    {
+      onSuccess: () => {
+        setIsAuthError(false)
+      },
+      onError: err => {
+        if (err instanceof AuthenticationError) {
+          setIsAuthError(true)
+        }
+      },
     },
-  })
+  )
 
   // Debounce search
   useEffect(() => {
@@ -251,11 +262,8 @@ export const PublicCompaniesTable = () => {
 
       const marketCap = formatCompact(q.marketCap ?? null)
 
-      const pctRaw =
-        q.priceChangePercent != null ? Number.parseFloat(q.priceChangePercent) : Number.NaN
-      const pctString = Number.isFinite(pctRaw)
-        ? `${pctRaw >= 0 ? '+' : ''}${pctRaw.toFixed(2)}%`
-        : '-'
+      const pctString = formatSignedPercentChange(q.priceChangePercent, q.priceChange, q.price)
+      const oneDayChangeString = formatSignedAbsoluteChange(q.priceChange)
 
       return {
         asset,
@@ -270,7 +278,7 @@ export const PublicCompaniesTable = () => {
         holdingsAmount: q.holdingsAmount ?? '-',
         sharePrice,
         change24h: pctString,
-        change1d: pctString,
+        change1d: oneDayChangeString,
         // 暂无真实 7 日涨跌幅数据，这里保留为占位符，后端补充后再改为真实字段映射
         change7d: '-',
         infoParagraphs: q.infoParagraphs,
