@@ -450,8 +450,10 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
             symbols: successQuotes.map(q => q.symbol),
             fetchTime: newCursor.lastFetchTime,
             totalCount,
-            successCount: qualitySuccessCount,
-            failCount: qualityFailCount,
+            qualitySuccessCount,
+            qualityFailCount,
+            writableCount: writableQuotes.length,
+            businessFilteredCount: writableFilterFailures.length,
           },
         }
       }
@@ -510,8 +512,8 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
           symbols: successQuotes.map(q => q.symbol),
           fetchTime: newCursor.lastFetchTime,
           totalCount,
-          successCount: qualitySuccessCount,
-          failCount: qualityFailCount,
+          qualitySuccessCount,
+          qualityFailCount,
           writableCount: writableQuotes.length,
           businessFilteredCount: writableFilterFailures.length,
         },
