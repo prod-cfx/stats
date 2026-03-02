@@ -82,8 +82,45 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
   }
 
   async run(ctx: DataPullJobContext<PolymarketTaskMeta>): Promise<JobRunResult> {
-    const parsedCursor = this.parseCursor(ctx.cursor)
+    const runSetup = this.setupRunContext(ctx)
+    let loopCursor = runSetup.cursor
+    let stats = {
+      processed: 0,
+      skipped: 0,
+      total: 0,
+      scannedPages: 0,
+    }
 
+    // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
+    // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
+    for (let page = 0; page < this.maxPagesPerRun; page += 1) {
+      const pageResult = await this.fetchAndFilterPage(loopCursor, runSetup.filters)
+      stats = {
+        processed: stats.processed + pageResult.processed,
+        skipped: stats.skipped + pageResult.skipped,
+        total: stats.total + pageResult.total,
+        scannedPages: stats.scannedPages + 1,
+      }
+
+      const cursorProgress = this.advanceCursor(
+        loopCursor,
+        pageResult.nextCursorValue,
+        pageResult.apiReturned,
+        runSetup.filterSignature,
+      )
+      loopCursor = cursorProgress.cursor
+      if (cursorProgress.reachedEnd) break
+    }
+
+    return this.buildRunResult(loopCursor, runSetup.filters, stats)
+  }
+
+  private setupRunContext(ctx: DataPullJobContext<PolymarketTaskMeta>): {
+    filters: { category: string | null; tags: string[] | null; onlyActive: boolean }
+    filterSignature: string
+    cursor: PolymarketMarketsCursor
+  } {
+    const parsedCursor = this.parseCursor(ctx.cursor)
     const category = this.resolveCategory(ctx.meta)
     const tags = this.resolveTags(ctx.meta)
     const onlyActive = ctx.meta?.onlyActive ?? false
@@ -93,85 +130,127 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       onlyActive,
     })
     const cursor = this.normalizeCursorForCurrentFilter(parsedCursor, filterSignature)
+    return {
+      filters: { category, tags, onlyActive },
+      filterSignature,
+      cursor,
+    }
+  }
 
-    let processed = 0
+  private async fetchAndFilterPage(
+    cursor: PolymarketMarketsCursor,
+    filters: { category: string | null; tags: string[] | null; onlyActive: boolean },
+  ): Promise<{
+    processed: number
+    skipped: number
+    total: number
+    nextCursorValue: string | null
+    apiReturned: number
+  }> {
+    const response = await this.gammaClient.listMarkets({
+      limit: this.batchSize,
+      cursor: cursor.nextCursor ?? null,
+      offset: cursor.offset ?? 0,
+      updatedSince: null, // API 不支持，保持 null
+      category: filters.category ?? null,
+      tags: filters.tags ?? undefined,
+      // 当 onlyActive=true 时，仅获取未关闭的市场，跳过海量历史数据
+      closed: filters.onlyActive ? false : undefined,
+    })
+
+    const filtered = this.filterMarkets(response.markets, filters.category)
+    const processedStats = await this.processFilteredMarkets(filtered.marketsToProcess)
+    return {
+      processed: processedStats.processed,
+      skipped: filtered.skipped + processedStats.skipped,
+      total: response.markets.length,
+      nextCursorValue: response.nextCursor ?? null,
+      apiReturned: response.markets.length,
+    }
+  }
+
+  private filterMarkets(
+    markets: PolymarketGammaMarket[],
+    category: string | null,
+  ): { marketsToProcess: PolymarketGammaMarket[]; skipped: number } {
+    const marketsToProcess: PolymarketGammaMarket[] = []
     let skipped = 0
-    let total = 0
-    let scannedPages = 0
-    let loopCursor: PolymarketMarketsCursor = cursor
-
-    // 注意：Polymarket API 的 updated_since 参数实际不工作，无法做增量同步
-    // 因此始终使用 offset 分页，持续轮询所有市场以获取状态更新
-    for (let page = 0; page < this.maxPagesPerRun; page += 1) {
-      const response = await this.gammaClient.listMarkets({
-        limit: this.batchSize,
-        cursor: loopCursor.nextCursor ?? null,
-        offset: loopCursor.offset ?? 0,
-        updatedSince: null, // API 不支持，保持 null
-        category: category ?? null,
-        tags: tags ?? undefined,
-        // 当 onlyActive=true 时，仅获取未关闭的市场，跳过海量历史数据
-        closed: onlyActive ? false : undefined,
-      })
-
-      scannedPages += 1
-      total += response.markets.length
-
-      // 先过滤出需要处理的 markets（本地 category 过滤）
-      const marketsToProcess: PolymarketGammaMarket[] = []
-      for (const market of response.markets) {
-        const event = market.event ?? market.events?.[0]
-        const rawCategory = market.category ?? event?.category ?? null
-        const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
-        // 上游返回 category=null 时，做一次保守判定：
-        // 仅放行“明显属于目标分类”的市场，避免混入无关数据。
-        if (category && normalizedCategory && normalizedCategory !== category) {
-          skipped += 1
-          continue
-        }
-        if (
-          category &&
-          !normalizedCategory &&
-          !this.isLikelyCategoryMatchWhenCategoryMissing(market, event, category)
-        ) {
-          skipped += 1
-          continue
-        }
-        marketsToProcess.push(market)
+    for (const market of markets) {
+      const event = market.event ?? market.events?.[0]
+      const rawCategory = market.category ?? event?.category ?? null
+      const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
+      // 上游返回 category=null 时，做一次保守判定：
+      // 仅放行“明显属于目标分类”的市场，避免混入无关数据。
+      if (category && normalizedCategory && normalizedCategory !== category) {
+        skipped += 1
+        continue
       }
-
-      // 批量翻译：收集所有需要翻译的文本，一次性发送减少 API 调用次数
-      const translationMap = await this.batchTranslateMarkets(marketsToProcess)
-
-      for (const market of marketsToProcess) {
-        const result = await this.processMarket(market, translationMap)
-        if (result.skipped) {
-          skipped += 1
-        } else {
-          processed += 1
-        }
+      if (
+        category &&
+        !normalizedCategory &&
+        !this.isLikelyCategoryMatchWhenCategoryMissing(market, event, category)
+      ) {
+        skipped += 1
+        continue
       }
-
-      const next = this.computeNextCursor(loopCursor, response.nextCursor ?? null, response.markets.length)
-      loopCursor = {
-        ...next.cursor,
-        filterSignature,
-      }
-      if (next.reachedEnd) break
+      marketsToProcess.push(market)
     }
 
+    return { marketsToProcess, skipped }
+  }
+
+  private async processFilteredMarkets(
+    marketsToProcess: PolymarketGammaMarket[],
+  ): Promise<{ processed: number; skipped: number }> {
+    let processed = 0
+    let skipped = 0
+    // 批量翻译：收集所有需要翻译的文本，一次性发送减少 API 调用次数
+    const translationMap = await this.batchTranslateMarkets(marketsToProcess)
+
+    for (const market of marketsToProcess) {
+      const result = await this.processMarket(market, translationMap)
+      if (result.skipped) {
+        skipped += 1
+      } else {
+        processed += 1
+      }
+    }
+    return { processed, skipped }
+  }
+
+  private advanceCursor(
+    currentCursor: PolymarketMarketsCursor,
+    nextCursorValue: string | null,
+    apiReturned: number,
+    filterSignature: string,
+  ): { cursor: PolymarketMarketsCursor; reachedEnd: boolean } {
+    const next = this.computeNextCursor(currentCursor, nextCursorValue, apiReturned)
     return {
-      fetchedCount: processed,
+      cursor: {
+        ...next.cursor,
+        filterSignature,
+      },
+      reachedEnd: next.reachedEnd,
+    }
+  }
+
+  private buildRunResult(
+    loopCursor: PolymarketMarketsCursor,
+    filters: { category: string | null; tags: string[] | null; onlyActive: boolean },
+    stats: { processed: number; skipped: number; total: number; scannedPages: number },
+  ): JobRunResult {
+    return {
+      fetchedCount: stats.processed,
       newCursor: JSON.stringify(loopCursor),
       meta: {
-        markets: processed,
-        skipped,
-        total,
-        pages: scannedPages,
+        markets: stats.processed,
+        skipped: stats.skipped,
+        total: stats.total,
+        pages: stats.scannedPages,
         nextCursor: loopCursor.nextCursor ?? null,
         offset: loopCursor.offset ?? 0,
-        category,
-        tags,
+        category: filters.category,
+        tags: filters.tags,
       },
     }
   }
