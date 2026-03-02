@@ -1479,6 +1479,7 @@ export interface FetchPredictionMarketsParams {
   onlyActive?: boolean
   limit?: number
   page?: number
+  locale?: string
 }
 
 export async function fetchPredictionMarkets(
@@ -1494,6 +1495,7 @@ export async function fetchPredictionMarkets(
         queries: {
           ...(params.category && { category: params.category }),
           ...(params.onlyActive !== undefined && { onlyActive: params.onlyActive }),
+          ...(params.locale && { locale: params.locale }),
           page,
           limit,
         },

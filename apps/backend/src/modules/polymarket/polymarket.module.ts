@@ -11,5 +11,3 @@ import { PolymarketService } from './polymarket.service'
   providers: [PolymarketRepository, PolymarketService],
 })
 export class PolymarketModule {}
-
-
