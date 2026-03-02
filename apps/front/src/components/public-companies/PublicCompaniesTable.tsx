@@ -11,8 +11,8 @@ import { useAsync } from '@/hooks/use-async'
 import { fetchCryptoStockQuotesLatest } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
 import { formatNumber } from '@/lib/formatters'
+import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
-import { mergeQuotesBySymbol } from './merge-quotes'
 
 interface CompanyData {
   asset: string
@@ -200,13 +200,7 @@ export const PublicCompaniesTable = () => {
     error,
     execute: reload,
   } = useAsync<CryptoStockQuoteLatest[]>(
-    async () => {
-      const [holdingsQuotes, priceQuotes] = await Promise.all([
-        fetchCryptoStockQuotesLatest({ source: 'BBX_SCRAPER' }),
-        fetchCryptoStockQuotesLatest({ source: 'BBX' }),
-      ])
-      return mergeQuotesBySymbol(holdingsQuotes, priceQuotes)
-    },
+    async () => fetchPublicCompanyQuotes(fetchCryptoStockQuotesLatest),
     {
       onSuccess: () => {
         setIsAuthError(false)
