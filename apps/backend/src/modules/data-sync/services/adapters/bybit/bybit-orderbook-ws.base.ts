@@ -322,15 +322,11 @@ export abstract class BybitOrderbookWsAdapterBase implements OrderbookWsAdapter 
 
     if (event.data.u <= state.lastUpdateId) return
 
-    const expected = state.lastUpdateId + 1
     if (typeof event.data.pu === 'number') {
       if (event.data.pu !== state.lastUpdateId) {
         await this.resync(symbol, state, `pu mismatch: last=${state.lastUpdateId}, pu=${event.data.pu}, u=${event.data.u}`)
         return
       }
-    } else if (event.data.u !== expected) {
-      await this.resync(symbol, state, `sequence gap without pu: last=${state.lastUpdateId}, expected=${expected}, u=${event.data.u}`)
-      return
     }
 
     this.applyLevelsToMap(state.bids, event.data.b ?? [])
@@ -687,4 +683,3 @@ class BybitWsConnection {
     } catch {}
   }
 }
-
