@@ -106,7 +106,10 @@ export class PolymarketMarketsJob implements DataPullJob<PolymarketTaskMeta> {
       const event = market.event ?? market.events?.[0]
       const rawCategory = market.category ?? event?.category ?? null
       const normalizedCategory = rawCategory ? rawCategory.toLowerCase().trim() : null
-      if (category && normalizedCategory !== category) {
+      // Gamma 近期大量返回 category=null；此时不能做严格本地过滤，
+      // 否则会把 meta.category=crypto 的任务全部跳过。
+      // 仅在上游明确返回了 category 且不匹配时才跳过。
+      if (category && normalizedCategory && normalizedCategory !== category) {
         skipped += 1
         continue
       }
