@@ -399,7 +399,8 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       }
 
       const totalCount = quotes.length
-      // 过滤掉 holdingValue 为 null 或 ≤0 的记录，前置到 successRate 计算，确保指标真实反映可写入数据
+      // 业务硬规则：仅写入 holdingValue > 0 的记录。
+      // 注意：该规则不参与 successRate 门禁，避免数据源部分标的无持仓时整批被跳过。
       const writableFilterFailures: BbxEnrichmentFailure[] = []
       const writableQuotes: BbxScrapedQuote[] = []
       for (const quote of successQuotes) {
@@ -420,9 +421,10 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
           `BBX write filter: ${successQuotes.length} -> ${writableQuotes.length} (removed ${successQuotes.length - writableQuotes.length} with null/zero holdingValue)`,
         )
       }
-      const successCount = writableQuotes.length
-      const failCount = failures.length
-      const successRate = totalCount > 0 ? successCount / totalCount : 0
+      // successRate 只衡量抓取/解析质量（price + marketCap），不包含业务写入过滤。
+      const qualitySuccessCount = successQuotes.length
+      const qualityFailCount = totalCount - qualitySuccessCount
+      const successRate = totalCount > 0 ? qualitySuccessCount / totalCount : 0
       const failureListSample = failures.slice(0, 20)
       const failureSummary = JSON.stringify(failureListSample)
       const reasonSummary = JSON.stringify(Object.fromEntries(reasonCounts.entries()))
@@ -430,12 +432,12 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
 
       this.logger.log(`Extracted ${quotes.length} quotes from BBX list API`)
       this.logger.log(
-        `BBX validation: successRate=${(successRate * 100).toFixed(2)}%, total=${totalCount}, success=${successCount}, fail=${failCount}, reasons=${reasonSummary}, missingPriceChange=${missingPriceChangeSymbols.length}, missingPriceChangeSample=${missingPriceChangeSample}, sampleFailures=${failureSummary}`,
+        `BBX validation: successRate=${(successRate * 100).toFixed(2)}%, total=${totalCount}, qualitySuccess=${qualitySuccessCount}, qualityFail=${qualityFailCount}, writable=${writableQuotes.length}, businessFiltered=${writableFilterFailures.length}, reasons=${reasonSummary}, missingPriceChange=${missingPriceChangeSymbols.length}, missingPriceChangeSample=${missingPriceChangeSample}, sampleFailures=${failureSummary}`,
       )
 
       if (successRate < 0.95) {
         this.logger.warn(
-          `BBX write skipped: successRate=${(successRate * 100).toFixed(2)}% < 95%, total=${totalCount}, success=${successCount}, fail=${failCount}`,
+          `BBX write skipped: successRate=${(successRate * 100).toFixed(2)}% < 95%, total=${totalCount}, qualitySuccess=${qualitySuccessCount}, qualityFail=${qualityFailCount}, writable=${writableQuotes.length}`,
         )
         const newCursor: BbxScraperJobCursor = {
           lastFetchTime: new Date().toISOString(),
@@ -448,8 +450,10 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
             symbols: successQuotes.map(q => q.symbol),
             fetchTime: newCursor.lastFetchTime,
             totalCount,
-            successCount,
-            failCount,
+            qualitySuccessCount,
+            qualityFailCount,
+            writableCount: writableQuotes.length,
+            businessFilteredCount: writableFilterFailures.length,
           },
         }
       }
@@ -494,7 +498,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
       this.logger.log(
         `BBX write completed: fetchedCount=${count}, successRate=${(successRate * 100).toFixed(
           2,
-        )}%, failures=${failCount}, sample=${failureSummary}`,
+        )}%, qualityFailures=${qualityFailCount}, businessFiltered=${writableFilterFailures.length}, sample=${failureSummary}`,
       )
 
       const newCursor: BbxScraperJobCursor = {
@@ -508,8 +512,10 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
           symbols: successQuotes.map(q => q.symbol),
           fetchTime: newCursor.lastFetchTime,
           totalCount,
-          successCount,
-          failCount,
+          qualitySuccessCount,
+          qualityFailCount,
+          writableCount: writableQuotes.length,
+          businessFilteredCount: writableFilterFailures.length,
         },
       }
     } finally {
