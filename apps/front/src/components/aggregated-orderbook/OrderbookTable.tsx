@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { ExchangeLogo } from '@/components/ui/ExchangeLogo'
+import { sampleLevelsForDisplay } from './orderbook-display'
 
 interface OrderItem {
   price: string
@@ -25,6 +26,9 @@ interface OrderbookTableProps {
   displayMode?: 'both' | 'bids' | 'asks'
   variant?: 'default' | 'compact'
 }
+
+const BOTH_SIDE_ROWS = 13
+const BOTH_SIDE_WINDOW = BOTH_SIDE_ROWS * 5
 
 const OrderRow = ({
   item,
@@ -175,12 +179,18 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       }
     }
 
-    // Both mode: Fixed 13 asks and 13 bids
+    // Both mode: fixed rows, but sample within a near-mid window
+    // so dense books (e.g. ETH perp) still cover a wider visible range.
+    const asksNearMid = asksSorted.slice(-BOTH_SIDE_WINDOW)
+    const bidsNearMid = bidsSorted.slice(0, BOTH_SIDE_WINDOW)
+    const sampledAsks = sampleLevelsForDisplay(asksNearMid, BOTH_SIDE_ROWS)
+    const sampledBids = sampleLevelsForDisplay(bidsNearMid, BOTH_SIDE_ROWS)
+
     return {
       rows: [
-        ...asksSorted.slice(-13).map(x => ({ ...x, _type: 'ask' as const })),
+        ...sampledAsks.map(x => ({ ...x, _type: 'ask' as const })),
         { _type: 'gap', price: '', amount: '', total: '', exchanges: [], depthPercent: 0 },
-        ...bidsSorted.slice(0, 13).map(x => ({ ...x, _type: 'bid' as const })),
+        ...sampledBids.map(x => ({ ...x, _type: 'bid' as const })),
       ],
       canScroll: false,
     }
