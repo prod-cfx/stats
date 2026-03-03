@@ -28,20 +28,20 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
       <main className="flex flex-1 items-center justify-center px-4 py-8 md:px-8">
-        <div className="w-full max-w-[520px] space-y-6 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 md:p-8">
+        <div className="w-full max-w-[520px] space-y-6 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 shadow-xl md:p-8">
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
               {t('nav.login')}
             </h1>
             <p className="text-sm text-[color:var(--cf-muted)]">
-              你可以自由选择邮箱或 Telegram 登录
+              {t('auth.loginDesc')}
             </p>
           </div>
 
           <EmailOtpForm onSuccess={() => router.replace(`/${lng}/account`)} />
 
           <div className="relative py-1 text-center text-xs text-[color:var(--cf-muted)]">
-            <span className="px-2">- 或者 -</span>
+            <span className="px-2">{t('auth.or')}</span>
           </div>
 
           <TelegramLoginButtons lng={lng} />

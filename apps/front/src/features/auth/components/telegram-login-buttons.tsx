@@ -2,6 +2,7 @@
 
 import { Send } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { API_BASE_URL } from '@/lib/api-client'
 import { useAuth } from '@/hooks/use-auth'
 import { canShowTelegramDesktopEntry, isTelegramWebAppEnv } from '../telegram-env'
@@ -16,6 +17,7 @@ interface TelegramConfigResponse {
 }
 
 export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginButtonsProps) {
+  const { t } = useTranslation()
   const [showDesktopEntry, setShowDesktopEntry] = useState(false)
   const [showWebAppEntry, setShowWebAppEntry] = useState(false)
   const [botName, setBotName] = useState<string | null>(null)
@@ -40,14 +42,14 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
         const name = parsed.botName?.trim()
         setBotName(name || null)
         if (!name) {
-          setStatusMessage('未配置 Telegram 登录机器人（请检查 TELEGRAM_BOT_TOKEN）')
+          setStatusMessage(t('auth.configFailed'))
         } else {
           setStatusMessage(null)
         }
       })
       .catch(() => {
         setBotName(null)
-        setStatusMessage('获取 Telegram 配置失败，请稍后重试')
+        setStatusMessage(t('auth.configFailed'))
       })
   }, [])
 
@@ -70,11 +72,15 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex h-11 items-center justify-center rounded-full border border-cyan-400 bg-cyan-500/5 px-4 text-sm font-semibold text-cyan-200">
+        <div
+          className={`flex h-11 items-center justify-center rounded-full border border-violet-500/30 px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] dark:text-white ${
+            botName ? 'dark:bg-gray-200' : 'bg-transparent'
+          }`}
+        >
           {botName ? (
             <div ref={scriptHostRef} className="telegram-widget-host [&_iframe]:!h-8 [&_iframe]:!w-full" />
           ) : (
-            <span>Telegram 网页版（未配置）</span>
+            <span>{t('auth.telegramWeb')}</span>
           )}
         </div>
 
@@ -94,22 +100,22 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
                   window.location.href = result.callbackUrl
                 }, 350)
               } catch (error) {
-                setStatusMessage(error instanceof Error ? error.message : '无法拉起 Telegram 桌面应用')
+                setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
               } finally {
                 setDesktopBusy(false)
               }
             }}
-            className="flex h-11 items-center justify-center gap-2 rounded-full border border-cyan-400 px-4 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/10 disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white"
           >
-            <Send className="h-4 w-4" />
-            Telegram 桌面应用
+            <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+            {t('auth.telegramDesktop')}
           </button>
         )}
       </div>
 
       {showWebAppEntry && (
         <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--cf-text-strong)]">
-          请在 Telegram 内使用机器人完成授权后返回
+          {t('auth.telegramWebAppDesc')}
         </div>
       )}
 
@@ -121,7 +127,7 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
 
       {botName && (
         <p className="text-center text-xs text-[color:var(--cf-muted)]">
-          若网页版出现 Bot domain invalid，请在 BotFather 使用 /setdomain 配置当前站点域名
+          {t('auth.botDomainInvalid')}
         </p>
       )}
     </div>
