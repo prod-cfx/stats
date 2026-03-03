@@ -130,6 +130,17 @@ export async function createTelegramDesktopIntentRequest(payload: {
   return postJson('/auth/telegram/desktop/intent', payload)
 }
 
+export async function getTelegramWebAuthorizeUrlRequest(payload: {
+  intent: 'login' | 'bind'
+  lng: 'zh' | 'en'
+}): Promise<{ authorizeUrl: string }> {
+  const query = new URLSearchParams({
+    intent: payload.intent,
+    lng: payload.lng,
+  })
+  return getJson(`/auth/telegram/web/authorize-url?${query.toString()}`)
+}
+
 export async function getTelegramDesktopIntentStatusRequest(intentId: string): Promise<{
   status: TelegramDesktopIntentStatus
 }> {
