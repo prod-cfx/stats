@@ -5,6 +5,7 @@ import type { AppLocale } from '@/lib/i18n'
 import React, { useMemo } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { ToastProvider } from '@/components/ui/toast'
+import { AuthProvider } from '@/features/auth/auth-provider'
 import { createAppI18n } from '@/lib/i18n'
 import { I18nSync } from './I18nSync'
 import { ThemeProvider } from './ThemeProvider'
@@ -21,10 +22,12 @@ export function AppProviders({ children, lng = 'zh' }: AppProvidersProps) {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
-        <ToastProvider>
-          <I18nSync />
-          {children}
-        </ToastProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <I18nSync />
+            {children}
+          </ToastProvider>
+        </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>
   )

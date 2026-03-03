@@ -1,16 +1,12 @@
 'use client'
 
-// TODO: Implement auth context when user system is enabled
-// import { use } from 'react'
-// import { AuthContext } from '@/components/providers/auth-context'
+import { useContext } from 'react'
+import { AuthContext } from '@/features/auth/auth-provider'
 
 export function useAuth() {
-  // Stub implementation - return null until auth context is implemented
-  return null
-
-  // const context = use(AuthContext)
-  // if (context === undefined) {
-  //   throw new Error('useAuth must be used within an AuthProvider')
-  // }
-  // return context
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
 }

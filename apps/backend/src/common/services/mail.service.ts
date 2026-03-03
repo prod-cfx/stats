@@ -5,6 +5,7 @@ import { EmailFailedException } from '@/common/exceptions/email-failed.exception
 
 const MOCK_ENVIRONMENTS = new Set(['development', 'staging', 'test', 'e2e'])
 const MAX_TEST_EMAIL_RECORDS = 50
+const PLACEHOLDER_API_KEYS = new Set(['dummy', '__set_in_env.local__'])
 
 export interface SendMailOptions {
   to: string
@@ -35,6 +36,7 @@ export class MailService {
   private readonly emailStats = { sent: 0, failed: 0 }
   private readonly testEmailStorage: StoredEmailRecord[] = []
   private readonly resend?: Resend
+  private readonly providerConfigured: boolean
 
   constructor(
     // Nest 注入需要运行时引用 ConfigService
@@ -46,19 +48,22 @@ export class MailService {
     this.fromEmail = this.configService.get<string>('EMAIL_FROM', 'noreply@example.com')
     this.fromName = this.configService.get<string>('EMAIL_FROM_NAME', 'AI Platform')
 
-    const apiKey = this.configService.get<string>('RESEND_API_KEY')?.trim()
-    if (!apiKey && !this.isMockEnvironment) {
+    const rawApiKey = this.configService.get<string>('RESEND_API_KEY')?.trim() || ''
+    const apiKey = rawApiKey.length > 0 ? rawApiKey : undefined
+    const isPlaceholderApiKey = apiKey ? PLACEHOLDER_API_KEYS.has(apiKey.toLowerCase()) : true
+    if ((!apiKey || isPlaceholderApiKey) && !this.isMockEnvironment) {
       throw new Error('RESEND_API_KEY is required outside mock environments')
     }
 
-    if (!apiKey) {
-      this.logger.warn('RESEND_API_KEY 未配置，邮件将以模拟模式发送')
+    if (!apiKey || isPlaceholderApiKey) {
+      this.logger.warn('RESEND_API_KEY 未配置或为占位符，非测试环境将拒绝真实邮件发送')
     }
 
-    const shouldMock = this.isMockEnvironment || !apiKey
+    const shouldMock = this.storeTestEmails
     this.useMockEmail = shouldMock
+    this.providerConfigured = Boolean(apiKey && !isPlaceholderApiKey)
 
-    if (!shouldMock && apiKey) {
+    if (!shouldMock && this.providerConfigured && apiKey) {
       if (!MailService.resendClient) {
         MailService.resendClient = new Resend(apiKey)
       }
@@ -70,6 +75,8 @@ export class MailService {
     if (!options.html && !options.text) {
       throw new EmailFailedException({ recipient: options.to, reason: 'Missing email content' })
     }
+
+    this.assertProviderConfigured(options.to)
 
     if (this.shouldMockSend()) {
       this.logMockEmail(options)
@@ -181,6 +188,15 @@ export class MailService {
     return this.useMockEmail || !this.resend
   }
 
+  private assertProviderConfigured(recipient: string): void {
+    if (this.providerConfigured) return
+    if (this.storeTestEmails) return
+    throw new EmailFailedException({
+      recipient,
+      reason: 'RESEND_API_KEY/EMAIL_FROM 未正确配置，无法发送真实邮件验证码',
+    })
+  }
+
   private logMockEmail(options: SendMailOptions) {
     this.logger.log(
       `[${this.appEnv}] (mock) Email to ${this.maskEmail(options.to)} | Subject: ${options.subject}`,
@@ -247,4 +263,3 @@ ${this.fromName} Team`
     return `${local.slice(0, 2)}***@${domain}`
   }
 }
-
