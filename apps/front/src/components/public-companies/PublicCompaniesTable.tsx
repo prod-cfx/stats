@@ -13,6 +13,7 @@ import { AuthenticationError } from '@/lib/errors'
 import { formatNumber } from '@/lib/formatters'
 import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
+import { isPublicCompaniesColumnVisible } from './column-visibility'
 
 interface CompanyData {
   asset: string
@@ -193,6 +194,8 @@ export const PublicCompaniesTable = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null)
   const [isAuthError, setIsAuthError] = useState(false)
+  const showChange1d = isPublicCompaniesColumnVisible('change1d')
+  const showChange7d = isPublicCompaniesColumnVisible('change7d')
 
   const {
     data: quotes,
@@ -582,24 +585,28 @@ export const PublicCompaniesTable = () => {
                       {t('publicCompanies.columns.change24h')} {renderSortIcon('change24h')}
                     </button>
                   </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('change1d')}
-                      className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
-                    >
-                      {t('publicCompanies.columns.change1d')} {renderSortIcon('change1d')}
-                    </button>
-                  </th>
-                  <th className="px-2 py-4 font-bold md:px-4 md:py-6">
-                    <button
-                      type="button"
-                      onClick={() => handleSort('change7d')}
-                      className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
-                    >
-                      {t('publicCompanies.columns.change7d')} {renderSortIcon('change7d')}
-                    </button>
-                  </th>
+                  {showChange1d && (
+                    <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('change1d')}
+                        className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
+                      >
+                        {t('publicCompanies.columns.change1d')} {renderSortIcon('change1d')}
+                      </button>
+                    </th>
+                  )}
+                  {showChange7d && (
+                    <th className="px-2 py-4 font-bold md:px-4 md:py-6">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('change7d')}
+                        className="group flex w-full items-center justify-center gap-1 text-center transition-colors hover:text-[color:var(--cf-text-strong)]"
+                      >
+                        {t('publicCompanies.columns.change7d')} {renderSortIcon('change7d')}
+                      </button>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--cf-border)] text-[11px] md:text-sm">
@@ -681,12 +688,16 @@ export const PublicCompaniesTable = () => {
                     <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
                       {renderValueWithColor(row.change24h)}
                     </td>
-                    <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
-                      {renderValueWithColor(row.change1d)}
-                    </td>
-                    <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
-                      {renderValueWithColor(row.change7d)}
-                    </td>
+                    {showChange1d && (
+                      <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
+                        {renderValueWithColor(row.change1d)}
+                      </td>
+                    )}
+                    {showChange7d && (
+                      <td className="px-2 py-3 text-center font-mono md:px-4 md:py-4">
+                        {renderValueWithColor(row.change7d)}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
