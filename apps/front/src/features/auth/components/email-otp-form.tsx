@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
 
 interface EmailOtpFormProps {
@@ -8,6 +9,7 @@ interface EmailOtpFormProps {
 }
 
 export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
+  const { t } = useTranslation()
   const { sendEmailCode, loginWithEmailCode } = useAuth()
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -36,7 +38,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
       await sendEmailCode(email)
       startCooldown()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '发送验证码失败')
+      setError(e instanceof Error ? e.message : t('auth.sendFailed'))
     }
   }
 
@@ -49,7 +51,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
       await loginWithEmailCode(email, code)
       onSuccess()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '登录失败')
+      setError(e instanceof Error ? e.message : t('auth.loginFailed'))
     } finally {
       setSubmitting(false)
     }
@@ -58,26 +60,26 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
   return (
     <form onSubmit={handleLogin} className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm text-[color:var(--cf-muted)]">邮箱</label>
+        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.email')}</label>
         <input
           type="email"
           value={email}
           onChange={event => setEmail(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-cyan-400"
-          placeholder="name@example.com"
+          className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+          placeholder={t('auth.emailPlaceholder')}
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm text-[color:var(--cf-muted)]">验证码</label>
+        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.code')}</label>
         <div className="flex gap-2">
           <input
             type="text"
             value={code}
             onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="h-11 flex-1 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-cyan-400"
-            placeholder="6位验证码"
+            className="h-11 flex-1 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+            placeholder={t('auth.codePlaceholder')}
             required
           />
           <button
@@ -86,7 +88,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
             onClick={handleSendCode}
             className="h-11 min-w-[110px] rounded-xl border border-[color:var(--cf-border)] px-3 text-sm font-medium text-[color:var(--cf-text-strong)] disabled:opacity-50"
           >
-            {cooldown > 0 ? `${cooldown}s` : '发送验证码'}
+            {cooldown > 0 ? `${cooldown}s` : t('auth.sendCode')}
           </button>
         </div>
       </div>
@@ -100,9 +102,9 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
       <button
         type="submit"
         disabled={submitting || code.length !== 6}
-        className="h-11 w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-sm font-semibold text-white disabled:opacity-50"
+        className="h-11 w-full rounded-xl bg-gradient-to-r from-primary to-secondary text-sm font-semibold text-white disabled:opacity-50"
       >
-        {submitting ? '登录中...' : '邮箱验证码登录'}
+        {submitting ? t('auth.loggingIn') : t('auth.loginWithEmail')}
       </button>
     </form>
   )
