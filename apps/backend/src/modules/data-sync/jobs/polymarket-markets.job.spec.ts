@@ -1,7 +1,7 @@
 import type { PolymarketGammaMarket } from '@/clients/polymarket/types'
 import { PolymarketMarketsJob } from './polymarket-markets.job'
 
-describe('PolymarketMarketsJob', () => {
+describe('polymarket markets job', () => {
   const createJob = () => {
     const gammaClient = {
       listMarkets: jest.fn(),

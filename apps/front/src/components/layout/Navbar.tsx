@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
+import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/components/ui/toast'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
@@ -40,8 +41,8 @@ export const Navbar = () => {
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
-  // Phase 1: 用户系统先隐藏
-  const ENABLE_USER_SYSTEM = false
+  const { session, logout } = useAuth()
+  const ENABLE_USER_SYSTEM = true
 
   // 从 pathname 提取当前语言
   const currentLng = useMemo(() => {
@@ -447,14 +448,31 @@ export const Navbar = () => {
         <ThemeToggle />
 
         {/* User System - Phase 1 Hidden */}
-        {ENABLE_USER_SYSTEM && (
-          <button
-            type="button"
-            className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex"
-          >
-            {t('nav.login')}
-          </button>
-        )}
+        {ENABLE_USER_SYSTEM &&
+          (session ? (
+            <div className="hidden items-center gap-2 md:flex">
+              <Link
+                href={withLng('/account')}
+                className="rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                {session.email || session.userId}
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                {t('account.logout', { defaultValue: '登出' })}
+              </button>
+            </div>
+          ) : (
+            <Link
+              href={withLng('/auth/login')}
+              className="from-primary to-secondary shadow-primary/20 hidden rounded-lg bg-gradient-to-r px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 md:flex"
+            >
+              {t('nav.login')}
+            </Link>
+          ))}
       </div>
 
       {/* Mobile Menu Overlay */}
@@ -527,12 +545,35 @@ export const Navbar = () => {
 
             {ENABLE_USER_SYSTEM && (
               <div className="mt-6">
-                <button
-                  type="button"
-                  className="from-primary to-secondary shadow-primary/20 w-full rounded-xl bg-gradient-to-r py-3 text-lg font-bold text-white shadow-lg"
-                >
-                  {t('nav.login')}
-                </button>
+                {session ? (
+                  <div className="space-y-2">
+                    <Link
+                      href={withLng('/account')}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
+                    >
+                      {session.email || session.userId}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logout()
+                        setMobileMenuOpen(false)
+                      }}
+                      className="w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-base font-semibold"
+                    >
+                      {t('account.logout', { defaultValue: '登出' })}
+                    </button>
+                  </div>
+                ) : (
+                  <Link
+                    href={withLng('/auth/login')}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="from-primary to-secondary shadow-primary/20 block w-full rounded-xl bg-gradient-to-r py-3 text-center text-lg font-bold text-white shadow-lg"
+                  >
+                    {t('nav.login')}
+                  </Link>
+                )}
               </div>
             )}
           </div>
