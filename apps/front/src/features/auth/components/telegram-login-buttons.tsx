@@ -59,7 +59,7 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
     }
   }, [])
 
-  const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
+  const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-black transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
 
   return (
