@@ -6,9 +6,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
-import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/components/ui/toast'
 import { useWhaleNotificationUnreadCount } from '@/features/whale-notification/hooks/useWhaleNotificationUnreadCount'
+import { useAuth } from '@/hooks/use-auth'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -39,11 +39,11 @@ export const Navbar = () => {
   const [extraBases, _setExtraBases] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
+  const { session, logout } = useAuth()
   const { unreadCount } = useWhaleNotificationUnreadCount()
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
-  const { session, logout } = useAuth()
   const ENABLE_USER_SYSTEM = true
 
   // 从 pathname 提取当前语言
@@ -464,7 +464,6 @@ export const Navbar = () => {
           )}
         </button>
 
-        {/* User System - Phase 1 Hidden */}
         {ENABLE_USER_SYSTEM &&
           (session ? (
             <div className="hidden items-center gap-2 md:flex">

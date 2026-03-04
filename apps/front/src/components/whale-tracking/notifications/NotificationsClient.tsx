@@ -8,12 +8,13 @@ import { createWhaleNotificationRule } from '@/features/whale-notification/api/w
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { useWhaleNotificationRules } from '@/features/whale-notification/hooks/useWhaleNotificationRules'
-import { MonitorSection } from './MonitorSection'
+import { AddressMonitorSection } from './AddressMonitorSection'
+import { RealtimeWhaleMonitorSection } from './RealtimeWhaleMonitorSection'
 
 export function NotificationsClient() {
   const { t } = useTranslation()
   const [openModal, setOpenModal] = useState(false)
-  const [modalMode, setModalMode] = useState<WhaleNotificationRuleType>('SYMBOL')
+  const [modalMode, setModalMode] = useState<WhaleNotificationRuleType>('ADDRESS')
 
   const {
     rules,
@@ -46,31 +47,23 @@ export function NotificationsClient() {
         <p className="text-sm text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.subtitle')}</p>
       </div>
 
-      <MonitorSection
-        title={t('whaleTracking.notifications.sections.address')}
+      <AddressMonitorSection
         rules={addressRules}
         loading={loading}
-        emptyText={t('whaleTracking.notifications.emptyAddress')}
         onCreate={() => openCreateModal('ADDRESS')}
-        onToggle={(id, isActive) => {
-          void updateRule(id, { isActive })
-        }}
+        onUpdate={(id, input) => updateRule(id, input)}
         onDelete={(id) => {
           void deleteRule(id)
         }}
       />
 
-      <MonitorSection
-        title={t('whaleTracking.notifications.sections.realtime')}
+      <RealtimeWhaleMonitorSection
         rules={symbolRules}
-        loading={loading}
-        emptyText={t('whaleTracking.notifications.emptyRealtime')}
-        onCreate={() => openCreateModal('SYMBOL')}
-        onToggle={(id, isActive) => {
-          void updateRule(id, { isActive })
-        }}
-        onDelete={(id) => {
-          void deleteRule(id)
+        onCreateRule={async (input) => {
+          if (!ensureMonitorAuth(t)) return { created: false }
+          await createWhaleNotificationRule(input)
+          await refresh()
+          return { created: true }
         }}
       />
 

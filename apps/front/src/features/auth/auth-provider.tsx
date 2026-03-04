@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import type { AuthContextValue, AuthSession } from './types'
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { clearStoredSession, loadStoredSession, persistSession } from '@/lib/auth-storage'
 import {
   bindEmailRequest,
   bindTelegramByDesktopIntentRequest,
@@ -14,7 +15,6 @@ import {
   sendEmailCodeRequest,
   verifyEmailCodeRequest,
 } from './api'
-import { clearStoredSession, loadStoredSession, persistSession } from '@/lib/auth-storage'
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 

@@ -1,5 +1,5 @@
-import type { AuthResponseDto } from '@/types/auth'
 import type { AuthLoginMethod, AuthSession } from './types'
+import type { AuthResponseDto } from '@/types/auth'
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
 import { buildSession } from '@/lib/auth-storage'
 
