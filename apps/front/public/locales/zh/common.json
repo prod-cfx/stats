@@ -25,7 +25,7 @@
     "discover": "发现",
     "realtime_whales": "实时巨鲸",
     "whale_holdings": "鲸鱼持仓",
-    "whale_notifications": "通知管理",
+    "whale_notifications": "监控",
     "search": "搜索",
     "docs": "文档",
     "login": "登录",
@@ -543,8 +543,8 @@
       }
     },
     "notifications": {
-      "title": "巨鲸通知管理",
-      "subtitle": "管理地址关注与实时币种大额开单推送",
+      "title": "巨鲸监控",
+      "subtitle": "管理监控地址与实时巨鲸推送",
       "tabs": {
         "rules": "规则管理",
         "inbox": "通知中心"
@@ -570,7 +570,12 @@
         "markRead": "标记已读",
         "markAllRead": "全部已读",
         "newSymbolRule": "关注币种推送",
-        "followAddress": "一键关注"
+        "followAddress": "一键监控",
+        "createMonitor": "创建监控"
+      },
+      "sections": {
+        "address": "监控地址",
+        "realtime": "实时巨鲸"
       },
       "channels": {
         "web": "网页通知",
@@ -593,12 +598,16 @@
         "invalidAddress": "地址无效，请返回详情页重试"
       },
       "toast": {
-        "ruleCreated": "通知规则创建成功",
+        "ruleCreated": "监控规则创建成功",
         "webPermissionDeniedTitle": "浏览器通知权限未开启",
-        "webPermissionDeniedDesc": "规则仍会通过站内消息发送，可稍后在浏览器设置中开启权限"
+        "webPermissionDeniedDesc": "规则仍会通过站内消息发送，可稍后在浏览器设置中开启权限",
+        "authRequiredTitle": "请先登录",
+        "authRequiredDesc": "请先登录后使用监控功能"
       },
       "emptyRules": "暂无通知规则",
-      "emptyInbox": "暂无通知消息"
+      "emptyInbox": "暂无通知消息",
+      "emptyAddress": "暂无监控地址",
+      "emptyRealtime": "暂无实时巨鲸监控"
     },
     "holdings": {
       "title": "鲸鱼持仓",

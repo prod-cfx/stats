@@ -25,7 +25,7 @@
     "discover": "Discover",
     "realtime_whales": "Realtime Whales",
     "whale_holdings": "Whale Holdings",
-    "whale_notifications": "Notifications",
+    "whale_notifications": "Monitoring",
     "search": "Search",
     "docs": "Doc",
     "login": "Login",
@@ -533,8 +533,8 @@
       }
     },
     "notifications": {
-      "title": "Whale Notification Management",
-      "subtitle": "Manage address follow rules and realtime symbol large-order alerts",
+      "title": "Whale Monitoring",
+      "subtitle": "Manage monitored addresses and realtime whale alerts",
       "tabs": {
         "rules": "Rules",
         "inbox": "Inbox"
@@ -560,7 +560,12 @@
         "markRead": "Mark Read",
         "markAllRead": "Mark All Read",
         "newSymbolRule": "Follow Symbol Alerts",
-        "followAddress": "Follow Address"
+        "followAddress": "Monitor Address",
+        "createMonitor": "Create Monitor"
+      },
+      "sections": {
+        "address": "Monitored Addresses",
+        "realtime": "Realtime Whales"
       },
       "channels": {
         "web": "Web",
@@ -583,12 +588,16 @@
         "invalidAddress": "Invalid address, please retry from profile page"
       },
       "toast": {
-        "ruleCreated": "Notification rule created",
+        "ruleCreated": "Monitor rule created",
         "webPermissionDeniedTitle": "Browser notification permission is disabled",
-        "webPermissionDeniedDesc": "Rule is still saved and in-site messages continue to work"
+        "webPermissionDeniedDesc": "Rule is still saved and in-site messages continue to work",
+        "authRequiredTitle": "Please log in",
+        "authRequiredDesc": "Please log in to use monitoring features"
       },
       "emptyRules": "No notification rules yet",
-      "emptyInbox": "No notification messages yet"
+      "emptyInbox": "No notification messages yet",
+      "emptyAddress": "No monitored addresses yet",
+      "emptyRealtime": "No realtime whale monitors yet"
     },
     "holdings": {
       "title": "Whale Holdings",

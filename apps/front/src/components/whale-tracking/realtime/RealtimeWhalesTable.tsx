@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { PageTitle } from '@/components/ui/Typography';
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api';
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal';
+import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard';
 import { fetchWhaleTradesRealtime } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
@@ -282,7 +283,10 @@ export const RealtimeWhalesTable = () => {
         <div className="flex items-center gap-4 w-full md:w-auto">
           <button
             type="button"
-            onClick={() => setIsCreateSymbolRuleOpen(true)}
+            onClick={() => {
+              if (!ensureMonitorAuth(t)) return;
+              setIsCreateSymbolRuleOpen(true);
+            }}
             className="flex-1 md:flex-none rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/15"
           >
             {t('whaleTracking.notifications.actions.newSymbolRule')}
@@ -423,6 +427,7 @@ export const RealtimeWhalesTable = () => {
         mode="SYMBOL"
         onClose={() => setIsCreateSymbolRuleOpen(false)}
         onCreate={async (payload) => {
+          if (!ensureMonitorAuth(t)) return;
           await createWhaleNotificationRule(payload);
         }}
       />

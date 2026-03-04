@@ -452,7 +452,7 @@ export const Navbar = () => {
         <button
           type="button"
           aria-label="whale-notification-bell"
-          onClick={() => router.push(withLng('/whale-tracking/notifications?tab=inbox'))}
+          onClick={() => router.push(withLng('/whale-tracking/notifications'))}
           className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
         >
           <Bell className="h-5 w-5" />

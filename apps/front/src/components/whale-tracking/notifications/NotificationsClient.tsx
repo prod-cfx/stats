@@ -1,109 +1,87 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import type { WhaleNotificationRuleType } from '@/features/whale-notification/types'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageTitle } from '@/components/ui/Typography'
-import {
-  createWhaleNotificationRule,
-} from '@/features/whale-notification/api/whale-notification-api'
+import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
-import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
+import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { useWhaleNotificationRules } from '@/features/whale-notification/hooks/useWhaleNotificationRules'
-import { InboxTab } from './InboxTab'
-import { RulesTab } from './RulesTab'
-
-type TabKey = 'rules' | 'inbox'
+import { MonitorSection } from './MonitorSection'
 
 export function NotificationsClient() {
   const { t } = useTranslation()
-  const searchParams = useSearchParams()
-  const initialTab = searchParams?.get('tab') === 'inbox' ? 'inbox' : 'rules'
-  const [tab, setTab] = useState<TabKey>(initialTab)
   const [openModal, setOpenModal] = useState(false)
+  const [modalMode, setModalMode] = useState<WhaleNotificationRuleType>('SYMBOL')
 
   const {
     rules,
-    loading: rulesLoading,
+    loading,
     updateRule,
     deleteRule,
-    refresh: refreshRules,
+    refresh,
   } = useWhaleNotificationRules()
 
-  const {
-    items,
-    loading: inboxLoading,
-    markRead,
-    markAllRead,
-    refresh: refreshInbox,
-  } = useWhaleNotificationInbox()
+  const addressRules = useMemo(
+    () => rules.filter(rule => rule.type === 'ADDRESS'),
+    [rules],
+  )
 
-  const unreadCount = useMemo(() => items.filter(item => !item.read).length, [items])
+  const symbolRules = useMemo(
+    () => rules.filter(rule => rule.type === 'SYMBOL'),
+    [rules],
+  )
+
+  const openCreateModal = (mode: WhaleNotificationRuleType) => {
+    if (!ensureMonitorAuth(t)) return
+    setModalMode(mode)
+    setOpenModal(true)
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <PageTitle className="text-xl md:text-2xl">{t('whaleTracking.notifications.title')}</PageTitle>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpenModal(true)}
-          className="from-primary to-secondary rounded-full bg-gradient-to-r px-5 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
-        >
-          {t('whaleTracking.notifications.actions.newSymbolRule')}
-        </button>
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <PageTitle className="text-xl md:text-2xl">{t('whaleTracking.notifications.title')}</PageTitle>
+        <p className="text-sm text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.subtitle')}</p>
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-1">
-        <button
-          type="button"
-          onClick={() => setTab('rules')}
-          className={`rounded-lg px-3 py-2 text-sm transition-colors ${tab === 'rules' ? 'bg-primary/15 text-primary' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
-        >
-          {t('whaleTracking.notifications.tabs.rules')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('inbox')}
-          className={`rounded-lg px-3 py-2 text-sm transition-colors ${tab === 'inbox' ? 'bg-primary/15 text-primary' : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'}`}
-        >
-          {t('whaleTracking.notifications.tabs.inbox')} ({unreadCount})
-        </button>
-      </div>
+      <MonitorSection
+        title={t('whaleTracking.notifications.sections.address')}
+        rules={addressRules}
+        loading={loading}
+        emptyText={t('whaleTracking.notifications.emptyAddress')}
+        onCreate={() => openCreateModal('ADDRESS')}
+        onToggle={(id, isActive) => {
+          void updateRule(id, { isActive })
+        }}
+        onDelete={(id) => {
+          void deleteRule(id)
+        }}
+      />
 
-      {tab === 'rules' ? (
-        <RulesTab
-          rules={rules}
-          loading={rulesLoading}
-          onToggle={(id, isActive) => {
-            void updateRule(id, { isActive })
-          }}
-          onDelete={(id) => {
-            void deleteRule(id)
-          }}
-        />
-      ) : (
-        <InboxTab
-          items={items}
-          loading={inboxLoading}
-          onRead={(id) => {
-            void markRead(id)
-          }}
-          onReadAll={() => {
-            void markAllRead()
-          }}
-        />
-      )}
+      <MonitorSection
+        title={t('whaleTracking.notifications.sections.realtime')}
+        rules={symbolRules}
+        loading={loading}
+        emptyText={t('whaleTracking.notifications.emptyRealtime')}
+        onCreate={() => openCreateModal('SYMBOL')}
+        onToggle={(id, isActive) => {
+          void updateRule(id, { isActive })
+        }}
+        onDelete={(id) => {
+          void deleteRule(id)
+        }}
+      />
 
       <CreateMonitorModal
         isOpen={openModal}
-        mode="SYMBOL"
+        mode={modalMode}
         onClose={() => setOpenModal(false)}
         onCreate={async (payload) => {
+          if (!ensureMonitorAuth(t)) return
           await createWhaleNotificationRule(payload)
-          await Promise.all([refreshRules(), refreshInbox()])
+          await refresh()
         }}
       />
     </div>
