@@ -22,7 +22,6 @@ import { createWhaleNotificationRule } from '@/features/whale-notification/api/w
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchTraderDiscoverTags, fetchTraderFullData } from '@/lib/api'
-import { toast } from '@/lib/toast'
 
 export function ProfileClient({ address }: { address: string }) {
   const { t } = useTranslation()
@@ -146,9 +145,9 @@ export function ProfileClient({ address }: { address: string }) {
         presetAddress={address}
         onClose={() => setIsCreateAddressRuleOpen(false)}
         onCreate={async (payload) => {
-          if (!ensureMonitorAuth(t)) return
+          if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(payload)
-          toast.success({ title: t('whaleTracking.notifications.toast.ruleCreated') })
+          return { created: true }
         }}
       />
       <Footer />

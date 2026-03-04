@@ -427,8 +427,9 @@ export const RealtimeWhalesTable = () => {
         mode="SYMBOL"
         onClose={() => setIsCreateSymbolRuleOpen(false)}
         onCreate={async (payload) => {
-          if (!ensureMonitorAuth(t)) return;
+          if (!ensureMonitorAuth(t)) return { created: false };
           await createWhaleNotificationRule(payload);
+          return { created: true };
         }}
       />
     </div>

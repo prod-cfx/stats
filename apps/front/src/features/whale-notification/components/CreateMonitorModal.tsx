@@ -18,7 +18,7 @@ interface CreateMonitorModalProps {
   mode: WhaleNotificationRuleType
   presetAddress?: string
   onClose: () => void
-  onCreate: (input: CreateWhaleNotificationRuleInput) => Promise<void>
+  onCreate: (input: CreateWhaleNotificationRuleInput) => Promise<{ created: boolean }>
 }
 
 const DEFAULT_THRESHOLD = 500000
@@ -87,7 +87,7 @@ export function CreateMonitorModal({
         }
       }
 
-      await onCreate({
+      const result = await onCreate({
         type: mode,
         address: mode === 'ADDRESS' ? presetAddress : undefined,
         symbol: mode === 'SYMBOL' ? symbol : undefined,
@@ -95,8 +95,10 @@ export function CreateMonitorModal({
         note: mode === 'ADDRESS' ? addressNote : undefined,
         channels,
       })
-      toast.success({ title: t('whaleTracking.notifications.toast.ruleCreated') })
-      handleClose()
+      if (result.created) {
+        toast.success({ title: t('whaleTracking.notifications.toast.ruleCreated') })
+        handleClose()
+      }
     } catch (err) {
       toast.error({
         title: t('common.error'),

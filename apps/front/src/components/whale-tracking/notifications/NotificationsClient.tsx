@@ -79,9 +79,10 @@ export function NotificationsClient() {
         mode={modalMode}
         onClose={() => setOpenModal(false)}
         onCreate={async (payload) => {
-          if (!ensureMonitorAuth(t)) return
+          if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(payload)
           await refresh()
+          return { created: true }
         }}
       />
     </div>
