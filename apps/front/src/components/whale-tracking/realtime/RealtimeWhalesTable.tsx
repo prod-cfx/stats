@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageTitle } from '@/components/ui/Typography';
+import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api';
+import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal';
 import { fetchWhaleTradesRealtime } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
@@ -39,6 +41,7 @@ export const RealtimeWhalesTable = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateSymbolRuleOpen, setIsCreateSymbolRuleOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -279,6 +282,13 @@ export const RealtimeWhalesTable = () => {
         <div className="flex items-center gap-4 w-full md:w-auto">
           <button
             type="button"
+            onClick={() => setIsCreateSymbolRuleOpen(true)}
+            className="flex-1 md:flex-none rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/15"
+          >
+            {t('whaleTracking.notifications.actions.newSymbolRule')}
+          </button>
+          <button
+            type="button"
             onClick={() => setIsPaused(!isPaused)}
             className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 border rounded-full text-xs md:text-label font-bold transition-all active:scale-95 ${isPaused
                 ? 'bg-[#21262d] border-[#30363d] text-[#8b949e]'
@@ -406,6 +416,15 @@ export const RealtimeWhalesTable = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         address={selectedAddress || ''}
+      />
+
+      <CreateMonitorModal
+        isOpen={isCreateSymbolRuleOpen}
+        mode="SYMBOL"
+        onClose={() => setIsCreateSymbolRuleOpen(false)}
+        onCreate={async (payload) => {
+          await createWhaleNotificationRule(payload);
+        }}
       />
     </div>
   );

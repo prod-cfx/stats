@@ -15,9 +15,16 @@ interface ProfileHeaderProps {
     descriptionKey?: 'bullWarGod' | 'swingKing' | 'smartTrader' | 'treasuryKeeper' | 'twitterKol'
   }[]
   onRefresh?: () => void
+  onFollow?: () => void
 }
 
-export const ProfileHeader = ({ address, discoverTag, aiTags, onRefresh }: ProfileHeaderProps) => {
+export const ProfileHeader = ({
+  address,
+  discoverTag,
+  aiTags,
+  onRefresh,
+  onFollow,
+}: ProfileHeaderProps) => {
   const { t } = useTranslation()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
@@ -113,6 +120,15 @@ export const ProfileHeader = ({ address, discoverTag, aiTags, onRefresh }: Profi
       </div>
 
       <div className="flex items-center gap-3">
+        {onFollow && (
+          <button
+            type="button"
+            onClick={onFollow}
+            className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/15 active:scale-95"
+          >
+            {t('whaleTracking.notifications.actions.followAddress')}
+          </button>
+        )}
         <button
           type="button"
           onClick={handleRefresh}

@@ -1,12 +1,13 @@
 'use client'
 
-import { ChevronDown, Menu, Search, X } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
 import { useToast } from '@/components/ui/toast'
+import { useWhaleNotificationUnreadCount } from '@/features/whale-notification/hooks/useWhaleNotificationUnreadCount'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -37,6 +38,7 @@ export const Navbar = () => {
   const [extraBases, _setExtraBases] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
+  const { unreadCount } = useWhaleNotificationUnreadCount()
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
@@ -83,6 +85,7 @@ export const Navbar = () => {
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
     { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
     { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
+    { name: t('nav.whale_notifications'), href: withLng('/whale-tracking/notifications') },
   ]
 
   // 临时隐藏看板，需要时再恢复
@@ -445,6 +448,20 @@ export const Navbar = () => {
 
         <LanguageSwitcher />
         <ThemeToggle />
+
+        <button
+          type="button"
+          aria-label="whale-notification-bell"
+          onClick={() => router.push(withLng('/whale-tracking/notifications?tab=inbox'))}
+          className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
 
         {/* User System - Phase 1 Hidden */}
         {ENABLE_USER_SYSTEM && (

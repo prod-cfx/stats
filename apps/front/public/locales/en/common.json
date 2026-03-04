@@ -25,6 +25,7 @@
     "discover": "Discover",
     "realtime_whales": "Realtime Whales",
     "whale_holdings": "Whale Holdings",
+    "whale_notifications": "Notifications",
     "search": "Search",
     "docs": "Doc",
     "login": "Login",
@@ -530,6 +531,64 @@
         "time": "Time",
         "actions": "Actions"
       }
+    },
+    "notifications": {
+      "title": "Whale Notification Management",
+      "subtitle": "Manage address follow rules and realtime symbol large-order alerts",
+      "tabs": {
+        "rules": "Rules",
+        "inbox": "Inbox"
+      },
+      "table": {
+        "type": "Type",
+        "target": "Target",
+        "threshold": "Threshold",
+        "channels": "Channels",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "ruleType": {
+        "address": "Address Rule",
+        "symbol": "Realtime Symbol Rule"
+      },
+      "status": {
+        "active": "Active",
+        "paused": "Paused"
+      },
+      "actions": {
+        "delete": "Delete",
+        "markRead": "Mark Read",
+        "markAllRead": "Mark All Read",
+        "newSymbolRule": "Follow Symbol Alerts",
+        "followAddress": "Follow Address"
+      },
+      "channels": {
+        "web": "Web",
+        "email": "Email",
+        "telegram": "Telegram"
+      },
+      "modal": {
+        "createAddressTitle": "Create Address Monitor",
+        "createSymbolTitle": "Create Symbol Monitor",
+        "create": "Create",
+        "address": "Address",
+        "addressNote": "Address Note",
+        "optional": "Optional",
+        "symbol": "Symbol",
+        "thresholdUsd": "Threshold (USD)",
+        "channels": "Channels"
+      },
+      "errors": {
+        "invalidThreshold": "Please enter a valid threshold amount",
+        "invalidAddress": "Invalid address, please retry from profile page"
+      },
+      "toast": {
+        "ruleCreated": "Notification rule created",
+        "webPermissionDeniedTitle": "Browser notification permission is disabled",
+        "webPermissionDeniedDesc": "Rule is still saved and in-site messages continue to work"
+      },
+      "emptyRules": "No notification rules yet",
+      "emptyInbox": "No notification messages yet"
     },
     "holdings": {
       "title": "Whale Holdings",
