@@ -1,333 +1,149 @@
-# Whale Notification Frontend Implementation Plan
+# Whale Monitoring Frontend Alignment Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build whale notification frontend support for two rule types (address, realtime symbol), channel selection, global unread bell, and whale notification center while preserving existing Coinflux UI style.
+**Goal:** Align existing whale-notification frontend to the new whale-monitoring product wording and behavior: monitor-only IA, login guard, and Hyperbot-like two-section monitoring page.
 
-**Architecture:** Implement a dedicated frontend feature module (`whale-notification`) and integrate it into existing whale pages (realtime/profile) plus navbar. Keep data layer isolated (`api` + `hooks`) and reuse current UI patterns (table/modal/toast). Use incremental delivery with TDD-style checks for each integration point.
+**Architecture:** Reuse the current `whale-notification` feature module but refactor page composition from tabbed rules/inbox into two monitor sections (`ADDRESS` and `SYMBOL`). Centralize login guard for all monitor-create actions. Keep route stable and UI tokens consistent with existing Coinflux components.
 
-**Tech Stack:** Next.js App Router, React, TypeScript, existing Coinflux UI components/styles, i18n JSON (`zh/en`), existing test stack (Jest/RTL where available).
+**Tech Stack:** Next.js App Router, React, TypeScript, existing Coinflux UI components, i18n JSON (`zh/en`), toast utility.
 
 ---
 
-### Task 1: Define frontend notification domain types and API wrappers
+### Task 1: Update wording to monitoring terminology
 
 **Files:**
-- Create: `apps/front/src/features/whale-notification/types.ts`
-- Create: `apps/front/src/features/whale-notification/api/whale-notification-api.ts`
-- Modify: `apps/front/src/lib/api.ts`
-- Test: `apps/front/src/features/whale-notification/api/whale-notification-api.test.ts`
-
-**Step 1: Write the failing test**
-
-```ts
-it('maps create address rule payload correctly', async () => {
-  // expect request body to include type/channel/default threshold
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm --filter front test -- whale-notification-api.test.ts`
-Expected: FAIL due to missing module/functions.
-
-**Step 3: Write minimal implementation**
-
-```ts
-export async function createWhaleNotificationRule(input: CreateRuleInput) {
-  return apiRequest('/whale-notifications/rules', { method: 'POST', body: JSON.stringify(input) })
-}
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- whale-notification-api.test.ts`
-Expected: PASS.
-
-**Step 5: Commit**
-
-```bash
-git add apps/front/src/features/whale-notification/types.ts apps/front/src/features/whale-notification/api/whale-notification-api.ts apps/front/src/lib/api.ts apps/front/src/features/whale-notification/api/whale-notification-api.test.ts
-git commit -m "feat(front): add whale notification api client and domain types"
-```
-
-### Task 2: Build reusable hooks for rules, inbox, and unread count
-
-**Files:**
-- Create: `apps/front/src/features/whale-notification/hooks/useWhaleNotificationRules.ts`
-- Create: `apps/front/src/features/whale-notification/hooks/useWhaleNotificationInbox.ts`
-- Create: `apps/front/src/features/whale-notification/hooks/useWhaleNotificationUnreadCount.ts`
-- Test: `apps/front/src/features/whale-notification/hooks/useWhaleNotificationUnreadCount.test.ts`
-
-**Step 1: Write the failing test**
-
-```ts
-it('polls unread count and updates value', async () => {
-  // mock api, advance timers, assert updated unread count
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm --filter front test -- useWhaleNotificationUnreadCount.test.ts`
-Expected: FAIL because hook not implemented.
-
-**Step 3: Write minimal implementation**
-
-```ts
-useEffect(() => {
-  const id = setInterval(fetchUnread, 30000)
-  return () => clearInterval(id)
-}, [fetchUnread])
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- useWhaleNotificationUnreadCount.test.ts`
-Expected: PASS.
-
-**Step 5: Commit**
-
-```bash
-git add apps/front/src/features/whale-notification/hooks/*
-git commit -m "feat(front): add whale notification data hooks"
-```
-
-### Task 3: Implement create monitor modal with ADDRESS/SYMBOL modes
-
-**Files:**
-- Create: `apps/front/src/features/whale-notification/components/CreateMonitorModal.tsx`
-- Create: `apps/front/src/features/whale-notification/components/ChannelToggles.tsx`
 - Modify: `apps/front/public/locales/zh/common.json`
 - Modify: `apps/front/public/locales/en/common.json`
-- Test: `apps/front/src/features/whale-notification/components/CreateMonitorModal.test.tsx`
 
-**Step 1: Write the failing test**
+**Step 1: Write failing assertion checklist**
+- Navbar whale submenu still shows `通知管理`.
+- Page title still shows `巨鲸通知管理`.
 
-```tsx
-it('renders address mode with preset address and default threshold 500000', () => {
-  // render modal with mode ADDRESS and assert fields/defaults
-})
-```
+**Step 2: Implement minimal wording updates**
+- Change submenu label to `监控` / `Monitoring`.
+- Change page title to `巨鲸监控` / `Whale Monitoring`.
+- Keep existing keys when possible to minimize impact.
 
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm --filter front test -- CreateMonitorModal.test.tsx`
-Expected: FAIL due to missing component.
-
-**Step 3: Write minimal implementation**
-
-```tsx
-<input value={threshold} onChange={...} defaultValue={500000} />
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- CreateMonitorModal.test.tsx`
-Expected: PASS.
-
-**Step 5: Commit**
-
+**Step 3: Validate JSON format**
+Run:
 ```bash
-git add apps/front/src/features/whale-notification/components/CreateMonitorModal.tsx apps/front/src/features/whale-notification/components/ChannelToggles.tsx apps/front/public/locales/zh/common.json apps/front/public/locales/en/common.json apps/front/src/features/whale-notification/components/CreateMonitorModal.test.tsx
-git commit -m "feat(front): add whale notification create monitor modal"
+node -e "JSON.parse(require('fs').readFileSync('apps/front/public/locales/zh/common.json','utf8')); JSON.parse(require('fs').readFileSync('apps/front/public/locales/en/common.json','utf8')); console.log('ok')"
+```
+Expected: `ok`.
+
+**Step 4: Commit**
+```bash
+git add apps/front/public/locales/zh/common.json apps/front/public/locales/en/common.json
+git commit -m "refactor(front): rename whale notification wording to monitoring"
 ```
 
-### Task 4: Integrate symbol-rule entry in realtime whales page
+### Task 2: Add centralized login guard for monitor creation
 
 **Files:**
+- Create: `apps/front/src/features/whale-notification/guards/monitor-auth-guard.ts`
+- Modify: `apps/front/src/features/whale-notification/components/CreateMonitorModal.tsx`
 - Modify: `apps/front/src/components/whale-tracking/realtime/RealtimeWhalesTable.tsx`
-- Test: `apps/front/src/components/whale-tracking/realtime/RealtimeWhalesTable.test.tsx`
-
-**Step 1: Write the failing test**
-
-```tsx
-it('opens symbol monitor modal from realtime page action', async () => {
-  // click button, expect modal visible in SYMBOL mode
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm --filter front test -- RealtimeWhalesTable.test.tsx`
-Expected: FAIL because action/modal not wired.
-
-**Step 3: Write minimal implementation**
-
-```tsx
-<button onClick={() => setOpenSymbolModal(true)}>关注币种推送</button>
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- RealtimeWhalesTable.test.tsx`
-Expected: PASS.
-
-**Step 5: Commit**
-
-```bash
-git add apps/front/src/components/whale-tracking/realtime/RealtimeWhalesTable.tsx apps/front/src/components/whale-tracking/realtime/RealtimeWhalesTable.test.tsx
-git commit -m "feat(front): add symbol notification entry on realtime whales page"
-```
-
-### Task 5: Integrate one-click follow entry in whale profile page
-
-**Files:**
 - Modify: `apps/front/src/app/[lng]/whale-tracking/profile/ProfileClient.tsx`
-- Create: `apps/front/src/components/whale-tracking/profile/FollowWhaleButton.tsx`
-- Test: `apps/front/src/app/[lng]/whale-tracking/profile/ProfileClient.test.tsx`
+- Modify: `apps/front/src/components/whale-tracking/notifications/NotificationsClient.tsx`
 
-**Step 1: Write the failing test**
+**Step 1: Write failing behavior checklist**
+- Unauthenticated user can still open/submit monitor creation flow.
 
-```tsx
-it('opens address monitor modal from profile follow button', async () => {
-  // render profile with address, click follow, expect ADDRESS mode modal
-})
-```
+**Step 2: Implement guard utility**
+- Add helper returning boolean based on token.
+- On failure, show toast only:
+  - zh: `请先登录后使用监控功能`
+  - en: `Please log in to use monitoring features`
 
-**Step 2: Run test to verify it fails**
+**Step 3: Wire guard into all create entries**
+- Profile `一键监控`.
+- Realtime `关注币种推送`.
+- Monitoring page `创建监控`.
 
-Run: `pnpm --filter front test -- ProfileClient.test.tsx`
-Expected: FAIL due to missing button flow.
-
-**Step 3: Write minimal implementation**
-
-```tsx
-<FollowWhaleButton address={address} onClick={openModal} />
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- ProfileClient.test.tsx`
-Expected: PASS.
+**Step 4: Verify behavior manually**
+- Clear token and click each entry, confirm toast only.
+- Restore token and confirm normal creation flow.
 
 **Step 5: Commit**
-
 ```bash
-git add apps/front/src/app/[lng]/whale-tracking/profile/ProfileClient.tsx apps/front/src/components/whale-tracking/profile/FollowWhaleButton.tsx apps/front/src/app/[lng]/whale-tracking/profile/ProfileClient.test.tsx
-git commit -m "feat(front): add profile one-click follow for whale notifications"
+git add apps/front/src/features/whale-notification/guards/monitor-auth-guard.ts apps/front/src/features/whale-notification/components/CreateMonitorModal.tsx apps/front/src/components/whale-tracking/realtime/RealtimeWhalesTable.tsx apps/front/src/app/[lng]/whale-tracking/profile/ProfileClient.tsx apps/front/src/components/whale-tracking/notifications/NotificationsClient.tsx
+git commit -m "feat(front): guard monitor creation when user is not authenticated"
 ```
 
-### Task 6: Build whale notification management page (Rules + Inbox tabs)
+### Task 3: Refactor monitoring page from tabs to two sections
 
 **Files:**
-- Create: `apps/front/src/app/[lng]/whale-tracking/notifications/page.tsx`
-- Create: `apps/front/src/components/whale-tracking/notifications/NotificationsClient.tsx`
-- Create: `apps/front/src/components/whale-tracking/notifications/RulesTab.tsx`
-- Create: `apps/front/src/components/whale-tracking/notifications/InboxTab.tsx`
-- Test: `apps/front/src/components/whale-tracking/notifications/NotificationsClient.test.tsx`
+- Modify: `apps/front/src/components/whale-tracking/notifications/NotificationsClient.tsx`
+- Modify: `apps/front/src/components/whale-tracking/notifications/RulesTab.tsx`
+- Modify: `apps/front/src/components/whale-tracking/notifications/InboxTab.tsx` (remove usage or deprecate)
+- Create: `apps/front/src/components/whale-tracking/notifications/AddressMonitorSection.tsx`
+- Create: `apps/front/src/components/whale-tracking/notifications/RealtimeWhaleMonitorSection.tsx`
 
-**Step 1: Write the failing test**
+**Step 1: Write failing behavior checklist**
+- Page still renders Rules/Inbox tabs.
 
-```tsx
-it('switches between rules and inbox tabs and loads corresponding content', async () => {
-  // assert tab switch behavior and data loading calls
-})
-```
+**Step 2: Implement two-section layout**
+- Render section A: `监控地址 (N)` filtered by `rule.type === 'ADDRESS'`.
+- Render section B: `实时巨鲸 (N)` filtered by `rule.type === 'SYMBOL'`.
+- Keep row actions: toggle, edit (if exists), delete.
 
-**Step 2: Run test to verify it fails**
+**Step 3: Align visuals with Hyperbot-like panel style using existing Coinflux tokens**
+- Dark card container.
+- Dense row list.
+- Right-side compact actions.
 
-Run: `pnpm --filter front test -- NotificationsClient.test.tsx`
-Expected: FAIL because page/components missing.
-
-**Step 3: Write minimal implementation**
-
-```tsx
-const [tab, setTab] = useState<'rules' | 'inbox'>('rules')
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- NotificationsClient.test.tsx`
-Expected: PASS.
+**Step 4: Remove inbox tab entry from monitoring page content**
+- Monitoring page shows only two sections.
 
 **Step 5: Commit**
-
 ```bash
-git add apps/front/src/app/[lng]/whale-tracking/notifications/page.tsx apps/front/src/components/whale-tracking/notifications/*
-git commit -m "feat(front): add whale notification management page"
+git add apps/front/src/components/whale-tracking/notifications/NotificationsClient.tsx apps/front/src/components/whale-tracking/notifications/AddressMonitorSection.tsx apps/front/src/components/whale-tracking/notifications/RealtimeWhaleMonitorSection.tsx apps/front/src/components/whale-tracking/notifications/RulesTab.tsx apps/front/src/components/whale-tracking/notifications/InboxTab.tsx
+git commit -m "refactor(front): reshape whale monitoring page into address and realtime sections"
 ```
 
-### Task 7: Add navbar bell unread badge and whale menu link
+### Task 4: Navbar and page metadata final alignment
 
 **Files:**
 - Modify: `apps/front/src/components/layout/Navbar.tsx`
-- Test: `apps/front/src/components/layout/Navbar.test.tsx`
+- Modify: `apps/front/src/app/[lng]/whale-tracking/notifications/page.tsx`
 
-**Step 1: Write the failing test**
+**Step 1: Verify menu label and navigation target**
+- Whale submenu shows `监控`.
+- Route remains `/{lng}/whale-tracking/notifications`.
 
-```tsx
-it('shows whale notification bell with unread badge and inbox navigation', async () => {
-  // assert badge rendering and click navigation
-})
-```
+**Step 2: Verify page title/subtitle**
+- `巨鲸监控` and updated subtitle text.
 
-**Step 2: Run test to verify it fails**
-
-Run: `pnpm --filter front test -- Navbar.test.tsx`
-Expected: FAIL since bell integration absent.
-
-**Step 3: Write minimal implementation**
-
-```tsx
-<button aria-label="whale-notification-bell" onClick={goInbox}>...</button>
-```
-
-**Step 4: Run test to verify it passes**
-
-Run: `pnpm --filter front test -- Navbar.test.tsx`
-Expected: PASS.
-
-**Step 5: Commit**
-
+**Step 3: Commit**
 ```bash
-git add apps/front/src/components/layout/Navbar.tsx apps/front/src/components/layout/Navbar.test.tsx
-git commit -m "feat(front): add whale notification bell and unread badge in navbar"
+git add apps/front/src/components/layout/Navbar.tsx apps/front/src/app/[lng]/whale-tracking/notifications/page.tsx
+git commit -m "chore(front): align whale monitoring navigation and page metadata"
 ```
 
-### Task 8: Final verification and regression checks
+### Task 5: Verification and regression checks
 
 **Files:**
-- Modify: `apps/front/public/locales/zh/common.json`
-- Modify: `apps/front/public/locales/en/common.json`
-- Modify: `docs/plans/2026-03-04-whale-notification-frontend-design.md` (if wording sync needed)
+- Modify if needed: `apps/front/public/locales/zh/common.json`
+- Modify if needed: `apps/front/public/locales/en/common.json`
 
-**Step 1: Run targeted tests**
-
+**Step 1: Lint touched files**
 Run:
 ```bash
-pnpm --filter front test -- whale-notification-api.test.ts
-pnpm --filter front test -- useWhaleNotificationUnreadCount.test.ts
-pnpm --filter front test -- CreateMonitorModal.test.tsx
-pnpm --filter front test -- RealtimeWhalesTable.test.tsx
-pnpm --filter front test -- ProfileClient.test.tsx
-pnpm --filter front test -- NotificationsClient.test.tsx
-pnpm --filter front test -- Navbar.test.tsx
+pnpm --filter @ai/front exec eslint src/features/whale-notification src/components/whale-tracking/notifications src/components/layout/Navbar.tsx src/components/whale-tracking/realtime/RealtimeWhalesTable.tsx src/app/[lng]/whale-tracking/profile/ProfileClient.tsx src/app/[lng]/whale-tracking/notifications/page.tsx --config ../../eslint.config.js
 ```
-Expected: PASS.
+Expected: no errors.
 
-**Step 2: Run lint**
+**Step 2: Manual smoke checks (logged-in + not-logged-in)**
+Run: `dx start front --dev` (or `next dev` fallback)
+Expected:
+- Menu text is monitoring wording.
+- Monitoring page contains only two blocks.
+- Unauthenticated create actions show toast only.
+- Authenticated create actions work.
 
-Run: `dx lint`
-Expected: PASS without new errors.
-
-**Step 3: Build front**
-
-Run: `dx build front --dev`
-Expected: SUCCESS.
-
-**Step 4: Manual smoke checks**
-
-Run: `dx start front --dev`
-Expected: Frontend runs and flows work in browser:
-- Profile follow modal
-- Realtime symbol modal
-- Rules list/inbox list
-- Navbar unread bell
-
-**Step 5: Commit**
-
+**Step 3: Commit**
 ```bash
 git add -A
-git commit -m "feat(front): complete whale notification UI flows and notification center"
+git commit -m "test(front): verify whale monitoring wording, layout, and auth guard behavior"
 ```

@@ -1,98 +1,75 @@
-# Whale Notification Frontend Design
+# Whale Monitoring Frontend Design
 
 ## Scope
 - Only frontend changes.
-- Keep Coinflux current UI style and interaction language.
+- Keep Coinflux existing visual language and interaction style.
 - No backend implementation changes in this phase.
 
 ## Goals
-- Support two message push types only:
-  1. Address rule: follow one whale address and push when that address opens large orders.
-  2. Realtime symbol rule: from realtime whales page, user selects symbol and minimum order amount to push.
-- Support channel selection per rule: Web / Email / Telegram.
-- Global bell with unread count, and whale notification center entry.
+- Rename whale notification experience to whale monitoring.
+- Enforce login guard for all monitoring-create actions (toast only, no redirect/modal).
+- Whale monitoring page content must only contain two sections:
+  1. 监控地址 (address monitor rules)
+  2. 实时巨鲸 (symbol + threshold monitor rules)
+
+## Naming and IA Changes
+- Whale submenu label: `通知管理` -> `监控`.
+- Monitoring page title: `巨鲸通知管理` -> `巨鲸监控`.
+- Route remains `/{lng}/whale-tracking/notifications` to avoid link breakage.
+- Inside page, remove Rules/Inbox tabs and use two stacked sections:
+  - `监控地址 (N)`
+  - `实时巨鲸 (N)`
 
 ## User Flows
-1. Address rule creation:
-- User enters whale address profile page from Discover / Realtime / Holdings.
-- Click "一键关注" on profile page.
-- Open create monitor modal (address preset).
-- Submit and create rule.
+1. Address monitor creation:
+- User enters whale profile page from Discover / Realtime / Holdings.
+- Click `一键监控`.
+- If not logged in: show toast and stop.
+- If logged in: open create monitor modal in ADDRESS mode and submit.
 
-2. Realtime symbol rule creation:
-- User is on `/[lng]/whale-tracking/realtime`.
-- Click "关注币种推送".
-- Select symbol(s) and minimum amount.
-- Submit and create rule.
+2. Realtime whale monitor creation:
+- User clicks `关注币种推送` on realtime whales page.
+- If not logged in: show toast and stop.
+- If logged in: open create monitor modal in SYMBOL mode and submit.
 
-3. Notification center:
-- User clicks global navbar bell.
-- Route to whale notification center tab.
-- View list, mark read, mark all read, inspect per-channel delivery status.
+3. Monitoring page create action:
+- User clicks `创建监控` on monitoring page.
+- If not logged in: show toast and stop.
+- If logged in: open create monitor modal.
 
-## Information Architecture
-- Add whale menu child route: `/[lng]/whale-tracking/notifications`.
-- Notification page tabs:
-  - Rules
-  - Inbox
-- Global navbar bell:
-  - Shows unread count
-  - Navigates to inbox tab
-
-## Rule Types (Frontend Contract)
+## Rule Types (Frontend)
 - `ADDRESS`
   - `address` (required)
-  - `defaultThresholdUsd` (required, default `500000`)
+  - `thresholdUsd` (required, default `500000`)
   - `note` (optional)
   - channels: web/email/telegram
 
 - `SYMBOL`
   - `symbol` (required)
-  - `minTradeValueUsd` (required, default `500000`)
+  - `thresholdUsd` (required, default `500000`)
   - channels: web/email/telegram
 
-## Channel Defaults
-- Web: default on.
-- Email: default on only if account is email-login.
-- Telegram: default off, user can turn on manually.
+## UI Structure (Hyperbot-like, Coinflux-compatible)
+- Top action bar: title + `创建监控` button.
+- Section A (监控地址): row-oriented list with address, threshold, channels, status, actions.
+- Section B (实时巨鲸): row-oriented list with symbol, threshold, channels, status, actions.
+- Keep Coinflux tokens and components (surface, border, spacing, rounded shape, typography).
 
-## UI Constraints (Must Match Existing Coinflux)
-- Reuse existing visual tokens: colors, border radius, shadows, spacing scale.
-- Reuse existing modal/table/button/toast styling patterns.
-- No new design language, no custom animation system.
-- Keep mobile breakpoints and responsive behavior aligned with existing whale pages.
+## Auth Guard Rule
+- Guard all monitor-create actions by token existence.
+- If no token:
+  - show toast (`请先登录后使用监控功能` / `Please log in to use monitoring features`)
+  - do not navigate
+  - do not open login modal
 
-## Component Plan
-- New module: `apps/front/src/features/whale-notification/`
-  - `api/`: rule/inbox/unread endpoints
-  - `hooks/`: data-fetch hooks
-  - `components/`: modal, rule list, inbox list, channel badges
-- Integrations:
-  - Realtime whales page: symbol rule entry
-  - Whale profile page: address rule entry
-  - Navbar: bell + unread badge + route
-
-## Data Flow
-- Create rule:
-  - submit form -> create API -> refresh rules list -> toast feedback.
-- Inbox:
-  - load list -> read single/batch -> refresh unread badge.
-- Unread badge:
-  - initial fetch + interval polling (simple first version).
-
-## Error Handling
-- Form-level validation for threshold/symbol/address.
-- Channel partial failure shown in message item status.
-- Browser notification permission is requested only when web channel is enabled.
-- If browser permission denied, keep in-site message path active.
-
-## Acceptance Mapping (Frontend)
-- Address profile can create address rule via one-click follow.
-- Realtime page can create symbol+amount rule.
-- Rules can pick channels.
-- Global bell shows unread count and links to inbox.
-- Inbox displays notification records and delivery status.
+## Acceptance Mapping
+- Whale submenu displays `监控`.
+- Monitoring page displays `巨鲸监控`.
+- Monitoring page contains only two blocks: `监控地址` and `实时巨鲸`.
+- Not-logged-in users cannot create monitor rules and only see toast.
+- Logged-in users can create ADDRESS and SYMBOL monitor rules normally.
 
 ## Non-Goals
-- Backend module implementation details.
-- New global notification platform beyond whale notifications.
+- Backend monitor dispatch logic refactor.
+- New login modal or auth flow redesign.
+- New global notification center beyond this monitoring page.
