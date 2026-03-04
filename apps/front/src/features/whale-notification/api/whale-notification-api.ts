@@ -108,6 +108,12 @@ async function requestWithFallback<T>(
         throw new ApiError(message, 'FORBIDDEN', 403, payload)
       }
 
+      if (response.status === 404 || response.status === 405) {
+        hasFallbackCandidateFailure = true
+        lastFailure = new ApiError(message, 'API_ERROR', response.status, payload)
+        continue
+      }
+
       if (response.status >= 400 && response.status < 500) {
         throw new ApiError(message, 'API_ERROR', response.status, payload)
       }

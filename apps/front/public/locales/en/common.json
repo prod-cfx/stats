@@ -1,8 +1,24 @@
 {
   "common": {
-    "copied": "Copied",
+    "all": "All",
+    "applyChanges": "Apply changes",
+    "featureInProgress": "Work in progress...",
+    "comingSoonTitle": "Coming Soon",
+    "comingSoonDesc": "This link will be available soon.",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load",
+    "yesterday": "Yesterday",
+    "mockHint": "You are viewing mock data. You can retry or use URL params to switch states.",
+    "retry": "Retry",
+    "emptyTitle": "No data",
+    "emptyDescription": "No results for the current filters. Try adjusting filters.",
+    "clearFiltersAndRetry": "Clear filters and retry",
     "error": "Error",
-    "tryAgain": "Please try again"
+    "success": "Success",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close",
+    "price": "Price"
   },
   "app": {
     "title": "Coinflux - Advanced Crypto Data Aggregator",
@@ -146,9 +162,8 @@
     "tagline": "Professional crypto asset data aggregation and multi-dimensional market analysis terminal",
     "terms": "Terms of Service",
     "privacy": "Privacy Policy",
-    "ownership": "coinflux.ai is owned and operated by Node Global.",
-    "copyrightLine": "© {{year}} Coinflux. All rights reserved.",
-    "ownership": "coinflux.ai is owned and operated by Node Global Ltd."
+    "ownership": "coinflux.ai is owned and operated by Node Global Ltd.",
+    "copyrightLine": "© {{year}} Coinflux. All rights reserved."
   },
   "rightPanel": {
     "exchangeBinance": "Binance",
@@ -244,27 +259,6 @@
       "longAmount": "Long Amount",
       "shortAmount": "Short Amount"
     }
-  },
-  "common": {
-    "all": "All",
-    "applyChanges": "Apply changes",
-    "featureInProgress": "Work in progress...",
-    "comingSoonTitle": "Coming Soon",
-    "comingSoonDesc": "This link will be available soon.",
-    "loading": "Loading...",
-    "loadFailed": "Failed to load",
-    "yesterday": "Yesterday",
-    "mockHint": "You are viewing mock data. You can retry or use URL params to switch states.",
-    "retry": "Retry",
-    "emptyTitle": "No data",
-    "emptyDescription": "No results for the current filters. Try adjusting filters.",
-    "clearFiltersAndRetry": "Clear filters and retry",
-    "error": "Error",
-    "success": "Success",
-    "confirm": "Confirm",
-    "cancel": "Cancel",
-    "close": "Close",
-    "price": "Price"
   },
   "aggregatedOrderbook": {
     "title": "Aggregated Orderbook",
@@ -561,7 +555,12 @@
         "markAllRead": "Mark All Read",
         "newSymbolRule": "Follow Symbol Alerts",
         "followAddress": "Monitor Address",
-        "createMonitor": "Create Monitor"
+        "createMonitor": "Create Monitor",
+        "tradingStats": "Trading Stats",
+        "disableTelegram": "Disable Telegram",
+        "edit": "Edit",
+        "removeMonitor": "Remove Monitor",
+        "save": "Save"
       },
       "sections": {
         "address": "Monitored Addresses",
@@ -581,7 +580,8 @@
         "optional": "Optional",
         "symbol": "Symbol",
         "thresholdUsd": "Threshold (USD)",
-        "channels": "Channels"
+        "channels": "Channels",
+        "editAddressTitle": "Edit Address Monitor"
       },
       "errors": {
         "invalidThreshold": "Please enter a valid threshold amount",
@@ -597,7 +597,13 @@
       "emptyRules": "No notification rules yet",
       "emptyInbox": "No notification messages yet",
       "emptyAddress": "No monitored addresses yet",
-      "emptyRealtime": "No realtime whale monitors yet"
+      "emptyRealtime": "No realtime whale monitors yet",
+      "addressMetrics": {
+        "totalValue": "Perp Total Value",
+        "withdrawable": "Withdrawable Margin",
+        "marginUsage": "Margin Usage",
+        "positions": "Positions"
+      }
     },
     "holdings": {
       "title": "Whale Holdings",
@@ -938,5 +944,42 @@
       "back": "Back"
     },
     "loading": "Under Development"
+  },
+  "account": {
+    "title": "Account",
+    "loginMethods": "Login Methods",
+    "telegramLogin": "Telegram Login",
+    "bound": "Bound",
+    "notBound": "Email not bound",
+    "mainAccount": "Main Account",
+    "inputEmail": "Enter email",
+    "inputCode": "Code",
+    "sendCode": "Send Code",
+    "bindEmail": "Bind Email",
+    "accountInfo": "Account Info",
+    "userId": "UserId",
+    "userIdCopied": "UserId Copied",
+    "emailBound": "Email Bound",
+    "codeSent": "Verification code sent",
+    "logout": "Logout"
+  },
+  "auth": {
+    "loginDesc": "You can login with Email or Telegram",
+    "or": "- OR -",
+    "email": "Email",
+    "emailPlaceholder": "name@example.com",
+    "code": "Verification Code",
+    "codePlaceholder": "6-digit code",
+    "sendCode": "Send Code",
+    "loginWithEmail": "Login with Email Code",
+    "loggingIn": "Logging in...",
+    "sendFailed": "Failed to send code",
+    "loginFailed": "Login failed",
+    "telegramWeb": "Telegram Web (Not Configured)",
+    "telegramDesktop": "Telegram Desktop App",
+    "telegramWebAppDesc": "Please authorize in Telegram bot and return",
+    "botDomainInvalid": "If Bot domain invalid appears, use /setdomain in BotFather to configure current domain",
+    "configFailed": "Failed to get Telegram config, please try again later",
+    "launchFailed": "Failed to launch Telegram Desktop"
   }
 }

@@ -2,10 +2,11 @@
 
 import type {
   CreateWhaleNotificationRuleInput,
+  WhaleNotificationChannels,
   WhaleNotificationRuleType,
 } from '../types'
 import { Bell, Mail, Send } from 'lucide-react'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/lib/toast'
@@ -17,6 +18,14 @@ interface CreateMonitorModalProps {
   isOpen: boolean
   mode: WhaleNotificationRuleType
   presetAddress?: string
+  titleOverride?: string
+  submitText?: string
+  initialValues?: {
+    thresholdUsd?: number
+    note?: string
+    symbol?: string
+    channels?: WhaleNotificationChannels
+  }
   onClose: () => void
   onCreate: (input: CreateWhaleNotificationRuleInput) => Promise<{ created: boolean }>
 }
@@ -28,34 +37,40 @@ export function CreateMonitorModal({
   isOpen,
   mode,
   presetAddress,
+  titleOverride,
+  submitText,
+  initialValues,
   onClose,
   onCreate,
 }: CreateMonitorModalProps) {
   const { t } = useTranslation()
   const [threshold, setThreshold] = useState<string>(String(DEFAULT_THRESHOLD))
+  const [address, setAddress] = useState(presetAddress ?? '')
   const [addressNote, setAddressNote] = useState('')
   const [symbol, setSymbol] = useState('BTC')
   const [channels, setChannels] = useState(getDefaultWhaleChannels)
   const [submitting, setSubmitting] = useState(false)
 
-  const resetForm = () => {
-    setThreshold(String(DEFAULT_THRESHOLD))
-    setAddressNote('')
-    setSymbol('BTC')
-    setChannels(getDefaultWhaleChannels())
-  }
+  useEffect(() => {
+    if (!isOpen) return
+    setThreshold(String(initialValues?.thresholdUsd ?? DEFAULT_THRESHOLD))
+    setAddress(presetAddress ?? '')
+    setAddressNote(initialValues?.note ?? '')
+    setSymbol(initialValues?.symbol ?? 'BTC')
+    setChannels(initialValues?.channels ?? getDefaultWhaleChannels())
+  }, [initialValues, isOpen, presetAddress])
 
   const handleClose = () => {
-    resetForm()
     onClose()
   }
 
   const title = useMemo(
-    () =>
+    () => titleOverride || (
       mode === 'ADDRESS'
         ? t('whaleTracking.notifications.modal.createAddressTitle')
-        : t('whaleTracking.notifications.modal.createSymbolTitle'),
-    [mode, t],
+        : t('whaleTracking.notifications.modal.createSymbolTitle')
+    ),
+    [mode, t, titleOverride],
   )
 
   const handleSubmit = async () => {
@@ -65,7 +80,8 @@ export function CreateMonitorModal({
       return
     }
 
-    if (mode === 'ADDRESS' && !presetAddress) {
+    const finalAddress = mode === 'ADDRESS' ? (presetAddress ?? address).trim() : undefined
+    if (mode === 'ADDRESS' && !/^0x[a-fA-F0-9]{40}$/.test(finalAddress || '')) {
       toast.error({ title: t('common.error'), description: t('whaleTracking.notifications.errors.invalidAddress') })
       return
     }
@@ -89,7 +105,7 @@ export function CreateMonitorModal({
 
       const result = await onCreate({
         type: mode,
-        address: mode === 'ADDRESS' ? presetAddress : undefined,
+        address: finalAddress,
         symbol: mode === 'SYMBOL' ? symbol : undefined,
         thresholdUsd,
         note: mode === 'ADDRESS' ? addressNote : undefined,
@@ -123,7 +139,7 @@ export function CreateMonitorModal({
             disabled={submitting}
             className="from-primary to-secondary rounded-full bg-gradient-to-r px-6 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? t('common.loading') : t('whaleTracking.notifications.modal.create')}
+            {submitting ? t('common.loading') : (submitText ?? t('whaleTracking.notifications.modal.create'))}
           </button>
         </div>
       )}
@@ -136,8 +152,9 @@ export function CreateMonitorModal({
                 {t('whaleTracking.notifications.modal.address')}
               </label>
               <input
-                value={presetAddress ?? ''}
-                readOnly
+                value={presetAddress ?? address}
+                onChange={e => setAddress(e.target.value)}
+                readOnly={Boolean(presetAddress)}
                 className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
               />
             </div>
