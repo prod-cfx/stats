@@ -60,9 +60,10 @@ export function NotificationsClient() {
       <RealtimeWhaleMonitorSection
         rules={symbolRules}
         onCreateRule={async (input) => {
-          if (!ensureMonitorAuth(t)) return
+          if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(input)
           await refresh()
+          return { created: true }
         }}
       />
 

@@ -14,7 +14,7 @@ import { useRealtimeWhaleTrades } from './useRealtimeWhaleTrades'
 
 interface RealtimeWhaleMonitorSectionProps {
   rules: WhaleNotificationRule[]
-  onCreateRule: (input: CreateWhaleNotificationRuleInput) => Promise<void>
+  onCreateRule: (input: CreateWhaleNotificationRuleInput) => Promise<{ created: boolean }>
 }
 
 export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWhaleMonitorSectionProps) {
@@ -60,13 +60,15 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
 
     setCreating(true)
     try {
-      await onCreateRule({
+      const result = await onCreateRule({
         type: 'SYMBOL',
         symbol: selectedSymbol,
         thresholdUsd: threshold,
         channels: getDefaultWhaleChannels(),
       })
-      toast.success({ title: t('whaleTracking.notifications.toast.ruleCreated') })
+      if (result.created) {
+        toast.success({ title: t('whaleTracking.notifications.toast.ruleCreated') })
+      }
     } finally {
       setCreating(false)
     }
