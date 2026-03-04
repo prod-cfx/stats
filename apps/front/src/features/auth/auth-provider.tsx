@@ -160,5 +160,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
     ],
   )
 
-  return <AuthContext value={value}>{children}</AuthContext>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
