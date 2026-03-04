@@ -3,8 +3,8 @@
 import { Send } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { API_BASE_URL } from '@/lib/api-client'
 import { useAuth } from '@/hooks/use-auth'
+import { API_BASE_URL } from '@/lib/api-client'
 import { getTelegramWebAuthorizeUrlRequest } from '../api'
 import { canShowTelegramDesktopEntry, isTelegramWebAppEnv } from '../telegram-env'
 
@@ -16,6 +16,8 @@ interface TelegramLoginButtonsProps {
 interface TelegramConfigResponse {
   botName?: string | null
 }
+
+const DESKTOP_CALLBACK_REDIRECT_DELAY_MS = 350
 
 export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
@@ -92,14 +94,25 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
             onClick={async () => {
               try {
                 setDesktopBusy(true)
+                // Open a popup synchronously within user gesture to avoid browser popup blocking.
+                const popup = window.open('', '_blank', 'noopener,noreferrer')
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
                 })
-                window.location.href = result.deepLink
+                const launchLink = result.webLink?.trim() || result.deepLink?.trim()
+                if (!launchLink) {
+                  popup?.close()
+                  throw new Error('Telegram launch link is missing. Please try again.')
+                }
+                if (popup) {
+                  popup.location.href = launchLink
+                } else {
+                  window.location.href = launchLink
+                }
                 window.setTimeout(() => {
                   window.location.href = result.callbackUrl
-                }, 350)
+                }, DESKTOP_CALLBACK_REDIRECT_DELAY_MS)
               } catch (error) {
                 setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
               } finally {
