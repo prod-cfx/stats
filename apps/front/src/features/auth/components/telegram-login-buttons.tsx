@@ -94,15 +94,22 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
             onClick={async () => {
               try {
                 setDesktopBusy(true)
+                // Open a popup synchronously within user gesture to avoid browser popup blocking.
+                const popup = window.open('', '_blank', 'noopener,noreferrer')
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
                 })
                 const launchLink = result.webLink?.trim() || result.deepLink?.trim()
                 if (!launchLink) {
+                  popup?.close()
                   throw new Error('Telegram launch link is missing. Please try again.')
                 }
-                window.open(launchLink, '_blank', 'noopener,noreferrer')
+                if (popup) {
+                  popup.location.href = launchLink
+                } else {
+                  window.location.href = launchLink
+                }
                 window.setTimeout(() => {
                   window.location.href = result.callbackUrl
                 }, DESKTOP_CALLBACK_REDIRECT_DELAY_MS)
