@@ -13,6 +13,7 @@ import { toast } from '@/lib/toast'
 import {
   getDefaultWhaleChannels,
 } from '../api/whale-notification-api'
+import { DEFAULT_MONITOR_SYMBOL, MONITOR_SYMBOL_OPTIONS } from '../constants'
 
 interface CreateMonitorModalProps {
   isOpen: boolean
@@ -31,7 +32,6 @@ interface CreateMonitorModalProps {
 }
 
 const DEFAULT_THRESHOLD = 500000
-const SYMBOL_OPTIONS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'LINK', 'AVAX', 'ADA']
 
 export function CreateMonitorModal({
   isOpen,
@@ -47,7 +47,7 @@ export function CreateMonitorModal({
   const [threshold, setThreshold] = useState<string>(String(DEFAULT_THRESHOLD))
   const [address, setAddress] = useState(presetAddress ?? '')
   const [addressNote, setAddressNote] = useState('')
-  const [symbol, setSymbol] = useState('BTC')
+  const [symbol, setSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
   const [channels, setChannels] = useState(getDefaultWhaleChannels)
   const [submitting, setSubmitting] = useState(false)
 
@@ -56,7 +56,7 @@ export function CreateMonitorModal({
     setThreshold(String(initialValues?.thresholdUsd ?? DEFAULT_THRESHOLD))
     setAddress(presetAddress ?? '')
     setAddressNote(initialValues?.note ?? '')
-    setSymbol(initialValues?.symbol ?? 'BTC')
+    setSymbol(initialValues?.symbol ?? DEFAULT_MONITOR_SYMBOL)
     setChannels(initialValues?.channels ?? getDefaultWhaleChannels())
   }, [initialValues, isOpen, presetAddress])
 
@@ -182,7 +182,7 @@ export function CreateMonitorModal({
               onChange={e => setSymbol(e.target.value)}
               className="w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm text-[color:var(--cf-text-strong)]"
             >
-              {SYMBOL_OPTIONS.map(item => (
+              {MONITOR_SYMBOL_OPTIONS.map(item => (
                 <option key={item} value={item}>{item}</option>
               ))}
             </select>

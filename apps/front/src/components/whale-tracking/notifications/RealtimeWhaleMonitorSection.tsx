@@ -1,95 +1,41 @@
 'use client'
 
-import type { WhaleTradeDto } from '@ai/api-contracts'
 import type { CreateWhaleNotificationRuleInput, WhaleNotificationRule } from '@/features/whale-notification/types'
 import { Check, Copy, RefreshCw } from 'lucide-react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getDefaultWhaleChannels } from '@/features/whale-notification/api/whale-notification-api'
-import { fetchWhaleTradesRealtime } from '@/lib/api'
+import {
+  buildMonitorSymbolOptions,
+  DEFAULT_MONITOR_SYMBOL,
+} from '@/features/whale-notification/constants'
 import { toast } from '@/lib/toast'
+import { useRealtimeWhaleTrades } from './useRealtimeWhaleTrades'
 
 interface RealtimeWhaleMonitorSectionProps {
   rules: WhaleNotificationRule[]
   onCreateRule: (input: CreateWhaleNotificationRuleInput) => Promise<void>
 }
 
-interface RealtimeRow {
-  address: string
-  symbol: string
-  positionValueUsd: number
-  positionValueText: string
-  entryPriceText: string
-  timestamp: number
-}
-
 export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWhaleMonitorSectionProps) {
   const { t } = useTranslation()
-  const [rows, setRows] = useState<RealtimeRow[]>([])
-  const [isPaused, setIsPaused] = useState(false)
-  const [countdown, setCountdown] = useState(5)
-  const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [selectedSymbol, setSelectedSymbol] = useState('BTC')
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
   const [thresholdUsd, setThresholdUsd] = useState('500000')
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const fetchRows = useCallback(async () => {
-    setLoading(true)
-    try {
-      const list = await fetchWhaleTradesRealtime({ limit: 50 })
-      const mapped = (list as WhaleTradeDto[]).map((item) => {
-        const tradeValue = Number(item.trade_value_usd)
-        const price = Number(item.price)
-        return {
-          address: item.user_address,
-          symbol: item.symbol,
-          positionValueUsd: Number.isFinite(tradeValue) ? tradeValue : 0,
-          positionValueText: Number.isFinite(tradeValue)
-            ? `$ ${tradeValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-            : '$ -',
-          entryPriceText: Number.isFinite(price)
-            ? `$ ${price.toLocaleString('en-US', { maximumFractionDigits: 1 })}`
-            : '$ -',
-          timestamp: new Date(item.trade_time).getTime(),
-        }
-      })
-      setRows(mapped)
-    } catch {
-      toast.error({ title: t('whaleTracking.realtime.toast.loadFailed') })
-    } finally {
-      setLoading(false)
-    }
+  const onLoadError = useCallback(() => {
+    toast.error({ title: t('whaleTracking.realtime.toast.loadFailed') })
   }, [t])
-
-  useEffect(() => {
-    void fetchRows()
-  }, [fetchRows])
-
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (isPaused) return
-
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          void fetchRows()
-          return 5
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [fetchRows, isPaused])
+  const {
+    rows,
+    loading,
+    isPaused,
+    countdown,
+    setIsPaused,
+  } = useRealtimeWhaleTrades(onLoadError)
 
   const symbolOptions = useMemo(() => {
-    const set = new Set<string>(['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'])
-    for (const row of rows) set.add(row.symbol)
-    return Array.from(set)
+    return buildMonitorSymbolOptions(rows.map(row => row.symbol))
   }, [rows])
 
   const symbolRules = useMemo(
@@ -204,8 +150,8 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row, index) => (
-              <tr key={`${row.address}-${index}`} className="border-b border-[color:var(--cf-border)]/60">
+            {filteredRows.map((row) => (
+              <tr key={row.rowKey} className="border-b border-[color:var(--cf-border)]/60">
                 <td className="px-4 py-3">
                   <button
                     type="button"
