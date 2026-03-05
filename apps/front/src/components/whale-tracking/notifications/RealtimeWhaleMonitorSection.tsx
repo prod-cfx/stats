@@ -199,13 +199,12 @@ export function RealtimeWhaleMonitorSection({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
-        <table className="w-full min-w-[1080px]">
+        <table className="w-full min-w-[980px]">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.address')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.asset')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.direction')}</th>
-              <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.leverage')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.positionValue')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.entryPrice')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.time')}</th>
@@ -234,7 +233,6 @@ export function RealtimeWhaleMonitorSection({
                     {row.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.leverageText}</td>
                 <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.positionValueText}</td>
                 <td className="px-4 py-3 text-sm text-[color:var(--cf-text)]">{row.entryPriceText}</td>
                 <td className="px-4 py-3 text-sm text-[color:var(--cf-muted)]">{formatRelativeTime(row.timestamp)}</td>
@@ -242,7 +240,7 @@ export function RealtimeWhaleMonitorSection({
             ))}
             {!filteredRows.length && !loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
                   {t('whaleTracking.notifications.emptyRealtime')}
                 </td>
               </tr>

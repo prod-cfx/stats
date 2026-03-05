@@ -10,7 +10,6 @@ export interface RealtimeRow {
   address: string
   symbol: string
   side: 'Long' | 'Short'
-  leverageText: string
   positionValueUsd: number
   positionValueText: string
   entryPriceText: string
@@ -22,7 +21,6 @@ interface RealtimeWhaleTradeItem {
   symbol: string
   trade_time: string
   side?: string
-  leverage?: number | string | null
   trade_size?: number | string
   trade_value_usd: number | string
   price: number | string
@@ -48,22 +46,12 @@ function mapTradeToRow(item: RealtimeWhaleTradeItem): RealtimeRow {
     normalizedSideRaw === 'short' || (!normalizedSideRaw && Number.isFinite(tradeSize) && tradeSize < 0)
       ? 'Short'
       : 'Long'
-  const leverageRaw = item.leverage
-  const leverageValue =
-    typeof leverageRaw === 'number'
-      ? leverageRaw
-      : typeof leverageRaw === 'string'
-        ? Number(leverageRaw)
-        : Number.NaN
-  const leverageText =
-    Number.isFinite(leverageValue) && leverageValue > 0 ? `${leverageValue}x` : '--'
 
   return {
     rowKey: createRowKey(item),
     address: item.user_address,
     symbol: item.symbol,
     side,
-    leverageText,
     positionValueUsd: Number.isFinite(tradeValue) ? tradeValue : 0,
     positionValueText: Number.isFinite(tradeValue)
       ? `$ ${tradeValue.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
