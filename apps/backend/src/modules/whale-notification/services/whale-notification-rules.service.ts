@@ -1,11 +1,13 @@
 import type { WhaleNotificationRule } from '@prisma/client'
 import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
 import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
+import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { WhaleNotificationRuleType } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 
 @Injectable()
@@ -13,6 +15,8 @@ export class WhaleNotificationRulesService {
   constructor(
     @Inject(WhaleNotificationRulesRepositoryToken)
     private readonly repository: WhaleNotificationRulesRepository,
+    @Inject(WhaleNotificationDeliveryRepositoryToken)
+    private readonly deliveryRepository: WhaleNotificationDeliveryRepository,
   ) {}
 
   async listByUser(userId: string): Promise<WhaleNotificationRule[]> {
@@ -21,6 +25,7 @@ export class WhaleNotificationRulesService {
 
   async create(userId: string, dto: CreateWhaleNotificationRuleDto): Promise<WhaleNotificationRule> {
     const normalized = this.normalizeCreateInput(dto)
+    await this.ensureTelegramChannelAvailable(userId, normalized.channels.telegram)
 
     return this.repository.create({
       userId,
@@ -41,6 +46,8 @@ export class WhaleNotificationRulesService {
         status: HttpStatus.NOT_FOUND,
       })
     }
+
+    await this.ensureTelegramChannelAvailable(userId, dto.channels?.telegram === true)
 
     return this.repository.update(id, {
       thresholdUsd: dto.thresholdUsd,
@@ -109,5 +116,16 @@ export class WhaleNotificationRulesService {
       note: dto.note?.trim() || undefined,
       channels: dto.channels,
     }
+  }
+
+  private async ensureTelegramChannelAvailable(userId: string, useTelegram: boolean): Promise<void> {
+    if (!useTelegram) return
+    const telegramId = await this.deliveryRepository.findUserTelegramId(userId)
+    if (telegramId) return
+
+    throw new DomainException('Telegram channel requires linked Telegram account', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+    })
   }
 }

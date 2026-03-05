@@ -9,6 +9,7 @@ import { Bell, Mail, Send } from 'lucide-react'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/Modal'
+import { useAuth } from '@/hooks/use-auth'
 import { toast } from '@/lib/toast'
 import {
   getDefaultWhaleChannels,
@@ -44,12 +45,14 @@ export function CreateMonitorModal({
   onCreate,
 }: CreateMonitorModalProps) {
   const { t } = useTranslation()
+  const { session } = useAuth()
   const [threshold, setThreshold] = useState<string>(String(DEFAULT_THRESHOLD))
   const [address, setAddress] = useState(presetAddress ?? '')
   const [addressNote, setAddressNote] = useState('')
   const [symbol, setSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
   const [channels, setChannels] = useState(getDefaultWhaleChannels)
   const [submitting, setSubmitting] = useState(false)
+  const canUseTelegram = Boolean(session?.telegram?.isLinked || session?.loginMethods?.includes('telegram'))
 
   useEffect(() => {
     if (!isOpen) return
@@ -57,8 +60,12 @@ export function CreateMonitorModal({
     setAddress(presetAddress ?? '')
     setAddressNote(initialValues?.note ?? '')
     setSymbol(initialValues?.symbol ?? DEFAULT_MONITOR_SYMBOL)
-    setChannels(initialValues?.channels ?? getDefaultWhaleChannels())
-  }, [initialValues, isOpen, presetAddress])
+    const nextChannels = initialValues?.channels ?? getDefaultWhaleChannels()
+    setChannels({
+      ...nextChannels,
+      telegram: canUseTelegram ? nextChannels.telegram : false,
+    })
+  }, [canUseTelegram, initialValues, isOpen, presetAddress])
 
   const handleClose = () => {
     onClose()
@@ -224,13 +231,19 @@ export function CreateMonitorModal({
               />
             </label>
             <label className="flex items-center justify-between rounded-lg bg-[color:var(--cf-surface)] px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-[color:var(--cf-text-strong)]"><Send className="h-4 w-4" />{t('whaleTracking.notifications.channels.telegram')}</span>
+              <span className={`flex items-center gap-2 text-sm ${canUseTelegram ? 'text-[color:var(--cf-text-strong)]' : 'text-[color:var(--cf-muted)]'}`}><Send className="h-4 w-4" />{t('whaleTracking.notifications.channels.telegram')}</span>
               <input
                 type="checkbox"
                 checked={channels.telegram}
-                onChange={e => setChannels(prev => ({ ...prev, telegram: e.target.checked }))}
+                disabled={!canUseTelegram}
+                onChange={e => setChannels(prev => ({ ...prev, telegram: canUseTelegram ? e.target.checked : false }))}
               />
             </label>
+            {!canUseTelegram && (
+              <p className="px-1 text-xs text-[color:var(--cf-muted)]">
+                {t('whaleTracking.notifications.modal.telegramBindRequired')}
+              </p>
+            )}
           </div>
         </div>
       </div>

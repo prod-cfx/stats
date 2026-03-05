@@ -619,6 +619,7 @@
         "symbol": "Symbol",
         "thresholdUsd": "Threshold (USD)",
         "channels": "Channels",
+        "telegramBindRequired": "Please log in/bind Telegram first to enable Telegram notifications",
         "editAddressTitle": "Edit Address Monitor"
       },
       "errors": {
