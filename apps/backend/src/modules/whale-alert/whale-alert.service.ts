@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 import { TradeSide } from './dto/whale-trade.dto'
 
@@ -15,7 +16,10 @@ import { TradeSide } from './dto/whale-trade.dto'
 export class WhaleAlertService {
   private readonly logger = new Logger(WhaleAlertService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whaleNotificationOrchestrator: WhaleNotificationOrchestratorService,
+  ) {}
 
   /**
    * 获取 Hyperliquid 鲸鱼持仓预警的"实时"列表
@@ -230,6 +234,15 @@ export class WhaleAlertService {
         price,
         tradeValueUsd,
       },
+    })
+
+    // 新增交易后触发通知编排：匹配规则 -> 去重 -> 分发 -> 投递记录
+    await this.whaleNotificationOrchestrator.processTradeEvent({
+      whaleAddress,
+      symbol: coin,
+      side,
+      tradeValueUsd,
+      tradeTime,
     })
   }
 }

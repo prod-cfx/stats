@@ -1,4 +1,9 @@
-import type { Prisma as PrismaTypes, WhaleNotificationRuleType } from '@prisma/client'
+import type {
+  Prisma as PrismaTypes,
+  WhaleNotificationChannel,
+  WhaleNotificationDeliveryStatus,
+  WhaleNotificationRuleType,
+} from '@prisma/client'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -26,6 +31,22 @@ interface UpdateRuleParams {
     email: boolean
     telegram: boolean
   }
+}
+
+interface CreateDeliveryParams {
+  userId: string
+  ruleId: string
+  dedupKey: string
+  channel: WhaleNotificationChannel
+  status: WhaleNotificationDeliveryStatus
+  whaleAddress: string
+  symbol: string
+  side: string
+  tradeValueUsd: number
+  tradeTime: Date
+  title?: string
+  content?: string
+  errorMessage?: string
 }
 
 @Injectable()
@@ -72,6 +93,26 @@ export class WhaleNotificationRulesRepository {
       select: {
         dedupKey: true,
         channel: true,
+      },
+    })
+  }
+
+  async createDelivery(params: CreateDeliveryParams) {
+    return this.getClient().whaleNotificationDelivery.create({
+      data: {
+        userId: params.userId,
+        ruleId: params.ruleId,
+        dedupKey: params.dedupKey,
+        channel: params.channel,
+        status: params.status,
+        whaleAddress: params.whaleAddress,
+        symbol: params.symbol,
+        side: params.side,
+        tradeValueUsd: new Prisma.Decimal(params.tradeValueUsd),
+        tradeTime: params.tradeTime,
+        title: params.title ?? null,
+        content: params.content ?? null,
+        errorMessage: params.errorMessage ?? null,
       },
     })
   }

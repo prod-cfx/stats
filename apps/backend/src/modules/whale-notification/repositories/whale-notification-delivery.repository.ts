@@ -43,4 +43,12 @@ export class WhaleNotificationDeliveryRepository {
       },
     })
   }
+
+  async findUserEmail(userId: string): Promise<string | null> {
+    const row = await this.getClient().user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    return row?.email ?? null
+  }
 }
