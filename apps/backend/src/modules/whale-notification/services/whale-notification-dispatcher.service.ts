@@ -4,6 +4,8 @@ import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
 import { MailService } from '@/common/services/mail.service'
+import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
+import { WhaleNotificationMetricsService as WhaleNotificationMetricsServiceToken } from './whale-notification-metrics.service'
 
 export interface DispatchInput {
   userId: string
@@ -27,7 +29,9 @@ export class WhaleNotificationDispatcherService {
   constructor(
     @Inject(MailService) private readonly mailService: MailService,
     @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(WhaleNotificationDeliveryRepositoryToken)
     private readonly deliveryRepository: WhaleNotificationDeliveryRepository,
+    @Inject(WhaleNotificationMetricsServiceToken)
     private readonly metricsService: WhaleNotificationMetricsService,
   ) {}
 

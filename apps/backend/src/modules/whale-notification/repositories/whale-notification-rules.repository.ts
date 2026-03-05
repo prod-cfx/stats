@@ -5,8 +5,9 @@ import type {
   WhaleNotificationRuleType,
 } from '@prisma/client'
 import type { PrismaService } from '@/prisma/prisma.service'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
 
 interface CreateRuleParams {
   userId: string
@@ -51,7 +52,7 @@ interface CreateDeliveryParams {
 
 @Injectable()
 export class WhaleNotificationRulesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaServiceToken) private readonly prisma: PrismaService) {}
 
   private getClient() {
     return this.prisma.getClient()

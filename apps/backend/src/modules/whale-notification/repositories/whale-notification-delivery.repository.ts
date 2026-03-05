@@ -1,9 +1,10 @@
 import type { PrismaService } from '@/prisma/prisma.service'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
+import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
 
 @Injectable()
 export class WhaleNotificationDeliveryRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaServiceToken) private readonly prisma: PrismaService) {}
 
   private getClient() {
     return this.prisma.getClient()

@@ -1,6 +1,7 @@
 import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { WhaleNotificationChannel } from '@prisma/client'
+import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 
 export interface DeliveryCandidate {
   userId: string
@@ -25,7 +26,10 @@ export interface DedupResult {
 
 @Injectable()
 export class WhaleNotificationDeduplicatorService {
-  constructor(private readonly repository: WhaleNotificationRulesRepository) {}
+  constructor(
+    @Inject(WhaleNotificationRulesRepositoryToken)
+    private readonly repository: WhaleNotificationRulesRepository,
+  ) {}
 
   async filterByCooldown(candidates: DeliveryCandidate[], cooldownSeconds: number): Promise<DedupResult> {
     if (!candidates.length) {

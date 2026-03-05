@@ -5,8 +5,15 @@ import type { WhaleNotificationDeduplicatorService } from './whale-notification-
 import type { WhaleNotificationDispatcherService } from './whale-notification-dispatcher.service'
 import type { WhaleNotificationMatcherService } from './whale-notification-matcher.service'
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
+import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
+import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
+import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
+import { WhaleNotificationDeduplicatorService as WhaleNotificationDeduplicatorServiceToken } from './whale-notification-deduplicator.service'
+import { WhaleNotificationDispatcherService as WhaleNotificationDispatcherServiceToken } from './whale-notification-dispatcher.service'
+import { WhaleNotificationMatcherService as WhaleNotificationMatcherServiceToken } from './whale-notification-matcher.service'
+import { WhaleNotificationMetricsService as WhaleNotificationMetricsServiceToken } from './whale-notification-metrics.service'
 
 export interface WhaleTradeEventInput {
   whaleAddress: string
@@ -19,12 +26,19 @@ export interface WhaleTradeEventInput {
 @Injectable()
 export class WhaleNotificationOrchestratorService {
   constructor(
+    @Inject(WhaleNotificationMatcherServiceToken)
     private readonly matcher: WhaleNotificationMatcherService,
+    @Inject(WhaleNotificationDeduplicatorServiceToken)
     private readonly deduplicator: WhaleNotificationDeduplicatorService,
+    @Inject(WhaleNotificationDispatcherServiceToken)
     private readonly dispatcher: WhaleNotificationDispatcherService,
+    @Inject(WhaleNotificationRulesRepositoryToken)
     private readonly repository: WhaleNotificationRulesRepository,
+    @Inject(WhaleNotificationDeliveryRepositoryToken)
     private readonly deliveryRepository: WhaleNotificationDeliveryRepository,
+    @Inject(ConfigServiceToken)
     private readonly configService: ConfigService,
+    @Inject(WhaleNotificationMetricsServiceToken)
     private readonly metricsService: WhaleNotificationMetricsService,
   ) {}
 
@@ -35,7 +49,9 @@ export class WhaleNotificationOrchestratorService {
       return
     }
 
-    const matches = await this.matcher.matchTradeEvent(event)
+    const rawMatches = await this.matcher.matchTradeEvent(event)
+    const matches = this.applyGrayRelease(rawMatches)
+    this.metricsService.addGrayReleaseSkippedMatches(rawMatches.length - matches.length)
     this.metricsService.addMatchedRules(matches.length)
     if (!matches.length) return
 
@@ -64,7 +80,7 @@ export class WhaleNotificationOrchestratorService {
     })
 
     this.metricsService.addDeliveryCandidates(candidates.length)
-    const dedupResult = await this.deduplicator.filterByCooldown(candidates, 60)
+    const dedupResult = await this.deduplicator.filterByCooldown(candidates, this.getCooldownSeconds())
     this.metricsService.addSkippedCooldownDeliveries(dedupResult.skipped.length)
 
     for (const skipped of dedupResult.skipped) {
@@ -132,5 +148,31 @@ export class WhaleNotificationOrchestratorService {
       return raw.trim().toLowerCase() !== 'false'
     }
     return true
+  }
+
+  private getCooldownSeconds(): number {
+    const raw = this.configService.get<string>('WHALE_NOTIFICATION_COOLDOWN_SECONDS')?.trim()
+    if (!raw)
+      return 60
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed))
+      return 60
+    return Math.max(1, Math.floor(parsed))
+  }
+
+  private applyGrayRelease<T extends { userId: string }>(matches: T[]): T[] {
+    const rawAllowlist = this.configService.get<string>('WHALE_NOTIFICATION_ALLOWED_USER_IDS')?.trim()
+    if (!rawAllowlist)
+      return matches
+
+    const allowlist = new Set(
+      rawAllowlist
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean),
+    )
+    if (!allowlist.size)
+      return matches
+    return matches.filter(match => allowlist.has(match.userId))
   }
 }

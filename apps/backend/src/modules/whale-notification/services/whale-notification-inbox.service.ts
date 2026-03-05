@@ -2,12 +2,16 @@ import type { WhaleNotificationDelivery } from '@prisma/client'
 import type { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
 import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 
 @Injectable()
 export class WhaleNotificationInboxService {
-  constructor(private readonly repository: WhaleNotificationDeliveryRepository) {}
+  constructor(
+    @Inject(WhaleNotificationDeliveryRepositoryToken)
+    private readonly repository: WhaleNotificationDeliveryRepository,
+  ) {}
 
   async list(userId: string): Promise<WhaleNotificationInboxResponseDto[]> {
     const rows = await this.repository.listInboxByUser(userId)

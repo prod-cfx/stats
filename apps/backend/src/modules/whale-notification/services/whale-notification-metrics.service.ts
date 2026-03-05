@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common'
 interface WhaleNotificationMetricsSnapshot {
   eventsReceived: number
   matchedRules: number
+  grayReleaseSkippedMatches: number
   deliveryCandidates: number
   deliveriesSent: number
   deliveriesFailed: number
@@ -16,6 +17,7 @@ export class WhaleNotificationMetricsService {
   private metrics: WhaleNotificationMetricsSnapshot = {
     eventsReceived: 0,
     matchedRules: 0,
+    grayReleaseSkippedMatches: 0,
     deliveryCandidates: 0,
     deliveriesSent: 0,
     deliveriesFailed: 0,
@@ -34,6 +36,10 @@ export class WhaleNotificationMetricsService {
 
   addMatchedRules(count: number) {
     this.metrics.matchedRules += Math.max(0, count)
+  }
+
+  addGrayReleaseSkippedMatches(count: number) {
+    this.metrics.grayReleaseSkippedMatches += Math.max(0, count)
   }
 
   addDeliveryCandidates(count: number) {

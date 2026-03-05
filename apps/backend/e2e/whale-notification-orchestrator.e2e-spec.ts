@@ -14,6 +14,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   let prisma: PrismaService
   let whaleAlertService: WhaleAlertService
   const originalWhaleNotificationEnabled = process.env.WHALE_NOTIFICATION_ENABLED
+  const originalWhaleNotificationAllowedUserIds = process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS
 
   const userId = 'e2e-orchestrator-user'
 
@@ -67,6 +68,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
   afterAll(async () => {
     process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
+    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
 
     if (prisma) {
       const client = prisma.getClient()
@@ -162,6 +164,28 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     expect(typeof metrics.eventsReceived).toBe('number')
     expect(typeof metrics.deliveriesSent).toBe('number')
     expect(typeof metrics.featureFlagSkippedEvents).toBe('number')
+    expect(typeof metrics.grayReleaseSkippedMatches).toBe('number')
     expect(metrics.eventsReceived as number).toBeGreaterThan(0)
+  })
+
+  it('should skip unmatched users in gray release allowlist mode', async () => {
+    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = 'some-other-user'
+    await prisma.getClient().whaleNotificationDelivery.deleteMany({ where: { userId } })
+
+    await whaleAlertService.recordWhaleTrade({
+      whaleAddress: '0xorchestrator',
+      coin: 'BTC',
+      side: 'Long',
+      tradeSize: 1,
+      price: 70000,
+      tradeValueUsd: 120000,
+      tradeTime: new Date(),
+    })
+
+    const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
+      where: { userId },
+    })
+    expect(rows.length).toBe(0)
+    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
   })
 })

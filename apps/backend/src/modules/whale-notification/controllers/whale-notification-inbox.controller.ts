@@ -1,16 +1,20 @@
 import type { WhaleNotificationInboxService } from '../services/whale-notification-inbox.service'
-import { Controller, Get, HttpCode, Patch, Param, Post } from '@nestjs/common'
+import { Controller, Get, HttpCode, Inject, Patch, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
+import { WhaleNotificationInboxService as WhaleNotificationInboxServiceToken } from '../services/whale-notification-inbox.service'
 
 @ApiTags('whale-notification')
 @ApiBearerAuth('bearer')
 @Auth()
 @Controller('whale-notification/notifications')
 export class WhaleNotificationInboxController {
-  constructor(private readonly service: WhaleNotificationInboxService) {}
+  constructor(
+    @Inject(WhaleNotificationInboxServiceToken)
+    private readonly service: WhaleNotificationInboxService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '获取当前用户通知收件箱' })

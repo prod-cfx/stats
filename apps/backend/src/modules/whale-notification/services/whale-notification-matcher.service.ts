@@ -4,7 +4,8 @@ import type {
   WhaleNotificationRuleSymbolOverride,
 } from '@prisma/client'
 import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
+import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 
 export interface WhaleTradeEventInput {
   whaleAddress: string
@@ -37,7 +38,10 @@ export interface WhaleNotificationMatch {
 
 @Injectable()
 export class WhaleNotificationMatcherService {
-  constructor(private readonly repository: WhaleNotificationRulesRepository) {}
+  constructor(
+    @Inject(WhaleNotificationRulesRepositoryToken)
+    private readonly repository: WhaleNotificationRulesRepository,
+  ) {}
 
   async matchTradeEvent(event: WhaleTradeEventInput): Promise<WhaleNotificationMatch[]> {
     const normalizedAddress = event.whaleAddress.trim().toLowerCase()

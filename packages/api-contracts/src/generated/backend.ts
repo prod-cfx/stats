@@ -909,25 +909,7 @@ const WhaleNotificationRuleResponseDto = z
     updatedAt: z.string(),
   })
   .passthrough();
-const CreateWhaleNotificationRuleDto = z
-  .object({
-    type: z.enum(["ADDRESS", "SYMBOL"]),
-    address: z.string().optional(),
-    symbol: z.string().optional(),
-    thresholdUsd: z.number(),
-    note: z.string().optional(),
-    channels: WhaleNotificationChannelsDto,
-  })
-  .passthrough();
-const UpdateWhaleNotificationRuleDto = z
-  .object({
-    thresholdUsd: z.number(),
-    note: z.string(),
-    channels: WhaleNotificationChannelsDto,
-    isActive: z.boolean(),
-  })
-  .partial()
-  .passthrough();
+const Function = z.object({}).partial().passthrough();
 const WhaleNotificationDeliveryMapDto = z
   .object({ web: z.string(), email: z.string(), telegram: z.string() })
   .passthrough();
@@ -1168,8 +1150,7 @@ export const schemas = {
   TickerResponseDto,
   WhaleNotificationChannelsDto,
   WhaleNotificationRuleResponseDto,
-  CreateWhaleNotificationRuleDto,
-  UpdateWhaleNotificationRuleDto,
+  Function,
   WhaleNotificationDeliveryMapDto,
   WhaleNotificationInboxResponseDto,
   LiquidationSummaryItemDto,
@@ -3580,6 +3561,13 @@ const endpoints = makeApi([
   },
   {
     method: "get",
+    path: "/whale-notification/metrics",
+    alias: "WhaleNotificationMetricsController_metrics",
+    requestFormat: "json",
+    response: z.void(),
+  },
+  {
+    method: "get",
     path: "/whale-notification/notifications",
     alias: "WhaleNotificationInboxController_list",
     requestFormat: "json",
@@ -3647,7 +3635,7 @@ const endpoints = makeApi([
       {
         name: "body",
         type: "Body",
-        schema: CreateWhaleNotificationRuleDto,
+        schema: z.object({}).partial().passthrough(),
       },
     ],
     response: WhaleNotificationRuleResponseDto,
@@ -3661,7 +3649,7 @@ const endpoints = makeApi([
       {
         name: "body",
         type: "Body",
-        schema: UpdateWhaleNotificationRuleDto,
+        schema: z.object({}).partial().passthrough(),
       },
       {
         name: "id",

@@ -2,18 +2,22 @@ import type { WhaleNotificationRule } from '@prisma/client'
 import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
 import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
 import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { WhaleNotificationRuleResponseDto } from '../dto/whale-notification-rule.response.dto'
+import { WhaleNotificationRulesService as WhaleNotificationRulesServiceToken } from '../services/whale-notification-rules.service'
 
 @ApiTags('whale-notification')
 @ApiBearerAuth('bearer')
 @Auth()
 @Controller('whale-notification/rules')
 export class WhaleNotificationRulesController {
-  constructor(private readonly service: WhaleNotificationRulesService) {}
+  constructor(
+    @Inject(WhaleNotificationRulesServiceToken)
+    private readonly service: WhaleNotificationRulesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '获取当前用户的巨鲸通知规则' })

@@ -3,13 +3,17 @@ import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notific
 import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
 import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { WhaleNotificationRuleType } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 
 @Injectable()
 export class WhaleNotificationRulesService {
-  constructor(private readonly repository: WhaleNotificationRulesRepository) {}
+  constructor(
+    @Inject(WhaleNotificationRulesRepositoryToken)
+    private readonly repository: WhaleNotificationRulesRepository,
+  ) {}
 
   async listByUser(userId: string): Promise<WhaleNotificationRule[]> {
     return this.repository.listByUser(userId)
