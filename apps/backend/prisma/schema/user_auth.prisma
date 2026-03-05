@@ -160,3 +160,16 @@ model WhaleNotificationDelivery {
   @@index([status, createdAt], map: "idx_whale_notify_delivery_status_created")
   @@map("whale_notification_deliveries")
 }
+
+model WhaleNotificationCooldownGuard {
+  id        String   @id @default(cuid())
+  dedupKey  String   @map("dedup_key")
+  channel   String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([dedupKey, channel], map: "uniq_whale_notify_cooldown_guard")
+  @@index([expiresAt], map: "idx_whale_notify_cooldown_guard_expires")
+  @@map("whale_notification_cooldown_guards")
+}

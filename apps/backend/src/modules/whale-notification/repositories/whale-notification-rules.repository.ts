@@ -98,6 +98,34 @@ export class WhaleNotificationRulesRepository {
     })
   }
 
+  async tryAcquireCooldownSlot(params: {
+    dedupKey: string
+    channel: WhaleNotificationChannel
+    cooldownSeconds: number
+  }): Promise<boolean> {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + params.cooldownSeconds * 1000)
+    const result = await this.getClient().$queryRaw<Array<{ id: string }>>`
+      INSERT INTO "whale_notification_cooldown_guards" (
+        "dedup_key",
+        "channel",
+        "expires_at"
+      )
+      VALUES (
+        ${params.dedupKey},
+        ${params.channel},
+        ${expiresAt}
+      )
+      ON CONFLICT ("dedup_key", "channel")
+      DO UPDATE SET
+        "expires_at" = EXCLUDED."expires_at",
+        "updated_at" = NOW()
+      WHERE "whale_notification_cooldown_guards"."expires_at" <= ${now}
+      RETURNING "id"
+    `
+    return result.length > 0
+  }
+
   async createDelivery(params: CreateDeliveryParams) {
     return this.getClient().whaleNotificationDelivery.create({
       data: {

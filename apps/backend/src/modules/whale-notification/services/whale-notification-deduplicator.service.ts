@@ -36,19 +36,17 @@ export class WhaleNotificationDeduplicatorService {
       return { allowed: [], skipped: [] }
     }
 
-    const dedupKeys = candidates.map(item => this.buildDedupKey(item))
-    const since = new Date(Date.now() - cooldownSeconds * 1000)
-
-    const recentSent = await this.repository.findRecentSentDeliveries(dedupKeys, since)
-    const sentSet = new Set(recentSent.map(item => `${item.dedupKey}:${item.channel}`))
-
     const allowed: Array<DeliveryCandidate & { dedupKey: string }> = []
     const skipped: DedupSkippedItem[] = []
 
     for (const item of candidates) {
       const dedupKey = this.buildDedupKey(item)
-      const marker = `${dedupKey}:${item.channel}`
-      if (sentSet.has(marker)) {
+      const acquired = await this.repository.tryAcquireCooldownSlot({
+        dedupKey,
+        channel: this.toChannelEnum(item.channel),
+        cooldownSeconds,
+      })
+      if (!acquired) {
         skipped.push({
           ...item,
           reason: 'cooldown',
