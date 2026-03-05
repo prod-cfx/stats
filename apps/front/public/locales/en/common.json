@@ -556,6 +556,7 @@
       "table": {
         "address": "Address",
         "asset": "Asset",
+        "direction": "Direction",
         "positionValue": "Position Value",
         "entryPrice": "Entry Price",
         "winRate": "Win Rate",
