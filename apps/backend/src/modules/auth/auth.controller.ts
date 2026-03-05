@@ -24,8 +24,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard'
 import { UserAuthService } from './services/user-auth.service'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { CurrentUser } from './decorators/current-user.decorator'
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { ApiBody, ApiExtraModels, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
 @ApiTags('auth')
@@ -39,6 +41,29 @@ export class AuthController {
   @ApiOperation({ summary: '获取 Telegram 登录配置' })
   async getTelegramLoginConfig(): Promise<{ botName: string | null }> {
     return this.userAuthService.getTelegramLoginConfig()
+  }
+
+  @Get('telegram/web/authorize-url')
+  @UseGuards(AuthRateLimitGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '获取 Telegram 网页授权地址' })
+  async getTelegramWebAuthorizeUrl(
+    @Query('intent') intent?: string,
+    @Query('lng') lng?: string,
+  ): Promise<{ authorizeUrl: string }> {
+    if (intent !== 'login' && intent !== 'bind') {
+      throw new DomainException('Invalid intent', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+    if (lng !== 'zh' && lng !== 'en') {
+      throw new DomainException('Invalid lng', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+    return this.userAuthService.getTelegramWebAuthorizeUrl({ intent, lng })
   }
 
   @Post('telegram/desktop/intent')

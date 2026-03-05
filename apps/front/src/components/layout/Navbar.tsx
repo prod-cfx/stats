@@ -1,13 +1,14 @@
 'use client'
 
-import { ChevronDown, Menu, Search, X } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
-import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/components/ui/toast'
+import { useWhaleNotificationUnreadCount } from '@/features/whale-notification/hooks/useWhaleNotificationUnreadCount'
+import { useAuth } from '@/hooks/use-auth'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -38,10 +39,11 @@ export const Navbar = () => {
   const [extraBases, _setExtraBases] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
+  const { session, logout } = useAuth()
+  const { unreadCount } = useWhaleNotificationUnreadCount()
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
-  const { session, logout } = useAuth()
   const ENABLE_USER_SYSTEM = true
 
   // 从 pathname 提取当前语言
@@ -84,6 +86,7 @@ export const Navbar = () => {
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
     { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
     { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
+    { name: t('nav.whale_notifications'), href: withLng('/whale-tracking/notifications') },
   ]
 
   // 临时隐藏看板，需要时再恢复
@@ -447,7 +450,20 @@ export const Navbar = () => {
         <LanguageSwitcher />
         <ThemeToggle />
 
-        {/* User System - Phase 1 Hidden */}
+        <button
+          type="button"
+          aria-label="whale-notification-bell"
+          onClick={() => router.push(withLng('/whale-tracking/notifications'))}
+          className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+
         {ENABLE_USER_SYSTEM &&
           (session ? (
             <div className="hidden items-center gap-2 md:flex">

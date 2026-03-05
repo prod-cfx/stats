@@ -268,6 +268,27 @@ export class UserAuthService {
     return { botName }
   }
 
+  async getTelegramWebAuthorizeUrl(payload: {
+    intent: 'login' | 'bind'
+    lng: 'zh' | 'en'
+  }): Promise<{ authorizeUrl: string }> {
+    const botId = this.resolveTelegramBotId()
+    const frontUrl = this.resolveFrontendUrl()
+    const frontOrigin = new URL(frontUrl).origin
+    const callbackUrl = `${frontUrl}/${payload.lng}/auth/telegram/callback?source=web&intent=${payload.intent}`
+
+    const query = new URLSearchParams({
+      bot_id: botId,
+      origin: frontOrigin,
+      request_access: 'write',
+      return_to: callbackUrl,
+    })
+
+    return {
+      authorizeUrl: `https://oauth.telegram.org/auth?${query.toString()}`,
+    }
+  }
+
   async createTelegramDesktopIntent(dto: CreateTelegramDesktopIntentRequestDto): Promise<{
     intentId: string
     deepLink: string
@@ -893,6 +914,18 @@ export class UserAuthService {
       this.logger.warn(`Failed to resolve Telegram bot name: ${error instanceof Error ? error.message : String(error)}`)
       return null
     }
+  }
+
+  private resolveTelegramBotId(): string {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN')?.trim()
+    const match = /^(\d+):/.exec(botToken || '')
+    if (!match) {
+      throw new DomainException('Telegram bot token is invalid', {
+        code: ErrorCode.INTERNAL_SERVER_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+      })
+    }
+    return match[1]
   }
 
   private resolveFrontendUrl(): string {
