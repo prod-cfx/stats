@@ -26,6 +26,12 @@ function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${token}` }
 }
 
+function hasAuthenticatedSession(): boolean {
+  const token = getToken()
+  if (!token) return false
+  return Boolean(loadStoredSession())
+}
+
 function hashString(input: string): string {
   let hash = 2166136261
   for (let i = 0; i < input.length; i++) {
@@ -289,6 +295,10 @@ export async function deleteWhaleNotificationRule(id: string): Promise<void> {
 }
 
 export async function listWhaleNotificationInbox(): Promise<WhaleNotificationInboxItem[]> {
+  if (!hasAuthenticatedSession()) {
+    return loadInboxFromLocal()
+  }
+
   const outcome = await requestWithFallback<WhaleNotificationInboxItem[]>('GET', '/notifications')
   if (outcome.kind === 'remote') return outcome.data ?? []
   return loadInboxFromLocal()
@@ -314,9 +324,20 @@ export async function markAllWhaleNotificationsRead(): Promise<void> {
 }
 
 export async function getWhaleNotificationUnreadCount(): Promise<number> {
-  const outcome = await requestWithFallback<{ unread: number }>('GET', '/notifications/unread-count')
-  if (outcome.kind === 'remote' && outcome.data && typeof outcome.data.unread === 'number') {
-    return outcome.data.unread
+  if (!hasAuthenticatedSession()) {
+    const items = loadInboxFromLocal()
+    return items.filter(item => !item.read).length
+  }
+
+  try {
+    const outcome = await requestWithFallback<{ unread: number }>('GET', '/notifications/unread-count')
+    if (outcome.kind === 'remote' && outcome.data && typeof outcome.data.unread === 'number') {
+      return outcome.data.unread
+    }
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error
+    }
   }
 
   try {
