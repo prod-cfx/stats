@@ -18,6 +18,8 @@ model User {
   inviter      User?            @relation("UserInviter", fields: [inviterId], references: [id])
   invitedUsers User[]           @relation("UserInviter")
   credentials  UserCredential[]
+  whaleNotificationRules WhaleNotificationRule[]
+  whaleNotificationDeliveries WhaleNotificationDelivery[]
 
   @@map("users")
 }
@@ -57,4 +59,104 @@ model VerificationCode {
 enum VerificationCodePurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+}
+
+enum WhaleNotificationRuleType {
+  ADDRESS
+  SYMBOL
+}
+
+enum WhaleNotificationChannel {
+  WEB
+  EMAIL
+  TELEGRAM
+}
+
+enum WhaleNotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED_COOLDOWN
+}
+
+model WhaleNotificationRule {
+  id              String                    @id @default(cuid())
+  userId          String                    @map("user_id")
+  type            WhaleNotificationRuleType
+  whaleAddress    String?                   @map("whale_address")
+  symbol          String?
+  thresholdUsd    Decimal                   @map("threshold_usd") @db.Decimal(30, 10)
+  note            String?                   @db.Text
+  channelWeb      Boolean                   @default(true) @map("channel_web")
+  channelEmail    Boolean                   @default(false) @map("channel_email")
+  channelTelegram Boolean                   @default(false) @map("channel_telegram")
+  isActive        Boolean                   @default(true) @map("is_active")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @default(now()) @updatedAt @map("updated_at")
+
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addressTargets  WhaleNotificationRuleAddress[]
+  symbolOverrides WhaleNotificationRuleSymbolOverride[]
+  deliveries      WhaleNotificationDelivery[]
+
+  @@index([userId, createdAt], map: "idx_whale_notify_rules_user_created")
+  @@index([userId, isActive], map: "idx_whale_notify_rules_user_active")
+  @@map("whale_notification_rules")
+}
+
+model WhaleNotificationRuleAddress {
+  id           String                @id @default(cuid())
+  ruleId       String                @map("rule_id")
+  whaleAddress String                @map("whale_address")
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  rule         WhaleNotificationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, whaleAddress], map: "uniq_whale_notify_rule_address")
+  @@index([whaleAddress], map: "idx_whale_notify_rule_address")
+  @@map("whale_notification_rule_addresses")
+}
+
+model WhaleNotificationRuleSymbolOverride {
+  id              String                @id @default(cuid())
+  ruleId          String                @map("rule_id")
+  whaleAddress    String?               @map("whale_address")
+  symbol          String
+  minTradeValueUsd Decimal              @map("min_trade_value_usd") @db.Decimal(30, 10)
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @default(now()) @updatedAt @map("updated_at")
+
+  rule            WhaleNotificationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, whaleAddress, symbol], map: "uniq_whale_notify_rule_symbol_override")
+  @@index([symbol], map: "idx_whale_notify_rule_override_symbol")
+  @@map("whale_notification_rule_symbol_overrides")
+}
+
+model WhaleNotificationDelivery {
+  id          String                          @id @default(cuid())
+  userId      String                          @map("user_id")
+  ruleId      String                          @map("rule_id")
+  dedupKey    String                          @map("dedup_key")
+  channel     WhaleNotificationChannel
+  status      WhaleNotificationDeliveryStatus
+  whaleAddress String                         @map("whale_address")
+  symbol      String
+  side        String
+  tradeValueUsd Decimal                       @map("trade_value_usd") @db.Decimal(30, 10)
+  tradeTime   DateTime                        @map("trade_time")
+  title       String?
+  content     String?                         @db.Text
+  isRead      Boolean                         @default(false) @map("is_read")
+  errorMessage String?                        @map("error_message") @db.Text
+  createdAt   DateTime                        @default(now()) @map("created_at")
+  updatedAt   DateTime                        @default(now()) @updatedAt @map("updated_at")
+
+  user        User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rule        WhaleNotificationRule           @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([dedupKey, channel, createdAt], map: "idx_whale_notify_delivery_dedup")
+  @@index([userId, createdAt], map: "idx_whale_notify_delivery_user_created")
+  @@index([status, createdAt], map: "idx_whale_notify_delivery_status_created")
+  @@map("whale_notification_deliveries")
 }

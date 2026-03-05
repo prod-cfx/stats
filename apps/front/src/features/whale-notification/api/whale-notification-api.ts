@@ -306,7 +306,7 @@ export async function markWhaleNotificationRead(id: string): Promise<void> {
 }
 
 export async function markAllWhaleNotificationsRead(): Promise<void> {
-  const outcome = await requestWithFallback<null>('PATCH', '/notifications/read-all')
+  const outcome = await requestWithFallback<null>('POST', '/notifications/read-all')
   if (outcome.kind === 'remote') return
 
   const items = loadInboxFromLocal().map(item => ({ ...item, read: true }))
@@ -317,6 +317,13 @@ export async function getWhaleNotificationUnreadCount(): Promise<number> {
   const outcome = await requestWithFallback<{ unread: number }>('GET', '/notifications/unread-count')
   if (outcome.kind === 'remote' && outcome.data && typeof outcome.data.unread === 'number') {
     return outcome.data.unread
+  }
+
+  try {
+    const inbox = await listWhaleNotificationInbox()
+    return inbox.filter(item => !item.read).length
+  } catch {
+    // fall through to local storage fallback below
   }
 
   const items = loadInboxFromLocal()

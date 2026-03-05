@@ -36,6 +36,7 @@ import { TradesConfigModule } from './trades-config/trades-config.module'
 import { UserModule } from './user/user.module'
 import { WhaleAlertModule } from './whale-alert/whale-alert.module'
 import { WhaleHoldingsModule } from './whale-holdings/whale-holdings.module'
+import { WhaleNotificationModule } from './whale-notification/whale-notification.module'
 import { WhaleTrackingModule } from './whale-tracking/whale-tracking.module'
 
 // 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
@@ -104,6 +105,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     OpenInterestModule,
     PolymarketModule,
     WhaleAlertModule,
+    WhaleNotificationModule,
     CryptoStockQuotesModule,
     WhaleTrackingModule,
     WhaleHoldingsModule,
