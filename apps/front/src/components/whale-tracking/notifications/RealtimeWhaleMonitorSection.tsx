@@ -1,7 +1,11 @@
 'use client'
 
-import type { CreateWhaleNotificationRuleInput, WhaleNotificationRule } from '@/features/whale-notification/types'
-import { Check, Copy, RefreshCw } from 'lucide-react'
+import type {
+  CreateWhaleNotificationRuleInput,
+  UpdateWhaleNotificationRuleInput,
+  WhaleNotificationRule,
+} from '@/features/whale-notification/types'
+import { Check, Copy, RefreshCw, Trash2 } from 'lucide-react'
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getDefaultWhaleChannels } from '@/features/whale-notification/api/whale-notification-api'
@@ -15,9 +19,16 @@ import { useRealtimeWhaleTrades } from './useRealtimeWhaleTrades'
 interface RealtimeWhaleMonitorSectionProps {
   rules: WhaleNotificationRule[]
   onCreateRule: (input: CreateWhaleNotificationRuleInput) => Promise<{ created: boolean }>
+  onUpdateRule: (id: string, input: UpdateWhaleNotificationRuleInput) => Promise<void> | void
+  onDeleteRule: (id: string) => Promise<void> | void
 }
 
-export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWhaleMonitorSectionProps) {
+export function RealtimeWhaleMonitorSection({
+  rules,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
+}: RealtimeWhaleMonitorSectionProps) {
   const { t } = useTranslation()
   const [creating, setCreating] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
@@ -143,6 +154,45 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
           </button>
         </div>
       </div>
+      {!!symbolRules.length && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-2.5">
+          {symbolRules.map(rule => (
+            <div
+              key={rule.id}
+              className="flex items-center gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 py-1.5"
+            >
+              <span className="text-xs font-semibold text-[color:var(--cf-text-strong)]">
+                {rule.symbol} · ${rule.thresholdUsd.toLocaleString('en-US')}
+              </span>
+              <label className="inline-flex cursor-pointer items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={rule.isActive}
+                  onChange={e => {
+                    void onUpdateRule(rule.id, { isActive: e.target.checked })
+                  }}
+                />
+                <span className={rule.isActive ? 'text-emerald-400' : 'text-[color:var(--cf-muted)]'}>
+                  {rule.isActive
+                    ? t('whaleTracking.notifications.status.active')
+                    : t('whaleTracking.notifications.status.paused')}
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  void onDeleteRule(rule.id)
+                }}
+                className="rounded p-1 text-rose-400 transition-colors hover:bg-rose-500/10"
+                aria-label={t('whaleTracking.notifications.actions.removeMonitor')}
+                title={t('whaleTracking.notifications.actions.removeMonitor')}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading && (
         <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>

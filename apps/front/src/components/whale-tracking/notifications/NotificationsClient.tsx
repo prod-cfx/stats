@@ -65,6 +65,12 @@ export function NotificationsClient() {
           await refresh()
           return { created: true }
         }}
+        onUpdateRule={async (id, input) => {
+          await updateRule(id, input)
+        }}
+        onDeleteRule={async (id) => {
+          await deleteRule(id)
+        }}
       />
 
       <CreateMonitorModal
