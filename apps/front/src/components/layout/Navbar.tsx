@@ -450,19 +450,25 @@ export const Navbar = () => {
         <LanguageSwitcher />
         <ThemeToggle />
 
-        <button
-          type="button"
+        <Link
+          href={withLng('/whale-tracking/notifications')}
           aria-label="whale-notification-bell"
-          onClick={() => router.push(withLng('/whale-tracking/notifications'))}
+          onClick={e => {
+            const target = withLng('/whale-tracking/notifications')
+            if (pathname === target) {
+              e.preventDefault()
+              router.refresh()
+            }
+          }}
           className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
+            <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
-        </button>
+        </Link>
 
         {ENABLE_USER_SYSTEM &&
           (session ? (
