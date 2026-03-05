@@ -1,5 +1,5 @@
+import type { PrismaService } from '@/prisma/prisma.service'
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class WhaleNotificationDeliveryRepository {
@@ -50,5 +50,23 @@ export class WhaleNotificationDeliveryRepository {
       select: { email: true },
     })
     return row?.email ?? null
+  }
+
+  async findUserTelegramId(userId: string): Promise<string | null> {
+    const credential = await this.getClient().userCredential.findFirst({
+      where: {
+        userId,
+        value: {
+          startsWith: 'telegram:',
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      select: { value: true },
+    })
+
+    if (!credential?.value)
+      return null
+    const telegramId = credential.value.slice('telegram:'.length).trim()
+    return telegramId || null
   }
 }

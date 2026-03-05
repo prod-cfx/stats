@@ -1,9 +1,9 @@
 import type { WhaleNotificationDelivery } from '@prisma/client'
+import type { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
+import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
-import { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
 
 @Injectable()
 export class WhaleNotificationInboxService {

@@ -1,11 +1,11 @@
 import type { WhaleNotificationRule } from '@prisma/client'
 import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
 import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
+import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { WhaleNotificationRuleType } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 
 @Injectable()
 export class WhaleNotificationRulesService {

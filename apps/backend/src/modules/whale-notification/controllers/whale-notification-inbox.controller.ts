@@ -1,9 +1,9 @@
+import type { WhaleNotificationInboxService } from '../services/whale-notification-inbox.service'
 import { Controller, Get, HttpCode, Patch, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
-import { WhaleNotificationInboxService } from '../services/whale-notification-inbox.service'
 
 @ApiTags('whale-notification')
 @ApiBearerAuth('bearer')

@@ -1,12 +1,12 @@
 import type { WhaleNotificationRule } from '@prisma/client'
+import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
+import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
+import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
-import { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
-import { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
+import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { WhaleNotificationRuleResponseDto } from '../dto/whale-notification-rule.response.dto'
-import { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
 
 @ApiTags('whale-notification')
 @ApiBearerAuth('bearer')

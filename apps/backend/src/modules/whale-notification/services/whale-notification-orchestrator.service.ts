@@ -1,10 +1,12 @@
+import type { ConfigService } from '@nestjs/config'
+import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
+import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
+import type { WhaleNotificationDeduplicatorService } from './whale-notification-deduplicator.service'
+import type { WhaleNotificationDispatcherService } from './whale-notification-dispatcher.service'
+import type { WhaleNotificationMatcherService } from './whale-notification-matcher.service'
+import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
 import { Injectable } from '@nestjs/common'
 import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
-import { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
-import { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
-import { WhaleNotificationDeduplicatorService } from './whale-notification-deduplicator.service'
-import { WhaleNotificationDispatcherService } from './whale-notification-dispatcher.service'
-import { WhaleNotificationMatcherService } from './whale-notification-matcher.service'
 
 export interface WhaleTradeEventInput {
   whaleAddress: string
@@ -22,10 +24,19 @@ export class WhaleNotificationOrchestratorService {
     private readonly dispatcher: WhaleNotificationDispatcherService,
     private readonly repository: WhaleNotificationRulesRepository,
     private readonly deliveryRepository: WhaleNotificationDeliveryRepository,
+    private readonly configService: ConfigService,
+    private readonly metricsService: WhaleNotificationMetricsService,
   ) {}
 
   async processTradeEvent(event: WhaleTradeEventInput): Promise<void> {
+    this.metricsService.incrementEventsReceived()
+    if (!this.isFeatureEnabled()) {
+      this.metricsService.incrementFeatureFlagSkippedEvents()
+      return
+    }
+
     const matches = await this.matcher.matchTradeEvent(event)
+    this.metricsService.addMatchedRules(matches.length)
     if (!matches.length) return
 
     const candidates = matches.flatMap(match => {
@@ -52,7 +63,9 @@ export class WhaleNotificationOrchestratorService {
       return out
     })
 
+    this.metricsService.addDeliveryCandidates(candidates.length)
     const dedupResult = await this.deduplicator.filterByCooldown(candidates, 60)
+    this.metricsService.addSkippedCooldownDeliveries(dedupResult.skipped.length)
 
     for (const skipped of dedupResult.skipped) {
       await this.repository.createDelivery({
@@ -98,6 +111,12 @@ export class WhaleNotificationOrchestratorService {
         content: dispatchResult.content,
         errorMessage: dispatchResult.errorMessage,
       })
+
+      if (dispatchResult.status === WhaleNotificationDeliveryStatus.SENT) {
+        this.metricsService.incrementDeliveriesSent()
+      } else if (dispatchResult.status === WhaleNotificationDeliveryStatus.FAILED) {
+        this.metricsService.incrementDeliveriesFailed()
+      }
     }
   }
 
@@ -105,5 +124,13 @@ export class WhaleNotificationOrchestratorService {
     if (channel === 'EMAIL') return WhaleNotificationChannel.EMAIL
     if (channel === 'TELEGRAM') return WhaleNotificationChannel.TELEGRAM
     return WhaleNotificationChannel.WEB
+  }
+
+  private isFeatureEnabled(): boolean {
+    const raw = this.configService.get<string>('WHALE_NOTIFICATION_ENABLED')
+    if (typeof raw === 'string') {
+      return raw.trim().toLowerCase() !== 'false'
+    }
+    return true
   }
 }

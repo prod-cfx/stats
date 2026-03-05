@@ -3,8 +3,8 @@ import type {
   WhaleNotificationRuleAddress,
   WhaleNotificationRuleSymbolOverride,
 } from '@prisma/client'
+import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { Injectable } from '@nestjs/common'
-import { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 
 export interface WhaleTradeEventInput {
   whaleAddress: string

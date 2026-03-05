@@ -4,6 +4,7 @@ import type { WhaleAlertService } from '../src/modules/whale-alert/whale-alert.s
 import type { PrismaService } from '../src/prisma/prisma.service'
 import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
+import request from 'supertest'
 import { AppModule } from '../src/modules/app.module'
 import { WhaleAlertService as WhaleAlertServiceToken } from '../src/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '../src/prisma/prisma.service'
@@ -12,6 +13,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   let app: INestApplication
   let prisma: PrismaService
   let whaleAlertService: WhaleAlertService
+  const originalWhaleNotificationEnabled = process.env.WHALE_NOTIFICATION_ENABLED
 
   const userId = 'e2e-orchestrator-user'
 
@@ -64,6 +66,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   })
 
   afterAll(async () => {
+    process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
+
     if (prisma) {
       const client = prisma.getClient()
       await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
@@ -112,5 +116,52 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
     expect(sentRows.length).toBe(2)
     expect(skippedRows.length).toBe(2)
+  })
+
+  it('should skip orchestration when feature flag is disabled', async () => {
+    process.env.WHALE_NOTIFICATION_ENABLED = 'false'
+
+    await prisma.getClient().whaleNotificationDelivery.deleteMany({ where: { userId } })
+
+    await whaleAlertService.recordWhaleTrade({
+      whaleAddress: '0xorchestrator',
+      coin: 'ETH',
+      side: 'Short',
+      tradeSize: 100,
+      price: 3000,
+      tradeValueUsd: 300000,
+      tradeTime: new Date(),
+    })
+
+    const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
+      where: { userId },
+    })
+
+    expect(rows.length).toBe(0)
+    process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
+  })
+
+  it('should expose basic orchestrator metrics', async () => {
+    process.env.WHALE_NOTIFICATION_ENABLED = 'true'
+
+    const now = new Date()
+    await whaleAlertService.recordWhaleTrade({
+      whaleAddress: '0xorchestrator',
+      coin: 'SOL',
+      side: 'Long',
+      tradeSize: 1000,
+      price: 200,
+      tradeValueUsd: 200000,
+      tradeTime: now,
+    })
+
+    const server = app.getHttpServer()
+    const res = await request(server).get('/whale-notification/metrics').expect(200)
+    const metrics = (res.body?.data?.data ?? res.body?.data ?? res.body) as Record<string, unknown>
+
+    expect(typeof metrics.eventsReceived).toBe('number')
+    expect(typeof metrics.deliveriesSent).toBe('number')
+    expect(typeof metrics.featureFlagSkippedEvents).toBe('number')
+    expect(metrics.eventsReceived as number).toBeGreaterThan(0)
   })
 })
