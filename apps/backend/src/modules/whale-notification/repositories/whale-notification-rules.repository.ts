@@ -126,6 +126,17 @@ export class WhaleNotificationRulesRepository {
     return result.length > 0
   }
 
+  async releaseCooldownSlot(params: {
+    dedupKey: string
+    channel: WhaleNotificationChannel
+  }): Promise<void> {
+    await this.getClient().$executeRaw`
+      DELETE FROM "whale_notification_cooldown_guards"
+      WHERE "dedup_key" = ${params.dedupKey}
+        AND "channel" = ${params.channel}
+    `
+  }
+
   async createDelivery(params: CreateDeliveryParams) {
     return this.getClient().whaleNotificationDelivery.create({
       data: {

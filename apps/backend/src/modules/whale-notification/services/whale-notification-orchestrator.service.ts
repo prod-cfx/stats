@@ -102,31 +102,50 @@ export class WhaleNotificationOrchestratorService {
     }
 
     for (const item of dedupResult.allowed) {
-      const dispatchResult = await this.dispatcher.dispatch({
-        userId: item.userId,
-        recipientEmail: await this.deliveryRepository.findUserEmail(item.userId),
-        channel: this.toChannelEnum(item.channel),
-        whaleAddress: item.whaleAddress,
-        symbol: item.symbol,
-        side: item.side,
-        tradeValueUsd: item.tradeValueUsd,
-      })
+      const channel = this.toChannelEnum(item.channel)
+      let dispatchResult: Awaited<ReturnType<WhaleNotificationDispatcherService['dispatch']>>
+      try {
+        dispatchResult = await this.dispatcher.dispatch({
+          userId: item.userId,
+          recipientEmail: await this.deliveryRepository.findUserEmail(item.userId),
+          channel,
+          whaleAddress: item.whaleAddress,
+          symbol: item.symbol,
+          side: item.side,
+          tradeValueUsd: item.tradeValueUsd,
+        })
+      } catch (error) {
+        await this.repository.releaseCooldownSlot({
+          dedupKey: item.dedupKey,
+          channel,
+        })
+        throw error
+      }
 
-      await this.repository.createDelivery({
-        userId: item.userId,
-        ruleId: item.ruleId,
-        dedupKey: item.dedupKey,
-        channel: this.toChannelEnum(item.channel),
-        status: dispatchResult.status,
-        whaleAddress: item.whaleAddress,
-        symbol: item.symbol,
-        side: item.side,
-        tradeValueUsd: item.tradeValueUsd,
-        tradeTime: item.tradeTime,
-        title: dispatchResult.title,
-        content: dispatchResult.content,
-        errorMessage: dispatchResult.errorMessage,
-      })
+      try {
+        await this.repository.createDelivery({
+          userId: item.userId,
+          ruleId: item.ruleId,
+          dedupKey: item.dedupKey,
+          channel,
+          status: dispatchResult.status,
+          whaleAddress: item.whaleAddress,
+          symbol: item.symbol,
+          side: item.side,
+          tradeValueUsd: item.tradeValueUsd,
+          tradeTime: item.tradeTime,
+          title: dispatchResult.title,
+          content: dispatchResult.content,
+          errorMessage: dispatchResult.errorMessage,
+        })
+      } finally {
+        if (dispatchResult.status === WhaleNotificationDeliveryStatus.FAILED) {
+          await this.repository.releaseCooldownSlot({
+            dedupKey: item.dedupKey,
+            channel,
+          })
+        }
+      }
 
       if (dispatchResult.status === WhaleNotificationDeliveryStatus.SENT) {
         this.metricsService.incrementDeliveriesSent()
