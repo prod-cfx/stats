@@ -21,7 +21,7 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
   const { t } = useTranslation()
   const [creating, setCreating] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
-  const [thresholdUsd, setThresholdUsd] = useState('500000')
+  const [thresholdDraftBySymbol, setThresholdDraftBySymbol] = useState<Record<string, string>>({})
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const onLoadError = useCallback(() => {
     toast.error({ title: t('whaleTracking.realtime.toast.loadFailed') })
@@ -42,6 +42,11 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
     () => rules.filter(rule => rule.type === 'SYMBOL'),
     [rules],
   )
+  const selectedSymbolRule = useMemo(
+    () => symbolRules.find(rule => (rule.symbol ?? '').toUpperCase() === selectedSymbol.toUpperCase()),
+    [selectedSymbol, symbolRules],
+  )
+  const thresholdUsd = thresholdDraftBySymbol[selectedSymbol] ?? String(selectedSymbolRule?.thresholdUsd ?? 500000)
 
   const filteredRows = useMemo(
     () => rows.filter(row => !selectedSymbol || row.symbol === selectedSymbol),
@@ -114,7 +119,10 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
             type="number"
             min={1}
             value={thresholdUsd}
-            onChange={e => setThresholdUsd(e.target.value)}
+            onChange={e => {
+              const value = e.target.value
+              setThresholdDraftBySymbol(prev => ({ ...prev, [selectedSymbol]: value }))
+            }}
             className="w-[140px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm"
           />
           <button
