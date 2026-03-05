@@ -213,16 +213,8 @@ export class WhaleAlertService {
   }): Promise<void> {
     const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = data
 
-    await this.prisma.hyperliquidWhaleTrade.upsert({
-      where: {
-        userAddress_symbol_tradeTime_side: {
-          userAddress: whaleAddress,
-          symbol: coin,
-          tradeTime,
-          side,
-        },
-      },
-      create: {
+    const insertResult = await this.prisma.hyperliquidWhaleTrade.createMany({
+      data: [{
         userAddress: whaleAddress,
         symbol: coin,
         side,
@@ -230,15 +222,15 @@ export class WhaleAlertService {
         price,
         tradeValueUsd,
         tradeTime,
-      },
-      update: {
-        tradeSize,
-        price,
-        tradeValueUsd,
-      },
+      }],
+      skipDuplicates: true,
     })
 
-    // 新增交易后触发通知编排：匹配规则 -> 去重 -> 分发 -> 投递记录
+    if (insertResult.count === 0) {
+      return
+    }
+
+    // 仅在首次插入成交时触发编排，避免重放历史成交产生重复通知
     await this.whaleNotificationOrchestrator.processTradeEvent({
       whaleAddress,
       symbol: coin,
