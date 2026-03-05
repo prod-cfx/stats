@@ -65,6 +65,27 @@ export class WhaleNotificationRulesService {
   private normalizeCreateInput(dto: CreateWhaleNotificationRuleDto) {
     const normalizedAddress = dto.address?.trim().toLowerCase()
     const normalizedSymbol = dto.symbol?.trim().toUpperCase()
+    const thresholdInput = dto.thresholdUsd
+    const normalizedThresholdUsd = Number(thresholdInput)
+
+    if (!Number.isFinite(normalizedThresholdUsd) || normalizedThresholdUsd < 1) {
+      throw new DomainException('thresholdUsd must be a valid number greater than or equal to 1', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    if (
+      !dto.channels
+      || typeof dto.channels.web !== 'boolean'
+      || typeof dto.channels.email !== 'boolean'
+      || typeof dto.channels.telegram !== 'boolean'
+    ) {
+      throw new DomainException('channels must include web/email/telegram boolean fields', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
 
     if (dto.type === WhaleNotificationRuleType.ADDRESS && !normalizedAddress) {
       throw new DomainException('Address rule requires address', {
@@ -84,7 +105,7 @@ export class WhaleNotificationRulesService {
       type: dto.type,
       address: normalizedAddress,
       symbol: normalizedSymbol,
-      thresholdUsd: dto.thresholdUsd,
+      thresholdUsd: normalizedThresholdUsd,
       note: dto.note?.trim() || undefined,
       channels: dto.channels,
     }

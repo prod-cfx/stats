@@ -164,4 +164,22 @@ describe('Whale notification rules HTTP (E2E)', () => {
 
     expect(finalListRes.body?.data).toHaveLength(0)
   })
+
+  it('should return 400 instead of 500 for missing threshold', async () => {
+    const server = app.getHttpServer()
+
+    await request(server)
+      .post('/api/v1/whale-notification/rules')
+      .set('Authorization', 'Bearer e2e-token')
+      .send({
+        type: 'SYMBOL',
+        symbol: 'BTC',
+        channels: {
+          web: true,
+          email: false,
+          telegram: false,
+        },
+      })
+      .expect(400)
+  })
 })

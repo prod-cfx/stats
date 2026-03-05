@@ -1,11 +1,15 @@
 import type { WhaleNotificationRule } from '@prisma/client'
-import type { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
-import type { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
 import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+// Nest ValidationPipe 需要运行时引用 DTO class，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { CreateWhaleNotificationRuleDto } from '../dto/create-whale-notification-rule.dto'
+// Nest ValidationPipe 需要运行时引用 DTO class，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { UpdateWhaleNotificationRuleDto } from '../dto/update-whale-notification-rule.dto'
 import { WhaleNotificationRuleResponseDto } from '../dto/whale-notification-rule.response.dto'
 import { WhaleNotificationRulesService as WhaleNotificationRulesServiceToken } from '../services/whale-notification-rules.service'
 
