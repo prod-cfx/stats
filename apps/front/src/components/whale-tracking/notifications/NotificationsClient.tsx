@@ -7,8 +7,10 @@ import { PageTitle } from '@/components/ui/Typography'
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
+import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
 import { useWhaleNotificationRules } from '@/features/whale-notification/hooks/useWhaleNotificationRules'
 import { AddressMonitorSection } from './AddressMonitorSection'
+import { InboxTab } from './InboxTab'
 import { RealtimeWhaleMonitorSection } from './RealtimeWhaleMonitorSection'
 
 export function NotificationsClient() {
@@ -23,6 +25,7 @@ export function NotificationsClient() {
     deleteRule,
     refresh,
   } = useWhaleNotificationRules()
+  const inbox = useWhaleNotificationInbox()
 
   const addressRules = useMemo(
     () => rules.filter(rule => rule.type === 'ADDRESS'),
@@ -72,6 +75,22 @@ export function NotificationsClient() {
           await deleteRule(id)
         }}
       />
+
+      <section className="space-y-3 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 md:p-5">
+        <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">
+          {t('whaleTracking.notifications.tabs.inbox')} ({inbox.unreadCount})
+        </h3>
+        <InboxTab
+          items={inbox.items}
+          loading={inbox.loading}
+          onRead={(id) => {
+            void inbox.markRead(id)
+          }}
+          onReadAll={() => {
+            void inbox.markAllRead()
+          }}
+        />
+      </section>
 
       <CreateMonitorModal
         isOpen={openModal}
