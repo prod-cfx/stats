@@ -43,7 +43,7 @@ export const Navbar = () => {
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
   const [bellOpen, setBellOpen] = useState(false)
   const { session, logout } = useAuth()
-  const { unreadCount } = useWhaleNotificationUnreadCount()
+  const { unreadCount, refresh: refreshUnreadCount } = useWhaleNotificationUnreadCount()
   const inbox = useWhaleNotificationInbox()
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
@@ -492,8 +492,9 @@ export const Navbar = () => {
                 {unreadCount > 0 && (
                   <button
                     type="button"
-                    onClick={() => {
-                      void inbox.markAllRead()
+                    onClick={async () => {
+                      await inbox.markAllRead()
+                      await refreshUnreadCount()
                     }}
                     className="rounded px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
                   >
@@ -516,9 +517,10 @@ export const Navbar = () => {
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         if (!item.read) {
-                          void inbox.markRead(item.id)
+                          await inbox.markRead(item.id)
+                          await refreshUnreadCount()
                         }
                         setBellOpen(false)
                         router.push(withLng('/whale-tracking/notifications'))
