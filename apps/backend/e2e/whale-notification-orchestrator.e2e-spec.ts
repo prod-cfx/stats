@@ -228,7 +228,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     expect(metrics.eventsReceived as number).toBeGreaterThan(0)
   })
 
-  it('should skip unmatched users in gray release allowlist mode', async () => {
+  it('should ignore allowlist setting and continue dispatching', async () => {
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = 'some-other-user'
     await prisma.getClient().whaleNotificationDelivery.deleteMany({ where: { userId } })
 
@@ -245,7 +245,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
       where: { userId },
     })
-    expect(rows.length).toBe(0)
+    expect(rows.length).toBeGreaterThan(0)
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
   })
 })

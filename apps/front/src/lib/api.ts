@@ -13,8 +13,6 @@ import { ApiError, AuthenticationError, logError } from './errors'
 import {
   fetchTraderFullData as fetchTraderFullDataFromHyperliquid,
   fetchTraderOpenOrdersFromHyperliquid,
-  fetchTraderPositionsFromHyperliquid,
-  fetchTraderSnapshotFromHyperliquid,
   fetchUserFillsFromHyperliquid,
   fetchUserPortfolioFromHyperliquid,
 } from './hyperliquid-api'
@@ -476,15 +474,42 @@ export async function fetchTraderSnapshot(
 ): Promise<TraderSnapshotResponse> {
   try {
     return await apiCall(async () => {
-      // 如果需要跳过缓存，直接调用 Hyperliquid API
-      if (query.skipCache) {
-        return fetchTraderSnapshotFromHyperliquid(address)
+      const searchParams = new URLSearchParams()
+      if (query.skipCache === true) {
+        searchParams.set('skipCache', 'true')
       }
+      const queryString = searchParams.toString()
+      const fallbackUrl =
+        queryString.length > 0
+          ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot?${queryString}`
+          : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/snapshot`
 
-      // 使用缓存包装器（30 秒缓存）
+      // 如果需要跳过缓存，直接调用 Hyperliquid API
       return cachedRequest(
-        `trader-snapshot:${address}`,
-        () => fetchTraderSnapshotFromHyperliquid(address),
+        `trader-snapshot:${address}:${query.skipCache ? 'skip' : 'cache'}`,
+        () =>
+          safeApiCall(
+            () =>
+              client.WhaleTrackingController_getTraderSnapshot({
+                params: { address },
+                queries: query.skipCache ? { skipCache: true } : {},
+                headers: optionalAuthHeaders(),
+              }),
+            {
+              url: fallbackUrl,
+              options: {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...optionalAuthHeaders(),
+                },
+              },
+              validateResponse: data =>
+                unwrapResponse<TraderSnapshotResponse>(
+                  data as TraderSnapshotResponse | BaseResponse<TraderSnapshotResponse>,
+                ),
+            },
+          ),
         CacheTTL.MEDIUM,
       )
     }, 'FETCH_TRADER_SNAPSHOT')
@@ -565,15 +590,48 @@ export async function fetchTraderPositions(
     return await apiCall(async () => {
       const { type = 'all', skipCache = false } = query
 
-      // 如果需要跳过缓存，直接调用 Hyperliquid API
-      if (skipCache) {
-        return fetchTraderPositionsFromHyperliquid(address, { type })
+      const searchParams = new URLSearchParams()
+      if (type) {
+        searchParams.set('type', type)
       }
+      if (skipCache) {
+        searchParams.set('skipCache', 'true')
+      }
+      const queryString = searchParams.toString()
+      const fallbackUrl =
+        queryString.length > 0
+          ? `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions?${queryString}`
+          : `${API_BASE_URL}/whale-tracking/traders/${encodeURIComponent(address)}/positions`
 
       // 使用缓存包装器（30 秒缓存）
       return cachedRequest(
-        `trader-positions:${address}:${type}`,
-        () => fetchTraderPositionsFromHyperliquid(address, { type }),
+        `trader-positions:${address}:${type}:${skipCache ? 'skip' : 'cache'}`,
+        () =>
+          safeApiCall(
+            () =>
+              client.WhaleTrackingController_getTraderPositions({
+                params: { address },
+                queries: {
+                  type,
+                  ...(skipCache ? { skipCache: true } : {}),
+                },
+                headers: optionalAuthHeaders(),
+              }),
+            {
+              url: fallbackUrl,
+              options: {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...optionalAuthHeaders(),
+                },
+              },
+              validateResponse: data =>
+                unwrapResponse<TraderPositionsResponse>(
+                  data as TraderPositionsResponse | BaseResponse<TraderPositionsResponse>,
+                ),
+            },
+          ),
         CacheTTL.MEDIUM,
       )
     }, 'FETCH_TRADER_POSITIONS')

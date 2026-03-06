@@ -5,6 +5,7 @@ import type {
   WhaleNotificationRuleType,
 } from '@prisma/client'
 import type { PrismaService } from '@/prisma/prisma.service'
+import { randomUUID } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
@@ -103,15 +104,18 @@ export class WhaleNotificationRulesRepository {
     channel: WhaleNotificationChannel
     cooldownSeconds: number
   }): Promise<boolean> {
+    const id = randomUUID()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + params.cooldownSeconds * 1000)
     const result = await this.getClient().$queryRaw<Array<{ id: string }>>`
       INSERT INTO "whale_notification_cooldown_guards" (
+        "id",
         "dedup_key",
         "channel",
         "expires_at"
       )
       VALUES (
+        ${id},
         ${params.dedupKey},
         ${params.channel},
         ${expiresAt}
