@@ -15,7 +15,6 @@ export default function TelegramCallbackPage() {
   const {
     loginWithTelegramCallback,
     bindTelegram,
-    createTelegramDesktopIntent,
     getTelegramDesktopIntentStatus,
     loginWithTelegramDesktopIntent,
     bindTelegramByDesktopIntent,
@@ -26,7 +25,7 @@ export default function TelegramCallbackPage() {
 
   useEffect(() => {
     const query = typeof window === 'undefined'
-      ? searchParams
+      ? (searchParams ?? new URLSearchParams())
       : new URLSearchParams(window.location.search)
     const { source, intent, desktopIntentId, redirect, payload } = resolveTelegramCallbackPayload({
       query,
@@ -41,18 +40,19 @@ export default function TelegramCallbackPage() {
 
       const finishDesktopFlow = async () => {
         if (intent === 'bind') {
-          if (isLoading) return
+          if (isLoading) return 'waiting'
           if (!isAuthenticated) {
             setError('当前未登录 Coinflux，无法绑定 Telegram')
-            return
+            return 'failed'
           }
           await bindTelegramByDesktopIntent(desktopIntentId)
           router.replace(redirect)
-          return
+          return 'done'
         }
 
         await loginWithTelegramDesktopIntent(desktopIntentId)
         router.replace(redirect)
+        return 'done'
       }
 
       const tick = async () => {
@@ -62,24 +62,15 @@ export default function TelegramCallbackPage() {
         try {
           const status = await getTelegramDesktopIntentStatus(desktopIntentId)
           if (status.status === 'confirmed') {
-            await finishDesktopFlow()
+            const result = await finishDesktopFlow()
+            if (result === 'waiting') {
+              window.setTimeout(tick, 800)
+            }
             return
           }
           if (status.status === 'expired') {
-            try {
-              const recreated = await createTelegramDesktopIntent({
-                intent,
-                lng,
-              })
-              window.location.href = recreated.webLink
-              window.setTimeout(() => {
-                window.location.href = recreated.callbackUrl
-              }, 400)
-              return
-            } catch {
-              setError('Telegram 授权已过期，请返回登录页重新发起')
-              return
-            }
+            setError('Telegram 授权已过期，请返回登录页重新发起')
+            return
           }
           if (status.status !== 'pending') {
             setError('Telegram 授权状态异常，请返回登录页重试')
@@ -134,7 +125,6 @@ export default function TelegramCallbackPage() {
   }, [
     bindTelegram,
     bindTelegramByDesktopIntent,
-    createTelegramDesktopIntent,
     getTelegramDesktopIntentStatus,
     isAuthenticated,
     isLoading,
