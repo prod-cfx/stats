@@ -181,7 +181,7 @@ export class WhaleNotificationOrchestratorService {
 
   private applyGrayRelease<T extends { userId: string }>(matches: T[]): T[] {
     const rawAllowlist = this.configService.get<string>('WHALE_NOTIFICATION_ALLOWED_USER_IDS')?.trim()
-    if (!rawAllowlist)
+    if (!rawAllowlist || this.isLocalPlaceholder(rawAllowlist))
       return matches
 
     const allowlist = new Set(
@@ -193,5 +193,10 @@ export class WhaleNotificationOrchestratorService {
     if (!allowlist.size)
       return matches
     return matches.filter(match => allowlist.has(match.userId))
+  }
+
+  private isLocalPlaceholder(value: string): boolean {
+    // 根目录 env 模板约定：未配置时使用占位符 __SET_IN_env.local__
+    return value === '__SET_IN_env.local__'
   }
 }
