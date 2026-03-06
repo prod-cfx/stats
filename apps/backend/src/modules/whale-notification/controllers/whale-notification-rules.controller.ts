@@ -1,6 +1,6 @@
 import type { WhaleNotificationRule } from '@prisma/client'
 import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -42,7 +42,7 @@ export class WhaleNotificationRulesController {
     return this.toResponse(row)
   }
 
-  @Patch(':id')
+  @Put(':id')
   @ApiOperation({ summary: '更新巨鲸通知规则' })
   @ApiOkResponse({ type: WhaleNotificationRuleResponseDto })
   async update(

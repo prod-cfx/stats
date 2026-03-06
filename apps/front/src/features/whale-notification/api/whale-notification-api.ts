@@ -257,7 +257,7 @@ export async function updateWhaleNotificationRule(
   id: string,
   input: UpdateWhaleNotificationRuleInput,
 ): Promise<WhaleNotificationRule> {
-  const outcome = await requestWithFallback<WhaleNotificationRule>('PATCH', `/rules/${id}`, input)
+  const outcome = await requestWithFallback<WhaleNotificationRule>('PUT', `/rules/${id}`, input)
   if (outcome.kind === 'remote' && outcome.data) return outcome.data
 
   if (outcome.kind === 'remote' && !outcome.data) {
