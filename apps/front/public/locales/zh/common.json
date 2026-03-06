@@ -567,6 +567,7 @@
       "table": {
         "address": "交易地址",
         "asset": "币种",
+        "direction": "多空方向",
         "positionValue": "持仓价值",
         "entryPrice": "开盘价格",
         "winRate": "胜率",
@@ -629,6 +630,7 @@
         "symbol": "币种",
         "thresholdUsd": "阈值（USD）",
         "channels": "通知渠道",
+        "telegramBindRequired": "请先完成 Telegram 登录/绑定后再开启 Telegram 推送",
         "editAddressTitle": "编辑地址监控"
       },
       "errors": {

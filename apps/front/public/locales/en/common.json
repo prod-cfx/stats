@@ -556,6 +556,7 @@
       "table": {
         "address": "Address",
         "asset": "Asset",
+        "direction": "Direction",
         "positionValue": "Position Value",
         "entryPrice": "Entry Price",
         "winRate": "Win Rate",
@@ -618,6 +619,7 @@
         "symbol": "Symbol",
         "thresholdUsd": "Threshold (USD)",
         "channels": "Channels",
+        "telegramBindRequired": "Please log in/bind Telegram first to enable Telegram notifications",
         "editAddressTitle": "Edit Address Monitor"
       },
       "errors": {

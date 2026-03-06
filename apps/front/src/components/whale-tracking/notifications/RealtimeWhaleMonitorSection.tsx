@@ -1,7 +1,11 @@
 'use client'
 
-import type { CreateWhaleNotificationRuleInput, WhaleNotificationRule } from '@/features/whale-notification/types'
-import { Check, Copy, RefreshCw } from 'lucide-react'
+import type {
+  CreateWhaleNotificationRuleInput,
+  UpdateWhaleNotificationRuleInput,
+  WhaleNotificationRule,
+} from '@/features/whale-notification/types'
+import { Check, Copy, RefreshCw, Trash2 } from 'lucide-react'
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getDefaultWhaleChannels } from '@/features/whale-notification/api/whale-notification-api'
@@ -15,13 +19,20 @@ import { useRealtimeWhaleTrades } from './useRealtimeWhaleTrades'
 interface RealtimeWhaleMonitorSectionProps {
   rules: WhaleNotificationRule[]
   onCreateRule: (input: CreateWhaleNotificationRuleInput) => Promise<{ created: boolean }>
+  onUpdateRule: (id: string, input: UpdateWhaleNotificationRuleInput) => Promise<void> | void
+  onDeleteRule: (id: string) => Promise<void> | void
 }
 
-export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWhaleMonitorSectionProps) {
+export function RealtimeWhaleMonitorSection({
+  rules,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
+}: RealtimeWhaleMonitorSectionProps) {
   const { t } = useTranslation()
   const [creating, setCreating] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string>(DEFAULT_MONITOR_SYMBOL)
-  const [thresholdUsd, setThresholdUsd] = useState('500000')
+  const [thresholdDraftBySymbol, setThresholdDraftBySymbol] = useState<Record<string, string>>({})
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const onLoadError = useCallback(() => {
     toast.error({ title: t('whaleTracking.realtime.toast.loadFailed') })
@@ -42,6 +53,11 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
     () => rules.filter(rule => rule.type === 'SYMBOL'),
     [rules],
   )
+  const selectedSymbolRule = useMemo(
+    () => symbolRules.find(rule => (rule.symbol ?? '').toUpperCase() === selectedSymbol.toUpperCase()),
+    [selectedSymbol, symbolRules],
+  )
+  const thresholdUsd = thresholdDraftBySymbol[selectedSymbol] ?? String(selectedSymbolRule?.thresholdUsd ?? 500000)
 
   const filteredRows = useMemo(
     () => rows.filter(row => !selectedSymbol || row.symbol === selectedSymbol),
@@ -114,7 +130,10 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
             type="number"
             min={1}
             value={thresholdUsd}
-            onChange={e => setThresholdUsd(e.target.value)}
+            onChange={e => {
+              const value = e.target.value
+              setThresholdDraftBySymbol(prev => ({ ...prev, [selectedSymbol]: value }))
+            }}
             className="w-[140px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-sm"
           />
           <button
@@ -135,17 +154,57 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
           </button>
         </div>
       </div>
+      {!!symbolRules.length && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-2.5">
+          {symbolRules.map(rule => (
+            <div
+              key={rule.id}
+              className="flex items-center gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2.5 py-1.5"
+            >
+              <span className="text-xs font-semibold text-[color:var(--cf-text-strong)]">
+                {rule.symbol} · ${rule.thresholdUsd.toLocaleString('en-US')}
+              </span>
+              <label className="inline-flex cursor-pointer items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={rule.isActive}
+                  onChange={e => {
+                    void onUpdateRule(rule.id, { isActive: e.target.checked })
+                  }}
+                />
+                <span className={rule.isActive ? 'text-emerald-400' : 'text-[color:var(--cf-muted)]'}>
+                  {rule.isActive
+                    ? t('whaleTracking.notifications.status.active')
+                    : t('whaleTracking.notifications.status.paused')}
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  void onDeleteRule(rule.id)
+                }}
+                className="rounded p-1 text-rose-400 transition-colors hover:bg-rose-500/10"
+                aria-label={t('whaleTracking.notifications.actions.removeMonitor')}
+                title={t('whaleTracking.notifications.actions.removeMonitor')}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading && (
         <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
       )}
 
       <div className="overflow-x-auto rounded-xl border border-[color:var(--cf-border)]">
-        <table className="w-full min-w-[920px]">
+        <table className="w-full min-w-[980px]">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.address')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.asset')}</th>
+              <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.direction')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.positionValue')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.entryPrice')}</th>
               <th className="px-4 py-3 text-left">{t('whaleTracking.realtime.table.time')}</th>
@@ -165,6 +224,15 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
                   </button>
                 </td>
                 <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.symbol}</td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex rounded-md border px-2 py-1 text-xs font-bold ${
+                    row.side === 'Long'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                      : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                  }`}>
+                    {row.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-sm font-semibold text-[color:var(--cf-text-strong)]">{row.positionValueText}</td>
                 <td className="px-4 py-3 text-sm text-[color:var(--cf-text)]">{row.entryPriceText}</td>
                 <td className="px-4 py-3 text-sm text-[color:var(--cf-muted)]">{formatRelativeTime(row.timestamp)}</td>
@@ -172,7 +240,7 @@ export function RealtimeWhaleMonitorSection({ rules, onCreateRule }: RealtimeWha
             ))}
             {!filteredRows.length && !loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-[color:var(--cf-muted)]">
                   {t('whaleTracking.notifications.emptyRealtime')}
                 </td>
               </tr>

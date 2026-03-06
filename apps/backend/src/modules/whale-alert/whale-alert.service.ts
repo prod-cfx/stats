@@ -3,8 +3,10 @@ import type {
   RealtimeWhaleAlertDto,
 } from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
-import { Injectable, Logger } from '@nestjs/common'
+import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -15,7 +17,11 @@ import { TradeSide } from './dto/whale-trade.dto'
 export class WhaleAlertService {
   private readonly logger = new Logger(WhaleAlertService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(WhaleNotificationOrchestratorServiceToken)
+    private readonly whaleNotificationOrchestrator: WhaleNotificationOrchestratorService,
+  ) {}
 
   /**
    * 获取 Hyperliquid 鲸鱼持仓预警的"实时"列表
@@ -207,16 +213,8 @@ export class WhaleAlertService {
   }): Promise<void> {
     const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = data
 
-    await this.prisma.hyperliquidWhaleTrade.upsert({
-      where: {
-        userAddress_symbol_tradeTime_side: {
-          userAddress: whaleAddress,
-          symbol: coin,
-          tradeTime,
-          side,
-        },
-      },
-      create: {
+    const insertResult = await this.prisma.hyperliquidWhaleTrade.createMany({
+      data: [{
         userAddress: whaleAddress,
         symbol: coin,
         side,
@@ -224,12 +222,21 @@ export class WhaleAlertService {
         price,
         tradeValueUsd,
         tradeTime,
-      },
-      update: {
-        tradeSize,
-        price,
-        tradeValueUsd,
-      },
+      }],
+      skipDuplicates: true,
+    })
+
+    if (insertResult.count === 0) {
+      return
+    }
+
+    // 仅在首次插入成交时触发编排，避免重放历史成交产生重复通知
+    await this.whaleNotificationOrchestrator.processTradeEvent({
+      whaleAddress,
+      symbol: coin,
+      side,
+      tradeValueUsd,
+      tradeTime,
     })
   }
 }
