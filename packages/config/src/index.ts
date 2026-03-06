@@ -20,7 +20,7 @@ export type AppEnv = z.infer<typeof schema>
 
 const load = (filePath: string) => {
     if (!existsSync(filePath)) return
-    const result = loadFile({ path: filePath })
+    const result = loadFile({ path: filePath, override: true })
     expand(result)
 }
 
@@ -32,10 +32,10 @@ export const loadEnvironment = (options: { path?: string; env?: string; basePath
         const baseDir = options.basePath ?? process.cwd()
         console.log(`[loadEnvironment] envName: ${envName}, basePath: ${baseDir}`)
         const candidates = [
-            `.env.${envName}.local`,
             `.env.${envName}`,
-            '.env.local',
+            `.env.${envName}.local`,
             '.env',
+            '.env.local',
         ]
         candidates.forEach(file => {
             const fullPath = resolve(baseDir, file)
@@ -52,4 +52,3 @@ export const loadEnvironment = (options: { path?: string; env?: string; basePath
     }
     return parsed.data
 }
-
