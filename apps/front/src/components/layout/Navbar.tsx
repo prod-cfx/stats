@@ -96,6 +96,7 @@ export const Navbar = () => {
   // 临时隐藏看板，需要时再恢复
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
+    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
     {
       name: t('nav.data'),
       href: '#',
