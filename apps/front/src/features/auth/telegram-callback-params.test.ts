@@ -67,6 +67,29 @@ describe('resolveTelegramCallbackPayload', () => {
     expect(result.payload.firstName).toBe('Bob')
   })
 
+  it('当 tgAuthResult 为未编码 base64 且包含 + 时应正确解析', () => {
+    const query = new URLSearchParams('source=web')
+    const basePayload = {
+      id: '1110614274',
+      auth_date: '1773023842',
+      hash: '6890a4de1b3b8c73e1e1bdf37c60dc526a40be0d85fd696bdc44245e5a8595b8',
+      first_name: 'lisa',
+      username: 'TON_future_value',
+      photo_url: 'https://t.me/i/userpic/320/rpXAUQCKHrDxOxrBFC9lJtoyq2x9facWNc4LxslyOGM.jpg',
+    }
+    const tgAuthResult = encodeBase64({ ...basePayload, nonce: '>' })
+    expect(tgAuthResult.includes('+')).toBe(true)
+
+    const result = resolveTelegramCallbackPayload({ query, hash: `#tgAuthResult=${tgAuthResult}` })
+
+    expect(result.payload.telegramId).toBe('1110614274')
+    expect(result.payload.authDate).toBe('1773023842')
+    expect(result.payload.hash).toBe('6890a4de1b3b8c73e1e1bdf37c60dc526a40be0d85fd696bdc44245e5a8595b8')
+    expect(result.payload.firstName).toBe('lisa')
+    expect(result.payload.username).toBe('TON_future_value')
+    expect(result.payload.photoUrl).toContain('https://t.me/i/userpic')
+  })
+
   it('应将 tgAuthResult 中 number 类型的 id/auth_date 转成字符串', () => {
     const query = new URLSearchParams('source=web')
     const tgAuthResult = encodeBase64({

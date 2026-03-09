@@ -65,7 +65,7 @@ function parseHashParams(hash: string | undefined): URLSearchParams {
 }
 
 function decodeBase64Utf8(value: string): string | null {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const normalized = value.replace(/\s/g, '+').replace(/-/g, '+').replace(/_/g, '/')
   const padding = normalized.length % 4
   const padded = padding === 0 ? normalized : `${normalized}${'='.repeat(4 - padding)}`
 
