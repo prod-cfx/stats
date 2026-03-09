@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageTitle } from '@/components/ui/Typography';
+import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api';
+import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal';
+import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard';
 import { fetchWhaleTradesRealtime } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
@@ -16,6 +19,7 @@ interface WhaleTransaction {
   tagBg: string;
   asset: string;
   side: 'Long' | 'Short';
+  leverage: string;
   marginType: 'Cross' | 'Isolated';
   positionValueUSD: string;
   positionValueAsset: string;
@@ -39,6 +43,7 @@ export const RealtimeWhalesTable = () => {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateSymbolRuleOpen, setIsCreateSymbolRuleOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc' | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -121,6 +126,14 @@ export const RealtimeWhalesTable = () => {
             : '$-';
 
         const timestamp = new Date(alert.trade_time).getTime();
+        const leverageRaw = (alert as { leverage?: number | string | null }).leverage;
+        const leverageValue =
+          typeof leverageRaw === 'number'
+            ? leverageRaw
+            : typeof leverageRaw === 'string'
+              ? Number(leverageRaw)
+              : Number.NaN;
+        const leverage = Number.isFinite(leverageValue) && leverageValue > 0 ? `${leverageValue}x` : '--';
 
         // 后端暂未提供胜率：先用“稳定伪随机”生成展示值（基于 address+symbol，不会抖动）
         const seedBase = `${alert.user_address}-${alert.symbol}`;
@@ -133,6 +146,7 @@ export const RealtimeWhalesTable = () => {
           tagBg: tagStyle.tagBg,
           asset: alert.symbol,
           side,
+          leverage,
           // Hyperliquid / Coinglass 不暴露保证金类型，这里统一展示为 Cross
           marginType: 'Cross',
           positionValueUSD,
@@ -279,6 +293,16 @@ export const RealtimeWhalesTable = () => {
         <div className="flex items-center gap-4 w-full md:w-auto">
           <button
             type="button"
+            onClick={() => {
+              if (!ensureMonitorAuth(t)) return;
+              setIsCreateSymbolRuleOpen(true);
+            }}
+            className="flex-1 md:flex-none rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/15"
+          >
+            {t('whaleTracking.notifications.actions.newSymbolRule')}
+          </button>
+          <button
+            type="button"
             onClick={() => setIsPaused(!isPaused)}
             className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 border rounded-full text-xs md:text-label font-bold transition-all active:scale-95 ${isPaused
                 ? 'bg-[#21262d] border-[#30363d] text-[#8b949e]'
@@ -295,11 +319,13 @@ export const RealtimeWhalesTable = () => {
         {/* Loading indicator removed per UX request (kept data fetching + logs) */}
 
         <div className="overflow-x-auto cf-scrollbar">
-          <table className="w-full border-collapse min-w-[1000px]">
+          <table className="w-full border-collapse min-w-[1160px]">
             <thead>
               <tr className="text-[color:var(--cf-muted)] border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/50">
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider sticky left-0 z-10 bg-[color:var(--cf-bg)]/95 border-r border-[color:var(--cf-border)]">{t('whaleTracking.realtime.table.address')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.asset')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.direction')}</th>
+                <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.holdings.table.leverage')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.positionValue')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider">{t('whaleTracking.realtime.table.entryPrice')}</th>
                 <th className="px-3 md:px-6 py-4 text-left text-[10px] md:text-xs font-bold uppercase tracking-wider whitespace-nowrap">
@@ -358,15 +384,18 @@ export const RealtimeWhalesTable = () => {
                     </div>
                   </td>
                   <td className="px-3 md:px-6 py-5">
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-6 h-6 md:w-8 md:h-8 rounded md:rounded-lg flex items-center justify-center text-[10px] md:text-xs font-bold ${tx.side === 'Long' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                        {tx.side === 'Long' ? t('whaleTracking.side.longAbbr') : t('whaleTracking.side.shortAbbr')}
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-bold">{tx.asset}</span>
-                        <span className="text-[color:var(--cf-muted)] text-[8px] md:text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
-                      </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-bold">{tx.asset}</span>
+                      <span className="text-[color:var(--cf-muted)] text-[8px] md:text-[10px] uppercase">{tx.marginType === 'Cross' ? t('whaleTracking.margin.cross') : t('whaleTracking.margin.isolated')}</span>
                     </div>
+                  </td>
+                  <td className="px-3 md:px-6 py-5">
+                    <span className={`inline-flex rounded-md border px-2 py-1 text-[10px] md:text-xs font-bold ${tx.side === 'Long' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
+                      {tx.side === 'Long' ? t('whaleTracking.side.long') : t('whaleTracking.side.short')}
+                    </span>
+                  </td>
+                  <td className="px-3 md:px-6 py-5 text-[color:var(--cf-text-strong)] text-[11px] md:text-body font-semibold">
+                    {tx.leverage}
                   </td>
                   <td className="px-3 md:px-6 py-5">
                     <div className="flex flex-col gap-0.5">
@@ -406,6 +435,17 @@ export const RealtimeWhalesTable = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         address={selectedAddress || ''}
+      />
+
+      <CreateMonitorModal
+        isOpen={isCreateSymbolRuleOpen}
+        mode="SYMBOL"
+        onClose={() => setIsCreateSymbolRuleOpen(false)}
+        onCreate={async (payload) => {
+          if (!ensureMonitorAuth(t)) return { created: false };
+          await createWhaleNotificationRule(payload);
+          return { created: true };
+        }}
       />
     </div>
   );

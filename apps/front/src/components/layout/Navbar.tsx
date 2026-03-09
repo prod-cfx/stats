@@ -1,13 +1,15 @@
 'use client'
 
-import { ChevronDown, Menu, Search, X } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoinfluxMark } from '@/components/ui/CoinfluxMark'
-import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/components/ui/toast'
+import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
+import { useWhaleNotificationUnreadCount } from '@/features/whale-notification/hooks/useWhaleNotificationUnreadCount'
+import { useAuth } from '@/hooks/use-auth'
 import { getMockMarketList } from '@/lib/market-data/mock-market-list'
 import { useMarketDataCatalog } from '@/lib/market-data/useMarketDataCatalog'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -32,16 +34,20 @@ export const Navbar = () => {
   const { info: _info } = useToast()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchWrapRef = useRef<HTMLDivElement>(null)
+  const bellWrapRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [extraBases, _setExtraBases] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
+  const [bellOpen, setBellOpen] = useState(false)
+  const { session, logout } = useAuth()
+  const { unreadCount, refresh: refreshUnreadCount } = useWhaleNotificationUnreadCount()
+  const inbox = useWhaleNotificationInbox()
 
   // Phase 1: 搜索交互先隐藏（后续要恢复，只需改为 true）
   const ENABLE_GLOBAL_SEARCH = false
-  const { session, logout } = useAuth()
   const ENABLE_USER_SYSTEM = true
 
   // 从 pathname 提取当前语言
@@ -84,6 +90,7 @@ export const Navbar = () => {
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
     { name: t('nav.realtime_whales'), href: withLng('/whale-tracking/realtime') },
     { name: t('nav.whale_holdings'), href: withLng('/whale-tracking/holdings') },
+    { name: t('nav.whale_notifications'), href: withLng('/whale-tracking/notifications') },
   ]
 
   // 临时隐藏看板，需要时再恢复
@@ -247,6 +254,20 @@ export const Navbar = () => {
       prev.includes(name) ? prev.filter(item => item !== name) : [...prev, name],
     )
   }
+
+  const recentInboxItems = useMemo(() => inbox.items.slice(0, 5), [inbox.items])
+
+  useEffect(() => {
+    const handleOutside = (event: MouseEvent) => {
+      if (bellWrapRef.current && !bellWrapRef.current.contains(event.target as Node)) {
+        setBellOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+    }
+  }, [])
 
   return (
     <nav className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 md:h-20 md:px-8">
@@ -448,7 +469,104 @@ export const Navbar = () => {
         <LanguageSwitcher />
         <ThemeToggle />
 
-        {/* User System - Phase 1 Hidden */}
+        <div className="relative" ref={bellWrapRef}>
+          <button
+            type="button"
+            aria-label="whale-notification-bell"
+            onClick={() => setBellOpen(prev => !prev)}
+            className="relative rounded-lg p-2 text-[color:var(--cf-muted)] transition-colors hover:bg-[color:var(--cf-surface)] hover:text-[color:var(--cf-text-strong)]"
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-bold text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {bellOpen && (
+            <div className="absolute top-full right-0 z-[80] mt-2 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] px-4 py-3">
+                <div className="text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                  {t('whaleTracking.notifications.tabs.inbox')} ({unreadCount})
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await inbox.markAllRead()
+                      await refreshUnreadCount()
+                    }}
+                    className="rounded px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
+                  >
+                    {t('whaleTracking.notifications.actions.markAllRead')}
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-80 overflow-y-auto p-2">
+                {inbox.loading ? (
+                  <div className="px-2 py-8 text-center text-sm text-[color:var(--cf-muted)]">
+                    {t('common.loading')}
+                  </div>
+                ) : !recentInboxItems.length ? (
+                  <div className="px-2 py-8 text-center text-sm text-[color:var(--cf-muted)]">
+                    {t('whaleTracking.notifications.emptyInbox')}
+                  </div>
+                ) : (
+                  recentInboxItems.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={async () => {
+                        if (!item.read) {
+                          await inbox.markRead(item.id)
+                          await refreshUnreadCount()
+                        }
+                        setBellOpen(false)
+                        router.push(withLng('/whale-tracking/notifications'))
+                      }}
+                      className={`mb-2 w-full rounded-lg border p-3 text-left transition-colors last:mb-0 ${
+                        item.read
+                          ? 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] hover:bg-[color:var(--cf-surface-hover)]'
+                          : 'border-primary/40 bg-primary/5 hover:bg-primary/10'
+                      }`}
+                    >
+                      <div className="line-clamp-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                        {item.title}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-xs text-[color:var(--cf-muted)]">
+                        {item.content}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[color:var(--cf-muted)]">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="border-t border-[color:var(--cf-border)] p-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBellOpen(false)
+                    const target = withLng('/whale-tracking/notifications')
+                    if (pathname === target) {
+                      router.refresh()
+                      return
+                    }
+                    router.push(target)
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-sm font-medium text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
+                >
+                  {t('nav.whale_notifications')}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {ENABLE_USER_SYSTEM &&
           (session ? (
             <div className="hidden items-center gap-2 md:flex">

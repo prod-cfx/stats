@@ -1,5 +1,5 @@
-import type { AuthResponseDto } from '@/types/auth'
 import type { AuthLoginMethod, AuthSession } from './types'
+import type { AuthResponseDto } from '@/types/auth'
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
 import { buildSession } from '@/lib/auth-storage'
 
@@ -128,6 +128,17 @@ export async function createTelegramDesktopIntentRequest(payload: {
   expiresInSeconds: number
 }> {
   return postJson('/auth/telegram/desktop/intent', payload)
+}
+
+export async function getTelegramWebAuthorizeUrlRequest(payload: {
+  intent: 'login' | 'bind'
+  lng: 'zh' | 'en'
+}): Promise<{ authorizeUrl: string }> {
+  const query = new URLSearchParams({
+    intent: payload.intent,
+    lng: payload.lng,
+  })
+  return getJson(`/auth/telegram/web/authorize-url?${query.toString()}`)
 }
 
 export async function getTelegramDesktopIntentStatusRequest(intentId: string): Promise<{

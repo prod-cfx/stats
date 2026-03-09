@@ -4,20 +4,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
 import { useAuth } from '@/hooks/use-auth'
-
-type CallbackSource = 'web' | 'desktop' | 'webapp'
-type CallbackIntent = 'login' | 'bind'
-
-function parseSource(value: string | null): CallbackSource {
-  if (value === 'desktop') return 'desktop'
-  if (value === 'webapp') return 'webapp'
-  return 'web'
-}
-
-function parseIntent(value: string | null): CallbackIntent {
-  return value === 'bind' ? 'bind' : 'login'
-}
 
 export default function TelegramCallbackPage() {
   const router = useRouter()
@@ -27,7 +15,6 @@ export default function TelegramCallbackPage() {
   const {
     loginWithTelegramCallback,
     bindTelegram,
-    createTelegramDesktopIntent,
     getTelegramDesktopIntentStatus,
     loginWithTelegramDesktopIntent,
     bindTelegramByDesktopIntent,
@@ -37,9 +24,14 @@ export default function TelegramCallbackPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const source = parseSource(searchParams.get('source'))
-    const intent = parseIntent(searchParams.get('intent'))
-    const desktopIntentId = searchParams.get('desktop_intent') || ''
+    const query = typeof window === 'undefined'
+      ? (searchParams ?? new URLSearchParams())
+      : new URLSearchParams(window.location.search)
+    const { source, intent, desktopIntentId, redirect, payload } = resolveTelegramCallbackPayload({
+      query,
+      hash: typeof window === 'undefined' ? '' : window.location.hash,
+      lng,
+    })
 
     if (source === 'desktop' && desktopIntentId) {
       let stopped = false
@@ -48,18 +40,19 @@ export default function TelegramCallbackPage() {
 
       const finishDesktopFlow = async () => {
         if (intent === 'bind') {
-          if (isLoading) return
+          if (isLoading) return 'waiting'
           if (!isAuthenticated) {
             setError('当前未登录 Coinflux，无法绑定 Telegram')
-            return
+            return 'failed'
           }
           await bindTelegramByDesktopIntent(desktopIntentId)
-          router.replace(`/${lng}/account`)
-          return
+          router.replace(redirect)
+          return 'done'
         }
 
         await loginWithTelegramDesktopIntent(desktopIntentId)
-        router.replace(`/${lng}/account`)
+        router.replace(redirect)
+        return 'done'
       }
 
       const tick = async () => {
@@ -69,24 +62,15 @@ export default function TelegramCallbackPage() {
         try {
           const status = await getTelegramDesktopIntentStatus(desktopIntentId)
           if (status.status === 'confirmed') {
-            await finishDesktopFlow()
+            const result = await finishDesktopFlow()
+            if (result === 'waiting') {
+              window.setTimeout(tick, 800)
+            }
             return
           }
           if (status.status === 'expired') {
-            try {
-              const recreated = await createTelegramDesktopIntent({
-                intent,
-                lng,
-              })
-              window.location.href = recreated.webLink
-              window.setTimeout(() => {
-                window.location.href = recreated.callbackUrl
-              }, 400)
-              return
-            } catch {
-              setError('Telegram 授权已过期，请返回登录页重新发起')
-              return
-            }
+            setError('Telegram 授权已过期，请返回登录页重新发起')
+            return
           }
           if (status.status !== 'pending') {
             setError('Telegram 授权状态异常，请返回登录页重试')
@@ -109,17 +93,6 @@ export default function TelegramCallbackPage() {
       }
     }
 
-    const payload = {
-      source,
-      telegramId: searchParams.get('id') || '',
-      authDate: searchParams.get('auth_date') || '',
-      hash: searchParams.get('hash') || '',
-      firstName: searchParams.get('first_name') || undefined,
-      lastName: searchParams.get('last_name') || undefined,
-      username: searchParams.get('username') || undefined,
-      photoUrl: searchParams.get('photo_url') || undefined,
-    }
-
     if (!payload.telegramId || !payload.authDate || !payload.hash) {
       setError('缺少 Telegram 授权参数，请先在 Telegram 中完成登录授权')
       return
@@ -134,7 +107,7 @@ export default function TelegramCallbackPage() {
 
       bindTelegram(payload)
         .then(() => {
-          router.replace(`/${lng}/account`)
+          router.replace(redirect)
         })
         .catch(err => {
           setError(err instanceof Error ? err.message : 'Telegram 绑定失败')
@@ -144,7 +117,7 @@ export default function TelegramCallbackPage() {
 
     loginWithTelegramCallback(payload)
       .then(() => {
-        router.replace(`/${lng}/account`)
+        router.replace(redirect)
       })
       .catch(err => {
         setError(err instanceof Error ? err.message : 'Telegram 登录失败')
@@ -152,7 +125,6 @@ export default function TelegramCallbackPage() {
   }, [
     bindTelegram,
     bindTelegramByDesktopIntent,
-    createTelegramDesktopIntent,
     getTelegramDesktopIntentStatus,
     isAuthenticated,
     isLoading,

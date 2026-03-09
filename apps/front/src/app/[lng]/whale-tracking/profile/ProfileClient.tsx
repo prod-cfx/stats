@@ -18,6 +18,9 @@ import { PositionProfile } from '@/components/whale-tracking/profile/PositionPro
 import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs'
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader'
 import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary'
+import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
+import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
+import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchTraderDiscoverTags, fetchTraderFullData } from '@/lib/api'
 
 export function ProfileClient({ address }: { address: string }) {
@@ -33,6 +36,7 @@ export function ProfileClient({ address }: { address: string }) {
   const [portfolioData, setPortfolioData] = useState<UserPortfolioResponse | null>(null)
   const [fillsData, setFillsData] = useState<UserFillsResponse | null>(null)
   const [discoverTags, setDiscoverTags] = useState<TraderDiscoverTagsResponse | null>(null)
+  const [isCreateAddressRuleOpen, setIsCreateAddressRuleOpen] = useState(false)
 
   const loadData = useCallback(
     async (options: { skipCache?: boolean } = {}) => {
@@ -85,9 +89,13 @@ export function ProfileClient({ address }: { address: string }) {
               {/* Header */}
               <ProfileHeader
                 address={address}
-                discoverTag={discoverTags?.tag}
+                discoverTag={discoverTags?.tag ?? undefined}
                 aiTags={discoverTags?.aiTags}
                 onRefresh={() => loadData({ skipCache: true })}
+                onFollow={() => {
+                  if (!ensureMonitorAuth(t)) return
+                  setIsCreateAddressRuleOpen(true)
+                }}
               />
 
               {/* Summary Stats */}
@@ -130,6 +138,18 @@ export function ProfileClient({ address }: { address: string }) {
           )}
         </div>
       </main>
+
+      <CreateMonitorModal
+        isOpen={isCreateAddressRuleOpen}
+        mode="ADDRESS"
+        presetAddress={address}
+        onClose={() => setIsCreateAddressRuleOpen(false)}
+        onCreate={async (payload) => {
+          if (!ensureMonitorAuth(t)) return { created: false }
+          await createWhaleNotificationRule(payload)
+          return { created: true }
+        }}
+      />
       <Footer />
     </div>
   )
