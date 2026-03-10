@@ -1,0 +1,36 @@
+export type QuantReturnIntent =
+  | { type: 'run', strategyId: string, ts?: number }
+  | { type: 'edit', strategyId: string, ts?: number }
+  | { type: 'chat', draft: string, ts?: number }
+
+export type QuantReturnIntentInput =
+  | { type: 'run', strategyId: string }
+  | { type: 'edit', strategyId: string }
+  | { type: 'chat', draft: string }
+
+const INTENT_STORAGE_KEY = 'ai_quant_return_intent_v1'
+
+export function setIntent(intent: QuantReturnIntentInput) {
+  const payload: QuantReturnIntent = { ...intent, ts: Date.now() }
+  localStorage.setItem(INTENT_STORAGE_KEY, JSON.stringify(payload))
+}
+
+export function getIntent(ttlMs: number): QuantReturnIntent | null {
+  const raw = localStorage.getItem(INTENT_STORAGE_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as QuantReturnIntent
+    if (!parsed?.ts || Date.now() - parsed.ts > ttlMs) {
+      clearIntent()
+      return null
+    }
+    return parsed
+  } catch {
+    clearIntent()
+    return null
+  }
+}
+
+export function clearIntent() {
+  localStorage.removeItem(INTENT_STORAGE_KEY)
+}

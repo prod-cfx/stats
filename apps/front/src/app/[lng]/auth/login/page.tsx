@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Footer } from '@/components/layout/Footer'
@@ -12,15 +12,17 @@ import { useAuth } from '@/hooks/use-auth'
 export default function LoginPage() {
   const { t } = useTranslation()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const { isAuthenticated } = useAuth()
+  const redirect = searchParams?.get('redirect') || `/${lng}/account`
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace(`/${lng}/account`)
+      router.replace(redirect)
     }
-  }, [isAuthenticated, lng, router])
+  }, [isAuthenticated, redirect, router])
 
   if (isAuthenticated) return null
 
@@ -38,13 +40,13 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <EmailOtpForm onSuccess={() => router.replace(`/${lng}/account`)} />
+          <EmailOtpForm onSuccess={() => router.replace(redirect)} />
 
           <div className="relative py-1 text-center text-xs text-[color:var(--cf-muted)]">
             <span className="px-2">{t('auth.or')}</span>
           </div>
 
-          <TelegramLoginButtons lng={lng} />
+          <TelegramLoginButtons lng={lng} redirect={redirect} />
         </div>
       </main>
       <Footer />

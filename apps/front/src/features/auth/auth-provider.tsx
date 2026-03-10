@@ -78,7 +78,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [saveSession],
   )
 
-  const createTelegramDesktopIntent = useCallback(async (payload: { intent: 'login' | 'bind'; lng: 'zh' | 'en' }) => {
+  const createTelegramDesktopIntent = useCallback(async (payload: {
+    intent: 'login' | 'bind'
+    lng: 'zh' | 'en'
+    redirect?: string
+  }) => {
     return createTelegramDesktopIntentRequest(payload)
   }, [])
 

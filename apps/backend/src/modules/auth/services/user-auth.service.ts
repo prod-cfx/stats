@@ -62,6 +62,7 @@ interface TelegramDesktopIntentPayload {
   status: 'pending' | 'confirmed'
   intent: 'login' | 'bind'
   lng: 'zh' | 'en'
+  redirect: string
   createdAt: number
   telegramId?: string
   firstName?: string
@@ -271,11 +272,18 @@ export class UserAuthService {
   async getTelegramWebAuthorizeUrl(payload: {
     intent: 'login' | 'bind'
     lng: 'zh' | 'en'
+    redirect?: string
   }): Promise<{ authorizeUrl: string }> {
     const botId = this.resolveTelegramBotId()
     const frontUrl = this.resolveFrontendUrl()
     const frontOrigin = new URL(frontUrl).origin
-    const callbackUrl = `${frontUrl}/${payload.lng}/auth/telegram/callback?source=web&intent=${payload.intent}`
+    const callbackUrl = this.buildTelegramCallbackUrl({
+      frontUrl,
+      source: 'web',
+      intent: payload.intent,
+      lng: payload.lng,
+      redirect: this.normalizeAuthRedirect(payload.redirect, payload.lng),
+    })
 
     const query = new URLSearchParams({
       bot_id: botId,
@@ -314,12 +322,20 @@ export class UserAuthService {
       status: 'pending',
       intent,
       lng,
+      redirect: this.normalizeAuthRedirect(dto.redirect, lng),
       createdAt: Date.now(),
     }
 
     await this.cacheService.set(this.telegramDesktopIntentCacheKey(intentId), payload, TELEGRAM_DESKTOP_INTENT_TTL_SECONDS)
 
-    const callbackUrl = `${frontUrl}/${lng}/auth/telegram/callback?source=desktop&intent=${intent}&desktop_intent=${intentId}`
+    const callbackUrl = this.buildTelegramCallbackUrl({
+      frontUrl,
+      source: 'desktop',
+      intent,
+      lng,
+      desktopIntentId: intentId,
+      redirect: payload.redirect,
+    })
     return {
       intentId,
       deepLink: `tg://resolve?domain=${botName}&start=${startParam}`,
@@ -459,7 +475,14 @@ export class UserAuthService {
     await this.cacheService.set(cacheKey, updated, TELEGRAM_DESKTOP_INTENT_TTL_SECONDS)
 
     const frontUrl = this.resolveFrontendUrl()
-    const callbackUrl = `${frontUrl}/${payload.lng}/auth/telegram/callback?source=desktop&intent=${payload.intent}&desktop_intent=${intentId}`
+    const callbackUrl = this.buildTelegramCallbackUrl({
+      frontUrl,
+      source: 'desktop',
+      intent: payload.intent,
+      lng: payload.lng,
+      desktopIntentId: intentId,
+      redirect: payload.redirect,
+    })
     const messageText = payload.lng === 'en'
       ? `Authorization confirmed. Click to continue:\n${callbackUrl}`
       : `授权成功，请点击继续登录：\n${callbackUrl}`
@@ -932,6 +955,30 @@ export class UserAuthService {
     const fromEnv = this.configService.get<string>('FRONTEND_URL')?.trim()
     if (fromEnv) return fromEnv.replace(/\/$/, '')
     return 'http://localhost:3001'
+  }
+
+  private normalizeAuthRedirect(redirect: string | undefined, lng: 'zh' | 'en'): string {
+    if (!redirect) return `/${lng}/account`
+    if (!redirect.startsWith('/') || redirect.startsWith('//')) return `/${lng}/account`
+    return redirect
+  }
+
+  private buildTelegramCallbackUrl(input: {
+    frontUrl: string
+    source: 'web' | 'desktop'
+    intent: 'login' | 'bind'
+    lng: 'zh' | 'en'
+    desktopIntentId?: string
+    redirect: string
+  }): string {
+    const callbackUrl = new URL(`${input.frontUrl}/${input.lng}/auth/telegram/callback`)
+    callbackUrl.searchParams.set('source', input.source)
+    callbackUrl.searchParams.set('intent', input.intent)
+    callbackUrl.searchParams.set('redirect', input.redirect)
+    if (input.desktopIntentId) {
+      callbackUrl.searchParams.set('desktop_intent', input.desktopIntentId)
+    }
+    return callbackUrl.toString()
   }
 
   private buildTelegramPlaceholderEmail(telegramId: string): string {

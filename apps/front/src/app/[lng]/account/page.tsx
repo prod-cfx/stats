@@ -1,11 +1,13 @@
 'use client'
 
 import { Copy, LogOut, Send } from 'lucide-react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useState } from 'react'
+import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
 import { useTranslation } from 'react-i18next'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { AiQuantSection } from '@/components/account/AiQuantSection'
 import { useToast } from '@/components/ui/toast'
 import { TelegramLoginButtons } from '@/features/auth/components/telegram-login-buttons'
 import { useAuth } from '@/hooks/use-auth'
@@ -17,8 +19,11 @@ function maskEmail(email: string) {
   return `${name.slice(0, 2)}***@${domain}`
 }
 
+type AccountTab = 'settings' | 'ai-quant'
+
 export default function AccountPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const { t } = useTranslation()
@@ -35,6 +40,8 @@ export default function AccountPage() {
   }, [isLoading, lng, router, session])
 
   const loginMethods = useMemo(() => new Set(session?.loginMethods || []), [session?.loginMethods])
+  const tabParam = searchParams?.get('tab')
+  const currentTab: AccountTab = tabParam === 'ai-quant' || tabParam === 'exchange-api' ? 'ai-quant' : 'settings'
 
   if (!session) {
     return null
@@ -69,102 +76,137 @@ export default function AccountPage() {
       <Navbar />
       <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
         <h1 className="bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-2xl font-bold text-transparent">{t('account.title')}</h1>
+        <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-2">
+          <button
+            type="button"
+            onClick={() => router.replace(`/${lng}/account?tab=settings`)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              currentTab === 'settings'
+                ? 'bg-[color:var(--cf-bg)] text-[color:var(--cf-text-strong)]'
+                : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+            }`}
+          >
+            账号设置
+          </button>
+          <button
+            type="button"
+            onClick={() => router.replace(`/${lng}/account?tab=ai-quant`)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              currentTab === 'ai-quant'
+                ? 'bg-[color:var(--cf-bg)] text-[color:var(--cf-text-strong)]'
+                : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+            }`}
+          >
+            AI量化
+          </button>
+        </div>
 
-        <section className="space-y-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('account.loginMethods')}</h2>
+        {currentTab === 'settings' && (
+          <>
+            <section className="space-y-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('account.loginMethods')}</h2>
 
-          <div className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--cf-text-strong)]">
-                <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-                {t('account.telegramLogin')}
-              </div>
-              {loginMethods.has('telegram') ? (
-                <span className="rounded-lg border border-violet-500/30 bg-transparent px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] dark:text-white">
-                  {t('account.bound')}
-                </span>
-              ) : (
-                <div className="w-[320px]">
-                  <TelegramLoginButtons lng={lng} intent="bind" />
+              <div className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--cf-text-strong)]">
+                    <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+                    {t('account.telegramLogin')}
+                  </div>
+                  {loginMethods.has('telegram') ? (
+                    <span className="rounded-lg border border-violet-500/30 bg-transparent px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] dark:text-white">
+                      {t('account.bound')}
+                    </span>
+                  ) : (
+                    <div className="w-[320px]">
+                      <TelegramLoginButtons lng={lng} intent="bind" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-sm text-[color:var(--cf-text)]">
-                {session.email ? maskEmail(session.email) : t('account.notBound')}
-              </div>
-              {loginMethods.has('email') ? (
-                <span className="rounded-lg border border-violet-500/30 bg-transparent px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] dark:text-white">
-                  {t('account.mainAccount')}
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    value={bindEmailValue}
-                    onChange={event => setBindEmailValue(event.target.value)}
-                    placeholder={t('account.inputEmail')}
-                    className="h-8 w-[180px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500"
-                  />
-                  <input
-                    value={bindEmailCode}
-                    onChange={event => setBindEmailCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder={t('account.inputCode')}
-                    className="h-8 w-[110px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={onSendBindEmailCode}
-                    disabled={busy || !bindEmailValue}
-                    className="rounded-lg border border-violet-500/30 px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white"
-                  >
-                    {t('account.sendCode')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onBindEmail}
-                    disabled={busy || !bindEmailValue || bindEmailCode.length !== 6}
-                    className="rounded-lg border border-violet-500/30 px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white"
-                  >
-                    {t('account.bindEmail')}
-                  </button>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm text-[color:var(--cf-text)]">
+                    {session.email ? maskEmail(session.email) : t('account.notBound')}
+                  </div>
+                  {loginMethods.has('email') ? (
+                    <span className="rounded-lg border border-violet-500/30 bg-transparent px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] dark:text-white">
+                      {t('account.mainAccount')}
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={bindEmailValue}
+                        onChange={event => setBindEmailValue(event.target.value)}
+                        placeholder={t('account.inputEmail')}
+                        className="h-8 w-[180px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500"
+                      />
+                      <input
+                        value={bindEmailCode}
+                        onChange={event => setBindEmailCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder={t('account.inputCode')}
+                        className="h-8 w-[110px] rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-xs text-[color:var(--cf-text)] outline-none transition focus:border-violet-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={onSendBindEmailCode}
+                        disabled={busy || !bindEmailValue}
+                        className="rounded-lg border border-violet-500/30 px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white"
+                      >
+                        {t('account.sendCode')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onBindEmail}
+                        disabled={busy || !bindEmailValue || bindEmailCode.length !== 6}
+                        className="rounded-lg border border-violet-500/30 px-3 py-1 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white"
+                      >
+                        {t('account.bindEmail')}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        </section>
+              </div>
+            </section>
 
-        <section className="space-y-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('account.accountInfo')}</h2>
-          <div className="flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-            <div>
-              <p className="text-xs text-[color:var(--cf-muted)]">{t('account.userId')}</p>
-              <p className="mt-1 font-mono text-sm text-[color:var(--cf-text-strong)]">{session.userId}</p>
-            </div>
+            <section className="space-y-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('account.accountInfo')}</h2>
+              <div className="flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
+                <div>
+                  <p className="text-xs text-[color:var(--cf-muted)]">{t('account.userId')}</p>
+                  <p className="mt-1 font-mono text-sm text-[color:var(--cf-text-strong)]">{session.userId}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(session.userId)
+                    success(t('account.userIdCopied'))
+                  }}
+                  className="rounded-lg border border-[color:var(--cf-border)] p-2 transition hover:bg-[color:var(--cf-surface-hover)] hover:text-violet-500"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </div>
+            </section>
+
             <button
               type="button"
               onClick={() => {
-                navigator.clipboard.writeText(session.userId)
-                success(t('account.userIdCopied'))
+                logout()
+                router.replace(`/${lng}/auth/login`)
               }}
-              className="rounded-lg border border-[color:var(--cf-border)] p-2 transition hover:bg-[color:var(--cf-surface-hover)] hover:text-violet-500"
+              className="inline-flex w-fit items-center gap-2 rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500"
             >
-              <Copy className="h-4 w-4" />
+              <LogOut className="h-4 w-4" />
+              {t('account.logout')}
             </button>
-          </div>
-        </section>
+          </>
+        )}
 
-        <button
-          type="button"
-          onClick={() => {
-            logout()
-            router.replace(`/${lng}/auth/login`)
-          }}
-          className="inline-flex w-fit items-center gap-2 rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500"
-        >
-          <LogOut className="h-4 w-4" />
-          {t('account.logout')}
-        </button>
+        {currentTab === 'ai-quant' && (
+          <>
+            <AiQuantSection lng={lng} />
+            <ExchangeApiSection highlighted />
+          </>
+        )}
       </main>
       <Footer />
     </div>

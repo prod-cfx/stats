@@ -52,7 +52,7 @@ function parseIntent(value: string | null): TelegramCallbackIntent {
 
 function normalizeRedirect(value: string | null, lng: string) {
   if (!value) return `/${lng}/account`
-  return value.startsWith('/') ? value : `/${lng}/account`
+  return value.startsWith('/') && !value.startsWith('//') ? value : `/${lng}/account`
 }
 
 function stripHashPrefix(hash: string | undefined): string {
