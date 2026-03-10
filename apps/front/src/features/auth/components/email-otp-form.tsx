@@ -16,6 +16,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
   const [cooldown, setCooldown] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const canSendCode = useMemo(() => cooldown <= 0 && !submitting, [cooldown, submitting])
 
@@ -34,17 +35,25 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
 
   const handleSendCode = async () => {
     setError(null)
+    setNotice(null)
     try {
       await sendEmailCode(email)
       startCooldown()
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('auth.sendFailed'))
+      const message = e instanceof Error ? e.message : ''
+      if (message === 'DEV_EMAIL_FALLBACK_CODE_123456') {
+        setNotice('开发环境邮件服务未配置，请使用测试验证码 123456 登录。')
+        startCooldown()
+        return
+      }
+      setError(message || t('auth.sendFailed'))
     }
   }
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
+    setNotice(null)
     setSubmitting(true)
 
     try {
@@ -96,6 +105,11 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+          {notice}
         </div>
       )}
 

@@ -42,6 +42,8 @@ export const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [expandedMobileMenus, setExpandedMobileMenus] = useState<string[]>([])
   const [bellOpen, setBellOpen] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
   const { session, logout } = useAuth()
   const { unreadCount, refresh: refreshUnreadCount } = useWhaleNotificationUnreadCount()
   const inbox = useWhaleNotificationInbox()
@@ -96,7 +98,6 @@ export const Navbar = () => {
   // 临时隐藏看板，需要时再恢复
   const navLinks = [
     { name: t('nav.home'), href: withLng('/') },
-    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
     {
       name: t('nav.data'),
       href: '#',
@@ -107,6 +108,7 @@ export const Navbar = () => {
       href: '#',
       children: whaleChildren,
     },
+    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
     // { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ]
 
@@ -199,6 +201,9 @@ export const Navbar = () => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(event.target as Node)) {
         setSearchOpen(false)
+      }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setAccountMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -569,20 +574,44 @@ export const Navbar = () => {
 
         {ENABLE_USER_SYSTEM &&
           (session ? (
-            <div className="hidden items-center gap-2 md:flex">
-              <Link
-                href={withLng('/account')}
-                className="rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-              >
-                {session.email || session.userId}
-              </Link>
+            <div ref={accountMenuRef} className="relative hidden items-center md:flex">
               <button
                 type="button"
-                onClick={logout}
-                className="rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                onClick={() => setAccountMenuOpen(prev => !prev)}
+                className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--cf-border)] px-3 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
               >
-                {t('account.logout', { defaultValue: '登出' })}
+                {session.email || session.userId}
+                <ChevronDown className={`h-4 w-4 transition-transform ${accountMenuOpen ? 'rotate-180' : ''}`} />
               </button>
+
+              {accountMenuOpen && (
+                <div className="absolute top-[110%] right-0 z-50 min-w-[180px] overflow-hidden rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-xl">
+                  <Link
+                    href={withLng('/account?tab=settings')}
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                  >
+                    账号设置
+                  </Link>
+                  <Link
+                    href={withLng('/account?tab=ai-quant')}
+                    onClick={() => setAccountMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                  >
+                    AI量化
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logout()
+                      setAccountMenuOpen(false)
+                    }}
+                    className="block w-full px-4 py-2.5 text-left text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                  >
+                    {t('account.logout', { defaultValue: '登出' })}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <Link
@@ -667,11 +696,18 @@ export const Navbar = () => {
                 {session ? (
                   <div className="space-y-2">
                     <Link
-                      href={withLng('/account')}
+                      href={withLng('/account?tab=settings')}
                       onClick={() => setMobileMenuOpen(false)}
                       className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
                     >
-                      {session.email || session.userId}
+                      账号设置
+                    </Link>
+                    <Link
+                      href={withLng('/account?tab=ai-quant')}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
+                    >
+                      AI量化
                     </Link>
                     <button
                       type="button"
