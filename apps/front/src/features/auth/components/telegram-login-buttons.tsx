@@ -11,6 +11,7 @@ import { canShowTelegramDesktopEntry, isTelegramWebAppEnv } from '../telegram-en
 interface TelegramLoginButtonsProps {
   lng: 'zh' | 'en'
   intent?: 'login' | 'bind'
+  redirect?: string
 }
 
 interface TelegramConfigResponse {

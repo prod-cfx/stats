@@ -50,8 +50,10 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
 
   const save = () => {
     const next: ApiConfigState = {
+      binanceAccountName: form.binanceAccountName || saved?.binanceAccountName || '',
       binanceApiKey: form.binanceApiKey || saved?.binanceApiKey || '',
       binanceSecretKey: form.binanceSecretKey || saved?.binanceSecretKey || '',
+      okxAccountName: form.okxAccountName || saved?.okxAccountName || '',
       okxApiKey: form.okxApiKey || saved?.okxApiKey || '',
       okxSecretKey: form.okxSecretKey || saved?.okxSecretKey || '',
       okxPassphrase: form.okxPassphrase || saved?.okxPassphrase || '',

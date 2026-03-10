@@ -40,7 +40,7 @@ export default function AccountPage() {
   }, [isLoading, lng, router, session])
 
   const loginMethods = useMemo(() => new Set(session?.loginMethods || []), [session?.loginMethods])
-  const tabParam = searchParams.get('tab')
+  const tabParam = searchParams?.get('tab')
   const currentTab: AccountTab = tabParam === 'ai-quant' || tabParam === 'exchange-api' ? 'ai-quant' : 'settings'
 
   if (!session) {
