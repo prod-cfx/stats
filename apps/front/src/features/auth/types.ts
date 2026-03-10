@@ -31,7 +31,11 @@ export interface AuthContextValue {
     username?: string
     photoUrl?: string
   }) => Promise<void>
-  createTelegramDesktopIntent: (payload: { intent: 'login' | 'bind'; lng: 'zh' | 'en' }) => Promise<{
+  createTelegramDesktopIntent: (payload: {
+    intent: 'login' | 'bind'
+    lng: 'zh' | 'en'
+    redirect?: string
+  }) => Promise<{
     intentId: string
     deepLink: string
     webLink: string

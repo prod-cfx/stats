@@ -20,7 +20,7 @@ interface TelegramConfigResponse {
 
 const DESKTOP_CALLBACK_REDIRECT_DELAY_MS = 350
 
-export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginButtonsProps) {
+export function TelegramLoginButtons({ lng, intent = 'login', redirect }: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
   const [showDesktopEntry, setShowDesktopEntry] = useState(false)
   const [showWebAppEntry, setShowWebAppEntry] = useState(false)
@@ -75,7 +75,7 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
             try {
               setWebBusy(true)
               setStatusMessage(null)
-              const result = await getTelegramWebAuthorizeUrlRequest({ intent, lng })
+              const result = await getTelegramWebAuthorizeUrlRequest({ intent, lng, redirect })
               window.location.href = result.authorizeUrl
             } catch (error) {
               setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
@@ -100,6 +100,7 @@ export function TelegramLoginButtons({ lng, intent = 'login' }: TelegramLoginBut
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
+                  redirect,
                 })
                 const launchLink = result.webLink?.trim() || result.deepLink?.trim()
                 if (!launchLink) {

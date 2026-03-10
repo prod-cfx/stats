@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsEnum, IsOptional } from 'class-validator'
+import { IsEnum, IsOptional, IsString } from 'class-validator'
 
 export enum TelegramDesktopIntentKind {
   LOGIN = 'login',
@@ -21,4 +21,9 @@ export class CreateTelegramDesktopIntentRequestDto {
   @IsEnum(TelegramDesktopIntentLanguage)
   @IsOptional()
   lng?: TelegramDesktopIntentLanguage
+
+  @ApiProperty({ required: false, description: '登录成功后回跳路径，仅允许站内绝对路径，例如 /zh/ai-quant' })
+  @IsString()
+  @IsOptional()
+  redirect?: string
 }

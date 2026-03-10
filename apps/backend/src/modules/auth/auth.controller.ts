@@ -50,6 +50,7 @@ export class AuthController {
   async getTelegramWebAuthorizeUrl(
     @Query('intent') intent?: string,
     @Query('lng') lng?: string,
+    @Query('redirect') redirect?: string,
   ): Promise<{ authorizeUrl: string }> {
     if (intent !== 'login' && intent !== 'bind') {
       throw new DomainException('Invalid intent', {
@@ -63,7 +64,7 @@ export class AuthController {
         status: HttpStatus.BAD_REQUEST,
       })
     }
-    return this.userAuthService.getTelegramWebAuthorizeUrl({ intent, lng })
+    return this.userAuthService.getTelegramWebAuthorizeUrl({ intent, lng, redirect })
   }
 
   @Post('telegram/desktop/intent')

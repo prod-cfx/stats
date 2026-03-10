@@ -145,4 +145,28 @@ describe('resolveTelegramCallbackPayload', () => {
     expect(result.payload.hash).toBe('qh')
     expect(result.payload.firstName).toBe('FromHash')
   })
+
+  it('应保留合法站内 redirect 路径', () => {
+    const query = new URLSearchParams('source=web&intent=login&redirect=/zh/ai-quant')
+
+    const result = resolveTelegramCallbackPayload({ query, hash: '#id=1&auth_date=2&hash=3', lng: 'zh' })
+
+    expect(result.redirect).toBe('/zh/ai-quant')
+  })
+
+  it('当 redirect 为外链时应回退到账户页', () => {
+    const query = new URLSearchParams('source=web&intent=login&redirect=https://evil.com')
+
+    const result = resolveTelegramCallbackPayload({ query, hash: '#id=1&auth_date=2&hash=3', lng: 'zh' })
+
+    expect(result.redirect).toBe('/zh/account')
+  })
+
+  it('当 redirect 为协议相对路径时应回退到账户页', () => {
+    const query = new URLSearchParams('source=web&intent=login&redirect=//evil.com')
+
+    const result = resolveTelegramCallbackPayload({ query, hash: '#id=1&auth_date=2&hash=3', lng: 'zh' })
+
+    expect(result.redirect).toBe('/zh/account')
+  })
 })

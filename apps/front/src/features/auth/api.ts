@@ -146,6 +146,7 @@ export async function completeTelegramLogin(payload: {
 export async function createTelegramDesktopIntentRequest(payload: {
   intent: TelegramDesktopIntentKind
   lng: 'zh' | 'en'
+  redirect?: string
 }): Promise<{
   intentId: string
   deepLink: string
@@ -159,11 +160,15 @@ export async function createTelegramDesktopIntentRequest(payload: {
 export async function getTelegramWebAuthorizeUrlRequest(payload: {
   intent: 'login' | 'bind'
   lng: 'zh' | 'en'
+  redirect?: string
 }): Promise<{ authorizeUrl: string }> {
   const query = new URLSearchParams({
     intent: payload.intent,
     lng: payload.lng,
   })
+  if (payload.redirect) {
+    query.set('redirect', payload.redirect)
+  }
   return getJson(`/auth/telegram/web/authorize-url?${query.toString()}`)
 }
 
