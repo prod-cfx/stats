@@ -591,14 +591,14 @@ export const Navbar = () => {
                     onClick={() => setAccountMenuOpen(false)}
                     className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
                   >
-                    账号设置
+                    {t('account.settings')}
                   </Link>
                   <Link
                     href={withLng('/account?tab=ai-quant')}
                     onClick={() => setAccountMenuOpen(false)}
                     className="block px-4 py-2.5 text-sm text-[color:var(--cf-text)] transition hover:bg-[color:var(--cf-surface-hover)]"
                   >
-                    AI量化
+                    {t('nav.aiQuant')}
                   </Link>
                   <button
                     type="button"
@@ -700,14 +700,14 @@ export const Navbar = () => {
                       onClick={() => setMobileMenuOpen(false)}
                       className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
                     >
-                      账号设置
+                      {t('account.settings')}
                     </Link>
                     <Link
                       href={withLng('/account?tab=ai-quant')}
                       onClick={() => setMobileMenuOpen(false)}
                       className="block w-full rounded-xl border border-[color:var(--cf-border)] py-3 text-center text-base font-semibold"
                     >
-                      AI量化
+                      {t('nav.aiQuant')}
                     </Link>
                     <button
                       type="button"

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { listExchangeAccounts, upsertExchangeAccount } from './exchange-account-store'
 
 interface ExchangeApiSectionProps {
@@ -20,12 +21,13 @@ interface ApiConfigState {
 const STORAGE_KEY = 'exchange_api_configs_v1'
 
 function mask(value: string) {
-  if (!value) return '未配置'
+  if (!value) return null
   if (value.length <= 6) return `${value.slice(0, 2)}***`
   return `${value.slice(0, 3)}***${value.slice(-3)}`
 }
 
 export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionProps) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<ApiConfigState>({
     binanceAccountName: '',
     binanceApiKey: '',
@@ -100,68 +102,68 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       }`}
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">交易所 API 配置</h2>
+        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.apiConfigTitle')}</h2>
         <div className="flex gap-2 text-xs">
           <span className={`rounded-lg px-2 py-1 ${binanceReady ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            Binance {binanceReady ? '已配置' : '未配置'}
+            Binance {binanceReady ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
           </span>
           <span className={`rounded-lg px-2 py-1 ${okxReady ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            OKX {okxReady ? '已配置' : '未配置'}
+            OKX {okxReady ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
           </span>
         </div>
       </div>
 
-      <p className="text-sm text-[color:var(--cf-muted)]">MVP 前端占位实现：仅用于本地演示部署校验流程，真实环境需后端安全托管。</p>
+      <p className="text-sm text-[color:var(--cf-muted)]">{t('aiQuant.apiConfigDesc')}</p>
 
       <div className="grid gap-4 md:grid-cols-2">
         <article className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">Binance API</h3>
-          <p className="text-xs text-[color:var(--cf-muted)]">当前 Key: {mask(saved?.binanceApiKey || '')}</p>
+          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.binanceApi')}</h3>
+          <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.currentKey')} {mask(saved?.binanceApiKey || '') || t('aiQuant.notConfigured')}</p>
           <input
             value={form.binanceAccountName}
             onChange={event => setForm(prev => ({ ...prev, binanceAccountName: event.target.value }))}
-            placeholder="账户名称（例如：Binance 主账户）"
+            placeholder={t('aiQuant.accountName')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
           <input
             value={form.binanceApiKey}
             onChange={event => setForm(prev => ({ ...prev, binanceApiKey: event.target.value }))}
-            placeholder="Binance API Key"
+            placeholder={t('aiQuant.apiKey')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
           <input
             value={form.binanceSecretKey}
             onChange={event => setForm(prev => ({ ...prev, binanceSecretKey: event.target.value }))}
-            placeholder="Binance Secret Key"
+            placeholder={t('aiQuant.secretKey')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
         </article>
 
         <article className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">OKX API</h3>
-          <p className="text-xs text-[color:var(--cf-muted)]">当前 Key: {mask(saved?.okxApiKey || '')}</p>
+          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.okxApi')}</h3>
+          <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.currentKey')} {mask(saved?.okxApiKey || '') || t('aiQuant.notConfigured')}</p>
           <input
             value={form.okxAccountName}
             onChange={event => setForm(prev => ({ ...prev, okxAccountName: event.target.value }))}
-            placeholder="账户名称（例如：OKX 子账户A）"
+            placeholder={t('aiQuant.accountName')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
           <input
             value={form.okxApiKey}
             onChange={event => setForm(prev => ({ ...prev, okxApiKey: event.target.value }))}
-            placeholder="OKX API Key"
+            placeholder={t('aiQuant.apiKey')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
           <input
             value={form.okxSecretKey}
             onChange={event => setForm(prev => ({ ...prev, okxSecretKey: event.target.value }))}
-            placeholder="OKX Secret Key"
+            placeholder={t('aiQuant.secretKey')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
           <input
             value={form.okxPassphrase}
             onChange={event => setForm(prev => ({ ...prev, okxPassphrase: event.target.value }))}
-            placeholder="OKX Passphrase"
+            placeholder={t('aiQuant.passphrase')}
             className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
           />
         </article>
@@ -170,14 +172,14 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       <button
         type="button"
         onClick={save}
-        className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white"
+        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700"
       >
-        保存 API 配置
+        {t('aiQuant.saveApiConfig')}
       </button>
 
       {accounts.length > 0 && (
         <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-          <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">已绑定交易账户</p>
+          <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.boundAccounts')}</p>
           <div className="mt-2 space-y-2">
             {accounts.map(account => (
               <div key={account.accountId} className="flex items-center justify-between text-xs text-[color:var(--cf-muted)]">

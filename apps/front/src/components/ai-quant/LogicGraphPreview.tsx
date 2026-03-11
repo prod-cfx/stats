@@ -1,4 +1,5 @@
 import type { StrategyLogicGraph } from './logic-graph-model'
+import { useTranslation } from 'react-i18next'
 
 interface LogicGraphPreviewProps {
   graph: StrategyLogicGraph
@@ -7,13 +8,15 @@ interface LogicGraphPreviewProps {
 }
 
 export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPreviewProps) {
+  const { t } = useTranslation()
+
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">策略逻辑图确认</h2>
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.messages.graphTitle')}</h2>
           <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-            版本 v{graph.version} · 状态 {graph.status === 'confirmed' ? '已确认' : '待确认'}
+            {t('aiQuant.messages.version')} v{graph.version} · {t('aiQuant.messages.status')} {graph.status === 'confirmed' ? t('aiQuant.status.confirmed') : t('aiQuant.status.pending')}
           </p>
         </div>
       </div>
@@ -65,17 +68,16 @@ export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPrev
               : 'bg-gradient-to-r from-primary to-secondary'
           }`}
         >
-          {graph.status === 'confirmed' ? '已确认，可回测' : '确认并回测'}
+          {graph.status === 'confirmed' ? t('aiQuant.messages.confirmedBacktest') : t('aiQuant.messages.confirmBacktest')}
         </button>
         <button
           type="button"
           onClick={onRevise}
           className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
         >
-          返回对话修改
+          {t('aiQuant.messages.returnRevise')}
         </button>
       </div>
     </section>
   )
 }
-
