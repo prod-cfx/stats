@@ -7,6 +7,7 @@ import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
@@ -18,7 +19,6 @@ import { buildLogicGraphFromPrompt } from '@/components/ai-quant/logic-graph-gen
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
-import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import { useAuth } from '@/hooks/use-auth'
 
 export interface QuantParams {
@@ -41,15 +41,6 @@ const DEFAULT_PARAMS: QuantParams = {
   positionPct: 10,
 }
 
-const INITIAL_MESSAGES: QuantMessage[] = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    content:
-      '告诉我你的交易想法，我会帮你生成策略并回测。回测最大回撤需要 <= 20% 才能一键部署。',
-  },
-]
-
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
@@ -62,19 +53,6 @@ interface ConversationState {
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   updatedAt: number
-}
-
-function createConversation(): ConversationState {
-  const now = Date.now()
-  return {
-    id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
-    title: '新对话',
-    messages: INITIAL_MESSAGES,
-    params: DEFAULT_PARAMS,
-    backtestResult: null,
-    logicGraph: null,
-    updatedAt: now,
-  }
 }
 
 function getMockBacktest(params: QuantParams): BacktestResult {
@@ -94,12 +72,35 @@ function getMockBacktest(params: QuantParams): BacktestResult {
 }
 
 export function AiQuantPageClient() {
+  const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
   const { session, isLoading } = useAuth()
 
-  const [conversations, setConversations] = useState<ConversationState[]>([createConversation()])
+  const createConversation = (): ConversationState => {
+    const now = Date.now()
+    return {
+      id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
+      title: t('aiQuant.newChat'),
+      messages: [
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: t('aiQuant.messages.welcome'),
+        },
+      ],
+      params: DEFAULT_PARAMS,
+      backtestResult: null,
+      logicGraph: null,
+      updatedAt: now,
+    }
+  }
+
+  // Initialize state lazily to avoid hydration mismatch if possible, 
+  // but here we need to read from localStorage which is a side effect.
+  // We'll start with a default and update in useEffect.
+  const [conversations, setConversations] = useState<ConversationState[]>(() => [createConversation()])
   const [activeConversationId, setActiveConversationId] = useState<string>('')
   const [deployOpen, setDeployOpen] = useState(false)
   const [apiReady, setApiReady] = useState({ binance: false, okx: false })
@@ -137,6 +138,7 @@ export function AiQuantPageClient() {
       setActiveConversationId(seed.id)
       localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -183,7 +185,7 @@ export function AiQuantPageClient() {
     if (!activeConversation?.backtestResult) return false
     return activeConversation.backtestResult.maxDrawdownPct <= 20
   }, [activeConversation?.backtestResult])
-  const graphConfirmed = activeConversation.logicGraph?.status === 'confirmed'
+  const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
 
   const compactMode = useMemo(() => {
     if (!activeConversation) return true
@@ -202,19 +204,18 @@ export function AiQuantPageClient() {
 
     updateActiveConversation(curr => {
       const nextVersion = (curr.logicGraph?.version || 0) + 1
-      const draftGraph = buildLogicGraphFromPrompt(input, curr.params, nextVersion)
+      const draftGraph = buildLogicGraphFromPrompt(input, curr.params, nextVersion, t)
       const nextMessages: QuantMessage[] = [
         ...curr.messages,
         { id: `u-${Date.now()}`, role: 'user', content: input },
         {
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content:
-            '我已把你的自然语言转换为逻辑图。请先确认逻辑图，再开始回测。',
+          content: t('aiQuant.messages.graphGenerated'),
         },
       ]
 
-      const derivedTitle = curr.title === '新对话' ? input.trim().slice(0, 16) || '新对话' : curr.title
+      const derivedTitle = curr.title === t('aiQuant.newChat') ? input.trim().slice(0, 16) || t('aiQuant.newChat') : curr.title
       return {
         ...curr,
         title: derivedTitle,
@@ -236,9 +237,10 @@ export function AiQuantPageClient() {
       ...curr,
       params: { ...curr.params, ...preset },
       logicGraph: buildLogicGraphFromPrompt(
-        `${presetName}：${preset.buyWindowMin || curr.params.buyWindowMin}分钟跌${preset.buyDropPct || curr.params.buyDropPct}%买入`,
+        `${presetName}：${preset.buyWindowMin || curr.params.buyWindowMin}m drop ${preset.buyDropPct || curr.params.buyDropPct}% buy`,
         { ...curr.params, ...preset },
         (curr.logicGraph?.version || 0) + 1,
+        t,
       ),
       backtestResult: null,
       messages: [
@@ -247,8 +249,8 @@ export function AiQuantPageClient() {
           id: `pick-${Date.now()}`,
           role: 'assistant',
           content: fromLoginIntent
-            ? `已恢复你登录前选择的「${presetName}」，已导入参数。告诉我你想优化哪一项。`
-            : `已应用推荐策略「${presetName}」，已生成逻辑图，请先确认再回测。`,
+            ? t('aiQuant.messages.restorePreset', { name: presetName })
+            : t('aiQuant.messages.applyPreset', { name: presetName }),
         },
       ],
       updatedAt: Date.now(),
@@ -270,9 +272,10 @@ export function AiQuantPageClient() {
       ...curr,
       params: { ...curr.params, ...preset },
       logicGraph: buildLogicGraphFromPrompt(
-        `${presetName}，请生成策略逻辑图`,
+        `${presetName}, generate logic graph`,
         { ...curr.params, ...preset },
         (curr.logicGraph?.version || 0) + 1,
+        t,
       ),
       backtestResult: null,
       messages: [
@@ -281,8 +284,8 @@ export function AiQuantPageClient() {
           id: `run-pick-${Date.now()}`,
           role: 'assistant',
           content: fromLoginIntent
-            ? `已恢复你登录前的“运行 ${presetName}”请求。请先确认逻辑图，再开始回测。`
-            : `已应用「${presetName}」。请先确认逻辑图，再开始回测。`,
+            ? t('aiQuant.messages.restoreRun', { name: presetName })
+            : t('aiQuant.messages.applyRun', { name: presetName }),
         },
       ],
       updatedAt: Date.now(),
@@ -298,7 +301,7 @@ export function AiQuantPageClient() {
           {
             id: `graph-guard-${Date.now()}`,
             role: 'assistant',
-            content: '请先确认上方逻辑图，再进行回测。',
+            content: t('aiQuant.messages.graphGuard'),
           },
         ],
         updatedAt: Date.now(),
@@ -316,8 +319,8 @@ export function AiQuantPageClient() {
           role: 'assistant',
           content:
             result.maxDrawdownPct <= 20
-              ? `本次回测最大回撤 ${result.maxDrawdownPct}%（达标），可以部署。`
-              : `本次回测最大回撤 ${result.maxDrawdownPct}%（未达标）。建议继续对话优化参数后再回测。`,
+              ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+              : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
         },
       ],
       updatedAt: Date.now(),
@@ -350,7 +353,7 @@ export function AiQuantPageClient() {
           {
             id: `intent-miss-${Date.now()}`,
             role: 'assistant',
-            content: '你登录前选择的策略已不可用，请重新选择策略。',
+            content: t('aiQuant.messages.intentMiss'),
           },
         ],
       }))
@@ -358,11 +361,12 @@ export function AiQuantPageClient() {
     }
 
     if (intent.type === 'edit') {
-      onEditStrategy(preset.id, preset.params, preset.name, true)
+      onEditStrategy(preset.id, preset.params, t(`aiQuant.strategies.${preset.id}.name`, { defaultValue: preset.name }), true)
       return
     }
 
-    onRunStrategy(preset.id, preset.params, preset.name, true)
+    onRunStrategy(preset.id, preset.params, t(`aiQuant.strategies.${preset.id}.name`, { defaultValue: preset.name }), true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversation, session])
 
   useEffect(() => {
@@ -392,27 +396,27 @@ export function AiQuantPageClient() {
     )
   }
 
-  const showRecommendedStrategies = compactMode
+  if (!activeConversation) return null
 
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">AI量化</h1>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">对话创建策略、回测评估，达标后再一键部署。</p>
+          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.title')}</h1>
+          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href={`/${lng}/ai-quant/plaza`}
             className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            策略广场
+            {t('aiQuant.plaza')}
           </Link>
           <Link
             href={`/${lng}/account?tab=ai-quant#exchange-api`}
             className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            配置交易所 API
+            {t('aiQuant.configApi')}
           </Link>
         </div>
       </div>
@@ -467,7 +471,7 @@ export function AiQuantPageClient() {
                     {
                       id: `graph-confirm-${Date.now()}`,
                       role: 'assistant',
-                      content: '逻辑图已确认，现在可以开始回测。',
+                      content: t('aiQuant.messages.graphConfirmed'),
                     },
                   ],
                   updatedAt: Date.now(),
@@ -481,20 +485,12 @@ export function AiQuantPageClient() {
                     {
                       id: `graph-revise-${Date.now()}`,
                       role: 'assistant',
-                      content: '好的，请在对话框继续描述你要修改的条件。',
+                      content: t('aiQuant.messages.graphRevise'),
                     },
                   ],
                   updatedAt: Date.now(),
                 }))
               }}
-            />
-          )}
-
-          {showRecommendedStrategies && (
-            <StrategyPlaza
-              onRunStrategy={onRunStrategy}
-              onEditStrategy={onEditStrategy}
-              subtitle="首次对话可先从推荐策略开始，也可以继续在上面对话自定义。"
             />
           )}
 
@@ -509,7 +505,7 @@ export function AiQuantPageClient() {
                 const optimizeMessage: QuantMessage = {
                   id: `opt-${Date.now()}`,
                   role: 'assistant',
-                  content: '建议先降低单笔仓位或调整买卖阈值，再重新回测。',
+                  content: t('aiQuant.messages.optimizeHint'),
                 }
                 updateActiveConversation(curr => ({
                   ...curr,
@@ -563,7 +559,7 @@ export function AiQuantPageClient() {
               {
                 id: `deploy-ok-${Date.now()}`,
                 role: 'assistant',
-                content: `部署成功：${selectedDeployExchange.toUpperCase()} / ${account.accountName}。可在个人中心查看运行状态。`,
+                content: t('aiQuant.messages.deploySuccess', { exchange: selectedDeployExchange.toUpperCase(), account: account.accountName }),
               },
             ],
             updatedAt: Date.now(),

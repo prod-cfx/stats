@@ -2,6 +2,7 @@
 
 import { Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface ConversationItem {
   id: string
@@ -26,6 +27,7 @@ function formatTime(ts: number) {
 }
 
 export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRename, onDelete }: ConversationSidebarProps) {
+  const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
 
@@ -34,9 +36,9 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
       <button
         type="button"
         onClick={onCreate}
-        className="from-primary to-secondary mb-3 w-full rounded-xl bg-gradient-to-r px-3 py-2 text-sm font-bold text-white"
+        className="mb-3 w-full rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700"
       >
-        + 新建会话
+        {t('aiQuant.createChat')}
       </button>
 
       <div className="space-y-2">
@@ -80,7 +82,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   {item.title}
                 </button>
               )}
-              <div className="mt-1 text-xs text-[color:var(--cf-muted)]">更新于 {formatTime(item.updatedAt)}</div>
+              <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</div>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -89,7 +91,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                     setDraftTitle(item.title)
                   }}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-                  aria-label="重命名会话"
+                  aria-label="Rename"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -97,7 +99,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   type="button"
                   onClick={() => onDelete(item.id)}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400"
-                  aria-label="删除会话"
+                  aria-label="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

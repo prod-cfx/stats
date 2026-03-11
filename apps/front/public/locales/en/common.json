@@ -42,6 +42,7 @@
     "realtime_whales": "Realtime Whales",
     "whale_holdings": "Whale Holdings",
     "whale_notifications": "Monitoring",
+    "aiQuant": "AI Quant",
     "search": "Search",
     "docs": "Doc",
     "login": "Login",
@@ -64,7 +65,176 @@
     "userIdCopied": "UserId Copied",
     "emailBound": "Email Bound",
     "codeSent": "Verification code sent",
-    "logout": "Logout"
+    "logout": "Logout",
+    "settings": "Account Settings"
+  },
+  "aiQuant": {
+    "title": "AI Quant",
+    "subtitle": "Create strategies via chat, backtest, and deploy in one click.",
+    "accountSubtitle": "View strategy details, parameter snapshots, and runtime timeline.",
+    "plaza": "Strategy Plaza",
+    "configApi": "Configure Exchange API",
+    "newChat": "New Chat",
+    "createChat": "+ New Chat",
+    "chatTitle": "AI Strategy Assistant",
+    "paramsConfig": "Parameters",
+    "startBacktest": "Start Backtest",
+    "exchange": "Exchange",
+    "symbol": "Symbol",
+    "positionPct": "Position Size (%)",
+    "send": "Send",
+    "inputPlaceholder": "Describe your strategy, e.g., Buy when drops 1% in 3m, sell when rises 2% in 15m...",
+    "backtestResult": "Backtest Result",
+    "maxDrawdown": "Max Drawdown",
+    "totalReturn": "Total Return",
+    "winRate": "Win Rate",
+    "tradeCount": "Trades",
+    "deploy": "Deploy",
+    "optimize": "Optimize",
+    "fullScreen": "Full Screen",
+    "logicGraph": "Strategy Logic Graph",
+    "confirm": "Confirm",
+    "revise": "Revise",
+    "run": "Run",
+    "edit": "Edit",
+    "strategyPlazaSubtitle": "Start with a preset strategy or customize via chat above.",
+    "myStrategies": "My Strategies",
+    "noStrategies": "No Running Strategies",
+    "noStrategiesDesc": "You haven't created any AI quant strategies yet. Start chatting to generate your first automated trading strategy.",
+    "createStrategy": "Create New Strategy",
+    "viewDetail": "View Details",
+    "updatedAt": "Updated at",
+    "status": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "draft": "Draft",
+      "confirmed": "Confirmed",
+      "pending": "Pending"
+    },
+    "timeframe": "Timeframe",
+    "position": "Position",
+    "saveApiConfig": "Save API Config",
+    "apiConfigTitle": "Exchange API Configuration",
+    "apiConfigDesc": "MVP Frontend Placeholder: For local demo only. Real environment requires secure backend hosting.",
+    "accountName": "Account Name",
+    "apiKey": "API Key",
+    "secretKey": "Secret Key",
+    "passphrase": "Passphrase",
+    "boundAccounts": "Bound Trading Accounts",
+    "configured": "Configured",
+    "notConfigured": "Not Configured",
+    "currentKey": "Current Key: ",
+    "binanceApi": "Binance API",
+    "okxApi": "OKX API",
+    "logic": {
+      "dropIn": "Drop in {{window}}m",
+      "riseIn": "Rise in {{window}}m",
+      "buyAmount": "{{percent}}% Capital",
+      "sellAmount": "{{percent}}% Position",
+      "riskPosition": "Position Size {{percent}}%",
+      "riskDrawdown": "Max Drawdown Threshold {{percent}}%"
+    },
+    "guestLanding": {
+      "title": "AI Quant Strategy Generation",
+      "subtitle": "Describe your trading ideas, and AI will automatically generate backtestable quantitative strategy code for you.",
+      "tryExample": "Try Example",
+      "plazaTitle": "Strategy Plaza",
+      "plazaSubtitle": "Selected high-quality strategy templates, run with one click or secondary development",
+      "backtestReturn": "Return",
+      "winRate": "Win Rate"
+    },
+    "deployDialog": {
+      "title": "Deploy Strategy",
+      "selectExchange": "Select Exchange",
+      "selectAccount": "Select Account",
+      "strategyName": "Strategy Name",
+      "confirmDeploy": "Confirm Deploy",
+      "cancel": "Cancel",
+      "deploySuccess": "Deploy Success",
+      "deploySuccessDesc": "You can view the running status in the User Center.",
+      "desc": "Must pass API and backtest checks before deploying.",
+      "apiStatus": "Exchange API Status",
+      "apiKeyMissing": "API Key not configured, please configure first.",
+      "drawdownFail": "Backtest max drawdown failed (must be <= 20%), deployment disabled.",
+      "noAccounts": "No available API accounts for this exchange, please configure in User Center.",
+      "goConfig": "Go Config"
+    },
+    "messages": {
+      "welcome": "Tell me your trading idea, I will help you generate a strategy and backtest it. Max drawdown must be <= 20% to deploy.",
+      "graphGenerated": "I have converted your natural language into a logic graph. Please confirm the logic graph before backtesting.",
+      "graphGuard": "Please confirm the logic graph above before backtesting.",
+      "backtestSuccess": "Backtest max drawdown {{drawdown}}% (Passed), ready to deploy.",
+      "backtestFail": "Backtest max drawdown {{drawdown}}% (Failed). Suggest optimizing parameters via chat before backtesting again.",
+      "optimizeHint": "Suggest reducing single position size or adjusting buy/sell thresholds before re-backtesting.",
+      "deploySuccess": "Deployed successfully: {{exchange}} / {{account}}. Check status in User Center.",
+      "intentMiss": "The strategy you selected before login is no longer available, please select again.",
+      "applyPreset": "Applied recommended strategy \"{{name}}\", logic graph generated, please confirm before backtesting.",
+      "restorePreset": "Restored \"{{name}}\" selected before login, parameters imported. Tell me what you want to optimize.",
+      "restoreRun": "Restored \"Run {{name}}\" request selected before login. Please confirm logic graph before backtesting.",
+      "applyRun": "Applied \"{{name}}\". Please confirm logic graph before backtesting.",
+      "graphConfirmed": "Logic graph confirmed, ready to backtest.",
+      "graphRevise": "Okay, please continue describing the conditions you want to modify in the chat box.",
+      "aiDisclaimer": "AI generated content may be inaccurate, please be sure to fully backtest before live trading.",
+      "backtestDrawdownLimit": "Max drawdown <= 20% required for one-click deployment",
+      "backtestDrawdownFail": "Drawdown failed, deployment disabled. Please return to chat to optimize parameters.",
+      "returnToChat": "Return to Chat to Optimize",
+      "graphTitle": "Strategy Logic Graph Confirmation",
+      "version": "Version",
+      "status": "Status",
+      "confirmedBacktest": "Confirmed, Ready to Backtest",
+      "confirmBacktest": "Confirm & Backtest",
+      "returnRevise": "Return to Chat to Revise"
+    },
+    "strategies": {
+      "momentum-steady": {
+        "name": "Price Momentum (Steady)",
+        "desc": "Buy on 1% drop in 3m, sell on 2% rise in 15m, 10% position",
+        "tags": {
+          "trend": "Trend Follow",
+          "steady": "Steady"
+        }
+      },
+      "momentum-aggressive": {
+        "name": "Price Momentum (Aggressive)",
+        "desc": "Buy on 1.5% drop in 5m, sell on 3% rise in 20m, 15% position",
+        "tags": {
+          "hft": "HFT",
+          "aggressive": "Aggressive"
+        }
+      },
+      "grid-range": {
+        "name": "Grid (Range Bound)",
+        "desc": "Range 60000-80000, grid 0.5%, 10% position per order",
+        "tags": {
+          "oscillation": "Oscillation",
+          "grid": "Grid"
+        }
+      },
+      "bollinger-reversion": {
+        "name": "Bollinger Mean Reversion",
+        "desc": "15m timeframe, short at upper band, long at lower band, 10% position",
+        "tags": {
+          "meanReversion": "Mean Reversion",
+          "bollinger": "Bollinger"
+        }
+      },
+      "breakout-short": {
+        "name": "Breakout Chase (Short Term)",
+        "desc": "Follow after 3m confirmed breakout, take profit target 2%",
+        "tags": {
+          "breakout": "Breakout",
+          "shortTerm": "Short Term"
+        }
+      },
+      "dip-buy-mid": {
+        "name": "Dip Buy (Mid Term)",
+        "desc": "Buy on 1.8% drop in 15m, sell on 2.4% bounce",
+        "tags": {
+          "dipBuy": "Dip Buy",
+          "swing": "Swing"
+        }
+      }
+    }
   },
   "auth": {
     "loginDesc": "You can login with Email or Telegram",
@@ -271,6 +441,14 @@
       "locked": "Locked",
       "cumulativeLong": "Cum Long",
       "cumulativeShort": "Cum Short"
+    },
+    "indicator": {
+      "add": "添加",
+      "added": "已添加",
+      "remove": "移除 {{name}}",
+      "removeAria": "移除 {{name}}",
+      "overlayPlaceholder": "已叠加到图表（占位展示）。后续会在这里渲染该指标的真实数据与可视化。",
+      "openFull": "打开完整页面"
     }
   },
   "longShort": {
@@ -983,42 +1161,5 @@
       "back": "Back"
     },
     "loading": "Under Development"
-  },
-  "account": {
-    "title": "Account",
-    "loginMethods": "Login Methods",
-    "telegramLogin": "Telegram Login",
-    "bound": "Bound",
-    "notBound": "Email not bound",
-    "mainAccount": "Main Account",
-    "inputEmail": "Enter email",
-    "inputCode": "Code",
-    "sendCode": "Send Code",
-    "bindEmail": "Bind Email",
-    "accountInfo": "Account Info",
-    "userId": "UserId",
-    "userIdCopied": "UserId Copied",
-    "emailBound": "Email Bound",
-    "codeSent": "Verification code sent",
-    "logout": "Logout"
-  },
-  "auth": {
-    "loginDesc": "You can login with Email or Telegram",
-    "or": "- OR -",
-    "email": "Email",
-    "emailPlaceholder": "name@example.com",
-    "code": "Verification Code",
-    "codePlaceholder": "6-digit code",
-    "sendCode": "Send Code",
-    "loginWithEmail": "Login with Email Code",
-    "loggingIn": "Logging in...",
-    "sendFailed": "Failed to send code",
-    "loginFailed": "Login failed",
-    "telegramWeb": "Telegram Web (Not Configured)",
-    "telegramDesktop": "Telegram Desktop App",
-    "telegramWebAppDesc": "Please authorize in Telegram bot and return",
-    "botDomainInvalid": "If Bot domain invalid appears, use /setdomain in BotFather to configure current domain",
-    "configFailed": "Failed to get Telegram config, please try again later",
-    "launchFailed": "Failed to launch Telegram Desktop"
   }
 }
