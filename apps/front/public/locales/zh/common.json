@@ -111,6 +111,10 @@
       "confirmed": "已确认",
       "pending": "待确认"
     },
+    "actions": {
+      "run": "运行",
+      "stop": "停止"
+    },
     "timeframe": "时间周期",
     "position": "单笔仓位",
     "saveApiConfig": "保存 API 配置",
