@@ -1,0 +1,154 @@
+enum LlmStrategyStatus {
+  draft
+  live
+  archived
+}
+
+enum LlmStrategyInstanceStatus {
+  running
+  paused
+  stopped
+}
+
+enum LlmStrategyInstanceMode {
+  LIVE
+  PAPER
+  BACKTEST
+}
+
+enum LlmStrategyRunStatus {
+  success
+  failed
+  skipped
+}
+
+enum LlmCodegenSessionStatus {
+  DRAFTING
+  CHECKLIST_GATE
+  GENERATING
+  VALIDATING_STATIC
+  VALIDATING_RUNTIME
+  VALIDATING_OUTPUT
+  PUBLISHED
+  REJECTED
+}
+
+model LlmStrategy {
+  id                    String            @id @default(cuid())
+  name                  String            @unique
+  description           String
+  status                LlmStrategyStatus @default(draft)
+  systemPrompt          String?           @map("system_prompt") @db.Text
+  initialPromptTemplate String?           @map("initial_prompt_template") @db.Text
+  allowedSymbols        Json?             @map("allowed_symbols")
+  allowedTimeframes     Json?             @map("allowed_timeframes")
+  riskConfig            Json?             @map("risk_config")
+  createdBy             String            @map("created_by")
+  updatedBy             String            @map("updated_by")
+  metadata              Json?
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  instances      LlmStrategyInstance[]
+  codeVersions   LlmStrategyCodeVersion[]
+  tradingSignals TradingSignal[]
+
+  @@index([status], map: "idx_llm_strategies_status")
+  @@index([createdBy, createdAt], map: "idx_llm_strategies_created_by_created_at")
+  @@map("llm_strategies")
+}
+
+model LlmStrategyInstance {
+  id                 String                    @id @default(cuid())
+  strategyId         String                    @map("strategy_id")
+  name               String
+  status             LlmStrategyInstanceStatus @default(paused)
+  mode               LlmStrategyInstanceMode   @default(PAPER)
+  llmModel           String                    @map("llm_model")
+  scheduleCron       String?                   @map("schedule_cron")
+  maxToolCallsPerRun Int?                      @map("max_tool_calls_per_run")
+  maxRunsPerHour     Int?                      @map("max_runs_per_hour")
+  cooldownSeconds    Int?                      @map("cooldown_seconds")
+  configOverrides    Json?                     @map("config_overrides")
+  createdBy          String                    @map("created_by")
+  updatedBy          String                    @map("updated_by")
+  metadata           Json?
+  lastRunAt          DateTime?                 @map("last_run_at")
+  createdAt          DateTime                  @default(now()) @map("created_at")
+  updatedAt          DateTime                  @default(now()) @updatedAt @map("updated_at")
+
+  strategy       LlmStrategy                   @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  runs           LlmStrategyRun[]
+  subscriptions  UserLlmStrategySubscription[]
+  tradingSignals TradingSignal[]
+
+  @@unique([strategyId, name], map: "uniq_llm_strategy_instance_per_strategy")
+  @@index([strategyId, status], map: "idx_llm_strategy_instances_strategy_status")
+  @@index([status], map: "idx_llm_strategy_instances_status")
+  @@index([createdBy, createdAt], map: "idx_llm_strategy_instances_created_by_created_at")
+  @@index([strategyId, createdBy, createdAt], map: "idx_llm_strategy_instances_strategy_created_by_created_at")
+  @@map("llm_strategy_instances")
+}
+
+model LlmStrategyRun {
+  id                 String               @id @default(cuid())
+  strategyInstanceId String               @map("strategy_instance_id")
+  startedAt          DateTime             @default(now()) @map("started_at")
+  finishedAt         DateTime?            @map("finished_at")
+  status             LlmStrategyRunStatus
+  reason             String?
+  toolCallsCount     Int?                 @map("tool_calls_count")
+  llmModel           String?              @map("llm_model")
+  rawDialogSnapshot  Json?                @map("raw_dialog_snapshot")
+  generatedSignalId  String?              @map("generated_signal_id")
+  errorMessage       String?              @map("error_message")
+  metadata           Json?
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  strategyInstance LlmStrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+  generatedSignal  TradingSignal?      @relation(fields: [generatedSignalId], references: [id], onDelete: SetNull)
+
+  @@index([strategyInstanceId, startedAt], map: "idx_llm_strategy_runs_instance_time")
+  @@index([status], map: "idx_llm_strategy_runs_status")
+  @@index([generatedSignalId], map: "idx_llm_strategy_runs_signal")
+  @@map("llm_strategy_runs")
+}
+
+model LlmStrategyCodegenSession {
+  id              String                  @id @default(cuid())
+  userId          String                  @map("user_id")
+  status          LlmCodegenSessionStatus @default(DRAFTING)
+  checklist       Json?
+  constraintPack  Json?                   @map("constraint_pack")
+  latestDraftCode String?                 @map("latest_draft_code") @db.Text
+  latestSpecDesc  Json?                   @map("latest_spec_desc")
+  rejectReason    String?                 @map("reject_reason")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @default(now()) @updatedAt @map("updated_at")
+
+  versions LlmStrategyCodeVersion[]
+
+  @@index([userId, status, createdAt], map: "idx_llm_codegen_sessions_user_status_created_at")
+  @@index([status, createdAt], map: "idx_llm_codegen_sessions_status_created_at")
+  @@map("llm_strategy_codegen_sessions")
+}
+
+model LlmStrategyCodeVersion {
+  id            String   @id @default(cuid())
+  sessionId     String   @map("session_id")
+  llmStrategyId String?  @map("llm_strategy_id")
+  scriptCode    String   @map("script_code") @db.Text
+  specDesc      Json     @map("spec_desc")
+  staticPassed  Boolean  @default(false) @map("static_passed")
+  runtimePassed Boolean  @default(false) @map("runtime_passed")
+  outputPassed  Boolean  @default(false) @map("output_passed")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  session     LlmStrategyCodegenSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  llmStrategy LlmStrategy?              @relation(fields: [llmStrategyId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt], map: "idx_llm_code_versions_session_created_at")
+  @@index([llmStrategyId, createdAt], map: "idx_llm_code_versions_strategy_created_at")
+  @@map("llm_strategy_code_versions")
+}

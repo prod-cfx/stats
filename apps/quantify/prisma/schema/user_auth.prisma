@@ -1,0 +1,49 @@
+/// 鐢ㄦ埛涓庤璇佺浉鍏虫ā鍨?
+enum ExchangeId {
+  binance
+  okx
+  hyperliquid
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  nickname        String?
+  avatarUrl       String?   @map("avatar_url")
+  bio             String?   @db.Text
+  invitationCode  String?   @map("invitation_code")
+  inviterId       String?   @map("inviter_id")
+  isGuest         Boolean   @default(false) @map("is_guest")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  inviter               User?                      @relation("UserInviter", fields: [inviterId], references: [id])
+  invitedUsers          User[]                     @relation("UserInviter")
+  exchangeAccounts      ExchangeAccount[]
+  strategyAccounts      UserStrategyAccount[]
+  strategySubscriptions UserStrategySubscription[]
+  llmStrategySubscriptions UserLlmStrategySubscription[]
+  signalExecutions      UserSignalExecution[]
+
+  @@map("users")
+}
+
+model ExchangeAccount {
+  id              String     @id @default(cuid())
+  userId          String     @map("user_id")
+  exchangeId      ExchangeId @map("exchange_id")
+  name            String?
+  isTestnet       Boolean    @default(false) @map("is_testnet")
+  encryptedConfig String     @map("encrypted_config") @db.Text
+  lastValidatedAt DateTime?  @map("last_validated_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at")
+
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategySubscriptions UserStrategySubscription[]
+  llmStrategySubscriptions UserLlmStrategySubscription[]
+
+  @@unique([userId, exchangeId, name], map: "uniq_exchange_accounts_user_exchange_name")
+  @@index([userId], map: "idx_exchange_accounts_user")
+  @@map("exchange_accounts")
+}

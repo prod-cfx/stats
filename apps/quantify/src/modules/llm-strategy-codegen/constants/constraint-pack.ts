@@ -1,0 +1,43 @@
+export const FORBIDDEN_TOKENS = [
+  'eval(',
+  'Function(',
+  'import ',
+  'require(',
+  'process.',
+  '__dirname',
+  '__filename',
+  'globalThis',
+] as const
+
+export const ALLOWED_HELPER_PREFIXES = [
+  'helpers.math.',
+  'helpers.array.',
+  'helpers.ta.',
+  'helpers.signal.',
+] as const
+
+export const REQUIRED_CHECKLIST_FIELDS = [
+  'symbols',
+  'timeframes',
+  'entryRules',
+  'exitRules',
+  'riskRules',
+] as const
+
+export type ChecklistField = typeof REQUIRED_CHECKLIST_FIELDS[number]
+
+export interface ConstraintPackSnapshot {
+  allowedHelperPrefixes: readonly string[]
+  forbiddenTokens: readonly string[]
+  runtime: 'current_script_engine'
+  allowHelpersOnly: boolean
+}
+
+export function createDefaultConstraintPack(): ConstraintPackSnapshot {
+  return {
+    allowedHelperPrefixes: ALLOWED_HELPER_PREFIXES,
+    forbiddenTokens: FORBIDDEN_TOKENS,
+    runtime: 'current_script_engine',
+    allowHelpersOnly: true,
+  }
+}

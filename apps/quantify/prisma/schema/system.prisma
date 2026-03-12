@@ -1,0 +1,35 @@
+/// 绯荤粺閰嶇疆鐩稿叧妯″瀷
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  type        String   @default("string")
+  description String?
+  category    String   @default("general")
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([isSystem])
+  @@map("system_settings")
+}
+
+model AiProviderKey {
+  id           String   @id @default(cuid())
+  providerCode String   @map("provider_code")
+  providerName String?  @map("provider_name")
+  baseUrl      String   @map("base_url")
+  type         String
+  name         String
+  apiKey       String   @map("api_key")
+  isDefault    Boolean  @default(false) @map("is_default")
+  status       String   @default("INACTIVE")
+  defaultModel String?  @map("default_model")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([providerCode, name], map: "uniq_ai_provider_code_name")
+  @@index([providerCode, status], map: "idx_ai_provider_provider_status")
+  @@map("ai_provider_keys")
+}
