@@ -1,0 +1,444 @@
+/// 绛栫暐涓庝氦鏄撳煙鏋氫妇
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum PositionSide {
+  LONG
+  SHORT
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum LedgerEntryType {
+  DEPOSIT
+  WITHDRAW
+  REALIZED_PNL
+  FEE
+  FUNDING_FEE
+  ADJUSTMENT
+}
+
+enum SignalSourceType {
+  AI_GENERATED
+  MANUAL
+  SYSTEM
+}
+
+enum SignalType {
+  ENTRY
+  EXIT
+  ADJUSTMENT
+  ALERT
+}
+
+enum SignalDirection {
+  BUY
+  SELL
+  CLOSE_LONG
+  CLOSE_SHORT
+}
+
+enum SignalStatus {
+  PENDING
+  EXECUTED
+  PARTIAL
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum ExecutionStatus {
+  PENDING
+  EXECUTED
+  FAILED
+  SKIPPED
+}
+
+enum StrategyTemplateStatus {
+  draft
+  testing
+  live
+  disabled
+}
+
+enum StrategyInstanceStatus {
+  draft
+  running
+  paused
+  stopped
+}
+
+enum StrategyInstanceMode {
+  BACKTEST  // 鍘嗗彶鍥炴祴
+  PAPER     // 绾镐笂浜ゆ槗
+  TESTNET   // 娴嬭瘯缃戜氦鏄?
+  LIVE      // 瀹炵洏浜ゆ槗
+}
+
+enum SubscriptionStatus {
+  active
+  paused
+  cancelled
+}
+
+model UserStrategyAccount {
+  id                 String    @id @default(cuid())
+  userId             String    @map("user_id")
+  strategyId         String    @map("strategy_id")
+  strategyName       String?   @map("strategy_name")
+  strategyVersion    String?   @map("strategy_version")
+  baseCurrency       String    @map("base_currency")
+  initialBalance     Decimal   @default(0) @map("initial_balance") @db.Decimal(48, 18)
+  balance            Decimal   @default(0) @db.Decimal(48, 18)
+  equity             Decimal   @default(0) @db.Decimal(48, 18)
+  totalRealizedPnl   Decimal   @default(0) @map("total_realized_pnl") @db.Decimal(48, 18)
+  totalUnrealizedPnl Decimal   @default(0) @map("total_unrealized_pnl") @db.Decimal(48, 18)
+  lastEquityRecalcAt DateTime? @map("last_equity_recalc_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  positions        Position[]
+  trades           Trade[]
+  ledger           PnlLedger[]
+  dailyMetrics     StrategyPnlDaily[]
+  signalExecutions UserSignalExecution[]
+
+  @@unique([userId, strategyId], map: "uniq_user_strategy_account")
+  @@index([strategyId], map: "idx_user_strategy_account_strategy")
+  @@index([userId], map: "idx_user_strategy_account_user")
+  @@map("user_strategy_accounts")
+}
+
+model Position {
+  id                    String         @id @default(cuid())
+  userStrategyAccountId String         @map("user_strategy_account_id")
+  symbol                String
+  positionSide          PositionSide   @map("position_side")
+  leverage              Decimal?       @db.Decimal(18, 8)
+  quantity              Decimal        @default(0) @db.Decimal(48, 18)
+  avgEntryPrice         Decimal        @default(0) @map("avg_entry_price") @db.Decimal(48, 18)
+  realizedPnl           Decimal        @default(0) @map("realized_pnl") @db.Decimal(48, 18)
+  unrealizedPnl         Decimal        @default(0) @map("unrealized_pnl") @db.Decimal(48, 18)
+  status                PositionStatus @default(OPEN)
+  openedAt              DateTime       @default(now()) @map("opened_at")
+  closedAt              DateTime?      @map("closed_at")
+  exchangeId            String?        @map("exchange_id")
+  marketType            String?        @map("market_type")
+  metadata              Json?          @map("metadata")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  account UserStrategyAccount @relation(fields: [userStrategyAccountId], references: [id], onDelete: Cascade)
+  trades  Trade[]
+  ledgers PnlLedger[]
+
+  @@index([userStrategyAccountId, status], map: "idx_position_account_status")
+  @@index([symbol, status], map: "idx_position_symbol_status")
+  @@map("positions")
+}
+
+model Trade {
+  id                    String       @id @default(cuid())
+  userStrategyAccountId String       @map("user_strategy_account_id")
+  positionId            String?      @map("position_id")
+  symbol                String
+  market                String?
+  side                  TradeSide
+  positionSide          PositionSide @map("position_side")
+  price                 Decimal      @db.Decimal(48, 18)
+  quantity              Decimal      @db.Decimal(48, 18)
+  fee                   Decimal      @default(0) @db.Decimal(48, 18)
+  feeCurrency           String?      @map("fee_currency")
+  orderId               String?      @map("order_id")
+  externalTradeId       String?      @map("external_trade_id")
+  provider              String?
+  executedAt            DateTime     @map("executed_at")
+  metadata              Json?        @map("metadata")
+  createdAt             DateTime     @default(now()) @map("created_at")
+
+  account  UserStrategyAccount @relation(fields: [userStrategyAccountId], references: [id], onDelete: Cascade)
+  position Position?           @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  @@unique([userStrategyAccountId, externalTradeId], map: "uniq_trade_external_id_per_account")
+  @@index([userStrategyAccountId, executedAt], map: "idx_trade_account_time")
+  @@index([symbol, executedAt], map: "idx_trade_symbol_time")
+  @@map("trades")
+}
+
+model PnlLedger {
+  id                    String          @id @default(cuid())
+  userStrategyAccountId String          @map("user_strategy_account_id")
+  positionId            String?         @map("position_id")
+  type                  LedgerEntryType
+  amount                Decimal         @default(0) @db.Decimal(48, 18)
+  balanceAfter          Decimal         @default(0) @map("balance_after") @db.Decimal(48, 18)
+  referenceId           String?         @map("reference_id")
+  description           String?
+  occurredAt            DateTime        @map("occurred_at")
+  meta                  Json?
+  createdAt             DateTime        @default(now()) @map("created_at")
+
+  account  UserStrategyAccount @relation(fields: [userStrategyAccountId], references: [id], onDelete: Cascade)
+  position Position?           @relation(fields: [positionId], references: [id], onDelete: SetNull)
+
+  @@unique([userStrategyAccountId, referenceId], map: "uniq_ledger_reference_per_account")
+  @@index([userStrategyAccountId, occurredAt], map: "idx_ledger_account_time")
+  @@index([type, occurredAt], map: "idx_ledger_type_time")
+  @@map("pnl_ledger")
+}
+
+model StrategyPnlDaily {
+  id                    String   @id @default(cuid())
+  userStrategyAccountId String   @map("user_strategy_account_id")
+  date                  DateTime
+  equityStart           Decimal  @default(0) @map("equity_start") @db.Decimal(48, 18)
+  equityEnd             Decimal  @default(0) @map("equity_end") @db.Decimal(48, 18)
+  realizedPnl           Decimal  @default(0) @map("realized_pnl") @db.Decimal(48, 18)
+  unrealizedPnl         Decimal  @default(0) @map("unrealized_pnl") @db.Decimal(48, 18)
+  deposits              Decimal  @default(0) @db.Decimal(48, 18)
+  withdrawals           Decimal  @default(0) @db.Decimal(48, 18)
+  maxDrawdown           Decimal  @default(0) @map("max_drawdown") @db.Decimal(48, 18)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  account UserStrategyAccount @relation(fields: [userStrategyAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([userStrategyAccountId, date], map: "uniq_strategy_pnl_daily")
+  @@map("strategy_pnl_daily")
+}
+
+model StrategyTemplate {
+  id                    String                 @id @default(cuid())
+  name                  String                 @unique
+  description           String
+  /// 绛栫暐鑵垮畾涔?JSON: [{ id, symbol, role, description? }]
+  legs                  Json?
+  /// 绛栫暐鎵ц閰嶇疆 JSON: { timeframe, cooldownMinutes? }
+  execution             Json?
+  /// 鏁版嵁闇€姹傞厤缃?JSON: { [legId]: ["1h", "4h", ...] }
+  dataRequirements      Json?                  @map("data_requirements")
+  llmModel              String                 @map("llm_model")
+  promptTemplate        String                 @map("prompt_template") @db.Text
+  script                String?                @db.Text
+  paramsSchema          Json                   @map("params_schema")
+  defaultParams         Json?                  @map("default_params")
+  rulesJson             Json?                  @map("rules_json")
+  /// @deprecated 浣跨敤 dataRequirements 鏇夸唬
+  requiredFields        String[]               @default([]) @map("required_fields")
+  rulesVersion          Int                    @default(0) @map("rules_version")
+  status                StrategyTemplateStatus @default(draft)
+  createdBy             String?                @map("created_by")
+  updatedBy             String?                @map("updated_by")
+  lastGenerationSummary String?                @map("last_generation_summary") @db.Text
+  metadata              Json?
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at")
+
+  instances StrategyInstance[]
+  signals   TradingSignal[]
+
+  @@index([status], map: "idx_strategy_templates_status")
+  @@index([createdAt], map: "idx_strategy_templates_created_at")
+  @@map("strategy_templates")
+}
+
+model StrategyInstance {
+  id                 String                 @id @default(cuid())
+  strategyTemplateId String                 @map("strategy_template_id")
+  name               String
+  description        String?
+  llmModel           String                 @map("llm_model")
+  params             Json?
+  status             StrategyInstanceStatus @default(draft)
+  mode               StrategyInstanceMode   @default(PAPER)
+  startedAt          DateTime?              @map("started_at")
+  stoppedAt          DateTime?              @map("stopped_at")
+  createdBy          String?                @map("created_by")
+  updatedBy          String?                @map("updated_by")
+  metadata           Json?
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @default(now()) @updatedAt @map("updated_at")
+
+  strategyTemplate StrategyTemplate           @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
+  signals          TradingSignal[]
+  signalState      StrategySignalState?
+  subscriptions    UserStrategySubscription[]
+
+  @@unique([strategyTemplateId, llmModel, name], map: "uniq_strategy_instance_template_model_name")
+  @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")
+  @@index([status], map: "idx_strategy_instance_status")
+  @@index([mode], map: "idx_strategy_instance_mode")
+  @@index([createdAt], map: "idx_strategy_instance_created_at")
+  @@map("strategy_instances")
+}
+
+model TradingSignal {
+  id                    String           @id @default(cuid())
+  strategyId            String?          @map("strategy_id") // 鍙€夛紝鐢ㄤ簬鏃х瓥鐣ユā鏉?
+  strategyInstanceId    String?          @map("strategy_instance_id") // 鍙€夛紝鐢ㄤ簬鏃х瓥鐣ュ疄渚?
+  llmStrategyId         String?          @map("llm_strategy_id") // LLM绛栫暐ID
+  llmStrategyInstanceId String?          @map("llm_strategy_instance_id") // LLM绛栫暐瀹炰緥ID
+  symbolId              String           @map("symbol_id")
+  sourceType            SignalSourceType @default(AI_GENERATED) @map("source_type")
+  signalType            SignalType       @map("signal_type")
+  direction             SignalDirection
+  confidence            Decimal?         @db.Decimal(5, 2)
+  entryPrice            Decimal?         @map("entry_price") @db.Decimal(30, 10)
+  targetPrice           Decimal?         @map("target_price") @db.Decimal(30, 10)
+  stopLoss              Decimal?         @map("stop_loss") @db.Decimal(30, 10)
+  takeProfit            Decimal?         @map("take_profit") @db.Decimal(30, 10)
+  /// 绛栫暐寤鸿鐨勪粨浣嶅ぇ灏忥紙鎶ヤ环甯佺閲戦锛屽 USDT锛?
+  positionSizeQuote     Decimal?         @map("position_size_quote") @db.Decimal(30, 10)
+  /// 绛栫暐寤鸿鐨勪粨浣嶆瘮渚嬶紙鐩稿浜庤处鎴蜂綑棰濓紝0-1涔嬮棿锛?
+  positionSizeRatio     Decimal?         @map("position_size_ratio") @db.Decimal(5, 4)
+  aiModel               String?          @map("ai_model")
+  aiReasoning           String?          @map("ai_reasoning") @db.Text
+  aiRawResponse         Json?            @map("ai_raw_response")
+  marketContext         Json?            @map("market_context")
+  metadata              Json?
+  status                SignalStatus     @default(PENDING)
+  publishedAt           DateTime         @default(now()) @map("published_at")
+  expiresAt             DateTime?        @map("expires_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  strategy            StrategyTemplate?     @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  strategyInstance    StrategyInstance?     @relation(fields: [strategyInstanceId], references: [id], onDelete: SetNull)
+  llmStrategy         LlmStrategy?          @relation(fields: [llmStrategyId], references: [id], onDelete: Cascade)
+  llmStrategyInstance LlmStrategyInstance?  @relation(fields: [llmStrategyInstanceId], references: [id], onDelete: SetNull)
+  symbol              Symbol                @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  executions          UserSignalExecution[]
+  llmStrategyRuns     LlmStrategyRun[]
+
+  @@index([strategyId, createdAt], map: "idx_strategy_signals_strategy_created")
+  @@index([strategyInstanceId, createdAt], map: "idx_strategy_signals_instance_created")
+  @@index([llmStrategyId, createdAt], map: "idx_strategy_signals_llm_strategy_created")
+  @@index([llmStrategyInstanceId, createdAt], map: "idx_strategy_signals_llm_instance_created")
+  @@index([symbolId, createdAt], map: "idx_strategy_signals_symbol_created")
+  @@index([status, createdAt], map: "idx_strategy_signals_status_created")
+  @@map("strategy_signals")
+}
+
+model UserSignalExecution {
+  id                    String          @id @default(cuid())
+  signalId              String          @map("signal_id")
+  userId                String          @map("user_id")
+  userStrategyAccountId String          @map("user_strategy_account_id")
+  status                ExecutionStatus @default(PENDING)
+  orderSide             TradeSide       @map("order_side")
+  positionSide          PositionSide    @map("position_side")
+  executedPrice         Decimal?        @map("executed_price") @db.Decimal(48, 18)
+  executedQuantity      Decimal?        @map("executed_quantity") @db.Decimal(48, 18)
+  fee                   Decimal?        @db.Decimal(48, 18)
+  feeCurrency           String?         @map("fee_currency")
+  tradeId               String?         @map("trade_id")
+  positionId            String?         @map("position_id")
+  executedAt            DateTime?       @map("executed_at")
+  errorMessage          String?         @map("error_message")
+  metadata              Json?
+  reservedQuote         Decimal?        @map("reserved_quote") @db.Decimal(48, 18)
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  signal  TradingSignal       @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account UserStrategyAccount @relation(fields: [userStrategyAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([signalId, userStrategyAccountId], map: "uniq_signal_exec_per_account")
+  @@index([userStrategyAccountId, createdAt], map: "idx_signal_exec_account_created")
+  @@index([signalId], map: "idx_signal_exec_signal")
+  @@index([userId, createdAt], map: "idx_signal_exec_user_created")
+  @@map("user_signal_executions")
+}
+
+model StrategySignalState {
+  strategyId          String    @map("strategy_id")
+  strategyInstanceId  String    @map("strategy_instance_id")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  lockedUntil         DateTime? @map("locked_until")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+
+  @@id([strategyId, strategyInstanceId], map: "pk_strategy_signal_state")
+  @@unique([strategyInstanceId], map: "uniq_strategy_signal_state_instance")
+  @@map("strategy_signal_state")
+}
+
+model UserStrategySubscription {
+  id                 String             @id @default(cuid())
+  userId             String             @map("user_id")
+  strategyInstanceId String             @map("strategy_instance_id")
+  status             SubscriptionStatus @default(active)
+  /// 鐢ㄦ埛鑷畾涔夊弬鏁帮紙瑕嗙洊妯℃澘榛樿鍙傛暟锛?
+  customParams       Json?              @map("custom_params")
+  /// 缁戝畾鐨勪氦鏄撴墍璐︽埛
+  exchangeAccountId  String?            @map("exchange_account_id")
+  subscribedAt       DateTime           @default(now()) @map("subscribed_at")
+  unsubscribedAt     DateTime?          @map("unsubscribed_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+  exchangeAccount  ExchangeAccount? @relation(fields: [exchangeAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, strategyInstanceId], map: "uniq_user_strategy_subscription")
+  @@index([userId, status], map: "idx_user_strategy_subscription_user_status")
+  @@index([strategyInstanceId, status], map: "idx_user_strategy_subscription_instance_status")
+  @@map("user_strategy_subscriptions")
+}
+
+model UserLlmStrategySubscription {
+  id                  String             @id @default(cuid())
+  userId              String             @map("user_id")
+  llmStrategyInstanceId String           @map("llm_strategy_instance_id")
+  status              SubscriptionStatus @default(active)
+  /// 鐢ㄦ埛鑷畾涔夊弬鏁帮紙鐢ㄤ簬瑕嗙洊/琛ュ厖瀹炰緥鎴栫瓥鐣ラ粯璁ら厤缃級
+  customParams        Json?              @map("custom_params")
+  /// 缁戝畾鐨勪氦鏄撴墍璐︽埛
+  exchangeAccountId   String?            @map("exchange_account_id")
+  subscribedAt        DateTime           @default(now()) @map("subscribed_at")
+  unsubscribedAt      DateTime?          @map("unsubscribed_at")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  llmStrategyInstance LlmStrategyInstance @relation(fields: [llmStrategyInstanceId], references: [id], onDelete: Cascade)
+  exchangeAccount    ExchangeAccount?  @relation(fields: [exchangeAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, llmStrategyInstanceId], map: "uniq_user_llm_strategy_subscription")
+  @@index([userId, status], map: "idx_user_llm_strategy_subscription_user_status")
+  @@index([llmStrategyInstanceId, status], map: "idx_user_llm_strategy_subscription_instance_status")
+  @@map("user_llm_strategy_subscriptions")
+}
+
+model PositionSyncLog {
+  id                    String   @id @default(cuid())
+  userId                String   @map("user_id")
+  userStrategyAccountId String?  @map("user_strategy_account_id")
+  exchangeId            String   @map("exchange_id")
+  marketType            String   @map("market_type")
+  syncType              String   @map("sync_type") // 'manual', 'scheduled', 'auto'
+  success               Boolean
+  exchangePositions     Int      @default(0) @map("exchange_positions")
+  localPositions        Int      @default(0) @map("local_positions")
+  differencesCount      Int      @default(0) @map("differences_count")
+  differences           Json? // 璇︾粏宸紓淇℃伅
+  errors                Json? // 閿欒淇℃伅鏁扮粍
+  durationMs            Int?     @map("duration_ms")
+  triggeredBy           String?  @map("triggered_by") // 瑙﹀彂鍚屾鐨勭敤鎴?ID
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_position_sync_log_user_time")
+  @@index([userStrategyAccountId, createdAt], map: "idx_position_sync_log_account_time")
+  @@index([success, createdAt], map: "idx_position_sync_log_success_time")
+  @@map("position_sync_logs")
+}

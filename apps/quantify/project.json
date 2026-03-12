@@ -1,0 +1,57 @@
+{
+  "name": "backend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/backend/src",
+  "projectType": "application",
+  "tags": ["scope:backend", "type:app", "framework:nestjs"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/apps/backend/dist"],
+      "options": {
+        "command": "pnpm --filter @net/backend run build"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @net/backend run dev"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "pnpm --filter @net/backend run start"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/backend/src/**/*.ts", "apps/backend/e2e/**/*.ts"],
+        "eslintConfig": "eslint.config.js"
+      }
+    },
+    "swagger": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/dist/openapi/backend.json",
+        "{workspaceRoot}/apps/backend/dist/openapi/backend.json"
+      ],
+      "options": {
+        "command": "pnpm exec ts-node -r tsconfig-paths/register src/swagger/export-openapi.ts",
+        "cwd": "apps/backend",
+        "env": {
+          "SKIP_PRISMA_CONNECT": "true"
+        }
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @net/backend run test"
+      }
+    }
+  }
+}

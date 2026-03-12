@@ -1,0 +1,150 @@
+/// 琛屾儏涓庢寚鏍囩浉鍏冲畾涔?
+enum SymbolType {
+  CRYPTO
+  STOCK
+  FOREX
+}
+
+enum SymbolStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum InstrumentType {
+  SPOT
+  PERPETUAL
+  FUTURE
+}
+
+enum IndicatorType {
+  RET /// 鍖洪棿鏀剁泭
+  MOVING_AVG /// 绠€鍗曠Щ鍔ㄥ潎绾?
+  VOLATILITY /// 娉㈠姩鐜?
+  VOLUME_RATIO /// 閲忚兘姣?
+}
+
+enum MarketTimeframe {
+  m1  @map("1m")
+  m5  @map("5m")
+  m15 @map("15m")
+  h1  @map("1h")
+  h4  @map("4h")
+  d1  @map("1d")
+}
+
+model Symbol {
+  id                String         @id @default(cuid())
+  code              String         @unique
+  baseAsset         String         @map("base_asset")
+  quoteAsset        String         @map("quote_asset")
+  exchange          String
+  type              SymbolType     @default(CRYPTO)
+  instrumentType    InstrumentType @default(SPOT) @map("instrument_type")
+  status            SymbolStatus   @default(ACTIVE)
+  precisionPrice    Int            @default(2) @map("precision_price")
+  precisionQuantity Int            @default(6) @map("precision_quantity")
+  tickSize          Decimal?       @map("tick_size")
+  lotSize           Decimal?       @map("lot_size")
+  isMarginEnabled   Boolean        @default(false) @map("is_margin_enabled")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  bars             MarketBar[]
+  quotes           MarketQuote[]
+  indicatorConfigs IndicatorConfig[]
+  indicatorValues  IndicatorValue[]
+  signals          TradingSignal[]
+
+  @@index([exchange, status, instrumentType], map: "idx_symbols_exchange_status_type")
+  @@map("market_symbols")
+}
+
+model MarketBar {
+  id          String          @id @default(cuid())
+  symbolId    String          @map("symbol_id")
+  timeframe   MarketTimeframe
+  time        DateTime
+  open        Decimal         @db.Decimal(30, 10)
+  high        Decimal         @db.Decimal(30, 10)
+  low         Decimal         @db.Decimal(30, 10)
+  close       Decimal         @db.Decimal(30, 10)
+  volume      Decimal?        @db.Decimal(30, 12)
+  quoteVolume Decimal?        @map("quote_volume") @db.Decimal(30, 12)
+  trades      Int?
+  source      String? /// 鏁版嵁鏉ユ簮锛堝 BINANCE_REST / BINANCE_WS锛?
+  isFinal     Boolean         @default(true) @map("is_final")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([symbolId, timeframe, time], map: "uniq_market_bars_symbol_timeframe_time")
+  @@index([symbolId, timeframe, time], map: "idx_market_bars_symbol_timeframe_time")
+  @@map("market_bars")
+}
+
+model MarketQuote {
+  id                 String   @id @default(cuid())
+  symbolId           String   @map("symbol_id")
+  lastPrice          Decimal  @map("last_price") @db.Decimal(30, 10)
+  priceChange        Decimal? @map("price_change") @db.Decimal(30, 10)
+  priceChangePercent Decimal? @map("price_change_percent") @db.Decimal(18, 8)
+  openPrice          Decimal? @map("open_price") @db.Decimal(30, 10)
+  highPrice          Decimal? @map("high_price") @db.Decimal(30, 10)
+  lowPrice           Decimal? @map("low_price") @db.Decimal(30, 10)
+  volume             Decimal? @db.Decimal(30, 12)
+  quoteVolume        Decimal? @map("quote_volume") @db.Decimal(30, 12)
+  bidPrice           Decimal? @map("bid_price") @db.Decimal(30, 10)
+  bidQty             Decimal? @map("bid_qty") @db.Decimal(30, 12)
+  askPrice           Decimal? @map("ask_price") @db.Decimal(30, 10)
+  askQty             Decimal? @map("ask_qty") @db.Decimal(30, 12)
+  eventTime          DateTime @map("event_time")
+  source             String? /// 鏁版嵁鏉ユ簮
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@index([symbolId, eventTime], map: "idx_market_quotes_symbol_event_time")
+  @@index([symbolId], map: "idx_market_quotes_symbol")
+  @@map("market_quotes")
+}
+
+model IndicatorConfig {
+  id          String          @id @default(cuid())
+  symbolId    String          @map("symbol_id")
+  timeframe   MarketTimeframe
+  type        IndicatorType   @map("indicator_type")
+  name        String
+  params      Json?
+  isEnabled   Boolean         @default(true) @map("is_enabled")
+  description String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  symbol Symbol           @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  values IndicatorValue[]
+
+  @@unique([symbolId, timeframe, type, name], map: "uniq_indicator_config_symbol_timeframe_type_name")
+  @@index([symbolId, timeframe, type], map: "idx_indicator_config_symbol_timeframe_type")
+  @@map("indicator_configs")
+}
+
+model IndicatorValue {
+  id                String          @id @default(cuid())
+  indicatorConfigId String          @map("indicator_config_id")
+  symbolId          String          @map("symbol_id")
+  timeframe         MarketTimeframe
+  type              IndicatorType   @map("indicator_type")
+  time              DateTime        @map("time")
+  valueNumeric      Decimal?        @map("value_numeric") @db.Decimal(48, 18)
+  valueJson         Json?           @map("value_json")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  config IndicatorConfig @relation(fields: [indicatorConfigId], references: [id], onDelete: Cascade)
+  symbol Symbol          @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([indicatorConfigId, time], map: "uniq_indicator_values_config_time")
+  @@index([symbolId, timeframe, type, time], map: "idx_indicator_values_symbol_timeframe_type_time")
+  @@index([indicatorConfigId, time], map: "idx_indicator_values_config_time")
+  @@map("indicator_values")
+}

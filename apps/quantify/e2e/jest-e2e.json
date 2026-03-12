@@ -1,0 +1,27 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".*\\.(e2e-spec|spec)\\.ts$",
+  "transform": {
+    "^.+\\.tsx?$": "ts-jest"
+  },
+  "globals": {
+    "ts-jest": {
+      "diagnostics": false,
+      "isolatedModules": true
+    }
+  },
+  "moduleNameMapper": {
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^@ai/shared$": "<rootDir>/../../../packages/shared/src",
+    "^@ai/shared/(.*)$": "<rootDir>/../../../packages/shared/src/$1",
+    "^@net/config$": "<rootDir>/../../../packages/config/src",
+    "^@net/config/(.*)$": "<rootDir>/../../../packages/config/src/$1"
+  },
+  "setupFilesAfterEnv": ["./setup-e2e.ts"],
+  "maxWorkers": 1,
+  "testRunner": "jest-circus/runner",
+  "testTimeout": 60000
+}
