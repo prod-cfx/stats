@@ -2,10 +2,10 @@
 
 import type { StrategyStatus } from './ai-quant-strategy-store'
 import Link from 'next/link'
-import { useMemo } from 'react'
-import { Activity, Clock, MoreHorizontal, PlayCircle, StopCircle } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { listStrategies } from './ai-quant-strategy-store'
+import { listStrategies, updateStrategyStatus } from './ai-quant-strategy-store'
 
 function fmtTime(ts: string, lng: string) {
   const date = new Date(ts)
@@ -19,7 +19,18 @@ function fmtTime(ts: string, lng: string) {
 
 export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const { t } = useTranslation()
-  const strategies = useMemo(() => listStrategies(), [])
+  const [strategies, setStrategies] = useState(() => listStrategies())
+
+  const refreshStrategies = () => {
+    setStrategies(listStrategies())
+  }
+
+  const handleStatusChange = (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
+    e.preventDefault()
+    e.stopPropagation()
+    updateStrategyStatus(id, status)
+    refreshStrategies()
+  }
 
   const STATUS_CONFIG: Record<StrategyStatus, { label: string; className: string; icon: React.ElementType }> = {
     running: {
@@ -110,6 +121,25 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   </div>
                   <div className="mt-0.5">{fmtTime(item.updatedAt, lng)}</div>
                 </div>
+                
+                {item.status === 'running' ? (
+                  <button
+                    onClick={(e) => handleStatusChange(e, item.id, 'stopped')}
+                    className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
+                  >
+                    <Square className="h-3 w-3 fill-current" />
+                    {t('aiQuant.actions.stop')}
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => handleStatusChange(e, item.id, 'running')}
+                    className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+                  >
+                    <Play className="h-3 w-3 fill-current" />
+                    {t('aiQuant.actions.run')}
+                  </button>
+                )}
+
                 <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] transition group-hover:border-primary/30 group-hover:text-primary">
                   {t('aiQuant.viewDetail')}
                 </div>

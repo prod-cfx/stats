@@ -111,6 +111,10 @@
       "confirmed": "Confirmed",
       "pending": "Pending"
     },
+    "actions": {
+      "run": "Run",
+      "stop": "Stop"
+    },
     "timeframe": "Timeframe",
     "position": "Position",
     "saveApiConfig": "Save API Config",

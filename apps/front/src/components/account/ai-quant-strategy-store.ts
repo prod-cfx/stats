@@ -264,3 +264,27 @@ export function upsertStrategyDeployment(input: {
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
 }
+
+export function updateStrategyStatus(id: string, status: StrategyStatus) {
+  const now = new Date().toISOString()
+  const existing = ensureStrategyStore()
+  const next = existing.map(item => {
+    if (item.id !== id) return item
+    
+    const event = status === 'running' ? '开始运行' : '停止运行'
+    const note = status === 'running' ? '用户手动启动' : '用户手动停止'
+    
+    return {
+      ...item,
+      status,
+      timeline: [
+        ...item.timeline,
+        { at: now.replace('T', ' ').slice(0, 16), event, note },
+      ],
+      updatedAt: now,
+    }
+  })
+  
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  return next
+}
