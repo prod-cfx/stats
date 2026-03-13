@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 // Nest 校验需要运行时枚举值，保留值导入
-import { LiquidationHeatmapModelType } from '@prisma/client'
+import { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class GetLiquidationHeatmapRequestDto {

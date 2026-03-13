@@ -1,4 +1,4 @@
-import type { DataPullTask as DataPullTaskModel } from '@prisma/client'
+import type { DataPullTask as DataPullTaskModel } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

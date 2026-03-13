@@ -1,6 +1,6 @@
 import type { OrderBookLevel, VenueOrderBook } from '@ai/shared'
 import type { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets'
-import type { MarketTrade } from '@prisma/client'
+import type { MarketTrade } from '@/prisma/prisma.types'
 import type { Server, Socket } from 'socket.io'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { KlineSubscriptionDto } from './dto/kline-subscription.dto'

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { VerificationCodePurpose } from '@prisma/client'
+import { VerificationCodePurpose } from '@/prisma/prisma.types'
 import { IsEmail, IsEnum, IsNotEmpty } from 'class-validator'
 
 export class SendVerificationCodeRequestDto {

@@ -1,6 +1,6 @@
 /* eslint-disable perfectionist/sort-imports */
-import type { AdminMenu } from '@prisma/client'
-import { AdminMenuType } from '@prisma/client'
+import type { AdminMenu } from '@/prisma/prisma.types'
+import { AdminMenuType } from '@/prisma/prisma.types'
 import type { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 
 type MenuNode = AdminMenu & { children: MenuNode[] }

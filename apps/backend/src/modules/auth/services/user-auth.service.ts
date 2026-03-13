@@ -1,5 +1,5 @@
 /* eslint-disable perfectionist/sort-imports -- auth service imports按职责分组，降低冲突 */
-import type { User } from '@prisma/client'
+import type { User } from '@/prisma/prisma.types'
 import type { LoginRequestDto } from '../dto/requests/login.request.dto'
 import type { PasswordResetRequestDto } from '../dto/requests/password-reset.request.dto'
 import type { RegisterRequestDto } from '../dto/requests/register.request.dto'
@@ -23,7 +23,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/JwtService，保留值导入
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
-import { PrincipalType, Prisma, UserCredentialType, VerificationCodePurpose } from '@prisma/client'
+import { PrincipalType, Prisma, UserCredentialType, VerificationCodePurpose } from '@/prisma/prisma.types'
 import { compare, hash } from 'bcrypt'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'

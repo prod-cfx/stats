@@ -2,7 +2,7 @@ import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
 import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
+import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
 import { MailService } from '@/common/services/mail.service'
 import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 import { WhaleNotificationMetricsService as WhaleNotificationMetricsServiceToken } from './whale-notification-metrics.service'

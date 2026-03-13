@@ -1,4 +1,4 @@
-import type { WhaleNotificationDelivery } from '@prisma/client'
+import type { WhaleNotificationDelivery } from '@/prisma/prisma.types'
 import type { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
 import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import { ErrorCode } from '@ai/shared'

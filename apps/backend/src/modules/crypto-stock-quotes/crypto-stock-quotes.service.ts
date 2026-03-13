@@ -1,4 +1,4 @@
-import type { CryptoStockQuote } from '@prisma/client'
+import type { CryptoStockQuote } from '@/prisma/prisma.types'
 import type { CryptoStockQuoteResponseDto } from './dto/crypto-stock-quote.dto'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 CryptoStockQuotesRepository，保留值导入

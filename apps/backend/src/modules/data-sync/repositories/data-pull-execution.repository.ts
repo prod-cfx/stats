@@ -1,4 +1,4 @@
-import type { DataPullExecution as DataPullExecutionModel } from '@prisma/client'
+import type { DataPullExecution as DataPullExecutionModel } from '@/prisma/prisma.types'
 import type { JobRunResult } from '../contracts/data-pull-job'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入

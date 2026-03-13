@@ -1,8 +1,8 @@
-import type { MarketTimeframe } from '@prisma/client'
+import type { MarketTimeframe } from '@/prisma/prisma.types'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 RedisService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

@@ -1,4 +1,4 @@
-import type { TradesPairConfig } from '@prisma/client'
+import type { TradesPairConfig } from '@/prisma/prisma.types'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
 import {
   ApiBearerAuth,

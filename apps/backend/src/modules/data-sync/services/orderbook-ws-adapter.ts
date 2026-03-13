@@ -1,4 +1,4 @@
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 
 export type OrderbookAdapterKey = `${string}.${'CEX' | 'DEX'}.${'SPOT' | 'PERPETUAL' | 'FUTURE'}`
 

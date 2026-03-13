@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { PrincipalType } from '@prisma/client'
+import { PrincipalType } from '@/prisma/prisma.types'
 
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 PrismaService
 import { PrismaService } from '@/prisma/prisma.service'

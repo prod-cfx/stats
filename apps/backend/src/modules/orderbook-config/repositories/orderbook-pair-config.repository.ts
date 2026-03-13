@@ -1,4 +1,4 @@
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'

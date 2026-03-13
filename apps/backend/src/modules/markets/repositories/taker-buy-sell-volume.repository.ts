@@ -1,6 +1,6 @@
-import type { TakerBuySellVolume } from '@prisma/client'
+import type { TakerBuySellVolume } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()

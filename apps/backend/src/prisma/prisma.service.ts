@@ -8,9 +8,9 @@ import { generateShortId } from '@ai/shared'
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient as PrismaClientBase } from '@prisma/client'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
 import { Pool } from 'pg'
+import { PrismaClient as PrismaClientBase } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
 import { PRISMA_OPTIONS } from './prisma.constants'
@@ -369,4 +369,3 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
     return [items, total]
   }
 }
-
