@@ -6,30 +6,30 @@ import type { AiSignalPayloadWithMeta } from './llm-v3-tools'
 import type { ChatCompletionToolCall, ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { fillPromptTemplate } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏?EventEmitter2
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入 EventEmitter2
 import { EventEmitter2 } from '@nestjs/event-emitter'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 AiService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 AiService
 import { AiService } from '@/modules/ai/ai.service'
 import { StrategySignalEvents } from '@/modules/strategy-signals/constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '@/modules/strategy-signals/events/strategy-signal.events'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 PrismaService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
 import { PrismaService } from '@/prisma/prisma.service'
 import { LLM_OPS_TEST_LOG_EVENT } from './llm-ops-test-log.events'
 import { LLM_RUN_REASONS } from './llm-run-reasons'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 LlmToolsService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 LlmToolsService
 import { LlmToolsService } from './llm-tools.service'
 import { GENERATE_TRADING_SIGNAL_TOOL_NAME, llmV3Tools } from './llm-v3-tools'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆浠撳偍绫?
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入仓储类
 import { LlmStrategyInstancesRepository, LlmStrategyRunsRepository } from './repositories'
 
 export interface LlmOrchestratedRunEnvironment {
   /**
-   * 褰撳墠瑙﹀彂鏃堕棿锛岄粯璁?new Date()
+   * 当前触发时间，默认 new Date()
    */
   now?: Date
   /**
-   * 涓氬姟涓婁笅鏂囦腑鏇寸粏绮掑害鐨勪俊鎭紙鍙€夛級
-   * 渚嬪锛氭湰娆℃鏌ヤ綔鐢ㄧ殑 symbol / timeframe / 瑙﹀彂鏉ユ簮绛?
+   * 业务上下文中更细粒度的信息（可选）
+   * 例如：本次检查作用的 symbol / timeframe / 触发来源等
    */
   symbol?: string
   timeframe?: string
@@ -40,8 +40,8 @@ export interface LlmOrchestratedRunEnvironment {
 export interface LlmOrchestratedRunResult {
   runId: string
   /**
-   * 褰?LLM 姝ｇ‘璋冪敤 generate_trading_signal 鏃惰繑鍥炵粨鏋勫寲淇″彿锛?
-   * 澶辫触鎴栧紓甯告椂涓?undefined銆?
+   * 当 LLM 正确调用 generate_trading_signal 时返回结构化信号；
+   * 失败或异常时为 undefined。
    */
   status: LlmStrategyRunStatus
   reason?: LlmRunReason
@@ -73,13 +73,13 @@ export class LlmOrchestratedEngineV3 {
   }
 
   /**
-   * 涓烘寚瀹氬疄渚嬫墽琛屼竴娆?LLM v3 娴佺▼锛?
-   * - 鍔犺浇瀹炰緥涓庣瓥鐣?
-   * - 鏋勯€?system/user 鍒濆娑堟伅
-   * - 杩愯甯?tools 鐨勫璇濆惊鐜?
-   * - 璁板綍 LlmStrategyRun
+   * 为指定实例执行一次 LLM v3 流程：
+   * - 加载实例与策略
+   * - 构造 system/user 初始消息
+   * - 运行带 tools 的对话循环
+   * - 记录 LlmStrategyRun
    *
-   * 鏃犺鎴愬姛涓庡惁閮戒細杩斿洖 runId锛涘彧鏈夊湪鎴愬姛璋冪敤 generate_trading_signal 鏃舵墠杩斿洖 signal銆?
+   * 无论成功与否都会返回 runId；只有在成功调用 generate_trading_signal 时才返回 signal。
    */
   async runForInstance(
     instanceId: string,
@@ -87,9 +87,9 @@ export class LlmOrchestratedEngineV3 {
     environment: LlmOrchestratedRunEnvironment = {},
     options?: {
       /**
-       * 鏄惁璺宠繃杩愯鍓嶇殑鐘舵€佷笌鑺傛祦鏍￠獙锛?
-       * - 榛樿 false锛氶伒寰疄渚嬬姸鎬併€佸喎鍗存椂闂淬€佹瘡灏忔椂棰戠巼绛夐檺鍒?
-       * - true锛氬拷鐣ヤ笂杩伴檺鍒讹紝濮嬬粓灏濊瘯鎵ц涓€娆″畬鏁寸殑 LLM 娴佺▼
+       * 是否跳过运行前的状态与节流校验：
+       * - 默认 false：遵循实例状态、冷却时间、每小时频率等限制
+       * - true：忽略上述限制，始终尝试执行一次完整的 LLM 流程
        */
       skipGuards?: boolean
     },
@@ -120,7 +120,7 @@ export class LlmOrchestratedEngineV3 {
       })
     }
 
-    // 杩愯鍓嶇姸鎬佷笌鑺傛祦鏍￠獙锛氫粎鍦ㄦ湭鏄惧紡璺宠繃鏃剁敓鏁?
+    // 运行前状态与节流校验：仅在未显式跳过时生效
     if (!skipGuards) {
       const guardResult = await this.checkExecutionGuards(instance, createdBy, now)
       if (!guardResult.allowed) {
@@ -136,7 +136,7 @@ export class LlmOrchestratedEngineV3 {
             message,
           })
         }
-        // 鍒涘缓涓€鏉?skipped run 璁板綍锛屾柟渚垮悗缁璁?
+        // 创建一条 skipped run 记录，方便后续审计
         const skippedRun = await this.runsRepo.create({
           strategyInstance: { connect: { id: instance.id } },
           status: 'skipped' satisfies LlmStrategyRunStatus,
@@ -160,10 +160,10 @@ export class LlmOrchestratedEngineV3 {
 
     const messages = this.buildInitialMessages(strategy, instance, effectiveRiskConfig, environment, now)
 
-    // 棰勫垱寤?run 璁板綍锛岀‘淇濇棤璁烘垚鍔熶笌鍚﹂兘鏈?runId 鍙拷韪?
+    // 预创建 run 记录，确保无论成功与否都有 runId 可追踪
     const run = await this.runsRepo.create({
       strategyInstance: { connect: { id: instance.id } },
-      status: 'failed' satisfies LlmStrategyRunStatus, // 鍏堟爣璁颁负 failed锛屾垚鍔熷悗鍐嶆洿鏂颁负 success
+      status: 'failed' satisfies LlmStrategyRunStatus, // 先标记为 failed，成功后再更新为 success
       startedAt: now,
       llmModel: instance.llmModel,
       toolCallsCount: 0,
@@ -172,10 +172,10 @@ export class LlmOrchestratedEngineV3 {
     const toolContext: LlmToolExecutionContext = {
       instance,
       effectiveRiskConfig,
-      // 瀹炰緥涓嶅啀鐩存帴缁戝畾璐︽埛/鎶曡祫缁勫悎锛岀浉鍏充俊鎭敱涓婂眰锛堝璁㈤槄锛夋彁渚?
+      // 实例不再直接绑定账户/投资组合，相关信息由上层（如订阅）提供
       accountSnapshot: null,
       portfolioSnapshot: null,
-      // 浣跨敤 runId 浣滀负 sessionId锛岀‘淇濆悓涓€娆¤繍琛岀殑宸ュ叿璋冪敤鍙互鍏变韩缂撳瓨锛堝 contextId锛?
+      // 使用 runId 作为 sessionId，确保同一次运行的工具调用可以共享缓存（如 contextId）
       sessionId: run.id,
     }
 
@@ -206,7 +206,7 @@ export class LlmOrchestratedEngineV3 {
 
       let loopIndex = 0
 
-      // 涓诲璇濆惊鐜?
+      // 主对话循环
       while (true) {
         loopIndex += 1
         if (isOpsTest) {
@@ -276,7 +276,7 @@ export class LlmOrchestratedEngineV3 {
             })
           }
 
-          // 鎶?assistant 鐨?tool_calls 鍥炲涔熻拷鍔犲埌娑堟伅閲岋紝淇濇寔瀹屾暣瀵硅瘽涓婁笅鏂?
+          // 把 assistant 的 tool_calls 回复也追加到消息里，保持完整对话上下文
           messages.push({
             role: 'assistant',
             content: chatResult.content ?? '',
@@ -314,7 +314,7 @@ export class LlmOrchestratedEngineV3 {
               }
 
             if (call.function.name === GENERATE_TRADING_SIGNAL_TOOL_NAME) {
-              // 缁堟宸ュ叿锛氳В鏋愪负浜ゆ槗淇″彿骞剁粨鏉熷惊鐜?
+              // 终止工具：解析为交易信号并结束循环
               const parsed = this.parseGenerateTradingSignal(call)
               if (!parsed) {
                 finalStatus = 'failed'
@@ -361,7 +361,7 @@ export class LlmOrchestratedEngineV3 {
               break
             }
 
-            // 鍏跺畠宸ュ叿缁熶竴浜ょ粰 LlmToolsService
+            // 其它工具统一交给 LlmToolsService
             const result = await this.toolsService.executeTool(call, toolContext)
             if (isOpsTest) {
               const outputSnippet = JSON.stringify(result.output ?? {}).slice(0, 400)
@@ -399,11 +399,11 @@ export class LlmOrchestratedEngineV3 {
             break
           }
 
-          // 缁х画涓嬩竴杞惊鐜紝鐢?LLM 鍩轰簬鏈€鏂扮殑 tool 杈撳嚭缁х画鎬濊€?
+          // 继续下一轮循环，由 LLM 基于最新的 tool 输出继续思考
           continue
         }
 
-        // 娌℃湁 toolCalls锛屽彧杩斿洖浜嗙函鏂囨湰 鈫?瑙嗕负鍗忚杩濊儗
+        // 没有 toolCalls，只返回了纯文本 → 视为协议违背
         finalReason = LLM_RUN_REASONS.NO_TOOL_CALL
         errorMessage =
           chatResult.content && chatResult.content.length > 0
@@ -434,7 +434,7 @@ export class LlmOrchestratedEngineV3 {
         `LlmStrategyInstance ${instance.id} run failed with unexpected error: ${detail}`,
         error instanceof Error ? error.stack : undefined,
       )
-       // 绠＄悊鍛樻祴璇曟椂锛岄澶栨墦鍗版洿鏄庢樉鐨勬棩蹇?
+       // 管理员测试时，额外打印更明显的日志
       if (isOpsTest) {
         const message = `[OPS_TEST] RunId=${run.id} failed with unexpected error: ${detail}`
         this.logger.error(
@@ -453,11 +453,11 @@ export class LlmOrchestratedEngineV3 {
       errorMessage = detail
     }
 
-    // 淇濆瓨瀵硅瘽蹇収锛堜粎淇濈暀鏈€杩戣嫢骞叉潯娑堟伅锛岄伩鍏嶈繃澶э級
+    // 保存对话快照（仅保留最近若干条消息，避免过大）
     const rawDialogSnapshot = this.buildDialogSnapshot(messages)
 
-    // 馃攧 鍒涘缓鐪熷疄鐨?TradingSignal 璁板綍
-    // 浠呭湪锛氭垚鍔熺敓鎴愪俊鍙?&& 瀹炰緥涓篖IVE妯″紡 && 闈炵鐞嗗憳娴嬭瘯杩愯
+    // 🔄 创建真实的 TradingSignal 记录
+    // 仅在：成功生成信号 && 实例为LIVE模式 && 非管理员测试运行
     let generatedSignalId: string | null = null
     if (signal && finalStatus === 'success' && instance.mode === 'LIVE' && !isOpsTest) {
       try {
@@ -503,8 +503,8 @@ export class LlmOrchestratedEngineV3 {
         }
       }
     } else if (signal && isOpsTest) {
-      // 绠＄悊鍛樻祴璇曟ā寮忥細淇″彿灏嗕繚瀛樺埌 run metadata 涓紝涓嶅垱寤虹湡瀹?TradingSignal
-      const message = instance.mode === 'LIVE'
+      // 管理员测试模式：信号将保存到 run metadata 中，不创建真实 TradingSignal
+      const message = instance.mode === 'LIVE' 
         ? `[OPS_TEST] Signal generated and saved to run metadata (not creating TradingSignal in test mode)`
         : `[OPS_TEST] Signal generated but not creating TradingSignal (mode=${instance.mode}, not LIVE)`
       this.logger.log(message)
@@ -524,7 +524,7 @@ export class LlmOrchestratedEngineV3 {
         },
       })
     } else if (signal && instance.mode !== 'LIVE') {
-      // 闈?LIVE 妯″紡锛氫俊鍙蜂笉浼氬垱寤?TradingSignal
+      // 非 LIVE 模式：信号不会创建 TradingSignal
       this.logger.debug(`Signal generated but not creating TradingSignal (mode=${instance.mode})`)
     }
 
@@ -536,8 +536,8 @@ export class LlmOrchestratedEngineV3 {
       finishedAt: new Date(),
       rawDialogSnapshot: rawDialogSnapshot as any,
       errorMessage,
-      // 娉ㄦ剰: generatedSignal 鍏宠仈宸插湪 createTradingSignal 鏂规硶鐨勪簨鍔′腑瀹屾垚
-      // metadata 涓粎瀛樻斁鍙?JSON 搴忓垪鍖栫殑淇″彿蹇収锛岄伩鍏嶇被鍨嬩笉鍖归厤
+      // 注意: generatedSignal 关联已在 createTradingSignal 方法的事务中完成
+      // metadata 中仅存放可 JSON 序列化的信号快照，避免类型不匹配
       metadata: signal ? (JSON.parse(JSON.stringify(signal)) as any) : undefined,
     })
 
@@ -566,7 +566,7 @@ export class LlmOrchestratedEngineV3 {
       }
     }
 
-    // 鍚屾瀹炰緥绾у厓鏁版嵁锛氳褰曟渶杩戜竴娆¤繍琛屾椂闂达紝渚夸簬 UI 灞曠ず涓庤妭娴佹帶鍒?
+    // 同步实例级元数据：记录最近一次运行时间，便于 UI 展示与节流控制
     try {
       await this.instancesRepo.update(instance.id, {
         lastRunAt: new Date(),
@@ -579,8 +579,8 @@ export class LlmOrchestratedEngineV3 {
       )
     }
 
-    // 娓呯悊褰撳墠浼氳瘽鐨勭紦瀛橈紝閲婃斁鍐呭瓨
-    // sessionId = run.id锛宺un 缁撴潫鍚庝笉浼氬啀澶嶇敤锛屽強鏃舵竻鐞嗛伩鍏嶇紦瀛樺爢绉?
+    // 清理当前会话的缓存，释放内存
+    // sessionId = run.id，run 结束后不会再复用，及时清理避免缓存堆积
     try {
       this.toolsService.clearSessionCache(instance.id, run.id)
       this.logger.debug(
@@ -628,34 +628,34 @@ export class LlmOrchestratedEngineV3 {
     environment: LlmOrchestratedRunEnvironment,
     now: Date,
   ): ChatMessage[] {
-    // 浼樺厛浣跨敤瀹炰緥绾?metadata 鐧藉悕鍗曪紝鍏舵鍥為€€鍒扮瓥鐣ョ骇閰嶇疆
-    // 杩欐牱纭繚鎻愮ず璇嶄笌宸ュ叿鎵ц鍣ㄤ娇鐢ㄥ悓涓€浠界櫧鍚嶅崟锛岄伩鍏?LLM 琚憡鐭ュ彲浠ヨ闂煇浜?symbols 浣嗘墽琛屽櫒鎷掔粷鐨勬儏鍐?
+    // 优先使用实例级 metadata 白名单，其次回退到策略级配置
+    // 这样确保提示词与工具执行器使用同一份白名单，避免 LLM 被告知可以访问某些 symbols 但执行器拒绝的情况
     const instanceMetadata = (instance.metadata as Record<string, unknown>) || {}
     const allowedSymbols = this.safeJson(instanceMetadata.allowedSymbols) || this.safeJson(strategy.allowedSymbols)
     const allowedTimeframes = this.safeJson(instanceMetadata.allowedTimeframes) || this.safeJson(strategy.allowedTimeframes)
 
-    const riskSummary = effectiveRiskConfig ? JSON.stringify(effectiveRiskConfig) : '鏈彁渚涳紝鎸夐粯璁や腑鎬ч闄╁鐞?
+    const riskSummary = effectiveRiskConfig ? JSON.stringify(effectiveRiskConfig) : '未提供，按默认中性风险处理'
 
     const systemParts: string[] = []
     systemParts.push(
-      '浣犳槸涓€鍚嶄弗鏍奸伒瀹堥闄╃鐞嗙殑閲忓寲浜ゆ槗绛栫暐鍔╂墜锛岃礋璐ｆ牴鎹粰瀹氱瓥鐣ュ拰璐︽埛绾︽潫锛岃緭鍑?*缁撴瀯鍖栫殑浜ゆ槗淇″彿**銆?,
+      '你是一名严格遵守风险管理的量化交易策略助手，负责根据给定策略和账户约束，输出**结构化的交易信号**。',
     )
     if (strategy.systemPrompt) {
-      systemParts.push('\n=== 绛栫暐绾?System Prompt ===\n', strategy.systemPrompt)
+      systemParts.push('\n=== 策略级 System Prompt ===\n', strategy.systemPrompt)
     }
     systemParts.push(
-      '\n=== 宸ュ叿浣跨敤瑙勫垯 ===',
-      '- 浣犳嫢鏈変竴缁勫伐鍏凤紙tools锛夛紝鍙互鐢ㄦ潵鏌ヨ璐︽埛銆佺粍鍚堛€佽鎯呯瓑淇℃伅銆?,
-      `- **鏈€缁堢殑浜ゆ槗鍐崇瓥蹇呴』閫氳繃宸ュ叿 "${GENERATE_TRADING_SIGNAL_TOOL_NAME}" 杈撳嚭**锛岃€屼笉鏄敤鑷劧璇█鐩存帴璇存槑銆俙,
-      '- 濡傛灉浠嶇劧涓嶇‘瀹氭槸鍚﹀簲璇ヤ氦鏄擄紝鍙互璋冪敤 generate_trading_signal 杈撳嚭涓€涓甫鏈夎緝浣?confidence 鐨?ALERT 鎴栫┖浠撲俊鍙枫€?,
-      '\n=== 杈撳嚭鍗忚锛堥潪甯搁噸瑕侊級===',
-      `- 浣犻渶瑕侀€氳繃 function calling 璋冪敤 "${GENERATE_TRADING_SIGNAL_TOOL_NAME}"锛屽苟鎸夊弬鏁?schema 杩斿洖 JSON 瀵硅薄銆俙,
-      '- 闄や簡宸ュ叿璋冪敤杩斿洖鐨?JSON 鍙傛暟澶栵紝涓嶈鍦ㄦ渶缁堝洖绛斾腑杈撳嚭棰濆瑙ｉ噴鎬ф枃鏈€?,
-      '\n=== JSON 鏍煎紡瑕佹眰锛堝繀椤婚伒瀹堬級===',
-      '- **鎵€鏈夊瓧绗︿覆瀛楁锛堝 reasoning锛変腑涓嶈浣跨敤鎹㈣绗︼紝鐢ㄧ┖鏍兼垨鍙ュ彿鍒嗛殧**銆?,
-      '- **纭繚 JSON 鏍煎紡姝ｇ‘**锛氭墍鏈夊紩鍙峰繀椤婚棴鍚堬紝涓嶈鏈夊浣欑殑閫楀彿銆?,
-      '- **reasoning 瀛楁搴旂畝娲?*锛氫笉瓒呰繃 500 涓瓧绗︼紝浣跨敤鍗曡鏂囨湰銆?,
-      '- **绀轰緥**锛歿"direction": "BUY", "signalType": "ENTRY", "confidence": 75, "reasoning": "RSI瓒呭崠涓斾环鏍肩獊鐮撮樆鍔涗綅銆?}',
+      '\n=== 工具使用规则 ===',
+      '- 你拥有一组工具（tools），可以用来查询账户、组合、行情等信息。',
+      `- **最终的交易决策必须通过工具 "${GENERATE_TRADING_SIGNAL_TOOL_NAME}" 输出**，而不是用自然语言直接说明。`,
+      '- 如果仍然不确定是否应该交易，可以调用 generate_trading_signal 输出一个带有较低 confidence 的 ALERT 或空仓信号。',
+      '\n=== 输出协议（非常重要）===',
+      `- 你需要通过 function calling 调用 "${GENERATE_TRADING_SIGNAL_TOOL_NAME}"，并按参数 schema 返回 JSON 对象。`,
+      '- 除了工具调用返回的 JSON 参数外，不要在最终回答中输出额外解释性文本。',
+      '\n=== JSON 格式要求（必须遵守）===',
+      '- **所有字符串字段（如 reasoning）中不要使用换行符，用空格或句号分隔**。',
+      '- **确保 JSON 格式正确**：所有引号必须闭合，不要有多余的逗号。',
+      '- **reasoning 字段应简洁**：不超过 500 个字符，使用单行文本。',
+      '- **示例**：{"direction": "BUY", "signalType": "ENTRY", "confidence": 75, "reasoning": "RSI超卖且价格突破阻力位。"}',
     )
 
     const systemMessage: ChatMessage = {
@@ -664,37 +664,37 @@ export class LlmOrchestratedEngineV3 {
     }
 
     const userParts: string[] = []
-    userParts.push('璇锋牴鎹互涓嬩俊鎭垽鏂綋鍓嶆槸鍚﹂渶瑕佺敓鎴愪氦鏄撲俊鍙凤紝骞舵渶缁堥€氳繃宸ュ叿 generate_trading_signal 杈撳嚭缁撴灉锛?)
-    userParts.push('\n=== 绛栫暐淇℃伅 ===')
-    userParts.push(`- 绛栫暐鍚嶇О: ${strategy.name}`)
-    userParts.push(`- 绛栫暐鎻忚堪: ${strategy.description}`)
-    userParts.push(`- 绛栫暐鐘舵€? ${strategy.status}`)
+    userParts.push('请根据以下信息判断当前是否需要生成交易信号，并最终通过工具 generate_trading_signal 输出结果：')
+    userParts.push('\n=== 策略信息 ===')
+    userParts.push(`- 策略名称: ${strategy.name}`)
+    userParts.push(`- 策略描述: ${strategy.description}`)
+    userParts.push(`- 策略状态: ${strategy.status}`)
 
-    userParts.push('\n=== 瀹炰緥淇℃伅 ===')
-    userParts.push(`- 瀹炰緥鍚嶇О: ${instance.name}`)
-    userParts.push(`- 瀹炰緥妯″紡: ${instance.mode}`)
-    userParts.push(`- 瀹炰緥鐘舵€? ${instance.status}`)
-    userParts.push(`- LLM 妯″瀷: ${instance.llmModel}`)
+    userParts.push('\n=== 实例信息 ===')
+    userParts.push(`- 实例名称: ${instance.name}`)
+    userParts.push(`- 实例模式: ${instance.mode}`)
+    userParts.push(`- 实例状态: ${instance.status}`)
+    userParts.push(`- LLM 模型: ${instance.llmModel}`)
 
-    userParts.push('\n=== 绾︽潫涓庣幆澧?===')
-    userParts.push(`- 褰撳墠鏃堕棿: ${now.toISOString()}`)
+    userParts.push('\n=== 约束与环境 ===')
+    userParts.push(`- 当前时间: ${now.toISOString()}`)
     if (allowedSymbols) {
-      userParts.push(`- 鍏佽浜ゆ槗鐨勬爣鐨?(allowedSymbols): ${JSON.stringify(allowedSymbols)}`)
+      userParts.push(`- 允许交易的标的 (allowedSymbols): ${JSON.stringify(allowedSymbols)}`)
     }
     if (allowedTimeframes) {
-      userParts.push(`- 鍏佽浣跨敤鐨勬椂闂村懆鏈?(allowedTimeframes): ${JSON.stringify(allowedTimeframes)}`)
+      userParts.push(`- 允许使用的时间周期 (allowedTimeframes): ${JSON.stringify(allowedTimeframes)}`)
     }
     if (environment.symbol) {
-      userParts.push(`- 鏈瑙﹀彂鑱氱劍鏍囩殑: ${environment.symbol}`)
+      userParts.push(`- 本次触发聚焦标的: ${environment.symbol}`)
     }
     if (environment.timeframe) {
-      userParts.push(`- 鏈瑙﹀彂鑱氱劍鍛ㄦ湡: ${environment.timeframe}`)
+      userParts.push(`- 本次触发聚焦周期: ${environment.timeframe}`)
     }
     if (environment.triggerSource) {
-      userParts.push(`- 瑙﹀彂鏉ユ簮: ${environment.triggerSource}`)
+      userParts.push(`- 触发来源: ${environment.triggerSource}`)
     }
 
-    userParts.push('\n=== 椋庨櫓鍋忓ソ涓庨鎺ч厤缃?===')
+    userParts.push('\n=== 风险偏好与风控配置 ===')
     userParts.push(riskSummary)
 
     if (strategy.initialPromptTemplate) {
@@ -709,7 +709,7 @@ export class LlmOrchestratedEngineV3 {
       )
       const rendered = fillPromptTemplate(strategy.initialPromptTemplate, templateVars)
 
-      userParts.push('\n=== 鍒濆鎻愮ず锛堝熀浜?initial_prompt_template 娓叉煋锛?===')
+      userParts.push('\n=== 初始提示（基于 initial_prompt_template 渲染） ===')
       userParts.push(rendered ?? strategy.initialPromptTemplate)
     }
 
@@ -724,7 +724,7 @@ export class LlmOrchestratedEngineV3 {
   private parseGenerateTradingSignal(call: ChatCompletionToolCall): AiSignalPayloadWithMeta | null {
     let rawArgs: unknown
     let argsStr = call.function.arguments || '{}'
-
+    
     try {
       rawArgs = JSON.parse(argsStr)
     }
@@ -736,25 +736,25 @@ export class LlmOrchestratedEngineV3 {
       this.logger.debug(
         `Raw arguments (first 500 chars): ${argsStr.slice(0, 500)}`,
       )
-
-      // 灏濊瘯淇甯歌鐨?JSON 閿欒
+      
+      // 尝试修复常见的 JSON 错误
       try {
-        // 1. 绉婚櫎鎹㈣绗﹀拰澶氫綑鐨勭┖鐧?
+        // 1. 移除换行符和多余的空白
         argsStr = argsStr.replace(/\n/g, ' ').replace(/\r/g, ' ').replace(/\s+/g, ' ')
-
-        // 2. 濡傛灉 reasoning 瀛楁琚埅鏂紙缂哄皯闂悎寮曞彿锛夛紝灏濊瘯琛ュ叏
+        
+        // 2. 如果 reasoning 字段被截断（缺少闭合引号），尝试补全
         if (argsStr.includes('"reasoning"') && !argsStr.endsWith('}')) {
-          // 鎵惧埌鏈€鍚庝竴涓?" 鐨勪綅缃?
+          // 找到最后一个 " 的位置
           const lastQuoteIndex = argsStr.lastIndexOf('"')
           const hasReasoningValue = argsStr.includes('"reasoning":')
-
+          
           if (hasReasoningValue && lastQuoteIndex > 0) {
-            // 鎴柇鍒板悎鐞嗛暱搴﹀苟闂悎
+            // 截断到合理长度并闭合
             const reasoningStart = argsStr.indexOf('"reasoning":')
             const afterReasoning = argsStr.substring(reasoningStart + 12).trim()
-
+            
             if (afterReasoning.startsWith('"')) {
-              // 鎵惧埌 reasoning 鍊肩殑缁撴潫浣嶇疆锛堝鎵句笅涓€涓潪杞箟鐨勫紩鍙锋垨瀛楃涓叉湯灏撅級
+              // 找到 reasoning 值的结束位置（寻找下一个非转义的引号或字符串末尾）
               let endIndex = 1
               let inEscape = false
               for (let i = 1; i < afterReasoning.length; i++) {
@@ -771,11 +771,11 @@ export class LlmOrchestratedEngineV3 {
                   break
                 }
               }
-
-              // 濡傛灉娌℃壘鍒伴棴鍚堝紩鍙凤紝鎴柇骞舵坊鍔?
+              
+              // 如果没找到闭合引号，截断并添加
               if (endIndex === 1 && afterReasoning.length > 1) {
                 const truncatedValue = afterReasoning.substring(1, Math.min(500, afterReasoning.length))
-                  .replace(/["\n\r]/g, '') // 绉婚櫎鍙兘瀵艰嚧闂鐨勫瓧绗?
+                  .replace(/["\n\r]/g, '') // 移除可能导致问题的字符
                 const beforeReasoning = argsStr.substring(0, reasoningStart)
                 argsStr = `${beforeReasoning}"reasoning":"${truncatedValue}"}`
                 this.logger.debug('Fixed truncated reasoning field')
@@ -783,13 +783,13 @@ export class LlmOrchestratedEngineV3 {
             }
           }
         }
-
-        // 3. 纭繚浠?} 缁撳熬
+        
+        // 3. 确保以 } 结尾
         if (!argsStr.trim().endsWith('}')) {
           argsStr = `${argsStr.trim()  }}`
         }
-
-        // 鍐嶆灏濊瘯瑙ｆ瀽
+        
+        // 再次尝试解析
         rawArgs = JSON.parse(argsStr)
         this.logger.log('Successfully fixed and parsed JSON arguments')
       }
@@ -810,7 +810,7 @@ export class LlmOrchestratedEngineV3 {
 
     const obj = rawArgs as Record<string, unknown>
 
-    // 楠岃瘉 symbol锛堝繀濉級
+    // 验证 symbol（必填）
     const symbol = obj.symbol
     if (typeof symbol !== 'string' || !symbol.trim()) {
       this.logger.warn(
@@ -835,7 +835,7 @@ export class LlmOrchestratedEngineV3 {
     }
 
     const payload: AiSignalPayloadWithMeta = {
-      symbol: symbol.trim().toUpperCase(), // 鏍囧噯鍖栦负澶у啓
+      symbol: symbol.trim().toUpperCase(), // 标准化为大写
       direction,
       signalType:
         obj.signalType === 'EXIT' ||
@@ -877,7 +877,7 @@ export class LlmOrchestratedEngineV3 {
   }
 
   private buildDialogSnapshot(messages: ChatMessage[]) {
-    // 浠呬繚鐣欐渶杩戣嫢骞叉潯娑堟伅锛岄伩鍏嶅揩鐓ц繃澶?
+    // 仅保留最近若干条消息，避免快照过大
     const MAX_MESSAGES = 20
     const snapshot =
       messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages
@@ -899,9 +899,9 @@ export class LlmOrchestratedEngineV3 {
   }
 
   /**
-   * 杩愯鍓嶇姸鎬佷笌鑺傛祦鏍￠獙锛?
-   * - 鏍￠獙瀹炰緥鐘舵€佹槸鍚﹀厑璁歌繍琛?
-   * - 鍩轰簬 cooldownSeconds 涓?maxRunsPerHour 鍋氱畝鍗曡妭娴?
+   * 运行前状态与节流校验：
+   * - 校验实例状态是否允许运行
+   * - 基于 cooldownSeconds 与 maxRunsPerHour 做简单节流
    */
   private async checkExecutionGuards(
     instance: LlmStrategyInstance,
@@ -912,7 +912,7 @@ export class LlmOrchestratedEngineV3 {
     reason?: LlmRunReason
     errorMessage?: string
   }> {
-    // 1. 瀹炰緥鐘舵€佸繀椤绘槸 running 鎵嶅厑璁告墽琛?
+    // 1. 实例状态必须是 running 才允许执行
     if (instance.status !== 'running') {
       const message = `Instance status is ${instance.status}, only 'running' instances can be executed`
       this.logger.debug(
@@ -925,7 +925,7 @@ export class LlmOrchestratedEngineV3 {
       }
     }
 
-    // 2. 鍐峰嵈鏃堕棿妫€鏌ワ紙cooldownSeconds 鍩轰簬 lastRunAt锛?
+    // 2. 冷却时间检查（cooldownSeconds 基于 lastRunAt）
     if (instance.cooldownSeconds && instance.cooldownSeconds > 0 && instance.lastRunAt) {
       const elapsedMs = now.getTime() - instance.lastRunAt.getTime()
       const cooldownMs = instance.cooldownSeconds * 1000
@@ -941,10 +941,10 @@ export class LlmOrchestratedEngineV3 {
       }
     }
 
-    // 3. 姣忓皬鏃惰繍琛屾鏁伴檺鍒讹紙鍩轰簬鏈€杩?1 灏忔椂鐨?run 鏁帮級
+    // 3. 每小时运行次数限制（基于最近 1 小时的 run 数）
     if (instance.maxRunsPerHour && instance.maxRunsPerHour > 0) {
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
-      // 浠呯粺璁?status !== 'skipped' 鐨勬湁鏁堣繍琛屾鏁帮紝閬垮厤琚?guard 鎻掑叆鐨?skipped run 姹℃煋璁℃暟
+      // 仅统计 status !== 'skipped' 的有效运行次数，避免被 guard 插入的 skipped run 污染计数
       const countLastHour = await this.runsRepo.countEffectiveRunsSince(
         instance.id,
         oneHourAgo,
@@ -1018,13 +1018,13 @@ export class LlmOrchestratedEngineV3 {
   }
 
   /**
-   * 鍒涘缓鐪熷疄鐨?TradingSignal 璁板綍骞跺彂鍑轰簨浠?
-   * 鍙湪 LIVE 妯″紡涓嬭皟鐢ㄦ鏂规硶
-   *
-   * 浣跨敤浜嬪姟纭繚浠ヤ笅鎿嶄綔鐨勫師瀛愭€э細
-   * 1. 楠岃瘉Symbol瀛樺湪
-   * 2. 鍒涘缓TradingSignal
-   * 3. 鏇存柊LlmStrategyRun鍏宠仈
+   * 创建真实的 TradingSignal 记录并发出事件
+   * 只在 LIVE 模式下调用此方法
+   * 
+   * 使用事务确保以下操作的原子性：
+   * 1. 验证Symbol存在
+   * 2. 创建TradingSignal
+   * 3. 更新LlmStrategyRun关联
    */
   private async createTradingSignal(
     signal: AiSignalPayloadWithMeta,
@@ -1034,9 +1034,9 @@ export class LlmOrchestratedEngineV3 {
     isOpsTest = false,
     createdBy?: string,
   ): Promise<string> {
-    // 馃敡 浣跨敤浜嬪姟纭繚鍘熷瓙鎬?
+    // 🔧 使用事务确保原子性
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. 鏌ユ壘 symbol
+      // 1. 查找 symbol
       const symbolRecord = await tx.symbol.findUnique({
         where: { code: signal.symbol },
       })
@@ -1050,7 +1050,7 @@ export class LlmOrchestratedEngineV3 {
           runId,
         })
 
-        // 馃敡 绠＄悊鍛樻祴璇曟ā寮忎笅鍙戝嚭鍙嬪ソ鎻愮ず
+        // 🔧 管理员测试模式下发出友好提示
         if (isOpsTest && createdBy) {
           this.emitOpsTestLog({
             instanceId: instance.id,
@@ -1065,9 +1065,9 @@ export class LlmOrchestratedEngineV3 {
         throw new Error(errorMsg)
       }
 
-      // 2. 鍒涘缓 TradingSignal
+      // 2. 创建 TradingSignal
       const data: Prisma.TradingSignalCreateInput = {
-        // 鍏宠仈鍒?LLM 绛栫暐锛堜娇鐢ㄦ柊澧炵殑瀛楁锛?
+        // 关联到 LLM 策略（使用新增的字段）
         llmStrategy: { connect: { id: strategy.id } },
         llmStrategyInstance: { connect: { id: instance.id } },
         symbol: { connect: { id: symbolRecord.id } },
@@ -1083,7 +1083,7 @@ export class LlmOrchestratedEngineV3 {
         positionSizeRatio: signal.positionSizeRatio,
         aiModel: instance.llmModel,
         aiReasoning: signal.reasoning,
-        // 閫氳繃 JSON 搴忓垪鍖?鍙嶅簭鍒楀寲锛屼繚璇佸啓鍏ョ殑鏄函 JSON 瀵硅薄锛堣€屼笉鏄瓧绗︿覆锛?
+        // 通过 JSON 序列化+反序列化，保证写入的是纯 JSON 对象（而不是字符串）
         aiRawResponse: JSON.parse(JSON.stringify(signal)),
         marketContext: {
           symbol: signal.symbol,
@@ -1098,7 +1098,7 @@ export class LlmOrchestratedEngineV3 {
 
       const tradingSignal = await tx.tradingSignal.create({ data })
 
-      // 3. 鏇存柊杩愯璁板綍锛堝湪浜嬪姟涓級
+      // 3. 更新运行记录（在事务中）
       await tx.llmStrategyRun.update({
         where: { id: runId },
         data: {
@@ -1109,7 +1109,7 @@ export class LlmOrchestratedEngineV3 {
       return tradingSignal
     })
 
-    // 馃敡 缁撴瀯鍖栨棩蹇?
+    // 🔧 结构化日志
     this.logger.log(`Created TradingSignal ${result.id}`, {
       signalId: result.id,
       strategyId: strategy.id,
@@ -1121,7 +1121,7 @@ export class LlmOrchestratedEngineV3 {
       mode: instance.mode,
     })
 
-    // 馃敡 浜嬪姟鎴愬姛鍚庢墠鍙戝嚭浜嬩欢
+    // 🔧 事务成功后才发出事件
     this.eventEmitter.emit(
       StrategySignalEvents.CREATED,
       new TradingSignalCreatedEvent(result.id),

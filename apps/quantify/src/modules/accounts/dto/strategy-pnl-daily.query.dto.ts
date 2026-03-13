@@ -5,7 +5,7 @@ import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.d
 
 export class StrategyPnlDailyQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -13,7 +13,7 @@ export class StrategyPnlDailyQueryDto extends BasePaginationRequestDto {
   userId!: string
 
   @ApiPropertyOptional({
-    description: '杩斿洖鏈€杩?N 澶╋紙瑕嗙洊鍒嗛〉锛?,
+    description: '返回最近 N 天（覆盖分页）',
     example: 30,
     minimum: 1,
     maximum: 365,
@@ -25,3 +25,5 @@ export class StrategyPnlDailyQueryDto extends BasePaginationRequestDto {
   @Max(365)
   lastDays?: number
 }
+
+

@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -24,14 +24,14 @@ export class StrategySubscriptionsController {
   constructor(private readonly subscriptionsService: StrategySubscriptionsService) {}
 
   @Post()
-  @ApiOperation({ summary: '璁㈤槄绛栫暐妯℃澘' })
+  @ApiOperation({ summary: '订阅策略模板' })
   @ApiResponse({ status: 201, type: SubscriptionResponseDto })
   async subscribe(@Body() dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto> {
     return this.subscriptionsService.subscribe(dto.userId, dto)
   }
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇涓氬姟鐢ㄦ埛鐨勭瓥鐣ヨ闃呭垪琛? })
+  @ApiOperation({ summary: '获取业务用户的策略订阅列表' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -54,7 +54,7 @@ export class StrategySubscriptionsController {
   }
 
   @Get(':subscriptionId')
-  @ApiOperation({ summary: '鑾峰彇绛栫暐璁㈤槄璇︽儏' })
+  @ApiOperation({ summary: '获取策略订阅详情' })
   @ApiResponse({ status: 200, type: SubscriptionResponseDto })
   async detail(
     @Param('subscriptionId') subscriptionId: string,
@@ -64,7 +64,7 @@ export class StrategySubscriptionsController {
   }
 
   @Patch(':subscriptionId')
-  @ApiOperation({ summary: '鏇存柊璁㈤槄锛堝弬鏁?鐘舵€侊級' })
+  @ApiOperation({ summary: '更新订阅（参数/状态）' })
   @ApiResponse({ status: 200, type: SubscriptionResponseDto })
   async update(
     @Param('subscriptionId') subscriptionId: string,
@@ -74,8 +74,8 @@ export class StrategySubscriptionsController {
   }
 
   @Delete(':subscriptionId')
-  @ApiOperation({ summary: '鍙栨秷璁㈤槄' })
-  @ApiResponse({ status: 200, description: '鍙栨秷璁㈤槄鎴愬姛' })
+  @ApiOperation({ summary: '取消订阅' })
+  @ApiResponse({ status: 200, description: '取消订阅成功' })
   async cancel(
     @Param('subscriptionId') subscriptionId: string,
     @Query() query: SubscriptionUserQueryDto,

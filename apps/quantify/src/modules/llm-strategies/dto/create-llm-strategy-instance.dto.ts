@@ -13,48 +13,48 @@ import {
 } from 'class-validator'
 
 export class CreateLlmStrategyInstanceDto {
-  @ApiProperty({ description: '鎵€灞濴LM绛栫暐ID' })
+  @ApiProperty({ description: '所属LLM策略ID' })
   @IsString()
   @IsNotEmpty()
   strategyId!: string
 
-  @ApiProperty({ description: '瀹炰緥鍚嶇О锛堝湪鍚屼竴绛栫暐涓嬪敮涓€锛?, maxLength: 100 })
+  @ApiProperty({ description: '实例名称（在同一策略下唯一）', maxLength: 100 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   name!: string
 
-  @ApiProperty({ description: '杩愯妯″紡', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
+  @ApiProperty({ description: '运行模式', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
   @IsEnum(['LIVE', 'PAPER', 'BACKTEST'])
   mode!: LlmStrategyInstanceMode
 
-  @ApiProperty({ description: '浣跨敤鐨凩LM妯″瀷鍚嶇О', maxLength: 100 })
+  @ApiProperty({ description: '使用的LLM模型名称', maxLength: 100 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   llmModel!: string
 
-  @ApiPropertyOptional({ description: '璋冨害cron琛ㄨ揪寮?, maxLength: 100 })
+  @ApiPropertyOptional({ description: '调度cron表达式', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   scheduleCron?: string
 
-  @ApiPropertyOptional({ description: '姣忔杩愯鏈€澶у伐鍏疯皟鐢ㄦ鏁?, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({ description: '每次运行最大工具调用次数', minimum: 1, maximum: 100 })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100)
   maxToolCallsPerRun?: number
 
-  @ApiPropertyOptional({ description: '姣忓皬鏃舵渶澶ц繍琛屾鏁?, minimum: 1, maximum: 60 })
+  @ApiPropertyOptional({ description: '每小时最大运行次数', minimum: 1, maximum: 60 })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(60)
   maxRunsPerHour?: number
 
-  @ApiPropertyOptional({ description: '鍐峰嵈鏃堕棿锛堢锛?, minimum: 0, maximum: 86400 })
+  @ApiPropertyOptional({ description: '冷却时间（秒）', minimum: 0, maximum: 86400 })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -62,7 +62,7 @@ export class CreateLlmStrategyInstanceDto {
   cooldownSeconds?: number
 
   @ApiPropertyOptional({
-    description: '閰嶇疆瑕嗙洊鍙傛暟',
+    description: '配置覆盖参数',
     type: 'object',
     additionalProperties: true,
   })
@@ -71,7 +71,7 @@ export class CreateLlmStrategyInstanceDto {
   configOverrides?: Record<string, unknown>
 
   @ApiPropertyOptional({
-    description: '棰濆鍏冩暟鎹?,
+    description: '额外元数据',
     type: 'object',
     additionalProperties: true,
   })
@@ -79,7 +79,7 @@ export class CreateLlmStrategyInstanceDto {
   @IsObject()
   metadata?: Record<string, unknown>
 
-  @ApiPropertyOptional({ description: '鍒涘缓浜烘爣璇?, example: 'system-operator' })
+  @ApiPropertyOptional({ description: '创建人标识', example: 'system-operator' })
   @IsOptional()
   @IsString()
   createdBy?: string

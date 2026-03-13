@@ -9,10 +9,10 @@ import { ErrorCode } from '@ai/shared'
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
 import { SymbolStatus as PrismaSymbolStatus } from '@prisma/client'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import {
-  mapSymbolStatus,
+import { 
+  mapSymbolStatus, 
   mapTimeframe,
-  reverseMapTimeframe
+  reverseMapTimeframe 
 } from '@/common/utils/prisma-enum-mappers'
 import { IndicatorEngineService } from '@/modules/indicators/services/indicator-engine.service'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -42,11 +42,11 @@ export class MarketDataService {
       }
     }
 
-    // 纭繚鍒嗛〉鍙傛暟鏈夋晥鍊?
+    // 确保分页参数有效值
     const page = query.page || 1
     const limit = query.limit || 20
     const skip = (page - 1) * limit
-
+    
     const [items, total] = await Promise.all([
       this.prisma.symbol.findMany({
         where,
@@ -71,7 +71,7 @@ export class MarketDataService {
     const quoteAsset = payload.quoteAsset.trim().toUpperCase()
     const exchange = payload.exchange.trim().toUpperCase()
 
-    // 澶勭悊绌哄瓧绗︿覆锛岃浆涓?null锛圥risma Decimal 涓嶆帴鍙楃┖瀛楃涓诧級
+    // 处理空字符串，转为 null（Prisma Decimal 不接受空字符串）
     const normalizeDecimal = (value: string | null | undefined): string | null | undefined => {
       if (typeof value === 'string' && value.trim() === '') {
         return null
@@ -139,7 +139,7 @@ export class MarketDataService {
       data.precisionQuantity = payload.precisionQuantity
     }
     if (payload.tickSize !== undefined) {
-      // 鏄惧紡鏀寔 null 鍜岀┖瀛楃涓诧紝鍏佽娓呯┖瀛楁
+      // 显式支持 null 和空字符串，允许清空字段
       if (payload.tickSize === null || (typeof payload.tickSize === 'string' && payload.tickSize.trim() === '')) {
         data.tickSize = null
       } else {
@@ -147,7 +147,7 @@ export class MarketDataService {
       }
     }
     if (payload.lotSize !== undefined) {
-      // 鏄惧紡鏀寔 null 鍜岀┖瀛楃涓诧紝鍏佽娓呯┖瀛楁
+      // 显式支持 null 和空字符串，允许清空字段
       if (payload.lotSize === null || (typeof payload.lotSize === 'string' && payload.lotSize.trim() === '')) {
         data.lotSize = null
       } else {
@@ -159,7 +159,7 @@ export class MarketDataService {
     }
 
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException('鑷冲皯闇€瑕佹彁渚涗竴涓瓧娈佃繘琛屾洿鏂?)
+      throw new BadRequestException('至少需要提供一个字段进行更新')
     }
 
     const symbol = await this.prisma.symbol.update({
@@ -185,8 +185,8 @@ export class MarketDataService {
       if (query.end) where.time!.lte = new Date(query.end)
     }
 
-    // 濡傛灉娌℃湁鎸囧畾鏃堕棿鑼冨洿锛岄粯璁よ繑鍥炴渶鏂扮殑 K 绾匡紙闄嶅簭鍙?limit 鏉″悗鍙嶈浆锛?
-    // 濡傛灉鎸囧畾浜嗘椂闂磋寖鍥达紝鍒欐寜鏃堕棿鍗囧簭杩斿洖
+    // 如果没有指定时间范围，默认返回最新的 K 线（降序取 limit 条后反转）
+    // 如果指定了时间范围，则按时间升序返回
     const hasTimeFilter = Boolean(query.start || query.end)
     const orderBy = hasTimeFilter ? { time: 'asc' as const } : { time: 'desc' as const }
 
@@ -196,7 +196,7 @@ export class MarketDataService {
       take: query.limit,
     })
 
-    // 濡傛灉鏄檷搴忔煡璇紙榛樿鏈€鏂版暟鎹級锛岄渶瑕佸弽杞粨鏋滀互淇濇寔鏃堕棿鍗囧簭
+    // 如果是降序查询（默认最新数据），需要反转结果以保持时间升序
     const orderedBars = hasTimeFilter ? bars : bars.reverse()
 
     return orderedBars.map(bar => ({
@@ -284,7 +284,7 @@ export class MarketDataService {
   async saveBarFromProvider(payload: MarketBarPayload) {
     const symbol = await this.getSymbolOrThrow(payload.symbol)
     const prismaTimeframe = mapTimeframe(payload.timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
-
+    
     await this.prisma.marketBar.upsert({
       where: {
         symbolId_timeframe_time: {
@@ -320,7 +320,7 @@ export class MarketDataService {
       },
     })
 
-    // 淇濆瓨 K 绾垮悗瑙﹀彂鎸囨爣璁＄畻锛堣嫢瀛樺湪鐩稿叧閰嶇疆锛?
+    // 保存 K 线后触发指标计算（若存在相关配置）
     await this.indicatorEngine.handleNewBar({
       symbolId: symbol.id,
       symbolCode: symbol.code,
@@ -397,7 +397,7 @@ export class MarketDataService {
       return PrismaSymbolStatus.ACTIVE
     }
 
-    // 浜ゆ槗鎵€甯歌鐘舵€佸埌鍐呴儴鐘舵€佺殑鏄犲皠
+    // 交易所常见状态到内部状态的映射
     switch (normalized) {
       case 'TRADING':
       case 'OPEN':
@@ -415,7 +415,7 @@ export class MarketDataService {
         return PrismaSymbolStatus.DISABLED
 
       default:
-        this.logger.warn(`鏈煡浜ゆ槗瀵圭姸鎬?"${rawStatus}"锛屾寜 DISABLED 澶勭悊`)
+        this.logger.warn(`未知交易对状态 "${rawStatus}"，按 DISABLED 处理`)
         return PrismaSymbolStatus.DISABLED
     }
   }

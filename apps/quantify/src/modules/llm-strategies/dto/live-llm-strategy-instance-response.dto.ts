@@ -2,43 +2,43 @@ import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@prisma
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmStrategyInstancePublicResponseDto {
-  @ApiProperty({ description: '瀹炰緥ID' })
+  @ApiProperty({ description: '实例ID' })
   id: string
 
-  @ApiProperty({ description: '鎵€灞濴LM绛栫暐ID' })
+  @ApiProperty({ description: '所属LLM策略ID' })
   strategyId: string
 
-  @ApiProperty({ description: '鎵€灞濴LM绛栫暐鍚嶇О' })
+  @ApiProperty({ description: '所属LLM策略名称' })
   strategyName: string
 
-  @ApiPropertyOptional({ description: '鎵€灞濴LM绛栫暐鎻忚堪', nullable: true })
+  @ApiPropertyOptional({ description: '所属LLM策略描述', nullable: true })
   strategyDescription?: string | null
 
-  @ApiProperty({ description: '瀹炰緥鍚嶇О' })
+  @ApiProperty({ description: '实例名称' })
   name: string
 
-  @ApiPropertyOptional({ description: '瀹炰緥鎻忚堪锛堝彲閫夛紝褰撳墠浠庣瓥鐣ユ弿杩板洖閫€锛?, nullable: true })
+  @ApiPropertyOptional({ description: '实例描述（可选，当前从策略描述回退）', nullable: true })
   description?: string | null
 
-  @ApiProperty({ description: '瀹炰緥鐘舵€?, enum: ['running', 'paused', 'stopped'] })
+  @ApiProperty({ description: '实例状态', enum: ['running', 'paused', 'stopped'] })
   status: LlmStrategyInstanceStatus
 
-  @ApiProperty({ description: '杩愯妯″紡', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
+  @ApiProperty({ description: '运行模式', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
   mode: LlmStrategyInstanceMode
 
-  @ApiProperty({ description: '浣跨敤鐨凩LM妯″瀷' })
+  @ApiProperty({ description: '使用的LLM模型' })
   llmModel: string
 
-  @ApiPropertyOptional({ description: '鏈€鍚庤繍琛屾椂闂?, nullable: true })
+  @ApiPropertyOptional({ description: '最后运行时间', nullable: true })
   lastRunAt?: Date | null
 
-  @ApiProperty({ description: '鎸囧畾涓氬姟鐢ㄦ埛鏄惁宸茶闃呰瀹炰緥' })
+  @ApiProperty({ description: '指定业务用户是否已订阅该实例' })
   isSubscribed: boolean
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
   constructor(model: {

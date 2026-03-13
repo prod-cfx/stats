@@ -7,9 +7,9 @@ const env = defaultEnvAccessor
 
 export const appConfig = registerAs('app', () => ({
   appEnv: env.appEnv() || 'development',
-  port: env.int('PORT', 3000),
+  port: env.int('PORT', 3010),
   apiPrefix: env.str('API_PREFIX', 'api/v1'),
-  appName: env.str('APP_NAME', '@net/backend'),
+  appName: env.str('APP_NAME', 'quantify'),
 }))
 
 export const databaseConfig = registerAs('database', () => ({

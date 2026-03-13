@@ -39,7 +39,7 @@ export class SpecDescBuilderService {
         runtime: 'current_script_engine',
         allowedHelpersOnly: true,
       },
-      summary: `绛栫暐鍖呭惈 ${entryRules.length} 鏉″叆鍦鸿鍒欍€?{exitRules.length} 鏉″嚭鍦鸿鍒檂,
+      summary: `策略包含 ${entryRules.length} 条入场规则、${exitRules.length} 条出场规则`,
       embedding: null,
     }
   }

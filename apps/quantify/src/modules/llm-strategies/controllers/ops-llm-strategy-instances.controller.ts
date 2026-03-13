@@ -2,7 +2,7 @@ import type { MessageEvent } from '@nestjs/common'
 import type { Observable } from 'rxjs'
 import type { LlmOpsTestLogEvent } from '../llm-ops-test-log.events'
 import { Body, Controller, Delete, Get, Logger, Param, Post, Put, Query, Sse } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import {
   ApiBody,
@@ -26,11 +26,11 @@ import { LlmStrategyRunResponseDto } from '../dto/llm-strategy-run.response.dto'
 import { LlmStrategyRunsListQueryDto } from '../dto/llm-strategy-runs-list.query.dto'
 import { UpdateLlmStrategyInstanceDto } from '../dto/update-llm-strategy-instance.dto'
 import { LLM_OPS_TEST_LOG_EVENT } from '../llm-ops-test-log.events'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmOrchestratedEngineV3 } from '../llm-orchestrated-engine-v3.service'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategyInstancesService } from '../services/llm-strategy-instances.service'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategyRunsService } from '../services/llm-strategy-runs.service'
 
 @ApiTags('ops-llm-strategy-instances')
@@ -56,41 +56,41 @@ export class OpsLlmStrategyInstancesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: '鍒嗛〉鏌ヨLLM绛栫暐瀹炰緥' })
+  @ApiOperation({ summary: '分页查询LLM策略实例' })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
-    description: '椤电爜锛堜粠 1 寮€濮嬶級',
+    description: '页码（从 1 开始）',
     example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: '姣忛〉鏁伴噺',
+    description: '每页数量',
     example: 20,
   })
   @ApiQuery({
     name: 'status',
     required: false,
     enum: ['running', 'paused', 'stopped'],
-    description: '鎸夊疄渚嬬姸鎬佺瓫閫?,
+    description: '按实例状态筛选',
   })
   @ApiQuery({
     name: 'strategyId',
     required: false,
     type: String,
-    description: '鎸夌瓥鐣D绛涢€?,
+    description: '按策略ID筛选',
   })
   @ApiQuery({
     name: 'orderBy',
     required: false,
     type: String,
-    description: '鑷畾涔夋帓搴忓瓧娈碉紝渚嬪 createdAt:desc',
+    description: '自定义排序字段，例如 createdAt:desc',
   })
   @ApiOkResponse({
-    description: '鑾峰彇鎴愬姛',
+    description: '获取成功',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BasePaginationResponseDto) },
@@ -116,8 +116,8 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '鑾峰彇LLM绛栫暐瀹炰緥璇︽儏' })
-  @ApiOkResponse({ description: '鑾峰彇鎴愬姛', type: LlmStrategyInstanceResponseDto })
+  @ApiOperation({ summary: '获取LLM策略实例详情' })
+  @ApiOkResponse({ description: '获取成功', type: LlmStrategyInstanceResponseDto })
   async detail(
     @Param('id') id: string,
   ) {
@@ -126,9 +126,9 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓LLM绛栫暐瀹炰緥' })
-  @ApiBody({ description: '鍒涘缓LLM绛栫暐瀹炰緥璇锋眰浣?, type: CreateLlmStrategyInstanceDto })
-  @ApiOkResponse({ description: '鍒涘缓鎴愬姛', type: LlmStrategyInstanceResponseDto })
+  @ApiOperation({ summary: '创建LLM策略实例' })
+  @ApiBody({ description: '创建LLM策略实例请求体', type: CreateLlmStrategyInstanceDto })
+  @ApiOkResponse({ description: '创建成功', type: LlmStrategyInstanceResponseDto })
   async create(
     @Body() body: CreateLlmStrategyInstanceDto,
   ) {
@@ -137,9 +137,9 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: '鏇存柊LLM绛栫暐瀹炰緥' })
-  @ApiBody({ description: '鏇存柊LLM绛栫暐瀹炰緥璇锋眰浣?, type: UpdateLlmStrategyInstanceDto })
-  @ApiOkResponse({ description: '鏇存柊鎴愬姛', type: LlmStrategyInstanceResponseDto })
+  @ApiOperation({ summary: '更新LLM策略实例' })
+  @ApiBody({ description: '更新LLM策略实例请求体', type: UpdateLlmStrategyInstanceDto })
+  @ApiOkResponse({ description: '更新成功', type: LlmStrategyInstanceResponseDto })
   async update(
     @Param('id') id: string,
     @Body() body: UpdateLlmStrategyInstanceDto,
@@ -149,7 +149,7 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '鍒犻櫎LLM绛栫暐瀹炰緥' })
+  @ApiOperation({ summary: '删除LLM策略实例' })
   async delete(
     @Param('id') id: string,
   ) {
@@ -158,9 +158,9 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Get(':id/runs')
-  @ApiOperation({ summary: '鑾峰彇瀹炰緥鐨勮繍琛屽巻鍙茶褰? })
+  @ApiOperation({ summary: '获取实例的运行历史记录' })
   @ApiOkResponse({
-    description: '鑾峰彇鎴愬姛',
+    description: '获取成功',
     schema: {
       type: 'array',
       items: { $ref: getSchemaPath(LlmStrategyRunResponseDto) },
@@ -176,20 +176,20 @@ export class OpsLlmStrategyInstancesController {
 
   @Post(':id/test-run')
   @ApiOperation({
-    summary: '鎵嬪姩娴嬭瘯杩愯 LLM 绛栫暐瀹炰緥锛堝拷鐣ヨ皟搴︿笌鍐峰嵈闄愬埗锛?,
+    summary: '手动测试运行 LLM 策略实例（忽略调度与冷却限制）',
     description:
-      '绔嬪嵆瑙﹀彂涓€娆￠拡瀵规寚瀹?LLM 绛栫暐瀹炰緥鐨勫畬鏁村垎鏋愭祦绋嬶紝鐢ㄤ簬鑱旇皟鍜岄獙璇侊紝涓嶈€冭檻 scheduleCron銆佸喎鍗存椂闂村拰姣忓皬鏃惰繍琛屾鏁伴檺鍒躲€?,
+      '立即触发一次针对指定 LLM 策略实例的完整分析流程，用于联调和验证，不考虑 scheduleCron、冷却时间和每小时运行次数限制。',
   })
   @ApiOkResponse({
-    description: '鏈娴嬭瘯瀵瑰簲鐨勮繍琛岃褰?,
+    description: '本次测试对应的运行记录',
     type: LlmStrategyRunResponseDto,
   })
   async testRun(
     @Param('id') id: string,
     @Query('operatorId') operatorId: string,
   ) {
-    // 杩欓噷浼氬湪 LlmOrchestratedEngineV3 涓墦鍑鸿缁嗙殑 [OPS_TEST] 鏃ュ織
-    // 鏂逛究鍦ㄦ湇鍔℃棩蹇椾腑瀹炴椂瑙傚療娴嬭瘯杩囩▼
+    // 这里会在 LlmOrchestratedEngineV3 中打出详细的 [OPS_TEST] 日志
+    // 方便在服务日志中实时观察测试过程
     const result = await this.orchestratedEngine.runForInstance(
       id,
       operatorId,
@@ -206,9 +206,9 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @ApiOperation({
-    summary: '娴嬭瘯杩愯瀹炴椂鏃ュ織锛圫SE锛?,
+    summary: '测试运行实时日志（SSE）',
     description:
-      '閫氳繃 Server-Sent Events 瀹炴椂鎺ㄩ€佹寚瀹氬疄渚嬬殑娴嬭瘯鏃ュ織锛屼粎鍖呭惈褰撳墠 operatorId 瑙﹀彂鐨勬祴璇曡褰曘€?,
+      '通过 Server-Sent Events 实时推送指定实例的测试日志，仅包含当前 operatorId 触发的测试记录。',
   })
   @Sse(':id/test-log/stream')
   streamTestLogs(
@@ -222,7 +222,7 @@ export class OpsLlmStrategyInstancesController {
         instanceId: id,
         operatorId,
         level: 'info',
-        message: '鏃ュ織娴佸凡杩炴帴锛岀瓑寰呰Е鍙戞祴璇曡繍琛屸€︹€?,
+        message: '日志流已连接，等待触发测试运行……',
         timestamp: new Date().toISOString(),
       },
     }
@@ -256,7 +256,7 @@ export class OpsLlmStrategyInstancesController {
       level: event.level,
       timestamp: event.timestamp,
       message: sanitizedMessage,
-      // 灏嗙粨鏋勫寲 meta 涓€骞堕€忓嚭缁欒皟鐢ㄦ柟锛屼究浜庢洿涓板瘜鐨勮瘖鏂紱瀵瑰瓧绗︿覆瀛楁鍋氶暱搴︽埅鏂互闃叉棩蹇楄繃澶?
+      // 将结构化 meta 一并透出给调用方，便于更丰富的诊断；对字符串字段做长度截断以防日志过大
       meta: this.sanitizeLogMeta(event.meta),
     }
   }
@@ -277,8 +277,8 @@ export class OpsLlmStrategyInstancesController {
   }
 
   @Get('runs/:runId')
-  @ApiOperation({ summary: '鑾峰彇杩愯璁板綍璇︽儏' })
-  @ApiOkResponse({ description: '鑾峰彇鎴愬姛', type: LlmStrategyRunResponseDto })
+  @ApiOperation({ summary: '获取运行记录详情' })
+  @ApiOkResponse({ description: '获取成功', type: LlmStrategyRunResponseDto })
   async getRunDetail(
     @Param('runId') runId: string,
   ) {

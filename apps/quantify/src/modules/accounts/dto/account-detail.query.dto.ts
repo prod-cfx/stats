@@ -4,7 +4,7 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class AccountDetailQueryDto {
   @ApiPropertyOptional({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -12,7 +12,7 @@ export class AccountDetailQueryDto {
   userId!: string
 
   @ApiPropertyOptional({
-    description: '鏄惁鍖呭惈鏈€鏂版棩搴︽敹鐩?,
+    description: '是否包含最新日度收益',
     example: true,
   })
   @Type(() => Boolean)
@@ -20,3 +20,5 @@ export class AccountDetailQueryDto {
   @IsBoolean()
   withDailyStats?: boolean
 }
+
+

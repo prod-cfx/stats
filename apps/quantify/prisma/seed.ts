@@ -4,11 +4,13 @@ import { loadEnvironment } from '@net/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
+import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 
 // 浣跨敤缁熶竴鐨?loadEnvironment 鍔犺浇鐜鍙橀噺
 const rootDir = path.resolve(__dirname, '../../..')
 loadEnvironment({ basePath: rootDir })
+applyQuantifyEnvOverrides()
 
 // 浣跨敤缁熶竴鐨勭幆澧冨彉閲忚闂櫒
 const env = createEnvAccessor()

@@ -37,7 +37,7 @@ export class MailService {
   private readonly resend?: Resend
 
   constructor(
-    // Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 ConfigService
+    // Nest 注入需要运行时引用 ConfigService
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
     this.appEnv = this.configService.get<string>('app.appEnv', 'development')!
@@ -52,7 +52,7 @@ export class MailService {
     }
 
     if (!apiKey) {
-      this.logger.warn('RESEND_API_KEY 鏈厤缃紝閭欢灏嗕互妯℃嫙妯″紡鍙戦€?)
+      this.logger.warn('RESEND_API_KEY 未配置，邮件将以模拟模式发送')
     }
 
     const shouldMock = this.isMockEnvironment || !apiKey
@@ -150,28 +150,28 @@ export class MailService {
 
   getTestEmails(): StoredEmailRecord[] {
     if (!this.storeTestEmails) {
-      throw new Error('getTestEmails 浠呭彲鍦ㄦ祴璇曠幆澧冧笅浣跨敤')
+      throw new Error('getTestEmails 仅可在测试环境下使用')
     }
     return [...this.testEmailStorage]
   }
 
   clearTestEmails(): void {
     if (!this.storeTestEmails) {
-      throw new Error('clearTestEmails 浠呭彲鍦ㄦ祴璇曠幆澧冧笅浣跨敤')
+      throw new Error('clearTestEmails 仅可在测试环境下使用')
     }
     this.testEmailStorage.length = 0
   }
 
   findTestEmailByRecipient(email: string): StoredEmailRecord[] {
     if (!this.storeTestEmails) {
-      throw new Error('findTestEmailByRecipient 浠呭彲鍦ㄦ祴璇曠幆澧冧笅浣跨敤')
+      throw new Error('findTestEmailByRecipient 仅可在测试环境下使用')
     }
     return this.testEmailStorage.filter(record => record.to === email)
   }
 
   extractVerificationCodeFromEmail(emailHtml: string): string | null {
     if (!this.storeTestEmails) {
-      throw new Error('extractVerificationCodeFromEmail 浠呭彲鍦ㄦ祴璇曠幆澧冧笅浣跨敤')
+      throw new Error('extractVerificationCodeFromEmail 仅可在测试环境下使用')
     }
     const match = emailHtml.match(/>(\d{6})</)
     return match ? match[1] : null
@@ -247,3 +247,4 @@ ${this.fromName} Team`
     return `${local.slice(0, 2)}***@${domain}`
   }
 }
+

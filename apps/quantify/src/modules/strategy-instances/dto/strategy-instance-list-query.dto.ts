@@ -6,13 +6,13 @@ import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class StrategyInstanceListQueryDto extends BasePaginationRequestDto {
-  @ApiProperty({ description: '绛栫暐妯℃澘 ID 绛涢€?, required: false })
+  @ApiProperty({ description: '策略模板 ID 筛选', required: false })
   @IsString()
   @IsOptional()
   strategyTemplateId?: string
 
   @ApiProperty({
-    description: '鐘舵€佺瓫閫?,
+    description: '状态筛选',
     enum: StrategyInstanceStatus,
     required: false,
   })
@@ -21,7 +21,7 @@ export class StrategyInstanceListQueryDto extends BasePaginationRequestDto {
   status?: StrategyInstanceStatus
 
   @ApiProperty({
-    description: '杩愯妯″紡绛涢€夛細BACKTEST=鍘嗗彶鍥炴祴锛孭APER=绾镐笂浜ゆ槗锛孴ESTNET=娴嬭瘯缃戜氦鏄擄紝LIVE=瀹炵洏浜ゆ槗',
+    description: '运行模式筛选：BACKTEST=历史回测，PAPER=纸上交易，TESTNET=测试网交易，LIVE=实盘交易',
     enum: StrategyInstanceMode,
     required: false,
   })
@@ -29,13 +29,13 @@ export class StrategyInstanceListQueryDto extends BasePaginationRequestDto {
   @IsOptional()
   mode?: StrategyInstanceMode
 
-  @ApiProperty({ description: 'LLM 妯″瀷绛涢€?, required: false })
+  @ApiProperty({ description: 'LLM 模型筛选', required: false })
   @IsString()
   @IsOptional()
   llmModel?: string
 
-  @ApiProperty({
-    description: '鏄惁鍖呭惈缁熻鏁版嵁',
+  @ApiProperty({ 
+    description: '是否包含统计数据', 
     required: false,
     default: true,
     type: Boolean

@@ -17,28 +17,28 @@ import { fillPromptTemplate, parseAiSignalResponse } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 ConfigService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 EventEmitter2
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 EventEmitter2
 import { EventEmitter2 } from '@nestjs/event-emitter'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 SchedulerRegistry
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
 import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { ScriptDebugUtil } from '../utils/script-debug.util'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
 interface IndicatorGroup {
@@ -71,8 +71,8 @@ export class SignalGeneratorService {
   private isRunning = false
   private lastStrategyIndex = 0
   /**
-   * 璁板綍姣忎釜绛栫暐瀹炰緥鍦?candidateGroups 涓殑杞浣嶇疆锛?
-   * 閬垮厤澶氫釜瀹炰緥鍏变韩鍚屼竴妯℃澘鐨勬寚閽堝鑷村悇鑷彧瑕嗙洊涓€閮ㄥ垎鏍囩殑銆?
+   * 记录每个策略实例在 candidateGroups 中的轮询位置，
+   * 避免多个实例共享同一模板的指针导致各自只覆盖一部分标的。
    */
   private readonly lastGroupIndexByInstance = new Map<string, number>()
 
@@ -96,7 +96,7 @@ export class SignalGeneratorService {
       this.schedulerRegistry.deleteCronJob(this.cronJobName)
     }
 
-    // 浣跨敤甯﹂敊璇厹搴曠殑鍥炶皟锛岄伩鍏?runGenerationCycle 涓殑寮傚父鍙樻垚鏈崟鑾锋嫆缁濆鑷磋繘绋嬪穿婧?
+    // 使用带错误兜底的回调，避免 runGenerationCycle 中的异常变成未捕获拒绝导致进程崩溃
     this.cronJob = new CronJob(config.cronExpression, async () => {
       try {
         await this.runGenerationCycle()
@@ -138,9 +138,9 @@ export class SignalGeneratorService {
       return
     }
 
-    // 浠モ€滅瓥鐣ュ疄渚嬧€濅负鍗曚綅鐢熸垚淇″彿锛?
-    // - 鍙鐞?status='running' 涓?mode='LIVE' 鐨勫疄渚?
-    // - 搴曞眰妯℃澘蹇呴』涓?status='live'
+    // 以“策略实例”为单位生成信号：
+    // - 只处理 status='running' 且 mode='LIVE' 的实例
+    // - 底层模板必须为 status='live'
     const instances = await this.prisma.strategyInstance.findMany({
       where: {
         status: 'running',
@@ -149,7 +149,7 @@ export class SignalGeneratorService {
           status: 'live',
         },
       },
-      // 浣跨敤绋冲畾鐨勬帓搴忥紙鎸?id锛夛紝閰嶅悎 lastStrategyIndex 瀹炵幇杞锛岃€岄潪姘歌繙鍙鐞嗘渶鏂扮殑涓€鎵?
+      // 使用稳定的排序（按 id），配合 lastStrategyIndex 实现轮询，而非永远只处理最新的一批
       orderBy: { id: 'asc' },
       include: {
         strategyTemplate: true,
@@ -190,19 +190,19 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 楠岃瘉绛栫暐瀹炰緥鏄惁鍙互鎵嬪姩瑙﹀彂淇″彿鐢熸垚
-   * 鍦ㄨ繑鍥炲墠鍚屾楠岃瘉鎵€鏈夊繀椤绘潯浠讹紝閬垮厤璇姤鎴愬姛
-   * @param instanceId 绛栫暐瀹炰緥 ID
-   * @throws 濡傛灉楠岃瘉澶辫触锛屾姏鍑哄甫璇︾粏閿欒淇℃伅鐨勫紓甯?
+   * 验证策略实例是否可以手动触发信号生成
+   * 在返回前同步验证所有必须条件，避免误报成功
+   * @param instanceId 策略实例 ID
+   * @throws 如果验证失败，抛出带详细错误信息的异常
    */
   async validateManualTriggerTarget(instanceId: string): Promise<void> {
     const config = this.getConfig()
-
+    
     if (!config.enabled) {
       throw new Error('Strategy signal generation is disabled via configuration (STRATEGY_SIGNALS_ENABLED=false)')
     }
 
-    // 鏌ヨ鎸囧畾鐨勭瓥鐣ュ疄渚?
+    // 查询指定的策略实例
     const instance = await this.prisma.strategyInstance.findUnique({
       where: { id: instanceId },
       include: {
@@ -214,7 +214,7 @@ export class SignalGeneratorService {
       throw new Error(`Strategy instance ${instanceId} not found`)
     }
 
-    // 楠岃瘉瀹炰緥鐘舵€?
+    // 验证实例状态
     if (instance.status !== 'running') {
       throw new Error(`Strategy instance ${instanceId} is not running (status: ${instance.status})`)
     }
@@ -235,23 +235,23 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 涓烘寚瀹氱殑绛栫暐瀹炰緥鐢熸垚淇″彿锛堢敤浜庢墜鍔ㄨЕ鍙戯級
-   * @param instanceId 绛栫暐瀹炰緥 ID
-   * @param options 閫夐」閰嶇疆
-   * @param options.skipCooldown 鏄惁璺宠繃 cooldown 妫€鏌?
+   * 为指定的策略实例生成信号（用于手动触发）
+   * @param instanceId 策略实例 ID
+   * @param options 选项配置
+   * @param options.skipCooldown 是否跳过 cooldown 检查
    */
   async generateSignalForInstance(
     instanceId: string,
     options: { skipCooldown?: boolean } = {}
   ): Promise<void> {
     const config = this.getConfig()
-
+    
     if (!config.enabled) {
       this.logger.debug('Strategy signal generation is disabled via configuration')
       return
     }
 
-    // 鏌ヨ鎸囧畾鐨勭瓥鐣ュ疄渚?
+    // 查询指定的策略实例
     const instance = await this.prisma.strategyInstance.findUnique({
       where: { id: instanceId },
       include: {
@@ -263,7 +263,7 @@ export class SignalGeneratorService {
       throw new Error(`Strategy instance ${instanceId} not found`)
     }
 
-    // 楠岃瘉瀹炰緥鐘舵€?
+    // 验证实例状态
     if (instance.status !== 'running') {
       throw new Error(`Strategy instance ${instanceId} is not running (status: ${instance.status})`)
     }
@@ -282,29 +282,29 @@ export class SignalGeneratorService {
       )
     }
 
-    // 澶勭悊璇ュ疄渚?
+    // 处理该实例
     this.logger.log(`Manually generating signal for strategy instance ${instanceId}`)
     await this.processStrategyInstance(instance, config, options)
   }
 
   /**
-   * 妫€鏌ユ槸鍚﹀惎鐢ㄨ剼鏈皟璇曟棩蹇?
-   * 鐢熶骇鐜榛樿绂佺敤锛岄櫎闈炴樉寮忛厤缃?
+   * 检查是否启用脚本调试日志
+   * 生产环境默认禁用，除非显式配置
    */
   private isDebugEnabled(): boolean {
     const config = this.getConfig()
     const nodeEnv = process.env.NODE_ENV || 'development'
-
-    // 鐢熶骇鐜蹇呴』鏄惧紡鍚敤璋冭瘯锛屽紑鍙戠幆澧冮粯璁ゅ惎鐢?
+    
+    // 生产环境必须显式启用调试，开发环境默认启用
     if (nodeEnv === 'production') {
       return config.debug?.enabled === true
     }
-
+    
     return config.debug?.enabled !== false
   }
 
   /**
-   * 璁板綍鑴氭湰鎵ц鐨勮皟璇曚俊鎭?
+   * 记录脚本执行的调试信息
    */
   private logScriptDebug(strategy: StrategyTemplate, result?: { success: boolean; value?: any; error?: any }) {
     if (!this.isDebugEnabled()) return
@@ -313,14 +313,14 @@ export class SignalGeneratorService {
     const maxScriptLength = config.debug?.maxScriptLength ?? 1000
     const maxValueLength = config.debug?.maxValueLength ?? 200
 
-    // 璁板綍鑴氭湰鍐呭
+    // 记录脚本内容
     this.logger.debug(
       `[Script Debug] Strategy ${strategy.id} script:\n` +
       `${ScriptDebugUtil.formatScriptForLog(strategy.script, maxScriptLength)}\n` +
       `[End Script]`
     )
 
-    // 濡傛灉鎻愪緵浜嗘墽琛岀粨鏋滐紝璁板綍缁撴灉
+    // 如果提供了执行结果，记录结果
     if (result) {
       this.logger.debug(
         `[Script Debug] Strategy ${strategy.id} result: ` +
@@ -342,17 +342,17 @@ export class SignalGeneratorService {
       return
     }
 
-    // 妫€鏌ョ瓥鐣ユ槸鍚︿娇鐢ㄦ柊鏋舵瀯锛堟湁 execution 鍜?dataRequirements锛?
+    // 检查策略是否使用新架构（有 execution 和 dataRequirements）
     const execution = strategy.execution as unknown as StrategyExecutionConfig | null | undefined
     const dataRequirements = strategy.dataRequirements as unknown as StrategyDataRequirements | null | undefined
     const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
-
+    
     if (execution && dataRequirements && legs && legs.length > 0) {
-      // 鏂版灦鏋勶細浣跨敤 legs 鍜?dataRequirements
+      // 新架构：使用 legs 和 dataRequirements
       return this.processStrategyWithLegsForInstance(instance, strategy, execution, dataRequirements, legs, config, options)
     }
-
-    // 鏃ф灦鏋勶細浣跨敤 requiredFields
+    
+    // 旧架构：使用 requiredFields
     const requiredFields = strategy.requiredFields as string[] | null
     if (!requiredFields?.length) {
       this.logger.debug(`Strategy ${strategy.id} has no required fields or legs, skipping signal generation`)
@@ -385,7 +385,7 @@ export class SignalGeneratorService {
       return
     }
 
-    // 杞鎸囬拡鏀逛负鎸夊疄渚嬬淮搴︾嫭绔嬬淮鎶わ紝閬垮厤澶氫釜瀹炰緥鈥滃垎椋熲€濆悓涓€妯℃澘鐨勬爣鐨勯泦鍚堛€?
+    // 轮询指针改为按实例维度独立维护，避免多个实例“分食”同一模板的标的集合。
     const lastGroupIndex = this.lastGroupIndexByInstance.get(instance.id) ?? 0
 
     for (let i = 0; i < maxPerTick; i += 1) {
@@ -406,7 +406,7 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 澶勭悊浣跨敤鏂版灦鏋勭殑绛栫暐锛堝 Leg 澶氬懆鏈燂級
+   * 处理使用新架构的策略（多 Leg 多周期）
    */
   private async processStrategyWithLegsForInstance(
     instance: StrategyInstanceWithTemplate,
@@ -429,14 +429,14 @@ export class SignalGeneratorService {
       return
     }
 
-    // 鎵惧埌 primary leg
+    // 找到 primary leg
     const primaryLeg = legs.find(leg => leg.role === 'primary')
     if (!primaryLeg) {
       this.logger.warn(`Strategy ${strategy.id} has no primary leg, skipping for instance ${instance.id}`)
       return
     }
 
-    // 涓?primary leg 鐢熸垚淇″彿
+    // 为 primary leg 生成信号
     try {
       await this.generateSignalForMultiLegStrategy(
         instance,
@@ -513,11 +513,11 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 鍦ㄥ鍓湰閮ㄧ讲鍦烘櫙涓嬶紝浣跨敤鏁版嵁搴撹閿?+ 鍐峰嵈鏃堕棿妫€鏌ヤ繚璇佸悓涓€绛栫暐/鏍囩殑/鍐峰嵈绐楀彛鍐呭彧鐢熸垚涓€娆′俊鍙枫€?
-   * 閫昏緫锛?
-   * 1. 瀵?strategy_templates 琛屽姞 FOR UPDATE 閿侊紝涓茶鍖栧悓涓€绛栫暐鐨勭敓鎴愭祦绋嬶紱
-   * 2. 鍦ㄥ悓涓€浜嬪姟鍐呭啀娆℃鏌ュ喎鍗寸獥鍙ｅ唴鏄惁宸叉湁 TradingSignal锛?
-   * 3. 鑻ュ凡瀛樺湪鍒欒烦杩囷紱鍚﹀垯鍒涘缓鏂颁俊鍙峰苟鍦ㄤ簨鍔″鍙戝竷浜嬩欢銆?
+   * 在多副本部署场景下，使用数据库行锁 + 冷却时间检查保证同一策略/标的/冷却窗口内只生成一次信号。
+   * 逻辑：
+   * 1. 对 strategy_templates 行加 FOR UPDATE 锁，串行化同一策略的生成流程；
+   * 2. 在同一事务内再次检查冷却窗口内是否已有 TradingSignal；
+   * 3. 若已存在则跳过；否则创建新信号并在事务外发布事件。
    */
   private async createSignalWithCooldownAndLock(
     instance: StrategyInstanceWithTemplate,
@@ -532,7 +532,7 @@ export class SignalGeneratorService {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
     const result = await this.prisma.$transaction(async prisma => {
-      // 瀵瑰綋鍓嶇瓥鐣ュ疄渚嬭鍔犻攣锛岄伩鍏嶅悓涓€瀹炰緥骞跺彂閫氳繃鍐峰嵈妫€鏌ュ悗閲嶅鍒涘缓淇″彿
+      // 对当前策略实例行加锁，避免同一实例并发通过冷却检查后重复创建信号
       await prisma.$queryRaw`
         SELECT "id"
         FROM "strategy_instances"
@@ -540,7 +540,7 @@ export class SignalGeneratorService {
         FOR UPDATE
       `
 
-      // 鎵嬪姩瑙﹀彂鏃跺厑璁歌烦杩?cooldown 妫€鏌ワ紝纭繚绠＄悊鍛樿兘澶熷己鍒剁敓鎴愪俊鍙?
+      // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
         const existingCount = await prisma.tradingSignal.count({
           where: {
@@ -549,8 +549,8 @@ export class SignalGeneratorService {
             createdAt: {
               gte: cooldownSince,
             },
-            // 鍏煎鍘嗗彶鏁版嵁锛歴trategyInstanceId 涓虹┖鐨勬棫淇″彿涔熻涓哄懡涓喎鍗寸獥鍙ｏ紝
-            // 閬垮厤鍦ㄦ暟鎹皻鏈畬鍏ㄥ洖濉墠鐢熸垚閲嶅淇″彿銆?
+            // 兼容历史数据：strategyInstanceId 为空的旧信号也视为命中冷却窗口，
+            // 避免在数据尚未完全回填前生成重复信号。
             OR: [
               { strategyInstanceId: instance.id },
               { strategyInstanceId: null },
@@ -581,7 +581,7 @@ export class SignalGeneratorService {
         aiReasoning: aiPayload.reasoning,
         aiRawResponse: aiPayload.rawResponse,
         marketContext: {
-          timeframe: reverseMapTimeframe(group.timeframe as any),  // 杞崲涓哄簲鐢ㄥ眰鏍煎紡 "1m"
+          timeframe: reverseMapTimeframe(group.timeframe as any),  // 转换为应用层格式 "1m"
           indicatorTimestamp: latestIndicatorTime?.toISOString() ?? null,
           indicators: indicatorValues,
         } satisfies Prisma.JsonValue,
@@ -624,17 +624,17 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
-    // 鍑嗗濉厖 prompt 妯℃澘鐨勬暟鎹?
+    // 准备填充 prompt 模板的数据
     let promptData: Record<string, any> = {}
-
-    // 濡傛灉绛栫暐鏈夎剼鏈紝鎵ц鑴氭湰鍑嗗鏁版嵁
+    
+    // 如果策略有脚本，执行脚本准备数据
     if (strategy.script) {
       try {
         const engine = createScriptEngine()
-
-        // 鏋勫缓鑴氭湰鎵ц涓婁笅鏂?
+        
+        // 构建脚本执行上下文
         const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
-        // 杞崲 MarketBar 鍒?Bar 绫诲瀷
+        // 转换 MarketBar 到 Bar 类型
         const bars = marketBars ? marketBars.map(bar => ({
           open: Number(bar.open),
           high: Number(bar.high),
@@ -643,7 +643,7 @@ export class SignalGeneratorService {
           volume: Number(bar.volume),
           timestamp: bar.time.getTime(),
         })) : []
-
+        
         const scriptContext = buildStrategyContext({
           bars,
           symbol: symbol.code,
@@ -653,24 +653,24 @@ export class SignalGeneratorService {
           timestamp: Date.now(),
           params: this.buildEffectiveParams(strategy, instance),
         })
-
-        // 鎵ц鑴氭湰 - 鏅鸿兘閲嶈瘯鏈哄埗
-        // 浼樺厛鐢ㄦ爣鍑嗘ā寮忥紙鏂拌剼鏈細鏈€鍚庤〃杈惧紡浣滀负杩斿洖鍊硷級
+        
+        // 执行脚本 - 智能重试机制
+        // 优先用标准模式（新脚本：最后表达式作为返回值）
         let result = await engine.execute(strategy.script, {
           context: scriptContext,
           timeout: MAX_SCRIPT_TIMEOUT_MS,
           allowAsync: false,
         })
-
-        // 妫€娴嬪埌闇€瑕?async 涓婁笅鏂囩殑璇硶閿欒锛岀敤 allowAsync 閲嶈瘯锛堟棫鑴氭湰鍏煎锛?
-        // 鍖呮嫭锛氶《灞?return銆侀《灞?await 绛?
+        
+        // 检测到需要 async 上下文的语法错误，用 allowAsync 重试（旧脚本兼容）
+        // 包括：顶层 return、顶层 await 等
         if (!result.success && result.error?.message) {
           const errorMsg = result.error.message
-          const needsAsync =
+          const needsAsync = 
             errorMsg.includes('Illegal return statement') ||
             errorMsg.includes('await is only valid in async functions') ||
             errorMsg.includes('Unexpected reserved word')
-
+          
           if (needsAsync) {
             this.logger.warn(
               `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
@@ -682,12 +682,12 @@ export class SignalGeneratorService {
             })
           }
         }
-
+        
         if (result.success) {
-          // 濮嬬粓璋冪敤 validateScriptOutput锛屽嵆浣?result.value 涓?undefined
-          // 杩欐牱鍙互鎻愪緵涓€鑷寸殑閿欒鎻愮ず锛屼笌璋冭瘯鎺ュ彛鍜屽leg璺緞淇濇寔涓€鑷?
+          // 始终调用 validateScriptOutput，即使 result.value 为 undefined
+          // 这样可以提供一致的错误提示，与调试接口和多leg路径保持一致
           const validation = validateScriptOutput(result.value, { allowEmpty: true })
-
+          
           if (!validation.valid || !validation.value) {
             this.logger.warn(
               `Script for strategy ${strategy.id} returned invalid data. ` +
@@ -705,20 +705,20 @@ export class SignalGeneratorService {
         }
         else {
           this.logger.warn(`Script execution failed for strategy ${strategy.id}: ${result.error?.message}`)
-          // 鑴氭湰鎵ц澶辫触鏃讹紝浣跨敤鍘熷鎸囨爣鏁版嵁浣滀负鍚庡
+          // 脚本执行失败时，使用原始指标数据作为后备
           promptData = indicators
         }
       } catch (error) {
         this.logger.error(`Error executing script for strategy ${strategy.id}: ${(error as Error).message}`)
-        // 鍑洪敊鏃朵娇鐢ㄥ師濮嬫寚鏍囨暟鎹?
+        // 出错时使用原始指标数据
         promptData = indicators
       }
     } else {
-      // 娌℃湁鑴氭湰鏃讹紝鐩存帴浣跨敤鎸囨爣鏁版嵁
+      // 没有脚本时，直接使用指标数据
       promptData = indicators
     }
-
-    // 濉厖 prompt 妯℃澘涓殑鍗犱綅绗︼紙浣跨敤 shared helper锛屼繚璇佷笌璋冭瘯鎺ュ彛涓€鑷达級
+    
+    // 填充 prompt 模板中的占位符（使用 shared helper，保证与调试接口一致）
     const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
 
     const systemPrompt =
@@ -868,7 +868,7 @@ export class SignalGeneratorService {
         orderBy: { time: 'desc' },
         take: limit,
       })
-      // 杩斿洖鏃堕棿鍗囧簭鐨勭粨鏋滐紙鏈€鏃х殑鍦ㄥ墠锛?
+      // 返回时间升序的结果（最旧的在前）
       return bars.reverse()
     } catch (error) {
       this.logger.error(`Failed to load recent bars: ${(error as Error).message}`)
@@ -908,9 +908,9 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 璁＄畻褰撳墠瀹炰緥涓嬭剼鏈彲鐢ㄧ殑鍙傛暟锛?
-   * - 妯℃澘 defaultParams 浣滀负鍩虹
-   * - 瀹炰緥 params 瑕嗙洊鍚屽悕瀛楁
+   * 计算当前实例下脚本可用的参数：
+   * - 模板 defaultParams 作为基础
+   * - 实例 params 覆盖同名字段
    */
   private buildEffectiveParams(
     strategy: StrategyTemplate,
@@ -934,27 +934,27 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 鎵归噺鍔犺浇澶?Leg 绛栫暐鐨勬墍鏈夋暟鎹紙鎬ц兘浼樺寲锛?
+   * 批量加载多 Leg 策略的所有数据（性能优化）
    */
   private async loadMultiLegDataBatch(
     legs: StrategyLegDefinition[],
     dataRequirements: StrategyDataRequirements,
   ): Promise<Record<string, Record<string, LegTimeframeData>>> {
-    // 1. 鎵归噺鍔犺浇鎵€鏈?symbols
+    // 1. 批量加载所有 symbols
     const symbolCodes = legs.map(leg => leg.symbol)
     const symbols = await this.prisma.symbol.findMany({
       where: { code: { in: symbolCodes } },
     })
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
-
-    // 2. 鏀堕泦鎵€鏈夐渶瑕佸姞杞界殑 (legId, symbolId, timeframe) 缁勫悎
+    
+    // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
     interface DataRequest {
       legId: string
       symbolId: string
-      timeframe: MarketTimeframe  // Prisma 鏋氫妇鏍煎紡锛堝 'h1'锛?
-      originalTimeframe: string   // 搴旂敤灞傛牸寮忥紙濡?'1h'锛?
+      timeframe: MarketTimeframe  // Prisma 枚举格式（如 'h1'）
+      originalTimeframe: string   // 应用层格式（如 '1h'）
     }
-
+    
     const dataRequests: DataRequest[] = []
     for (const leg of legs) {
       const symbol = symbolMap.get(leg.symbol)
@@ -962,40 +962,40 @@ export class SignalGeneratorService {
         this.logger.warn(`Symbol ${leg.symbol} not found for leg ${leg.id}`)
         continue
       }
-
+      
       const timeframes = dataRequirements[leg.id]
       if (!timeframes || timeframes.length === 0) {
         this.logger.warn(`No timeframes defined for leg ${leg.id}`)
         continue
       }
-
-      // 灏嗗簲鐢ㄥ眰鏃堕棿鍛ㄦ湡鏄犲皠涓?Prisma 鏋氫妇
+      
+      // 将应用层时间周期映射为 Prisma 枚举
       for (const tf of timeframes) {
-        dataRequests.push({
-          legId: leg.id,
-          symbolId: symbol.id,
-          timeframe: mapTimeframe(tf as any),  // 浠庡簲鐢ㄥ眰 '1h' 杞崲涓?Prisma 'h1'
-          originalTimeframe: tf,  // 淇濈暀鍘熷搴旂敤灞傛牸寮忕敤浜庤繑鍥?
+        dataRequests.push({ 
+          legId: leg.id, 
+          symbolId: symbol.id, 
+          timeframe: mapTimeframe(tf as any),  // 从应用层 '1h' 转换为 Prisma 'h1'
+          originalTimeframe: tf,  // 保留原始应用层格式用于返回
         })
       }
     }
-
-    // 3. 骞惰鍔犺浇鎵€鏈?bars 鏁版嵁
+    
+    // 3. 并行加载所有 bars 数据
     const barsPromises = dataRequests.map(async req => {
       const bars = await this.loadRecentBars(req.symbolId, req.timeframe, DEFAULT_BAR_LIMIT)
       return { ...req, bars }
     })
-
+    
     const allBarsData = await Promise.all(barsPromises)
-
-    // 4. 鏋勫缓缁撴灉
+    
+    // 4. 构建结果
     const result: Record<string, Record<string, LegTimeframeData>> = {}
-
+    
     for (const data of allBarsData) {
       if (!result[data.legId]) {
         result[data.legId] = {}
       }
-
+      
       const bars = data.bars ? data.bars.map(bar => ({
         open: Number(bar.open),
         high: Number(bar.high),
@@ -1004,25 +1004,25 @@ export class SignalGeneratorService {
         volume: Number(bar.volume),
         timestamp: bar.time.getTime(),
       })) : []
-
+      
       const currentPrice = bars.length > 0 ? bars[bars.length - 1].close : 0
-
-      // TODO: 鍔犺浇鎸囨爣鏁版嵁锛堥渶瑕佹墿灞?IndicatorConfig 浠ユ敮鎸佹寜 leg 鏌ヨ锛?
+      
+      // TODO: 加载指标数据（需要扩展 IndicatorConfig 以支持按 leg 查询）
       const indicators: Record<string, number> = {}
-
-      // 浣跨敤搴旂敤灞傛牸寮忎綔涓?key锛堝 '1h'锛?
+      
+      // 使用应用层格式作为 key（如 '1h'）
       result[data.legId][data.originalTimeframe] = {
         bars,
         indicators,
         currentPrice,
       }
     }
-
+    
     return result
   }
 
   /**
-   * 涓轰娇鐢ㄦ柊鏋舵瀯鐨勫 Leg 绛栫暐鐢熸垚淇″彿
+   * 为使用新架构的多 Leg 策略生成信号
    */
   private async generateSignalForMultiLegStrategy(
     instance: StrategyInstanceWithTemplate,
@@ -1034,11 +1034,11 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
-    // 1. 鏌ユ壘 primary leg 鐨?symbol
+    // 1. 查找 primary leg 的 symbol
     const primarySymbol = await this.prisma.symbol.findUnique({
       where: { code: primaryLeg.symbol },
     })
-
+    
     if (!primarySymbol) {
       this.logger.warn(`Symbol ${primaryLeg.symbol} not found for strategy ${strategy.id}`)
       this.telemetry.recordGeneration({
@@ -1050,20 +1050,20 @@ export class SignalGeneratorService {
       return
     }
 
-    // 2. 鎵归噺鍔犺浇鎵€鏈?leg 鐨勬暟鎹紙鎬ц兘浼樺寲锛?
+    // 2. 批量加载所有 leg 的数据（性能优化）
     const multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements)
-
-    // 2.1 鏍￠獙鏁版嵁瀹屾暣鎬э細纭繚鎵€鏈?dataRequirements 涓畾涔夌殑鏁版嵁閮藉凡鍔犺浇
+    
+    // 2.1 校验数据完整性：确保所有 dataRequirements 中定义的数据都已加载
     for (const leg of legs) {
       const requiredTimeframes = dataRequirements[leg.id]
       if (!requiredTimeframes || requiredTimeframes.length === 0) {
         continue
       }
-
+      
       for (const timeframe of requiredTimeframes) {
         const legData = multiLegData[leg.id]?.[timeframe]
-
-        // 妫€鏌ユ暟鎹槸鍚﹀瓨鍦?
+        
+        // 检查数据是否存在
         if (!legData) {
           this.logger.error(
             `Missing data for leg "${leg.id}" timeframe "${timeframe}" in strategy ${strategy.id}. ` +
@@ -1078,8 +1078,8 @@ export class SignalGeneratorService {
           })
           return
         }
-
-        // 妫€鏌?bars 鏄惁涓虹┖
+        
+        // 检查 bars 是否为空
         if (!legData.bars || legData.bars.length === 0) {
           this.logger.error(
             `Empty bars for leg "${leg.id}" timeframe "${timeframe}" in strategy ${strategy.id}. ` +
@@ -1096,8 +1096,8 @@ export class SignalGeneratorService {
         }
       }
     }
-
-    // 3. 鏋勫缓鑴氭湰涓婁笅鏂?
+    
+    // 3. 构建脚本上下文
     const scriptContext: MultiLegStrategyContext = {
       data: multiLegData,
       execution: {
@@ -1114,12 +1114,12 @@ export class SignalGeneratorService {
       timestamp: Date.now(),
       params: this.buildEffectiveParams(strategy, instance),
     }
-
-    // 4. 鎵ц鑴氭湰鍑嗗鏁版嵁
+    
+    // 4. 执行脚本准备数据
     let promptData: Record<string, any> = {}
-
+    
     if (!strategy.script) {
-      // 鏂版灦鏋勫繀椤绘湁鑴氭湰
+      // 新架构必须有脚本
       this.logger.error(
         `Strategy ${strategy.id} is using multi-leg architecture but has no script. ` +
         `Cannot generate signal without data preparation script.`,
@@ -1133,33 +1133,33 @@ export class SignalGeneratorService {
       })
       return
     }
-
+    
     try {
       const engine = createScriptEngine()
       const ctx = buildMultiLegStrategyContext(scriptContext)
-
-      // 璋冭瘯鏃ュ織锛氭墦鍗拌剼鏈唴瀹癸紙浠呭湪鍚敤璋冭瘯鏃讹級
+      
+      // 调试日志：打印脚本内容（仅在启用调试时）
       this.logScriptDebug(strategy)
-
-      // 鏅鸿兘閲嶈瘯鏈哄埗锛氫紭鍏堟爣鍑嗘ā寮忥紝閬囧埌闇€瑕?async 涓婁笅鏂囩殑璇硶閿欒鍒欑敤 allowAsync 閲嶈瘯
+      
+      // 智能重试机制：优先标准模式，遇到需要 async 上下文的语法错误则用 allowAsync 重试
       let result = await engine.execute(strategy.script, {
         context: ctx,
         timeout: MAX_SCRIPT_TIMEOUT_MS,
         allowAsync: false,
       })
-
-      // 璋冭瘯鏃ュ織锛氭墦鍗版墽琛岀粨鏋滐紙浠呭湪鍚敤璋冭瘯鏃讹級
+      
+      // 调试日志：打印执行结果（仅在启用调试时）
       this.logScriptDebug(strategy, result)
-
-      // 妫€娴嬪埌闇€瑕?async 涓婁笅鏂囩殑璇硶閿欒锛岀敤 allowAsync 閲嶈瘯锛堟棫鑴氭湰鍏煎锛?
-      // 鍖呮嫭锛氶《灞?return銆侀《灞?await 绛?
+      
+      // 检测到需要 async 上下文的语法错误，用 allowAsync 重试（旧脚本兼容）
+      // 包括：顶层 return、顶层 await 等
       if (!result.success && result.error?.message) {
         const errorMsg = result.error.message
-        const needsAsync =
+        const needsAsync = 
           errorMsg.includes('Illegal return statement') ||
           errorMsg.includes('await is only valid in async functions') ||
           errorMsg.includes('Unexpected reserved word')
-
+        
         if (needsAsync) {
           this.logger.warn(
             `Multi-leg strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
@@ -1171,8 +1171,8 @@ export class SignalGeneratorService {
           })
         }
       }
-
-      // 鑴氭湰寮曟搸鎵ц澶辫触锛堣娉曢敊璇瓑锛?
+      
+      // 脚本引擎执行失败（语法错误等）
       if (!result.success) {
         this.logger.error(
           `Multi-leg script execution failed for strategy ${strategy.id}: ${result.error?.message || 'Unknown error'}. ` +
@@ -1190,9 +1190,9 @@ export class SignalGeneratorService {
 
       const rawValue = result.value
 
-      // 鍙帴鍙?鏅€氬璞?浣滀负鑴氭湰缁撴灉锛岄槻姝㈠瓧绗︿覆/鏁扮粍绛夌被鍨嬪鑷村悗缁?fillPromptTemplate 鎶ラ敊
+      // 只接受"普通对象"作为脚本结果，防止字符串/数组等类型导致后续 fillPromptTemplate 报错
       if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
-        // 浣跨敤宸ュ叿鍑芥暟瀹夊叏鍦板簭鍒楀寲瀹為檯杩斿洖鍊?
+        // 使用工具函数安全地序列化实际返回值
         const config = this.getConfig()
         const maxValueLength = config.debug?.maxValueLength ?? 200
         const valuePreview = ScriptDebugUtil.formatValueForLog(rawValue, maxValueLength)
@@ -1211,11 +1211,11 @@ export class SignalGeneratorService {
         })
         return
       }
-
-      // 鑴氭湰鎵ц鎴愬姛锛屼絾闇€瑕佹牎楠岃繑鍥炲€硷紙鍗充娇涓?undefined锛?
-      // 涓庡崟 Leg 璺緞鍜岃皟璇曟帴鍙ｄ繚鎸佷竴鑷达紝鎻愪緵缁撴瀯鍖栫殑閿欒淇℃伅
+      
+      // 脚本执行成功，但需要校验返回值（即使为 undefined）
+      // 与单 Leg 路径和调试接口保持一致，提供结构化的错误信息
       const validation = validateScriptOutput(result.value, { allowEmpty: false })
-
+      
       if (!validation.valid || !validation.value) {
         const reason =
           validation.code === 'EMPTY_OBJECT'
@@ -1236,9 +1236,9 @@ export class SignalGeneratorService {
         })
         return
       }
-
+      
       promptData = validation.value as Record<string, any>
-
+      
       this.logger.debug(`Multi-leg script executed successfully for strategy ${strategy.id}`)
     } catch (error) {
       this.logger.error(
@@ -1254,19 +1254,19 @@ export class SignalGeneratorService {
       })
       return
     }
-
-    // 5. 濉厖 prompt 骞惰皟鐢?AI
+    
+    // 5. 填充 prompt 并调用 AI
     const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
-
+    
     const primaryTimeframeData = multiLegData[primaryLeg.id]?.[execution.timeframe]
-
-    // 杩愯鏃舵鏌ワ細纭繚涓诲懆鏈熸暟鎹瓨鍦?
+    
+    // 运行时检查：确保主周期数据存在
     if (!primaryTimeframeData || !primaryTimeframeData.bars || primaryTimeframeData.bars.length === 0) {
       this.logger.error(
-        `Primary leg "${primaryLeg.id}" 缂哄皯 execution.timeframe (${execution.timeframe}) 鐨勬暟鎹€俙 +
-        `璇锋鏌?dataRequirements 閰嶇疆鏄惁姝ｇ‘銆俙,
+        `Primary leg "${primaryLeg.id}" 缺少 execution.timeframe (${execution.timeframe}) 的数据。` +
+        `请检查 dataRequirements 配置是否正确。`,
       )
-      // 灏嗙己澶变富鍛ㄦ湡鏁版嵁瑙嗕负瀹炰緥绾уけ璐ワ紝瑙﹀彂鍐峰嵈锛岄伩鍏嶅疄渚嬪湪姣忎釜 tick 涓婃棤闄愰噸璇曘€?
+      // 将缺失主周期数据视为实例级失败，触发冷却，避免实例在每个 tick 上无限重试。
       await this.handleStrategyFailure(instance.id, config)
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
@@ -1276,9 +1276,9 @@ export class SignalGeneratorService {
       })
       return
     }
-
+    
     const referencePrice = primaryTimeframeData.currentPrice
-
+    
     const systemPrompt =
       'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +
       'The JSON must include direction (BUY, SELL, CLOSE_LONG, CLOSE_SHORT), signalType (ENTRY or EXIT), confidence (0-100), ' +
@@ -1300,8 +1300,8 @@ export class SignalGeneratorService {
     let attempt = 0
     while (attempt < config.ai.maxAttempts) {
       attempt += 1
-
-      // AI 璋冪敤鍜岃В鏋愶紙鍙噸璇曪級
+      
+      // AI 调用和解析（可重试）
       let aiPayload: AiSignalPayload & { rawResponse: string }
       try {
         const result = await this.aiService.chat({
@@ -1329,11 +1329,11 @@ export class SignalGeneratorService {
         this.logger.error(`AI request failed for multi-leg strategy ${strategy.id} (attempt ${attempt}): ${(error as Error).message}`)
         continue
       }
-
-      // AI 瑙ｆ瀽鎴愬姛锛岀珛鍗抽噸缃け璐ヨ鏁板櫒锛堜笌鍗曡吙璺緞淇濇寔涓€鑷达級
+      
+      // AI 解析成功，立即重置失败计数器（与单腿路径保持一致）
       await this.resetStrategyFailure(instance.id)
-
-      // 鍒涘缓淇″彿锛堟暟鎹簱鎿嶄綔锛屼笉閲嶈瘯锛岄敊璇簲璇ュ啋娉★級
+      
+      // 创建信号（数据库操作，不重试，错误应该冒泡）
       const signalResult = await this.createMultiLegSignal(
         instance,
         strategy,
@@ -1344,8 +1344,8 @@ export class SignalGeneratorService {
         config,
         options.skipCooldown ?? false,
       )
-
-      // 璁板綍鍒涘缓缁撴灉
+      
+      // 记录创建结果
       if (!signalResult.created) {
         this.logger.debug(
           `Signal not created for strategy ${strategy.id} on ${primaryLeg.symbol}: ${signalResult.reason || 'COOLDOWN'}`,
@@ -1358,7 +1358,7 @@ export class SignalGeneratorService {
         })
         return
       }
-
+      
       this.logger.log(`Generated multi-leg signal ${signalResult.signalId} for strategy ${strategy.id} on ${primaryLeg.symbol}`)
       this.telemetry.recordGeneration({ strategyId: strategy.id, symbolCode: primaryLeg.symbol, success: true })
       return
@@ -1375,8 +1375,8 @@ export class SignalGeneratorService {
   }
 
   /**
-   * 鍒涘缓澶?Leg 绛栫暐鐨勪俊鍙?
-   * @returns 杩斿洖鍒涘缓缁撴灉锛屽寘鍚槸鍚﹀垱寤烘垚鍔熴€佷俊鍙稩D鍜屽師鍥?
+   * 创建多 Leg 策略的信号
+   * @returns 返回创建结果，包含是否创建成功、信号ID和原因
    */
   private async createMultiLegSignal(
     instance: StrategyInstanceWithTemplate,
@@ -1388,7 +1388,7 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     skipCooldown = false,
   ): Promise<{ created: boolean; signalId: string | null; reason?: string }> {
-    // 纭畾鍐峰嵈鏃堕棿锛氭棤鏉′欢淇濊瘉 >= timeframe 瀵瑰簲鐨勫垎閽熸暟
+    // 确定冷却时间：无条件保证 >= timeframe 对应的分钟数
     const configuredCooldown = execution.cooldownMinutes ?? config.cooldownMinutes
     const minimumCooldown = timeframeToMinutes(execution.timeframe)
     const cooldownMinutes = Math.max(configuredCooldown, minimumCooldown)
@@ -1402,15 +1402,15 @@ export class SignalGeneratorService {
         FOR UPDATE
       `
 
-      // 鎵嬪姩瑙﹀彂鏃跺厑璁歌烦杩?cooldown 妫€鏌ワ紝纭繚绠＄悊鍛樿兘澶熷己鍒剁敓鎴愪俊鍙?
+      // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
         const recentSignal = await prisma.tradingSignal.findFirst({
           where: {
             strategyId: strategy.id,
             symbolId: primarySymbol.id,
             createdAt: { gte: cooldownSince },
-            // 鍏煎鍘嗗彶鏁版嵁锛歴trategyInstanceId 涓虹┖鐨勬棫淇″彿涔熻涓哄懡涓喎鍗寸獥鍙ｏ紝
-            // 閬垮厤鍦ㄦ暟鎹皻鏈畬鍏ㄥ洖濉墠鐢熸垚閲嶅淇″彿銆?
+            // 兼容历史数据：strategyInstanceId 为空的旧信号也视为命中冷却窗口，
+            // 避免在数据尚未完全回填前生成重复信号。
             OR: [
               { strategyInstanceId: instance.id },
               { strategyInstanceId: null },
@@ -1424,7 +1424,7 @@ export class SignalGeneratorService {
         }
       }
 
-      // 鐩存帴浣跨敤浜嬪姟瀹㈡埛绔垱寤轰俊鍙凤紝纭繚鍘熷瓙鎬?
+      // 直接使用事务客户端创建信号，确保原子性
       const data: Prisma.TradingSignalCreateInput = {
         strategy: { connect: { id: strategy.id } },
         strategyInstance: { connect: { id: instance.id } },
@@ -1461,44 +1461,44 @@ export class SignalGeneratorService {
     if (result.created && result.signalId) {
       this.eventEmitter.emit(StrategySignalEvents.CREATED, new TradingSignalCreatedEvent(result.signalId))
     }
-
+    
     return result
   }
 
 
   /**
-   * 灏嗕换鎰忓€艰浆鎹负 JSON-safe 鐨勫€?
-   * 澶勭悊 Date銆乽ndefined銆丯aN銆両nfinity銆佸惊鐜紩鐢ㄧ瓑闈?JSON-safe 鐨勫€?
+   * 将任意值转换为 JSON-safe 的值
+   * 处理 Date、undefined、NaN、Infinity、循环引用等非 JSON-safe 的值
    */
   private toJsonSafe(value: any): any {
-    // 澶勭悊鍩烘湰绫诲瀷
+    // 处理基本类型
     if (value === null || value === undefined) {
       return null
     }
-
+    
     if (typeof value === 'number') {
-      // 澶勭悊 NaN銆両nfinity
+      // 处理 NaN、Infinity
       if (!Number.isFinite(value)) {
         return String(value)
       }
       return value
     }
-
+    
     if (typeof value === 'string' || typeof value === 'boolean') {
       return value
     }
-
-    // 澶勭悊 Date
+    
+    // 处理 Date
     if (value instanceof Date) {
       return value.toISOString()
     }
-
-    // 澶勭悊鏁扮粍
+    
+    // 处理数组
     if (Array.isArray(value)) {
       return value.map(item => this.toJsonSafe(item))
     }
-
-    // 澶勭悊瀵硅薄
+    
+    // 处理对象
     if (typeof value === 'object') {
       const result: Record<string, any> = {}
       for (const key in value) {
@@ -1508,8 +1508,8 @@ export class SignalGeneratorService {
       }
       return result
     }
-
-    // 鍏朵粬绫诲瀷锛堝 Function銆丼ymbol锛夎浆鎹负瀛楃涓?
+    
+    // 其他类型（如 Function、Symbol）转换为字符串
     return String(value)
   }
 }

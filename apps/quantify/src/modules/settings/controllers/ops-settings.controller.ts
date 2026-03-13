@@ -28,12 +28,12 @@ export class OpsSettingsController {
     name: 'category',
     required: false,
     type: String,
-    description: '鎸夊垎绫荤瓫閫夐厤缃紙鍙€夛紝涓嶄紶鍒欒繑鍥炴墍鏈夐厤缃級',
+    description: '按分类筛选配置（可选，不传则返回所有配置）',
   })
-  @ApiOperation({ summary: '鑾峰彇鎵€鏈夐厤缃紙杩愯惀鎺ュ彛锛? })
+  @ApiOperation({ summary: '获取所有配置（运营接口）' })
   @ApiResponse({
     status: 200,
-    description: '鎴愬姛鑾峰彇閰嶇疆鍒楄〃',
+    description: '成功获取配置列表',
     schema: {
       type: 'object',
       properties: {
@@ -52,7 +52,7 @@ export class OpsSettingsController {
     const settings = category
       ? await this.settingsService.getSettingsByCategory(category)
       : await this.settingsService.getAllSettings()
-    // 瀵规晱鎰熷瓧娈佃繘琛岃劚鏁?
+    // 对敏感字段进行脱敏
     return settings.map(
       setting =>
         new SettingResponseDto({
@@ -63,11 +63,11 @@ export class OpsSettingsController {
   }
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓閰嶇疆锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '创建配置（运营接口）' })
   @ApiBody({ type: CreateSettingDto })
   @ApiResponse({
     status: 201,
-    description: '鎴愬姛鍒涘缓閰嶇疆',
+    description: '成功创建配置',
     schema: {
       type: 'object',
       properties: {
@@ -93,11 +93,11 @@ export class OpsSettingsController {
   }
 
   @Put(':key')
-  @ApiOperation({ summary: '鏇存柊閰嶇疆锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '更新配置（运营接口）' })
   @ApiBody({ type: UpdateSettingDto })
   @ApiResponse({
     status: 200,
-    description: '鎴愬姛鏇存柊閰嶇疆',
+    description: '成功更新配置',
     schema: {
       type: 'object',
       properties: {
@@ -126,10 +126,10 @@ export class OpsSettingsController {
   }
 
   @Patch('reload')
-  @ApiOperation({ summary: '閲嶆柊鍔犺浇鎵€鏈夐厤缃紙杩愯惀鎺ュ彛锛? })
+  @ApiOperation({ summary: '重新加载所有配置（运营接口）' })
   @ApiResponse({
     status: 200,
-    description: '鎴愬姛閲嶆柊鍔犺浇閰嶇疆',
+    description: '成功重新加载配置',
     schema: {
       type: 'object',
       properties: {

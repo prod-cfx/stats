@@ -184,6 +184,7 @@
   },
   "appToTarget": {
     "backend": "backend",
+    "quantify": "quantify",
     "front": "frontend",
     "admin-front": "frontend"
   },
@@ -199,6 +200,39 @@
         "staging": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "production": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"]
+      }
+    },
+    "quantify": {
+      "files": {
+        "committed": ".env.{env}",
+        "local": ".env.{env}.local"
+      },
+      "required": {
+        "_common": ["APP_ENV"],
+        "development": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "staging": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "production": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "e2e": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ]
       }
     },
     "frontend": {

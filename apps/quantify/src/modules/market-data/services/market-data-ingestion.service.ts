@@ -42,22 +42,22 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     try {
       await this.bootstrapSymbols(config)
     } catch (error) {
-      this.logger.error(`浜ゆ槗瀵逛俊鎭悓姝ュけ璐? ${(error as Error).message}锛屽皢鍦ㄥ悗鍙伴噸璇昤, (error as Error).stack)
+      this.logger.error(`交易对信息同步失败: ${(error as Error).message}，将在后台重试`, (error as Error).stack)
     }
 
     try {
       await this.syncHistoricalBars(config)
     } catch (error) {
-      this.logger.error(`鍘嗗彶 K 绾垮悓姝ュけ璐? ${(error as Error).message}锛屽皢鍦ㄥ悗鍙伴噸璇昤, (error as Error).stack)
+      this.logger.error(`历史 K 线同步失败: ${(error as Error).message}，将在后台重试`, (error as Error).stack)
     }
 
     try {
       await this.startRealtimeSubscription(config)
     } catch (error) {
-      this.logger.error(`瀹炴椂琛屾儏璁㈤槄澶辫触: ${(error as Error).message}锛屽皢鍦ㄥ悗鍙伴噸璇昤, (error as Error).stack)
+      this.logger.error(`实时行情订阅失败: ${(error as Error).message}，将在后台重试`, (error as Error).stack)
     }
 
-    this.logger.log(`琛屾儏妯″潡鍒濆鍖栧畬鎴愶紝璁㈤槄 ${config.symbols.join(', ')} (${config.timeframes.join(', ')})`)
+    this.logger.log(`行情模块初始化完成，订阅 ${config.symbols.join(', ')} (${config.timeframes.join(', ')})`)
   }
 
   async onModuleDestroy() {
@@ -77,7 +77,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   private getConfig(): MarketDataRuntimeConfig {
     const config = this.configService.get<MarketDataRuntimeConfig>('marketData')
     if (!config) {
-      throw new Error('marketData 閰嶇疆鏈姞杞?)
+      throw new Error('marketData 配置未加载')
     }
     return config
   }
@@ -97,7 +97,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
       case '1d':
         return 24 * 60 * 60_000
       default:
-        // 鐞嗚涓婁笉浼氳蛋鍒拌繖閲岋紝鍏滃簳杩斿洖 1 鍒嗛挓
+        // 理论上不会走到这里，兜底返回 1 分钟
         return 60_000
     }
   }
@@ -115,7 +115,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     for (const symbol of config.symbols) {
       for (const timeframe of config.timeframes) {
         const frameMs = this.getTimeframeMs(timeframe as MarketTimeframe)
-        // 绮楃暐浼扮畻闇€瑕佺殑鎵规鏁帮紝閬垮厤鎰忓姝诲惊鐜?
+        // 粗略估算需要的批次数，避免意外死循环
         const maxIterations = Math.ceil(lookbackMs / (frameMs * config.restBatchSize)) + 2
         let cursor = new Date(start)
 
@@ -145,7 +145,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
           } catch (error) {
             const err = error as Error
             this.logger.error(
-              `鍚屾 K 绾垮け璐? ${symbol} ${timeframe} - ${err.message}`,
+              `同步 K 线失败: ${symbol} ${timeframe} - ${err.message}`,
               err.stack,
               MARKET_DATA_LOG_CONTEXT,
             )
@@ -163,11 +163,11 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
       onTick: async (tick: MarketQuotePayload) => {
         try {
           await this.marketDataService.saveQuoteFromProvider(tick)
-          // 骞挎挱瀹炴椂 ticker 鏁版嵁鍒?SSE 璁㈤槄鑰?
+          // 广播实时 ticker 数据到 SSE 订阅者
           this.streamService.emitQuote(tick)
         } catch (error) {
           this.logger.error(
-            `淇濆瓨瀹炴椂琛屾儏澶辫触: ${(error as Error).message}`,
+            `保存实时行情失败: ${(error as Error).message}`,
             (error as Error).stack,
             MARKET_DATA_LOG_CONTEXT,
           )
@@ -178,7 +178,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
           await this.marketDataService.saveBarFromProvider(bar)
         } catch (error) {
           this.logger.error(
-            `淇濆瓨瀹炴椂 K 绾垮け璐? ${(error as Error).message}`,
+            `保存实时 K 线失败: ${(error as Error).message}`,
             (error as Error).stack,
             MARKET_DATA_LOG_CONTEXT,
           )
@@ -187,3 +187,4 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     })
   }
 }
+

@@ -2,33 +2,35 @@ import { ApiProperty } from '@nestjs/swagger'
 import { LedgerEntryType } from '@prisma/client'
 
 export class LedgerEntryResponseDto {
-  @ApiProperty({ description: '娴佹按 ID' })
+  @ApiProperty({ description: '流水 ID' })
   id!: string
 
-  @ApiProperty({ description: '璐︽埛 ID' })
+  @ApiProperty({ description: '账户 ID' })
   userStrategyAccountId!: string
 
-  @ApiProperty({ description: '浠撲綅 ID', nullable: true })
+  @ApiProperty({ description: '仓位 ID', nullable: true })
   positionId?: string | null
 
-  @ApiProperty({ description: '娴佹按绫诲瀷', enum: LedgerEntryType })
+  @ApiProperty({ description: '流水类型', enum: LedgerEntryType })
   type!: LedgerEntryType
 
-  @ApiProperty({ description: '閲戦锛堝崄杩涘埗瀛楃涓诧級' })
+  @ApiProperty({ description: '金额（十进制字符串）' })
   amount!: string
 
-  @ApiProperty({ description: '鍙樻洿鍚庣殑浣欓' })
+  @ApiProperty({ description: '变更后的余额' })
   balanceAfter!: string
 
-  @ApiProperty({ description: '鍏宠仈 ID', nullable: true })
+  @ApiProperty({ description: '关联 ID', nullable: true })
   referenceId?: string | null
 
-  @ApiProperty({ description: '鎻忚堪', nullable: true })
+  @ApiProperty({ description: '描述', nullable: true })
   description?: string | null
 
-  @ApiProperty({ description: '鍙戠敓鏃堕棿 ISO 瀛楃涓? })
+  @ApiProperty({ description: '发生时间 ISO 字符串' })
   occurredAt!: string
 
-  @ApiProperty({ description: '鍏冩暟鎹?, nullable: true })
+  @ApiProperty({ description: '元数据', nullable: true })
   meta?: Record<string, unknown> | null
 }
+
+

@@ -13,35 +13,35 @@ import {
 } from 'class-validator'
 
 export class UpdateLlmStrategyInstanceDto {
-  @ApiPropertyOptional({ description: '瀹炰緥鍚嶇О', maxLength: 100 })
+  @ApiPropertyOptional({ description: '实例名称', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   name?: string
 
-  @ApiPropertyOptional({ description: '瀹炰緥鐘舵€?, enum: ['running', 'paused', 'stopped'] })
+  @ApiPropertyOptional({ description: '实例状态', enum: ['running', 'paused', 'stopped'] })
   @IsOptional()
   @IsEnum(['running', 'paused', 'stopped'])
   status?: LlmStrategyInstanceStatus
 
-  @ApiPropertyOptional({ description: '杩愯妯″紡', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
+  @ApiPropertyOptional({ description: '运行模式', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
   @IsOptional()
   @IsEnum(['LIVE', 'PAPER', 'BACKTEST'])
   mode?: LlmStrategyInstanceMode
 
-  @ApiPropertyOptional({ description: '浣跨敤鐨凩LM妯″瀷鍚嶇О', maxLength: 100 })
+  @ApiPropertyOptional({ description: '使用的LLM模型名称', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   llmModel?: string
 
-  @ApiPropertyOptional({ description: '璋冨害cron琛ㄨ揪寮?, maxLength: 100 })
+  @ApiPropertyOptional({ description: '调度cron表达式', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   scheduleCron?: string
 
-  @ApiPropertyOptional({ description: '姣忔杩愯鏈€澶у伐鍏疯皟鐢ㄦ鏁?, minimum: 1, maximum: 100, nullable: true })
+  @ApiPropertyOptional({ description: '每次运行最大工具调用次数', minimum: 1, maximum: 100, nullable: true })
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsInt()
@@ -49,7 +49,7 @@ export class UpdateLlmStrategyInstanceDto {
   @Max(100)
   maxToolCallsPerRun?: number | null
 
-  @ApiPropertyOptional({ description: '姣忓皬鏃舵渶澶ц繍琛屾鏁?, minimum: 1, maximum: 60, nullable: true })
+  @ApiPropertyOptional({ description: '每小时最大运行次数', minimum: 1, maximum: 60, nullable: true })
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsInt()
@@ -57,7 +57,7 @@ export class UpdateLlmStrategyInstanceDto {
   @Max(60)
   maxRunsPerHour?: number | null
 
-  @ApiPropertyOptional({ description: '鍐峰嵈鏃堕棿锛堢锛?, minimum: 0, maximum: 86400, nullable: true })
+  @ApiPropertyOptional({ description: '冷却时间（秒）', minimum: 0, maximum: 86400, nullable: true })
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
   @IsInt()
@@ -66,7 +66,7 @@ export class UpdateLlmStrategyInstanceDto {
   cooldownSeconds?: number | null
 
   @ApiPropertyOptional({
-    description: '閰嶇疆瑕嗙洊鍙傛暟',
+    description: '配置覆盖参数',
     type: 'object',
     additionalProperties: true,
     nullable: true,
@@ -77,7 +77,7 @@ export class UpdateLlmStrategyInstanceDto {
   configOverrides?: Record<string, unknown> | null
 
   @ApiPropertyOptional({
-    description: '棰濆鍏冩暟鎹?,
+    description: '额外元数据',
     type: 'object',
     additionalProperties: true,
     nullable: true,
@@ -87,7 +87,7 @@ export class UpdateLlmStrategyInstanceDto {
   @IsObject()
   metadata?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '鏇存柊浜烘爣璇?, example: 'system-operator' })
+  @ApiPropertyOptional({ description: '更新人标识', example: 'system-operator' })
   @IsOptional()
   @IsString()
   updatedBy?: string

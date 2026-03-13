@@ -6,7 +6,7 @@ import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.d
 
 export class LedgerQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -14,7 +14,7 @@ export class LedgerQueryDto extends BasePaginationRequestDto {
   userId!: string
 
   @ApiPropertyOptional({
-    description: '杩囨护绫诲瀷',
+    description: '过滤类型',
     enum: LedgerEntryType,
   })
   @IsOptional()
@@ -22,21 +22,21 @@ export class LedgerQueryDto extends BasePaginationRequestDto {
   type?: LedgerEntryType
 
   @ApiPropertyOptional({
-    description: '寮€濮嬫椂闂?,
+    description: '开始时间',
   })
   @IsOptional()
   @IsDateString()
   start?: string
 
   @ApiPropertyOptional({
-    description: '缁撴潫鏃堕棿',
+    description: '结束时间',
   })
   @IsOptional()
   @IsDateString()
   end?: string
 
   @ApiPropertyOptional({
-    description: '鏄惁鍙繑鍥炴湁 referenceId 鐨勬祦姘?,
+    description: '是否只返回有 referenceId 的流水',
     example: false,
   })
   @IsOptional()
@@ -44,3 +44,4 @@ export class LedgerQueryDto extends BasePaginationRequestDto {
   @IsBoolean()
   includeSystemOnly?: boolean
 }
+

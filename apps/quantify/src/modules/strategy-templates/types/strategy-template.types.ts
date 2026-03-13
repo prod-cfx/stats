@@ -6,11 +6,17 @@ import type { MarketTimeframe } from '@ai/shared'
 export function timeframeToMinutes(timeframe: MarketTimeframe): number {
   const map: Record<MarketTimeframe, number> = {
     '1m': 1,
+    '3m': 3,
     '5m': 5,
     '15m': 15,
+    '30m': 30,
     '1h': 60,
     '4h': 240,
+    '6h': 360,
+    '8h': 480,
+    '12h': 720,
     '1d': 1440,
+    '1w': 10080,
   }
   return map[timeframe] ?? 60 // 榛樿 1 灏忔椂
 }

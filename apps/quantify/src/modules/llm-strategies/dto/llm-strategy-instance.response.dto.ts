@@ -2,65 +2,65 @@ import type { LlmStrategyInstance, LlmStrategyInstanceMode, LlmStrategyInstanceS
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmStrategyInstanceResponseDto {
-  @ApiProperty({ description: '瀹炰緥ID' })
+  @ApiProperty({ description: '实例ID' })
   id: string
 
-  @ApiProperty({ description: '鎵€灞濴LM绛栫暐ID' })
+  @ApiProperty({ description: '所属LLM策略ID' })
   strategyId: string
 
-  @ApiProperty({ description: '瀹炰緥鍚嶇О' })
+  @ApiProperty({ description: '实例名称' })
   name: string
 
-  @ApiProperty({ description: '瀹炰緥鐘舵€?, enum: ['running', 'paused', 'stopped'] })
+  @ApiProperty({ description: '实例状态', enum: ['running', 'paused', 'stopped'] })
   status: LlmStrategyInstanceStatus
 
-  @ApiProperty({ description: '杩愯妯″紡', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
+  @ApiProperty({ description: '运行模式', enum: ['LIVE', 'PAPER', 'BACKTEST'] })
   mode: LlmStrategyInstanceMode
 
-  @ApiProperty({ description: '浣跨敤鐨凩LM妯″瀷' })
+  @ApiProperty({ description: '使用的LLM模型' })
   llmModel: string
 
-  @ApiPropertyOptional({ description: '璋冨害cron琛ㄨ揪寮?, nullable: true })
+  @ApiPropertyOptional({ description: '调度cron表达式', nullable: true })
   scheduleCron?: string | null
 
-  @ApiPropertyOptional({ description: '姣忔杩愯鏈€澶у伐鍏疯皟鐢ㄦ鏁?, nullable: true })
+  @ApiPropertyOptional({ description: '每次运行最大工具调用次数', nullable: true })
   maxToolCallsPerRun?: number | null
 
-  @ApiPropertyOptional({ description: '姣忓皬鏃舵渶澶ц繍琛屾鏁?, nullable: true })
+  @ApiPropertyOptional({ description: '每小时最大运行次数', nullable: true })
   maxRunsPerHour?: number | null
 
-  @ApiPropertyOptional({ description: '鍐峰嵈鏃堕棿锛堢锛?, nullable: true })
+  @ApiPropertyOptional({ description: '冷却时间（秒）', nullable: true })
   cooldownSeconds?: number | null
 
   @ApiPropertyOptional({
-    description: '閰嶇疆瑕嗙洊',
+    description: '配置覆盖',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   configOverrides?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '鍒涘缓浜篒D' })
+  @ApiProperty({ description: '创建人ID' })
   createdBy: string
 
-  @ApiProperty({ description: '鏇存柊浜篒D' })
+  @ApiProperty({ description: '更新人ID' })
   updatedBy: string
 
   @ApiPropertyOptional({
-    description: '鍏冩暟鎹?,
+    description: '元数据',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   metadata?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '鏈€鍚庤繍琛屾椂闂?, nullable: true })
+  @ApiPropertyOptional({ description: '最后运行时间', nullable: true })
   lastRunAt?: Date | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
   constructor(model: LlmStrategyInstance) {

@@ -8,20 +8,20 @@ import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.in
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ChecklistGateService } from './checklist-gate.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StaticGuardrailService } from './static-guardrail.service'
 
 interface ChecklistPayload {
@@ -70,14 +70,14 @@ export class CodegenConversationService {
   async continueSession(sessionId: string, dto: ContinueCodegenSessionDto): Promise<CodegenSessionResponseDto> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== dto.userId) {
-      throw new DomainException('浼氳瘽涓嶅瓨鍦?, {
+      throw new DomainException('会话不存在', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
         args: { sessionId },
       })
     }
     if (CodegenConversationService.isTerminalStatus(session.status)) {
-      throw new DomainException('浼氳瘽宸茬粓鎬侊紝涓嶈兘缁х画鍐欏叆', {
+      throw new DomainException('会话已终态，不能继续写入', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
@@ -257,9 +257,9 @@ export class CodegenConversationService {
 
   private buildGuidePrompt(missing: string[]): string {
     if (missing.length === 0) {
-      return '淇℃伅宸查綈鍏紝灏嗗紑濮嬬敓鎴愬苟鏍￠獙绛栫暐鑴氭湰銆?
+      return '信息已齐全，将开始生成并校验策略脚本。'
     }
-    return `杩樼己灏戜互涓嬩俊鎭細${missing.join(', ')}銆傝琛ュ厖鍚庡啀鐢熸垚銆俙
+    return `还缺少以下信息：${missing.join(', ')}。请补充后再生成。`
   }
 
   private async generateScript(checklist: ChecklistPayload, userMessage: string): Promise<string> {
@@ -267,16 +267,16 @@ export class CodegenConversationService {
       {
         role: 'system',
         content: [
-          '浣犳槸閲忓寲绛栫暐鑴氭湰鐢熸垚鍣ㄣ€?,
-          '鍙兘杈撳嚭 JavaScript 鑴氭湰浠ｇ爜锛屼笉瑕佷娇鐢?markdown 浠ｇ爜鍧椼€?,
-          '鍙兘浣跨敤 helpers.math/helpers.array/helpers.ta/helpers.signal銆?,
-          '绂佹浣跨敤 import/require/eval/Function/process銆?,
-          '鑴氭湰蹇呴』杩斿洖闈炵┖瀵硅薄銆?,
+          '你是量化策略脚本生成器。',
+          '只能输出 JavaScript 脚本代码，不要使用 markdown 代码块。',
+          '只能使用 helpers.math/helpers.array/helpers.ta/helpers.signal。',
+          '禁止使用 import/require/eval/Function/process。',
+          '脚本必须返回非空对象。',
         ].join('\n'),
       },
       {
         role: 'user',
-        content: `闇€姹? ${userMessage}\n绾︽潫: ${JSON.stringify(checklist)}`,
+        content: `需求: ${userMessage}\n约束: ${JSON.stringify(checklist)}`,
       },
     ]
 
@@ -288,7 +288,7 @@ export class CodegenConversationService {
 
     const code = result.content?.trim()
     if (!code) {
-      throw new DomainException('绛栫暐鑴氭湰鐢熸垚澶辫触锛氭ā鍨嬫湭杩斿洖鑴氭湰', {
+      throw new DomainException('策略脚本生成失败：模型未返回脚本', {
         code: ErrorCode.AI_PROVIDER_ERROR,
         status: HttpStatus.BAD_GATEWAY,
       })

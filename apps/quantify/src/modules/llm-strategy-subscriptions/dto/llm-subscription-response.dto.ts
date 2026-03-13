@@ -2,53 +2,54 @@ import type { SubscriptionStatus } from '@prisma/client'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmSubscriptionResponseDto {
-  @ApiProperty({ description: '璁㈤槄ID' })
+  @ApiProperty({ description: '订阅ID' })
   id: string
 
-  @ApiProperty({ description: '鐢ㄦ埛ID' })
+  @ApiProperty({ description: '用户ID' })
   userId: string
 
-  @ApiProperty({ description: 'LLM 绛栫暐瀹炰緥ID' })
+  @ApiProperty({ description: 'LLM 策略实例ID' })
   llmStrategyInstanceId: string
 
-  @ApiProperty({ description: 'LLM 绛栫暐瀹炰緥鍚嶇О' })
+  @ApiProperty({ description: 'LLM 策略实例名称' })
   llmStrategyInstanceName: string
 
-  @ApiProperty({ description: 'LLM 绛栫暐鍚嶇О' })
+  @ApiProperty({ description: 'LLM 策略名称' })
   llmStrategyName: string
 
-  @ApiPropertyOptional({ description: 'LLM 绛栫暐鎻忚堪', nullable: true })
+  @ApiPropertyOptional({ description: 'LLM 策略描述', nullable: true })
   llmStrategyDescription?: string | null
 
-  @ApiProperty({ description: '璁㈤槄鐘舵€?, enum: ['active', 'paused', 'cancelled'] })
+  @ApiProperty({ description: '订阅状态', enum: ['active', 'paused', 'cancelled'] })
   status: SubscriptionStatus
 
   @ApiPropertyOptional({
-    description: '鐢ㄦ埛鑷畾涔夊弬鏁?,
+    description: '用户自定义参数',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   customParams?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '缁戝畾鐨勪氦鏄撴墍璐︽埛 ID锛堝彲閫夛級', nullable: true })
+  @ApiPropertyOptional({ description: '绑定的交易所账户 ID（可选）', nullable: true })
   exchangeAccountId?: string | null
 
-  @ApiPropertyOptional({ description: '浜ゆ槗鎵€鏍囪瘑锛堝 binance, okx, hyperliquid锛?, nullable: true })
+  @ApiPropertyOptional({ description: '交易所标识（如 binance, okx, hyperliquid）', nullable: true })
   exchangeId?: string | null
 
-  @ApiPropertyOptional({ description: '浜ゆ槗鎵€璐︽埛鍒悕锛堝彲閫夛級', nullable: true })
+  @ApiPropertyOptional({ description: '交易所账户别名（可选）', nullable: true })
   exchangeName?: string | null
 
-  @ApiProperty({ description: '璁㈤槄鏃堕棿' })
+  @ApiProperty({ description: '订阅时间' })
   subscribedAt: Date
 
-  @ApiPropertyOptional({ description: '鍙栨秷璁㈤槄鏃堕棿', nullable: true })
+  @ApiPropertyOptional({ description: '取消订阅时间', nullable: true })
   unsubscribedAt?: Date | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 }
+

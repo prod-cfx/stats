@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
@@ -13,14 +13,14 @@ export class LiveLlmStrategyCodegenController {
   constructor(private readonly service: CodegenConversationService) {}
 
   @Post('sessions')
-  @ApiOperation({ summary: '鍒涘缓绛栫暐浠ｇ爜鐢熸垚浼氳瘽' })
+  @ApiOperation({ summary: '创建策略代码生成会话' })
   @ApiResponse({ status: 201, type: CodegenSessionResponseDto })
   async startSession(@Body() dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
     return this.service.startSession(dto)
   }
 
   @Post('sessions/:id/messages')
-  @ApiOperation({ summary: '缁х画浼氳瘽骞跺湪淇℃伅榻愬叏鏃剁敓鎴愮瓥鐣ヨ剼鏈? })
+  @ApiOperation({ summary: '继续会话并在信息齐全时生成策略脚本' })
   @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
   async continueSession(
     @Param('id') id: string,

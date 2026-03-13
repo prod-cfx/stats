@@ -20,17 +20,17 @@ import {
 import { PositionStatus } from '@prisma/client'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
-// DTOs 闇€瑕佸湪杩愯鏃跺瓨鍦ㄤ互鏀寔 class-validator 鍜?Swagger锛屽繀椤讳娇鐢ㄦ櫘閫?import
+// DTOs 需要在运行时存在以支持 class-validator 和 Swagger，必须使用普通 import
 import { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import { PositionSyncResultDto } from './dto/position-sync.dto'
 import { PositionResponseDto } from './dto/position.response.dto'
 import { TradeResponseDto } from './dto/trade.response.dto'
-// Nest DI 闇€瑕佽繍琛屾椂寮曠敤 service
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// Nest DI 需要运行时引用 service
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionSyncService } from './position-sync.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsValuationService } from './positions-valuation.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
 
 @ApiTags('positions')
@@ -44,20 +44,20 @@ export class PositionsController {
   ) {}
 
   @Post('fills')
-  @ApiOperation({ summary: '璁板綍鎴愪氦锛堝唴閮ㄤ娇鐢級' })
+  @ApiOperation({ summary: '记录成交（内部使用）' })
   @ApiOkResponse({ type: TradeResponseDto })
   async recordTrade(@Body() dto: RecordTradeDto) {
     return this.positionsService.recordTrade(dto)
   }
 
   @Post('quotes')
-  @ApiOperation({ summary: '鎺ㄩ€佽鎯呭揩鐓у苟鏇存柊鏈疄鐜扮泩浜忥紙鍐呴儴浣跨敤锛? })
+  @ApiOperation({ summary: '推送行情快照并更新未实现盈亏（内部使用）' })
   async applyQuotes(@Body() dto: QuotesUpdateDto) {
     return this.valuationService.applyQuotes(dto)
   }
 
   @Get('open')
-  @ApiOperation({ summary: '鏌ヨ鏈钩浠撲粨浣? })
+  @ApiOperation({ summary: '查询未平仓仓位' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -81,7 +81,7 @@ export class PositionsController {
   }
 
   @Get('history')
-  @ApiOperation({ summary: '鏌ヨ鍘嗗彶浠撲綅' })
+  @ApiOperation({ summary: '查询历史仓位' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -106,8 +106,8 @@ export class PositionsController {
 
   @Post('sync')
   @ApiOperation({
-    summary: '鎵嬪姩瑙﹀彂浠撲綅鍚屾',
-    description: '浠庝氦鏄撴墍鑾峰彇瀹為檯浠撲綅骞朵笌鏈湴鏁版嵁瀵规瘮鍚屾銆?,
+    summary: '手动触发仓位同步',
+    description: '从交易所获取实际仓位并与本地数据对比同步。',
   })
   @ApiOkResponse({ type: PositionSyncResultDto })
   async triggerPositionSync(@Body() dto: TriggerPositionSyncDto) {
@@ -133,7 +133,7 @@ export class PositionsController {
   }
 
   @Post('sync/all')
-  @ApiOperation({ summary: '鍚屾鎵€鏈夋椿璺冭处鎴风殑浠撲綅' })
+  @ApiOperation({ summary: '同步所有活跃账户的仓位' })
   @ApiOkResponse({ type: [PositionSyncResultDto] })
   async syncAllPositions() {
     return this.positionSyncService.syncAllActivePositions()
@@ -141,8 +141,8 @@ export class PositionsController {
 
   @Post('close')
   @ApiOperation({
-    summary: '鐢ㄦ埛涓诲姩骞充粨',
-    description: '鐢ㄦ埛閫氳繃甯備环鍗曚富鍔ㄥ钩浠擄紙鏀寔鍏ㄥ钩鎴栭儴鍒嗗钩浠擄級',
+    summary: '用户主动平仓',
+    description: '用户通过市价单主动平仓（支持全平或部分平仓）',
   })
   @ApiBody({ type: ClosePositionDto })
   @ApiOkResponse({ type: ClosePositionResponseDto })

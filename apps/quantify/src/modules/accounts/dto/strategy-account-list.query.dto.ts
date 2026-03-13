@@ -5,7 +5,7 @@ import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.d
 
 export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -13,7 +13,7 @@ export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   userId!: string
 
   @ApiPropertyOptional({
-    description: '绛涢€夌瓥鐣?ID',
+    description: '筛选策略 ID',
     example: 'strategy-grid-btc',
   })
   @IsOptional()
@@ -21,7 +21,7 @@ export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   strategyId?: string
 
   @ApiPropertyOptional({
-    description: '鍏抽敭瀛楋紙鏀寔绛栫暐鍚嶇О妯＄硦鍖归厤锛?,
+    description: '关键字（支持策略名称模糊匹配）',
     example: 'BTC',
   })
   @IsOptional()
@@ -30,7 +30,7 @@ export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   keyword?: string
 
   @ApiPropertyOptional({
-    description: '鏄惁杩斿洖鏈€杩戠殑鏃ュ害鏀剁泭鎽樿',
+    description: '是否返回最近的日度收益摘要',
     example: true,
   })
   @IsOptional()
@@ -39,7 +39,7 @@ export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   withDailyStats?: boolean
 
   @ApiPropertyOptional({
-    description: '鏄惁鍙繑鍥炴湭骞充粨鐨勭瓥鐣ヨ处鎴凤紙榛樿 false锛?,
+    description: '是否只返回未平仓的策略账户（默认 false）',
     example: false,
   })
   @IsOptional()
@@ -48,7 +48,7 @@ export class StrategyAccountListQueryDto extends BasePaginationRequestDto {
   onlyActive?: boolean
 
   @ApiPropertyOptional({
-    description: '绛涢€夎浠疯揣甯?,
+    description: '筛选计价货币',
     example: 'USDT',
   })
   @IsOptional()

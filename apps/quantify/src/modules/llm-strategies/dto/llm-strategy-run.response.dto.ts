@@ -4,63 +4,63 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
 
 export class LlmStrategyRunResponseDto {
-  @ApiProperty({ description: '杩愯璁板綍ID' })
+  @ApiProperty({ description: '运行记录ID' })
   id: string
 
-  @ApiProperty({ description: '鎵€灞炲疄渚婭D' })
+  @ApiProperty({ description: '所属实例ID' })
   strategyInstanceId: string
 
-  @ApiProperty({ description: '寮€濮嬫椂闂? })
+  @ApiProperty({ description: '开始时间' })
   startedAt: Date
 
-  @ApiPropertyOptional({ description: '缁撴潫鏃堕棿', nullable: true })
+  @ApiPropertyOptional({ description: '结束时间', nullable: true })
   finishedAt?: Date | null
 
-  @ApiProperty({ description: '杩愯鐘舵€?, enum: ['success', 'failed', 'skipped'] })
+  @ApiProperty({ description: '运行状态', enum: ['success', 'failed', 'skipped'] })
   status: LlmStrategyRunStatus
 
-  @ApiPropertyOptional({ description: '杩愯鍘熷洜鎴栨弿杩?, nullable: true })
+  @ApiPropertyOptional({ description: '运行原因或描述', nullable: true })
   reason?: string | null
 
-  @ApiPropertyOptional({ description: '宸ュ叿璋冪敤娆℃暟', nullable: true })
+  @ApiPropertyOptional({ description: '工具调用次数', nullable: true })
   toolCallsCount?: number | null
 
-  @ApiPropertyOptional({ description: '浣跨敤鐨凩LM妯″瀷', nullable: true })
+  @ApiPropertyOptional({ description: '使用的LLM模型', nullable: true })
   llmModel?: string | null
 
   @ApiPropertyOptional({
-    description: '鍘熷瀵硅瘽蹇収',
+    description: '原始对话快照',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   rawDialogSnapshot?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '鐢熸垚鐨勪俊鍙稩D', nullable: true })
+  @ApiPropertyOptional({ description: '生成的信号ID', nullable: true })
   generatedSignalId?: string | null
 
-  @ApiPropertyOptional({
-    description: '鐢熸垚鐨勪氦鏄撲俊鍙疯鎯?,
+  @ApiPropertyOptional({ 
+    description: '生成的交易信号详情', 
     type: () => TradingSignalResponseDto,
-    nullable: true
+    nullable: true 
   })
   generatedSignal?: TradingSignalResponseDto | null
 
-  @ApiPropertyOptional({ description: '閿欒娑堟伅', nullable: true })
+  @ApiPropertyOptional({ description: '错误消息', nullable: true })
   errorMessage?: string | null
 
   @ApiPropertyOptional({
-    description: '鍏冩暟鎹?,
+    description: '元数据',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   metadata?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
   constructor(model: LlmStrategyRun & { generatedSignal?: TradingSignal | null }) {

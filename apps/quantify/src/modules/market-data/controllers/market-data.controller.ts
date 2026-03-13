@@ -27,16 +27,16 @@ export class MarketDataController {
   ) {}
 
   @Get('symbols')
-  @ApiQuery({ name: 'page', required: false, type: Number, description: '椤电爜锛堜粠 1 寮€濮嬶級', example: 1 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: '姣忛〉鏁伴噺', example: 50 })
-  @ApiQuery({ name: 'exchange', required: false, type: String, description: '浜ゆ槗鎵€绛涢€?, example: 'BINANCE' })
-  @ApiQuery({ name: 'type', required: false, enum: MARKET_SYMBOL_TYPES, description: '鏍囩殑绫诲瀷' })
-  @ApiQuery({ name: 'status', required: false, enum: MARKET_SYMBOL_STATUSES, description: '浜ゆ槗瀵圭姸鎬? })
-  @ApiQuery({ name: 'instrumentType', required: false, enum: MARKET_INSTRUMENT_TYPES, description: '鍚堢害褰㈡€? })
-  @ApiQuery({ name: 'keyword', required: false, type: String, description: '浜ゆ槗瀵逛唬鐮佹ā绯婃悳绱?, example: 'BTC' })
-  @ApiOperation({ summary: '鏌ヨ鏀寔鐨勪氦鏄撳鍒楄〃' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '页码（从 1 开始）', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: '每页数量', example: 50 })
+  @ApiQuery({ name: 'exchange', required: false, type: String, description: '交易所筛选', example: 'BINANCE' })
+  @ApiQuery({ name: 'type', required: false, enum: MARKET_SYMBOL_TYPES, description: '标的类型' })
+  @ApiQuery({ name: 'status', required: false, enum: MARKET_SYMBOL_STATUSES, description: '交易对状态' })
+  @ApiQuery({ name: 'instrumentType', required: false, enum: MARKET_INSTRUMENT_TYPES, description: '合约形态' })
+  @ApiQuery({ name: 'keyword', required: false, type: String, description: '交易对代码模糊搜索', example: 'BTC' })
+  @ApiOperation({ summary: '查询支持的交易对列表' })
   @ApiOkResponse({
-    description: '鑾峰彇鎴愬姛',
+    description: '获取成功',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BasePaginationResponseDto) },
@@ -53,9 +53,9 @@ export class MarketDataController {
   }
 
   @Get('bars')
-  @ApiOperation({ summary: '鏌ヨ鍘嗗彶 K 绾? })
+  @ApiOperation({ summary: '查询历史 K 线' })
   @ApiOkResponse({
-    description: '鑾峰彇鎴愬姛',
+    description: '获取成功',
     schema: { type: 'array', items: { $ref: getSchemaPath(MarketBarDto) } },
   })
   async getBars(@Query() query: MarketBarsQueryDto) {
@@ -63,15 +63,15 @@ export class MarketDataController {
   }
 
   @Get('quote')
-  @ApiOperation({ summary: '鏌ヨ鏈€鏂拌鎯呭揩鐓? })
-  @ApiOkResponse({ description: '鑾峰彇鎴愬姛', schema: { $ref: getSchemaPath(MarketQuoteDto) } })
+  @ApiOperation({ summary: '查询最新行情快照' })
+  @ApiOkResponse({ description: '获取成功', schema: { $ref: getSchemaPath(MarketQuoteDto) } })
   async getQuote(@Query() query: MarketQuoteQueryDto) {
     return this.marketDataService.getLatestQuote(query)
   }
 
   @Sse('stream/ticker')
-  @ApiOperation({ summary: '瀹炴椂鎺ㄩ€佽鎯?ticker (SSE)' })
-  @ApiOkResponse({ description: 'SSE 娴侊紝鎺ㄩ€佸疄鏃?ticker 鏁版嵁' })
+  @ApiOperation({ summary: '实时推送行情 ticker (SSE)' })
+  @ApiOkResponse({ description: 'SSE 流，推送实时 ticker 数据' })
   streamTicker(): Observable<MessageEvent> {
     return fromEvent<MarketQuoteEvent>(this.eventEmitter, MARKET_QUOTE_EVENT).pipe(
       map(event => {
@@ -97,3 +97,4 @@ export class MarketDataController {
     )
   }
 }
+

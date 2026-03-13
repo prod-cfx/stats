@@ -13,20 +13,20 @@ import {
 const DECIMAL_PATTERN = /^-?\d+(\.\d+)?$/
 
 export class QuoteInputDto {
-  @ApiProperty({ description: '浜ゆ槗瀵?, example: 'BTCUSDT' })
+  @ApiProperty({ description: '交易对', example: 'BTCUSDT' })
   @IsString()
   symbol!: string
 
-  @ApiProperty({ description: '鏈€鏂颁环鏍?, example: '65000.12' })
-  @Matches(DECIMAL_PATTERN, { message: 'price 蹇呴』鏄暟瀛楀瓧绗︿覆' })
+  @ApiProperty({ description: '最新价格', example: '65000.12' })
+  @Matches(DECIMAL_PATTERN, { message: 'price 必须是数字字符串' })
   price!: string
 
-  @ApiProperty({ description: '鏉ユ簮', example: 'BINANCE', required: false })
+  @ApiProperty({ description: '来源', example: 'BINANCE', required: false })
   @IsOptional()
   @IsString()
   source?: string
 
-  @ApiProperty({ description: '浜嬩欢鏃堕棿', required: false })
+  @ApiProperty({ description: '事件时间', required: false })
   @IsOptional()
   @IsDateString()
   eventTime?: string
@@ -40,3 +40,6 @@ export class QuotesUpdateDto {
   @Type(() => QuoteInputDto)
   quotes!: QuoteInputDto[]
 }
+
+
+

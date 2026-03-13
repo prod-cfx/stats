@@ -9,32 +9,32 @@ import {
 } from 'class-validator'
 
 export class CreateLlmStrategyDto {
-  @ApiProperty({ description: '绛栫暐鍚嶇О锛堝敮涓€锛?, maxLength: 100 })
+  @ApiProperty({ description: '策略名称（唯一）', maxLength: 100 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   name!: string
 
-  @ApiProperty({ description: '绛栫暐鎻忚堪', maxLength: 1000 })
+  @ApiProperty({ description: '策略描述', maxLength: 1000 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)
   description!: string
 
-  @ApiPropertyOptional({ description: '绯荤粺鎻愮ず璇嶏紝瀹氫箟AI鐨勮鑹插拰琛屼负鍑嗗垯', maxLength: 10000 })
+  @ApiPropertyOptional({ description: '系统提示词，定义AI的角色和行为准则', maxLength: 10000 })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
   systemPrompt?: string
 
-  @ApiPropertyOptional({ description: '鍒濆鎻愮ず璇嶆ā鏉匡紝鐢ㄤ簬棣栨杩愯鏃剁殑鎻愮ず', maxLength: 10000 })
+  @ApiPropertyOptional({ description: '初始提示词模板，用于首次运行时的提示', maxLength: 10000 })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
   initialPromptTemplate?: string
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勪氦鏄撳鍒楄〃',
+    description: '允许的交易对列表',
     type: [String],
     example: ['BTCUSDT', 'ETHUSDT'],
   })
@@ -44,7 +44,7 @@ export class CreateLlmStrategyDto {
   allowedSymbols?: string[]
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勬椂闂村懆鏈?,
+    description: '允许的时间周期',
     type: [String],
     example: ['1m', '5m', '15m', '1h', '4h', '1d'],
   })
@@ -54,7 +54,7 @@ export class CreateLlmStrategyDto {
   allowedTimeframes?: string[]
 
   @ApiPropertyOptional({
-    description: '椋庨櫓閰嶇疆鍙傛暟',
+    description: '风险配置参数',
     type: 'object',
     additionalProperties: true,
     example: {
@@ -68,7 +68,7 @@ export class CreateLlmStrategyDto {
   riskConfig?: Record<string, unknown>
 
   @ApiPropertyOptional({
-    description: '棰濆鍏冩暟鎹?,
+    description: '额外元数据',
     type: 'object',
     additionalProperties: true,
   })
@@ -76,7 +76,7 @@ export class CreateLlmStrategyDto {
   @IsObject()
   metadata?: Record<string, unknown>
 
-  @ApiPropertyOptional({ description: '鍒涘缓浜烘爣璇?, example: 'system-operator' })
+  @ApiPropertyOptional({ description: '创建人标识', example: 'system-operator' })
   @IsOptional()
   @IsString()
   createdBy?: string

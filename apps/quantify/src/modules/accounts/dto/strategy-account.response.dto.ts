@@ -1,47 +1,47 @@
 import { ApiProperty } from '@nestjs/swagger'
 
 export class StrategyAccountResponseDto {
-  @ApiProperty({ description: '璐︽埛 ID' })
+  @ApiProperty({ description: '账户 ID' })
   id!: string
 
-  @ApiProperty({ description: '鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '用户 ID' })
   userId!: string
 
-  @ApiProperty({ description: '绛栫暐 ID' })
+  @ApiProperty({ description: '策略 ID' })
   strategyId!: string
 
-  @ApiProperty({ description: '绛栫暐鍚嶇О', nullable: true })
+  @ApiProperty({ description: '策略名称', nullable: true })
   strategyName?: string | null
 
-  @ApiProperty({ description: '绛栫暐鐗堟湰', nullable: true })
+  @ApiProperty({ description: '策略版本', nullable: true })
   strategyVersion?: string | null
 
-  @ApiProperty({ description: '鍩虹璐у竵' })
+  @ApiProperty({ description: '基础货币' })
   baseCurrency!: string
 
-  @ApiProperty({ description: '鍒濆璧勯噾' })
+  @ApiProperty({ description: '初始资金' })
   initialBalance!: string
 
-  @ApiProperty({ description: '鍙敤浣欓' })
+  @ApiProperty({ description: '可用余额' })
   balance!: string
 
-  @ApiProperty({ description: '璐︽埛鏉冪泭锛堜綑棰?+ 鏈疄鐜扮泩浜忥級' })
+  @ApiProperty({ description: '账户权益（余额 + 未实现盈亏）' })
   equity!: string
 
-  @ApiProperty({ description: '绱宸插疄鐜扮泩浜? })
+  @ApiProperty({ description: '累计已实现盈亏' })
   totalRealizedPnl!: string
 
-  @ApiProperty({ description: '鏈疄鐜扮泩浜忔眹鎬? })
+  @ApiProperty({ description: '未实现盈亏汇总' })
   totalUnrealizedPnl!: string
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt!: string
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt!: string
 
   @ApiProperty({
-    description: '鏈€杩戜竴娆℃棩搴︽敹鐩婏紙濡傚瓨鍦級',
+    description: '最近一次日度收益（如存在）',
     nullable: true,
   })
   latestDailyStat?: {
@@ -51,3 +51,5 @@ export class StrategyAccountResponseDto {
     unrealizedPnl: string
   } | null
 }
+
+

@@ -83,7 +83,7 @@ describe('codegenConversationService', () => {
 
     const dto: ContinueCodegenSessionDto = {
       userId: 'u1',
-      message: '鐢熸垚绛栫暐',
+      message: '生成策略',
       entryRules: ['rsi < 30'],
       exitRules: ['atr stop'],
       riskRules: { maxPositionPct: 0.1 },
@@ -104,7 +104,7 @@ describe('codegenConversationService', () => {
       checklist: {},
     })
 
-    await expect(service.continueSession('s3', { userId: 'u1', message: '缁х画鐢熸垚' })).rejects.toThrow('浼氳瘽宸茬粓鎬?)
+    await expect(service.continueSession('s3', { userId: 'u1', message: '继续生成' })).rejects.toThrow('会话已终态')
   })
 
   it('converges session status to REJECTED when generation throws', async () => {
@@ -122,7 +122,7 @@ describe('codegenConversationService', () => {
     })
     mockAi.chat.mockRejectedValue(new Error('provider down'))
 
-    await expect(service.continueSession('s4', { userId: 'u1', message: '鐢熸垚绛栫暐' })).rejects.toThrow('provider down')
+    await expect(service.continueSession('s4', { userId: 'u1', message: '生成策略' })).rejects.toThrow('provider down')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({ status: 'REJECTED' }))
   })
 })

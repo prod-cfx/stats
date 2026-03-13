@@ -10,11 +10,11 @@ import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response
 import { LlmStrategyInstanceNameConflictException } from '../exceptions/llm-strategy-instance-name-conflict.exception'
 import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy-instance-not-found.exception'
 import { LlmStrategyNotLiveException } from '../exceptions/llm-strategy-not-live.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategyInstancesRepository } from '../repositories/llm-strategy-instances.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategiesService } from './llm-strategies.service'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategyInstanceSchedulerService } from './llm-strategy-instance-scheduler.service'
 
 @Injectable()
@@ -70,7 +70,7 @@ export class LlmStrategyInstancesService {
   }
 
   async create(dto: CreateLlmStrategyInstanceDto, operatorId: string): Promise<LlmStrategyInstance> {
-    // 楠岃瘉绛栫暐瀛樺湪涓斿浜庝笂绾跨姸鎬?
+    // 验证策略存在且处于上线状态
     const strategy = await this.strategiesService.getDetail(dto.strategyId)
     if (strategy.status !== 'live') {
       throw new LlmStrategyNotLiveException({ strategyId: dto.strategyId, status: strategy.status })
@@ -116,10 +116,10 @@ export class LlmStrategyInstancesService {
       return await this.repository.create(payload)
     }
     catch (error) {
-      // 鎹曡幏 Prisma 鍞竴绾︽潫鍐茬獊閿欒
+      // 捕获 Prisma 唯一约束冲突错误
       if (error instanceof PrismaNamespace.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new LlmStrategyInstanceNameConflictException({
-          name: dto.name,
+        throw new LlmStrategyInstanceNameConflictException({ 
+          name: dto.name, 
           strategyId: dto.strategyId,
         })
       }
@@ -154,29 +154,29 @@ export class LlmStrategyInstancesService {
         throw new LlmStrategyInstanceNotFoundException({ instanceId: id })
       }
 
-      // 馃攧 鐘舵€佸彉鏇村悗鑷姩绠＄悊璋冨害浠诲姟
+      // 🔄 状态变更后自动管理调度任务
       if (dto.status !== undefined && dto.status !== current.status) {
         await this.handleSchedulerOnStatusChange(updated, current.status, dto.status)
       }
-
-      // scheduleCron 鍙樻洿锛歳unning 鐘舵€佷笅鍏佽鍔ㄦ€侀噸鍚?鍋滄璋冨害
+      
+      // scheduleCron 变更：running 状态下允许动态重启/停止调度
       if (updated.status === 'running' && dto.scheduleCron !== undefined) {
         if (updated.scheduleCron) {
           await this.scheduler.restartInstance(updated.id)
-          this.logger.log(`LLM瀹炰緥 ${updated.id} 鐨?scheduleCron 宸叉洿鏂帮紝閲嶅惎璋冨害浠诲姟`)
+          this.logger.log(`LLM实例 ${updated.id} 的 scheduleCron 已更新，重启调度任务`)
         } else {
-          // 绠＄悊鍛樻竻绌?scheduleCron锛氳涓衡€滄殏鍋滆嚜鍔ㄨ皟搴︿絾浠嶅厑璁告墜鍔ㄨЕ鍙戔€濓紝闇€鏄惧紡 stop
+          // 管理员清空 scheduleCron：视为“暂停自动调度但仍允许手动触发”，需显式 stop
           await this.scheduler.stopInstance(updated.id)
-          this.logger.log(`LLM瀹炰緥 ${updated.id} 鐨?scheduleCron 宸叉竻绌猴紝宸插仠姝㈣皟搴︿换鍔)
+          this.logger.log(`LLM实例 ${updated.id} 的 scheduleCron 已清空，已停止调度任务`)
         }
       }
 
       return updated
     }
     catch (error) {
-      // 鎹曡幏 Prisma 鍞竴绾︽潫鍐茬獊閿欒
+      // 捕获 Prisma 唯一约束冲突错误
       if (error instanceof PrismaNamespace.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new LlmStrategyInstanceNameConflictException({
+        throw new LlmStrategyInstanceNameConflictException({ 
           name: dto.name ?? current.name,
           strategyId: current.strategyId,
         })
@@ -187,18 +187,18 @@ export class LlmStrategyInstancesService {
 
   async delete(id: string): Promise<void> {
     await this.getDetail(id)
-
-    // 鍒犻櫎鍓嶆竻鐞嗚皟搴︿换鍔?
+    
+    // 删除前清理调度任务
     await this.scheduler.stopInstance(id)
-
-    // 鍒犻櫎瀹炰緥浼氱骇鑱斿垹闄ょ浉鍏崇殑runs
+    
+    // 删除实例会级联删除相关的runs
     await this.repository.delete(id)
   }
 
   /**
-   * 鐘舵€佸彉鏇存椂鑷姩绠＄悊璋冨害浠诲姟
-   * - running: 鍚姩瀹炰緥鐨勮皟搴︿换鍔★紙濡傛灉璁剧疆浜唖cheduleCron锛?
-   * - paused/stopped: 鍋滄瀹炰緥鐨勮皟搴︿换鍔?
+   * 状态变更时自动管理调度任务
+   * - running: 启动实例的调度任务（如果设置了scheduleCron）
+   * - paused/stopped: 停止实例的调度任务
    */
   private async handleSchedulerOnStatusChange(
     instance: LlmStrategyInstance,
@@ -207,22 +207,22 @@ export class LlmStrategyInstancesService {
   ): Promise<void> {
     try {
       if (newStatus === 'running' && oldStatus !== 'running') {
-        // 瀹炰緥鍚姩 -> 鍚姩璋冨害浠诲姟锛堟湭璁剧疆 cron 鏃朵娇鐢ㄩ粯璁ゅ€硷級
+        // 实例启动 -> 启动调度任务（未设置 cron 时使用默认值）
         this.logger.log(
-          `LLM瀹炰緥 ${instance.id} 鍚姩锛屾鍦ㄥ垱寤鸿皟搴︿换鍔?{instance.scheduleCron ? '' : '锛堜娇鐢ㄩ粯璁?cron锛?}...`
+          `LLM实例 ${instance.id} 启动，正在创建调度任务${instance.scheduleCron ? '' : '（使用默认 cron）'}...`
         )
         await this.scheduler.startInstance(instance)
       } else if (newStatus !== 'running' && oldStatus === 'running') {
-        // 瀹炰緥鍋滄/鏆傚仠 -> 鍋滄璋冨害浠诲姟
-        this.logger.log(`LLM瀹炰緥 ${instance.id} ${newStatus === 'paused' ? '鏆傚仠' : '鍋滄'}锛屾鍦ㄦ竻鐞嗚皟搴︿换鍔?..`)
+        // 实例停止/暂停 -> 停止调度任务
+        this.logger.log(`LLM实例 ${instance.id} ${newStatus === 'paused' ? '暂停' : '停止'}，正在清理调度任务...`)
         await this.scheduler.stopInstance(instance.id)
       }
     } catch (error) {
       this.logger.error(
-        `绠＄悊LLM瀹炰緥 ${instance.id} 鐨勮皟搴︿换鍔″け璐? ${(error as Error).message}`,
+        `管理LLM实例 ${instance.id} 的调度任务失败: ${(error as Error).message}`,
         (error as Error).stack,
       )
-      // 璋冨害浠诲姟澶辫触涓嶅簲闃诲鐘舵€佹洿鏂帮紝鍙褰曢敊璇?
+      // 调度任务失败不应阻塞状态更新，只记录错误
     }
   }
 

@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄥ拰渚濊禆娉ㄥ叆闇€瑕佽繍琛屾椂瀵煎叆 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import type { SubscriptionStatus } from '@prisma/client'
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
@@ -76,12 +76,12 @@ export class LlmStrategySubscriptionsService {
       throw new LlmStrategyNotAvailableException({ llmStrategyInstanceId: dto.llmStrategyInstanceId, status: instance.status })
     }
 
-    // 浠呭厑璁歌闃?LIVE 妯″紡瀹炰緥锛堜繚鎸佷笌鏃ц闃呴€昏緫涓€鑷达級
+    // 仅允许订阅 LIVE 模式实例（保持与旧订阅逻辑一致）
     if (instance.mode !== 'LIVE') {
       throw new LlmStrategyNotAvailableException({
         llmStrategyInstanceId: dto.llmStrategyInstanceId,
         status: `mode_${instance.mode.toLowerCase()}`,
-        message: `璇ョ瓥鐣ュ疄渚嬪綋鍓嶅浜?${instance.mode} 妯″紡锛屼粎鏀寔璁㈤槄瀹炵洏妯″紡锛圠IVE锛夌殑绛栫暐`,
+        message: `该策略实例当前处于 ${instance.mode} 模式，仅支持订阅实盘模式（LIVE）的策略`,
       })
     }
 
@@ -103,25 +103,25 @@ export class LlmStrategySubscriptionsService {
         ? dto.exchangeAccountId
         : existing?.exchangeAccountId ?? null
 
-    // 璁㈤槄 / 閲嶆柊婵€娲绘椂锛屽繀椤荤粦瀹氫竴涓悎娉曠殑浜ゆ槗鎵€璐︽埛
+    // 订阅 / 重新激活时，必须绑定一个合法的交易所账户
     if (!effectiveExchangeAccountId) {
       throw new BadRequestException('exchangeAccountId is required to subscribe LLM strategy')
     }
     await this.ensureExchangeAccountOwnership(userId, effectiveExchangeAccountId)
 
-    // 宸插瓨鍦ㄨ闃呰褰曪細active 鐩存帴鎶ラ敊锛屽惁鍒欐仮澶?
+    // 已存在订阅记录：active 直接报错，否则恢复
     if (existing) {
       if (existing.status === 'active') {
         throw new LlmAlreadySubscribedException({ llmStrategyInstanceId: dto.llmStrategyInstanceId })
       }
 
-      // 閲嶆柊婵€娲伙細鍏堢‘淇濈瓥鐣ヨ处鎴峰瓨鍦ㄥ苟鍏ラ噾鎴愬姛锛屽啀鏇存柊璁㈤槄鐘舵€佷负 active
-      // 杩欐牱鍙互淇濊瘉璁㈤槄涓庤处鎴风殑鐢熷懡鍛ㄦ湡鍚屾锛岄伩鍏嶅嚭鐜?active 璁㈤槄 + 涓嶅瓨鍦ㄨ处鎴?鐨勮剰鐘舵€?
-      // - 濡傛灉鐢ㄦ埛鏈浼犲叆浜嗘柊鐨?amount锛坉to.customParams 涓湁锛夛紝璇存槑鐢ㄦ埛鎯宠鎶曞叆杩欑瑪璧勯噾
-      // - 濡傛灉娌℃湁浼犲叆 amount 鎴?amount=0锛屽彧鍒涘缓璐︽埛涓嶅叆閲?
+      // 重新激活：先确保策略账户存在并入金成功，再更新订阅状态为 active
+      // 这样可以保证订阅与账户的生命周期同步，避免出现"active 订阅 + 不存在账户"的脏状态
+      // - 如果用户本次传入了新的 amount（dto.customParams 中有），说明用户想要投入这笔资金
+      // - 如果没有传入 amount 或 amount=0，只创建账户不入金
       const newAmount = dto.customParams ? this.extractAmount(dto.customParams) : undefined
-      // 濮嬬粓璋冪敤 ensureUserStrategyAccount锛屽彧鍦?amount > 0 鏃朵紶鍏ラ噾棰濊繘琛屽叆閲?
-      // 澶辫触鏃朵細鎶涘嚭寮傚父锛岃闃呯姸鎬佷笉浼氳鏇存柊涓?active
+      // 始终调用 ensureUserStrategyAccount，只在 amount > 0 时传入金额进行入金
+      // 失败时会抛出异常，订阅状态不会被更新为 active
       await this.ensureUserStrategyAccount(
         userId,
         instance.strategyId,
@@ -129,7 +129,7 @@ export class LlmStrategySubscriptionsService {
         newAmount && newAmount > 0 ? newAmount : undefined,
       )
 
-      // 璐︽埛鍒涘缓/鍏ラ噾鎴愬姛鍚庢墠鏇存柊璁㈤槄鐘舵€?
+      // 账户创建/入金成功后才更新订阅状态
       const updated = await this.repo.update(existing.id, {
         status: 'active',
         customParams: effectiveCustomParams as Prisma.InputJsonValue | null,
@@ -137,7 +137,7 @@ export class LlmStrategySubscriptionsService {
         unsubscribedAt: null,
       })
 
-      this.logger.log(`鐢ㄦ埛 ${userId} 閲嶆柊婵€娲?LLM 璁㈤槄 ${updated.id}锛堝疄渚?${dto.llmStrategyInstanceId}锛塦)
+      this.logger.log(`用户 ${userId} 重新激活 LLM 订阅 ${updated.id}（实例 ${dto.llmStrategyInstanceId}）`)
 
       const detail = await this.repo.findByIdWithDetails(updated.id)
       if (!detail || detail.userId !== userId) {
@@ -146,10 +146,10 @@ export class LlmStrategySubscriptionsService {
       return this.toResponseDto(detail)
     }
 
-    // 棣栨璁㈤槄锛氬厛鍒涘缓璁㈤槄璁板綍锛屾垚鍔熷悗鍐嶅叆閲?
-    // 杩欐牱鍙互闃叉骞跺彂璇锋眰瀵艰嚧閲嶅鍏ラ噾锛?
-    // - 绗竴涓姹傚垱寤鸿闃呮垚鍔燂紝绗簩涓姹傚湪姝ゅ灏变細鍥犲敮涓€绱㈠紩鍐茬獊鑰屽け璐?
-    // - 鍙湁璁㈤槄鍒涘缓鎴愬姛鐨勮姹傛墠浼氭墽琛屽悗缁殑鍏ラ噾鎿嶄綔
+    // 首次订阅：先创建订阅记录，成功后再入金
+    // 这样可以防止并发请求导致重复入金：
+    // - 第一个请求创建订阅成功，第二个请求在此处就会因唯一索引冲突而失败
+    // - 只有订阅创建成功的请求才会执行后续的入金操作
     let created
     try {
       created = await this.repo.create({
@@ -165,11 +165,11 @@ export class LlmStrategySubscriptionsService {
       throw error
     }
 
-    this.logger.log(`鐢ㄦ埛 ${userId} 鎴愬姛璁㈤槄 LLM 绛栫暐瀹炰緥 ${dto.llmStrategyInstanceId}`)
+    this.logger.log(`用户 ${userId} 成功订阅 LLM 策略实例 ${dto.llmStrategyInstanceId}`)
 
-    // 璁㈤槄鍒涘缓鎴愬姛鍚庯紝蹇呴』鍒涘缓绛栫暐璐︽埛锛堟墽琛屽櫒渚濊禆 user_strategy_account 杩囨护璁㈤槄鐢ㄦ埛锛?
-    // - 鍗充娇 amount=0 涔熷繀椤诲垱寤鸿处鎴凤紝鍚﹀垯鎵ц鍣ㄦ壘涓嶅埌璇ョ敤鎴凤紝姘歌繙鏀朵笉鍒颁俊鍙?
-    // - 鍙湪 amount > 0 鏃惰繘琛屽叆閲戞搷浣?
+    // 订阅创建成功后，必须创建策略账户（执行器依赖 user_strategy_account 过滤订阅用户）
+    // - 即使 amount=0 也必须创建账户，否则执行器找不到该用户，永远收不到信号
+    // - 只在 amount > 0 时进行入金操作
     const subscribeAmount = this.extractAmount(effectiveCustomParams)
     try {
       await this.ensureUserStrategyAccount(
@@ -179,19 +179,19 @@ export class LlmStrategySubscriptionsService {
         subscribeAmount && subscribeAmount > 0 ? subscribeAmount : undefined,
       )
     } catch (error) {
-      // 鍒涘缓绛栫暐璐︽埛澶辫触鏃堕渶瑕佸洖婊氳闃呰褰?
-      // 鍥犱负娌℃湁绛栫暐璐︽埛锛屾墽琛屽櫒鏃犳硶鎵惧埌璇ヨ闃呯敤鎴凤紝璁㈤槄瀹為檯涓婁笉鍙敤
+      // 创建策略账户失败时需要回滚订阅记录
+      // 因为没有策略账户，执行器无法找到该订阅用户，订阅实际上不可用
       this.logger.error(
-        `鐢ㄦ埛 ${userId} 璁㈤槄 ${created.id} 鍚庡垱寤虹瓥鐣ヨ处鎴峰け璐ワ紝鍥炴粴璁㈤槄: ${error instanceof Error ? error.message : error}`,
+        `用户 ${userId} 订阅 ${created.id} 后创建策略账户失败，回滚订阅: ${error instanceof Error ? error.message : error}`,
       )
       try {
         await this.repo.delete(created.id)
       } catch (deleteError) {
         this.logger.error(
-          `鍥炴粴璁㈤槄 ${created.id} 澶辫触: ${deleteError instanceof Error ? deleteError.message : deleteError}`,
+          `回滚订阅 ${created.id} 失败: ${deleteError instanceof Error ? deleteError.message : deleteError}`,
         )
       }
-      throw new BadRequestException('璁㈤槄澶辫触锛氬垱寤虹瓥鐣ヨ处鎴峰け璐ワ紝璇风◢鍚庨噸璇?)
+      throw new BadRequestException('订阅失败：创建策略账户失败，请稍后重试')
     }
 
     const detail = await this.repo.findByIdWithDetails(created.id)
@@ -240,27 +240,27 @@ export class LlmStrategySubscriptionsService {
     const nextExchangeAccountId =
       dto.exchangeAccountId !== undefined ? dto.exchangeAccountId : existing.exchangeAccountId
 
-    // 璁＄畻鏇存柊鍚庣殑瀹為檯鐘舵€侊紙濡傛灉娌℃湁鏇存敼 status锛屽垯娌跨敤鐜版湁鐘舵€侊級
+    // 计算更新后的实际状态（如果没有更改 status，则沿用现有状态）
     const effectiveStatus = dto.status ?? existing.status
 
-    // 绂佹 active 璁㈤槄娓呯┖ exchangeAccountId 鈥斺€?鎵ц鍣ㄩ渶瑕佽处鎴锋墠鑳戒笅鍗?
-    // 鐢ㄦ埛蹇呴』鍏堟殏鍋?鍙栨秷璁㈤槄锛屾垨鑰呮彁渚涙柊鐨勮处鎴?ID
+    // 禁止 active 订阅清空 exchangeAccountId —— 执行器需要账户才能下单
+    // 用户必须先暂停/取消订阅，或者提供新的账户 ID
     if (effectiveStatus === 'active' && dto.exchangeAccountId === null) {
       throw new BadRequestException('Cannot remove exchangeAccountId from active subscription. Please pause or cancel first.')
     }
 
-    // 褰撶姸鎬佽璁剧疆涓?active锛堟棤璁烘槸鎭㈠杩樻槸浠庡叾瀹冪姸鎬佸垏鎹級鏃讹紝蹇呴』纭繚璁㈤槄缁戝畾浜嗘湁鏁堣处鎴?
+    // 当状态被设置为 active（无论是恢复还是从其它状态切换）时，必须确保订阅绑定了有效账户
     if (dto.status === 'active') {
       if (!nextExchangeAccountId) {
         throw new BadRequestException('exchangeAccountId is required when activating LLM subscription')
       }
       await this.ensureExchangeAccountOwnership(userId, nextExchangeAccountId)
     } else if (dto.exchangeAccountId !== undefined && dto.exchangeAccountId !== null) {
-      // 鍏跺畠鏇存柊鍦烘櫙涓紝濡傛灉鏄惧紡淇敼浜嗚处鎴凤紝涔熼渶瑕佹牎楠屽綊灞?
+      // 其它更新场景中，如果显式修改了账户，也需要校验归属
       await this.ensureExchangeAccountOwnership(userId, dto.exchangeAccountId)
     }
 
-    // 鎭㈠ active 鏃舵牎楠屽疄渚嬪彲璁㈤槄
+    // 恢复 active 时校验实例可订阅
     if (dto.status === 'active') {
       const instance = existing.llmStrategyInstance
       if (!instance) {
@@ -273,7 +273,7 @@ export class LlmStrategySubscriptionsService {
         throw new LlmStrategyNotAvailableException({
           llmStrategyInstanceId: existing.llmStrategyInstanceId,
           status: `mode_${instance.mode.toLowerCase()}`,
-          message: `璇ョ瓥鐣ュ疄渚嬪綋鍓嶅浜?${instance.mode} 妯″紡锛屼粎鏀寔璁㈤槄瀹炵洏妯″紡锛圠IVE锛夌殑绛栫暐`,
+          message: `该策略实例当前处于 ${instance.mode} 模式，仅支持订阅实盘模式（LIVE）的策略`,
         })
       }
       if (instance.strategy?.status !== 'live') {
@@ -306,8 +306,8 @@ export class LlmStrategySubscriptionsService {
       return this.toResponseDto(existing as any)
     }
 
-    // 褰撶姸鎬佸彉涓?active 鏃讹紝鍏堢‘淇濊处鎴峰瓨鍦ㄥ啀鏇存柊璁㈤槄鐘舵€?
-    // 椤哄簭寰堥噸瑕侊細濡傛灉璐︽埛鍒涘缓澶辫触锛岃闃呯姸鎬佷笉浼氳鏇存柊锛屼繚鎸佹暟鎹竴鑷存€?
+    // 当状态变为 active 时，先确保账户存在再更新订阅状态
+    // 顺序很重要：如果账户创建失败，订阅状态不会被更新，保持数据一致性
     if (dto.status === 'active' && existing.llmStrategyInstance) {
       await this.ensureUserStrategyAccount(
         userId,
@@ -317,7 +317,7 @@ export class LlmStrategySubscriptionsService {
     }
 
     await this.repo.update(subscriptionId, updatePayload)
-    this.logger.log(`鐢ㄦ埛 ${userId} 鏇存柊 LLM 璁㈤槄 ${subscriptionId}`)
+    this.logger.log(`用户 ${userId} 更新 LLM 订阅 ${subscriptionId}`)
 
     const detail = await this.repo.findByIdWithDetails(subscriptionId)
     if (!detail) {
@@ -337,7 +337,7 @@ export class LlmStrategySubscriptionsService {
       unsubscribedAt: new Date(),
     })
 
-    this.logger.log(`鐢ㄦ埛 ${userId} 鍙栨秷 LLM 璁㈤槄 ${subscriptionId}`)
+    this.logger.log(`用户 ${userId} 取消 LLM 订阅 ${subscriptionId}`)
   }
 
   private async ensureExchangeAccountOwnership(userId: string, exchangeAccountId: string) {
@@ -382,7 +382,7 @@ export class LlmStrategySubscriptionsService {
   }
 
   /**
-   * 浠?customParams 涓彁鍙栫敤鎴疯緭鍏ョ殑璁㈤槄閲戦
+   * 从 customParams 中提取用户输入的订阅金额
    */
   private extractAmount(customParams: Record<string, unknown> | null | undefined): number | undefined {
     if (!customParams || typeof customParams !== 'object') {
@@ -402,16 +402,16 @@ export class LlmStrategySubscriptionsService {
   }
 
   /**
-   * 纭繚鐢ㄦ埛鎷ユ湁鎸囧畾 LLM 绛栫暐瀵瑰簲鐨?UserStrategyAccount锛堣櫄鎷熻处鎴凤級锛屽苟涓哄叾鍏ラ噾銆?
-   * 璇ヨ处鎴风敤浜庢墽琛屽櫒涓嬪崟鍜?PnL 璺熻釜銆?
+   * 确保用户拥有指定 LLM 策略对应的 UserStrategyAccount（虚拟账户），并为其入金。
+   * 该账户用于执行器下单和 PnL 跟踪。
    *
-   * strategyId 浣跨敤 LlmStrategy.id锛屼娇寰楁墽琛屽櫒鐨勬煡璇㈡潯浠?
-   * `where.strategyId = signal.llmStrategyId` 鑳藉鍖归厤鍒拌璐︽埛銆?
+   * strategyId 使用 LlmStrategy.id，使得执行器的查询条件
+   * `where.strategyId = signal.llmStrategyId` 能够匹配到该账户。
    *
-   * @param userId 涓氬姟鐢ㄦ埛 ID
-   * @param llmStrategyId LLM 绛栫暐 ID
-   * @param strategyName 绛栫暐灞曠ず鍚嶇О
-   * @param amount 鐢ㄦ埛璁㈤槄鏃惰緭鍏ョ殑璧勯噾棰濆害锛堜粠 customParams.amount 鎻愬彇锛?
+   * @param userId 业务用户 ID
+   * @param llmStrategyId LLM 策略 ID
+   * @param strategyName 策略展示名称
+   * @param amount 用户订阅时输入的资金额度（从 customParams.amount 提取）
    */
   private async ensureUserStrategyAccount(
     userId: string,
@@ -422,7 +422,7 @@ export class LlmStrategySubscriptionsService {
     const client = this.prisma.getClient()
     const fundingAmount = amount && amount > 0 ? String(amount) : '0'
 
-    // 妫€鏌ユ槸鍚﹀凡瀛樺湪璇ョ敤鎴?+ LLM 绛栫暐鐨勮櫄鎷熻处鎴?
+    // 检查是否已存在该用户 + LLM 策略的虚拟账户
     const existing = await client.userStrategyAccount.findUnique({
       where: {
         userId_strategyId: {
@@ -434,23 +434,23 @@ export class LlmStrategySubscriptionsService {
     })
 
     if (existing) {
-      this.logger.debug(`鐢ㄦ埛 ${userId} 宸叉湁 LLM 绛栫暐 ${llmStrategyId} 鐨勮櫄鎷熻处鎴?${existing.id}`)
-      // 濡傛灉鏈夐噾棰濓紝涓哄凡鏈夎处鎴峰叆閲?
+      this.logger.debug(`用户 ${userId} 已有 LLM 策略 ${llmStrategyId} 的虚拟账户 ${existing.id}`)
+      // 如果有金额，为已有账户入金
       if (amount && amount > 0) {
-        // 鍏ラ噾澶辫触鏄笟鍔″け璐ワ紝蹇呴』鎶涘嚭寮傚父璁╀笂灞傛劅鐭?
-        // 鍚﹀垯鐢ㄦ埛鐪嬪埌"璁㈤槄鎴愬姛"浣嗚櫄鎷熻处鎴蜂綑棰濅负 0锛屼笅涓€娆′俊鍙峰洜浣欓涓嶈冻琚烦杩?
+        // 入金失败是业务失败，必须抛出异常让上层感知
+        // 否则用户看到"订阅成功"但虚拟账户余额为 0，下一次信号因余额不足被跳过
         await this.accountsService.deposit(existing.id, {
           userId,
           amount: fundingAmount,
-          description: `LLM 绛栫暐璁㈤槄鍏ラ噾`,
+          description: `LLM 策略订阅入金`,
         })
-        this.logger.log(`涓虹敤鎴?${userId} 鐨勮櫄鎷熻处鎴?${existing.id} 鍏ラ噾 ${fundingAmount}`)
+        this.logger.log(`为用户 ${userId} 的虚拟账户 ${existing.id} 入金 ${fundingAmount}`)
       }
       return
     }
 
-    // 鍒涘缓鏂扮殑铏氭嫙璐︽埛锛堝甫鍒濆璧勯噾锛?
-    // 娉ㄦ剰锛氳处鎴峰垱寤哄け璐ユ椂蹇呴』鎶涘嚭寮傚父锛屽惁鍒欒闃呮垚鍔熶絾鎵ц鍣ㄦ壘涓嶅埌璐︽埛锛岀敤鎴锋案杩滄棤娉曚笅鍗?
+    // 创建新的虚拟账户（带初始资金）
+    // 注意：账户创建失败时必须抛出异常，否则订阅成功但执行器找不到账户，用户永远无法下单
     try {
       await this.accountsService.createUserStrategyAccount(userId, {
         userId,
@@ -459,36 +459,36 @@ export class LlmStrategySubscriptionsService {
         baseCurrency: 'USDT',
         initialBalance: fundingAmount,
       })
-      this.logger.log(`涓虹敤鎴?${userId} 鍒涘缓 LLM 绛栫暐 ${llmStrategyId} 鐨勮櫄鎷熻处鎴凤紝鍒濆璧勯噾 ${fundingAmount}`)
+      this.logger.log(`为用户 ${userId} 创建 LLM 策略 ${llmStrategyId} 的虚拟账户，初始资金 ${fundingAmount}`)
     } catch (error) {
-      // 濡傛灉鏄敮涓€绾︽潫鍐茬獊锛堝苟鍙戝垱寤猴級锛屽拷鐣ラ敊璇苟灏濊瘯鍏ラ噾
+      // 如果是唯一约束冲突（并发创建），忽略错误并尝试入金
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        this.logger.debug(`鐢ㄦ埛 ${userId} 鐨?LLM 绛栫暐 ${llmStrategyId} 铏氭嫙璐︽埛宸茶骞跺彂鍒涘缓`)
-        // 骞跺彂鍒涘缓鍚庝粛闇€鍏ラ噾
+        this.logger.debug(`用户 ${userId} 的 LLM 策略 ${llmStrategyId} 虚拟账户已被并发创建`)
+        // 并发创建后仍需入金
         if (amount && amount > 0) {
           const account = await client.userStrategyAccount.findUnique({
             where: { userId_strategyId: { userId, strategyId: llmStrategyId } },
             select: { id: true },
           })
           if (account) {
-            // 鍏ラ噾澶辫触蹇呴』鎶涘嚭寮傚父锛屼笌 existing 鍒嗘敮淇濇寔涓€鑷?
-            // 鍚﹀垯浼氬嚭鐜?璁㈤槄 active + 铏氭嫙璐︽埛浣欓涓?0"鐨勮剰鐘舵€?
-            // 鍚庣画淇″彿鎵ц閮戒細鍥?InsufficientBalance 琚烦杩囷紝鐢ㄦ埛鍗存病鏈変换浣曞け璐ユ彁绀?
+            // 入金失败必须抛出异常，与 existing 分支保持一致
+            // 否则会出现"订阅 active + 虚拟账户余额为 0"的脏状态
+            // 后续信号执行都会因 InsufficientBalance 被跳过，用户却没有任何失败提示
             await this.accountsService.deposit(account.id, {
               userId,
               amount: fundingAmount,
-              description: `LLM 绛栫暐璁㈤槄鍏ラ噾`,
+              description: `LLM 策略订阅入金`,
             })
-            this.logger.log(`骞跺彂鍒涘缓鍚庝负鐢ㄦ埛 ${userId} 鐨勮櫄鎷熻处鎴?${account.id} 鍏ラ噾 ${fundingAmount}`)
+            this.logger.log(`并发创建后为用户 ${userId} 的虚拟账户 ${account.id} 入金 ${fundingAmount}`)
           }
         }
         return
       }
-      // 鍏朵粬閿欒锛氬垱寤鸿处鎴峰け璐ュ繀椤昏璁㈤槄涔熷け璐ワ紝鍚﹀垯鐢ㄦ埛鏀跺埌"璁㈤槄鎴愬姛"鍗存案杩滄棤娉曚笅鍗?
+      // 其他错误：创建账户失败必须让订阅也失败，否则用户收到"订阅成功"却永远无法下单
       this.logger.error(
-        `涓虹敤鎴?${userId} 鍒涘缓 LLM 绛栫暐 ${llmStrategyId} 鐨勮櫄鎷熻处鎴峰け璐? ${error instanceof Error ? error.message : error}`,
+        `为用户 ${userId} 创建 LLM 策略 ${llmStrategyId} 的虚拟账户失败: ${error instanceof Error ? error.message : error}`,
       )
-      throw new BadRequestException('鍒涘缓绛栫暐璐︽埛澶辫触锛岃绋嶅悗閲嶈瘯')
+      throw new BadRequestException('创建策略账户失败，请稍后重试')
     }
   }
 }

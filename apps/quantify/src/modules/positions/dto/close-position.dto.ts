@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator'
 
-// 浠呭厑璁稿ぇ浜?0 鐨勬鏁?
+// 仅允许大于 0 的正数
 const POSITIVE_DECIMAL_PATTERN = /^(?:0*[1-9]\d*(?:\.\d+)?|0*\.0*[1-9]\d*)$/
 
-// 瀹氫箟鏋氫妇浠ヤ繚鎸佺被鍨嬪畨鍏?
+// 定义枚举以保持类型安全
 enum ExchangeId {
   BINANCE = 'binance',
   OKX = 'okx',
@@ -17,47 +17,47 @@ enum MarketType {
 }
 
 export class ClosePositionDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiProperty({ description: '鐢ㄦ埛绛栫暐璐︽埛 ID' })
+  @ApiProperty({ description: '用户策略账户 ID' })
   @IsString()
   @IsNotEmpty()
   userStrategyAccountId!: string
 
-  @ApiProperty({ description: '浠撲綅 ID' })
+  @ApiProperty({ description: '仓位 ID' })
   @IsString()
   @IsNotEmpty()
   positionId!: string
 
-  @ApiProperty({
-    description: '骞充粨鏁伴噺锛堟墜鏁帮級',
+  @ApiProperty({ 
+    description: '平仓数量（手数）',
     example: '0.5',
   })
-  @Matches(POSITIVE_DECIMAL_PATTERN, { message: 'quantity 蹇呴』鏄ぇ浜?0 鐨勬暟瀛楀瓧绗︿覆' })
+  @Matches(POSITIVE_DECIMAL_PATTERN, { message: 'quantity 必须是大于 0 的数字字符串' })
   quantity!: string
 
-  @ApiProperty({
-    description: '浜ゆ槗鎵€ ID',
+  @ApiProperty({ 
+    description: '交易所 ID',
     example: 'binance',
     enum: ExchangeId,
   })
-  @IsEnum(ExchangeId, { message: 'exchangeId 蹇呴』鏄湁鏁堢殑浜ゆ槗鎵€ID' })
+  @IsEnum(ExchangeId, { message: 'exchangeId 必须是有效的交易所ID' })
   exchangeId!: ExchangeId
 
-  @ApiProperty({
-    description: '甯傚満绫诲瀷',
+  @ApiProperty({ 
+    description: '市场类型',
     example: 'perp',
     enum: MarketType,
   })
-  @IsEnum(MarketType, { message: 'marketType 蹇呴』鏄湁鏁堢殑甯傚満绫诲瀷' })
+  @IsEnum(MarketType, { message: 'marketType 必须是有效的市场类型' })
   marketType!: MarketType
 
-  @ApiPropertyOptional({
-    description: '璁㈠崟澶囨敞',
-    example: '鐢ㄦ埛鎵嬪姩骞充粨',
+  @ApiPropertyOptional({ 
+    description: '订单备注', 
+    example: '用户手动平仓',
   })
   @IsOptional()
   @IsString()
@@ -65,21 +65,21 @@ export class ClosePositionDto {
 }
 
 export class ClosePositionResponseDto {
-  @ApiProperty({ description: '鏄惁鎴愬姛' })
+  @ApiProperty({ description: '是否成功' })
   success!: boolean
 
-  @ApiProperty({ description: '璁㈠崟 ID' })
+  @ApiProperty({ description: '订单 ID' })
   orderId!: string
 
-  @ApiProperty({ description: '浠撲綅 ID' })
+  @ApiProperty({ description: '仓位 ID' })
   positionId!: string
 
-  @ApiProperty({ description: '宸叉垚浜ゆ暟閲? })
+  @ApiProperty({ description: '已成交数量' })
   filledQuantity!: string
 
-  @ApiPropertyOptional({ description: '鎴愪氦鍧囦环锛堝競浠峰崟鍙兘娌℃湁鎴愪氦浠锋牸锛? })
+  @ApiPropertyOptional({ description: '成交均价（市价单可能没有成交价格）' })
   averagePrice?: string
 
-  @ApiProperty({ description: '鐘舵€佹秷鎭? })
+  @ApiProperty({ description: '状态消息' })
   message!: string
 }

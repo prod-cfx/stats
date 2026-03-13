@@ -1,42 +1,43 @@
 import { ApiProperty } from '@nestjs/swagger'
 
 export class MarketSymbolDto {
-  @ApiProperty({ description: '浜ゆ槗瀵逛唬鐮?, example: 'BTCUSDT' })
+  @ApiProperty({ description: '交易对代码', example: 'BTCUSDT' })
   code!: string
 
-  @ApiProperty({ description: '鍩虹璧勪骇', example: 'BTC' })
+  @ApiProperty({ description: '基础资产', example: 'BTC' })
   baseAsset!: string
 
-  @ApiProperty({ description: '璁′环璧勪骇', example: 'USDT' })
+  @ApiProperty({ description: '计价资产', example: 'USDT' })
   quoteAsset!: string
 
-  @ApiProperty({ description: '浜ゆ槗鎵€', example: 'BINANCE' })
+  @ApiProperty({ description: '交易所', example: 'BINANCE' })
   exchange!: string
 
-  @ApiProperty({ description: '鍝佺绫诲瀷', example: 'CRYPTO' })
+  @ApiProperty({ description: '品种类型', example: 'CRYPTO' })
   type!: string
 
-  @ApiProperty({ description: '鍚堢害褰㈡€?, example: 'SPOT' })
+  @ApiProperty({ description: '合约形态', example: 'SPOT' })
   instrumentType!: string
 
-  @ApiProperty({ description: '鐘舵€?, example: 'ACTIVE' })
+  @ApiProperty({ description: '状态', example: 'ACTIVE' })
   status!: string
 
-  @ApiProperty({ description: '浠锋牸绮惧害', example: 2 })
+  @ApiProperty({ description: '价格精度', example: 2 })
   precisionPrice!: number
 
-  @ApiProperty({ description: '鏁伴噺绮惧害', example: 6 })
+  @ApiProperty({ description: '数量精度', example: 6 })
   precisionQuantity!: number
 
-  @ApiProperty({ description: '鏈€灏忓彉鍔ㄤ环浣?, example: '0.01', nullable: true })
+  @ApiProperty({ description: '最小变动价位', example: '0.01', nullable: true })
   tickSize?: string | null
 
-  @ApiProperty({ description: '鏈€灏忎笅鍗曟暟閲?, example: '0.0001', nullable: true })
+  @ApiProperty({ description: '最小下单数量', example: '0.0001', nullable: true })
   lotSize?: string | null
 
-  @ApiProperty({ description: '鏄惁鏀寔鏉犳潌', example: true })
+  @ApiProperty({ description: '是否支持杠杆', example: true })
   isMarginEnabled!: boolean
 
-  @ApiProperty({ description: '鏈€鍚庢洿鏂版椂闂?, example: new Date().toISOString() })
+  @ApiProperty({ description: '最后更新时间', example: new Date().toISOString() })
   updatedAt!: string
 }
+
