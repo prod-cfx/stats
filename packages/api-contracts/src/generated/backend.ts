@@ -49,6 +49,7 @@ const CreateTelegramDesktopIntentRequestDto = z
   .object({
     intent: z.enum(["login", "bind"]).default("login"),
     lng: z.enum(["zh", "en"]).default("zh"),
+    redirect: z.string(),
   })
   .partial()
   .passthrough();
@@ -909,7 +910,25 @@ const WhaleNotificationRuleResponseDto = z
     updatedAt: z.string(),
   })
   .passthrough();
-const Function = z.object({}).partial().passthrough();
+const CreateWhaleNotificationRuleDto = z
+  .object({
+    type: z.enum(["ADDRESS", "SYMBOL"]),
+    address: z.string().optional(),
+    symbol: z.string().optional(),
+    thresholdUsd: z.number(),
+    note: z.string().optional(),
+    channels: WhaleNotificationChannelsDto,
+  })
+  .passthrough();
+const UpdateWhaleNotificationRuleDto = z
+  .object({
+    thresholdUsd: z.number(),
+    note: z.string(),
+    channels: WhaleNotificationChannelsDto,
+    isActive: z.boolean(),
+  })
+  .partial()
+  .passthrough();
 const WhaleNotificationDeliveryMapDto = z
   .object({ web: z.string(), email: z.string(), telegram: z.string() })
   .passthrough();
@@ -1150,7 +1169,8 @@ export const schemas = {
   TickerResponseDto,
   WhaleNotificationChannelsDto,
   WhaleNotificationRuleResponseDto,
-  Function,
+  CreateWhaleNotificationRuleDto,
+  UpdateWhaleNotificationRuleDto,
   WhaleNotificationDeliveryMapDto,
   WhaleNotificationInboxResponseDto,
   LiquidationSummaryItemDto,
@@ -2818,6 +2838,11 @@ const endpoints = makeApi([
         type: "Query",
         schema: z.string(),
       },
+      {
+        name: "redirect",
+        type: "Query",
+        schema: z.string(),
+      },
     ],
     response: z.void(),
   },
@@ -3635,13 +3660,13 @@ const endpoints = makeApi([
       {
         name: "body",
         type: "Body",
-        schema: z.object({}).partial().passthrough(),
+        schema: CreateWhaleNotificationRuleDto,
       },
     ],
     response: WhaleNotificationRuleResponseDto,
   },
   {
-    method: "patch",
+    method: "put",
     path: "/whale-notification/rules/:id",
     alias: "WhaleNotificationRulesController_update",
     requestFormat: "json",
@@ -3649,7 +3674,7 @@ const endpoints = makeApi([
       {
         name: "body",
         type: "Body",
-        schema: z.object({}).partial().passthrough(),
+        schema: UpdateWhaleNotificationRuleDto,
       },
       {
         name: "id",

@@ -1,4 +1,4 @@
-import { InstrumentType, type PrismaClient, VenueType } from '@prisma/client'
+import { InstrumentType, type PrismaClient, VenueType } from '../../generated/prisma'
 
 /**
  * 订单薄配置种子数据

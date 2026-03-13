@@ -1,5 +1,4 @@
-import type { PrismaClient } from '@prisma/client'
-import { InstrumentType } from '@prisma/client'
+import { InstrumentType, type PrismaClient } from '../../generated/prisma'
 
 /**
  * 交易记录订阅配置种子数据
@@ -402,5 +401,4 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
 
   console.log(`✅ Trades configs seeded: ${createdCount} created, ${skippedCount} skipped`)
 }
-
 
