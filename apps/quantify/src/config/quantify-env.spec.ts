@@ -40,4 +40,20 @@ describe('applyQuantifyEnvOverrides', () => {
 
     expect(env.DATABASE_URL).toBe('postgresql://postgres:postgres@localhost:5432/ai_dev')
   })
+
+  it('ignores placeholder quantify values', () => {
+    const env = {
+      EXCHANGE_ACCOUNT_CRYPTO_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      UNIAPI_API_KEY: 'shared-uniapi-key',
+      QUANTIFY_EXCHANGE_ACCOUNT_CRYPTO_KEY: '__SET_IN_env.local__',
+      QUANTIFY_UNIAPI_API_KEY: '__SET_IN_env.local__',
+    }
+
+    applyQuantifyEnvOverrides(env)
+
+    expect(env.EXCHANGE_ACCOUNT_CRYPTO_KEY).toBe(
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    )
+    expect(env.UNIAPI_API_KEY).toBe('shared-uniapi-key')
+  })
 })

@@ -1,0 +1,15 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const repoRoot = path.resolve(__dirname, '../..')
+
+test('quantify build depends on prisma generate', () => {
+  const project = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'apps/quantify/project.json'), 'utf8'),
+  )
+
+  assert.ok(project.targets['prisma:generate'], 'missing quantify prisma:generate target')
+  assert.deepEqual(project.targets.build.dependsOn, ['^build', 'prisma:generate'])
+})

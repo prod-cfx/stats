@@ -26,6 +26,8 @@ export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   D1: 'd1' as PrismaMarketTimeframe,
 } as const
 
+export const SUPPORTED_MARKET_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly MarketTimeframe[]
+
 /**
  * 灏嗗簲鐢ㄥ眰鏃堕棿鍛ㄦ湡鏄犲皠涓?Prisma 鏋氫妇閿悕
  * @param timeframe - 搴旂敤灞傛椂闂村懆鏈燂紙濡?"1m", "5m"锛?

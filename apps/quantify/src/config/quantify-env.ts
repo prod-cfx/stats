@@ -1,5 +1,7 @@
 type QuantifyEnv = Record<string, string | undefined>
 
+const SECRET_PLACEHOLDER = '__SET_IN_env.local__'
+
 const MAPPINGS = {
   QUANTIFY_PORT: 'PORT',
   QUANTIFY_DATABASE_URL: 'DATABASE_URL',
@@ -15,7 +17,7 @@ function normalizedValue(value: string | undefined): string | undefined {
     return undefined
   }
   const trimmed = value.trim()
-  return trimmed === '' ? undefined : trimmed
+  return trimmed === '' || trimmed === SECRET_PLACEHOLDER ? undefined : trimmed
 }
 
 export function applyQuantifyEnvOverrides(env: QuantifyEnv = process.env): QuantifyEnv {

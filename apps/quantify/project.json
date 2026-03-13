@@ -5,9 +5,16 @@
   "projectType": "application",
   "tags": ["scope:quantify", "type:app", "framework:nestjs"],
   "targets": {
+    "prisma:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @net/quantify run prisma:generate"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/apps/quantify/dist"],
+      "dependsOn": ["^build", "prisma:generate"],
       "options": {
         "command": "pnpm --filter @net/quantify run build"
       }
