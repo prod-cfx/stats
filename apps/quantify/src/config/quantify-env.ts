@@ -6,6 +6,8 @@ const MAPPINGS = {
   QUANTIFY_REDIS_URL: 'REDIS_URL',
   QUANTIFY_APP_SECRET: 'APP_SECRET',
   QUANTIFY_JWT_SECRET: 'JWT_SECRET',
+  QUANTIFY_UNIAPI_API_KEY: 'UNIAPI_API_KEY',
+  QUANTIFY_EXCHANGE_ACCOUNT_CRYPTO_KEY: 'EXCHANGE_ACCOUNT_CRYPTO_KEY',
 } as const
 
 function normalizedValue(value: string | undefined): string | undefined {
