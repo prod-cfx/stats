@@ -42,6 +42,15 @@ test('quantify runtime locates workspace root dynamically', () => {
   assert.match(mainSource, /pnpm-workspace\.yaml/)
 })
 
+test('backend runtime locates workspace root dynamically', () => {
+  const mainSource = fs.readFileSync(
+    path.join(repoRoot, 'apps/backend/src/main.ts'),
+    'utf8',
+  )
+
+  assert.match(mainSource, /pnpm-workspace\.yaml/)
+})
+
 test('quantify declares runtime deps needed by bundled workspace config code', () => {
   const pkg = JSON.parse(
     fs.readFileSync(path.join(repoRoot, 'apps/quantify/package.json'), 'utf8'),
