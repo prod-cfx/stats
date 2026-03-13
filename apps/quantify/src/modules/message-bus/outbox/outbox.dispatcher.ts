@@ -69,6 +69,7 @@ export class OutboxDispatcher {
         const started = Date.now()
         // 下游 Bull 发布（沿用现有队列与去重策略）
         await this.bus.publish<any>(msg.topic, msg.type, msg.payload, {
+          correlationId: msg.correlationId || undefined,
           dedupeKey: msg.dedupeKey || undefined,
           priority: msg.priority || undefined,
           attempts: this.publishAttempts,

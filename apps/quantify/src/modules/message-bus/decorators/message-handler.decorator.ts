@@ -1,8 +1,9 @@
-import { Process } from '@nestjs/bull'
+import { Process, Processor } from '@nestjs/bull'
 import { Job } from 'bull'
 import { MessageEnvelope } from '../message-bus.types'
 import { IdempotentConsumer } from './idempotent-consumer.decorator'
 import { MessageBusService } from '../message-bus.service'
+import { MESSAGE_BUS_QUEUE } from '../message-bus.types'
 
 export function MessageHandler<TPayload = any>(opts: {
   topic: string
@@ -15,6 +16,9 @@ export function MessageHandler<TPayload = any>(opts: {
     propertyKey: string,
     descriptor: TypedPropertyDescriptor<(job: Job<MessageEnvelope<TPayload>>) => any>,
   ) {
+    // 让仅使用 @MessageHandler 的类也具备队列消费元数据，避免遗漏 @Processor(queue)
+    Processor(MESSAGE_BUS_QUEUE)(target.constructor)
+
     // 绑定 Bull 的 topic 处理
     Process(opts.topic)(target, propertyKey, descriptor as any)
 

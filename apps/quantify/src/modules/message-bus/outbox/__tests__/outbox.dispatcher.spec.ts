@@ -84,6 +84,7 @@ describe('OutboxDispatcher', () => {
       'test.type',
       { ok: true },
       expect.objectContaining({
+        correlationId: 'cid-1',
         dedupeKey: 'dedupe-1',
         priority: 1,
         attempts: 3,

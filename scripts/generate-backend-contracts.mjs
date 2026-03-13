@@ -25,7 +25,7 @@ await generateZodClientFromOpenAPI({
     baseUrl: '/api/v1',
     apiClientName: 'aiBackendClient',
     withDocs: true,
-    withDeprecated: true,
+    withDeprecatedEndpoints: true,
     shouldExportAllSchemas: true,
   },
 })
