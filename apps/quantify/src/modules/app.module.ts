@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { BullModule } from '@nestjs/bull'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
@@ -26,6 +27,8 @@ import { LlmStrategiesModule } from './llm-strategies/llm-strategies.module'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen/llm-strategy-codegen.module'
 import { LlmStrategySubscriptionsModule } from './llm-strategy-subscriptions/llm-strategy-subscriptions.module'
 import { MarketDataModule } from './market-data/market-data.module'
+import { MessageBusModule } from './message-bus/message-bus.module'
+import { isMessageBusRuntimeEnabled } from './message-bus/message-bus.runtime'
 import { PositionsModule } from './positions/positions.module'
 import { SettingsModule } from './settings/settings.module'
 import { StrategyInstancesModule } from './strategy-instances/strategy-instances.module'
@@ -36,6 +39,25 @@ import { TradingModule } from './trading/trading.module'
 
 // 缁熶竴鐜璇嗗埆锛氭敮鎸?APP_ENV/NODE_ENV fallback 鍜屽埆鍚嶏紙prod/stage 绛夛級
 const currentEnv = defaultEnvAccessor.appEnv()
+const bullImports = isMessageBusRuntimeEnabled()
+  ? [
+      BullModule.forRootAsync({
+        useFactory: (env: EnvService) => {
+          const url = env.getString('REDIS_URL')
+          if (!url) {
+            throw new Error('REDIS_URL is required for Bull queue initialization')
+          }
+
+          return { url }
+        },
+        inject: [EnvService],
+      }),
+    ]
+  : []
+
+const infrastructureImports = isMessageBusRuntimeEnabled()
+  ? [MessageBusModule]
+  : []
 
 @Module({
   imports: [
@@ -65,10 +87,12 @@ const currentEnv = defaultEnvAccessor.appEnv()
       },
       inject: [EnvService],
     }),
+    ...bullImports,
     CacheModule, // 蹇呴』鍦?WinstonModule 涔嬪悗,鍥犱负 RedisService 渚濊禆 WINSTON_MODULE_NEST_PROVIDER
     TransactionEventsModule, // 鍏ㄥ眬浜嬪姟浜嬩欢鏈嶅姟
     PrismaModule, // Global 妯″潡锛岄渶瑕佸湪鍏朵粬妯″潡涔嬪墠瀵煎叆
     ScheduleModule.forRoot(),
+    ...infrastructureImports,
     HealthModule,
     SettingsModule,
     BacktestingModule,

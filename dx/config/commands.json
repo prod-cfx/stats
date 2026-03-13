@@ -122,7 +122,7 @@
       }
     },
     "contracts": {
-      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; pnpm exec openapi-zod-client dist/openapi/backend.json --output packages/api-contracts/src/generated/backend.ts --api-client-name aiBackendClient --base-url \"/api/v1\" --with-alias --with-docs --with-deprecated --export-schemas --prettier prettier.config.js'",
+      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; node scripts/generate-backend-contracts.mjs'",
       "app": "backend",
       "description": "生成 API 合约 (packages/api-contracts)"
     }

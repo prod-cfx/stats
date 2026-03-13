@@ -50,7 +50,9 @@
         "command": "pnpm exec ts-node -r tsconfig-paths/register src/swagger/export-openapi.ts",
         "cwd": "apps/quantify",
         "env": {
-          "SKIP_PRISMA_CONNECT": "true"
+          "SKIP_PRISMA_CONNECT": "true",
+          "MESSAGEBUS_RUNTIME_ENABLED": "false",
+          "EXCHANGE_ACCOUNT_CRYPTO_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         }
       }
     },

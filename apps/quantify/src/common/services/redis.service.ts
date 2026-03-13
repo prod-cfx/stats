@@ -3,10 +3,12 @@ import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import Redis from 'ioredis'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { defaultEnvAccessor } from '../env/env.accessor'
 
 @Injectable()
 export class RedisService implements OnApplicationShutdown {
   private readonly client: Redis
+  private readonly offlinePlaceholder: boolean
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
@@ -15,6 +17,8 @@ export class RedisService implements OnApplicationShutdown {
     this.logger.debug?.('[RedisService] constructor: creating client...')
     try {
       this.client = this.createClient()
+      this.offlinePlaceholder = !this.configService.get<string>('redis.url')
+        && defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)
       this.logger.debug?.('[RedisService] constructor: client created successfully')
       this.registerEvents()
     } catch (error) {
@@ -28,6 +32,17 @@ export class RedisService implements OnApplicationShutdown {
     if (url) {
       this.logger.debug?.('[RedisService] createClient: using URL connection (url present)')
       return new Redis(url)
+    }
+
+    if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)) {
+      this.logger.warn?.('[RedisService] offline mode detected, creating lazy Redis client placeholder')
+      return new Redis({
+        host: '127.0.0.1',
+        port: 0,
+        lazyConnect: true,
+        maxRetriesPerRequest: 0,
+        enableOfflineQueue: false,
+      })
     }
 
     throw new Error('Redis configuration is incomplete. Please set REDIS_URL.')
@@ -62,6 +77,11 @@ export class RedisService implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
+    if (this.offlinePlaceholder) {
+      this.client.disconnect()
+      return
+    }
+
     try {
       await this.client.quit()
     } catch (error) {

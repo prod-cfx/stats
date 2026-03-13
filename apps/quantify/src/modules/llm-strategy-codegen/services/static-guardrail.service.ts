@@ -25,7 +25,7 @@ export class StaticGuardrailService {
       if (pattern.test(script)) {
         return {
           passed: false,
-          reason: `绛栫暐鑴氭湰浣跨敤浜嗙鐢ㄨ兘鍔? ${pattern.source}`,
+          reason: `策略脚本使用了禁用能力: ${pattern.source}`,
         }
       }
     }
@@ -33,7 +33,7 @@ export class StaticGuardrailService {
     if (/helpers\s*\[\s*[^'"]/.test(script)) {
       return {
         passed: false,
-        reason: '绂佹浣跨敤鍔ㄦ€?helper 涓嬫爣璁块棶',
+        reason: '禁止使用动态 helper 下标访问',
       }
     }
 
@@ -45,7 +45,7 @@ export class StaticGuardrailService {
       if (!ALLOWED_HELPER_PREFIXES.includes(prefix as (typeof ALLOWED_HELPER_PREFIXES)[number])) {
         return {
           passed: false,
-          reason: `妫€娴嬪埌鏈巿鏉?helper 璺緞: helpers.${namespace}`,
+          reason: `检测到未授权 helper 路径: helpers.${namespace}`,
         }
       }
     }
