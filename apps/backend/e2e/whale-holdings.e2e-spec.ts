@@ -119,7 +119,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     expect(btc.positionValueUsd).toBe(1_200_000)
     expect(btc.side).toBe('LONG')
 
-    // 2）不传 symbol，降低 minPositionValueUsd，应包含 BTC 与 ETH 两个地址
+    // 2）不传 symbol，minPositionValueUsd=100k 时应包含三条记录
     const allHoldings = await whaleHoldingsService.getCurrentHoldings({
       minPositionValueUsd: 100_000,
       limit: 10,
@@ -127,12 +127,12 @@ describe('WhaleHoldingsService (E2E)', () => {
 
     const addresses = allHoldings.map(h => `${h.userAddress}-${h.symbol}`).sort()
     expect(addresses).toEqual([
+      '0xWhaleAddress1-BTC',
       '0xWhaleAddress2-BTC',
       '0xWhaleAddress3-ETH',
     ])
   })
 })
-
 
 
 

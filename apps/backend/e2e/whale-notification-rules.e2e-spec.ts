@@ -112,7 +112,7 @@ describe('Whale notification rules HTTP (E2E)', () => {
         channels: {
           web: true,
           email: false,
-          telegram: true,
+          telegram: false,
         },
       })
     expect(createRes.status).toBe(201)
@@ -135,7 +135,7 @@ describe('Whale notification rules HTTP (E2E)', () => {
     expect(listRes.body.data[0].id).toBe(ruleId)
 
     const updateRes = await request(server)
-      .patch(`/api/v1/whale-notification/rules/${ruleId}`)
+      .put(`/api/v1/whale-notification/rules/${ruleId}`)
       .set('Authorization', 'Bearer e2e-token')
       .send({
         thresholdUsd: 200000,

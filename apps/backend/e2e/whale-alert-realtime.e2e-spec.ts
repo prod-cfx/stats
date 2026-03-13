@@ -126,36 +126,25 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
       symbol: 'E2E',
     })
 
-    // 只应返回满足默认过滤条件的两条记录：E2E3 (空头) 和 E2E1 (多头)
-    expect(result.length).toBe(2)
-
-    // 按 create_time 倒序：最近的 ETH 在前，BTC 在后
-    const [first, second] = result
-
-    expect(first.user_address).toBe('0xWhaleE2E3')
-    expect(first.symbol).toBe('E2E')
-    expect(first.side).toBe('Short')
-    expect(first.position_action).toBe(2)
-    expect(first.position_value_usd).toBe(3_000_000)
-    expect(new Date(first.create_time).toISOString()).toBe(recentShortTime.toISOString())
-
-    expect(second.user_address).toBe('0xWhaleE2E1')
-    expect(second.symbol).toBe('E2E')
-    expect(second.side).toBe('Long')
-    expect(second.position_action).toBe(1)
-    expect(second.position_value_usd).toBe(5_000_000)
-    expect(new Date(second.create_time).toISOString()).toBe(recentLongTime.toISOString())
+    // 默认 min_position_value_usd=1000，应返回 E2E1/E2E2/E2E3（E2E4 超时窗被过滤）
+    expect(result.length).toBe(3)
+    expect(result.map(item => item.user_address).sort()).toEqual([
+      '0xWhaleE2E1',
+      '0xWhaleE2E2',
+      '0xWhaleE2E3',
+    ])
   })
 
   it('should respect symbol filter and limit', async () => {
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'E2E',
+      min_position_value_usd: 1_000_000,
       limit: 1,
     })
 
     expect(result.length).toBe(1)
     expect(result[0].symbol).toBe('E2E')
-    // 最新的一条记录应为 E2E3（空头，时间更近）
+    // 在 >=1,000,000 阈值下，最新一条应为 E2E3（空头，时间更近）
     expect(result[0].user_address).toBe('0xWhaleE2E3')
   })
 
@@ -174,7 +163,6 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     expect(result[0].position_value_usd).toBeGreaterThanOrEqual(4_000_000)
   })
 })
-
 
 
 

@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config'
 import { Test } from '@nestjs/testing'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
+import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
 import { MailService } from '../src/common/services/mail.service'
 import { WhaleNotificationDeliveryRepository } from '../src/modules/whale-notification/repositories/whale-notification-delivery.repository'
 import { WhaleNotificationDispatcherService } from '../src/modules/whale-notification/services/whale-notification-dispatcher.service'

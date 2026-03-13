@@ -256,48 +256,39 @@ describe('Polymarket markets job (E2E)', () => {
       usedCursor?: boolean
     }
 
-    // 第一轮：应只处理 crypto 市场（1 个），offset 应基于 API 返回数量推进
-    expect(run1.fetchedCount).toBe(1)
-    expect(cursor1.offset).toBe(mockedMarketsPage1.length)
+    // 单次 run 会按 maxPagesPerRun 连续拉取页面：
+    // 第一页(100条) + 第二页(1条) 共处理 2 个 crypto 市场，并在末页后重置 offset
+    expect(run1.fetchedCount).toBe(2)
+    expect(cursor1.offset).toBe(0)
     expect(cursor1.nextCursor).toBeNull()
     expect(cursor1.usedCursor).toBe(false)
 
     const marketsAfterRun1 = await client.polymarketMarket.findMany({
-      where: { marketId: 'm-1' },
-      orderBy: { id: 'asc' },
+      where: {
+        marketId: {
+          in: ['m-1', 'm-3'],
+        },
+      },
+      orderBy: { marketId: 'asc' },
     })
-    expect(marketsAfterRun1.length).toBe(1)
-    expect(marketsAfterRun1[0].marketId).toBe('m-1')
+    expect(marketsAfterRun1.length).toBe(2)
+    expect(marketsAfterRun1.map(m => m.marketId)).toEqual(['m-1', 'm-3'])
     expect(marketsAfterRun1[0].category).toBe('crypto')
 
     const outcomesAfterRun1 = await client.polymarketOutcome.findMany({
       where: {
         outcomeTokenId: {
-          in: ['token-no', 'token-yes'],
+          in: ['token-eth-yes', 'token-no', 'token-yes'],
         },
       },
       orderBy: { outcomeTokenId: 'asc' },
     })
-    expect(outcomesAfterRun1.length).toBe(2)
-    expect(outcomesAfterRun1[0].outcomeTokenId).toBe('token-no')
-    expect(outcomesAfterRun1[1].outcomeTokenId).toBe('token-yes')
-
-    // 第二轮：继续从 offset 开始，处理下一页；由于返回数量不足一页，应重置 offset 为 0
-    const run2 = await job.run({
-      ...baseCtx,
-      cursor: run1.newCursor as string,
-    })
-
-    const cursor2 = JSON.parse(run2.newCursor as string) as {
-      nextCursor?: string | null
-      offset?: number
-      usedCursor?: boolean
-    }
-
-    expect(run2.fetchedCount).toBe(1)
-    expect(cursor2.offset).toBe(0)
-    expect(cursor2.nextCursor).toBeNull()
-    expect(cursor2.usedCursor).toBe(false)
+    expect(outcomesAfterRun1.length).toBe(3)
+    expect(outcomesAfterRun1.map(o => o.outcomeTokenId)).toEqual([
+      'token-eth-yes',
+      'token-no',
+      'token-yes',
+    ])
 
     // 验证 offset/cursor 策略：第二轮调用应基于第一轮返回数量推进 offset
     expect(listMarketsSpy).toHaveBeenCalledTimes(2)
@@ -313,30 +304,6 @@ describe('Polymarket markets job (E2E)', () => {
       cursor: null,
     })
 
-    const marketsAfterRun2 = await client.polymarketMarket.findMany({
-      where: {
-        marketId: {
-          in: ['m-1', 'm-3'],
-        },
-      },
-      orderBy: { marketId: 'asc' },
-    })
-    expect(marketsAfterRun2.map(m => m.marketId)).toEqual(['m-1', 'm-3'])
-
-    const outcomesAfterRun2 = await client.polymarketOutcome.findMany({
-      where: {
-        outcomeTokenId: {
-          in: ['token-eth-yes', 'token-no', 'token-yes'],
-        },
-      },
-      orderBy: { outcomeTokenId: 'asc' },
-    })
-    expect(outcomesAfterRun2.map(o => o.outcomeTokenId)).toEqual([
-      'token-eth-yes',
-      'token-no',
-      'token-yes',
-    ])
   })
 })
-
 

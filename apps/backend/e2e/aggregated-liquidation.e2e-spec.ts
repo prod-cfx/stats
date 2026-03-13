@@ -132,10 +132,10 @@ describe('Aggregated liquidation service (E2E)', () => {
     expect(item1h?.shortUsd).toBe(50)
     expect(item1h?.totalUsd).toBe(150)
 
-    // 4h: 对 BINANCE + OKX 行求和
-    expect(item4h?.longUsd).toBe(200 + 150)
-    expect(item4h?.shortUsd).toBe(80 + 70)
-    expect(item4h?.totalUsd).toBe(200 + 150 + 80 + 70)
+    // 4h: summary 存在 AGGREGATED 行时优先使用该行
+    expect(item4h?.longUsd).toBe(9999)
+    expect(item4h?.shortUsd).toBe(8888)
+    expect(item4h?.totalUsd).toBe(9999 + 8888)
   })
 
   it('should return exchange breakdown with TOTAL row for BTC 4h', async () => {
@@ -173,7 +173,6 @@ describe('Aggregated liquidation service (E2E)', () => {
     expect(okx?.shortUsd).toBe(70)
   })
 })
-
 
 
 
