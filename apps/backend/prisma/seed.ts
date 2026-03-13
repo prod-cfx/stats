@@ -8,9 +8,9 @@ loadEnvironment({ basePath: rootDir })
 
 // Prisma 7: 使用 Driver Adapter
 import { PrismaPg } from '@prisma/adapter-pg'
-import { AdminMenuType, PrincipalType, PrismaClient } from '@prisma/client'
 import { hashSync } from 'bcrypt'
 import { Pool } from 'pg'
+import { AdminMenuType, PrincipalType, PrismaClient } from '../generated/prisma'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { AppRole } from '../src/modules/auth/rbac/permissions'
 import { seedOrderbookConfigs } from './seeds/orderbook-configs.seed'

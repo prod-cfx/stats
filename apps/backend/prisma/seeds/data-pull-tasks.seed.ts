@@ -1,5 +1,5 @@
-import type { PrismaClient } from '@prisma/client'
 import { OI_SYMBOLS } from '@ai/shared'
+import type { PrismaClient } from '../../generated/prisma'
 
 const COINGLASS_TAKER_VOLUME_RANGES = ['5m', '15m', '30m', '1h', '4h', '12h', '24h'] as const
 

@@ -90,12 +90,12 @@
     "all": {
       "dev": {
         "sequential": true,
-        "commands": ["build.backend.dev", "build.contracts", "build.parallelWeb.dev"],
+        "commands": ["build.backend.dev", "build.quantify.dev", "build.contracts", "build.parallelWeb.dev"],
         "description": "构建所有应用(开发环境，含 contracts，Web并行)"
       },
       "prod": {
         "sequential": true,
-        "commands": ["build.backend.prod", "build.contracts", "build.parallelWeb.prod"],
+        "commands": ["build.backend.prod", "build.quantify.prod", "build.contracts", "build.parallelWeb.prod"],
         "description": "构建所有应用(生产环境，Web并行)"
       }
     },
@@ -195,7 +195,7 @@
         "dangerous": true,
         "description": "重置数据库(开发环境)",
         "quantify": {
-          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:reset",
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:db:reset",
           "app": "quantify",
           "dangerous": true,
           "skipEnvValidation": true,
@@ -390,6 +390,47 @@
       "args": [],
       "description": "启动完整开发环境（集成start-dev.sh功能）",
       "interactive": true
+    },
+    "stack": {
+      "internal": "pm2-stack",
+      "interactive": true,
+      "description": "PM2 交互式服务栈（服务、端口清理、缓存清理均可配置）",
+      "stack": {
+        "ecosystemConfig": "ecosystem.config.cjs",
+        "pm2Bin": "pnpm pm2",
+        "services": [
+          "backend",
+          "front",
+          "admin",
+          "quantify"
+        ],
+        "preflight": {
+          "pm2Reset": true,
+          "killPorts": [
+            3000,
+            3001,
+            3500,
+            3010
+          ],
+          "forcePortCleanup": true,
+          "cleanPaths": [
+            "apps/front/.next",
+            "dist/front",
+            "apps/front/.eslintcache",
+            "apps/admin-front/node_modules/.vite",
+            "dist/admin-front",
+            "apps/admin-front/.eslintcache",
+            "apps/quantify/dist",
+            "apps/quantify/.eslintcache"
+          ],
+          "cleanTsBuildInfo": true,
+          "cleanTsBuildInfoDirs": [
+            "apps/front",
+            "apps/admin-front",
+            "apps/quantify"
+          ]
+        }
+      }
     },
     "stagewise-front": {
       "command": "npx stagewise@latest -b -a 3001 -p 3002 -w ./apps/front",

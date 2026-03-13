@@ -1,23 +1,23 @@
-// Prisma 7: 鏄惧紡鍔犺浇鐜鍙橀噺锛圥risma 7 涓嶅啀鑷姩鍔犺浇锛?
+// Prisma 7: explicitly load environment variables.
 import * as path from 'node:path'
 import { loadEnvironment } from '@net/config'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
+import { PrismaClient } from '../generated/prisma'
 import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 
-// 浣跨敤缁熶竴鐨?loadEnvironment 鍔犺浇鐜鍙橀噺
+// Load environment variables using the shared loader.
 const rootDir = path.resolve(__dirname, '../../..')
 loadEnvironment({ basePath: rootDir })
 applyQuantifyEnvOverrides()
 
-// 浣跨敤缁熶竴鐨勭幆澧冨彉閲忚闂櫒
+// Access environment variables via the shared accessor.
 const env = createEnvAccessor()
 
 const dbUrl = env.str('DATABASE_URL')
 if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
-  console.error('鉂?DATABASE_URL 鏈厤缃垨浠嶄负鍗犱綅绗︺€傝鍦?.env.*.local 涓缃湁鏁堢殑鏁版嵁搴撹繛鎺ュ瓧绗︿覆銆?)
+  console.error('DATABASE_URL is not configured. Set a valid value in .env.*.local.')
   process.exit(1)
 }
 const pool = new Pool({ connectionString: dbUrl })
@@ -28,15 +28,15 @@ async function seedAiProviderKeys() {
   const rawKey = process.env.UNIAPI_API_KEY
   const apiKey = rawKey?.trim()
 
-  // 鍏煎 .env.* 涓殑鍗犱綅绗?__SET_IN_env.local__锛屼互鍙婄┖鐧藉€?
+  // Skip provider seeding when the key is missing or still a placeholder.
   if (!apiKey || apiKey === '__SET_IN_env.local__') {
     console.warn(
-      '[seed] 妫€娴嬪埌鏈厤缃?UNIAPI_API_KEY锛堟垨浠嶄负鍗犱綅绗?__SET_IN_env.local__锛夛紝璺宠繃 AiProviderKey(uniapi/default) 鍒濆鍖栥€傝鍦ㄦ湰鍦?.env.<env>.local 涓厤缃?UNIAPI_API_KEY 鍚庨噸鏂拌繍琛?seed銆?,
+      '[seed] UNIAPI_API_KEY is not configured. Skipping AiProviderKey seeding for uniapi/default.',
     )
     return
   }
 
-  console.log('[seed] 寮€濮嬪垵濮嬪寲 AI 渚涘簲鍟嗛厤缃? uniapi/default...')
+  console.log('[seed] Seeding AI provider config for uniapi/default...')
 
   interface AiProviderKeyDelegate {
     upsert: (args: unknown) => Promise<unknown>
@@ -48,7 +48,7 @@ async function seedAiProviderKeys() {
 
   if (!client.aiProviderKey || typeof client.aiProviderKey.upsert !== 'function') {
     console.warn(
-      '[seed] 褰撳墠 Prisma Client 涓嶅寘鍚?aiProviderKey 濮旀墭锛屽彲鑳芥槸 schema 涓庤縼绉绘湭鍚屾锛岃烦杩?AiProviderKey 鍒濆鍖栥€?,
+      '[seed] Prisma Client does not expose aiProviderKey. Skipping AiProviderKey seeding.',
     )
     return
   }
@@ -82,27 +82,27 @@ async function seedAiProviderKeys() {
     },
   })
 
-  console.log('[seed] AI 渚涘簲鍟嗛厤缃?uniapi/default 鍒濆鍖栧畬鎴?)
+  console.log('[seed] AI provider config seeded for uniapi/default')
 }
 
 async function main() {
-  console.log('寮€濮嬪～鍏呯瀛愭暟鎹?..')
+  console.log('Starting quantify seed...')
 
   await seedAiProviderKeys()
 
-  console.log('绉嶅瓙鏁版嵁濉厖瀹屾垚')
+  console.log('Quantify seed finished')
 }
 
 main()
   .then(async () => {
     await prisma.$disconnect()
-    // Prisma 7: 鍏抽棴杩炴帴姹?
+    // Prisma 7: close the underlying pg pool explicitly.
     await pool.end()
   })
   .catch(async (e) => {
-    console.error('绉嶅瓙鏁版嵁濉厖澶辫触:', e)
+    console.error('Quantify seed failed:', e)
     await prisma.$disconnect()
-    // Prisma 7: 鍏抽棴杩炴帴姹?
+    // Prisma 7: close the underlying pg pool explicitly.
     await pool.end()
     process.exit(1)
   })

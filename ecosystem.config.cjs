@@ -155,6 +155,49 @@ function createAdminConfig() {
   }
 }
 
+/**
+ * 创建 Quantify 配置
+ */
+function createQuantifyConfig() {
+  if (isProduction) {
+    return {
+      name: 'quantify',
+      cwd: projectRoot,
+      script: 'apps/quantify/dist/apps/quantify/src/main.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env: {
+        NODE_ENV: 'production',
+        APP_ENV: 'production',
+        PORT: 3010,
+      },
+      max_memory_restart: '1G',
+      error_file: path.join(projectRoot, 'logs/pm2-prod/quantify-error.log'),
+      out_file: path.join(projectRoot, 'logs/pm2-prod/quantify-out.log'),
+      merge_logs: true,
+      autorestart: true,
+      watch: false,
+    }
+  }
+
+  return {
+    name: 'quantify',
+    cwd: projectRoot,
+    script: 'scripts/pm2/run-dx.cjs',
+    args: 'start quantify --dev',
+    env: {
+      NODE_ENV: 'development',
+      APP_ENV: 'development',
+    },
+    max_memory_restart: '500M',
+    error_file: './logs/pm2/quantify-error.log',
+    out_file: './logs/pm2/quantify-out.log',
+    merge_logs: true,
+    autorestart: true,
+    watch: false,
+  }
+}
+
 module.exports = {
-  apps: [createBackendConfig(), createFrontConfig(), createAdminConfig()],
+  apps: [createBackendConfig(), createFrontConfig(), createAdminConfig(), createQuantifyConfig()],
 }
