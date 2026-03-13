@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only=false --project tsconfig.json -r tsconfig-paths/register src/main.ts",
     "start": "node dist/main.js",
-    "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
+    "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json && node ../../scripts/copy-prisma-client-to-dist.cjs backend",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -41,6 +41,7 @@
     "@nktkas/hyperliquid": "^0.27.1",
     "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.4.2",
+    "@prisma/client-runtime-utils": "^7.4.2",
     "ajv": "^8.17.1",
     "async-mutex": "^0.5.0",
     "bcrypt": "^6.0.0",
