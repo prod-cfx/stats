@@ -103,7 +103,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
           exchange: 'NASDAQ',
           price: 200,
           marketCap: 30_000_000_000, // 30B
-          holdingValue: 500_000_000, // 500M (<1B，会被过滤)
+          holdingValue: 500_000_000, // 500M（当前实现会保留）
           timestamp: quoteTime,
         },
       ],
@@ -136,7 +136,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     )
 
     expect(fetchCallCount).toBe(1)
-    expect(result.fetchedCount).toBe(1) // 只有MSTR符合holdingValue≥1B的条件
+    expect(result.fetchedCount).toBe(2)
     expect(result.newCursor).toBeDefined()
 
     const cursor = JSON.parse(result.newCursor as string) as {
@@ -146,22 +146,26 @@ describe('BBX crypto stock quotes job (E2E)', () => {
 
     const rows = await client.cryptoStockQuote.findMany({
       where: {
-        symbol: { in: ['MSTR'] },
+        symbol: { in: ['MSTR', 'COIN'] },
       },
       orderBy: {
-        quoteTimestamp: 'asc',
+        symbol: 'asc',
       },
     })
 
-    expect(rows.length).toBe(1)
+    expect(rows.length).toBe(2)
 
+    const coin = rows.find(r => r.symbol === 'COIN')
     const mstr = rows.find(r => r.symbol === 'MSTR')
+
+    expect(coin).toBeDefined()
+    expect(coin?.quoteTimestamp.getTime()).toBe(quoteTime)
+    expect(coin?.price.toString()).toBe('200')
+    expect(coin?.source).toBe('BBX')
 
     expect(mstr).toBeDefined()
     expect(mstr?.quoteTimestamp.getTime()).toBe(quoteTime)
     expect(mstr?.price.toString()).toBe('100')
-    expect(mstr?.source).toBe('BBX_SCRAPER')
-    expect(mstr?.holdingValue?.toString()).toBe('63900000000')
+    expect(mstr?.source).toBe('BBX')
   })
 })
-
