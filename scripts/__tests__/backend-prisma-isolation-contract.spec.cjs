@@ -5,18 +5,18 @@ const path = require('node:path')
 
 const repoRoot = path.resolve(__dirname, '../..')
 
-test('quantify build depends on prisma generate', () => {
+test('backend build depends on prisma generate', () => {
   const project = JSON.parse(
-    fs.readFileSync(path.join(repoRoot, 'apps/quantify/project.json'), 'utf8'),
+    fs.readFileSync(path.join(repoRoot, 'apps/backend/project.json'), 'utf8'),
   )
 
-  assert.ok(project.targets['prisma:generate'], 'missing quantify prisma:generate target')
+  assert.ok(project.targets['prisma:generate'], 'missing backend prisma:generate target')
   assert.deepEqual(project.targets.build.dependsOn, ['^build', 'prisma:generate'])
 })
 
-test('quantify prisma client generates into app-local output', () => {
+test('backend prisma client generates into app-local output', () => {
   const baseSchema = fs.readFileSync(
-    path.join(repoRoot, 'apps/quantify/prisma/schema/base.prisma'),
+    path.join(repoRoot, 'apps/backend/prisma/schema/base.prisma'),
     'utf8',
   )
 
