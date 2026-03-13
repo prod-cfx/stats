@@ -23,6 +23,16 @@ test('quantify package start script points at built entry file', () => {
   )
 })
 
+test('backend package start script points at built entry file', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'apps/backend/package.json'), 'utf8'),
+  )
+  assert.equal(
+    pkg.scripts.start,
+    'TS_NODE_BASEURL=./dist node -r tsconfig-paths/register dist/apps/backend/src/main.js',
+  )
+})
+
 test('quantify runtime locates workspace root dynamically', () => {
   const mainSource = fs.readFileSync(
     path.join(repoRoot, 'apps/quantify/src/main.ts'),
