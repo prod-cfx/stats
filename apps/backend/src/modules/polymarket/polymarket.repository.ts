@@ -1,4 +1,4 @@
-import type { PolymarketMarket as PolymarketMarketModel, Prisma } from '@prisma/client'
+import type { PolymarketMarket as PolymarketMarketModel, Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'

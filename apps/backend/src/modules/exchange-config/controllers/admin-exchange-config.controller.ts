@@ -1,4 +1,4 @@
-import type { ExchangeConfig } from '@prisma/client'
+import type { ExchangeConfig } from '@/prisma/prisma.types'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,

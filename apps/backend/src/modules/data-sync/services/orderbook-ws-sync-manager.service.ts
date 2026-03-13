@@ -2,7 +2,7 @@
 
 import type { OrderbookAdapterKey, OrderbookWsAdapter } from './orderbook-ws-adapter'
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 // Nest 注入需要运行时引用 Service，保留值导入

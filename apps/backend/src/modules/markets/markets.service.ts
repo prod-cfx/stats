@@ -18,7 +18,7 @@ import type {
   TradingVenueType,
 } from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
-import type { MarketTrade, Prisma } from '@prisma/client'
+import type { MarketTrade, Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

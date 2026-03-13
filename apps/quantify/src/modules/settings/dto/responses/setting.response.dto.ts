@@ -13,31 +13,31 @@ interface SettingData {
 }
 
 export class SettingResponseDto {
-  @ApiProperty({ description: '閰嶇疆ID' })
+  @ApiProperty({ description: '配置ID' })
     id: string
 
-  @ApiProperty({ description: '閰嶇疆閿悕' })
+  @ApiProperty({ description: '配置键名' })
     key: string
 
-  @ApiProperty({ description: '閰嶇疆鍊? })
+  @ApiProperty({ description: '配置值' })
     value: string
 
-  @ApiProperty({ description: '鍊肩被鍨? })
+  @ApiProperty({ description: '值类型' })
     type: string
 
-  @ApiProperty({ description: '閰嶇疆鎻忚堪' })
+  @ApiProperty({ description: '配置描述' })
     description?: string
 
-  @ApiProperty({ description: '閰嶇疆鍒嗙被' })
+  @ApiProperty({ description: '配置分类' })
     category: string
 
-  @ApiProperty({ description: '鏄惁绯荤粺閰嶇疆' })
+  @ApiProperty({ description: '是否系统配置' })
     isSystem: boolean
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
     createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
     updatedAt: Date
 
   constructor(setting: SettingData) {
@@ -52,3 +52,4 @@ export class SettingResponseDto {
     this.updatedAt = setting.updatedAt || new Date()
   }
 }
+

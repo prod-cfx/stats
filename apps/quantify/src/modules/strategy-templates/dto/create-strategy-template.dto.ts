@@ -23,27 +23,27 @@ import {
 import { IsSafeFieldNameArray } from '../validators/safe-field-name.validator'
 
 /**
- * 绛栫暐鑵垮畾涔?DTO
+ * 策略腿定义 DTO
  */
 export class StrategyLegDefinitionDto implements StrategyLegDefinition {
-  @ApiProperty({ description: '鍦ㄧ瓥鐣ユā鏉垮唴鍞竴鐨?leg ID锛屼緥濡?btc銆乪th', example: 'btc' })
+  @ApiProperty({ description: '在策略模板内唯一的 leg ID，例如 btc、eth', example: 'btc' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   id!: string
 
-  @ApiProperty({ description: '浜ゆ槗瀵逛唬鐮?, example: 'BTCUSDT' })
+  @ApiProperty({ description: '交易对代码', example: 'BTCUSDT' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)
   symbol!: string
 
-  @ApiProperty({ description: 'leg 瑙掕壊', enum: STRATEGY_LEG_ROLES })
+  @ApiProperty({ description: 'leg 角色', enum: STRATEGY_LEG_ROLES })
   @IsString()
   @IsIn(STRATEGY_LEG_ROLES)
   role!: StrategyLegRole
 
-  @ApiPropertyOptional({ description: '璇?leg 鐨勮ˉ鍏呰鏄?, maxLength: 200 })
+  @ApiPropertyOptional({ description: '该 leg 的补充说明', maxLength: 200 })
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -51,15 +51,15 @@ export class StrategyLegDefinitionDto implements StrategyLegDefinition {
 }
 
 /**
- * 绛栫暐鎵ц閰嶇疆 DTO
+ * 策略执行配置 DTO
  */
 export class StrategyExecutionConfigDto implements StrategyExecutionConfig {
-  @ApiProperty({ description: '淇″彿瑙﹀彂鍛ㄦ湡', enum: MARKET_TIMEFRAMES, example: '1h' })
+  @ApiProperty({ description: '信号触发周期', enum: MARKET_TIMEFRAMES, example: '1h' })
   @IsString()
   @IsIn(MARKET_TIMEFRAMES as unknown as string[])
   timeframe!: MarketTimeframe
 
-  @ApiPropertyOptional({ description: '鍐峰嵈鏃堕棿锛堝垎閽燂級', example: 15, minimum: 1, maximum: 1440 })
+  @ApiPropertyOptional({ description: '冷却时间（分钟）', example: 15, minimum: 1, maximum: 1440 })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -69,27 +69,27 @@ export class StrategyExecutionConfigDto implements StrategyExecutionConfig {
 
 export class CreateStrategyTemplateDto {
   @ApiPropertyOptional({
-    description: '鎿嶄綔鑰?ID锛堝彲淇＄幆澧冨唴鐢辫皟鐢ㄦ柟鏄惧紡浼犲叆锛?,
+    description: '操作者 ID（可信环境内由调用方显式传入）',
     example: 'system-operator',
   })
   @IsOptional()
   @IsString()
   createdBy?: string
 
-  @ApiProperty({ description: '绛栫暐鍚嶇О', maxLength: 100 })
+  @ApiProperty({ description: '策略名称', maxLength: 100 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   name!: string
 
-  @ApiProperty({ description: '绛栫暐鎻忚堪', maxLength: 500 })
+  @ApiProperty({ description: '策略描述', maxLength: 500 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
   description!: string
 
   @ApiProperty({
-    description: '绛栫暐鐨?leg 瀹氫箟鍒楄〃锛岃嚦灏戦渶瑕佷竴涓?primary leg',
+    description: '策略的 leg 定义列表，至少需要一个 primary leg',
     type: [StrategyLegDefinitionDto],
   })
   @IsArray()
@@ -98,7 +98,7 @@ export class CreateStrategyTemplateDto {
   legs!: StrategyLegDefinition[]
 
   @ApiProperty({
-    description: '绛栫暐鎵ц閰嶇疆',
+    description: '策略执行配置',
     type: StrategyExecutionConfigDto,
   })
   @ValidateNested()
@@ -106,7 +106,7 @@ export class CreateStrategyTemplateDto {
   execution!: StrategyExecutionConfig
 
   @ApiProperty({
-    description: '鏁版嵁闇€姹傞厤缃紝key 涓?leg id锛寁alue 涓洪渶瑕佺殑鏃堕棿鍛ㄦ湡鏁扮粍',
+    description: '数据需求配置，key 为 leg id，value 为需要的时间周期数组',
     type: 'object',
     additionalProperties: { type: 'array', items: { type: 'string' } },
     example: { btc: ['15m', '1h', '4h'], eth: ['1h'] },
@@ -114,35 +114,35 @@ export class CreateStrategyTemplateDto {
   @IsObject()
   dataRequirements!: StrategyDataRequirements
 
-  @ApiProperty({ description: 'LLM 妯″瀷鍚嶇О', example: 'gpt-4.1-mini' })
+  @ApiProperty({ description: 'LLM 模型名称', example: 'gpt-4.1-mini' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   llmModel!: string
 
-  @ApiProperty({ description: 'Prompt 妯℃澘锛屾敮鎸佸崰浣嶇', maxLength: 20000 })
+  @ApiProperty({ description: 'Prompt 模板，支持占位符', maxLength: 20000 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20000)
   promptTemplate!: string
 
-  @ApiProperty({ description: '绛栫暐鑴氭湰浠ｇ爜锛岀敤浜庡鐞嗗鑵挎暟鎹苟鐢熸垚 AI prompt 鍙橀噺', maxLength: 100000 })
+  @ApiProperty({ description: '策略脚本代码，用于处理多腿数据并生成 AI prompt 变量', maxLength: 100000 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100000)
   script!: string
 
-  @ApiProperty({ description: '绛栫暐鍙傛暟 schema锛孞SON Schema 缁撴瀯', type: 'object', additionalProperties: true })
+  @ApiProperty({ description: '策略参数 schema，JSON Schema 结构', type: 'object', additionalProperties: true })
   @IsObject()
   paramsSchema!: Record<string, unknown>
 
-  @ApiPropertyOptional({ description: '鍙傛暟榛樿鍊?, type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '参数默认值', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
   defaultParams?: Record<string, unknown>
 
   @ApiPropertyOptional({
-    description: '@deprecated 浣跨敤 dataRequirements 鏇夸唬銆傜瓥鐣ヤ緷璧栫殑瀛楁鍒楄〃',
+    description: '@deprecated 使用 dataRequirements 替代。策略依赖的字段列表',
     type: [String],
     example: ['price_close', 'ma_20', 'rsi_14'],
     deprecated: true,
@@ -153,8 +153,9 @@ export class CreateStrategyTemplateDto {
   @IsSafeFieldNameArray()
   requiredFields?: string[]
 
-  @ApiPropertyOptional({ description: '棰濆鍏冧俊鎭?, type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '额外元信息', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>
 }
+

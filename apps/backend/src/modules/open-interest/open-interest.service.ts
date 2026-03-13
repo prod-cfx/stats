@@ -3,7 +3,7 @@ import type {
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

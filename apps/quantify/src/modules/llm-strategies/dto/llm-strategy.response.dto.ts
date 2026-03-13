@@ -1,65 +1,65 @@
-import type { LlmStrategy, LlmStrategyStatus } from '@prisma/client'
+import type { LlmStrategy, LlmStrategyStatus } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmStrategyResponseDto {
-  @ApiProperty({ description: 'LLM绛栫暐ID' })
+  @ApiProperty({ description: 'LLM策略ID' })
   id: string
 
-  @ApiProperty({ description: '绛栫暐鍚嶇О' })
+  @ApiProperty({ description: '策略名称' })
   name: string
 
-  @ApiProperty({ description: '绛栫暐鎻忚堪' })
+  @ApiProperty({ description: '策略描述' })
   description: string
 
-  @ApiProperty({ description: '绛栫暐鐘舵€?, enum: ['draft', 'live', 'archived'] })
+  @ApiProperty({ description: '策略状态', enum: ['draft', 'live', 'archived'] })
   status: LlmStrategyStatus
 
-  @ApiPropertyOptional({ description: '绯荤粺鎻愮ず璇?, nullable: true })
+  @ApiPropertyOptional({ description: '系统提示词', nullable: true })
   systemPrompt?: string | null
 
-  @ApiPropertyOptional({ description: '鍒濆鎻愮ず璇嶆ā鏉?, nullable: true })
+  @ApiPropertyOptional({ description: '初始提示词模板', nullable: true })
   initialPromptTemplate?: string | null
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勪氦鏄撳',
+    description: '允许的交易对',
     type: String,
     isArray: true,
   })
   allowedSymbols?: string[]
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勬椂闂村懆鏈?,
+    description: '允许的时间周期',
     type: String,
     isArray: true,
   })
   allowedTimeframes?: string[]
 
   @ApiPropertyOptional({
-    description: '椋庨櫓閰嶇疆',
+    description: '风险配置',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   riskConfig?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '鍒涘缓浜篒D' })
+  @ApiProperty({ description: '创建人ID' })
   createdBy: string
 
-  @ApiProperty({ description: '鏇存柊浜篒D' })
+  @ApiProperty({ description: '更新人ID' })
   updatedBy: string
 
   @ApiPropertyOptional({
-    description: '鍏冩暟鎹?,
+    description: '元数据',
     type: 'object',
     additionalProperties: true,
     nullable: true,
   })
   metadata?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
   constructor(model: LlmStrategy) {

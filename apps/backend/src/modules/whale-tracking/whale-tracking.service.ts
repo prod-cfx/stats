@@ -1,4 +1,4 @@
-import type { HyperliquidWhaleAlert } from '@prisma/client'
+import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
 import type {
   WhaleDiscoverResponseDto,
   WhaleDiscoverTraderAiTagDto,

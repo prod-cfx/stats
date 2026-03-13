@@ -3,13 +3,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class CreateSettingDto {
-  @ApiProperty({ description: '閰嶇疆閿悕', example: 'site.title' })
+  @ApiProperty({ description: '配置键名', example: 'site.title' })
   @IsString()
   @IsNotEmpty()
     key!: string
 
   @ApiProperty({
-    description: '閰嶇疆鍊硷紙鍙互鏄瓧绗︿覆銆佹暟瀛椼€佸竷灏斿€兼垨JSON瀵硅薄锛?,
+    description: '配置值（可以是字符串、数字、布尔值或JSON对象）',
     example: 'My Site',
     oneOf: [
       { type: 'string' },
@@ -23,7 +23,7 @@ export class CreateSettingDto {
     value!: SettingValue
 
   @ApiPropertyOptional({
-    description: '鍊肩被鍨?,
+    description: '值类型',
     example: 'string',
     enum: ['string', 'number', 'boolean', 'json'],
   })
@@ -31,17 +31,17 @@ export class CreateSettingDto {
   @IsOptional()
     type?: string
 
-  @ApiPropertyOptional({ description: '閰嶇疆鎻忚堪', example: '缃戠珯鏍囬' })
+  @ApiPropertyOptional({ description: '配置描述', example: '网站标题' })
   @IsString()
   @IsOptional()
     description?: string
 
-  @ApiPropertyOptional({ description: '閰嶇疆鍒嗙被', example: 'site' })
+  @ApiPropertyOptional({ description: '配置分类', example: 'site' })
   @IsString()
   @IsOptional()
     category?: string
 
-  @ApiPropertyOptional({ description: '鏄惁绯荤粺閰嶇疆', example: false })
+  @ApiPropertyOptional({ description: '是否系统配置', example: false })
   @IsBoolean()
   @IsOptional()
     isSystem?: boolean

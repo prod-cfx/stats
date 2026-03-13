@@ -1,6 +1,6 @@
-import type { Prisma, UserSignalExecution } from '@prisma/client'
+import type { Prisma, UserSignalExecution } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
-import { ExecutionStatus } from '@prisma/client'
+import { ExecutionStatus } from '@/prisma/prisma.types'
 
 import { PrismaService } from '@/prisma/prisma.service'
 

@@ -2,7 +2,7 @@
 
 import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import WebSocket from 'ws'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'

@@ -6,7 +6,7 @@
 
 import type { MarketBarPayload, MarketTimeframe } from '@ai/shared'
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common'
-import type { Prisma } from '@prisma/client'
+import type { Prisma } from '@/prisma/prisma.types'
 import type {
   ComputeFinancialMetricsParams,
   ComputeFinancialMetricsResult,

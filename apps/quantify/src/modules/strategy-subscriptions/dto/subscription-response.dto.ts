@@ -1,44 +1,44 @@
-import type { SubscriptionStatus as SubscriptionStatusType } from '@prisma/client'
+import type { SubscriptionStatus as SubscriptionStatusType } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { SubscriptionStatus } from '@prisma/client'
+import { SubscriptionStatus } from '@/prisma/prisma.types'
 
 export class SubscriptionResponseDto {
-  @ApiProperty({ description: '璁㈤槄 ID' })
+  @ApiProperty({ description: '订阅 ID' })
   id!: string
 
-  @ApiProperty({ description: '鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '用户 ID' })
   userId!: string
 
-  @ApiProperty({ description: '绛栫暐瀹炰緥 ID' })
+  @ApiProperty({ description: '策略实例 ID' })
   strategyInstanceId!: string
 
-  @ApiProperty({ description: '绛栫暐瀹炰緥鍚嶇О' })
+  @ApiProperty({ description: '策略实例名称' })
   strategyInstanceName!: string
 
-  @ApiProperty({ description: '绛栫暐鎻忚堪' })
+  @ApiProperty({ description: '策略描述' })
   strategyDescription!: string
 
-  @ApiProperty({ description: '璁㈤槄鐘舵€?, enum: SubscriptionStatus, enumName: 'SubscriptionStatus' })
+  @ApiProperty({ description: '订阅状态', enum: SubscriptionStatus, enumName: 'SubscriptionStatus' })
   status!: SubscriptionStatusType
 
-  @ApiPropertyOptional({ description: '鑷畾涔夊弬鏁?, nullable: true })
+  @ApiPropertyOptional({ description: '自定义参数', nullable: true })
   customParams?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '浜ゆ槗鎵€璐︽埛 ID', nullable: true })
+  @ApiPropertyOptional({ description: '交易所账户 ID', nullable: true })
   exchangeAccountId?: string | null
 
-  @ApiPropertyOptional({ description: '浜ゆ槗鎵€鏍囪瘑', nullable: true })
+  @ApiPropertyOptional({ description: '交易所标识', nullable: true })
   exchangeName?: string | null
 
-  @ApiProperty({ description: '璁㈤槄鏃堕棿' })
+  @ApiProperty({ description: '订阅时间' })
   subscribedAt!: Date
 
-  @ApiPropertyOptional({ description: '鍙栨秷璁㈤槄鏃堕棿', nullable: true })
+  @ApiPropertyOptional({ description: '取消订阅时间', nullable: true })
   unsubscribedAt?: Date | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt!: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt!: Date
 }

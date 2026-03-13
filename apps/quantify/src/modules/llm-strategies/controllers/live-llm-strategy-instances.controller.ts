@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -25,7 +25,7 @@ export class LiveLlmStrategyInstancesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇杩愯涓殑 LLM 绛栫暐瀹炰緥鍒楄〃锛堝叕寮€锛? })
+  @ApiOperation({ summary: '获取运行中的 LLM 策略实例列表（公开）' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -48,7 +48,7 @@ export class LiveLlmStrategyInstancesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '鑾峰彇杩愯涓殑 LLM 绛栫暐瀹炰緥璇︽儏锛堝叕寮€锛? })
+  @ApiOperation({ summary: '获取运行中的 LLM 策略实例详情（公开）' })
   @ApiResponse({ status: 200, type: LlmStrategyInstancePublicResponseDto })
   async detail(
     @Param('id') id: string,
@@ -58,7 +58,7 @@ export class LiveLlmStrategyInstancesController {
   }
 
   @Get(':id/signals')
-  @ApiOperation({ summary: '鑾峰彇鎸囧畾 LLM 绛栫暐瀹炰緥鐨勪俊鍙疯褰曪紙褰撳墠鍗犱綅杩斿洖绌哄垪琛級' })
+  @ApiOperation({ summary: '获取指定 LLM 策略实例的信号记录（当前占位返回空列表）' })
   @ApiOkResponse({
     schema: {
       allOf: [

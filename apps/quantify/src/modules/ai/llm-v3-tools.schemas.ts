@@ -1,36 +1,36 @@
 /**
  * LLM Orchestrated Engine v3 - Function Calling Tools Schema
- *
- * 瀹氫箟鎵€鏈?v3 寮曟搸鍙敤鐨勫伐鍏峰強鍏?JSON Schema锛岀敤浜?LLM function calling銆?
- *
+ * 
+ * 定义所有 v3 引擎可用的工具及其 JSON Schema，用于 LLM function calling。
+ * 
  * @module llm-v3-tools.schemas
  */
 
 /**
- * 宸ュ叿 1: 鑾峰彇绛栫暐鍏佽鐨勪氦鏄撴爣鐨勫拰鏃堕棿妗嗘灦
+ * 工具 1: 获取策略允许的交易标的和时间框架
  */
 export const GET_SYMBOL_UNIVERSE_SCHEMA = {
   name: 'get_symbol_universe',
-  description: '鑾峰彇褰撳墠绛栫暐鍏佽浜ゆ槗鐨勬爣鐨勫垪琛紙symbols锛夊拰鏀寔鐨勬椂闂村懆鏈燂紙timeframes锛?,
+  description: '获取当前策略允许交易的标的列表（symbols）和支持的时间周期（timeframes）',
   parameters: {
     type: 'object',
     properties: {
       filter: {
         type: 'object',
-        description: '鍙€夌殑杩囨护鏉′欢',
+        description: '可选的过滤条件',
         properties: {
           exchange: {
             type: 'string',
-            description: '浜ゆ槗鎵€浠ｇ爜锛屼緥濡?binance',
+            description: '交易所代码，例如 binance',
           },
           type: {
             type: 'string',
             enum: ['CRYPTO', 'STOCK', 'FOREX'],
-            description: '鏍囩殑绫诲瀷',
+            description: '标的类型',
           },
           baseAsset: {
             type: 'string',
-            description: '鍩虹璧勪骇锛屼緥濡?BTC',
+            description: '基础资产，例如 BTC',
           },
         },
       },
@@ -39,33 +39,33 @@ export const GET_SYMBOL_UNIVERSE_SCHEMA = {
 } as const
 
 /**
- * 宸ュ叿 2: 鑾峰彇鍘熷甯傚満鏁版嵁锛圞绾匡級
+ * 工具 2: 获取原始市场数据（K线）
  */
 export const GET_MARKET_DATA_RAW_SCHEMA = {
   name: 'get_market_data_raw',
-  description: '鑾峰彇鎸囧畾鏍囩殑鍜屾椂闂村懆鏈熺殑鍘熷K绾挎暟鎹紝杩斿洖 OHLCV bars 鏁扮粍',
+  description: '获取指定标的和时间周期的原始K线数据，返回 OHLCV bars 数组',
   parameters: {
     type: 'object',
     properties: {
       symbol: {
         type: 'string',
-        description: '浜ゆ槗鏍囩殑浠ｇ爜锛屼緥濡?BTCUSDT',
+        description: '交易标的代码，例如 BTCUSDT',
       },
       timeframe: {
         type: 'string',
         enum: ['1m', '5m', '15m', '1h', '4h', '1d'],
-        description: '鏃堕棿鍛ㄦ湡',
+        description: '时间周期',
       },
       lookbackBars: {
         type: 'integer',
-        description: '鍥炴函鐨凨绾挎暟閲忥紝榛樿 100',
+        description: '回溯的K线数量，默认 100',
         minimum: 1,
         maximum: 1000,
         default: 100,
       },
       contextId: {
         type: 'string',
-        description: '鍙€夌殑涓婁笅鏂嘔D锛岀敤浜庡悗缁紩鐢ㄦ鏁版嵁闆嗭紙渚嬪鍦?compute_technical_indicators 涓娇鐢級',
+        description: '可选的上下文ID，用于后续引用此数据集（例如在 compute_technical_indicators 中使用）',
       },
     },
     required: ['symbol', 'timeframe'],
@@ -73,25 +73,25 @@ export const GET_MARKET_DATA_RAW_SCHEMA = {
 } as const
 
 /**
- * 宸ュ叿 3: 璁＄畻鎶€鏈寚鏍?
+ * 工具 3: 计算技术指标
  */
 export const COMPUTE_TECHNICAL_INDICATORS_SCHEMA = {
   name: 'compute_technical_indicators',
-  description: '鍩轰簬 K 绾挎暟鎹绠楁妧鏈寚鏍囷紙濡?SMA銆丒MA銆丷SI銆丮ACD 绛夛級锛屽彲寮曠敤涔嬪墠鑾峰彇鐨勬暟鎹泦鎴栫洿鎺ヤ紶鍏?bars',
+  description: '基于 K 线数据计算技术指标（如 SMA、EMA、RSI、MACD 等），可引用之前获取的数据集或直接传入 bars',
   parameters: {
     type: 'object',
     properties: {
       contextId: {
         type: 'string',
-        description: '寮曠敤涔嬪墠 get_market_data_raw 杩斿洖鐨?contextId锛屼笌 bars 浜岄€変竴',
+        description: '引用之前 get_market_data_raw 返回的 contextId，与 bars 二选一',
       },
       bars: {
         type: 'array',
-        description: '鐩存帴浼犲叆鐨?K 绾挎暟鎹暟缁勶紝涓?contextId 浜岄€変竴',
+        description: '直接传入的 K 线数据数组，与 contextId 二选一',
         items: {
           type: 'object',
           properties: {
-            timestamp: { type: 'number', description: 'Unix 鏃堕棿鎴筹紙姣锛? },
+            timestamp: { type: 'number', description: 'Unix 时间戳（毫秒）' },
             open: { type: 'number' },
             high: { type: 'number' },
             low: { type: 'number' },
@@ -103,22 +103,22 @@ export const COMPUTE_TECHNICAL_INDICATORS_SCHEMA = {
       },
       indicators: {
         type: 'array',
-        description: '瑕佽绠楃殑鎸囨爣閰嶇疆鏁扮粍',
+        description: '要计算的指标配置数组',
         items: {
           type: 'object',
           properties: {
             type: {
               type: 'string',
               enum: ['SMA', 'EMA', 'RSI', 'MACD', 'ATR', 'STOCH'],
-              description: '鎸囨爣绫诲瀷銆傛敞锛欱BANDS銆丄DX銆丱BV銆乂WAP 鏆傛湭瀹炵幇锛屽皢鍦ㄥ悗缁増鏈敮鎸?,
+              description: '指标类型。注：BBANDS、ADX、OBV、VWAP 暂未实现，将在后续版本支持',
             },
             field: {
               type: 'string',
-              description: '鎸囨爣瀛楁鍚嶏紙鐢ㄤ簬澶氬€兼寚鏍囷紝濡?MACD 鐨?macd/signal/histogram锛?,
+              description: '指标字段名（用于多值指标，如 MACD 的 macd/signal/histogram）',
             },
             params: {
               type: 'object',
-              description: '鎸囨爣鍙傛暟锛屼緥濡?{ period: 14 }',
+              description: '指标参数，例如 { period: 14 }',
               additionalProperties: true,
             },
           },
@@ -131,38 +131,38 @@ export const COMPUTE_TECHNICAL_INDICATORS_SCHEMA = {
 } as const
 
 /**
- * 宸ュ叿 4: 璁＄畻閲戣瀺鎸囨爣锛堥闄?鏀剁泭鎸囨爣锛?
+ * 工具 4: 计算金融指标（风险/收益指标）
  */
 export const COMPUTE_FINANCIAL_METRICS_SCHEMA = {
   name: 'compute_financial_metrics',
-  description: '鍩轰簬鏀剁泭鐜囧簭鍒楁垨鏉冪泭鏇茬嚎璁＄畻閲戣瀺鎸囨爣锛屽 Sharpe Ratio銆佹渶澶у洖鎾ゃ€佹尝鍔ㄧ巼銆佽儨鐜囩瓑',
+  description: '基于收益率序列或权益曲线计算金融指标，如 Sharpe Ratio、最大回撤、波动率、胜率等',
   parameters: {
     type: 'object',
     properties: {
       returns: {
         type: 'array',
-        description: '鏀剁泭鐜囧簭鍒楋紝涓?equityCurve 浜岄€変竴',
+        description: '收益率序列，与 equityCurve 二选一',
         items: { type: 'number' },
       },
       equityCurve: {
         type: 'array',
-        description: '鏉冪泭鏇茬嚎锛堣处鎴峰噣鍊煎簭鍒楋級锛屼笌 returns 浜岄€変竴',
+        description: '权益曲线（账户净值序列），与 returns 二选一',
         items: { type: 'number' },
       },
       returnsFormat: {
         type: 'string',
         enum: ['decimal', 'percentage'],
-        description: '鏀剁泭鐜囨牸寮忥細decimal锛堝皬鏁板舰寮忥紝濡?0.05 琛ㄧず +5%锛夋垨 percentage锛堢櫨鍒嗘瘮褰㈠紡锛屽 5 琛ㄧず +5%锛夈€傞粯璁や负 decimal',
+        description: '收益率格式：decimal（小数形式，如 0.05 表示 +5%）或 percentage（百分比形式，如 5 表示 +5%）。默认为 decimal',
         default: 'decimal',
       },
       riskFreeRate: {
         type: 'number',
-        description: '鏃犻闄╁埄鐜囷紙骞村寲锛夛紝鐢ㄤ簬璁＄畻 Sharpe Ratio锛岄粯璁?0.02',
+        description: '无风险利率（年化），用于计算 Sharpe Ratio，默认 0.02',
         default: 0.02,
       },
       periodsPerYear: {
         type: 'integer',
-        description: '姣忓勾鐨勫懆鏈熸暟锛堢敤浜庡勾鍖栬绠楋級锛屼緥濡傛棩绾?252锛屽皬鏃剁嚎=8760锛岄粯璁?252',
+        description: '每年的周期数（用于年化计算），例如日线=252，小时线=8760，默认 252',
         default: 252,
       },
     },
@@ -171,7 +171,7 @@ export const COMPUTE_FINANCIAL_METRICS_SCHEMA = {
 } as const
 
 /**
- * 缁熶竴瀵煎嚭鎵€鏈夊伐鍏?Schema锛堜粎鍖呭惈鏌ヨ鍜岃绠楀伐鍏凤級
+ * 统一导出所有工具 Schema（仅包含查询和计算工具）
  */
 export const LLM_V3_TOOLS = [
   GET_SYMBOL_UNIVERSE_SCHEMA,
@@ -181,7 +181,7 @@ export const LLM_V3_TOOLS = [
 ] as const
 
 /**
- * 宸ュ叿鍚嶇О绫诲瀷锛堢敤浜庣被鍨嬪畨鍏級
+ * 工具名称类型（用于类型安全）
  */
 export type LlmV3ToolName =
   | 'get_symbol_universe'
@@ -190,7 +190,7 @@ export type LlmV3ToolName =
   | 'compute_financial_metrics'
 
 /**
- * 鍚勫伐鍏风殑杈撳叆鍙傛暟绫诲瀷瀹氫箟锛堢敤浜庡疄鐜板眰锛?
+ * 各工具的输入参数类型定义（用于实现层）
  */
 export interface GetSymbolUniverseParams {
   filter?: {
@@ -233,7 +233,7 @@ export interface ComputeFinancialMetricsParams {
 }
 
 /**
- * 鍚勫伐鍏风殑杩斿洖鍊肩被鍨嬪畾涔夛紙鐢ㄤ簬瀹炵幇灞傦級
+ * 各工具的返回值类型定义（用于实现层）
  */
 export interface GetSymbolUniverseResult {
   symbols: Array<{

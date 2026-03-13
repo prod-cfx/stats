@@ -1,4 +1,4 @@
-import type { LiquidationHeatmapModelType } from '@prisma/client'
+import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
 import { ApiProperty } from '@nestjs/swagger'
 
 export class LiquidationHeatmapResponseDto {

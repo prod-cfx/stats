@@ -1,4 +1,4 @@
-import type { CryptoStockQuote, Prisma } from '@prisma/client'
+import type { CryptoStockQuote, Prisma } from '@/prisma/prisma.types'
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { SourceConsistencyException } from '@/common/exceptions/source-consistency.exception'
 import { PrismaService } from '@/prisma/prisma.service'

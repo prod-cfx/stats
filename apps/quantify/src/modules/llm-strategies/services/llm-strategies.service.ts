@@ -1,9 +1,9 @@
-import type { LlmStrategy, Prisma } from '@prisma/client'
+import type { LlmStrategy, Prisma } from '@/prisma/prisma.types'
 import type { CreateLlmStrategyDto } from '../dto/create-llm-strategy.dto'
 import type { LlmStrategyListQueryDto } from '../dto/llm-strategy-list.query.dto'
 import type { UpdateLlmStrategyDto } from '../dto/update-llm-strategy.dto'
 import { Injectable } from '@nestjs/common'
-import { Prisma as PrismaNamespace } from '@prisma/client'
+import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 

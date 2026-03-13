@@ -60,3 +60,5 @@ logs
 .next/
 *.log
 .nx/
+apps/backend/generated/
+apps/quantify/generated/

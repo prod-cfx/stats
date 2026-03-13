@@ -1,4 +1,4 @@
-import type { LlmStrategyRun } from '@prisma/client'
+import type { LlmStrategyRun } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
 import { LlmStrategyRunNotFoundException } from '../exceptions/llm-strategy-run-not-found.exception'

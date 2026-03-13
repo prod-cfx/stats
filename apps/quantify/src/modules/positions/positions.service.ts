@@ -1,4 +1,4 @@
-import type { Position, Trade } from '@prisma/client'
+import type { Position, Trade } from '@/prisma/prisma.types'
 import type { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
@@ -6,20 +6,20 @@ import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import { Injectable } from '@nestjs/common'
-import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@prisma/client'
+import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
 import { TradeConflictException } from './exceptions/trade-conflict.exception'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -42,10 +42,10 @@ export class PositionsService {
     const executedAt = new Date(dto.executedAt)
 
     const trade = await this.prisma.runInTransaction(async prisma => {
-      // 1. 鏍￠獙璐︽埛涓庢垚浜ゅ箓绛?
+      // 1. 校验账户与成交幂等
       await this.ensureAccountAndNoDuplicateTrade(prisma, dto)
 
-      // 2. 鍔犻攣鍔犺浇褰撳墠浠撲綅
+      // 2. 加锁加载当前仓位
       const lockedPosition = await this.loadAndLockPosition(
         prisma,
         dto.userStrategyAccountId,
@@ -53,7 +53,7 @@ export class PositionsService {
         dto.positionSide,
       )
 
-      // 3. 鏍规嵁鏂瑰悜璋冩暣浠撲綅
+      // 3. 根据方向调整仓位
       const isIncrease = this.isIncreaseTrade(dto.positionSide, dto.side)
       const {
         position,
@@ -181,9 +181,9 @@ export class PositionsService {
     const { dto, normalizedSymbol, price, quantity, leverage, executedAt } = params
     let { existingPosition } = params
 
-    // 鏃犱粨浣嶅垯灏濊瘯鍒涘缓锛屽鐞嗗苟鍙戝敮涓€绾︽潫
+    // 无仓位则尝试创建，处理并发唯一约束
     if (!existingPosition) {
-      // 浠?market 瀛楁鎻愬彇 exchangeId 鍜?marketType (鏍煎紡: "exchangeId:marketType")
+      // 从 market 字段提取 exchangeId 和 marketType (格式: "exchangeId:marketType")
       let exchangeId: string | null = null
       let marketType: string | null = null
       if (dto.market) {
@@ -210,11 +210,11 @@ export class PositionsService {
         return { position: created, realizedPnlDelta: new Decimal(0) }
       }
       catch (error: any) {
-        // P2002 = Unique constraint violation锛岃鏄庡彟涓€浜嬪姟鍒氬ソ鍒涘缓浜嗗悓鏂瑰悜 OPEN 浠撲綅
+        // P2002 = Unique constraint violation，说明另一事务刚好创建了同方向 OPEN 仓位
         if (error.code !== 'P2002') {
           throw error
         }
-        // 閲嶆柊鍔犻攣鍔犺浇
+        // 重新加锁加载
         existingPosition = await this.loadAndLockPosition(
           prisma,
           dto.userStrategyAccountId,
@@ -222,18 +222,18 @@ export class PositionsService {
           dto.positionSide,
         )
         if (!existingPosition) {
-          // 鐞嗚涓婁笉搴斿嚭鐜帮紙闄ら潪骞跺彂鍒涘缓鍚庡張绔嬪嵆鍒犻櫎锛夛紝淇濈暀鍘熷閿欒
+          // 理论上不应出现（除非并发创建后又立即删除），保留原始错误
           throw error
         }
       }
     }
 
-    // 鏈夊凡鏈変粨浣嶏紙鎴栧苟鍙戦噸璇曞悗鎷垮埌锛夛紝鎵ц鍔犱粨閫昏緫
+    // 有已有仓位（或并发重试后拿到），执行加仓逻辑
     const newQty = existingPosition.quantity.add(quantity)
     const weighted = existingPosition.avgEntryPrice.mul(existingPosition.quantity).add(price.mul(quantity))
     const newAvg = weighted.div(newQty)
-
-    // 浠庢湰娆℃垚浜よˉ榻愮己澶辩殑 exchangeId/marketType锛堜负鑰佷粨浣嶆垨杩佺Щ鍓嶆暟鎹ˉ鍏呬俊鎭級
+    
+    // 从本次成交补齐缺失的 exchangeId/marketType（为老仓位或迁移前数据补充信息）
     let exchangeId = existingPosition.exchangeId
     let marketType = existingPosition.marketType
     if ((!exchangeId || !marketType) && dto.market) {
@@ -241,7 +241,7 @@ export class PositionsService {
       exchangeId = exchangeId || exId || null
       marketType = marketType || mType || null
     }
-
+    
     const updated = await prisma.position.update({
       where: { id: existingPosition.id },
       data: {
@@ -300,7 +300,7 @@ export class PositionsService {
       data: {
         quantity: remainingQty,
         realizedPnl: existingPosition.realizedPnl.add(realizedPnlDelta),
-        // 骞充粨鍚庤閮ㄥ垎鐨勬湭瀹炵幇鐩堜簭搴斿綋褰掗浂
+        // 平仓后该部分的未实现盈亏应当归零
         unrealizedPnl: isFullClose ? new Decimal(0) : existingPosition.unrealizedPnl,
         status: isFullClose ? PositionStatus.CLOSED : PositionStatus.OPEN,
         closedAt: isFullClose ? executedAt : existingPosition.closedAt,
@@ -313,15 +313,15 @@ export class PositionsService {
   }
 
   private async recalculateUnrealizedAndEquity(prisma: Prisma.TransactionClient, accountId: string): Promise<void> {
-    // 閲嶆柊鑱氬悎璇ヨ处鎴风殑鏈疄鐜扮泩浜忥紝纭繚 equity = balance + totalUnrealizedPnl 涓嶄緷璧栧悗缁鎯呮帹閫?
+    // 重新聚合该账户的未实现盈亏，确保 equity = balance + totalUnrealizedPnl 不依赖后续行情推送
     const aggregate = await prisma.position.aggregate({
       where: { userStrategyAccountId: accountId, status: PositionStatus.OPEN },
       _sum: { unrealizedPnl: true },
     })
     const totalUnrealized = aggregate._sum.unrealizedPnl ?? new Decimal(0)
 
-    // 馃敀 骞跺彂瀹夊叏锛氱敤鏁版嵁搴撴渶鏂颁綑棰?+ 鑱氬悎娴泩锛岄伩鍏嶈鐩栧叾瀹冧簨鍔★紙鍏ラ噾/鍑洪噾/鎵嬬画璐癸級瀵?balance 鐨勪慨鏀?
-    // 浣跨敤 $queryRaw 鍘熷瓙璇?+ 鍐欙紝涓嶄緷璧栦簨鍔″紑澶寸殑蹇収 account.balance
+    // 🔒 并发安全：用数据库最新余额 + 聚合浮盈，避免覆盖其它事务（入金/出金/手续费）对 balance 的修改
+    // 使用 $queryRaw 原子读 + 写，不依赖事务开头的快照 account.balance
     await prisma.$executeRaw`
       UPDATE "user_strategy_accounts"
       SET "total_unrealized_pnl" = ${totalUnrealized},
@@ -347,11 +347,11 @@ export class PositionsService {
       where.account = { userId: query.userId }
     }
 
-    // 纭繚鍒嗛〉鍙傛暟鏈夋晥鍊?
+    // 确保分页参数有效值
     const page = query.page || 1
     const limit = query.limit || 20
     const skip = (page - 1) * limit
-
+    
     const [items, total] = await Promise.all([
       this.prisma.position.findMany({
         where,
@@ -405,16 +405,16 @@ export class PositionsService {
   }
 
   /**
-   * 鐢ㄦ埛涓诲姩骞充粨锛堝競浠峰崟鍏ㄥ钩鎴栭儴鍒嗗钩浠擄級
-   *
-   * @param dto - 骞充粨璇锋眰鍙傛暟
-   * @returns 骞充粨缁撴灉
-   * @throws PositionNotFoundException - 浠撲綅涓嶅瓨鍦ㄦ垨宸插叧闂?
-   * @throws PositionInsufficientQuantityException - 骞充粨鏁伴噺瓒呰繃鎸佷粨鏁伴噺
-   * @throws StrategyAccountNotFoundException - 璐︽埛涓嶅瓨鍦?
+   * 用户主动平仓（市价单全平或部分平仓）
+   * 
+   * @param dto - 平仓请求参数
+   * @returns 平仓结果
+   * @throws PositionNotFoundException - 仓位不存在或已关闭
+   * @throws PositionInsufficientQuantityException - 平仓数量超过持仓数量
+   * @throws StrategyAccountNotFoundException - 账户不存在
    */
   async closePosition(dto: ClosePositionDto): Promise<ClosePositionResponseDto> {
-    // 1. 楠岃瘉浠撲綅骞惰幏鍙栫浉鍏宠处鎴蜂俊鎭紙涓€娆℃煡璇紭鍖栨€ц兘锛?
+    // 1. 验证仓位并获取相关账户信息（一次查询优化性能）
     const position = await this.prisma.position.findUnique({
       where: { id: dto.positionId },
       include: {
@@ -428,37 +428,37 @@ export class PositionsService {
     })
 
     if (!position) {
-      throw new PositionNotFoundException({
-        accountId: dto.userStrategyAccountId,
+      throw new PositionNotFoundException({ 
+        accountId: dto.userStrategyAccountId, 
         symbol: '',
         positionSide: '',
       })
     }
 
-    // 楠岃瘉璐︽埛褰掑睘
+    // 验证账户归属
     if (position.userStrategyAccountId !== dto.userStrategyAccountId) {
-      throw new PositionNotFoundException({
-        accountId: dto.userStrategyAccountId,
+      throw new PositionNotFoundException({ 
+        accountId: dto.userStrategyAccountId, 
         symbol: position.symbol,
         positionSide: position.positionSide,
       })
     }
 
-    // 楠岃瘉浠撲綅鐘舵€?
+    // 验证仓位状态
     if (position.status !== PositionStatus.OPEN) {
-      throw new PositionNotFoundException({
-        accountId: dto.userStrategyAccountId,
+      throw new PositionNotFoundException({ 
+        accountId: dto.userStrategyAccountId, 
         symbol: position.symbol,
         positionSide: position.positionSide,
       })
     }
 
-    // 2. 楠岃瘉骞充粨鏁伴噺
+    // 2. 验证平仓数量
     const closeQuantity = new Decimal(dto.quantity)
     const currentQuantity = new Decimal(position.quantity)
 
     if (closeQuantity.lte(0)) {
-      throw new PositionInsufficientQuantityException({
+      throw new PositionInsufficientQuantityException({ 
         positionId: dto.positionId,
         requested: closeQuantity.toString(),
         available: currentQuantity.toString(),
@@ -466,25 +466,25 @@ export class PositionsService {
     }
 
     if (closeQuantity.gt(currentQuantity)) {
-      throw new PositionInsufficientQuantityException({
+      throw new PositionInsufficientQuantityException({ 
         positionId: dto.positionId,
         requested: closeQuantity.toString(),
         available: currentQuantity.toString(),
       })
     }
 
-    // 3. 楠岃瘉骞朵娇鐢ㄦ暟鎹簱涓瓨鍌ㄧ殑 exchangeId/marketType锛堝畨鍏ㄦ€э細涓嶄俊浠诲鎴风浼犲弬锛?
+    // 3. 验证并使用数据库中存储的 exchangeId/marketType（安全性：不信任客户端传参）
     if (!position.exchangeId || !position.marketType) {
-      throw new Error(`浠撲綅 ${dto.positionId} 缂哄皯浜ゆ槗鎵€淇℃伅锛屾棤娉曟墽琛屽钩浠撴搷浣渀)
+      throw new Error(`仓位 ${dto.positionId} 缺少交易所信息，无法执行平仓操作`)
     }
-
+    
     const exchangeId = position.exchangeId as ExchangeId
     const marketType = position.marketType as MarketType
-
-    // 4. 纭畾璁㈠崟鏂瑰悜锛氬钩澶氬崟闇€瑕佸崠鍑猴紝骞崇┖鍗曢渶瑕佷拱鍏?
+    
+    // 4. 确定订单方向：平多单需要卖出，平空单需要买入
     const orderSide = position.positionSide === PositionSide.LONG ? 'sell' : 'buy'
 
-    // 5. 璋冪敤浜ゆ槗鏈嶅姟涓嬪競浠峰钩浠撳崟
+    // 5. 调用交易服务下市价平仓单
     try {
       const order = await this.tradingService.placeOrder(
         position.account.userId,
@@ -496,28 +496,28 @@ export class PositionsService {
           side: orderSide,
           type: 'market',
           amount: closeQuantity.toNumber(),
-          reduceOnly: true, // 骞充粨鍗曡缃负 reduceOnly
+          reduceOnly: true, // 平仓单设置为 reduceOnly
         },
       )
 
-      // 6. 杩斿洖骞充粨缁撴灉
+      // 6. 返回平仓结果
       return {
         success: true,
         orderId: order.id,
         positionId: dto.positionId,
         filledQuantity: order.filled.toString(),
         averagePrice: order.price?.toString(),
-        message: dto.note || '甯備环骞充粨鎴愬姛',
+        message: dto.note || '市价平仓成功',
       }
     } catch (error) {
-      // 璁板綍浜ゆ槗鎵€閿欒骞惰浆鎹负涓氬姟寮傚父
-      console.error('浜ゆ槗鎵€骞充粨澶辫触', {
+      // 记录交易所错误并转换为业务异常
+      console.error('交易所平仓失败', {
         positionId: dto.positionId,
         symbol: position.symbol,
         exchangeId,
         error,
       })
-      throw error // 閲嶆柊鎶涘嚭璁╀笂灞傚鐞?
+      throw error // 重新抛出让上层处理
     }
   }
 
@@ -540,3 +540,4 @@ export class PositionsService {
     }
   }
 }
+

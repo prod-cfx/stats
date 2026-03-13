@@ -1,4 +1,4 @@
-import type { LlmStrategyStatus } from '@prisma/client'
+import type { LlmStrategyStatus } from '@/prisma/prisma.types'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsArray,
@@ -11,37 +11,37 @@ import {
 } from 'class-validator'
 
 export class UpdateLlmStrategyDto {
-  @ApiPropertyOptional({ description: '绛栫暐鍚嶇О', maxLength: 100 })
+  @ApiPropertyOptional({ description: '策略名称', maxLength: 100 })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   name?: string
 
-  @ApiPropertyOptional({ description: '绛栫暐鎻忚堪', maxLength: 1000 })
+  @ApiPropertyOptional({ description: '策略描述', maxLength: 1000 })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   description?: string
 
-  @ApiPropertyOptional({ description: '绛栫暐鐘舵€?, enum: ['draft', 'live', 'archived'] })
+  @ApiPropertyOptional({ description: '策略状态', enum: ['draft', 'live', 'archived'] })
   @IsOptional()
   @IsEnum(['draft', 'live', 'archived'])
   status?: LlmStrategyStatus
 
-  @ApiPropertyOptional({ description: '绯荤粺鎻愮ず璇?, maxLength: 10000 })
+  @ApiPropertyOptional({ description: '系统提示词', maxLength: 10000 })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
   systemPrompt?: string
 
-  @ApiPropertyOptional({ description: '鍒濆鎻愮ず璇嶆ā鏉?, maxLength: 10000 })
+  @ApiPropertyOptional({ description: '初始提示词模板', maxLength: 10000 })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
   initialPromptTemplate?: string
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勪氦鏄撳鍒楄〃',
+    description: '允许的交易对列表',
     type: [String],
     nullable: true,
   })
@@ -52,7 +52,7 @@ export class UpdateLlmStrategyDto {
   allowedSymbols?: string[] | null
 
   @ApiPropertyOptional({
-    description: '鍏佽鐨勬椂闂村懆鏈?,
+    description: '允许的时间周期',
     type: [String],
     nullable: true,
   })
@@ -63,7 +63,7 @@ export class UpdateLlmStrategyDto {
   allowedTimeframes?: string[] | null
 
   @ApiPropertyOptional({
-    description: '椋庨櫓閰嶇疆鍙傛暟',
+    description: '风险配置参数',
     type: 'object',
     additionalProperties: true,
     nullable: true,
@@ -74,7 +74,7 @@ export class UpdateLlmStrategyDto {
   riskConfig?: Record<string, unknown> | null
 
   @ApiPropertyOptional({
-    description: '棰濆鍏冩暟鎹?,
+    description: '额外元数据',
     type: 'object',
     additionalProperties: true,
     nullable: true,
@@ -84,7 +84,7 @@ export class UpdateLlmStrategyDto {
   @IsObject()
   metadata?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '鏇存柊浜烘爣璇?, example: 'system-operator' })
+  @ApiPropertyOptional({ description: '更新人标识', example: 'system-operator' })
   @IsOptional()
   @IsString()
   updatedBy?: string

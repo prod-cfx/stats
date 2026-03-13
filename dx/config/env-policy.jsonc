@@ -12,10 +12,16 @@
       "POSTGRES_USER",
       "POSTGRES_PASSWORD",
       "DATABASE_URL",
+      "QUANTIFY_DATABASE_URL",
       "REDIS_PASSWORD",
       "REDIS_URL",
+      "QUANTIFY_REDIS_URL",
       "JWT_SECRET",
+      "QUANTIFY_JWT_SECRET",
       "APP_SECRET",
+      "QUANTIFY_APP_SECRET",
+      "QUANTIFY_UNIAPI_API_KEY",
+      "QUANTIFY_EXCHANGE_ACCOUNT_CRYPTO_KEY",
       "RESEND_API_KEY",
       "EMAIL_FROM",
       "EMAIL_FROM_NAME",
@@ -179,11 +185,17 @@
       "HTTP_TRUST_PROXY_HOPS",
       "TRUST_PROXY",
       "TRANSLATE_LLM_BASE_URL",
-      "TRANSLATE_LLM_MODEL"
+      "TRANSLATE_LLM_MODEL",
+      "QUANTIFY_APP_NAME",
+      "QUANTIFY_API_BASE_URL",
+      "QUANTIFY_HTTP_TIMEOUT_MS",
+      "QUANTIFY_PORT",
+      "QUANTIFY_BASE_URL"
     ]
   },
   "appToTarget": {
     "backend": "backend",
+    "quantify": "quantify",
     "front": "frontend",
     "admin-front": "frontend"
   },
@@ -199,6 +211,39 @@
         "staging": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "production": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"]
+      }
+    },
+    "quantify": {
+      "files": {
+        "committed": ".env.{env}",
+        "local": ".env.{env}.local"
+      },
+      "required": {
+        "_common": ["APP_ENV"],
+        "development": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "staging": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "production": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ],
+        "e2e": [
+          "QUANTIFY_DATABASE_URL",
+          "QUANTIFY_REDIS_URL",
+          "QUANTIFY_APP_SECRET",
+          "QUANTIFY_JWT_SECRET"
+        ]
       }
     },
     "frontend": {

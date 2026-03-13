@@ -1,4 +1,4 @@
-import type { LlmStrategy, LlmStrategyStatus, Prisma } from '@prisma/client'
+import type { LlmStrategy, LlmStrategyStatus, Prisma } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'

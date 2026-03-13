@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -41,7 +41,7 @@ export class OpsStrategyInstancesController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓绛栫暐瀹炰緥' })
+  @ApiOperation({ summary: '创建策略实例' })
   @ApiResponse({ status: 201, type: StrategyInstanceResponseDto })
   async create(
     @Body() dto: CreateStrategyInstanceDto,
@@ -50,7 +50,7 @@ export class OpsStrategyInstancesController {
   }
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇绛栫暐瀹炰緥鍒楄〃' })
+  @ApiOperation({ summary: '获取策略实例列表' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -73,7 +73,7 @@ export class OpsStrategyInstancesController {
   }
 
   @Get(':id/subscriptions')
-  @ApiOperation({ summary: '鑾峰彇绛栫暐瀹炰緥璁㈤槄璇︽儏' })
+  @ApiOperation({ summary: '获取策略实例订阅详情' })
   @ApiResponse({ status: 200, type: StrategyInstanceSubscriptionDetailsDto })
   async getSubscriptionDetails(
     @Param('id') id: string,
@@ -87,14 +87,14 @@ export class OpsStrategyInstancesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '鑾峰彇绛栫暐瀹炰緥璇︽儏' })
+  @ApiOperation({ summary: '获取策略实例详情' })
   @ApiResponse({ status: 200, type: StrategyInstanceResponseDto })
   async detail(@Param('id') id: string): Promise<StrategyInstanceResponseDto> {
     return this.instancesService.getInstanceDetail(id)
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: '鏇存柊绛栫暐瀹炰緥' })
+  @ApiOperation({ summary: '更新策略实例' })
   @ApiResponse({ status: 200, type: StrategyInstanceResponseDto })
   async update(
     @Param('id') id: string,
@@ -104,17 +104,17 @@ export class OpsStrategyInstancesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '鍒犻櫎绛栫暐瀹炰緥锛堜粎 draft 鐘舵€侊級' })
-  @ApiResponse({ status: 200, description: '鍒犻櫎鎴愬姛' })
+  @ApiOperation({ summary: '删除策略实例（仅 draft 状态）' })
+  @ApiResponse({ status: 200, description: '删除成功' })
   async delete(@Param('id') id: string): Promise<void> {
     return this.instancesService.deleteInstance(id)
   }
 
   @Get(':id/test-run/prefill')
   @ApiOperation({
-    summary: '鑾峰彇瀹炰緥妫€鏌ラ粯璁よ姹備綋锛堝 Leg 澶氬懆鏈熻嚜鍔ㄥ～鍏咃級',
+    summary: '获取实例检查默认请求体（多 Leg 多周期自动填充）',
     description:
-      '鏍规嵁绛栫暐妯℃澘鐨?legs 鍜?dataRequirements锛屼粠琛屾儏琛ㄤ腑鎷夊彇鏈€杩戜竴娈?K 绾挎暟鎹紝鎸?multiLegData 缁撴瀯杩斿洖锛屾柟渚胯皟鐢ㄦ柟蹇€熷～鍏呰皟璇曞弬鏁般€?,
+      '根据策略模板的 legs 和 dataRequirements，从行情表中拉取最近一段 K 线数据，按 multiLegData 结构返回，方便调用方快速填充调试参数。',
   })
   @ApiResponse({ status: 200, type: TestStrategyInstanceDto })
   async buildTestPayload(@Param('id') id: string): Promise<TestStrategyInstanceDto> {
@@ -123,9 +123,9 @@ export class OpsStrategyInstancesController {
 
   @Post(':id/test-run')
   @ApiOperation({
-    summary: '涓诲姩瑙﹀彂绛栫暐瀹炰緥妫€鏌ワ紙璋冭瘯鐢紝涓嶄細浜х敓鐪熷疄淇″彿锛?,
+    summary: '主动触发策略实例检查（调试用，不会产生真实信号）',
     description:
-      '鏍规嵁浼犲叆鐨勫競鍦烘暟鎹墽琛屽叧鑱旂瓥鐣ユā鏉跨殑鑴氭湰锛岃繑鍥炶剼鏈粨鏋滃強濉厖鍚庣殑 Prompt锛岀敤浜庢湰鍦拌皟璇曘€?,
+      '根据传入的市场数据执行关联策略模板的脚本，返回脚本结果及填充后的 Prompt，用于本地调试。',
   })
   @ApiResponse({ status: 200, type: TestStrategyInstanceResultDto })
   async testRun(
@@ -138,53 +138,53 @@ export class OpsStrategyInstancesController {
   @Post(':id/generate-signal')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '鎵嬪姩瑙﹀彂绛栫暐瀹炰緥淇″彿鐢熸垚',
+    summary: '手动触发策略实例信号生成',
     description:
-      '鎵嬪姩瑙﹀彂鎸囧畾绛栫暐瀹炰緥鐨勪俊鍙风敓鎴愭祦绋嬨€備細鏍规嵁褰撳墠甯傚満鏁版嵁鎵ц绛栫暐鑴氭湰銆佽皟鐢?AI 骞剁敓鎴愮湡瀹炰氦鏄撲俊鍙枫€? +
-      '鐢ㄤ簬娴嬭瘯鎴栫揣鎬ユ儏鍐典笅鎵嬪姩瑙﹀彂淇″彿鐢熸垚銆?,
+      '手动触发指定策略实例的信号生成流程。会根据当前市场数据执行策略脚本、调用 AI 并生成真实交易信号。' +
+      '用于测试或紧急情况下手动触发信号生成。',
   })
   @ApiResponse({
     status: 200,
-    description: '淇″彿鐢熸垚浠诲姟宸茶Е鍙?,
+    description: '信号生成任务已触发',
     schema: {
       type: 'object',
       properties: {
-        message: { type: 'string', example: '淇″彿鐢熸垚浠诲姟宸茶Е鍙? },
+        message: { type: 'string', example: '信号生成任务已触发' },
         instanceId: { type: 'string', example: 'cmioxy4yg03zl3eh8gzvaaimd' },
       },
     },
   })
   async generateSignal(@Param('id') id: string): Promise<{ message: string; instanceId: string }> {
-    this.logger.log(`杩愯惀鎺ュ彛鎵嬪姩瑙﹀彂绛栫暐瀹炰緥 ${id} 鐨勪俊鍙风敓鎴恅)
+    this.logger.log(`运营接口手动触发策略实例 ${id} 的信号生成`)
 
-    // 鍦ㄨ繑鍥炲墠鍚屾楠岃瘉鎵€鏈夊繀椤绘潯浠讹紙status銆乵ode銆乼emplate銆乧onfig 绛夛級
-    // 閬垮厤鏃犳晥瀹炰緥/绂佺敤閰嶇疆涓嬭鎶ユ垚鍔燂紝纭繚璋冪敤鏂硅幏寰楀噯纭殑閿欒鍙嶉
+    // 在返回前同步验证所有必须条件（status、mode、template、config 等）
+    // 避免无效实例/禁用配置下误报成功，确保调用方获得准确的错误反馈
     try {
       await this.signalGenerator.validateManualTriggerTarget(id)
     }
     catch (error) {
       const message = (error as Error).message
-      this.logger.warn(`鎵嬪姩瑙﹀彂楠岃瘉澶辫触: ${message}`)
-
-      // 灏嗛獙璇侀敊璇槧灏勪负閫傚綋鐨?HTTP 鐘舵€佺爜
+      this.logger.warn(`手动触发验证失败: ${message}`)
+      
+      // 将验证错误映射为适当的 HTTP 状态码
       if (message.includes('not found')) {
         throw new NotFoundException(message)
       }
       if (message.includes('disabled via configuration')) {
-        throw new BadRequestException('淇″彿鐢熸垚鍔熻兘宸茬鐢紝璇锋鏌ラ厤缃?(STRATEGY_SIGNALS_ENABLED)')
+        throw new BadRequestException('信号生成功能已禁用，请检查配置 (STRATEGY_SIGNALS_ENABLED)')
       }
       throw new BadRequestException(message)
     }
 
-    // 楠岃瘉閫氳繃鍚庯紝寮傛瑙﹀彂淇″彿鐢熸垚锛堜笉闃诲 AI 璋冪敤锛夛紝鎵嬪姩瑙﹀彂鏃惰烦杩?cooldown 妫€鏌?
+    // 验证通过后，异步触发信号生成（不阻塞 AI 调用），手动触发时跳过 cooldown 检查
     setImmediate(() => {
       this.signalGenerator.generateSignalForInstance(id, { skipCooldown: true }).catch(error => {
-        this.logger.error(`鎵嬪姩瑙﹀彂瀹炰緥 ${id} 淇″彿鐢熸垚澶辫触: ${error.message}`, error.stack)
+        this.logger.error(`手动触发实例 ${id} 信号生成失败: ${error.message}`, error.stack)
       })
     })
 
     return {
-      message: '淇″彿鐢熸垚浠诲姟宸茶Е鍙戯紝璇风◢鍚庢煡鐪嬩俊鍙峰垪琛?,
+      message: '信号生成任务已触发，请稍后查看信号列表',
       instanceId: id,
     }
   }

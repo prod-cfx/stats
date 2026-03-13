@@ -16,7 +16,7 @@ import { CreateLlmStrategyDto } from '../dto/create-llm-strategy.dto'
 import { LlmStrategyListQueryDto } from '../dto/llm-strategy-list.query.dto'
 import { LlmStrategyResponseDto } from '../dto/llm-strategy.response.dto'
 import { UpdateLlmStrategyDto } from '../dto/update-llm-strategy.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategiesService } from '../services/llm-strategies.service'
 
 @ApiTags('ops-llm-strategies')
@@ -33,41 +33,41 @@ export class OpsLlmStrategiesController {
   constructor(private readonly llmStrategiesService: LlmStrategiesService) {}
 
   @Get()
-  @ApiOperation({ summary: '鍒嗛〉鏌ヨLLM绛栫暐' })
+  @ApiOperation({ summary: '分页查询LLM策略' })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
-    description: '椤电爜锛堜粠 1 寮€濮嬶級',
+    description: '页码（从 1 开始）',
     example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: '姣忛〉鏁伴噺',
+    description: '每页数量',
     example: 20,
   })
   @ApiQuery({
     name: 'status',
     required: false,
     enum: ['draft', 'live', 'archived'],
-    description: '鎸夌瓥鐣ョ姸鎬佺瓫閫?,
+    description: '按策略状态筛选',
   })
   @ApiQuery({
     name: 'keyword',
     required: false,
     type: String,
-    description: '鍚嶇О鎴栨弿杩板叧閿瘝妯＄硦鎼滅储',
+    description: '名称或描述关键词模糊搜索',
   })
   @ApiQuery({
     name: 'orderBy',
     required: false,
     type: String,
-    description: '鑷畾涔夋帓搴忓瓧娈碉紝渚嬪 createdAt:desc',
+    description: '自定义排序字段，例如 createdAt:desc',
   })
   @ApiOkResponse({
-    description: '鑾峰彇鎴愬姛',
+    description: '获取成功',
     schema: {
       allOf: [
         { $ref: getSchemaPath(BasePaginationResponseDto) },
@@ -93,8 +93,8 @@ export class OpsLlmStrategiesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '鑾峰彇LLM绛栫暐璇︽儏' })
-  @ApiOkResponse({ description: '鑾峰彇鎴愬姛', type: LlmStrategyResponseDto })
+  @ApiOperation({ summary: '获取LLM策略详情' })
+  @ApiOkResponse({ description: '获取成功', type: LlmStrategyResponseDto })
   async detail(
     @Param('id') id: string,
   ) {
@@ -103,9 +103,9 @@ export class OpsLlmStrategiesController {
   }
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓LLM绛栫暐' })
-  @ApiBody({ description: '鍒涘缓LLM绛栫暐璇锋眰浣?, type: CreateLlmStrategyDto })
-  @ApiOkResponse({ description: '鍒涘缓鎴愬姛', type: LlmStrategyResponseDto })
+  @ApiOperation({ summary: '创建LLM策略' })
+  @ApiBody({ description: '创建LLM策略请求体', type: CreateLlmStrategyDto })
+  @ApiOkResponse({ description: '创建成功', type: LlmStrategyResponseDto })
   async create(
     @Body() body: CreateLlmStrategyDto,
   ) {
@@ -114,9 +114,9 @@ export class OpsLlmStrategiesController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: '鏇存柊LLM绛栫暐' })
-  @ApiBody({ description: '鏇存柊LLM绛栫暐璇锋眰浣?, type: UpdateLlmStrategyDto })
-  @ApiOkResponse({ description: '鏇存柊鎴愬姛', type: LlmStrategyResponseDto })
+  @ApiOperation({ summary: '更新LLM策略' })
+  @ApiBody({ description: '更新LLM策略请求体', type: UpdateLlmStrategyDto })
+  @ApiOkResponse({ description: '更新成功', type: LlmStrategyResponseDto })
   async update(
     @Param('id') id: string,
     @Body() body: UpdateLlmStrategyDto,
@@ -126,7 +126,7 @@ export class OpsLlmStrategiesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '鍒犻櫎LLM绛栫暐' })
+  @ApiOperation({ summary: '删除LLM策略' })
   async delete(
     @Param('id') id: string,
   ) {

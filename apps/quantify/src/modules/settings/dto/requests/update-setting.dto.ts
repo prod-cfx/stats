@@ -4,7 +4,7 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class UpdateSettingDto {
   @ApiProperty({
-    description: '閰嶇疆鍊硷紙鍙互鏄瓧绗︿覆銆佹暟瀛椼€佸竷灏斿€兼垨JSON瀵硅薄锛?,
+    description: '配置值（可以是字符串、数字、布尔值或JSON对象）',
     example: 'New Value',
     oneOf: [
       { type: 'string' },
@@ -18,7 +18,7 @@ export class UpdateSettingDto {
     value!: SettingValue
 
   @ApiPropertyOptional({
-    description: '鍊肩被鍨?,
+    description: '值类型',
     example: 'string',
     enum: ['string', 'number', 'boolean', 'json'],
   })
@@ -26,17 +26,17 @@ export class UpdateSettingDto {
   @IsOptional()
     type?: string
 
-  @ApiPropertyOptional({ description: '閰嶇疆鎻忚堪', example: '鏇存柊鍚庣殑鎻忚堪' })
+  @ApiPropertyOptional({ description: '配置描述', example: '更新后的描述' })
   @IsString()
   @IsOptional()
     description?: string
 
-  @ApiPropertyOptional({ description: '閰嶇疆鍒嗙被', example: 'general' })
+  @ApiPropertyOptional({ description: '配置分类', example: 'general' })
   @IsString()
   @IsOptional()
     category?: string
 
-  @ApiPropertyOptional({ description: '鏄惁绯荤粺閰嶇疆', example: false })
+  @ApiPropertyOptional({ description: '是否系统配置', example: false })
   @IsBoolean()
   @IsOptional()
     isSystem?: boolean

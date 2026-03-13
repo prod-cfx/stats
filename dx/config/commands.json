@@ -44,6 +44,21 @@
         "description": "构建后端(生产环境)"
       }
     },
+    "quantify": {
+      "skipEnvValidation": true,
+      "dev": {
+        "command": "npx nx build quantify --configuration=development",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "构建 Quantify(开发环境)"
+      },
+      "prod": {
+        "command": "npx nx build quantify --configuration=production",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "构建 Quantify(生产环境)"
+      }
+    },
     "shared": {
       "command": "npx nx build shared",
       "description": "构建共享包 @ai/shared"
@@ -117,20 +132,38 @@
     "generate": {
       "command": "pnpm --filter @net/backend run prisma:generate",
       "app": "backend",
-      "description": "生成Prisma客户端"
+      "description": "生成Prisma客户端",
+      "quantify": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:generate",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "生成 Quantify Prisma 客户端"
+      }
     },
     "migrate": {
       "dev": {
         "command": "pnpm --filter @net/backend run prisma:migrate:dev",
         "app": "backend",
-        "description": "创建数据库迁移(开发环境)"
+        "description": "创建数据库迁移(开发环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:dev",
+          "app": "quantify",
+          "skipEnvValidation": true,
+          "description": "创建 Quantify 数据库迁移(开发环境)"
+        }
       }
     },
     "deploy": {
       "dev": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
-        "description": "应用数据库迁移(开发环境)"
+        "description": "应用数据库迁移(开发环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:deploy",
+          "app": "quantify",
+          "skipEnvValidation": true,
+          "description": "应用 Quantify 数据库迁移(开发环境)"
+        }
       },
       "test": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
@@ -140,7 +173,13 @@
       "e2e": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
-        "description": "应用数据库迁移(E2E环境)"
+        "description": "应用数据库迁移(E2E环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:deploy",
+          "app": "quantify",
+          "skipEnvValidation": true,
+          "description": "应用 Quantify 数据库迁移(E2E环境)"
+        }
       },
       "prod": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
@@ -154,13 +193,27 @@
         "command": "pnpm --filter @net/backend run prisma:migrate:reset",
         "app": "backend",
         "dangerous": true,
-        "description": "重置数据库(开发环境)"
+        "description": "重置数据库(开发环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:reset",
+          "app": "quantify",
+          "dangerous": true,
+          "skipEnvValidation": true,
+          "description": "重置 Quantify 数据库(开发环境)"
+        }
       },
       "e2e": {
         "command": "pnpm --filter @net/backend run prisma:migrate:reset",
         "app": "backend",
         "dangerous": true,
-        "description": "重置数据库(E2E环境)"
+        "description": "重置数据库(E2E环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:migrate:reset",
+          "app": "quantify",
+          "dangerous": true,
+          "skipEnvValidation": true,
+          "description": "重置 Quantify 数据库(E2E环境)"
+        }
       },
       "prod": {
         "command": "pnpm --filter @net/backend run prisma:migrate:reset",
@@ -173,12 +226,24 @@
       "dev": {
         "command": "pnpm --filter @net/backend run prisma:db:seed",
         "app": "backend",
-        "description": "填充种子数据(开发环境)"
+        "description": "填充种子数据(开发环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:db:seed",
+          "app": "quantify",
+          "skipEnvValidation": true,
+          "description": "填充 Quantify 种子数据(开发环境)"
+        }
       },
       "e2e": {
         "command": "pnpm --filter @net/backend run prisma:db:seed",
         "app": "backend",
-        "description": "填充种子数据(E2E环境)"
+        "description": "填充种子数据(E2E环境)",
+        "quantify": {
+          "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:db:seed",
+          "app": "quantify",
+          "skipEnvValidation": true,
+          "description": "填充 Quantify 种子数据(E2E环境)"
+        }
       },
       "prod": {
         "command": "pnpm --filter @net/backend run prisma:db:seed",
@@ -189,7 +254,13 @@
     },
     "format": {
       "command": "pnpm --filter @net/backend run prisma:format",
-      "description": "格式化Prisma schema文件"
+      "description": "格式化Prisma schema文件",
+      "quantify": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:format",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "格式化 Quantify Prisma schema 文件"
+      }
     },
     "script": {
       "dev": {
@@ -218,6 +289,14 @@
         "app": "backend",
         "description": "运行后端E2E测试"
       },
+      "quantify": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run test:e2e",
+        "app": "quantify",
+        "description": "运行 Quantify E2E 测试",
+        "requiresPath": true,
+        "fileCommand": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run test:e2e:file {TEST_PATH}",
+        "skipEnvValidation": true
+      },
       "all": {
         "command": "npx nx test:e2e backend",
         "app": "backend",
@@ -229,6 +308,12 @@
         "command": "npx nx test backend",
         "app": "backend",
         "description": "运行后端单元测试"
+      },
+      "quantify": {
+        "command": "node scripts/dx/quantify-launcher.cjs npx nx test quantify",
+        "app": "quantify",
+        "description": "运行 Quantify 单元测试",
+        "skipEnvValidation": true
       }
     }
   },
@@ -250,6 +335,22 @@
         "command": "npx nx start backend",
         "app": "backend",
         "description": "启动后端生产服务"
+      }
+    },
+    "quantify": {
+      "skipEnvValidation": true,
+      "dev": {
+        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run dev",
+        "app": "quantify",
+        "ports": [3010],
+        "skipEnvValidation": true,
+        "description": "启动 Quantify 开发服务"
+      },
+      "prod": {
+        "command": "node scripts/dx/quantify-launcher.cjs npx nx start quantify",
+        "app": "quantify",
+        "skipEnvValidation": true,
+        "description": "启动 Quantify 生产服务"
       }
     },
     "front": {

@@ -1,15 +1,17 @@
 import type { MarketTimeframe } from '@ai/shared'
 import { DEFAULT_MARKET_SYMBOLS, MARKET_TIMEFRAMES } from '@ai/shared'
 import { registerAs } from '@nestjs/config'
+import { SUPPORTED_MARKET_TIMEFRAMES } from '../common/utils/prisma-enum-mappers'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'
 
 const env = defaultEnvAccessor
+const SUPPORTED_MARKET_TIMEFRAME_SET = new Set<string>(SUPPORTED_MARKET_TIMEFRAMES)
 
 export const appConfig = registerAs('app', () => ({
   appEnv: env.appEnv() || 'development',
-  port: env.int('PORT', 3000),
+  port: env.int('PORT', 3010),
   apiPrefix: env.str('API_PREFIX', 'api/v1'),
-  appName: env.str('APP_NAME', '@net/backend'),
+  appName: env.str('APP_NAME', 'quantify'),
 }))
 
 export const databaseConfig = registerAs('database', () => ({
@@ -134,8 +136,8 @@ const parseTimeframeList = (
         .filter(Boolean)
     : [...fallback]
 
-  const valid = source.filter(item => MARKET_TIMEFRAMES.includes(item as MarketTimeframe)) as MarketTimeframe[]
-  const invalid = source.filter(item => !MARKET_TIMEFRAMES.includes(item as MarketTimeframe))
+  const valid = source.filter(item => SUPPORTED_MARKET_TIMEFRAME_SET.has(item)) as MarketTimeframe[]
+  const invalid = source.filter(item => !SUPPORTED_MARKET_TIMEFRAME_SET.has(item))
 
   if (invalid.length > 0) {
 
@@ -161,7 +163,7 @@ export const marketDataConfig = registerAs('marketData', () => ({
   wsBaseUrl: env.str('MARKET_DATA_WS_URL', 'wss://stream.binance.com:9443'),
   streamPathTemplate: env.str('MARKET_DATA_WS_STREAM_PATH', 'stream?streams='),
   symbols: parseSymbolList(env.str('MARKET_DATA_SYMBOLS'), DEFAULT_MARKET_SYMBOLS),
-  timeframes: parseTimeframeList(env.str('MARKET_DATA_TIMEFRAMES'), MARKET_TIMEFRAMES),
+  timeframes: parseTimeframeList(env.str('MARKET_DATA_TIMEFRAMES'), SUPPORTED_MARKET_TIMEFRAMES),
   historicalLookbackMinutes: parsePositiveInt(env.str('MARKET_DATA_HISTORICAL_LOOKBACK_MINUTES'), 24 * 60),
   restBatchSize: parsePositiveInt(env.str('MARKET_DATA_REST_BATCH_SIZE'), 500),
   wsReconnectDelayMs: env.int('MARKET_DATA_WS_RECONNECT_DELAY_MS', 5_000),

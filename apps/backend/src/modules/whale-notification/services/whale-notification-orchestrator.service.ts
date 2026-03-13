@@ -7,7 +7,7 @@ import type { WhaleNotificationMatcherService } from './whale-notification-match
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
 import { Inject, Injectable } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@prisma/client'
+import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
 import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 import { WhaleNotificationDeduplicatorService as WhaleNotificationDeduplicatorServiceToken } from './whale-notification-deduplicator.service'

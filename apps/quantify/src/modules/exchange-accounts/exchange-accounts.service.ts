@@ -1,4 +1,4 @@
-import type { ExchangeAccount } from '@prisma/client'
+import type { ExchangeAccount } from '@/prisma/prisma.types'
 import type { CreateExchangeAccountDto } from './dto/create-exchange-account.dto'
 import type { ExchangeAccountResponseDto } from './dto/exchange-account.response.dto'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'

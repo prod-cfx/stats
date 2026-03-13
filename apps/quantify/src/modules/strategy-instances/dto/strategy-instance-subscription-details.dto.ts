@@ -1,95 +1,95 @@
 import { ApiProperty } from '@nestjs/swagger'
 
 /**
- * 璁㈤槄鐢ㄦ埛淇℃伅
+ * 订阅用户信息
  */
 export class SubscriberInfoDto {
-  @ApiProperty({ description: '鐢ㄦ埛 ID', example: 'c1234567890123456789abcd' })
+  @ApiProperty({ description: '用户 ID', example: 'c1234567890123456789abcd' })
   userId: string
 
-  @ApiProperty({ description: '鐢ㄦ埛鍚?, example: 'john_doe', required: false })
+  @ApiProperty({ description: '用户名', example: 'john_doe', required: false })
   username?: string
 
-  @ApiProperty({ description: '鐢ㄦ埛閭', example: 'john@example.com', required: false })
+  @ApiProperty({ description: '用户邮箱', example: 'john@example.com', required: false })
   email?: string
 
-  @ApiProperty({ description: '璁㈤槄鐘舵€?, enum: ['active', 'paused', 'cancelled'], example: 'active' })
+  @ApiProperty({ description: '订阅状态', enum: ['active', 'paused', 'cancelled'], example: 'active' })
   status: string
 
-  @ApiProperty({ description: '璁㈤槄閲戦 (USDT)', example: 1000.0 })
+  @ApiProperty({ description: '订阅金额 (USDT)', example: 1000.0 })
   subscriptionAmount: number
 
-  @ApiProperty({ description: '褰撳墠浠撲綅閲戦 (USDT)', example: 350.5 })
+  @ApiProperty({ description: '当前仓位金额 (USDT)', example: 350.5 })
   currentPositionAmount: number
 
-  @ApiProperty({ description: '鎸佷粨鏁伴噺', example: 2 })
+  @ApiProperty({ description: '持仓数量', example: 2 })
   openPositionsCount: number
 
-  @ApiProperty({ description: '缁戝畾鐨勪氦鏄撴墍璐︽埛 ID', required: false })
+  @ApiProperty({ description: '绑定的交易所账户 ID', required: false })
   exchangeAccountId?: string
 
-  @ApiProperty({ description: '缁戝畾鐨勪氦鏄撴墍鍚嶇О', required: false })
+  @ApiProperty({ description: '绑定的交易所名称', required: false })
   exchangeName?: string
 
-  @ApiProperty({ description: '璁㈤槄鏃堕棿' })
+  @ApiProperty({ description: '订阅时间' })
   subscribedAt: Date
 
-  @ApiProperty({ description: '鑷畾涔夊弬鏁?, required: false })
+  @ApiProperty({ description: '自定义参数', required: false })
   customParams?: Record<string, any>
 }
 
 /**
- * 绛栫暐瀹炰緥璁㈤槄璇︽儏 DTO
+ * 策略实例订阅详情 DTO
  */
 export class StrategyInstanceSubscriptionDetailsDto {
-  @ApiProperty({ description: '绛栫暐瀹炰緥 ID', example: 'c1234567890123456789abcd' })
+  @ApiProperty({ description: '策略实例 ID', example: 'c1234567890123456789abcd' })
   strategyInstanceId: string
 
-  @ApiProperty({ description: '绛栫暐瀹炰緥鍚嶇О', example: 'BTC 瓒嬪娍璺熼殢绛栫暐 v1' })
+  @ApiProperty({ description: '策略实例名称', example: 'BTC 趋势跟随策略 v1' })
   strategyInstanceName: string
 
-  @ApiProperty({ description: '绛栫暐妯℃澘鍚嶇О', example: 'BTC 瓒嬪娍璺熼殢' })
+  @ApiProperty({ description: '策略模板名称', example: 'BTC 趋势跟随' })
   strategyTemplateName: string
 
-  @ApiProperty({ description: '璁㈤槄鐢ㄦ埛鎬绘暟', example: 15 })
+  @ApiProperty({ description: '订阅用户总数', example: 15 })
   totalSubscribers: number
 
-  @ApiProperty({ description: '娲昏穬璁㈤槄鏁?, example: 12 })
+  @ApiProperty({ description: '活跃订阅数', example: 12 })
   activeSubscribers: number
 
-  @ApiProperty({ description: '鏆傚仠璁㈤槄鏁?, example: 2 })
+  @ApiProperty({ description: '暂停订阅数', example: 2 })
   pausedSubscribers: number
 
-  @ApiProperty({ description: '宸插彇娑堣闃呮暟', example: 1 })
+  @ApiProperty({ description: '已取消订阅数', example: 1 })
   cancelledSubscribers: number
 
-  @ApiProperty({ description: '鎬昏闃呴噾棰?(USDT)', example: 15000.0 })
+  @ApiProperty({ description: '总订阅金额 (USDT)', example: 15000.0 })
   totalSubscriptionAmount: number
 
-  @ApiProperty({ description: '褰撳墠鎬讳粨浣嶉噾棰?(USDT)', example: 4250.75 })
+  @ApiProperty({ description: '当前总仓位金额 (USDT)', example: 4250.75 })
   totalCurrentPositionAmount: number
 
-  @ApiProperty({ description: '骞冲潎浠撲綅鍗犳瘮 (%)', example: 28.34 })
+  @ApiProperty({ description: '平均仓位占比 (%)', example: 28.34 })
   averagePositionRatio: number
 
-  @ApiProperty({ description: '鎬绘寔浠撴暟閲?, example: 23 })
+  @ApiProperty({ description: '总持仓数量', example: 23 })
   totalOpenPositions: number
 
-  @ApiProperty({
-    description: '璁㈤槄鐢ㄦ埛鍒楄〃',
+  @ApiProperty({ 
+    description: '订阅用户列表',
     type: [SubscriberInfoDto]
   })
   subscribers: SubscriberInfoDto[]
 
-  @ApiProperty({ description: '璁㈤槄鐢ㄦ埛鎬绘暟锛堢敤浜庡垎椤碉級', example: 150 })
+  @ApiProperty({ description: '订阅用户总数（用于分页）', example: 150 })
   totalSubscribersCount: number
 
-  @ApiProperty({ description: '褰撳墠椤电爜', example: 1 })
+  @ApiProperty({ description: '当前页码', example: 1 })
   currentPage: number
 
-  @ApiProperty({ description: '姣忛〉鏁伴噺', example: 50 })
+  @ApiProperty({ description: '每页数量', example: 50 })
   pageSize: number
 
-  @ApiProperty({ description: '鏈€鍚庢洿鏂版椂闂? })
+  @ApiProperty({ description: '最后更新时间' })
   lastUpdatedAt: Date
 }

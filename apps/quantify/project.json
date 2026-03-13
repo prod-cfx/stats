@@ -1,47 +1,54 @@
 {
-  "name": "backend",
+  "name": "quantify",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/backend/src",
+  "sourceRoot": "apps/quantify/src",
   "projectType": "application",
-  "tags": ["scope:backend", "type:app", "framework:nestjs"],
+  "tags": ["scope:quantify", "type:app", "framework:nestjs"],
   "targets": {
+    "prisma:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @net/quantify run prisma:generate"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": ["{workspaceRoot}/apps/backend/dist"],
+      "outputs": ["{workspaceRoot}/apps/quantify/dist"],
+      "dependsOn": ["^build", "prisma:generate"],
       "options": {
-        "command": "pnpm --filter @net/backend run build"
+        "command": "pnpm --filter @net/quantify run build"
       }
     },
     "dev": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm --filter @net/backend run dev"
+        "command": "pnpm --filter @net/quantify run dev"
       }
     },
     "start": {
       "executor": "nx:run-commands",
       "dependsOn": ["build"],
       "options": {
-        "command": "pnpm --filter @net/backend run start"
+        "command": "pnpm --filter @net/quantify run start"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["apps/backend/src/**/*.ts", "apps/backend/e2e/**/*.ts"],
+        "lintFilePatterns": ["apps/quantify/src/**/*.ts", "apps/quantify/e2e/**/*.ts"],
         "eslintConfig": "eslint.config.js"
       }
     },
     "swagger": {
       "executor": "nx:run-commands",
       "outputs": [
-        "{workspaceRoot}/dist/openapi/backend.json",
-        "{workspaceRoot}/apps/backend/dist/openapi/backend.json"
+        "{workspaceRoot}/dist/openapi/quantify.json",
+        "{workspaceRoot}/apps/quantify/dist/openapi/quantify.json"
       ],
       "options": {
         "command": "pnpm exec ts-node -r tsconfig-paths/register src/swagger/export-openapi.ts",
-        "cwd": "apps/backend",
+        "cwd": "apps/quantify",
         "env": {
           "SKIP_PRISMA_CONNECT": "true"
         }
@@ -50,7 +57,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm --filter @net/backend run test"
+        "command": "pnpm --filter @net/quantify run test"
       }
     }
   }

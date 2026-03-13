@@ -10,7 +10,7 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 
 /**
  * 为了兼容当前裁剪后的 Prisma schema（不再包含部分交易相关枚举），
- * 这里不直接依赖 @prisma/client 导出的枚举类型，而是使用字符串类型别名。
+ * 这里不直接依赖 @/prisma/prisma.types 导出的枚举类型，而是使用字符串类型别名。
  * 如后续重新引入相关 Prisma 枚举，可将这些类型别名替换为 Prisma 枚举类型。
  */
 export type PrismaMarketTimeframe = string

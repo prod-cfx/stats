@@ -5,7 +5,7 @@ import type {
   Prisma,
   IndicatorConfig as PrismaIndicatorConfig,
   IndicatorType as PrismaIndicatorType,
-} from '@prisma/client'
+} from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'

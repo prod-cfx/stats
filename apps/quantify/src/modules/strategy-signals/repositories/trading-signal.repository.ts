@@ -1,4 +1,4 @@
-import type { Prisma, SignalStatus } from '@prisma/client'
+import type { Prisma, SignalStatus } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { AdminMenuType } from '@prisma/client'
+import { AdminMenuType } from '@/prisma/prisma.types'
 import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator'
 
 export class CreateAdminMenuDto {

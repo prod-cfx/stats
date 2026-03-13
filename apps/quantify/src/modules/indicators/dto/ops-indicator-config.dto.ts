@@ -9,42 +9,42 @@ export const INDICATOR_TYPES_DTO = ['RET', 'MOVING_AVG', 'VOLATILITY', 'VOLUME_R
 export type IndicatorTypeDto = (typeof INDICATOR_TYPES_DTO)[number]
 
 class IndicatorParamsDto {
-  @ApiProperty({ description: '鎸囨爣绐楀彛闀垮害锛堝懆鏈熸暟锛?, example: 20 })
+  @ApiProperty({ description: '指标窗口长度（周期数）', example: 20 })
   @Min(1)
   window!: number
 }
 
 export class CreateIndicatorConfigDto {
-  @ApiProperty({ description: 'Symbol 涓婚敭 ID', format: 'uuid' })
+  @ApiProperty({ description: 'Symbol 主键 ID', format: 'uuid' })
   @IsString()
   symbolId!: string
 
-  @ApiProperty({ description: '鏃堕棿鍛ㄦ湡', enum: INDICATOR_TIMEFRAMES_DTO })
+  @ApiProperty({ description: '时间周期', enum: INDICATOR_TIMEFRAMES_DTO })
   @IsString()
   @IsIn(INDICATOR_TIMEFRAMES_DTO)
   timeframe!: IndicatorTimeframeDto
 
-  @ApiProperty({ description: '鎸囨爣绫诲瀷', enum: INDICATOR_TYPES_DTO })
+  @ApiProperty({ description: '指标类型', enum: INDICATOR_TYPES_DTO })
   @IsString()
   @IsIn(INDICATOR_TYPES_DTO)
   type!: IndicatorTypeDto
 
-  @ApiProperty({ description: '閰嶇疆鍚嶇О锛岀敤浜庡尯鍒嗗悓绫绘寚鏍?, maxLength: 64 })
+  @ApiProperty({ description: '配置名称，用于区分同类指标', maxLength: 64 })
   @IsString()
   @MaxLength(64)
   name!: string
 
-  @ApiProperty({ description: '鎸囨爣鍙傛暟锛岀洰鍓嶄粎鏀寔 window', type: () => IndicatorParamsDto })
+  @ApiProperty({ description: '指标参数，目前仅支持 window', type: () => IndicatorParamsDto })
   @ValidateNested()
   @Type(() => IndicatorParamsDto)
   params!: IndicatorParamsDto
 
-  @ApiPropertyOptional({ description: '鏄惁鍚敤', default: true })
+  @ApiPropertyOptional({ description: '是否启用', default: true })
   @IsOptional()
   @IsBoolean()
   isEnabled?: boolean
 
-  @ApiPropertyOptional({ description: '鎻忚堪', maxLength: 255 })
+  @ApiPropertyOptional({ description: '描述', maxLength: 255 })
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -52,41 +52,41 @@ export class CreateIndicatorConfigDto {
 }
 
 export class UpdateIndicatorConfigDto {
-  @ApiPropertyOptional({ description: 'Symbol 涓婚敭 ID', format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Symbol 主键 ID', format: 'uuid' })
   @IsOptional()
   @IsString()
   symbolId?: string
 
-  @ApiPropertyOptional({ description: '鏃堕棿鍛ㄦ湡', enum: INDICATOR_TIMEFRAMES_DTO })
+  @ApiPropertyOptional({ description: '时间周期', enum: INDICATOR_TIMEFRAMES_DTO })
   @IsOptional()
   @IsString()
   @IsIn(INDICATOR_TIMEFRAMES_DTO)
   timeframe?: IndicatorTimeframeDto
 
-  @ApiPropertyOptional({ description: '鎸囨爣绫诲瀷', enum: INDICATOR_TYPES_DTO })
+  @ApiPropertyOptional({ description: '指标类型', enum: INDICATOR_TYPES_DTO })
   @IsOptional()
   @IsString()
   @IsIn(INDICATOR_TYPES_DTO)
   type?: IndicatorTypeDto
 
-  @ApiPropertyOptional({ description: '閰嶇疆鍚嶇О', maxLength: 64 })
+  @ApiPropertyOptional({ description: '配置名称', maxLength: 64 })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   name?: string
 
-  @ApiPropertyOptional({ description: '鎸囨爣鍙傛暟锛岀洰鍓嶄粎鏀寔 window', type: () => IndicatorParamsDto })
+  @ApiPropertyOptional({ description: '指标参数，目前仅支持 window', type: () => IndicatorParamsDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => IndicatorParamsDto)
   params?: IndicatorParamsDto
 
-  @ApiPropertyOptional({ description: '鏄惁鍚敤' })
+  @ApiPropertyOptional({ description: '是否启用' })
   @IsOptional()
   @IsBoolean()
   isEnabled?: boolean
 
-  @ApiPropertyOptional({ description: '鎻忚堪', maxLength: 255 })
+  @ApiPropertyOptional({ description: '描述', maxLength: 255 })
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -94,33 +94,35 @@ export class UpdateIndicatorConfigDto {
 }
 
 export class IndicatorConfigListQueryDto {
-  @ApiPropertyOptional({ description: 'Symbol 浠ｇ爜锛屽 BTCUSDT' })
+  @ApiPropertyOptional({ description: 'Symbol 代码，如 BTCUSDT' })
   @IsOptional()
   @IsString()
   symbolCode?: string
 
-  @ApiPropertyOptional({ description: '鏃堕棿鍛ㄦ湡', enum: ['1m', '5m', '15m', '1h', '4h', '1d'] })
+  @ApiPropertyOptional({ description: '时间周期', enum: ['1m', '5m', '15m', '1h', '4h', '1d'] })
   @IsOptional()
   @IsString()
   @IsIn(INDICATOR_TIMEFRAMES_DTO)
   timeframe?: IndicatorTimeframeDto
 
-  @ApiPropertyOptional({ description: '鎸囨爣绫诲瀷', enum: ['RET', 'MOVING_AVG', 'VOLATILITY', 'VOLUME_RATIO'] })
+  @ApiPropertyOptional({ description: '指标类型', enum: ['RET', 'MOVING_AVG', 'VOLATILITY', 'VOLUME_RATIO'] })
   @IsOptional()
   @IsString()
   @IsIn(INDICATOR_TYPES_DTO)
   type?: IndicatorTypeDto
 
-  @ApiPropertyOptional({ description: '鏄惁鍚敤' })
+  @ApiPropertyOptional({ description: '是否启用' })
   @IsOptional()
   @IsBoolean()
   isEnabled?: boolean
 
-  @ApiPropertyOptional({ description: '椤电爜', default: 1 })
+  @ApiPropertyOptional({ description: '页码', default: 1 })
   @IsOptional()
   page?: number
 
-  @ApiPropertyOptional({ description: '姣忛〉鏁伴噺', default: 20 })
+  @ApiPropertyOptional({ description: '每页数量', default: 20 })
   @IsOptional()
   limit?: number
 }
+
+

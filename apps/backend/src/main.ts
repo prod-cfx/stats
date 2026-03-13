@@ -1,4 +1,5 @@
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
@@ -8,9 +9,21 @@ import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
 
 async function bootstrap() {
-  // 从 monorepo 根目录加载环境变量
-  // pnpm filter 会切换到应用目录,所以需要向上两级找到根目录
-  process.chdir(resolve(__dirname, '../../..'))
+  const findWorkspaceRoot = (startDir: string) => {
+    let current = startDir
+    while (true) {
+      if (existsSync(join(current, 'pnpm-workspace.yaml'))) {
+        return current
+      }
+      const parent = dirname(current)
+      if (parent === current) {
+        return startDir
+      }
+      current = parent
+    }
+  }
+
+  process.chdir(findWorkspaceRoot(__dirname))
   const env = loadEnvironment()
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,

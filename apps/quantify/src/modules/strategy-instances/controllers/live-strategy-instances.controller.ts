@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -26,7 +26,7 @@ export class LiveStrategyInstancesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇杩愯涓殑绛栫暐瀹炰緥鍒楄〃锛堝叕寮€锛? })
+  @ApiOperation({ summary: '获取运行中的策略实例列表（公开）' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -49,7 +49,7 @@ export class LiveStrategyInstancesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '鑾峰彇杩愯涓殑绛栫暐瀹炰緥璇︽儏锛堝叕寮€锛? })
+  @ApiOperation({ summary: '获取运行中的策略实例详情（公开）' })
   @ApiResponse({ status: 200, type: StrategyInstancePublicResponseDto })
   async detail(
     @Param('id') id: string,
@@ -59,7 +59,7 @@ export class LiveStrategyInstancesController {
   }
 
   @Get(':id/signals')
-  @ApiOperation({ summary: '鑾峰彇鎸囧畾绛栫暐瀹炰緥鐨勪俊鍙疯褰曪紙鏈€杩戣涓哄洖鏀撅級' })
+  @ApiOperation({ summary: '获取指定策略实例的信号记录（最近行为回放）' })
   @ApiOkResponse({
     schema: {
       allOf: [

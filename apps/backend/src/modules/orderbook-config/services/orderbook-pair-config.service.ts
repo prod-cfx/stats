@@ -1,11 +1,11 @@
 import type { MarketId, VenueOrderBook } from '@ai/shared'
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 import { ErrorCode, toMarketKey } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
@@ -63,21 +63,24 @@ export class OrderbookPairConfigService {
     }
     catch (error: unknown) {
       // 捕获 Prisma 唯一约束冲突（并发情况下可能通过前置检查）
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const target = (error.meta as { target?: unknown })?.target
-        if (Array.isArray(target) && target.includes('symbol')) {
-          throw new DomainException(
-            `该市场配置已存在：${dto.symbol} @ ${dto.venue} (${dto.instrumentType})`,
-            {
-              code: ErrorCode.CONFLICT,
-              status: HttpStatus.CONFLICT,
-            },
-          )
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        const knownError = error as Prisma.PrismaClientKnownRequestError
+        if (knownError.code === 'P2002') {
+          const target = (knownError.meta as { target?: unknown })?.target
+          if (Array.isArray(target) && target.includes('symbol')) {
+            throw new DomainException(
+              `该市场配置已存在：${dto.symbol} @ ${dto.venue} (${dto.instrumentType})`,
+              {
+                code: ErrorCode.CONFLICT,
+                status: HttpStatus.CONFLICT,
+              },
+            )
+          }
+          throw new DomainException('Pair ID already exists', {
+            code: ErrorCode.CONFLICT,
+            status: HttpStatus.CONFLICT,
+          })
         }
-        throw new DomainException('Pair ID already exists', {
-          code: ErrorCode.CONFLICT,
-          status: HttpStatus.CONFLICT,
-        })
       }
       throw error
     }
@@ -237,4 +240,3 @@ export class OrderbookPairConfigService {
   //   return []
   // }
 }
-

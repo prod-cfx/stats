@@ -3,67 +3,67 @@ import { Type } from 'class-transformer'
 import { IsArray, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator'
 
 /**
- * 鍗曟牴 K 绾挎暟鎹紙涓庢妧鏈寚鏍囨ā鍧楃殑 Bar 缁撴瀯淇濇寔涓€鑷达級
+ * 单根 K 线数据（与技术指标模块的 Bar 结构保持一致）
  */
 export class TestBarDto {
-  @ApiProperty({ description: '寮€鐩樹环' })
+  @ApiProperty({ description: '开盘价' })
   @IsNumber()
   open: number
 
-  @ApiProperty({ description: '鏈€楂樹环' })
+  @ApiProperty({ description: '最高价' })
   @IsNumber()
   high: number
 
-  @ApiProperty({ description: '鏈€浣庝环' })
+  @ApiProperty({ description: '最低价' })
   @IsNumber()
   low: number
 
-  @ApiProperty({ description: '鏀剁洏浠? })
+  @ApiProperty({ description: '收盘价' })
   @IsNumber()
   close: number
 
-  @ApiProperty({ description: '鎴愪氦閲? })
+  @ApiProperty({ description: '成交量' })
   @IsNumber()
   volume: number
 
-  @ApiProperty({ description: '鏃堕棿鎴筹紙姣锛?, required: false })
+  @ApiProperty({ description: '时间戳（毫秒）', required: false })
   @IsOptional()
   @IsNumber()
   timestamp?: number
 }
 
 /**
- * 澶氳吙澶氬懆鏈熷満鏅笅锛屽崟涓?leg + timeframe 鐨勬暟鎹粨鏋?
+ * 多腿多周期场景下，单个 leg + timeframe 的数据结构
  */
 export class TestLegTimeframeDataDto {
-  @ApiProperty({ type: () => [TestBarDto], description: 'K 绾挎暟鎹暟缁? })
+  @ApiProperty({ type: () => [TestBarDto], description: 'K 线数据数组' })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => TestBarDto)
   bars: TestBarDto[]
 
   @ApiProperty({
-    description: '鎶€鏈寚鏍囧瓧鍏革紝渚嬪 { rsi_14: 45.2, ma_20: 62000 }',
+    description: '技术指标字典，例如 { rsi_14: 45.2, ma_20: 62000 }',
     type: Object,
   })
   @IsObject()
   indicators: Record<string, number>
 
-  @ApiProperty({ description: '褰撳墠浠锋牸锛堥€氬父涓烘渶鏂颁竴鏍?K 绾挎敹鐩樹环锛? })
+  @ApiProperty({ description: '当前价格（通常为最新一根 K 线收盘价）' })
   @IsNumber()
   currentPrice: number
 }
 
 /**
- * 涓诲姩瑙﹀彂瀹炰緥妫€鏌ョ殑鍏ュ弬
+ * 主动触发实例检查的入参
  *
- * 鍏煎涓ょ鏂瑰紡锛?
- * - 鍗曡吙妯″紡锛堟棫鏋舵瀯锛夛細鐩存帴浼?bars / indicators / currentPrice
- * - 澶氳吙澶氬懆鏈熸ā寮忥紙鏂版灦鏋勶級锛氭寜 legId + timeframe 缁勭粐鍒?multiLegData 涓?
+ * 兼容两种方式：
+ * - 单腿模式（旧架构）：直接传 bars / indicators / currentPrice
+ * - 多腿多周期模式（新架构）：按 legId + timeframe 组织到 multiLegData 中
  */
 export class TestStrategyInstanceDto {
   @ApiProperty({
-    description: '锛堝彲閫夛級鍗曡吙妯″紡涓嬬殑 K 绾挎暟鎹暟缁?,
+    description: '（可选）单腿模式下的 K 线数据数组',
     required: false,
     type: () => [TestBarDto],
   })
@@ -74,7 +74,7 @@ export class TestStrategyInstanceDto {
   bars?: TestBarDto[]
 
   @ApiProperty({
-    description: '锛堝彲閫夛級鍗曡吙妯″紡涓嬬殑浜ゆ槗瀵逛唬鐮侊紝渚嬪 BTCUSDT',
+    description: '（可选）单腿模式下的交易对代码，例如 BTCUSDT',
     required: false,
   })
   @IsOptional()
@@ -82,7 +82,7 @@ export class TestStrategyInstanceDto {
   symbol?: string
 
   @ApiProperty({
-    description: '锛堝彲閫夛級鍗曡吙妯″紡涓嬬殑鏃堕棿鍛ㄦ湡锛屼緥濡?1h',
+    description: '（可选）单腿模式下的时间周期，例如 1h',
     required: false,
   })
   @IsOptional()
@@ -90,7 +90,7 @@ export class TestStrategyInstanceDto {
   timeframe?: string
 
   @ApiProperty({
-    description: '锛堝彲閫夛級鍗曡吙妯″紡涓嬬殑鎶€鏈寚鏍囧璞?,
+    description: '（可选）单腿模式下的技术指标对象',
     required: false,
     type: Object,
   })
@@ -99,7 +99,7 @@ export class TestStrategyInstanceDto {
   indicators?: Record<string, number>
 
   @ApiProperty({
-    description: '锛堝彲閫夛級鍗曡吙妯″紡涓嬬殑褰撳墠浠锋牸',
+    description: '（可选）单腿模式下的当前价格',
     required: false,
   })
   @IsOptional()
@@ -108,24 +108,24 @@ export class TestStrategyInstanceDto {
 
   @ApiProperty({
     description:
-      '锛堝彲閫夛級澶氳吙澶氬懆鏈熸ā寮忕殑鏁版嵁锛宬ey 涓?legId锛寁alue 涓?timeframe -> 鏁版嵁 鐨勬槧灏勩€? +
-      '渚嬪锛歿"btc": {"1h": { "bars": [...], "indicators": {...}, "currentPrice": 62000 }}}',
+      '（可选）多腿多周期模式的数据，key 为 legId，value 为 timeframe -> 数据 的映射。' +
+      '例如：{"btc": {"1h": { "bars": [...], "indicators": {...}, "currentPrice": 62000 }}}',
     required: false,
     type: Object,
   })
   @IsOptional()
   @IsObject()
-  // 涓哄吋瀹瑰灞傜骇鐨勫姩鎬侀敭缁撴瀯锛屼笉瀵瑰唴閮ㄥ瓧娈靛仛涓ユ牸鏍￠獙锛屼粎瑕佹眰涓哄璞°€?
-  // 鍏蜂綋瀛楁鐢辫剼鏈墽琛岄樁娈佃繘琛屾牎楠屽拰鎶ラ敊銆?
+  // 为兼容多层级的动态键结构，不对内部字段做严格校验，仅要求为对象。
+  // 具体字段由脚本执行阶段进行校验和报错。
   multiLegData?: Record<string, Record<string, unknown>>
 }
 
 /**
- * 涓诲姩瑙﹀彂瀹炰緥妫€鏌ョ殑杩斿洖缁撴灉
+ * 主动触发实例检查的返回结果
  */
 export class TestStrategyInstanceResultDto {
   @ApiProperty({
-    description: '鑴氭湰鎵ц杩斿洖鐨勫師濮嬬粨鏋滐紙閫氬父涓虹敤浜庡～鍏?Prompt 鐨勬暟鎹璞★級',
+    description: '脚本执行返回的原始结果（通常为用于填充 Prompt 的数据对象）',
     type: Object,
   })
   @IsObject()
@@ -133,10 +133,11 @@ export class TestStrategyInstanceResultDto {
   scriptResult: Record<string, unknown>
 
   @ApiProperty({
-    description: '灏嗚剼鏈粨鏋滃～鍏呭埌 Prompt 妯℃澘鍚庡緱鍒扮殑鏈€缁?Prompt 鏂囨湰锛屼究浜庤皟璇?,
+    description: '将脚本结果填充到 Prompt 模板后得到的最终 Prompt 文本，便于调试',
     required: false,
   })
   @IsOptional()
   @IsString()
   filledPrompt?: string
 }
+

@@ -11,31 +11,31 @@ export const GENERATE_TRADING_SIGNAL_TOOL_NAME = 'generate_trading_signal'
 
 export interface AiSignalPayloadWithMeta extends AiSignalPayload {
   /**
-   * 浜ゆ槗鏍囩殑浠ｇ爜锛堝繀濉級
+   * 交易标的代码（必填）
    */
   symbol: string
   /**
-   * 棰濆鐨勪笂涓嬫枃鍏冩暟鎹紝渚嬪锛?
-   * - 瑙﹀彂鐨?timeframe
-   * - 甯傚満鐘跺喌
-   * - 浠讳綍鑷畾涔夋爣绛?
+   * 额外的上下文元数据，例如：
+   * - 触发的 timeframe
+   * - 市场状况
+   * - 任何自定义标签
    */
   meta?: {
-    /** 鏃堕棿鍛ㄦ湡锛屽 '1h', '4h', '1d' */
+    /** 时间周期，如 '1h', '4h', '1d' */
     timeframe?: string
-    /** 甯傚満鐘跺喌锛屽 'bullish', 'bearish', 'sideways' */
+    /** 市场状况，如 'bullish', 'bearish', 'sideways' */
     marketCondition?: string
-    /** 娉㈠姩鐜囩瓑绾э紝濡?'low', 'medium', 'high' */
+    /** 波动率等级，如 'low', 'medium', 'high' */
     volatility?: string
-    /** 瓒嬪娍寮哄害锛?-100 */
+    /** 趋势强度，0-100 */
     trendStrength?: number
-    /** 鍏朵粬鑷畾涔夊瓧娈?*/
+    /** 其他自定义字段 */
     [key: string]: unknown
   }
 }
 
 /**
- * 鏁版嵁鏌ヨ涓庤绠楀伐鍏凤紙浠?AI 妯″潡瀵煎叆锛?
+ * 数据查询与计算工具（从 AI 模块导入）
  */
 const dataQueryTools: ChatCompletionTool[] = [
   {
@@ -73,67 +73,67 @@ const dataQueryTools: ChatCompletionTool[] = [
 ]
 
 /**
- * 鍐崇瓥杈撳嚭宸ュ叿
+ * 决策输出工具
  */
 const tradingSignalTool: ChatCompletionTool = {
   type: 'function',
   function: {
     name: GENERATE_TRADING_SIGNAL_TOOL_NAME,
     description:
-      '鏍规嵁褰撳墠閲忓寲绛栫暐鍜岄闄╅厤缃紝杈撳嚭涓€鏉＄粨鏋勫寲鐨勪氦鏄撲俊鍙峰喅绛栥€傚繀椤婚€氳繃姝ゅ伐鍏疯緭鍑烘渶缁堝喅绛栵紝鑰屼笉鏄嚜鐒惰瑷€鍥炵瓟銆?,
+      '根据当前量化策略和风险配置，输出一条结构化的交易信号决策。必须通过此工具输出最终决策，而不是自然语言回答。',
     parameters: {
       type: 'object',
       properties: {
         symbol: {
           type: 'string',
-          description: '浜ゆ槗鏍囩殑浠ｇ爜锛屽 BTCUSDT銆丒THUSDT 绛夈€傚繀椤绘槸浣犱箣鍓嶈皟鐢ㄥ伐鍏锋煡璇㈣繃鐨勬爣鐨?,
+          description: '交易标的代码，如 BTCUSDT、ETHUSDT 等。必须是你之前调用工具查询过的标的',
         },
         direction: {
           type: 'string',
-          description: '浜ゆ槗鏂瑰悜锛孊UY/SELL/CLOSE_LONG/CLOSE_SHORT 涔嬩竴',
+          description: '交易方向，BUY/SELL/CLOSE_LONG/CLOSE_SHORT 之一',
           enum: ['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT'],
         },
         signalType: {
           type: 'string',
-          description: '淇″彿绫诲瀷锛孍NTRY/EXIT/ADJUSTMENT/ALERT 涔嬩竴锛岄粯璁?ENTRY',
+          description: '信号类型，ENTRY/EXIT/ADJUSTMENT/ALERT 之一，默认 ENTRY',
           enum: ['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT'],
         },
         confidence: {
           type: 'number',
-          description: '缃俊搴︼紝0-100 涔嬮棿鐨勬暟鍊?,
+          description: '置信度，0-100 之间的数值',
           minimum: 0,
           maximum: 100,
         },
         entryPrice: {
           type: 'number',
-          description: '寤鸿鍏ュ満浠锋牸锛堝彲閫夛級锛屼笉濉椂鐢辩郴缁熶娇鐢ㄥ綋鍓嶅競浠?,
+          description: '建议入场价格（可选），不填时由系统使用当前市价',
         },
         stopLoss: {
           type: 'number',
-          description: '姝㈡崯浠锋牸锛堝彲閫夛級',
+          description: '止损价格（可选）',
         },
         takeProfit: {
           type: 'number',
-          description: '姝㈢泩浠锋牸锛堝彲閫夛級',
+          description: '止盈价格（可选）',
         },
         reasoning: {
           type: 'string',
-          description: '瀵规湰娆″喅绛栫殑绠€瑕佷腑鏂囪В閲婏紙鍗曡锛屼笉瓒呰繃 300 瀛楃锛屼笉瑕佷娇鐢ㄦ崲琛岀锛夛紝渚夸簬鐢ㄦ埛鐞嗚В绛栫暐琛屼负',
+          description: '对本次决策的简要中文解释（单行，不超过 300 字符，不要使用换行符），便于用户理解策略行为',
           maxLength: 300,
         },
         positionSizeQuote: {
           type: 'number',
-          description: '鏈浠撲綅鐨勫悕涔夐噾棰濓紙浠ユ姤浠疯揣甯佽锛屾瘮濡?USDT锛夛紝鍙€?,
+          description: '本次仓位的名义金额（以报价货币计，比如 USDT），可选',
         },
         positionSizeRatio: {
           type: 'number',
-          description: '鏈浠撲綅鍗犺处鎴锋潈鐩婄殑姣斾緥锛?-1锛夛紝鍙€?,
+          description: '本次仓位占账户权益的比例（0-1），可选',
           minimum: 0,
           maximum: 1,
         },
         meta: {
           type: 'object',
-          description: '棰濆鐨勫厓鏁版嵁瀛楁锛屽墠鍚庣鍙互鑷畾涔夋墿灞?,
+          description: '额外的元数据字段，前后端可以自定义扩展',
           additionalProperties: true,
         },
       },
@@ -144,11 +144,12 @@ const tradingSignalTool: ChatCompletionTool = {
 }
 
 /**
- * LLM v3 宸ュ叿鍒楄〃锛堝畬鏁寸増锛?
+ * LLM v3 工具列表（完整版）
  *
- * 鍖呭惈鏁版嵁鏌ヨ宸ュ叿锛?涓級+ 鍐崇瓥杈撳嚭宸ュ叿锛?涓級
+ * 包含数据查询工具（4个）+ 决策输出工具（1个）
  */
 export const llmV3Tools: ChatCompletionTool[] = [
   ...dataQueryTools,
   tradingSignalTool,
 ]
+

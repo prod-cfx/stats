@@ -1,11 +1,11 @@
-import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@prisma/client'
+import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import type { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals-query.dto'
 import { ForbiddenException, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest 娉ㄥ叆闇€瑕佽繍琛屾椂绫?
+// eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类
 import { PrismaService } from '@/prisma/prisma.service'
 import { LlmStrategyInstancePublicResponseDto } from '../dto/live-llm-strategy-instance-response.dto'
 import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy-instance-not-found.exception'
@@ -15,9 +15,9 @@ export class LiveLlmStrategyInstancesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 鍏紑鍏ュ彛锛氳幏鍙栬繍琛屼腑鐨?LLM 绛栫暐瀹炰緥鍒楄〃
-   * - 鐢熶骇鐜锛氫粎杩斿洖 status=running 涓?mode=LIVE 涓旀墍灞炵瓥鐣ヤ负 live 鐨勫疄渚?
-   * - 寮€鍙戠幆澧冿細鏀惧闄愬埗锛堜富瑕佺敤浜庢湰鍦拌仈璋冿級
+   * 公开入口：获取运行中的 LLM 策略实例列表
+   * - 生产环境：仅返回 status=running 且 mode=LIVE 且所属策略为 live 的实例
+   * - 开发环境：放宽限制（主要用于本地联调）
    */
   async listRunningInstances(
     query: LiveLlmStrategyInstanceListQueryDto,
@@ -29,10 +29,10 @@ export class LiveLlmStrategyInstancesService {
 
     const client = this.prisma.getClient()
 
-    // 涓轰簡涓庝骇鍝侀鏈熶竴鑷达細鏃犺鐜閮藉彧杩斿洖鈥滆繍琛屼腑鈥濈殑瀹炰緥
-    // - status 蹇呴』涓?running
-    // - mode 蹇呴』涓?LIVE
-    // - 鎵€灞炵瓥鐣ュ繀椤讳负 live
+    // 为了与产品预期一致：无论环境都只返回“运行中”的实例
+    // - status 必须为 running
+    // - mode 必须为 LIVE
+    // - 所属策略必须为 live
     const where = {
       status: 'running' as LlmStrategyInstanceStatus,
       mode: 'LIVE' as LlmStrategyInstanceMode,
@@ -69,7 +69,7 @@ export class LiveLlmStrategyInstancesService {
           })
           subs.forEach(sub => subscriptionMap.set(sub.llmStrategyInstanceId, true))
         } catch (error) {
-          // 鏈湴寮€鍙戠幆澧冨彲鑳藉皻鏈墽琛?LLM 璁㈤槄鐩稿叧杩佺Щ锛岃〃涓嶅瓨鍦ㄦ椂闄嶇骇涓烘湭璁㈤槄鐘舵€?
+          // 本地开发环境可能尚未执行 LLM 订阅相关迁移，表不存在时降级为未订阅状态
           if (
             error instanceof Prisma.PrismaClientKnownRequestError &&
             error.code === 'P2021' &&
@@ -91,7 +91,7 @@ export class LiveLlmStrategyInstancesService {
   }
 
   /**
-   * 鐢ㄦ埛绔細鑾峰彇杩愯涓殑 LLM 绛栫暐瀹炰緥璇︽儏锛堝叕寮€锛?
+   * 用户端：获取运行中的 LLM 策略实例详情（公开）
    */
   async getRunningInstanceDetail(
     id: string,
@@ -139,7 +139,7 @@ export class LiveLlmStrategyInstancesService {
         })
         isSubscribed = !!sub
       } catch (error) {
-        // 琛ㄤ笉瀛樺湪鏃跺湪鏈湴寮€鍙戠幆澧冮檷绾т负鏈闃呯姸鎬侊紝閬垮厤鏁翠釜璇︽儏鎺ュ彛 500
+        // 表不存在时在本地开发环境降级为未订阅状态，避免整个详情接口 500
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === 'P2021' &&
@@ -156,8 +156,8 @@ export class LiveLlmStrategyInstancesService {
   }
 
   /**
-   * 鐢ㄦ埛绔細LLM 绛栫暐瀹炰緥淇″彿鍒楄〃锛堝綋鍓嶅厛杩斿洖绌哄垪琛紱鍚庣画鍙帴鍏?runs/鐢熸垚淇″彿鎸佷箙鍖栵級
-   * - 鐢熶骇鐜锛氳姹傜敤鎴峰繀椤昏闃呭悗鎵嶅彲璁块棶锛堥伩鍏嶆硠闇茬瓥鐣ヨ涓虹粏鑺傦級
+   * 用户端：LLM 策略实例信号列表（当前先返回空列表；后续可接入 runs/生成信号持久化）
+   * - 生产环境：要求用户必须订阅后才可访问（避免泄露策略行为细节）
    */
   async getRunningInstanceSignals(
     id: string,
@@ -168,7 +168,7 @@ export class LiveLlmStrategyInstancesService {
       process.env.NODE_ENV === 'development' ||
       process.env.APP_ENV === 'development'
 
-    // 鏍￠獙瀹炰緥鍙鎬?
+    // 校验实例可见性
     await this.getRunningInstanceDetail(id, userId)
 
     if (!isDevEnv) {
@@ -183,7 +183,7 @@ export class LiveLlmStrategyInstancesService {
           select: { id: true },
         })
         if (!hasSubscription) {
-          throw new ForbiddenException('浠呰闃呰绛栫暐鐨勭敤鎴峰彲浠ユ煡鐪嬭缁嗕俊鍙?)
+          throw new ForbiddenException('仅订阅该策略的用户可以查看详细信号')
         }
       } catch (error) {
         if (
@@ -191,7 +191,7 @@ export class LiveLlmStrategyInstancesService {
           error.code === 'P2021' &&
           String(error.message).includes('user_llm_strategy_subscriptions')
         ) {
-          // 鐢熶骇鐜琛ㄤ笉瀛樺湪灞炰簬閰嶇疆閿欒锛岃繖閲屼粛鐒舵姏鍑?500 浠ヤ究鍛婅
+          // 生产环境表不存在属于配置错误，这里仍然抛出 500 以便告警
           throw error
         }
         throw error

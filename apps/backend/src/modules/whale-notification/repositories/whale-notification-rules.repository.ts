@@ -3,11 +3,11 @@ import type {
   WhaleNotificationChannel,
   WhaleNotificationDeliveryStatus,
   WhaleNotificationRuleType,
-} from '@prisma/client'
+} from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { randomUUID } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
 
 interface CreateRuleParams {

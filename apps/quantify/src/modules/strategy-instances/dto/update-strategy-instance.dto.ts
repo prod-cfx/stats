@@ -1,25 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsJSON, IsOptional, IsString } from 'class-validator'
 
 export class UpdateStrategyInstanceDto {
-  @ApiProperty({ description: '瀹炰緥鍚嶇О', required: false })
+  @ApiProperty({ description: '实例名称', required: false })
   @IsString()
   @IsOptional()
   name?: string
 
-  @ApiProperty({ description: '瀹炰緥鎻忚堪', required: false })
+  @ApiProperty({ description: '实例描述', required: false })
   @IsString()
   @IsOptional()
   description?: string
 
-  @ApiProperty({ description: 'LLM 妯″瀷', required: false })
+  @ApiProperty({ description: 'LLM 模型', required: false })
   @IsString()
   @IsOptional()
   llmModel?: string
 
   @ApiProperty({
-    description: '瀹炰緥鐘舵€?,
+    description: '实例状态',
     enum: StrategyInstanceStatus,
     required: false,
   })
@@ -28,7 +28,7 @@ export class UpdateStrategyInstanceDto {
   status?: StrategyInstanceStatus
 
   @ApiProperty({
-    description: '杩愯妯″紡锛欱ACKTEST=鍘嗗彶鍥炴祴锛孭APER=绾镐笂浜ゆ槗锛孴ESTNET=娴嬭瘯缃戜氦鏄擄紝LIVE=瀹炵洏浜ゆ槗銆傛敞鎰忥細杩愯涓殑瀹炰緥鏃犳硶鍒囨崲妯″紡锛孡IVE妯″紡涓嶈兘鍒囨崲鍒癇ACKTEST妯″紡锛屽凡鍋滄鐨勫疄渚嬩笉鑳藉垏鎹㈡ā寮?,
+    description: '运行模式：BACKTEST=历史回测，PAPER=纸上交易，TESTNET=测试网交易，LIVE=实盘交易。注意：运行中的实例无法切换模式，LIVE模式不能切换到BACKTEST模式，已停止的实例不能切换模式',
     enum: StrategyInstanceMode,
     required: false,
     example: 'PAPER',
@@ -37,17 +37,17 @@ export class UpdateStrategyInstanceDto {
   @IsOptional()
   mode?: StrategyInstanceMode
 
-  @ApiProperty({ description: '瀹炰緥鍙傛暟锛圝SON 鏍煎紡锛?, required: false })
+  @ApiProperty({ description: '实例参数（JSON 格式）', required: false })
   @IsJSON()
   @IsOptional()
   params?: Record<string, unknown>
 
-  @ApiProperty({ description: '鍏冩暟鎹紙JSON 鏍煎紡锛?, required: false })
+  @ApiProperty({ description: '元数据（JSON 格式）', required: false })
   @IsJSON()
   @IsOptional()
   metadata?: Record<string, unknown>
 
-  @ApiPropertyOptional({ description: '鏇存柊浜烘爣璇?, example: 'system-operator' })
+  @ApiPropertyOptional({ description: '更新人标识', example: 'system-operator' })
   @IsString()
   @IsOptional()
   updatedBy?: string

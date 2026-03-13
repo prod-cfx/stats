@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄥ拰渚濊禆娉ㄥ叆闇€瑕佽繍琛屾椂瀵煎叆 */
-import type { Prisma, StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import type { Prisma, StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'

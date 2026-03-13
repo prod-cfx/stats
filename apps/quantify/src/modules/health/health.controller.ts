@@ -9,10 +9,10 @@ export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
   @Get()
-  @ApiOperation({ summary: '鍋ュ悍妫€鏌? })
+  @ApiOperation({ summary: '健康检查' })
   @ApiResponse({
     status: 200,
-    description: '鏈嶅姟鍋ュ悍鐘舵€?,
+    description: '服务健康状态',
     schema: {
       type: 'object',
       properties: {
@@ -35,3 +35,4 @@ export class HealthController {
     return this.healthService.getHealth()
   }
 }
+

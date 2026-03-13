@@ -2,41 +2,41 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsArray, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class StartCodegenSessionDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiPropertyOptional({ description: '瀵圭瓥鐣ョ洰鏍囩殑绗竴杞弿杩? })
+  @ApiPropertyOptional({ description: '对策略目标的第一轮描述' })
   @IsOptional()
   @IsString()
   initialMessage?: string
 
-  @ApiPropertyOptional({ description: '鏍囩殑鍒楄〃', type: [String] })
+  @ApiPropertyOptional({ description: '标的列表', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   symbols?: string[]
 
-  @ApiPropertyOptional({ description: '鍛ㄦ湡鍒楄〃', type: [String] })
+  @ApiPropertyOptional({ description: '周期列表', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   timeframes?: string[]
 
-  @ApiPropertyOptional({ description: '鍏ュ満瑙勫垯鍒楄〃', type: [String] })
+  @ApiPropertyOptional({ description: '入场规则列表', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   entryRules?: string[]
 
-  @ApiPropertyOptional({ description: '鍑哄満瑙勫垯鍒楄〃', type: [String] })
+  @ApiPropertyOptional({ description: '出场规则列表', type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   exitRules?: string[]
 
-  @ApiPropertyOptional({ description: '椋庢帶瑙勫垯', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '风控规则', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
   riskRules?: Record<string, unknown>

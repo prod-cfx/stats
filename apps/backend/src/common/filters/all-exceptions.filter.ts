@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { randomUUID } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { Catch, HttpException, HttpStatus, Inject, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { DomainException } from '../exceptions/domain.exception'
 import { EnvService } from '../services/env.service'
 

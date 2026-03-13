@@ -1,4 +1,4 @@
-import type { StrategyPnlDaily, UserStrategyAccount } from '@prisma/client'
+import type { StrategyPnlDaily, UserStrategyAccount } from '@/prisma/prisma.types'
 import type { CreateStrategyAccountDto } from './dto/create-strategy-account.dto'
 import type { LedgerEntryResponseDto } from './dto/ledger-entry.response.dto'
 import type { LedgerQueryDto } from './dto/ledger-query.dto'
@@ -9,7 +9,7 @@ import type { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily.query.dt
 import type { StrategyPnlDailyResponseDto } from './dto/strategy-pnl-daily.response.dto'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
-import { LedgerEntryType, PositionStatus, Prisma } from '@prisma/client'
+import { LedgerEntryType, PositionStatus, Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤

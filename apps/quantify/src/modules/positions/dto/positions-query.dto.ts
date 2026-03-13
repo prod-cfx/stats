@@ -1,32 +1,33 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
-import { PositionSide, PositionStatus } from '@prisma/client'
+import { PositionSide, PositionStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class PositionsQueryDto extends BasePaginationRequestDto {
-  @ApiPropertyOptional({ description: '涓氬姟鐢ㄦ埛 ID', example: 'usr_123' })
+  @ApiPropertyOptional({ description: '业务用户 ID', example: 'usr_123' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiPropertyOptional({ description: '鐢ㄦ埛绛栫暐璐︽埛 ID' })
+  @ApiPropertyOptional({ description: '用户策略账户 ID' })
   @IsOptional()
   @IsString()
   accountId?: string
 
-  @ApiPropertyOptional({ description: '浜ゆ槗瀵?, example: 'BTCUSDT' })
+  @ApiPropertyOptional({ description: '交易对', example: 'BTCUSDT' })
   @IsOptional()
   @IsString()
   symbol?: string
 
-  @ApiPropertyOptional({ description: '浠撲綅鏂瑰悜', enum: PositionSide })
+  @ApiPropertyOptional({ description: '仓位方向', enum: PositionSide })
   @IsOptional()
   @IsEnum(PositionSide)
   positionSide?: PositionSide
 
-  @ApiPropertyOptional({ description: '浠撲綅鐘舵€?, enum: PositionStatus })
+  @ApiPropertyOptional({ description: '仓位状态', enum: PositionStatus })
   @IsOptional()
   @IsEnum(PositionStatus)
   status?: PositionStatus
 
 }
+

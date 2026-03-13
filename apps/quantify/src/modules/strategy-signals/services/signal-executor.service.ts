@@ -1,5 +1,5 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@prisma/client'
+import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
@@ -7,7 +7,7 @@ import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 ConfigService
 import { ConfigService } from '@nestjs/config'
 import { OnEvent } from '@nestjs/event-emitter'
-import { LedgerEntryType, Prisma } from '@prisma/client'
+import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤

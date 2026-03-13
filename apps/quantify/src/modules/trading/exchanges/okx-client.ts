@@ -107,7 +107,7 @@ export class OkxClient extends BaseCexClient {
       body.px = this.toPrice(input.price)
     }
 
-    // OKX 鎵€鏈変骇鍝侀兘闇€瑕?tdMode锛氱幇璐т娇鐢?'cash'锛屾案缁粯璁?'cross'锛堝彲閫氳繃 extra 瑕嗙洊锛?
+    // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
     if (this.marketType === 'perp') {
       body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
     }
@@ -141,7 +141,7 @@ export class OkxClient extends BaseCexClient {
       marketType: input.marketType,
       side: input.side,
       type: input.type,
-      // 浠ヤ氦鏄撴墍瀹為檯鎺ユ敹鐨勪环鏍煎拰鏁伴噺涓哄噯锛屼繚璇佷笌鍚庣画鏌ヨ/鍙栨秷璺緞涓€鑷?
+      // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
       price: order.px ? Number.parseFloat(order.px) : input.price,
       amount: order.sz ? Number.parseFloat(order.sz) : input.amount,
       filled: Number.parseFloat(order.fillSz ?? '0'),
@@ -295,7 +295,7 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    // OKX 鍝嶅簲鏍煎紡锛歞ata: [{ details: [...] }] 鎴栧皯鏁版儏鍐典笅鎵佸钩缁撴瀯
+    // OKX 响应格式：data: [{ details: [...] }] 或少数情况下扁平结构
     const items = res.data.flatMap((snapshot) => {
       if (snapshot.details?.length) {
         return snapshot.details
@@ -313,7 +313,7 @@ export class OkxClient extends BaseCexClient {
     })
 
     return items
-      .filter(b => b.ccy) // 杩囨护鎺夋棤鏁堝竵绉?
+      .filter(b => b.ccy) // 过滤掉无效币种
       .map((b) => {
         const total = Number.parseFloat(b.eq) || 0
         const free = Number.parseFloat(b.availEq) || 0
@@ -391,7 +391,7 @@ export class OkxClient extends BaseCexClient {
     headers['OK-ACCESS-TIMESTAMP'] = timestamp
     headers['Content-Type'] = 'application/json'
 
-    // 鍚敤 OKX 妯℃嫙鐩?
+    // 启用 OKX 模拟盘
     if (this.config.isTestnet) {
       headers['x-simulated-trading'] = '1'
     }
@@ -404,44 +404,44 @@ export class OkxClient extends BaseCexClient {
       const record = data as { code: string; msg: string }
       const { code, msg } = record
 
-      // API Key 鏃犳晥鎴栦笉瀛樺湪
+      // API Key 无效或不存在
       if (code === '50113') {
-        return new AuthError('API Key鏃犳晥锛岃妫€鏌ユ槸鍚︽纭鍒?, data)
+        return new AuthError('API Key无效，请检查是否正确复制', data)
       }
 
-      // API Key 杩囨湡
+      // API Key 过期
       if (code === '50114') {
-        return new AuthError('API Key宸茶繃鏈燂紝璇烽噸鏂板垱寤篈PI Key锛堟敞鎰忥細鏈粦瀹欼P鐨勪氦鏄撴潈闄怟ey浼氬湪14澶╀笉浣跨敤鍚庤嚜鍔ㄥけ鏁堬級', data)
+        return new AuthError('API Key已过期，请重新创建API Key（注意：未绑定IP的交易权限Key会在14天不使用后自动失效）', data)
       }
 
-      // Passphrase 閿欒
+      // Passphrase 错误
       if (code === '50111') {
-        return new AuthError('Passphrase閿欒锛岃妫€鏌ュ垱寤篈PI Key鏃惰缃殑瀵嗙爜鐭', data)
+        return new AuthError('Passphrase错误，请检查创建API Key时设置的密码短语', data)
       }
 
-      // IP 鐧藉悕鍗曢檺鍒?
+      // IP 白名单限制
       if (code === '50112') {
-        return new AuthError('IP鍦板潃鏈姞鍏ョ櫧鍚嶅崟锛岃鍦∣KX API绠＄悊椤甸潰娣诲姞鏈嶅姟鍣↖P鎴栧彇娑圛P闄愬埗', data)
+        return new AuthError('IP地址未加入白名单，请在OKX API管理页面添加服务器IP或取消IP限制', data)
       }
 
-      // 鏉冮檺涓嶈冻
-      if (code === '51001' || msg.toLowerCase().includes('permission') || msg.includes('鏉冮檺')) {
-        return new AuthError('API Key鏉冮檺涓嶈冻锛岃纭繚寮€鍚?璇诲彇"鍜?浜ゆ槗"鏉冮檺', data)
+      // 权限不足
+      if (code === '51001' || msg.toLowerCase().includes('permission') || msg.includes('权限')) {
+        return new AuthError('API Key权限不足，请确保开启"读取"和"交易"权限', data)
       }
 
-      // API Key 琚鐢?
+      // API Key 被禁用
       if (code === '50115') {
-        return new AuthError('API Key宸茶绂佺敤鎴栧垹闄わ紝璇峰湪OKX API绠＄悊椤甸潰妫€鏌ョ姸鎬?, data)
+        return new AuthError('API Key已被禁用或删除，请在OKX API管理页面检查状态', data)
       }
 
-      // 绛惧悕閿欒
+      // 签名错误
       if (code === '50103' || code === '50102') {
-        return new AuthError('API绛惧悕楠岃瘉澶辫触锛岃妫€鏌PI Secret鍜孭assphrase鏄惁姝ｇ‘', data)
+        return new AuthError('API签名验证失败，请检查API Secret和Passphrase是否正确', data)
       }
 
-      // 鍏朵粬璁よ瘉鐩稿叧閿欒锛?寮€澶寸殑1xx绯诲垪閿欒锛?
+      // 其他认证相关错误（5开头的1xx系列错误）
       if (typeof code === 'string' && /^501\d{2}$/.test(code)) {
-        return new AuthError(`OKX璁よ瘉澶辫触: ${msg}`, data)
+        return new AuthError(`OKX认证失败: ${msg}`, data)
       }
 
       return new ExchangeError(`OKX error ${code}: ${msg}`, code, data)
@@ -460,18 +460,18 @@ export class OkxClient extends BaseCexClient {
   }
 
   private toInstrumentId(symbol: string, marketType: MarketType): string {
-    // 缁熶竴 symbol: BTC/USDT 鎴?BTC/USDT:PERP
+    // 统一 symbol: BTC/USDT 或 BTC/USDT:PERP
     const baseQuote = symbol.includes(':') ? symbol.split(':')[0] : symbol
     const [base, quote] = baseQuote.split('/')
     if (marketType === 'spot') {
       return `${base}-${quote}`
     }
-    // SWAP 鍚堢害
+    // SWAP 合约
     return `${base}-${quote}-SWAP`
   }
 
   private fromInstrumentId(instId: string): string {
-    // BTC-USDT 鎴?BTC-USDT-SWAP
+    // BTC-USDT 或 BTC-USDT-SWAP
     const parts = instId.split('-')
     if (parts.length < 2) return instId
     const [base, quote, suffix] = parts
@@ -491,27 +491,27 @@ export class OkxClient extends BaseCexClient {
   }
 
   /**
-   * 灏?OKX 鐨?ordType 鏄犲皠涓虹粺涓€鐨?OrderType銆?
+   * 将 OKX 的 ordType 映射为统一的 OrderType。
    *
-   * - limit / post_only / ioc / fok 绛夐兘瑙嗕负闄愪环鍗曡涔?
-   * - market 瑙嗕负甯備环鍗?
-   * - conditional / trigger / stop_* 瑙嗕负姝㈡崯鍗?
-   * 瀵规湭鐭ョ被鍨嬬洿鎺ユ姏鍑?ExchangeError锛岄伩鍏嶉潤榛樿鍒ゃ€?
+   * - limit / post_only / ioc / fok 等都视为限价单语义
+   * - market 视为市价单
+   * - conditional / trigger / stop_* 视为止损单
+   * 对未知类型直接抛出 ExchangeError，避免静默误判。
    */
   private reverseMapOrderType(ordType: string): OrderType {
     const lower = ordType.toLowerCase()
 
-    // 闄愪环绫伙細鏅€氶檺浠?+ 鍚勭 TIF 鍙樹綋
+    // 限价类：普通限价 + 各种 TIF 变体
     if (lower === 'limit' || lower === 'post_only' || lower === 'fok' || lower === 'ioc') {
       return 'limit'
     }
 
-    // 甯備环
+    // 市价
     if (lower === 'market') {
       return 'market'
     }
 
-    // 姝㈡崯/鏉′欢鍗?
+    // 止损/条件单
     if (lower === 'conditional' || lower === 'trigger' || lower === 'stop' || lower === 'oco') {
       return 'stop'
     }
@@ -536,7 +536,7 @@ export class OkxClient extends BaseCexClient {
       case 'failed':
         return 'rejected'
       default:
-        // 瀵规湭鐭ョ姸鎬佷繚瀹堝湴瑙嗕负 rejected锛岄伩鍏嶉敊璇睍绀轰负鏈垚浜?
+        // 对未知状态保守地视为 rejected，避免错误展示为未成交
         return 'rejected'
     }
   }
@@ -570,3 +570,5 @@ export class OkxClient extends BaseCexClient {
     }
   }
 }
+
+

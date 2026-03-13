@@ -3,7 +3,7 @@ import { IsNotEmpty, IsOptional, IsString, Length, Matches } from 'class-validat
 
 export class CreateStrategyAccountDto {
   @ApiProperty({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -11,7 +11,7 @@ export class CreateStrategyAccountDto {
   userId!: string
 
   @ApiProperty({
-    description: '绛栫暐鍞竴鏍囪瘑',
+    description: '策略唯一标识',
     example: 'strategy-grid-btc',
   })
   @IsString()
@@ -19,8 +19,8 @@ export class CreateStrategyAccountDto {
   strategyId!: string
 
   @ApiPropertyOptional({
-    description: '绛栫暐鍚嶇О锛堢敤浜庡啑浣欏睍绀猴級',
-    example: 'BTC 缃戞牸绛栫暐',
+    description: '策略名称（用于冗余展示）',
+    example: 'BTC 网格策略',
   })
   @IsOptional()
   @IsString()
@@ -28,7 +28,7 @@ export class CreateStrategyAccountDto {
   strategyName?: string
 
   @ApiPropertyOptional({
-    description: '绛栫暐鐗堟湰/鍙戣鍙?,
+    description: '策略版本/发行号',
     example: 'v2025.11',
   })
   @IsOptional()
@@ -37,7 +37,7 @@ export class CreateStrategyAccountDto {
   strategyVersion?: string
 
   @ApiProperty({
-    description: '璁′环璐у竵',
+    description: '计价货币',
     example: 'USDT',
   })
   @IsString()
@@ -45,9 +45,10 @@ export class CreateStrategyAccountDto {
   baseCurrency!: string
 
   @ApiProperty({
-    description: '鍒濆璧勯噾',
+    description: '初始资金',
     example: '1000.00',
   })
-  @Matches(/^-?\d+(\.\d+)?$/, { message: 'initialBalance 蹇呴』鏄暟瀛楀瓧绗︿覆' })
+  @Matches(/^-?\d+(\.\d+)?$/, { message: 'initialBalance 必须是数字字符串' })
   initialBalance!: string
 }
+

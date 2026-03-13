@@ -15,7 +15,7 @@ const MARKET_TYPES: MarketType[] = ['spot', 'perp']
 
 export class CreateExchangeAccountDto {
   @ApiProperty({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -23,14 +23,14 @@ export class CreateExchangeAccountDto {
   userId!: string
 
   @ApiProperty({
-    description: '浜ゆ槗鎵€鏍囪瘑',
+    description: '交易所标识',
     enum: EXCHANGE_IDS,
   })
   @IsEnum(EXCHANGE_IDS)
   exchangeId!: ExchangeId
 
   @ApiPropertyOptional({
-    description: '璐︽埛鍒悕锛岀敤鎴疯嚜瀹氫箟',
+    description: '账户别名，用户自定义',
     maxLength: 64,
   })
   @IsOptional()
@@ -39,7 +39,7 @@ export class CreateExchangeAccountDto {
   name?: string
 
   @ApiPropertyOptional({
-    description: '鏄惁浣跨敤娴嬭瘯缃?妯℃嫙鐩?,
+    description: '是否使用测试网/模拟盘',
     default: false,
   })
   @IsOptional()
@@ -47,7 +47,7 @@ export class CreateExchangeAccountDto {
   isTestnet?: boolean
 
   @ApiPropertyOptional({
-    description: '鐢ㄤ簬鍑嵁鏍￠獙鐨勯粯璁ゅ競鍦虹被鍨?,
+    description: '用于凭据校验的默认市场类型',
     enum: MARKET_TYPES,
     default: 'spot',
   })
@@ -70,19 +70,19 @@ export class CreateExchangeAccountDto {
   apiSecret?: string
 
   @ApiPropertyOptional({
-    description: 'OKX API Passphrase锛屼粎 OKX 闇€瑕?,
+    description: 'OKX API Passphrase，仅 OKX 需要',
   })
   @ValidateIf(dto => dto.exchangeId === 'okx')
   @IsString()
   passphrase?: string
 
-  // ==================== Hyperliquid 涓撶敤瀛楁 ====================
-  // 娉ㄦ剰锛欻yperliquid 瀹㈡埛绔綋鍓嶄负楠ㄦ灦瀹炵幇锛屽彲浠ュ垱寤鸿处鎴蜂絾浜ゆ槗鍔熻兘灏氭湭瀹屾垚
-  // 璇﹁锛歛pps/backend/src/modules/trading/exchanges/README_HYPERLIQUID.md
+  // ==================== Hyperliquid 专用字段 ====================
+  // 注意：Hyperliquid 客户端当前为骨架实现，可以创建账户但交易功能尚未完成
+  // 详见：apps/backend/src/modules/trading/exchanges/README_HYPERLIQUID.md
   // ================================================================
 
   @ApiPropertyOptional({
-    description: 'Hyperliquid 涓婚挶鍖呭湴鍧€锛堝繀椤绘槸鏈夋晥鐨勪互澶潑鍦板潃锛?x + 40涓崄鍏繘鍒跺瓧绗︼級',
+    description: 'Hyperliquid 主钱包地址（必须是有效的以太坊地址，0x + 40个十六进制字符）',
     example: '0x1234567890123456789012345678901234567890',
     pattern: '^0x[0-9a-fA-F]{40}$',
   })
@@ -94,7 +94,7 @@ export class CreateExchangeAccountDto {
   mainWalletAddress?: string
 
   @ApiPropertyOptional({
-    description: 'Hyperliquid agent 绉侀挜锛堝繀椤绘槸鏈夋晥鐨勪互澶潑绉侀挜锛?x + 64涓崄鍏繘鍒跺瓧绗︼級',
+    description: 'Hyperliquid agent 私钥（必须是有效的以太坊私钥，0x + 64个十六进制字符）',
     example: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     pattern: '^0x[0-9a-fA-F]{64}$',
   })
@@ -105,3 +105,4 @@ export class CreateExchangeAccountDto {
   })
   agentPrivateKey?: string
 }
+

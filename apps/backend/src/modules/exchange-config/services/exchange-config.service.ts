@@ -1,10 +1,10 @@
-import type { ExchangeConfig } from '@prisma/client'
+import type { ExchangeConfig } from '@/prisma/prisma.types'
 import type { CreateExchangeConfigDto } from '../dto/create-exchange-config.dto'
 import type { QueryExchangeConfigDto } from '../dto/query-exchange-config.dto'
 import type { UpdateExchangeConfigDto } from '../dto/update-exchange-config.dto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 Repository，保留值导入
@@ -53,11 +53,14 @@ export class ExchangeConfigService {
       return await this.repository.create(payload)
     }
     catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new DomainException('Exchange code already exists', {
-          code: ErrorCode.CONFLICT,
-          status: HttpStatus.CONFLICT,
-        })
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        const knownError = error as Prisma.PrismaClientKnownRequestError
+        if (knownError.code === 'P2002') {
+          throw new DomainException('Exchange code already exists', {
+            code: ErrorCode.CONFLICT,
+            status: HttpStatus.CONFLICT,
+          })
+        }
       }
       throw error
     }
@@ -83,11 +86,14 @@ export class ExchangeConfigService {
       return await this.repository.update(id, normalized)
     }
     catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new DomainException('Exchange code already exists', {
-          code: ErrorCode.CONFLICT,
-          status: HttpStatus.CONFLICT,
-        })
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        const knownError = error as Prisma.PrismaClientKnownRequestError
+        if (knownError.code === 'P2002') {
+          throw new DomainException('Exchange code already exists', {
+            code: ErrorCode.CONFLICT,
+            status: HttpStatus.CONFLICT,
+          })
+        }
       }
       throw error
     }
@@ -98,4 +104,3 @@ export class ExchangeConfigService {
     await this.repository.delete(id)
   }
 }
-

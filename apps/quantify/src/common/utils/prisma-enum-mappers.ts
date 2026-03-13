@@ -6,7 +6,7 @@
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
-import { $Enums } from '@prisma/client'
+import { $Enums } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
 export type PrismaMarketTimeframe = $Enums.MarketTimeframe
@@ -25,6 +25,8 @@ export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   H4: 'h4' as PrismaMarketTimeframe,
   D1: 'd1' as PrismaMarketTimeframe,
 } as const
+
+export const SUPPORTED_MARKET_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly MarketTimeframe[]
 
 /**
  * 灏嗗簲鐢ㄥ眰鏃堕棿鍛ㄦ湡鏄犲皠涓?Prisma 鏋氫妇閿悕

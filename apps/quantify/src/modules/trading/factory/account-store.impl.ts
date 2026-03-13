@@ -1,4 +1,4 @@
-import type { ExchangeId as PrismaExchangeId } from '@prisma/client'
+import type { ExchangeId as PrismaExchangeId } from '@/prisma/prisma.types'
 import type { ExchangeId } from '../core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './account-store'
 import { Inject, Injectable } from '@nestjs/common'

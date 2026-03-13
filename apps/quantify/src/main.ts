@@ -1,17 +1,32 @@
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { applyQuantifyEnvOverrides } from './config/quantify-env'
 import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
 
 async function bootstrap() {
-  // 浠?monorepo 鏍圭洰褰曞姞杞界幆澧冨彉閲?
-  // pnpm filter 浼氬垏鎹㈠埌搴旂敤鐩綍,鎵€浠ラ渶瑕佸悜涓婁袱绾ф壘鍒版牴鐩綍
-  process.chdir(resolve(__dirname, '../../..'))
-  const env = loadEnvironment()
+  const findWorkspaceRoot = (startDir: string) => {
+    let current = startDir
+    while (true) {
+      if (existsSync(join(current, 'pnpm-workspace.yaml'))) {
+        return current
+      }
+      const parent = dirname(current)
+      if (parent === current) {
+        return startDir
+      }
+      current = parent
+    }
+  }
+
+  process.chdir(findWorkspaceRoot(__dirname))
+  loadEnvironment()
+  applyQuantifyEnvOverrides()
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   })
@@ -41,9 +56,9 @@ async function bootstrap() {
   // 璁剧疆鍏ㄥ眬璺敱鍓嶇紑
   app.setGlobalPrefix('api/v1')
 
-  if (env.APP_ENV !== 'production') {
+  if (process.env.APP_ENV !== 'production') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('AI Backend API')
+      .setTitle('Quantify API')
       .setDescription('Internal API documentation')
       .setVersion('1.0')
       .build()
@@ -53,9 +68,10 @@ async function bootstrap() {
       jsonDocumentUrl: 'docs-json',
     })
   }
-  await app.listen(env.PORT ?? 3000)
+  const port = Number(process.env.PORT || 3010)
+  await app.listen(port)
 
-  logger.log(`Backend ready on http://localhost:${env.PORT ?? 3000}/api/v1`)
+  logger.log(`Quantify ready on http://localhost:${port}/api/v1`)
 }
 
 bootstrap()

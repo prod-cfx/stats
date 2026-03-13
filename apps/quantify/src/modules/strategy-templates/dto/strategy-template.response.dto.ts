@@ -1,4 +1,4 @@
-import type { StrategyTemplate as StrategyTemplateModel } from '@prisma/client'
+import type { StrategyTemplate as StrategyTemplateModel } from '@/prisma/prisma.types'
 import type { JsonValue, StrategyDataRequirements, StrategyExecutionConfig, StrategyStatus } from '../types/strategy-template.types'
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
@@ -19,77 +19,77 @@ const normalizeJson = (value: unknown): JsonValue | undefined => {
 }
 
 export class StrategyTemplateResponseDto {
-  @ApiProperty({ description: '绛栫暐妯℃澘 ID' })
+  @ApiProperty({ description: '策略模板 ID' })
   id: string
 
-  @ApiProperty({ description: '绛栫暐鍚嶇О' })
+  @ApiProperty({ description: '策略名称' })
   name: string
 
-  @ApiProperty({ description: '绛栫暐鎻忚堪' })
+  @ApiProperty({ description: '策略描述' })
   description: string
 
   @ApiPropertyOptional({
-    description: 'Leg 瀹氫箟鍒楄〃',
+    description: 'Leg 定义列表',
     type: () => [StrategyLegDefinitionDto],
   })
   legs?: StrategyLegDefinitionDto[]
 
   @ApiPropertyOptional({
-    description: '绛栫暐鎵ц閰嶇疆',
+    description: '策略执行配置',
     type: () => StrategyExecutionConfigDto,
   })
   execution?: StrategyExecutionConfig
 
   @ApiPropertyOptional({
-    description: '鏁版嵁闇€姹傞厤缃?,
+    description: '数据需求配置',
     type: 'object',
     additionalProperties: { type: 'array', items: { type: 'string' } },
   })
   dataRequirements?: StrategyDataRequirements
 
-  @ApiProperty({ description: 'LLM 妯″瀷' })
+  @ApiProperty({ description: 'LLM 模型' })
   llmModel: string
 
-  @ApiProperty({ description: 'Prompt 妯℃澘' })
+  @ApiProperty({ description: 'Prompt 模板' })
   promptTemplate: string
 
-  @ApiPropertyOptional({ description: '绛栫暐鑴氭湰浠ｇ爜', nullable: true })
+  @ApiPropertyOptional({ description: '策略脚本代码', nullable: true })
   script?: string | null
 
-  @ApiProperty({ description: '鍙傛暟 schema' })
+  @ApiProperty({ description: '参数 schema' })
   paramsSchema: JsonValue
 
-  @ApiPropertyOptional({ description: '榛樿鍙傛暟' })
+  @ApiPropertyOptional({ description: '默认参数' })
   defaultParams?: JsonValue
 
-  @ApiPropertyOptional({ description: '绛栫暐瑙勫垯 JSON' })
+  @ApiPropertyOptional({ description: '策略规则 JSON' })
   rulesJson: JsonValue | null
 
-  @ApiProperty({ description: '@deprecated 浣跨敤 dataRequirements 鏇夸唬', type: [String], deprecated: true })
+  @ApiProperty({ description: '@deprecated 使用 dataRequirements 替代', type: [String], deprecated: true })
   requiredFields: string[]
 
-  @ApiProperty({ description: '瑙勫垯鐗堟湰鍙? })
+  @ApiProperty({ description: '规则版本号' })
   rulesVersion: number
 
-  @ApiProperty({ description: '绛栫暐鐘舵€?, enum: STRATEGY_STATUS_VALUES })
+  @ApiProperty({ description: '策略状态', enum: STRATEGY_STATUS_VALUES })
   status: StrategyStatus
 
-  @ApiPropertyOptional({ description: '鍒涘缓浜?ID' })
+  @ApiPropertyOptional({ description: '创建人 ID' })
   createdBy?: string | null
 
-  @ApiPropertyOptional({ description: '鏇存柊浜?ID' })
+  @ApiPropertyOptional({ description: '更新人 ID' })
   updatedBy?: string | null
 
-  @ApiPropertyOptional({ description: '鏈€杩戜竴娆¤鍒欑敓鎴愭憳瑕? })
+  @ApiPropertyOptional({ description: '最近一次规则生成摘要' })
   lastGenerationSummary?: string | null
 
-  @ApiPropertyOptional({ description: '闄勫姞鍏冩暟鎹? })
+  @ApiPropertyOptional({ description: '附加元数据' })
   metadata?: JsonValue
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
   constructor(model: StrategyTemplateModel) {
@@ -116,3 +116,5 @@ export class StrategyTemplateResponseDto {
     this.updatedAt = model.updatedAt
   }
 }
+
+

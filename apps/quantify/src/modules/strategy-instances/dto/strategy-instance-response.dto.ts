@@ -1,57 +1,57 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsDto } from './strategy-instance-stats.dto'
 
 export class StrategyInstanceResponseDto {
-  @ApiProperty({ description: '瀹炰緥 ID' })
+  @ApiProperty({ description: '实例 ID' })
   id: string
 
-  @ApiProperty({ description: '绛栫暐妯℃澘 ID' })
+  @ApiProperty({ description: '策略模板 ID' })
   strategyTemplateId: string
 
-  @ApiProperty({ description: '绛栫暐妯℃澘鍚嶇О', required: false })
+  @ApiProperty({ description: '策略模板名称', required: false })
   strategyTemplateName?: string
 
-  @ApiProperty({ description: '瀹炰緥鍚嶇О' })
+  @ApiProperty({ description: '实例名称' })
   name: string
 
-  @ApiProperty({ description: '瀹炰緥鎻忚堪', required: false })
+  @ApiProperty({ description: '实例描述', required: false })
   description?: string | null
 
-  @ApiProperty({ description: 'LLM 妯″瀷' })
+  @ApiProperty({ description: 'LLM 模型' })
   llmModel: string
 
-  @ApiProperty({ description: '瀹炰緥鍙傛暟', required: false })
+  @ApiProperty({ description: '实例参数', required: false })
   params?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '瀹炰緥鐘舵€?, enum: StrategyInstanceStatus })
+  @ApiProperty({ description: '实例状态', enum: StrategyInstanceStatus })
   status: StrategyInstanceStatus
 
-  @ApiProperty({ description: '杩愯妯″紡锛欱ACKTEST=鍘嗗彶鍥炴祴锛孭APER=绾镐笂浜ゆ槗锛孴ESTNET=娴嬭瘯缃戜氦鏄擄紝LIVE=瀹炵洏浜ゆ槗', enum: StrategyInstanceMode })
+  @ApiProperty({ description: '运行模式：BACKTEST=历史回测，PAPER=纸上交易，TESTNET=测试网交易，LIVE=实盘交易', enum: StrategyInstanceMode })
   mode: StrategyInstanceMode
 
-  @ApiProperty({ description: '鍚姩鏃堕棿', required: false })
+  @ApiProperty({ description: '启动时间', required: false })
   startedAt?: Date | null
 
-  @ApiProperty({ description: '鍋滄鏃堕棿', required: false })
+  @ApiProperty({ description: '停止时间', required: false })
   stoppedAt?: Date | null
 
-  @ApiProperty({ description: '鍒涘缓鑰?ID', required: false })
+  @ApiProperty({ description: '创建者 ID', required: false })
   createdBy?: string | null
 
-  @ApiProperty({ description: '鏇存柊鑰?ID', required: false })
+  @ApiProperty({ description: '更新者 ID', required: false })
   updatedBy?: string | null
 
-  @ApiProperty({ description: '鍏冩暟鎹?, required: false })
+  @ApiProperty({ description: '元数据', required: false })
   metadata?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '鍒涘缓鏃堕棿' })
+  @ApiProperty({ description: '创建时间' })
   createdAt: Date
 
-  @ApiProperty({ description: '鏇存柊鏃堕棿' })
+  @ApiProperty({ description: '更新时间' })
   updatedAt: Date
 
-  @ApiProperty({ description: '缁熻鏁版嵁', type: StrategyInstanceStatsDto, required: false })
+  @ApiProperty({ description: '统计数据', type: StrategyInstanceStatsDto, required: false })
   stats?: StrategyInstanceStatsDto
 }

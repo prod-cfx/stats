@@ -2,7 +2,8 @@ import { ApiProperty } from '@nestjs/swagger'
 import { IsString } from 'class-validator'
 
 export class MarketQuoteQueryDto {
-  @ApiProperty({ description: '浜ゆ槗瀵逛唬鐮侊紙濡?BTCUSDT锛? })
+  @ApiProperty({ description: '交易对代码（如 BTCUSDT）' })
   @IsString()
   symbol!: string
 }
+

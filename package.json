@@ -135,7 +135,10 @@
       "sharp",
       "unrs-resolver",
       "utf-8-validate"
-    ]
+    ],
+    "patchedDependencies": {
+      "@ranger1/dx@0.1.9": "patches/@ranger1__dx@0.1.9.patch"
+    }
   },
   "lint-staged": {
     "apps/backend/**/*.{js,jsx,ts,tsx,json,md}": [

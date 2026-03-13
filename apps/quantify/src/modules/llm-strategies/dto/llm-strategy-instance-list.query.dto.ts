@@ -1,20 +1,20 @@
-import type { LlmStrategyInstanceStatus } from '@prisma/client'
+import type { LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class LlmStrategyInstanceListQueryDto extends BasePaginationRequestDto {
-  @ApiPropertyOptional({ description: '瀹炰緥鐘舵€佺瓫閫?, enum: ['running', 'paused', 'stopped'] })
+  @ApiPropertyOptional({ description: '实例状态筛选', enum: ['running', 'paused', 'stopped'] })
   @IsOptional()
   @IsEnum(['running', 'paused', 'stopped'])
   status?: LlmStrategyInstanceStatus
 
-  @ApiPropertyOptional({ description: '鎵€灞炵瓥鐣D绛涢€? })
+  @ApiPropertyOptional({ description: '所属策略ID筛选' })
   @IsOptional()
   @IsString()
   strategyId?: string
 
-  @ApiPropertyOptional({ description: '鎺掑簭瀛楁锛屾牸寮? field:direction', example: 'createdAt:desc' })
+  @ApiPropertyOptional({ description: '排序字段，格式: field:direction', example: 'createdAt:desc' })
   @IsOptional()
   @IsString()
   orderBy?: string

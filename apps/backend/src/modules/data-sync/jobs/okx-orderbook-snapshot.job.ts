@@ -4,7 +4,7 @@ import type { Logger as WinstonLogger } from 'winston'
 import type { MarketId, VenueOrderBook } from '@ai/shared'
 import { toMarketKey } from '@ai/shared'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import type { OrderbookPairConfig } from '@prisma/client'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 // 这里需要值导入以保证 Nest DI 能正确解析依赖，禁止改为 type import
 // eslint-disable-next-line ts/consistent-type-imports

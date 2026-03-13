@@ -1,6 +1,6 @@
-import type { SubscriptionStatus } from '@prisma/client'
+import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 娉ㄥ叆闇€瑕佽繍琛屾椂绫?
 import { PrismaService } from '@/prisma/prisma.service'
 

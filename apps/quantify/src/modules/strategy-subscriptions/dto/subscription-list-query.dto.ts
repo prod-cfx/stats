@@ -8,7 +8,7 @@ import { SUBSCRIPTION_STATUS_VALUES } from './update-subscription.dto'
 
 export class SubscriptionListQueryDto extends BasePaginationRequestDto {
   @ApiProperty({
-    description: '涓氬姟鐢ㄦ埛 ID',
+    description: '业务用户 ID',
     example: 'usr_123',
   })
   @IsString()
@@ -16,7 +16,7 @@ export class SubscriptionListQueryDto extends BasePaginationRequestDto {
   userId!: string
 
   @ApiPropertyOptional({
-    description: '璁㈤槄鐘舵€?,
+    description: '订阅状态',
     enum: SUBSCRIPTION_STATUS_VALUES,
   })
   @IsString()

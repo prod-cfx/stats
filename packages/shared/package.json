@@ -9,6 +9,18 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./constants/*": {
+      "types": "./dist/constants/*.d.ts",
+      "default": "./dist/constants/*.js"
+    },
+    "./script-engine": {
+      "types": "./dist/script-engine/index.d.ts",
+      "default": "./dist/script-engine/index.js"
+    },
+    "./script-engine/*": {
+      "types": "./dist/script-engine/*.d.ts",
+      "default": "./dist/script-engine/*.js"
+    },
     "./node": {
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"

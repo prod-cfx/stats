@@ -1,4 +1,4 @@
-import type { LiquidationHeatmapModelType } from '@prisma/client'
+import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService，保留值导入

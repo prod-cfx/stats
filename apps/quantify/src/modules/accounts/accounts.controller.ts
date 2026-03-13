@@ -16,12 +16,12 @@ import {
 } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from './accounts.service'
 import { LedgerEntryResponseDto } from './dto/ledger-entry.response.dto'
 import { StrategyAccountResponseDto } from './dto/strategy-account.response.dto'
 import { StrategyPnlDailyResponseDto } from './dto/strategy-pnl-daily.response.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategyPnlReportService } from './strategy-pnl-report.service'
 
 @ApiTags('accounts')
@@ -39,14 +39,14 @@ export class AccountsController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓绛栫暐璐︽埛' })
+  @ApiOperation({ summary: '创建策略账户' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async createAccount(@Body() dto: CreateStrategyAccountDto) {
     return this.accountsService.createUserStrategyAccount(dto.userId, dto)
   }
 
   @Get()
-  @ApiOperation({ summary: '鏌ヨ绛栫暐璐︽埛鍒楄〃' })
+  @ApiOperation({ summary: '查询策略账户列表' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -70,7 +70,7 @@ export class AccountsController {
   }
 
   @Get(':accountId')
-  @ApiOperation({ summary: '鑾峰彇绛栫暐璐︽埛璇︽儏' })
+  @ApiOperation({ summary: '获取策略账户详情' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async getAccountDetail(
     @Param('accountId') accountId: string,
@@ -84,7 +84,7 @@ export class AccountsController {
   }
 
   @Post(':accountId/deposit')
-  @ApiOperation({ summary: '璐︽埛鍏ラ噾' })
+  @ApiOperation({ summary: '账户入金' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async deposit(
     @Param('accountId') accountId: string,
@@ -95,7 +95,7 @@ export class AccountsController {
   }
 
   @Post(':accountId/withdraw')
-  @ApiOperation({ summary: '璐︽埛鍑洪噾' })
+  @ApiOperation({ summary: '账户出金' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async withdraw(
     @Param('accountId') accountId: string,
@@ -106,7 +106,7 @@ export class AccountsController {
   }
 
   @Get(':accountId/ledger')
-  @ApiOperation({ summary: '鏌ヨ璐︽埛璧勯噾娴佹按' })
+  @ApiOperation({ summary: '查询账户资金流水' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -131,7 +131,7 @@ export class AccountsController {
   }
 
   @Get(':accountId/daily-pnl')
-  @ApiOperation({ summary: '鏌ヨ璐︽埛鏃ュ害鏀剁泭' })
+  @ApiOperation({ summary: '查询账户日度收益' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -156,7 +156,7 @@ export class AccountsController {
   }
 
   @Post('reports/daily')
-  @ApiOperation({ summary: '鐢熸垚鎸囧畾鏃ユ湡鐨勬棩搴︽敹鐩? })
+  @ApiOperation({ summary: '生成指定日期的日度收益' })
   async generateDailyReport(@Body() dto: GenerateDailyReportDto) {
     const date = dto.date ? new Date(dto.date) : undefined
     return this.strategyPnlReportService.generateDailyReport(date)

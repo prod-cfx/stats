@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { WhaleNotificationRuleType } from '@prisma/client'
+import { WhaleNotificationRuleType } from '@/prisma/prisma.types'
 import { Type } from 'class-transformer'
 import { IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator'
 import { WhaleNotificationChannelsDto } from './whale-notification-channels.dto'

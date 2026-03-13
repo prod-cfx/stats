@@ -1,6 +1,2 @@
-import { Prisma } from '@prisma/client'
-
-export * from '@prisma/client'
-
-export { Prisma }
-
+export * from '../../generated/prisma'
+export { Prisma, PrismaClient, $Enums } from '../../generated/prisma'
