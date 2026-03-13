@@ -2,7 +2,7 @@ import type {
   LlmStrategyInstance,
   LlmStrategyInstanceStatus,
   Prisma,
-} from '@prisma/client'
+} from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'

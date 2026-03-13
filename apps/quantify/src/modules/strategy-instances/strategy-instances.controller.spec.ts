@@ -9,7 +9,7 @@ import { LiveStrategyInstancesController } from './controllers/live-strategy-ins
 import { OpsStrategyInstancesController } from './controllers/ops-strategy-instances.controller'
 import { StrategyInstancesService } from './services/strategy-instances.service'
 
-jest.mock('@prisma/client', () => ({
+jest.mock('@/prisma/prisma.types', () => ({
   StrategyInstanceMode: {
     BACKTEST: 'BACKTEST',
     PAPER: 'PAPER',

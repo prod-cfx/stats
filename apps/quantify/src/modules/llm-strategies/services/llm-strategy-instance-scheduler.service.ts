@@ -1,5 +1,5 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import type { LlmStrategyInstance } from '@prisma/client'
+import type { LlmStrategyInstance } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'

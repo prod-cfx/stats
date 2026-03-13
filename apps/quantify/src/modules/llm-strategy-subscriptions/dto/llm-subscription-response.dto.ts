@@ -1,4 +1,4 @@
-import type { SubscriptionStatus } from '@prisma/client'
+import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmSubscriptionResponseDto {

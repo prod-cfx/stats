@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- PrismaService 闇€瑕佽繍琛屾椂瀵煎叆浠ヤ緵 Nest 娉ㄥ叆 */
-import type { Prisma, SubscriptionStatus } from '@prisma/client'
+import type { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'

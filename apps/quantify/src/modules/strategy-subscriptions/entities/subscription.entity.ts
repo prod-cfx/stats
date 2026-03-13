@@ -1,4 +1,4 @@
-import type { SubscriptionStatus } from '@prisma/client'
+import type { SubscriptionStatus } from '@/prisma/prisma.types'
 
 export interface SubscriptionEntity {
   id: string

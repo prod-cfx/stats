@@ -1,6 +1,6 @@
-import type { SubscriptionStatus as SubscriptionStatusType } from '@prisma/client'
+import type { SubscriptionStatus as SubscriptionStatusType } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { SubscriptionStatus } from '@prisma/client'
+import { SubscriptionStatus } from '@/prisma/prisma.types'
 
 export class SubscriptionResponseDto {
   @ApiProperty({ description: '订阅 ID' })

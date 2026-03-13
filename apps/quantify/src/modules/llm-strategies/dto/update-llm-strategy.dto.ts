@@ -1,4 +1,4 @@
-import type { LlmStrategyStatus } from '@prisma/client'
+import type { LlmStrategyStatus } from '@/prisma/prisma.types'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsArray,

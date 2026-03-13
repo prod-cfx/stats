@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
-import { PositionSide, PositionStatus } from '@prisma/client'
+import { PositionSide, PositionStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 

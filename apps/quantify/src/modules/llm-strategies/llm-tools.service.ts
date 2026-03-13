@@ -1,4 +1,4 @@
-import type { LlmStrategy, LlmStrategyInstance } from '@prisma/client'
+import type { LlmStrategy, LlmStrategyInstance } from '@/prisma/prisma.types'
 import type { LlmV3ToolName } from '@/modules/ai/llm-v3-tools.schemas'
 import type { ChatCompletionToolCall } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable, Logger } from '@nestjs/common'

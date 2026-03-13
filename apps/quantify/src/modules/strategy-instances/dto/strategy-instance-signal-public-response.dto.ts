@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { SignalDirection, SignalType } from '@prisma/client'
+import { SignalDirection, SignalType } from '@/prisma/prisma.types'
 
 import { convertDecimalToString } from '@/common/utils/decimal-converter'
 

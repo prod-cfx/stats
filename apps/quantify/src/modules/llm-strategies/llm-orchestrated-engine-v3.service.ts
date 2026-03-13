@@ -1,4 +1,4 @@
-import type { LlmStrategy, LlmStrategyInstance, LlmStrategyRunStatus, Prisma } from '@prisma/client'
+import type { LlmStrategy, LlmStrategyInstance, LlmStrategyRunStatus, Prisma } from '@/prisma/prisma.types'
 import type { LlmOpsTestLogEvent } from './llm-ops-test-log.events'
 import type { LlmRunReason } from './llm-run-reasons'
 import type { LlmToolExecutionContext } from './llm-tools.service'

@@ -10,7 +10,7 @@ import type {
   StrategyInstance,
   StrategyTemplate,
   Symbol,
-} from '@prisma/client'
+} from '@/prisma/prisma.types'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import { fillPromptTemplate, parseAiSignalResponse } from '@ai/shared'

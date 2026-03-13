@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { PositionSide, PositionStatus } from '@prisma/client'
+import { PositionSide, PositionStatus } from '@/prisma/prisma.types'
 
 export class PositionResponseDto {
   @ApiProperty()

@@ -1,4 +1,4 @@
-import type { LlmStrategyCodegenSession, LlmStrategyCodeVersion, Prisma } from '@prisma/client'
+import type { LlmStrategyCodegenSession, LlmStrategyCodeVersion, Prisma } from '@/prisma/prisma.types'
 
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂瀵煎叆

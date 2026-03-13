@@ -1,8 +1,8 @@
-import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@prisma/client'
+import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import type { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals-query.dto'
 import { ForbiddenException, Injectable } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类

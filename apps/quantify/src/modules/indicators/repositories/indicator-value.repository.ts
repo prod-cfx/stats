@@ -1,4 +1,4 @@
-import type { IndicatorValue, MarketTimeframe, Prisma, PrismaClient, IndicatorType as PrismaIndicatorType } from '@prisma/client'
+import type { IndicatorValue, MarketTimeframe, Prisma, PrismaClient, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
 

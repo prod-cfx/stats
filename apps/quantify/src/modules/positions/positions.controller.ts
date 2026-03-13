@@ -17,7 +17,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { PositionStatus } from '@prisma/client'
+import { PositionStatus } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
 // DTOs 需要在运行时存在以支持 class-validator 和 Swagger，必须使用普通 import

@@ -1,7 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import type { SubscriptionStatus } from '@prisma/client'
+import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@prisma/client'
+import { Prisma } from '@/prisma/prisma.types'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { AccountsService } from '@/modules/accounts/accounts.service'

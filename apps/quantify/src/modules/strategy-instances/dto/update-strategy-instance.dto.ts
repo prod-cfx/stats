@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsJSON, IsOptional, IsString } from 'class-validator'
 
 export class UpdateStrategyInstanceDto {

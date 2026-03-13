@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { SignalStatus } from '@prisma/client'
+import { SignalStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
 
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'

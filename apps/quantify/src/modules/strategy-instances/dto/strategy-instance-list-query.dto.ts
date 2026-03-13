@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { Transform } from 'class-transformer'
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
 

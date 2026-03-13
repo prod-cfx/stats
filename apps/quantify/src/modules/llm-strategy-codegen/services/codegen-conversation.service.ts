@@ -1,4 +1,4 @@
-import type { LlmCodegenSessionStatus, Prisma } from '@prisma/client'
+import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'

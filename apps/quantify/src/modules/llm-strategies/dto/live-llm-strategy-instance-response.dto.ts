@@ -1,4 +1,4 @@
-import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@prisma/client'
+import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class LlmStrategyInstancePublicResponseDto {

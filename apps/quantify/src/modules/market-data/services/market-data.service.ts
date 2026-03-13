@@ -1,5 +1,5 @@
 import type { MarketBarPayload, MarketQuotePayload, MarketTimeframe } from '@ai/shared'
-import type { InstrumentType, Prisma, Symbol as PrismaSymbol, SymbolType } from '@prisma/client'
+import type { InstrumentType, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
 import type { MarketBarsQueryDto } from '../dto/market-bars-query.dto'
 import type { MarketQuoteQueryDto } from '../dto/market-quote-query.dto'
 import type { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'
@@ -7,7 +7,7 @@ import type { CreateMarketSymbolDto, UpdateMarketSymbolDto } from '../dto/ops-ma
 import type { ProviderSymbol } from '../interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
-import { SymbolStatus as PrismaSymbolStatus } from '@prisma/client'
+import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { 
   mapSymbolStatus, 

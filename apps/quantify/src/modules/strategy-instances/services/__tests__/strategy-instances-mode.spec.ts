@@ -1,5 +1,5 @@
 import type { TestingModule } from '@nestjs/testing'
-import type { StrategyInstanceMode, StrategyInstanceStatus } from '@prisma/client'
+import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { Test } from '@nestjs/testing'
 
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'

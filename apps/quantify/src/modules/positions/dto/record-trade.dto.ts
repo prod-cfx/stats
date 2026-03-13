@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { PositionSide, TradeSide } from '@prisma/client'
+import { PositionSide, TradeSide } from '@/prisma/prisma.types'
 import {
   IsDateString,
   IsEnum,

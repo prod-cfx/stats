@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { LedgerEntryType, Prisma } from '@prisma/client'
+import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { PrismaService } from '@/prisma/prisma.service'
 
