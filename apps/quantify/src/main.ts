@@ -1,4 +1,5 @@
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
@@ -9,9 +10,21 @@ import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
 
 async function bootstrap() {
-  // 浠?monorepo 鏍圭洰褰曞姞杞界幆澧冨彉閲?
-  // pnpm filter 浼氬垏鎹㈠埌搴旂敤鐩綍,鎵€浠ラ渶瑕佸悜涓婁袱绾ф壘鍒版牴鐩綍
-  process.chdir(resolve(__dirname, '../../..'))
+  const findWorkspaceRoot = (startDir: string) => {
+    let current = startDir
+    while (true) {
+      if (existsSync(join(current, 'pnpm-workspace.yaml'))) {
+        return current
+      }
+      const parent = dirname(current)
+      if (parent === current) {
+        return startDir
+      }
+      current = parent
+    }
+  }
+
+  process.chdir(findWorkspaceRoot(__dirname))
   loadEnvironment()
   applyQuantifyEnvOverrides()
   const app = await NestFactory.create(AppModule, {
