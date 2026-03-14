@@ -4,7 +4,6 @@ import type { SuperTest, Test as SupertestTest } from 'supertest'
 import { randomBytes } from 'node:crypto'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { AppModule } from '@/modules/app.module'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
 
@@ -49,12 +48,19 @@ interface NormalizedCreateTestingAppOptions {
 export interface TestingAppContext {
   app: INestApplication
   moduleFixture: TestingModule
-  prisma: PrismaService
+  prisma?: PrismaService
 }
 
 function resolveCreateTestingAppOptions(
   input?: CreateTestingAppOptions | any[],
 ): NormalizedCreateTestingAppOptions {
+  const resolveDefaultImports = () => {
+    // Avoid importing AppModule eagerly so focused E2E suites can bootstrap
+    // a smaller module graph without pulling unrelated runtime dependencies.
+    const { AppModule } = require('@/modules/app.module') as typeof import('@/modules/app.module')
+    return [AppModule]
+  }
+
   if (Array.isArray(input)) {
     return {
       imports: input,
@@ -64,7 +70,7 @@ function resolveCreateTestingAppOptions(
 
   const options = input ?? {}
   return {
-    imports: options.imports ?? [AppModule],
+    imports: options.imports ?? resolveDefaultImports(),
     globalPrefix: options.globalPrefix ?? API_PREFIX,
     onAppInit: options.onAppInit,
   }
@@ -177,7 +183,13 @@ export async function createTestingApp(
 
   await app.init()
 
-  const prisma = moduleFixture.get(PrismaService)
+  let prisma: PrismaService | undefined
+  try {
+    prisma = moduleFixture.get(PrismaService, { strict: false })
+  }
+  catch {
+    prisma = undefined
+  }
   return { app, moduleFixture, prisma }
 }
 

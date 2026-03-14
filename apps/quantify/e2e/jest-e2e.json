@@ -4,7 +4,7 @@
   "testEnvironment": "node",
   "testRegex": ".*\\.(e2e-spec|spec)\\.ts$",
   "transform": {
-    "^.+\\.tsx?$": "ts-jest"
+    "^.+\\.[tj]sx?$": "ts-jest"
   },
   "globals": {
     "ts-jest": {
@@ -18,8 +18,12 @@
     "^@ai/shared$": "<rootDir>/../../../packages/shared/src",
     "^@ai/shared/(.*)$": "<rootDir>/../../../packages/shared/src/$1",
     "^@net/config$": "<rootDir>/../../../packages/config/src",
-    "^@net/config/(.*)$": "<rootDir>/../../../packages/config/src/$1"
+    "^@net/config/(.*)$": "<rootDir>/../../../packages/config/src/$1",
+    "^@nktkas/hyperliquid$": "<rootDir>/../node_modules/@nktkas/hyperliquid/script/src/mod.js"
   },
+  "transformIgnorePatterns": [
+    "/node_modules/(?!(?:@nktkas/hyperliquid|@noble/hashes|@noble/secp256k1)/)"
+  ],
   "setupFilesAfterEnv": ["./setup-e2e.ts"],
   "maxWorkers": 1,
   "testRunner": "jest-circus/runner",
