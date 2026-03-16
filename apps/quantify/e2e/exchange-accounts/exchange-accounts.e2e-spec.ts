@@ -293,7 +293,7 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(400)
 
       expect(response.body.message).toContain('API Key鎴朣ecret閿欒')
-      expect(response.body.message).toContain('涓嶈鏈夊浣欑┖鏍?)
+      expect(response.body.message).toContain('涓嶈鏈夊浣欑┖鏍?')
     })
 
     it('should reject wrong Binance secret', async () => {
@@ -338,7 +338,7 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(400)
 
       expect(response.body.message).toContain('API Key宸茶绂佺敤')
-      expect(response.body.message).toContain('甯佸畨API绠＄悊椤甸潰妫€鏌ョ姸鎬?)
+      expect(response.body.message).toContain('甯佸畨API绠＄悊椤甸潰妫€鏌ョ姸鎬?')
     })
 
     it('should reject Binance key without permission', async () => {
@@ -409,7 +409,7 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(400)
 
       expect(response.body.message).toContain('API Key鏃犳晥')
-      expect(response.body.message).toContain('妫€鏌ユ槸鍚︽纭鍒?)
+      expect(response.body.message).toContain('妫€鏌ユ槸鍚︽纭鍒?')
     })
 
     it('should reject expired OKX API key', async () => {
@@ -424,8 +424,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key宸茶繃鏈?)
-      expect(response.body.message).toContain('14澶╀笉浣跨敤鍚庤嚜鍔ㄥけ鏁?)
+      expect(response.body.message).toContain('API Key宸茶繃鏈?')
+      expect(response.body.message).toContain('14澶╀笉浣跨敤鍚庤嚜鍔ㄥけ鏁?')
     })
 
     it('should reject wrong OKX passphrase', async () => {
@@ -489,8 +489,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key宸茶绂佺敤鎴栧垹闄?)
-      expect(response.body.message).toContain('OKX API绠＄悊椤甸潰妫€鏌ョ姸鎬?)
+      expect(response.body.message).toContain('API Key宸茶绂佺敤鎴栧垹闄?')
+      expect(response.body.message).toContain('OKX API绠＄悊椤甸潰妫€鏌ョ姸鎬?')
     })
 
     it('should reject OKX request without passphrase', async () => {

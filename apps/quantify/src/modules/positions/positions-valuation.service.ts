@@ -1,8 +1,8 @@
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import { Injectable, Logger } from '@nestjs/common'
-import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { PrismaService } from '@/prisma/prisma.service'
+import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
 
 // Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
 /* eslint-disable no-redeclare, ts/no-redeclare */

@@ -1,12 +1,11 @@
-import type { Position, Trade } from '@/prisma/prisma.types'
 import type { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
+import type { Position, Trade } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
@@ -15,6 +14,7 @@ import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
 import { TradeConflictException } from './exceptions/trade-conflict.exception'

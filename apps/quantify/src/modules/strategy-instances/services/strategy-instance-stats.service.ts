@@ -1,8 +1,8 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄥ拰渚濊禆娉ㄥ叆闇€瑕佽繍琛屾椂瀵煎叆 */
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
-
 import { PrismaService } from '@/prisma/prisma.service'
+
+import { Prisma } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsDto } from '../dto/strategy-instance-stats.dto'
 

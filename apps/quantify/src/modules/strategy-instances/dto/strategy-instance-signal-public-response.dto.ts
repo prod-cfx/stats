@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { SignalDirection, SignalType } from '@/prisma/prisma.types'
-
 import { convertDecimalToString } from '@/common/utils/decimal-converter'
+
+import { SignalDirection, SignalType } from '@/prisma/prisma.types'
 
 /**
  * 闈㈠悜澶栭儴璋冪敤鏂圭殑绛栫暐瀹炰緥淇″彿鍝嶅簲 DTO锛堝凡鑴辨晱锛?

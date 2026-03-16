@@ -1,6 +1,6 @@
+import type { Job } from 'bull'
+import type { MessageEnvelope } from '../message-bus.types'
 import { MessageBusDedupeService } from '../runtime/message-bus.dedupe.service'
-import { MessageEnvelope } from '../message-bus.types'
-import { Job } from 'bull'
 
 export function IdempotentConsumer<TPayload = any>(
   keyFn: (job: Job<MessageEnvelope<TPayload>>) => string,

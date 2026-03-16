@@ -69,7 +69,7 @@ describe('llm strategy codegen (E2E)', () => {
 
     const continueRes = await supertestRequest(server).post(`/api/v1/llm-strategy-codegen/sessions/${sessionId}/messages`).send({
       userId: 'u-e2e-1',
-      message: '璇风敓鎴愯剼鏈?,
+      message: 'please generate a strategy script',
     }).expect(201)
 
     const continuePayload = continueRes.body.data ?? continueRes.body
@@ -105,7 +105,7 @@ describe('llm strategy codegen (E2E)', () => {
 
     const continueRes = await supertestRequest(server).post(`/api/v1/llm-strategy-codegen/sessions/${sessionId}/messages`).send({
       userId: 'u-e2e-2',
-      message: '璇风敓鎴愯剼鏈?,
+      message: 'please generate a strategy script',
     }).expect(201)
 
     const continuePayload = continueRes.body.data ?? continueRes.body

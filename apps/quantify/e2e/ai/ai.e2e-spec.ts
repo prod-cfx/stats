@@ -48,8 +48,8 @@ describe('AiService (E2E)', () => {
         providerCode: 'uniapi',
         model: 'o4-mini',
         messages: [
-          { role: 'system', content: '浣犳槸涓€涓敤浜?E2E 娴嬭瘯鐨勭畝鐭洖绛斿姪鎵嬨€? },
-          { role: 'user', content: '鐢ㄤ竴鍙ヨ瘽绠€鍗曚粙缁嶄竴涓嬩綘鑷繁銆? },
+          { role: 'system', content: 'You are a concise assistant for E2E tests.' },
+          { role: 'user', content: 'Introduce yourself in one sentence.' },
         ],
         temperature: 0.2,
         maxTokens: 64,

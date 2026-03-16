@@ -1,10 +1,10 @@
 import type { ExchangeId, MarketType, UnifiedPosition } from '@/modules/trading/core/types'
 import { Injectable, Logger } from '@nestjs/common'
-import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { PrismaService } from '@/prisma/prisma.service'
+import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { PositionsService } from './positions.service'
 
