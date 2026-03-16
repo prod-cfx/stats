@@ -24,33 +24,33 @@ describe('StrategySignals (E2E, DB only)', () => {
     moduleFixture = context.moduleFixture
     prisma = context.prisma
 
-    // 鍑嗗鐢ㄦ埛
+    // 准备用户
     await prisma.user.upsert({
       where: { id: TEST_USER_ID },
       update: {},
       create: {
         id: TEST_USER_ID,
         email: 'e2e-signal-user@test.com',
-        nickname: 'E2E 绛栫暐淇″彿鐢ㄦ埛',
+        nickname: 'E2E 策略信号用户',
       },
     })
 
-    // 鍑嗗绛栫暐妯℃澘锛堟渶灏忓彲鐢ㄥ瓧娈碉級
+    // 准备策略模板（最小可用字段）
     await prisma.strategyTemplate.create({
       data: {
         id: TEST_STRATEGY_TEMPLATE_ID,
         name: 'E2E-Signal-Template',
-        description: 'E2E 绛栫暐淇″彿娴嬭瘯妯℃澘',
+        description: 'E2E 策略信号测试模板',
         legs: [],
         llmModel: 'gpt-4',
-        promptTemplate: '娴嬭瘯绛栫暐淇″彿鐨?Prompt',
+        promptTemplate: '测试策略信号 Prompt',
         paramsSchema: { type: 'object' },
         requiredFields: [],
         status: 'draft',
       },
     })
 
-    // 鍑嗗琛屾儏浜ゆ槗瀵?
+    // 准备行情交易对
     await prisma.symbol.create({
       data: {
         id: TEST_SYMBOL_ID,
@@ -66,13 +66,13 @@ describe('StrategySignals (E2E, DB only)', () => {
       },
     })
 
-    // 鍑嗗鐢ㄦ埛绛栫暐璐︽埛
+    // 准备用户策略账户
     await prisma.userStrategyAccount.create({
       data: {
         id: TEST_ACCOUNT_ID,
         userId: TEST_USER_ID,
         strategyId: TEST_STRATEGY_TEMPLATE_ID,
-        strategyName: 'E2E 绛栫暐',
+        strategyName: 'E2E 策略',
         strategyVersion: 'v1',
         baseCurrency: 'USDT',
         initialBalance: '1000',
@@ -83,7 +83,7 @@ describe('StrategySignals (E2E, DB only)', () => {
   })
 
   afterAll(async () => {
-    // 娓呯悊鏁版嵁锛堟寜澶栭敭渚濊禆椤哄簭锛?
+    // 清理数据（按外键依赖顺序）
     await prisma.userSignalExecution.deleteMany({
       where: { userStrategyAccountId: TEST_ACCOUNT_ID },
     })
@@ -121,7 +121,7 @@ describe('StrategySignals (E2E, DB only)', () => {
         stopLoss: '58000',
         takeProfit: '64000',
         aiModel: 'gpt-4',
-        aiReasoning: 'E2E 娴嬭瘯淇″彿鐞嗙敱',
+        aiReasoning: 'E2E 测试信号理由',
         marketContext: {
           timeframe: '1h',
           indicators: {
@@ -190,7 +190,7 @@ describe('StrategySignals (E2E, DB only)', () => {
     const RISK_CONTROL_USER_ID = 'e2e-risk-control-user'
 
     beforeAll(async () => {
-      // 鍑嗗椋庢帶娴嬭瘯鐢ㄦ埛
+      // 准备风控测试用户
       await prisma.user.upsert({
         where: { id: RISK_CONTROL_USER_ID },
         update: {},
@@ -201,7 +201,7 @@ describe('StrategySignals (E2E, DB only)', () => {
         },
       })
 
-      // 鍑嗗椋庢帶娴嬭瘯璐︽埛锛屼綑棰?1000 USDT
+      // 准备风控测试账户，余额 1000 USDT
       await prisma.userStrategyAccount.upsert({
         where: { id: RISK_CONTROL_ACCOUNT_ID },
         update: {
@@ -235,9 +235,9 @@ describe('StrategySignals (E2E, DB only)', () => {
     })
 
     it('[TC-SIGNAL-003] should use strategy-specified positionSizeQuote but enforce maxRiskFraction limit', async () => {
-      // 娴嬭瘯閰嶇疆锛歮axRiskFraction = 0.2 (20%), defaultQuoteAmount = 100
-      // 璐︽埛浣欓 1000锛屽洜姝ら闄╀笂闄愪负 1000 * 0.2 = 200
-      // 绛栫暐瑕佹眰 positionSizeQuote = 500锛屽簲璇ヨ闄愬埗涓?200锛堣€岄潪 defaultQuoteAmount 鐨?100锛?
+      // 测试配置：maxRiskFraction = 0.2 (20%), defaultQuoteAmount = 100
+      // 账户余额 1000，因此风险上限为 1000 * 0.2 = 200
+      // 策略要求 positionSizeQuote = 500，应该被限制到 200，而非 defaultQuoteAmount 的 100
 
       const signal = await prisma.tradingSignal.create({
         data: {
@@ -249,7 +249,7 @@ describe('StrategySignals (E2E, DB only)', () => {
           status: SignalStatus.PENDING,
           confidence: '80',
           entryPrice: '50000',
-          positionSizeQuote: '500', // 绛栫暐瑕佹眰 500 USDT
+          positionSizeQuote: '500', // 策略要求 500 USDT
           aiModel: 'gpt-4',
           aiReasoning: 'TC-SIGNAL-003 test',
         },
@@ -297,22 +297,22 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(execution).toBeDefined()
       expect(execution!.status).toBe(ExecutionStatus.EXECUTED)
 
-      // 楠岃瘉瀹為檯涓嬪崟閲戦琚檺鍒跺湪椋庨櫓涓婇檺鍐咃紙200 USDT锛夛紝鑰岄潪 defaultQuoteAmount锛?00 USDT锛?
+      // 验证实际下单金额被限制在风险上限内（200 USDT），而非 defaultQuoteAmount 的 100 USDT
       expect(placeOrderSpy).toHaveBeenCalled()
       const callArgs = placeOrderSpy.mock.calls[0]
       const orderParams = callArgs[3]
 
-      // amount 搴旇鏄?200 / 50000 = 0.004锛堝彈 maxRiskFraction 闄愬埗锛?
-      // 鑰屼笉鏄?100 / 50000 = 0.002锛坉efaultQuoteAmount 涓嶅簲闄愬埗绛栫暐浠撲綅锛?
+      // amount 应该是 200 / 50000 = 0.004（受 maxRiskFraction 限制）
+      // 而不是 100 / 50000 = 0.002（defaultQuoteAmount 不应限制策略仓位）
       expect(orderParams.amount).toBeCloseTo(0.004, 6)
 
       placeOrderSpy.mockRestore()
     })
 
     it('[TC-SIGNAL-004] should use strategy-specified positionSizeRatio but enforce maxRiskFraction limit', async () => {
-      // 娴嬭瘯閰嶇疆锛歮axRiskFraction = 0.2 (20%), defaultQuoteAmount = 100
-      // 璐︽埛浣欓 1000锛屽洜姝ら闄╀笂闄愪负 200
-      // 绛栫暐瑕佹眰 positionSizeRatio = 0.5 (50%)锛屽嵆 500 USDT锛屽簲璇ヨ闄愬埗涓?200
+      // 测试配置：maxRiskFraction = 0.2 (20%), defaultQuoteAmount = 100
+      // 账户余额 1000，因此风险上限为 200
+      // 策略要求 positionSizeRatio = 0.5 (50%)，即 500 USDT，应该被限制到 200
 
       await prisma.userStrategyAccount.update({
         where: { id: RISK_CONTROL_ACCOUNT_ID },
@@ -329,7 +329,7 @@ describe('StrategySignals (E2E, DB only)', () => {
           status: SignalStatus.PENDING,
           confidence: '80',
           entryPrice: '50000',
-          positionSizeRatio: '0.5', // 绛栫暐瑕佹眰 50% = 500 USDT
+          positionSizeRatio: '0.5', // 策略要求 50% = 500 USDT
           aiModel: 'gpt-4',
           aiReasoning: 'TC-SIGNAL-004 test',
         },
@@ -376,20 +376,20 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(execution).toBeDefined()
       expect(execution!.status).toBe(ExecutionStatus.EXECUTED)
 
-      // 楠岃瘉瀹為檯涓嬪崟閲戦琚檺鍒跺湪椋庨櫓涓婇檺鍐咃紙200 USDT锛?
+      // 验证实际下单金额被限制在风险上限内（200 USDT）
       expect(placeOrderSpy).toHaveBeenCalled()
       const callArgs = placeOrderSpy.mock.calls[0]
       const orderParams = callArgs[3]
 
-      // amount 搴旇鏄?200 / 50000 = 0.004
+      // amount 应该是 200 / 50000 = 0.004
       expect(orderParams.amount).toBeCloseTo(0.004, 6)
 
       placeOrderSpy.mockRestore()
     })
 
     it('[TC-SIGNAL-005] should fallback to global config when no strategy position size specified', async () => {
-      // 娴嬭瘯閰嶇疆锛歮axRiskFraction = 0.2, defaultQuoteAmount = 100
-      // 绛栫暐鏈寚瀹氫粨浣嶅ぇ灏忥紝搴旇浣跨敤 min(1000 * 0.2, 100) = 100
+      // 测试配置：maxRiskFraction = 0.2, defaultQuoteAmount = 100
+      // 策略未指定仓位大小，应该使用 min(1000 * 0.2, 100) = 100
 
       await prisma.userStrategyAccount.update({
         where: { id: RISK_CONTROL_ACCOUNT_ID },
@@ -406,7 +406,7 @@ describe('StrategySignals (E2E, DB only)', () => {
           status: SignalStatus.PENDING,
           confidence: '80',
           entryPrice: '50000',
-          // 涓嶆寚瀹?positionSizeQuote 鎴?positionSizeRatio
+          // 不指定 positionSizeQuote 或 positionSizeRatio
           aiModel: 'gpt-4',
           aiReasoning: 'TC-SIGNAL-005 test',
         },
@@ -457,14 +457,14 @@ describe('StrategySignals (E2E, DB only)', () => {
       const callArgs = placeOrderSpy.mock.calls[0]
       const orderParams = callArgs[3]
 
-      // 搴旇浣跨敤鍏ㄥ眬閰嶇疆 min(200, 100) = 100 USDT
+      // 应该使用全局配置 min(200, 100) = 100 USDT
       expect(orderParams.amount).toBeCloseTo(0.002, 6) // 100 / 50000
 
       placeOrderSpy.mockRestore()
     })
 
     it('[TC-SIGNAL-006] should skip execution when strategy position size is invalid (zero or negative)', async () => {
-      // 娴嬭瘯鏃犳晥鐨勪粨浣嶅ぇ灏忓€?
+      // 测试无效的仓位大小
 
       await prisma.userStrategyAccount.update({
         where: { id: RISK_CONTROL_ACCOUNT_ID },
@@ -481,7 +481,7 @@ describe('StrategySignals (E2E, DB only)', () => {
           status: SignalStatus.PENDING,
           confidence: '80',
           entryPrice: '50000',
-          positionSizeQuote: '0', // 鏃犳晥鍊?
+          positionSizeQuote: '0', // 无效值
           aiModel: 'gpt-4',
           aiReasoning: 'TC-SIGNAL-006 test',
         },
@@ -496,7 +496,7 @@ describe('StrategySignals (E2E, DB only)', () => {
         side: 'buy',
         type: 'market',
         price: 50000,
-        amount: 0.002, // 100 / 50000 = 0.002锛堝洖閫€鍒板叏灞€閰嶇疆锛?
+        amount: 0.002, // 100 / 50000 = 0.002（回退到全局配置）
         filled: 0.002,
         status: 'closed',
         createdAt: Date.now(),
@@ -525,13 +525,13 @@ describe('StrategySignals (E2E, DB only)', () => {
         },
       })
 
-      // 鏃犳晥鐨?positionSizeQuote 搴旇鍥為€€鍒板叏灞€閰嶇疆锛岃€屼笉鏄烦杩?
-      // 鍥犱负浠ｇ爜涓 positionSizeQuote 鐨勬鏌ユ槸 `new Decimal(signal.positionSizeQuote).gt(0)`
-      // 濡傛灉涓?0 鎴栬礋鏁帮紝浼氳蛋 else if 鎴栨渶鍚庣殑鍏ㄥ眬閰嶇疆鍒嗘敮
+      // 无效的 positionSizeQuote 应该回退到全局配置，而不是跳过
+      // 因为代码中对 positionSizeQuote 的检查是 `new Decimal(signal.positionSizeQuote).gt(0)`
+      // 如果是 0 或负数，会走 else if 或最后的全局配置分支
       expect(execution).toBeDefined()
       expect(execution!.status).toBe(ExecutionStatus.EXECUTED)
 
-      // 搴旇浣跨敤鍏ㄥ眬閰嶇疆鑰屼笉鏄瓥鐣ユ寚瀹氱殑 0
+      // 应该使用全局配置而不是策略指定的 0
       expect(placeOrderSpy).toHaveBeenCalled()
 
       placeOrderSpy.mockRestore()
