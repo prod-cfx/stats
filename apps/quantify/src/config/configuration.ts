@@ -1,8 +1,8 @@
 import type { MarketTimeframe } from '@ai/shared'
 import { DEFAULT_MARKET_SYMBOLS, MARKET_TIMEFRAMES } from '@ai/shared'
 import { registerAs } from '@nestjs/config'
-import { SUPPORTED_MARKET_TIMEFRAMES } from '../common/utils/prisma-enum-mappers'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'
+import { SUPPORTED_MARKET_TIMEFRAMES } from '../common/utils/prisma-enum-mappers'
 
 const env = defaultEnvAccessor
 const SUPPORTED_MARKET_TIMEFRAME_SET = new Set<string>(SUPPORTED_MARKET_TIMEFRAMES)
@@ -27,14 +27,14 @@ export const uploadConfig = registerAs('upload', () => ({
   allowedFileTypes: (env.str('ALLOWED_FILE_TYPES', 'jpg,jpeg,png,gif,mp4') || '')
     .split(',')
     .filter(Boolean),
-  // 绉婚櫎鏈湴鎸佷箙鍖栭粯璁ゅ€硷紝閬靛惊"鏂囦欢瀛樺偍蹇呴』 S3/R2"瑙勮寖
-  // 浣跨敤鏂瑰繀椤绘樉寮忛厤缃垨浣跨敤 s3Config
+  // 移除本地持久化默认值，遵循“文件存储必须 S3/R2”规范
+  // 使用方必须显式配置或使用 s3Config
   destination: env.str('UPLOAD_DESTINATION'),
 }))
 
 export const httpConfig = registerAs('http', () => ({
-  // 浼樺厛浣跨敤 HTTP_TRUST_PROXY锛屼粎鍦ㄦ湭閰嶇疆鏃跺洖閫€鍒?TRUST_PROXY
-  // 浣跨敤 raw() 妫€鏌ュ彉閲忔槸鍚﹀瓨鍦紝閬垮厤 || 杩愮畻绗﹁鐩栨樉寮忕殑 false
+  // 优先使用 HTTP_TRUST_PROXY，仅在未配置时回退到 TRUST_PROXY
+  // 使用 raw() 检查变量是否存在，避免 || 运算符覆盖显式的 false
   trustProxy: env.raw('HTTP_TRUST_PROXY') !== undefined
     ? env.bool('HTTP_TRUST_PROXY')
     : env.bool('TRUST_PROXY'),
@@ -142,14 +142,14 @@ const parseTimeframeList = (
   if (invalid.length > 0) {
 
     console.warn(
-      `鏃犳晥鐨勬椂闂村懆鏈熼厤缃凡琚拷鐣? ${invalid.join(', ')}. 鏀寔鐨勫懆鏈? ${MARKET_TIMEFRAMES.join(', ')}`,
+      `无效的时间周期配置已被忽略: ${invalid.join(', ')}。支持的周期: ${MARKET_TIMEFRAMES.join(', ')}`,
     )
   }
 
   if (valid.length === 0) {
 
     console.warn(
-      `MARKET_DATA_TIMEFRAMES 閰嶇疆鍏ㄩ儴鏃犳晥锛屽皢鍥為€€鍒伴粯璁ゅ€? ${fallback.join(', ')}`,
+      `MARKET_DATA_TIMEFRAMES 配置全部无效，将回退到默认值: ${fallback.join(', ')}`,
     )
     return [...(fallback as MarketTimeframe[])]
   }
@@ -177,11 +177,11 @@ export const strategySignalsConfig = registerAs('strategySignals', () => ({
   batchSize: parsePositiveInt(env.str('STRATEGY_SIGNALS_BATCH_SIZE'), 10),
   maxSymbolsPerStrategy: parsePositiveInt(env.str('STRATEGY_SIGNALS_MAX_SYMBOLS'), 3),
   debug: {
-    // 鏄惁鍚敤璇︾粏鐨勮剼鏈皟璇曟棩蹇楋紙浠呯敤浜庡紑鍙?璋冭瘯锛岀敓浜х幆澧冨簲绂佺敤锛?
+    // 是否启用详细的脚本调试日志（仅用于开发调试，生产环境应禁用）
     enabled: env.bool('DEBUG_STRATEGY_SCRIPTS', false),
-    // 鑴氭湰鍐呭鏈€澶ц緭鍑洪暱搴?
+    // 脚本内容最大输出长度
     maxScriptLength: parsePositiveInt(env.str('DEBUG_SCRIPT_MAX_LENGTH'), 1000),
-    // 杩斿洖鍊兼渶澶ц緭鍑洪暱搴?
+    // 返回值最大输出长度
     maxValueLength: parsePositiveInt(env.str('DEBUG_VALUE_MAX_LENGTH'), 200),
   },
   ai: {
@@ -202,13 +202,13 @@ export const strategySignalsConfig = registerAs('strategySignals', () => ({
   },
 }))
 
-// 榛樿浠呭姞杞藉繀瑕佺殑閰嶇疆锛涘叾浣欏懡鍚嶇┖闂翠繚鐣欏疄鐜颁絾涓嶉粯璁ゅ惎鐢?
+// 默认仅加载必要的配置；其余命名空间保留实现但不默认启用
 export const backendConfigLoaders = [
   appConfig,
   httpConfig,
   redisConfig,
-  aiConfig, // AI 閰嶇疆鐢ㄤ簬绛栫暐鑴氭湰鐢熸垚
+  aiConfig, // AI 配置用于策略脚本生成
   marketDataConfig,
   strategySignalsConfig,
-  // 鍏朵粬閰嶇疆鍦ㄩ渶瑕佹椂鍐嶅姞鍏?ConfigModule.load
+  // 其他配置在需要时再加入 ConfigModule.load
 ]

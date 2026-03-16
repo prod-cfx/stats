@@ -27,7 +27,7 @@ describe('AiService (E2E)', () => {
     moduleFixture = result.moduleFixture
     aiService = moduleFixture.get(AiService)
 
-    // 浠呭湪鐜涓厤缃簡闈炲崰浣嶇殑 UNIAPI_API_KEY 鏃舵墠鎵ц鐪熷疄璋冪敤
+    // 仅在环境中配置了非占位的 UNIAPI_API_KEY 时才执行真实调用
     hasUniapiKey = isConfiguredKey(process.env.UNIAPI_API_KEY)
   })
 
@@ -37,9 +37,9 @@ describe('AiService (E2E)', () => {
 
   it('should make a real call using AiService with uniapi config', async () => {
     if (!hasUniapiKey) {
-      // 榛樿鐜鏈厤缃?UNIAPI_API_KEY 鏃讹紝涓嶅己鍒惰姹傜湡瀹炲閮ㄨ皟鐢紝閬垮厤 CI 蹇呯劧澶辫触
-      // 鏈湴鎴?CI 濡傞渶瀹屾暣 E2E锛岃鍦?.env.e2e(.local) 涓厤缃?UNIAPI_API_KEY
-      console.warn('[AiService E2E] 妫€娴嬪埌鏈厤缃?UNIAPI_API_KEY锛岃烦杩囩湡瀹?uniapi 璋冪敤鐢ㄤ緥')
+      // 默认环境未配置 UNIAPI_API_KEY 时，不强制要求真实外部调用，避免 CI 必然失败
+      // 本地或 CI 如需完整 E2E，请在 .env.e2e(.local) 中配置 UNIAPI_API_KEY
+      console.warn('[AiService E2E] 检测到未配置 UNIAPI_API_KEY，跳过真实 uniapi 调用用例')
       return
     }
 
@@ -48,8 +48,8 @@ describe('AiService (E2E)', () => {
         providerCode: 'uniapi',
         model: 'o4-mini',
         messages: [
-          { role: 'system', content: '浣犳槸涓€涓敤浜?E2E 娴嬭瘯鐨勭畝鐭洖绛斿姪鎵嬨€? },
-          { role: 'user', content: '鐢ㄤ竴鍙ヨ瘽绠€鍗曚粙缁嶄竴涓嬩綘鑷繁銆? },
+          { role: 'system', content: '你是一个用于 E2E 测试的简短回答助手。' },
+          { role: 'user', content: '用一句话简单介绍一下你自己。' },
         ],
         temperature: 0.2,
         maxTokens: 64,
@@ -58,7 +58,7 @@ describe('AiService (E2E)', () => {
       expect(typeof result.content).toBe('string')
     }
     catch (error) {
-      // 鍦ㄧ綉缁滄垨绗笁鏂规湇鍔″紓甯告椂锛岃姹傝繑鍥炶鑼冪殑 AI_PROVIDER_ERROR 涓氬姟寮傚父
+      // 在网络或第三方服务异常时，要求返回规范的 AI_PROVIDER_ERROR 业务异常
       expect(error).toBeInstanceOf(AiProviderErrorException)
     }
   })

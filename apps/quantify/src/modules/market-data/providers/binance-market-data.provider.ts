@@ -42,7 +42,7 @@ interface ExchangeInfoResponse {
   }>
 }
 
-// Binance Kline API 杩斿洖鏁扮粍鏍煎紡锛歔openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, ...]
+// Binance Kline API 返回数组格式：[openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, ...]
 type BinanceKlineEntry = [
   number, // 0: openTime
   string, // 1: open
@@ -225,7 +225,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       volume: entry[5],
       quoteVolume: entry[7],
       trades: entry[8],
-      timestamp: entry[0], // 浣跨敤 openTime 鑰岄潪 closeTime锛岀‘淇濇父鏍囨帹杩涙纭?
+      timestamp: entry[0], // 使用 openTime 而非 closeTime，确保游标推进正确
       isFinal: true,
       source: 'BINANCE_REST',
     }
@@ -252,16 +252,16 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     let url: string
 
     if (template.includes('streams=')) {
-      // 澶氳矾澶嶇敤妯″紡锛屼緥濡? /stream?streams=btcusdt@ticker/ethusdt@kline_1m
+      // 多路复用模式，例如 /stream?streams=btcusdt@ticker/ethusdt@kline_1m
       url = `${base}${path}${this.currentStreams}`
     } else {
-      // 鍗曟祦妯″紡锛屼緥濡? /ws/<streamName>
+      // 单流模式，例如 /ws/<streamName>
       url = `${base}${path}${this.currentStreams}`
     }
     this.ws = new WebSocket(url)
 
     this.ws.on('open', () => {
-      this.logger.log(`Binance WebSocket 宸茶繛鎺? ${this.currentStreams}`)
+      this.logger.log(`Binance WebSocket 已连接: ${this.currentStreams}`)
     })
 
     this.ws.on('message', data => {
@@ -269,17 +269,17 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
         const payload = JSON.parse(data.toString()) as BinanceStreamPayload
         this.handleStreamPayload(payload)
       } catch (error) {
-        this.logger.error(`瑙ｆ瀽 WebSocket 娑堟伅澶辫触: ${(error as Error).message}`)
+        this.logger.error(`解析 WebSocket 消息失败: ${(error as Error).message}`)
       }
     })
 
     this.ws.on('close', () => {
-      this.logger.warn('Binance WebSocket 杩炴帴鍏抽棴')
+      this.logger.warn('Binance WebSocket 连接关闭')
       this.scheduleReconnect()
     })
 
     this.ws.on('error', error => {
-      this.logger.error(`Binance WebSocket 閿欒: ${(error as Error).message}`)
+      this.logger.error(`Binance WebSocket 错误: ${(error as Error).message}`)
       this.scheduleReconnect()
     })
   }
@@ -306,7 +306,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
         await this.klineHandler?.(this.adaptWsKline(data))
       }
     } catch (error) {
-      this.logger.error(`澶勭悊 WebSocket 娑堟伅澶辫触: ${(error as Error).message}`, (error as Error).stack)
+      this.logger.error(`处理 WebSocket 消息失败: ${(error as Error).message}`, (error as Error).stack)
     }
   }
 

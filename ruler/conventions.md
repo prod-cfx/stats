@@ -71,7 +71,8 @@
 
 - 主门禁优先级：后端与 Quantify 的 E2E / 单测，高于前端零散测试
 - Backend E2E：`dx test e2e backend <file-or-dir> [-t "case name"]`
-- Quantify E2E：`dx test e2e quantify <file-or-dir>`
+- Quantify E2E（必须带路径）：`dx test e2e quantify apps/quantify/e2e/<file-or-dir>`
+- Quantify 最小健康校验：`dx test e2e quantify apps/quantify/e2e/health`
 - Backend 单测：`dx test unit backend`
 - Quantify 单测：`dx test unit quantify`
 - 避免无参全量跑大型 E2E；优先按影响范围逐文件、逐目录执行

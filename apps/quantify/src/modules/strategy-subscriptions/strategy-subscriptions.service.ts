@@ -1,11 +1,11 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import Ajv from 'ajv'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions/exchange-account-not-found.exception'
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 import { CreateSubscriptionDto } from './dto/create-subscription.dto'
 import { SubscriptionListQueryDto } from './dto/subscription-list-query.dto'
 import { SubscriptionResponseDto } from './dto/subscription-response.dto'

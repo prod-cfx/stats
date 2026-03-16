@@ -56,4 +56,17 @@ describe('applyQuantifyEnvOverrides', () => {
     )
     expect(env.UNIAPI_API_KEY).toBe('shared-uniapi-key')
   })
+
+  it('honors explicit e2e database override when provided', () => {
+    const env = {
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/quantify_e2e',
+      QUANTIFY_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/quantify_e2e',
+      QUANTIFY_E2E_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/quantify_e2e_tmp_123',
+    }
+
+    applyQuantifyEnvOverrides(env)
+
+    expect(env.DATABASE_URL).toBe('postgresql://postgres:postgres@localhost:5432/quantify_e2e_tmp_123')
+    expect(env.QUANTIFY_DATABASE_URL).toBe('postgresql://postgres:postgres@localhost:5432/quantify_e2e_tmp_123')
+  })
 })

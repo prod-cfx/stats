@@ -44,7 +44,7 @@ export abstract class BaseCexClient implements IExchangeClient {
   abstract fetchTicker(symbol: string): Promise<UnifiedTicker>
 
   /**
-   * 瀛愮被瀹炵幇鍏蜂綋绛惧悕閫昏緫锛岃繑鍥炲甫 query 涓?header 鐨勬渶缁堣姹備俊鎭€?
+   * 子类实现具体签名逻辑，返回带 query 和 header 的最终请求信息。
    */
   protected abstract signRequest(
     method: HttpMethod,
@@ -90,7 +90,7 @@ export abstract class BaseCexClient implements IExchangeClient {
         data = JSON.parse(text) as unknown
       }
       catch (error) {
-        // 缁熶竴灏嗚В鏋愬け璐ュ寘瑁呬负 ExchangeError锛岄伩鍏?SyntaxError 娉勯湶鍒颁笂灞?
+        // 统一将解析失败包装为 ExchangeError，避免 SyntaxError 泄露到上层
         throw new ExchangeError(
           'Failed to parse exchange response JSON',
           String(response.status),
@@ -107,7 +107,7 @@ export abstract class BaseCexClient implements IExchangeClient {
   }
 
   /**
-   * 榛樿閿欒鏄犲皠锛屽瓙绫诲彲鏍规嵁浜ゆ槗鎵€閿欒鐮佽鐩栥€?
+   * 默认错误映射，子类可根据交易所错误码覆盖。
    */
 
   protected mapError(status: number, data: unknown): ExchangeError {

@@ -1,34 +1,19 @@
-# 甯傚満鏁版嵁 SSE 鍔熻兘鎬荤粨
+# 市场数据模块摘要
 
-## 宸插畬鎴愯兘鍔?
+## 当前能力
 
-- 浣跨敤 `EventEmitter2` 骞挎挱瀹炴椂琛屾儏浜嬩欢
-- 鍦?`MarketDataController` 鏆撮湶 `GET /market/stream/ticker`
-- 琛屾儏鍏ュ簱涓?SSE 鎺ㄩ€佽В鑰?
-- 淇濈暀涓哄唴閮ㄦ湇鍔℃秷璐硅璁＄殑鏍囧噯 SSE 鎺ュ彛
+- 采集并持久化行情数据
+- 提供内部 SSE 实时推送接口
+- 支持多订阅方同时消费
 
-## 鏁版嵁娴?
+## 适用场景
 
-```text
-Binance WebSocket
-  -> MarketDataIngestionService
-  -> MarketDataStreamService
-  -> EventEmitter2
-  -> MarketDataController
-  -> Internal SSE consumer
-```
+- 内部服务订阅 ticker 流
+- 调试行情接入链路
+- 为策略或下游模块提供统一行情入口
 
-## 楠岃瘉鏂瑰紡
+## 后续方向
 
-```bash
-dx db generate
-dx start backend --dev
-curl -N http://localhost:3000/api/v1/market/stream/ticker
-```
-
-## 鍚庣画鍙€変紭鍖?
-
-- 鎸変氦鏄撳杩囨护
-- 鎺ㄩ€侀檺娴?
-- 蹇冭烦鏈哄埗
-- 澶氬疄渚嬪箍鎾?
+- 完善监控指标
+- 补充更多接入样例
+- 强化异常恢复与告警

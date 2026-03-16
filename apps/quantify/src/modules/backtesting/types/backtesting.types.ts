@@ -56,7 +56,7 @@ export type StrategyFn = (ctx: StrategyContext) => SignalIntent | Promise<Signal
 export interface ExecutionConfig {
   slippageBps: number
   feeBps: number
-  priceSource: 'mid'
+  priceSource: 'open' | 'close' | 'mid'
 }
 
 export interface Fill {

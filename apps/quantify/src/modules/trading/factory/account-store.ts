@@ -7,8 +7,8 @@ export interface BinanceConfig {
   spotEnabled?: boolean
   futuresEnabled?: boolean
   /**
-   * 鏄惁浣跨敤娴嬭瘯缃?妯℃嫙鐩樸€?
-   * - Binance: 鍒囨崲鍒板畼鏂?testnet 鍩熷悕
+   * 是否使用测试网/模拟盘？
+   * - Binance: 切换到官方 testnet 域名
    */
   isTestnet?: boolean
 }
@@ -19,7 +19,7 @@ export interface OkxConfig {
   passphrase: string
   useUnifiedAccount?: boolean
   /**
-   * 鏄惁鍚敤 OKX 妯℃嫙鐩?(x-simulated-trading = 1)
+   * 是否启用 OKX 模拟盘（x-simulated-trading = 1）
    */
   isTestnet?: boolean
 }
@@ -38,9 +38,9 @@ export type ExchangeAccountConfig =
 export interface ExchangeAccountStore {
   getAccountConfig: (userId: string, exchangeId: ExchangeId) => Promise<ExchangeAccountConfig | null>
   /**
-   * 鎸夎处鎴?ID 绮剧‘鑾峰彇閰嶇疆锛堢敤浜?LLM 璁㈤槄绛夐渶瑕佹寚瀹氬叿浣撹处鎴风殑鍦烘櫙锛?
-   * @param accountId 璐︽埛 ID
-   * @param userId 鐢ㄦ埛 ID锛堝繀椤伙紝鐢ㄤ簬闃叉瓒婃潈璁块棶锛?
+   * 按账户 ID 精确获取配置（用于 LLM 订阅等需要指定具体账户的场景）。
+   * @param accountId 账户 ID
+   * @param userId 用户 ID（必须，用于防止越权访问）
    */
   getAccountConfigById: (accountId: string, userId: string) => Promise<ExchangeAccountConfig | null>
 }

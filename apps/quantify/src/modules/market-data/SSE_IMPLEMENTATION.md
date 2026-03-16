@@ -1,36 +1,23 @@
-# 甯傚満鏁版嵁 SSE 瀹炵幇鏂囨。
+# 市场数据 SSE 实现说明
 
-## 姒傝堪
+## 目标
 
-鏈疄鐜颁负鍐呴儴娑堣垂鑰呮彁渚涘熀浜?Server-Sent Events (SSE) 鐨勫疄鏃?ticker 鎺ㄩ€佽兘鍔涖€?
+通过统一的 SSE 端点向内部调用方持续推送最新行情快照，降低轮询成本。
 
-## 鏋舵瀯
+## 数据流
 
-```text
-Binance WebSocket
-  -> MarketDataIngestionService
-  -> MarketDataStreamService
-  -> EventEmitter2
-  -> MarketDataController (SSE)
-  -> Internal SSE consumer
-```
+1. 市场数据提供方采集外部交易所行情
+2. 服务端完成标准化和必要缓存
+3. SSE 控制器将统一格式的数据推送给订阅方
 
-## 鍏抽敭鐐?
+## 约束
 
-- `MarketDataIngestionService` 鎺ユ敹骞朵繚瀛樿鎯?
-- `MarketDataStreamService` 璐熻矗骞挎挱浜嬩欢
-- `MarketDataController` 灏嗗唴閮ㄤ簨浠惰浆鎹㈡垚绋冲畾鐨?SSE 鏁版嵁鏍煎紡
-- 鎺ュ彛瀹氫綅涓哄彲淇＄幆澧冨唴閮ㄤ娇鐢紝涓嶅啀渚濊禆娴忚鍣ㄥ墠绔涔?
+- 仅面向内部调用场景
+- 调用方需要自行处理断线重连
+- 服务端负责输出稳定的数据结构，不负责客户端状态同步
 
-## 娴嬭瘯
+## 调试建议
 
-```bash
-curl -N http://localhost:3000/api/v1/market/stream/ticker
-```
-
-## 鎵╁睍鏂瑰悜
-
-- 鎸変氦鏄撳璁㈤槄
-- 蹇冭烦涓庢柇绾挎仮澶?
-- 涓嬫父闄愭祦
-- 澶氬疄渚嬪箍鎾?
+- 先确认上游行情采集是否正常
+- 再检查 SSE 端点是否持续输出事件
+- 若订阅方丢消息，优先排查网络和客户端消费逻辑

@@ -54,7 +54,7 @@ export class RequestContextInterceptor implements NestInterceptor {
     const requestId = typeof candidate === 'string' && candidate.trim().length > 0 ? candidate : randomUUID()
 
     request.headers['x-request-id'] = requestId
-    // 瀵逛簬宸茬粡寮€濮嬪啓鍑哄搷搴旂殑鍦烘櫙锛堜緥濡?SSE锛夛紝閬垮厤鍐嶆璁剧疆鍝嶅簲澶淬€?
+    // 对于已经开始写出响应的场景（例如 SSE），避免再次设置响应头。
     if (!response.headersSent) {
       response.setHeader('X-Request-Id', requestId)
     }

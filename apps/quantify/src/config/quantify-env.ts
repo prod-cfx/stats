@@ -1,6 +1,7 @@
 type QuantifyEnv = Record<string, string | undefined>
 
 const SECRET_PLACEHOLDER = '__SET_IN_env.local__'
+const E2E_DATABASE_OVERRIDE_KEY = 'QUANTIFY_E2E_DATABASE_URL'
 
 const MAPPINGS = {
   QUANTIFY_PORT: 'PORT',
@@ -26,6 +27,12 @@ export function applyQuantifyEnvOverrides(env: QuantifyEnv = process.env): Quant
     if (value) {
       env[targetKey] = value
     }
+  }
+
+  const e2eDatabaseOverride = normalizedValue(env[E2E_DATABASE_OVERRIDE_KEY])
+  if (e2eDatabaseOverride) {
+    env.QUANTIFY_DATABASE_URL = e2eDatabaseOverride
+    env.DATABASE_URL = e2eDatabaseOverride
   }
 
   return env

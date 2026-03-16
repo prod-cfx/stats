@@ -1,2 +1,2 @@
-// Prisma 7: datasource 涓?generator 閰嶇疆缁熶竴鏀惧湪 prisma.config.ts
-// 鎵€鏈夋ā鍨?/ 鏋氫妇宸叉媶鍒嗗埌 ./schema/*.prisma 鏂囦欢涓紝浠呬繚鐣欐鍗犱綅鏂囦欢鏂逛究缂栬緫鍣ㄥ紩鐢ㄣ€?
+// Prisma 7: datasource 和 generator 配置统一放在 prisma.config.ts
+// 所有模型 / 枚举已拆分到 ./schema/*.prisma 文件中，仅保留此占位文件方便编辑器引用。

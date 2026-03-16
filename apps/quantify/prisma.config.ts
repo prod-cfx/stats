@@ -3,7 +3,7 @@ import { loadEnvironment } from '@net/config'
 import { defineConfig } from 'prisma/config'
 import { applyQuantifyEnvOverrides } from './src/config/quantify-env'
 
-// Prisma 7 涓嶅啀鑷姩鍔犺浇鐜鍙橀噺锛屼娇鐢ㄧ粺涓€鐨?loadEnvironment 鍔犺浇
+// Prisma 7 不再自动加载环境变量，统一使用 loadEnvironment 加载
 const rootDir = path.resolve(__dirname, '../..')
 loadEnvironment({ basePath: rootDir })
 applyQuantifyEnvOverrides()
@@ -14,11 +14,11 @@ export default defineConfig({
   migrations: {
     seed: 'tsx prisma/seed.ts',
   },
-  // Prisma 7: datasource URL 蹇呴』鍦ㄨ繖閲岄厤缃?
+  // Prisma 7: datasource URL 必须在这里配置
   datasource: {
     url: process.env.DATABASE_URL,
   },
-  // Prisma 7: generator 閰嶇疆涔熼渶瑕佸湪杩欓噷
+  // Prisma 7: generator 配置也需要在这里声明
   generators: {
     client: {
       provider: 'prisma-client-js',

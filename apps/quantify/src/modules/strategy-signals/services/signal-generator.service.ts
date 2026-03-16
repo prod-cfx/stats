@@ -1,5 +1,7 @@
 import type { AiSignalPayload } from '@ai/shared'
 import type { LegTimeframeData, MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
+import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import type {
   IndicatorConfig,
   MarketBar,
@@ -11,8 +13,6 @@ import type {
   StrategyTemplate,
   Symbol,
 } from '@/prisma/prisma.types'
-import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
-import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import { fillPromptTemplate, parseAiSignalResponse } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'

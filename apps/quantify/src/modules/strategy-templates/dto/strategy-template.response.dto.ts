@@ -1,5 +1,5 @@
-import type { StrategyTemplate as StrategyTemplateModel } from '@/prisma/prisma.types'
 import type { JsonValue, StrategyDataRequirements, StrategyExecutionConfig, StrategyStatus } from '../types/strategy-template.types'
+import type { StrategyTemplate as StrategyTemplateModel } from '@/prisma/prisma.types'
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { StrategyExecutionConfigDto, StrategyLegDefinitionDto } from '../dto/create-strategy-template.dto'

@@ -70,7 +70,7 @@ export class BacktestReporter {
       exitPrice: payload.price,
       fee: current.fee + payload.fee,
       pnl: payload.pnl - current.fee - payload.fee,
-      returnPct: current.entryPrice === 0 ? 0 : (payload.price - current.entryPrice) / current.entryPrice,
+      returnPct: this.computeReturnPct(current.side, current.entryPrice, payload.price),
       reasonClose: payload.reason,
     }
 
@@ -113,7 +113,7 @@ export class BacktestReporter {
     return {
       summary: {
         netProfit: realized,
-        netProfitPct: initialCash === 0 ? 0 : realized / initialCash,
+        netProfitPct: initialCash === 0 ? 0 : (realized / initialCash) * 100,
         maxDrawdownPct: drawdown,
         winRate: this.trades.length === 0 ? 0 : wins.length / this.trades.length,
         profitFactor: grossLoss === 0 ? (grossProfit > 0 ? Number.POSITIVE_INFINITY : 0) : grossProfit / grossLoss,
@@ -137,7 +137,15 @@ export class BacktestReporter {
       if (dd > maxDrawdown) maxDrawdown = dd
     })
 
-    return maxDrawdown
+    return maxDrawdown * 100
+  }
+
+  private computeReturnPct(side: 'LONG' | 'SHORT', entryPrice: number, exitPrice: number): number {
+    if (entryPrice === 0) return 0
+    const raw = side === 'LONG'
+      ? (exitPrice - entryPrice) / entryPrice
+      : (entryPrice - exitPrice) / entryPrice
+    return raw * 100
   }
 }
 

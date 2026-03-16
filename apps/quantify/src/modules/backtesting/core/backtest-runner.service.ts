@@ -1,12 +1,12 @@
 import type { BacktestReport, BacktestRunInput, Bar, SignalIntent } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestReporterService } from '../report/backtest-reporter.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StateEngineService } from '../state/state-engine.service'
 
 @Injectable()
@@ -21,13 +21,24 @@ export class BacktestRunnerService {
   async run(input: BacktestRunInput): Promise<BacktestReport> {
     const ledger = this.ledgerFactory.create(input.initialCash)
     const reporter = this.reporterService.create()
+    const symbolSet = new Set(input.symbols)
 
     const baseBars = input.bars
-      .filter(bar => bar.timeframe === input.baseTimeframe)
+      .filter(bar =>
+        bar.timeframe === input.baseTimeframe
+        && (symbolSet.size === 0 || symbolSet.has(bar.symbol))
+        && bar.closeTime >= input.dataRange.fromTs
+        && bar.closeTime <= input.dataRange.toTs,
+      )
       .sort((a, b) => a.closeTime - b.closeTime)
 
     const stateBars = input.bars
-      .filter(bar => input.stateTimeframes.includes(bar.timeframe))
+      .filter(bar =>
+        input.stateTimeframes.includes(bar.timeframe)
+        && (symbolSet.size === 0 || symbolSet.has(bar.symbol))
+        && bar.closeTime >= input.dataRange.fromTs
+        && bar.closeTime <= input.dataRange.toTs,
+      )
       .sort((a, b) => a.closeTime - b.closeTime)
 
     let stateCursor = 0
@@ -69,14 +80,22 @@ export class BacktestRunnerService {
       })
 
       const normalized = this.normalizeIntent(intent, position.qty)
-      if (normalized === 0) {
+      const adjustedDelta = this.applyLeverageCap({
+        leverage: input.leverage,
+        price: this.getMarkPrice(bar, input.execution.priceSource),
+        currentQty: position.qty,
+        requestedDelta: normalized,
+        equity: snapshot.equity,
+      })
+
+      if (adjustedDelta === 0) {
         ledger.markToMarket({ [bar.symbol]: bar.close })
         reporter.pushEquity(bar.closeTime, ledger.snapshot().equity)
         continue
       }
 
-      const side: 'BUY' | 'SELL' = normalized > 0 ? 'BUY' : 'SELL'
-      const fill = this.executionModel.fill(bar, side, Math.abs(normalized), input.execution, intent.reason)
+      const side: 'BUY' | 'SELL' = adjustedDelta > 0 ? 'BUY' : 'SELL'
+      const fill = this.executionModel.fill(bar, side, Math.abs(adjustedDelta), input.execution, intent.reason)
       const events = ledger.applyFill(fill)
       events.forEach((event) => {
         if (event.type === 'OPEN') {
@@ -139,6 +158,27 @@ export class BacktestRunnerService {
       default:
         return 0
     }
+  }
+
+  private getMarkPrice(bar: Bar, priceSource: BacktestRunInput['execution']['priceSource']): number {
+    if (priceSource === 'open') return bar.open
+    if (priceSource === 'close') return bar.close
+    return (bar.open + bar.close) / 2
+  }
+
+  private applyLeverageCap(input: {
+    leverage: number
+    price: number
+    currentQty: number
+    requestedDelta: number
+    equity: number
+  }): number {
+    const safePrice = input.price > 0 ? input.price : 1
+    const safeLeverage = Number.isFinite(input.leverage) && input.leverage > 0 ? input.leverage : 1
+    const maxAbsQty = (Math.max(0, input.equity) * safeLeverage) / safePrice
+    const targetQty = input.currentQty + input.requestedDelta
+    const clippedTargetQty = Math.max(-maxAbsQty, Math.min(maxAbsQty, targetQty))
+    return clippedTargetQty - input.currentQty
   }
 }
 

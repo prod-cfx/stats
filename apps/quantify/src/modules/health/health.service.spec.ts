@@ -1,6 +1,6 @@
 import { HealthService } from './health.service'
 
-describe('HealthService', () => {
+describe('healthService', () => {
   it('returns quantify as service name', () => {
     const service = new HealthService()
 

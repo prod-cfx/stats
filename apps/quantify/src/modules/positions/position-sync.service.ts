@@ -1,14 +1,14 @@
 import type { ExchangeId, MarketType, UnifiedPosition } from '@/modules/trading/core/types'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -36,8 +36,8 @@ export interface PositionDifference {
 }
 
 /**
- * 浠撲綅鍚屾鏈嶅姟
- * 璐熻矗浠庝氦鏄撴墍鑾峰彇瀹為檯浠撲綅骞朵笌鏈湴鏁版嵁搴撹褰曡繘琛屽姣斿拰鍚屾
+ * 仓位同步服务
+ * 负责从交易所获取实际仓位并与本地数据库记录进行对比和同步
  */
 @Injectable()
 export class PositionSyncService {
@@ -50,7 +50,7 @@ export class PositionSyncService {
   ) {}
 
   /**
-   * 鍚屾鐢ㄦ埛鍦ㄦ寚瀹氫氦鏄撴墍鐨勪粨浣?
+   * 同步用户在指定交易所的仓位
    */
   async syncUserPositions(
     userId: string,
@@ -66,10 +66,10 @@ export class PositionSyncService {
     const errors: string[] = []
 
     try {
-      // 1. 浠庝氦鏄撴墍鑾峰彇瀹為檯浠撲綅
+      // 1. 从交易所获取实际仓位
       const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType)
 
-      // 2. 鑾峰彇鏈湴璁板綍鐨勫紑鏀句粨浣?
+      // 2. 获取本地记录的开放仓位
       const localPositions = await this.prisma.position.findMany({
         where: {
           userStrategyAccountId: accountId,
@@ -82,29 +82,29 @@ export class PositionSyncService {
         `${exchangePositions.length} from exchange, ${localPositions.length} in local DB`,
       )
 
-      // 3. 鏋勫缓浜ゆ槗鎵€浠撲綅鏄犲皠锛堟寜 symbol + side 鍒嗙粍锛?
+      // 3. 构建交易所仓位映射（按 symbol + side 分组）
       const exchangePositionMap = new Map<string, UnifiedPosition>()
       for (const pos of exchangePositions) {
         const key = this.getPositionKey(pos.symbol, pos.side === 'long' ? 'LONG' : 'SHORT')
         exchangePositionMap.set(key, pos)
       }
 
-      // 4. 鏋勫缓鏈湴浠撲綅鏄犲皠
+      // 4. 构建本地仓位映射
       const localPositionMap = new Map<string, typeof localPositions[0]>()
       for (const pos of localPositions) {
         const key = this.getPositionKey(pos.symbol, pos.positionSide)
         localPositionMap.set(key, pos)
       }
 
-      // 5. 瀵规瘮骞跺悓姝ュ樊寮?
-      // 5.1 澶勭悊浜ゆ槗鎵€瀛樺湪浣嗘湰鍦颁笉瀛樺湪鎴栨暟閲忎笉涓€鑷寸殑浠撲綅
+      // 5. 对比并同步差异
+      // 5.1 处理交易所存在但本地不存在或数量不一致的仓位
       for (const [key, exchangePos] of exchangePositionMap.entries()) {
         const localPos = localPositionMap.get(key)
         const exchangeQty = new Decimal(exchangePos.size)
         const localQty = localPos ? new Decimal(localPos.quantity) : new Decimal(0)
 
         if (!localPos) {
-          // 浜ゆ槗鎵€鏈変粨浣嶏紝鏈湴娌℃湁 - 闇€瑕佸垱寤?
+          // 交易所有仓位，本地没有，需要创建
           try {
             await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType)
             differences.push({
@@ -124,7 +124,7 @@ export class PositionSyncService {
           }
         }
         else if (!exchangeQty.equals(localQty)) {
-          // 鏁伴噺涓嶄竴鑷?- 闇€瑕佽皟鏁?
+          // 数量不一致，需要调整
           const diff = exchangeQty.sub(localQty)
           try {
             await this.adjustPositionQuantity(localPos, exchangePos, diff)
@@ -149,7 +149,7 @@ export class PositionSyncService {
         }
       }
 
-      // 5.2 澶勭悊鏈湴瀛樺湪浣嗕氦鏄撴墍涓嶅瓨鍦ㄧ殑浠撲綅锛堝簲璇ュ叧闂級
+      // 5.2 处理本地存在但交易所不存在的仓位（应该关闭）
       for (const [key, localPos] of localPositionMap.entries()) {
         if (!exchangePositionMap.has(key)) {
           const localQty = new Decimal(localPos.quantity)
@@ -189,7 +189,7 @@ export class PositionSyncService {
         errors: errors.length > 0 ? errors : undefined,
       }
 
-      // 璁板綍鍚屾鏃ュ織
+      // 记录同步日志
       const durationMs = Date.now() - startTime
       await this.saveSyncLog(result, accountId, syncType, triggeredBy, durationMs)
 
@@ -213,7 +213,7 @@ export class PositionSyncService {
         errors: [(error as Error).message],
       }
 
-      // 璁板綍澶辫触鏃ュ織
+      // 记录失败日志
       const durationMs = Date.now() - startTime
       await this.saveSyncLog(result, accountId, syncType, triggeredBy, durationMs)
 
@@ -222,7 +222,7 @@ export class PositionSyncService {
   }
 
   /**
-   * 鎵归噺鍚屾鎵€鏈夋椿璺冪敤鎴风殑浠撲綅
+   * 批量同步所有活跃用户的仓位
    */
   async syncAllActivePositions(): Promise<PositionSyncResult[]> {
     this.logger.log('Starting batch position sync for all active accounts')
@@ -387,7 +387,7 @@ export class PositionSyncService {
   }
 
   /**
-   * 鍒涘缓鏈湴缂哄け鐨勪粨浣?
+   * 创建本地缺失的仓位
    */
   private async createMissingPosition(
     accountId: string,
@@ -395,7 +395,7 @@ export class PositionSyncService {
     exchangeId: ExchangeId,
     marketType: MarketType,
   ): Promise<void> {
-    // 鐢变簬涓嶇煡閬撳叿浣撶殑鎴愪氦鍘嗗彶锛屽彧鑳借褰曚竴涓璐﹁皟鏁?
+    // 由于不知道具体的成交历史，只能记录一个对账调整
     const positionSide = exchangePos.side === 'long' ? PositionSide.LONG : PositionSide.SHORT
     const tradeSide = exchangePos.side === 'long' ? TradeSide.BUY : TradeSide.SELL
 
@@ -420,15 +420,15 @@ export class PositionSyncService {
   }
 
   /**
-   * 璋冩暣浠撲綅鏁伴噺
+   * 调整仓位数量
    */
   private async adjustPositionQuantity(
     localPos: any,
     exchangePos: UnifiedPosition,
     diff: Decimal,
   ): Promise<void> {
-    // 宸紓涓烘锛氶渶瑕佸鍔犱粨浣嶏紙涔板叆/鍔犱粨锛?
-    // 宸紓涓鸿礋锛氶渶瑕佸噺灏戜粨浣嶏紙鍗栧嚭/鍑忎粨锛?
+    // 差异为正：需要增加仓位（买入/加仓）
+    // 差异为负：需要减少仓位（卖出/减仓）
     const isIncrease = diff.gt(0)
     const tradeSide = isIncrease
       ? (localPos.positionSide === PositionSide.LONG ? TradeSide.BUY : TradeSide.SELL)
@@ -457,10 +457,10 @@ export class PositionSyncService {
   }
 
   /**
-   * 鍏抽棴瀛ょ珛鐨勪粨浣嶏紙浜ゆ槗鎵€宸蹭笉瀛樺湪锛?
+   * 关闭孤立的仓位（交易所已不存在）
    */
   private async closeOrphanedPosition(localPos: any): Promise<void> {
-    // 寮哄埗骞充粨
+    // 强制平仓
     const tradeSide = localPos.positionSide === PositionSide.LONG ? TradeSide.SELL : TradeSide.BUY
 
     await this.positionsService.recordTrade({
@@ -469,7 +469,7 @@ export class PositionSyncService {
       market: localPos.metadata?.market ?? 'unknown',
       side: tradeSide,
       positionSide: localPos.positionSide,
-      price: localPos.avgEntryPrice.toString(), // 浣跨敤骞冲潎鍏ュ満浠蜂綔涓哄钩浠撲环
+      price: localPos.avgEntryPrice.toString(), // 使用平均入场价作为平仓价
       quantity: localPos.quantity.toString(),
       fee: '0',
       orderId: `sync-close-${Date.now()}`,
@@ -484,7 +484,7 @@ export class PositionSyncService {
   }
 
   private normalizeSymbol(symbol: string): string {
-    // 灏?BTC/USDT:PERP 鏍煎紡杞崲涓?BTCUSDT
+    // 将 BTC/USDT:PERP 格式转换为 BTCUSDT
     return symbol
       .replace('/', '')
       .replace(':PERP', '')
@@ -497,7 +497,7 @@ export class PositionSyncService {
   }
 
   /**
-   * 淇濆瓨鍚屾鏃ュ織鍒版暟鎹簱
+   * 保存同步日志到数据库
    */
   private async saveSyncLog(
     result: PositionSyncResult,
@@ -531,7 +531,7 @@ export class PositionSyncService {
       )
     }
     catch (error) {
-      // 鏃ュ織淇濆瓨澶辫触涓嶅簲闃绘柇涓绘祦绋?
+      // 日志保存失败不应阻断主流程
       this.logger.warn(
         `Failed to save position sync log: ${(error as Error).message}`,
       )

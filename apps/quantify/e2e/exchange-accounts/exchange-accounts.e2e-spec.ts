@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
-import type { User } from '@prisma/client'
+import type { User } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
@@ -12,25 +12,34 @@ describe('ExchangeAccounts (E2E)', () => {
   const withUserId = <T extends Record<string, unknown>>(payload: T) => ({ userId: testUser.id, ...payload })
   const withUserIdPath = (path: string, userId = testUser.id) =>
     `${path}${path.includes('?') ? '&' : '?'}userId=${userId}`
+  const dataOf = <T>(response: { body: unknown }): T => {
+    const body = response.body as Record<string, unknown>
+    return ((body?.data as T | undefined) ?? (response.body as T))
+  }
 
   beforeAll(async () => {
-    // Mock fetch 鎷︽埅浜ゆ槗鎵€ API 璇锋眰
+    // Mock fetch 拦截交易所 API 请求
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
       const method = (init?.method || 'GET').toUpperCase()
 
-      // 瑙ｆ瀽璇锋眰澶村拰鍙傛暟
+      // 解析请求头和参数
       const headers = init?.headers as Record<string, string> || {}
       const urlParams = new URLSearchParams(url.search)
 
       // ===== Binance Mock =====
-      if (url.hostname === 'api.binance.com' || url.hostname === 'testnet.binance.vision') {
-        // Binance 鏌ヨ浣欓
+      if (
+        url.hostname === 'api.binance.com'
+        || url.hostname === 'fapi.binance.com'
+        || url.hostname === 'testnet.binance.vision'
+        || url.hostname === 'testnet.binancefuture.com'
+      ) {
+        // Binance 查询余额
         if (url.pathname === '/api/v3/account' && method === 'GET') {
           const apiKey = headers['X-MBX-APIKEY'] || headers['x-mbx-apikey']
           const signature = urlParams.get('signature')
 
-          // 妯℃嫙涓嶅悓鐨勯敊璇満鏅?
+          // 模拟不同的错误场景
           if (apiKey === 'invalid_key') {
             return new Response(JSON.stringify({
               code: -2015,
@@ -53,8 +62,8 @@ describe('ExchangeAccounts (E2E)', () => {
 
           if (apiKey === 'ip_restricted') {
             return new Response(JSON.stringify({
-              code: -2010,
-              msg: 'API-key format invalid.'
+              code: -1022,
+              msg: 'Signature for this request is not valid: ip not in whitelist.'
             }), {
               status: 403,
               headers: { 'content-type': 'application/json' },
@@ -73,15 +82,15 @@ describe('ExchangeAccounts (E2E)', () => {
 
           if (apiKey === 'no_permission') {
             return new Response(JSON.stringify({
-              code: -2015,
-              msg: 'Invalid API-key, IP, or permissions for action. Permission not enabled.'
+              code: -1100,
+              msg: 'Permission not enabled for this operation.'
             }), {
               status: 403,
               headers: { 'content-type': 'application/json' },
             })
           }
 
-          // 姝ｅ父鍝嶅簲
+          // 正常响应
           if (apiKey === 'valid_key' && signature) {
             return new Response(JSON.stringify({
               balances: [
@@ -95,7 +104,7 @@ describe('ExchangeAccounts (E2E)', () => {
           }
         }
 
-        // Binance futures 浣欓
+        // Binance futures 余额
         if (url.pathname === '/fapi/v2/balance' && method === 'GET') {
           const apiKey = headers['X-MBX-APIKEY'] || headers['x-mbx-apikey']
           if (apiKey === 'valid_key') {
@@ -123,9 +132,9 @@ describe('ExchangeAccounts (E2E)', () => {
         const passphrase = headers['OK-ACCESS-PASSPHRASE']
         const signature = headers['OK-ACCESS-SIGN']
 
-        // OKX 鏌ヨ浣欓
+        // OKX 查询余额
         if (url.pathname === '/api/v5/account/balance' && method === 'GET') {
-          // 妯℃嫙閿欒鍦烘櫙
+          // 模拟错误场景
           if (apiKey === 'invalid_key') {
             return new Response(JSON.stringify({
               code: '50113',
@@ -192,7 +201,7 @@ describe('ExchangeAccounts (E2E)', () => {
             })
           }
 
-          // 姝ｅ父鍝嶅簲
+          // 正常响应
           if (apiKey === 'valid_key' && passphrase === 'valid_passphrase' && signature) {
             return new Response(JSON.stringify({
               code: '0',
@@ -223,19 +232,19 @@ describe('ExchangeAccounts (E2E)', () => {
         }
       }
 
-      // 榛樿鍝嶅簲
+      // 默认响应
       return new Response('{}', {
         status: 404,
         headers: { 'content-type': 'application/json' },
       })
     }) as typeof fetch
 
-    // 鍒涘缓娴嬭瘯搴旂敤
+    // 创建测试应用
     const result = await createTestingApp()
     app = result.app
     prisma = result.prisma
 
-    // 鍒涘缓娴嬭瘯鐢ㄦ埛
+    // 创建测试用户
     testUser = await prisma.getClient().user.create({
       data: {
         email: `test-${Date.now()}@example.com`,
@@ -244,7 +253,7 @@ describe('ExchangeAccounts (E2E)', () => {
   })
 
   afterAll(async () => {
-    // 娓呯悊娴嬭瘯鏁版嵁
+    // 清理测试数据
     if (testUser) {
       await prisma.getClient().exchangeAccount.deleteMany({
         where: { userId: testUser.id }
@@ -271,14 +280,15 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body).toMatchObject({
+      const account = dataOf<any>(response)
+      expect(account).toMatchObject({
         exchangeId: 'binance',
         name: 'My Binance Account',
         isTestnet: false,
       })
-      expect(response.body.id).toBeDefined()
-      expect(response.body.lastValidatedAt).toBeDefined()
-      expect(response.body.createdAt).toBeDefined()
+      expect(account.id).toBeDefined()
+      expect(account.lastValidatedAt).toBeDefined()
+      expect(account.createdAt).toBeDefined()
     })
 
     it('should reject invalid Binance API key', async () => {
@@ -292,8 +302,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key鎴朣ecret閿欒')
-      expect(response.body.message).toContain('涓嶈鏈夊浣欑┖鏍?)
+      expect(response.body.message).toContain('API Key或Secret错误')
+      expect(response.body.message).toContain('不要有多余空格')
     })
 
     it('should reject wrong Binance secret', async () => {
@@ -307,8 +317,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API绛惧悕楠岃瘉澶辫触')
-      expect(response.body.message).toContain('妫€鏌PI Secret')
+      expect(response.body.message).toContain('API签名验证失败')
+      expect(response.body.message).toContain('API Secret')
     })
 
     it('should reject IP restricted Binance key', async () => {
@@ -322,8 +332,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('IP鍦板潃鏈姞鍏ョ櫧鍚嶅崟')
-      expect(response.body.message).toContain('甯佸畨API绠＄悊椤甸潰')
+      expect(response.body.message).toContain('IP地址未加入白名单')
+      expect(response.body.message).toContain('币安API管理页面')
     })
 
     it('should reject disabled Binance key', async () => {
@@ -337,8 +347,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key宸茶绂佺敤')
-      expect(response.body.message).toContain('甯佸畨API绠＄悊椤甸潰妫€鏌ョ姸鎬?)
+      expect(response.body.message).toContain('API Key已被禁用')
+      expect(response.body.message).toContain('币安API管理页面检查状态')
     })
 
     it('should reject Binance key without permission', async () => {
@@ -352,9 +362,9 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key鏉冮檺涓嶈冻')
-      expect(response.body.message).toContain('璇诲彇')
-      expect(response.body.message).toContain('浜ゆ槗')
+      expect(response.body.message).toContain('API Key权限不足')
+      expect(response.body.message).toContain('读取')
+      expect(response.body.message).toContain('交易')
     })
 
     it('should create Binance futures account', async () => {
@@ -369,8 +379,9 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.exchangeId).toBe('binance')
-      expect(response.body.name).toBe('Binance Futures')
+      const account = dataOf<any>(response)
+      expect(account.exchangeId).toBe('binance')
+      expect(account.name).toBe('Binance Futures')
     })
   })
 
@@ -388,12 +399,13 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body).toMatchObject({
+      const account = dataOf<any>(response)
+      expect(account).toMatchObject({
         exchangeId: 'okx',
         name: 'My OKX Account',
         isTestnet: false,
       })
-      expect(response.body.lastValidatedAt).toBeDefined()
+      expect(account.lastValidatedAt).toBeDefined()
     })
 
     it('should reject invalid OKX API key', async () => {
@@ -408,8 +420,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key鏃犳晥')
-      expect(response.body.message).toContain('妫€鏌ユ槸鍚︽纭鍒?)
+      expect(response.body.message).toContain('API Key无效')
+      expect(response.body.message).toContain('检查是否正确复制')
     })
 
     it('should reject expired OKX API key', async () => {
@@ -424,8 +436,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key宸茶繃鏈?)
-      expect(response.body.message).toContain('14澶╀笉浣跨敤鍚庤嚜鍔ㄥけ鏁?)
+      expect(response.body.message).toContain('API Key已过期')
+      expect(response.body.message).toContain('14天不使用后自动失效')
     })
 
     it('should reject wrong OKX passphrase', async () => {
@@ -440,8 +452,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('Passphrase閿欒')
-      expect(response.body.message).toContain('瀵嗙爜鐭')
+      expect(response.body.message).toContain('Passphrase错误')
+      expect(response.body.message).toContain('密码短语')
     })
 
     it('should reject IP restricted OKX key', async () => {
@@ -456,8 +468,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('IP鍦板潃鏈姞鍏ョ櫧鍚嶅崟')
-      expect(response.body.message).toContain('OKX API绠＄悊椤甸潰')
+      expect(response.body.message).toContain('IP地址未加入白名单')
+      expect(response.body.message).toContain('OKX API管理页面')
     })
 
     it('should reject OKX key without permission', async () => {
@@ -472,9 +484,9 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key鏉冮檺涓嶈冻')
-      expect(response.body.message).toContain('璇诲彇')
-      expect(response.body.message).toContain('浜ゆ槗')
+      expect(response.body.message).toContain('API Key权限不足')
+      expect(response.body.message).toContain('读取')
+      expect(response.body.message).toContain('交易')
     })
 
     it('should reject disabled OKX key', async () => {
@@ -489,8 +501,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      expect(response.body.message).toContain('API Key宸茶绂佺敤鎴栧垹闄?)
-      expect(response.body.message).toContain('OKX API绠＄悊椤甸潰妫€鏌ョ姸鎬?)
+      expect(response.body.message).toContain('API Key已被禁用或删除')
+      expect(response.body.message).toContain('OKX API管理页面检查状态')
     })
 
     it('should reject OKX request without passphrase', async () => {
@@ -505,7 +517,7 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(400)
 
-      // 搴旇鍦?DTO 楠岃瘉闃舵灏辫鎷掔粷
+      // 应该在 DTO 验证阶段就被拒绝
       expect(response.body.message).toBeDefined()
     })
   })
@@ -514,7 +526,7 @@ describe('ExchangeAccounts (E2E)', () => {
     let createdAccountId: string
 
     beforeAll(async () => {
-      // 鍒涘缓涓€涓祴璇曡处鎴?
+      // 创建一个测试账户
       const response = await createApiClient(app)
         .post('exchange-accounts')
         .send(withUserId({
@@ -525,7 +537,7 @@ describe('ExchangeAccounts (E2E)', () => {
           name: 'Test Account for List',
         }))
 
-      createdAccountId = response.body.id
+      createdAccountId = dataOf<any>(response).id
     })
 
     it('should list user exchange accounts', async () => {
@@ -533,10 +545,11 @@ describe('ExchangeAccounts (E2E)', () => {
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      expect(Array.isArray(response.body)).toBe(true)
-      expect(response.body.length).toBeGreaterThan(0)
+      const accounts = dataOf<any[]>(response)
+      expect(Array.isArray(accounts)).toBe(true)
+      expect(accounts.length).toBeGreaterThan(0)
 
-      const account = response.body.find((a: any) => a.id === createdAccountId)
+      const account = accounts.find((a: any) => a.id === createdAccountId)
       expect(account).toBeDefined()
       expect(account.exchangeId).toBe('binance')
       expect(account.name).toBe('Test Account for List')
@@ -547,7 +560,8 @@ describe('ExchangeAccounts (E2E)', () => {
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      const account = response.body[0]
+      const accounts = dataOf<any[]>(response)
+      const account = accounts[0]
       expect(account.encryptedConfig).toBeUndefined()
       expect(account.apiKey).toBeUndefined()
       expect(account.apiSecret).toBeUndefined()
@@ -565,7 +579,7 @@ describe('ExchangeAccounts (E2E)', () => {
     let accountToDelete: string
 
     beforeEach(async () => {
-      // 鍒涘缓涓€涓处鎴风敤浜庡垹闄?
+      // 创建一个账户用于删除
       const response = await createApiClient(app)
         .post('exchange-accounts')
         .send(withUserId({
@@ -576,7 +590,7 @@ describe('ExchangeAccounts (E2E)', () => {
           name: 'Account to Delete',
         }))
 
-      accountToDelete = response.body.id
+      accountToDelete = dataOf<any>(response).id
     })
 
     it('should delete exchange account', async () => {
@@ -584,12 +598,13 @@ describe('ExchangeAccounts (E2E)', () => {
         .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`))
         .expect(200)
 
-      // 楠岃瘉璐︽埛宸茶鍒犻櫎
+      // 验证账户已被删除
       const response = await createApiClient(app)
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      const account = response.body.find((a: any) => a.id === accountToDelete)
+      const accounts = dataOf<any[]>(response)
+      const account = accounts.find((a: any) => a.id === accountToDelete)
       expect(account).toBeUndefined()
     })
 
@@ -600,19 +615,19 @@ describe('ExchangeAccounts (E2E)', () => {
     })
 
     it('should not allow deleting other user\'s account', async () => {
-      // 鍒涘缓鍙︿竴涓敤鎴?
+      // 创建另一个用户
       const otherUser = await prisma.getClient().user.create({
         data: {
           email: `other-${Date.now()}@example.com`,
         }
       })
 
-      // 灏濊瘯鐢ㄥ彟涓€涓?userId 鍒犻櫎璐︽埛
+      // 尝试用另一个 userId 删除账户
       await createApiClient(app)
         .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`, otherUser.id))
-        .expect(404) // 搴旇杩斿洖404锛屽洜涓烘壘涓嶅埌灞炰簬璇ョ敤鎴风殑璐︽埛
+        .expect(404) // 应该返回404，因为找不到属于该用户的账户
 
-      // 娓呯悊
+      // 清理
       await prisma.getClient().user.delete({
         where: { id: otherUser.id }
       })
@@ -688,7 +703,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.name).toBeNull()
+      const account = dataOf<any>(response)
+      expect(account.name).toBeNull()
     })
 
     it('should accept testnet flag', async () => {
@@ -703,13 +719,14 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.isTestnet).toBe(true)
+      const account = dataOf<any>(response)
+      expect(account.isTestnet).toBe(true)
     })
   })
 
   describe('Edge Cases', () => {
     it('should handle concurrent requests', async () => {
-      // 鍚屾椂鍒涘缓澶氫釜璐︽埛
+      // 同时创建多个账户
       const promises = Array.from({ length: 5 }, (_, i) =>
         createApiClient(app)
           .post('exchange-accounts')
@@ -742,7 +759,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.name).toBe(longName)
+      const account = dataOf<any>(response)
+      expect(account.name).toBe(longName)
     })
 
     it('should reject account names exceeding max length', async () => {

@@ -1,9 +1,9 @@
 import type { TestingModule } from '@nestjs/testing';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { Prisma } from '@/prisma/prisma.types'
-
 import { PrismaService } from '@/prisma/prisma.service'
+
+import { Prisma } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsService } from '../strategy-instance-stats.service'
 

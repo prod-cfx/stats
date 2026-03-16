@@ -48,7 +48,7 @@ describe('llm strategy codegen (E2E)', () => {
   })
 
   it('publishes strategy script when checks pass', async () => {
-    jest.spyOn(aiService, 'chat').mockResolvedValue({
+    const chatSpy = jest.spyOn(aiService, 'chat').mockResolvedValue({
       content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80 }',
       toolCalls: [],
     })
@@ -69,12 +69,16 @@ describe('llm strategy codegen (E2E)', () => {
 
     const continueRes = await supertestRequest(server).post(`/api/v1/llm-strategy-codegen/sessions/${sessionId}/messages`).send({
       userId: 'u-e2e-1',
-      message: '璇风敓鎴愯剼鏈?,
+      message: '请生成脚本',
     }).expect(201)
 
     const continuePayload = continueRes.body.data ?? continueRes.body
     expect(continuePayload.status).toBe('PUBLISHED')
     expect(continuePayload.specDesc).toBeTruthy()
+    expect(chatSpy).toHaveBeenCalledTimes(1)
+    const systemPrompt = String(chatSpy.mock.calls[0]?.[0]?.messages?.[0]?.content ?? '')
+    expect(systemPrompt).toContain('helpers.finance.sharpeRatio')
+    expect(systemPrompt).not.toContain('helpers.math')
 
     const client = prisma.getClient()
     const versions = await client.llmStrategyCodeVersion.findMany({ where: { sessionId } })
@@ -105,11 +109,40 @@ describe('llm strategy codegen (E2E)', () => {
 
     const continueRes = await supertestRequest(server).post(`/api/v1/llm-strategy-codegen/sessions/${sessionId}/messages`).send({
       userId: 'u-e2e-2',
-      message: '璇风敓鎴愯剼鏈?,
+      message: '请生成脚本',
     }).expect(201)
 
     const continuePayload = continueRes.body.data ?? continueRes.body
     expect(continuePayload.status).toBe('REJECTED')
-    expect(String(continuePayload.rejectReason)).toContain('鏈巿鏉?helper')
+    expect(String(continuePayload.rejectReason)).toContain('未授权 helper')
+  })
+
+  it('rejects legacy helpers.math namespace', async () => {
+    jest.spyOn(aiService, 'chat').mockResolvedValue({
+      content: 'return helpers.math.avg([1,2,3])',
+    })
+
+    const server = app.getHttpServer()
+
+    const startRes = await supertestRequest(server).post('/api/v1/llm-strategy-codegen/sessions').send({
+      userId: 'u-e2e-3',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['rsi < 30'],
+      exitRules: ['atr stop'],
+      riskRules: { maxPositionPct: 0.1 },
+    }).expect(201)
+
+    const startPayload = startRes.body.data ?? startRes.body
+    const sessionId = startPayload.id as string
+
+    const continueRes = await supertestRequest(server).post(`/api/v1/llm-strategy-codegen/sessions/${sessionId}/messages`).send({
+      userId: 'u-e2e-3',
+      message: '请生成脚本',
+    }).expect(201)
+
+    const continuePayload = continueRes.body.data ?? continueRes.body
+    expect(continuePayload.status).toBe('REJECTED')
+    expect(String(continuePayload.rejectReason)).toContain('helpers.math')
   })
 })

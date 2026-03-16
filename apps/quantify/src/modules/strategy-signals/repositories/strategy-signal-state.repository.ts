@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆瀹炰緥
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
@@ -15,7 +15,7 @@ export class StrategySignalStateRepository {
   async incrementFailure(strategyInstanceId: string, options?: { lockedUntil?: Date; reset?: boolean }) {
     const { lockedUntil, reset } = options ?? {}
 
-    // 鑾峰彇瀹炰緥瀵瑰簲鐨勬ā鏉縄D
+    // 获取实例对应的模板ID
     const instance = await this.prisma.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: { strategyTemplateId: true },
@@ -46,7 +46,7 @@ export class StrategySignalStateRepository {
   }
 
   async reset(strategyInstanceId: string) {
-    // 鑾峰彇瀹炰緥瀵瑰簲鐨勬ā鏉縄D
+    // 获取实例对应的模板ID
     const instance = await this.prisma.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: { strategyTemplateId: true },

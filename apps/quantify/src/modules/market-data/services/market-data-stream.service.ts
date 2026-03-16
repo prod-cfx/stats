@@ -1,7 +1,7 @@
 import type { MarketQuotePayload } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 EventEmitter2
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 EventEmitter2
 import { EventEmitter2 } from '@nestjs/event-emitter'
 
 export const MARKET_QUOTE_EVENT = 'market.quote'
@@ -12,7 +12,7 @@ export interface MarketQuoteEvent {
 }
 
 /**
- * 琛屾儏娴佹湇鍔?- 璐熻矗绠＄悊瀹炴椂琛屾儏鏁版嵁鐨勪簨浠跺箍鎾?
+ * 行情流服务，负责管理实时行情数据的事件广播。
  */
 @Injectable()
 export class MarketDataStreamService {
@@ -21,7 +21,7 @@ export class MarketDataStreamService {
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   /**
-   * 骞挎挱 ticker 鏁版嵁鍒版墍鏈夎闃呰€?
+   * 广播 ticker 数据到所有订阅者。
    */
   emitQuote(payload: MarketQuotePayload): void {
     try {
@@ -31,7 +31,7 @@ export class MarketDataStreamService {
       }
       this.eventEmitter.emit(MARKET_QUOTE_EVENT, event)
     } catch (error) {
-      this.logger.error(`骞挎挱 ticker 鏁版嵁澶辫触: ${(error as Error).message}`, (error as Error).stack)
+      this.logger.error(`广播 ticker 数据失败: ${(error as Error).message}`, (error as Error).stack)
     }
   }
 }
