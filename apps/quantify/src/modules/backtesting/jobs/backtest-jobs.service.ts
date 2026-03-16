@@ -37,6 +37,7 @@ export class BacktestJobsService {
 
   createJob(input: BacktestRunInput): BacktestJobView {
     this.pruneJobs()
+    this.ensureCapacityForNewJob()
 
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const job: BacktestJobRecord = {
@@ -54,7 +55,6 @@ export class BacktestJobsService {
       },
     }
     this.jobs.set(id, job)
-    this.evictOverflowJobs()
     queueMicrotask(() => this.executeJob(id, input))
     return this.toView(job)
   }
@@ -116,11 +116,21 @@ export class BacktestJobsService {
     }
   }
 
-  private evictOverflowJobs() {
-    while (this.jobs.size > BacktestJobsService.MAX_JOBS) {
-      const oldestJobId = this.jobs.keys().next().value
-      if (!oldestJobId) break
-      this.jobs.delete(oldestJobId)
+  private ensureCapacityForNewJob() {
+    if (this.jobs.size < BacktestJobsService.MAX_JOBS) return
+    const targetSize = BacktestJobsService.MAX_JOBS - 1
+    this.evictCompletedJobs(targetSize)
+    if (this.jobs.size > targetSize) {
+      throw new ConflictException('Backtest job queue is full, please retry later')
+    }
+  }
+
+  private evictCompletedJobs(targetSize: number) {
+    if (this.jobs.size <= targetSize) return
+    for (const [id, job] of this.jobs) {
+      if (this.jobs.size <= targetSize) break
+      if (job.status === 'queued' || job.status === 'running') continue
+      this.jobs.delete(id)
     }
   }
 }

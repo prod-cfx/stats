@@ -65,5 +65,34 @@ describe('backtestJobsService', () => {
 
     expect(() => service.getJobResult(created.id)).toThrow(ConflictException)
   })
-})
 
+  it('should keep active jobs and reject new job when queue is full', async () => {
+    const maxJobsHolder = BacktestJobsService as unknown as { MAX_JOBS: number }
+    const originalMaxJobs = maxJobsHolder.MAX_JOBS
+    Object.defineProperty(maxJobsHolder, 'MAX_JOBS', {
+      configurable: true,
+      value: 2,
+    })
+
+    try {
+      const runner = {
+        run: jest.fn().mockImplementation(() => new Promise(() => {})),
+      }
+      const service = new BacktestJobsService(runner as never)
+      const first = service.createJob(createInput())
+      const second = service.createJob(createInput())
+      await flushMicrotasks()
+
+      expect(service.getJob(first.id).status).toBe('running')
+      expect(service.getJob(second.id).status).toBe('running')
+      expect(() => service.createJob(createInput())).toThrow(ConflictException)
+      expect(service.getJob(first.id).id).toBe(first.id)
+      expect(service.getJob(second.id).id).toBe(second.id)
+    } finally {
+      Object.defineProperty(maxJobsHolder, 'MAX_JOBS', {
+        configurable: true,
+        value: originalMaxJobs,
+      })
+    }
+  })
+})
