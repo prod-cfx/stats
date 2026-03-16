@@ -35,7 +35,8 @@ const knownMojibakeByFile: Record<string, string[]> = {
     '鏈ā鍧楄礋璐ｉ噰闆',
   ],
   'src/modules/strategy-signals/repositories/strategy-signal-state.repository.ts': [
-    '获取实例对应的模板ID',
+    'Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆瀹炰緥',
+    '鑾峰彇瀹炰緥瀵瑰簲鐨勬ā鏉縄D',
   ],
   'src/modules/strategy-signals/README_DEBUG.md': [
     '鏈ā鍧楁彁渚涗簡璇︾粏鐨勮剼鏈皟璇',
