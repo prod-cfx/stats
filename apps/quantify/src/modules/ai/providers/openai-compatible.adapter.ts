@@ -17,7 +17,7 @@ interface OpenAiChatCompletionResponse {
     message?: {
       role?: string
       content?: string | null
-      // OpenAI tools: assistant 娑堟伅涓殑宸ュ叿璋冪敤
+      // OpenAI tools: assistant 消息中的工具调用
       tool_calls?: Array<{
         id?: string
         type?: string
@@ -55,7 +55,7 @@ interface OpenAiChatCompletionMessageParam {
       arguments?: string
     }
   }>
-  // tool 瑙掕壊娑堟伅鐨勫伐鍏疯皟鐢?ID
+  // tool 角色消息的工具调用 ID
   tool_call_id?: string
 }
 
@@ -80,13 +80,13 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
           content: message.content,
         }
 
-        // OpenAI tools 鍗忚锛歳ole='tool' 娑堟伅涓嶆帴鍙?name 瀛楁
-        // 浠呭闈?tool 瑙掕壊淇濈暀 name锛堜緥濡傚嚱鏁板悕绛夊厓淇℃伅锛?
+        // OpenAI tools 协议：role='tool' 消息不接受 name 字段
+        // 仅对非 tool 角色保留 name（例如函数名等元信息）
         if (message.name && message.role !== 'tool') {
           base.name = message.name
         }
 
-        // 灏嗗唴閮ㄧ殑 toolCalls 鏄犲皠涓?OpenAI 瑕佹眰鐨?tool_calls 瀛楁
+        // 将内部的 toolCalls 映射到 OpenAI 要求的 tool_calls 字段
         if (message.toolCalls && Array.isArray(message.toolCalls) && message.toolCalls.length > 0) {
           base.tool_calls = message.toolCalls.map(call => ({
             id: call.id,
@@ -98,7 +98,7 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
           }))
         }
 
-        // 灏嗗唴閮ㄧ殑 toolCallId 鏄犲皠涓?OpenAI 瑕佹眰鐨?tool_call_id 瀛楁
+        // 将内部的 toolCallId 映射到 OpenAI 要求的 tool_call_id 字段
         if (message.toolCallId) {
           base.tool_call_id = message.toolCallId
         }
@@ -118,7 +118,7 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
           temperature: options.temperature,
           max_tokens: options.maxTokens,
           stream: false,
-          // OpenAI tools / tool_choice 璇箟锛屼繚鎸佷竴灞傞€忎紶
+          // OpenAI tools / tool_choice 语义，保持一层透传
           tools: options.tools,
           tool_choice: options.toolChoice,
         }),

@@ -203,7 +203,7 @@ export class BinanceClient extends BaseCexClient {
 
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
     if (!symbol) {
-      // Binance /api/v3/allOrders 涓?/fapi/v1/allOrders 閮借姹?symbol 涓哄繀濉弬鏁?
+      // Binance /api/v3/allOrders 和 /fapi/v1/allOrders 都要求 symbol 为必填参数
       throw new ExchangeError('Binance fetchClosedOrders requires symbol parameter', 'MISSING_SYMBOL')
     }
 
@@ -282,7 +282,7 @@ export class BinanceClient extends BaseCexClient {
     const path = this.marketType === 'spot' ? '/api/v3/ticker/24hr' : '/fapi/v1/ticker/24hr'
     const params: Record<string, unknown> = { symbol: rawSymbol }
 
-    // Binance 鐜拌揣涓庡悎绾?24hr ticker 缁撴瀯鍩烘湰鍏煎
+    // Binance 现货与合约 24hr ticker 结构基本兼容
     const res = await this.request<{
       lastPrice: string
       bidPrice: string
@@ -351,22 +351,22 @@ export class BinanceClient extends BaseCexClient {
       const message = typeof record.msg === 'string' ? record.msg : `Binance request failed with status ${status}`
       const messageLower = message.toLowerCase()
 
-      // API Key 鎴?Secret 閿欒
+      // API Key 和 Secret 错误
       if (code === '-2015' || code === '-2014') {
-        return new AuthError('API Key鎴朣ecret閿欒锛岃妫€鏌ユ槸鍚︽纭鍒讹紙涓嶈鏈夊浣欑┖鏍硷級', data)
+        return new AuthError('API Key或Secret错误，请检查是否正确复制（不要有多余空格）', data)
       }
 
-      // 绛惧悕鏃犳晥锛?1022 鍙兘鏄鍚嶉敊璇垨IP闄愬埗锛岄渶瑕佹鏌ユ秷鎭唴瀹癸級
+      // 签名无效（-1022 可能是签名错误或 IP 限制，需要检查消息内容）
       if (code === '-1022') {
         if (messageLower.includes('ip')) {
-          return new AuthError('IP鍦板潃鏈姞鍏ョ櫧鍚嶅崟锛岃鍦ㄥ竵瀹堿PI绠＄悊椤甸潰娣诲姞鏈嶅姟鍣↖P鎴栧彇娑圛P闄愬埗', data)
+          return new AuthError('IP地址未加入白名单，请在币安API管理页面添加服务器IP或取消IP限制', data)
         }
-        return new AuthError('API绛惧悕楠岃瘉澶辫触锛岃妫€鏌PI Secret鏄惁姝ｇ‘', data)
+        return new AuthError('API签名验证失败，请检查 API Secret 是否正确', data)
       }
 
-      // 鏉冮檺涓嶈冻
-      if (messageLower.includes('permission') || message.includes('鏉冮檺')) {
-        return new AuthError('API Key鏉冮檺涓嶈冻锛岃纭繚寮€鍚?璇诲彇"鍜?浜ゆ槗"鏉冮檺', data)
+      // 权限不足
+      if (messageLower.includes('permission') || message.includes('权限')) {
+        return new AuthError('API Key权限不足，请确保开启"读取"和"交易"权限', data)
       }
 
       return new ExchangeError(message, code, data)
@@ -396,12 +396,12 @@ export class BinanceClient extends BaseCexClient {
 
   private fromExchangeSymbol(rawSymbol: string): string {
     /**
-     * 灏?Binance 鍘熷 symbol锛堝 BTCUSDT銆丒THBTC銆丼OLFDUSD锛夎浆鎹负缁熶竴鏍煎紡锛?
-     * - 鐜拌揣: BASE/QUOTE
-     * - 姘哥画: BASE/QUOTE:PERP
+     * 将 Binance 原始 symbol（如 BTCUSDT、ETHBTC、SOLFDUSD）转换为统一格式。
+     * - 现货: BASE/QUOTE
+     * - 永续: BASE/QUOTE:PERP
      *
-     * 杩欓噷浣跨敤甯歌鎶ヤ环甯佸垪琛ㄨ繘琛屾媶鍒嗭紝鏈懡涓殑鎯呭喌鏄庣‘鎶涘嚭寮傚父锛?
-     * 閬垮厤浜х敓涓嬫父璋冪敤鏂规棤娉曡В鏋愮殑鈥滃亣缁熶竴 symbol鈥濄€?
+     * 这里使用常见报价币列表进行拆分，未命中的情况明确抛出异常。
+     * 避免产生下游调用方无法解析的“假统一 symbol”。
      */
     const knownQuotes = [
       'USDT',
@@ -443,10 +443,10 @@ export class BinanceClient extends BaseCexClient {
   }
 
   /**
-   * 灏?Binance 鐨勮鍗曠被鍨嬪瓧绗︿覆鏄犲皠涓虹粺涓€鐨?OrderType銆?
+   * 将 Binance 的订单类型字符串映射为统一的 OrderType。
    *
-   * 浠呮敮鎸佷竴灏忛儴鍒嗗父瑙佺被鍨嬶紱瀵规湭鐭ョ被鍨嬬洿鎺ユ姏鍑?ExchangeError锛?
-   * 閬垮厤闈欓粯璇垽銆?
+   * 仅支持一小部分常见类型；对未知类型直接抛出 ExchangeError。
+   * 避免静默误判。
    */
   private reverseMapOrderType(type: string): OrderType {
     const upper = type.toUpperCase()
@@ -487,7 +487,7 @@ export class BinanceClient extends BaseCexClient {
         return 'canceled'
       case 'REJECTED':
         return 'rejected'
-      // 浠ヤ笅鐘舵€佸湪 Binance 涓〃绀鸿鍗曞凡涓嶅啀澶勪簬娲昏穬鐘舵€?
+      // 以下状态在 Binance 中表示订单已不再处于活跃状态
       case 'EXPIRED':
       case 'EXPIRED_IN_MATCH':
       case 'STOPPED':
@@ -495,18 +495,18 @@ export class BinanceClient extends BaseCexClient {
         return 'canceled'
       case 'CALCULATED':
         return 'closed'
-      // 鐢变繚闄?ADL 绯荤粺鏂板缓鐨勮鍗曪紝鏄惧紡鏍囪涓?open锛屼究浜庝笅娓歌皟鐢ㄦ柟鍖哄垎
+      // 由保险/ADL 系统新建的订单，显式标记为 open，便于下游调用方区分
       case 'NEW_INSURANCE':
       case 'NEW_ADL':
         return 'open'
       default:
-        // 瀵逛簬鏈煡鐘舵€侊紝瀹佸彲瑙嗕负 rejected锛岃€屼笉鏄敊璇湴灞曠ず涓?open 閬垮厤鈥滃菇鐏佃鍗曗€?
+        // 对于未知状态，宁可视为 rejected，也不要错误地展示为 open，避免“幽灵订单”。
         return 'rejected'
     }
   }
 
   private mapOrderFromResponse(order: BinanceOrderResponse, symbol: string): UnifiedOrder {
-    // 浼樺厛浣跨敤浜ゆ槗鎵€鎻愪緵鐨勬椂闂存埑锛歵ime > transactTime > updateTime > Date.now()
+    // 优先使用交易所提供的时间戳：time > transactTime > updateTime > Date.now()
     const createdAt = order.time ?? order.transactTime ?? order.updateTime ?? Date.now()
 
     return {
@@ -532,9 +532,9 @@ export class BinanceClient extends BaseCexClient {
 
   private static resolveBaseUrl(marketType: MarketType, config: BinanceConfig): string {
     if (config.isTestnet) {
-      // Binance 瀹樻柟娴嬭瘯缃?
-      // - 鐜拌揣: https://testnet.binance.vision
-      // - USDT 姘哥画: https://testnet.binancefuture.com
+      // Binance 官方测试网
+      // - 现货: https://testnet.binance.vision
+      // - USDT 永续: https://testnet.binancefuture.com
       return marketType === 'spot'
         ? 'https://testnet.binance.vision'
         : 'https://testnet.binancefuture.com'

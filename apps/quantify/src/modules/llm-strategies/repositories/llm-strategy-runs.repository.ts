@@ -54,8 +54,8 @@ export class LlmStrategyRunsRepository {
   }
 
   /**
-   * 缁熻鎸囧畾瀹炰緥鍦ㄧ粰瀹氭椂闂寸偣涔嬪悗鐨?鏈夋晥杩愯"娆℃暟銆?
-   * 鏈夋晥杩愯鎸?status !== 'skipped' 鐨?run锛岀敤浜?maxRunsPerHour 鑺傛祦閫昏緫銆?
+   * 统计指定实例在给定时间点之后的“有效运行”次数。
+   * 有效运行指 status !== 'skipped' 的 run，用于 maxRunsPerHour 节流逻辑。
    */
   async countEffectiveRunsSince(
     instanceId: string,

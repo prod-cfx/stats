@@ -3,8 +3,8 @@ export type ChatRole = 'system' | 'user' | 'assistant' | 'tool'
 export interface ChatCompletionToolFunction {
   name: string
   description?: string
-  // OpenAI JSON Schema 椋庢牸鐨勫弬鏁板畾涔夛紝淇濇寔涓哄鏉剧殑 any 浠ュ吋瀹逛笉鍚屾彁渚涘晢
-  // 鐢变笂灞傛ā鍧楋紙濡?llm-strategies锛夌淮鎶ゅ叿浣撶粨鏋勩€?
+  // OpenAI JSON Schema 风格的参数定义，保持为宽松的 any 以兼容不同提供商
+  // 由上层模块（如 llm-strategies）维护具体结构
   parameters?: Record<string, unknown>
 }
 
@@ -18,7 +18,7 @@ export interface ChatCompletionToolCall {
   type: 'function'
   function: {
     name: string
-    // OpenAI 浼氫互瀛楃涓插舰寮忚繑鍥?JSON 鍙傛暟
+    // OpenAI 会以字符串形式返回 JSON 参数
     arguments: string
   }
 }
@@ -37,15 +37,15 @@ export interface ChatMessage {
   role: ChatRole
   content: string
   /**
-   * 褰?role === 'tool' 鏃讹紝鍙€夌殑宸ュ叿鍚嶇О
+   * 当 role === 'tool' 时，可选的工具名称
    */
   name?: string
   /**
-   * 褰?role === 'tool' 鏃讹紝瀵瑰簲鐨?tool_call_id锛屼究浜庡杞伐鍏疯皟鐢ㄥ叧鑱?
+   * 当 role === 'tool' 时，对应的 tool_call_id，便于多轮工具调用关联
    */
   toolCallId?: string
   /**
-   * 褰?role === 'assistant' 涓旀湰娆″洖澶嶈Е鍙戜簡宸ュ叿璋冪敤鏃讹紝鍖呭惈宸ュ叿璋冪敤鍒楄〃
+   * 当 role === 'assistant' 且本次回复触发了工具调用时，包含工具调用列表
    */
   toolCalls?: ChatCompletionToolCall[]
 }

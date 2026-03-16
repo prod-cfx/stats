@@ -33,7 +33,7 @@ async function bootstrap() {
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER)
   app.useLogger(logger)
 
-  // 閰嶇疆鍏ㄥ眬楠岃瘉绠￠亾
+  // 配置全局验证管道
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -53,7 +53,7 @@ async function bootstrap() {
     }),
   )
 
-  // 璁剧疆鍏ㄥ眬璺敱鍓嶇紑
+  // 设置全局路由前缀
   app.setGlobalPrefix('api/v1')
 
   if (process.env.APP_ENV !== 'production') {

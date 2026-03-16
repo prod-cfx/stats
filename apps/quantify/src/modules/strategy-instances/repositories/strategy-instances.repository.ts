@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄥ拰渚濊禆娉ㄥ叆闇€瑕佽繍琛屾椂瀵煎叆 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import type { Prisma, StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
@@ -103,9 +103,9 @@ export class StrategyInstancesRepository {
   }
 
   /**
-   * 鏌ヨ杩愯涓殑绛栫暐瀹炰緥锛堢敤鎴风锛?
-   * 鍙繑鍥?status='running' 涓斿叧鑱旂殑绛栫暐妯℃澘涓?'live' 鐘舵€佺殑瀹炰緥
-   * 闃叉娉勯湶鏈彂甯冪瓥鐣ワ紙draft/testing/disabled锛?
+   * 查询运行中的策略实例（用户端）
+   * 只返回 status='running' 且关联的策略模板为 'live' 状态的实例
+   * 防止泄露未发布策略（draft/testing/disabled）
    */
   async findRunningInstances(params: {
     strategyTemplateId?: string
@@ -117,8 +117,8 @@ export class StrategyInstancesRepository {
 
     const where: Prisma.StrategyInstanceWhereInput = {
       status: 'running',
-      mode: 'LIVE', // 鍙悜鐢ㄦ埛灞曠ず瀹炵洏杩愯鐨勫疄渚?
-      // 鍙叕寮€ live 鐘舵€佹ā鏉夸笅鐨勫疄渚嬶紝闃叉娉勯湶鏈彂甯冪瓥鐣?
+      mode: 'LIVE', // 只向用户展示实盘运行的实例
+      // 只公开 live 状态模板下的实例，防止泄露未发布策略
       strategyTemplate: {
         status: 'live',
       },

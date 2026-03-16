@@ -59,7 +59,7 @@ export function maskSettingValue(key: string, type: string, rawValue: string): s
   try {
     if (type === 'json') {
       const parsed = JSON.parse(rawValue)
-      // webhookSecrets: 浠绘剰鍙跺瓙瀛楃涓茬粺涓€鑴辨晱
+      // webhookSecrets: 任意叶子字符串统一脱敏
       if (loweredKey.includes('webhooksecrets')) {
         const maskAll = (obj: unknown): unknown => {
           if (obj === null || obj === undefined)
@@ -100,7 +100,7 @@ export function mergeMaskedJson(existing: unknown, incoming: unknown): unknown {
   if (isMaskedString(incoming))
     return existing
   if (Array.isArray(existing) && Array.isArray(incoming)) {
-    // 绠€鍗曠瓥鐣ワ細鑻ユ暟缁勫厓绱犱负鎺╃爜鍒欎繚鐣欏師鍊硷紝鍚﹀垯鏇挎崲瀵瑰簲绱㈠紩
+    // 简单策略：若数组元素为掩码则保留原值，否则替换对应索引
     const len = Math.max(existing.length, incoming.length)
     const out: unknown[] = []
     for (let i = 0; i < len; i++) {

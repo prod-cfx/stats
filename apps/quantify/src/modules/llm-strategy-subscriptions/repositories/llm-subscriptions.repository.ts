@@ -1,8 +1,8 @@
 import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest 娉ㄥ叆闇€瑕佽繍琛屾椂绫?
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类型
+import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class LlmSubscriptionsRepository {
@@ -19,7 +19,7 @@ export class LlmSubscriptionsRepository {
         error.code === 'P2021' &&
         String(error.message).includes('user_llm_strategy_subscriptions')
       ) {
-        // 鏈湴寮€鍙戠幆澧冭〃灏氭湭鍒涘缓鏃讹紝闄嶇骇涓烘棤璁㈤槄璁板綍
+        // 本地开发环境表尚未创建时，降级为无订阅记录
         return null
       }
       throw error
@@ -105,7 +105,7 @@ export class LlmSubscriptionsRepository {
         error.code === 'P2021' &&
         String(error.message).includes('user_llm_strategy_subscriptions')
       ) {
-        // 鏈湴寮€鍙戞暟鎹簱娌℃湁琛ㄦ椂锛岃繑鍥炵┖鍒楄〃锛岄伩鍏?/llm-strategy-subscriptions 鐩存帴 500
+        // 本地开发数据库没有表时，返回空列表，避免 /llm-strategy-subscriptions 直接 500
         return { items: [], total: 0 }
       }
       throw error

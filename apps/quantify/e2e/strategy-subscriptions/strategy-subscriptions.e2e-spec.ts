@@ -26,14 +26,14 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
     prismaService = testing.prisma
     prismaClient = prismaService.getClient() as PrismaClient
 
-    // 鍒涘缓娴嬭瘯鐢ㄦ埛
+    // 创建测试用户
     testUser = await seedUser('e2e-subscriber@test.com', 'Test123!')
 
-    // 鍒涘缓涓€涓彲璁㈤槄鐨?live 绛栫暐妯℃澘锛屽甫 requiredFields
+    // 创建一个可订阅的 live 策略模板，带 requiredFields
     const strategyTemplate = await prismaClient.strategyTemplate.create({
       data: {
         name: 'E2E-Test-Subscribable-Strategy',
-        description: 'E2E 娴嬭瘯鐢ㄥ彲璁㈤槄绛栫暐',
+        description: 'E2E 测试用可订阅策略',
         legs: [{ id: 'leg_main', role: 'primary' }],
         llmModel: 'gpt-4',
         promptTemplate: 'test prompt',
@@ -51,12 +51,12 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
 
     liveStrategyTemplateId = strategyTemplate.id
 
-    // 鍒涘缓涓€涓繍琛屼腑鐨勭瓥鐣ュ疄渚?
+    // 创建一个运行中的策略实例
     const strategyInstance = await prismaClient.strategyInstance.create({
       data: {
         strategyTemplateId: liveStrategyTemplateId,
         name: 'E2E-Test-Running-Instance',
-        description: 'E2E test running instance',
+        description: 'E2E 测试用运行实例',
         llmModel: 'gpt-4',
         status: 'running',
       },
@@ -66,7 +66,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
   })
 
   afterAll(async () => {
-    // 娓呯悊璁㈤槄鍜岀瓥鐣ャ€佺敤鎴?
+    // 清理订阅、策略和用户
     await prismaClient.userStrategySubscription.deleteMany({
       where: {
         userId: testUser.id,
@@ -126,7 +126,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
   it('should return SUBSCRIPTION_ALREADY_EXISTS when subscribing to same instance twice', async () => {
     const request = createApiClient(app)
 
-    // 绗竴娆¤闃咃紙濡傛灉涓嶅瓨鍦ㄥ垯鍒涘缓锛?
+    // 第一次订阅（如果不存在则创建）
     await request
       .post('strategy-subscriptions')
       .send({
@@ -141,7 +141,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
         expect([201, 409]).toContain(res.status)
       })
 
-    // 绗簩娆¤闃呭悓涓€绛栫暐瀹炰緥锛屽簲杩斿洖 409 + SUBSCRIPTION_ALREADY_EXISTS
+    // 第二次订阅同一策略实例，应返回 409 + SUBSCRIPTION_ALREADY_EXISTS
     const response = await request
       .post('strategy-subscriptions')
       .send({
@@ -167,7 +167,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
         strategyInstanceId: runningStrategyInstanceId,
         customParams: {
           price_close: 100,
-          // 缂哄皯 ma_20
+          // 缺少 ma_20
         },
       })
       .expect(400)
@@ -180,7 +180,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
   it('should return SUBSCRIPTION_INVALID_PARAMS when updating with invalid params', async () => {
     const request = createApiClient(app)
 
-    // 鍏堜繚璇佸瓨鍦ㄤ竴涓悎娉曡闃?
+    // 先保证存在一个合法订阅
     const createResp = await request
       .post('strategy-subscriptions')
       .send({
@@ -211,7 +211,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
         userId: testUser.id,
         customParams: {
           price_close: 130,
-          // 缂哄皯 ma_20
+          // 缺少 ma_20
         },
       })
       .expect(400)

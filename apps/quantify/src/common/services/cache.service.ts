@@ -2,7 +2,7 @@ import type { OnModuleInit } from '@nestjs/common'
 import type Redis from 'ioredis'
 import type { TTLInSeconds } from '../constants/cache.constants'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-// Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 RedisService锛岀姝㈡敼鎴?type-only
+// Nest 注入需要运行时引用 RedisService，禁止改为 type-only
 import { RedisService } from './redis.service'
 
 @Injectable()
@@ -25,7 +25,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 浠庣紦瀛樿幏鍙栨暟鎹?
+   * 从缓存获取数据
    */
   async get<T>(key: string): Promise<T | undefined> {
     try {
@@ -40,7 +40,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 璁剧疆缂撳瓨
+   * 设置缓存
    */
   async set<T>(key: string, value: T, ttl?: TTLInSeconds): Promise<void> {
     try {
@@ -58,7 +58,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鍒犻櫎缂撳瓨
+   * 删除缓存
    */
   async del(key: string): Promise<void> {
     try {
@@ -70,8 +70,8 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 娓呯┖缂撳瓨锛堜粎鍒犻櫎 cache: 鍓嶇紑鐨勯敭锛岄伩鍏嶅奖鍝嶅叾浠栨ā鍧楋級
-   * 浣跨敤鎵归噺鍒犻櫎绛栫暐锛岄伩鍏嶅ぇ瑙勬ā缂撳瓨鏃剁殑鍐呭瓨鍗犵敤鍜?Redis 闃诲
+   * 清空缓存（仅删除 cache: 前缀的键，避免影响其他模块）
+   * 使用批量删除策略，避免大规模缓存时的内存占用和 Redis 阻塞
    */
   async reset(): Promise<void> {
     try {
@@ -86,12 +86,12 @@ export class CacheService implements OnModuleInit {
         cursor = nextCursor
         batch.push(...(keys as string[]))
 
-        // 褰撴壒娆¤揪鍒伴槇鍊兼垨鎵弿瀹屾垚鏃讹紝鎵ц鍒犻櫎
+        // 当批次达到阈值或扫描完成时，执行删除
         if (batch.length >= batchSize || cursor === '0') {
           if (batch.length > 0) {
             const pipeline = this.client.pipeline()
             for (const key of batch) {
-              pipeline.unlink(key) // UNLINK 鏄紓姝ュ垹闄わ紝瀵?Redis 鎬ц兘褰卞搷鏇村皬
+              pipeline.unlink(key) // UNLINK 是异步删除，对 Redis 性能影响更小
             }
             await pipeline.exec()
             totalDeleted += batch.length
@@ -110,7 +110,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 妫€鏌ラ敭鏄惁瀛樺湪
+   * 检查键是否存在
    */
   async exists(key: string): Promise<boolean> {
     try {
@@ -124,7 +124,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 缂撳瓨涓嶅瓨鍦ㄦ椂鎵ц鍥炶皟
+   * 缓存不存在时执行回调
    */
   async getOrSet<T>(key: string, callback: () => Promise<T>, ttl?: TTLInSeconds): Promise<T> {
     const cachedValue = await this.get<T>(key)
@@ -143,7 +143,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鑾峰彇鍖归厤妯″紡鐨勯敭锛堣繑鍥炰笉甯﹀墠缂€鐨勯敭鍚嶏級
+   * 获取匹配模式的键（返回不带前缀的键名）
    */
   async keys(pattern: string): Promise<string[]> {
     try {
@@ -155,7 +155,7 @@ export class CacheService implements OnModuleInit {
         cursor = nextCursor
         keys.push(...(batch as string[]))
       } while (cursor !== '0')
-      // 绉婚櫎鍓嶇紑鍚庤繑鍥?
+      // 移除前缀后返回
       return keys.map(key => key.replace(this.keyPrefix, ''))
     } catch (error) {
       this.logError('keys', pattern, error)
@@ -164,8 +164,8 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鍒犻櫎鍖归厤妯″紡鐨勯敭
-   * 浣跨敤鎵归噺鍒犻櫎绛栫暐锛岄伩鍏嶅ぇ瑙勬ā缂撳瓨鏃剁殑鍐呭瓨鍗犵敤鍜?Redis 闃诲
+   * 删除匹配模式的键
+   * 使用批量删除策略，避免大规模缓存时的内存占用和 Redis 阻塞
    */
   async delByPattern(pattern: string): Promise<void> {
     try {
@@ -179,12 +179,12 @@ export class CacheService implements OnModuleInit {
         cursor = nextCursor
         batch.push(...(keys as string[]))
 
-        // 褰撴壒娆¤揪鍒伴槇鍊兼垨鎵弿瀹屾垚鏃讹紝鎵ц鍒犻櫎
+        // 当批次达到阈值或扫描完成时，执行删除
         if (batch.length >= batchSize || cursor === '0') {
           if (batch.length > 0) {
             const pipeline = this.client.pipeline()
             for (const key of batch) {
-              pipeline.unlink(key) // UNLINK 鏄紓姝ュ垹闄わ紝瀵?Redis 鎬ц兘褰卞搷鏇村皬
+              pipeline.unlink(key) // UNLINK 是异步删除，对 Redis 性能影响更小
             }
             await pipeline.exec()
             batch = []
@@ -198,7 +198,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鍒嗗竷寮忛攣锛氫粎鍦ㄤ笉瀛樺湪鏃惰缃?
+   * 分布式锁：仅在不存在时设置
    */
   async setIfNotExists<T>(key: string, value: T, ttl?: TTLInSeconds): Promise<boolean> {
     const ttlInSeconds = ttl ?? 300
@@ -213,7 +213,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鏉′欢鍒犻櫎
+   * 条件删除
    */
   async deleteIfValue(key: string, expectedValue: unknown): Promise<boolean> {
     const lua = `
@@ -235,7 +235,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鏉′欢缁湡
+   * 条件续期
    */
   async refreshIfValue(key: string, expectedValue: unknown, ttl?: TTLInSeconds): Promise<boolean> {
     const ttlInSeconds = ttl ?? 300
@@ -264,7 +264,7 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
-   * 鏋勫缓瀹屾暣鐨?Redis 閿紙娣诲姞鍓嶇紑锛?
+   * 构建完整 Redis 键（添加前缀）
    */
   private buildKey(key: string): string {
     return `${this.keyPrefix}${key}`

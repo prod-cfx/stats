@@ -4,11 +4,11 @@ import { IsNotEmpty, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 /**
- * 绛栫暐瀹炰緥淇″彿鍒楄〃鏌ヨ鍙傛暟
- * 鐩墠浠呮敮鎸佸垎椤靛弬鏁帮紝鍚庣画鍙墿灞曟寜鐘舵€佺瓑绛涢€?
+ * 策略实例信号列表查询参数
+ * 目前仅支持分页参数，后续可扩展按状态等筛选
  */
 export class StrategyInstanceSignalsListQueryDto extends BasePaginationRequestDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId: string

@@ -2,22 +2,22 @@ import type { LlmV3ToolName } from '@/modules/ai/llm-v3-tools.schemas'
 import type { ChatCompletionToolCall } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { LlmStrategy, LlmStrategyInstance } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 LlmV3ToolsExecutor
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 LlmV3ToolsExecutor
 import { LlmV3ToolsExecutor } from '@/modules/ai/llm-v3-tools.executor'
 
 export interface LlmToolExecutionContext {
   instance: LlmStrategyInstance & { strategy: LlmStrategy }
   /**
-   * 鍚堝苟鍚庣殑椋庨櫓閰嶇疆锛坰trategy.riskConfig + instance.configOverrides锛?
+   * 合并后的风险配置（strategy.riskConfig + instance.configOverrides）
    */
   effectiveRiskConfig: Record<string, unknown> | null
   /**
-   * 璐︽埛/缁勫悎鍗犱綅淇℃伅锛屽綋鍓嶅疄鐜颁粎淇濈暀 ID锛屽悗缁彲鎵╁睍涓哄畬鏁村揩鐓?
+   * 账户/组合占位信息，当前实现仅保留 ID，后续可扩展为完整快照
    */
   accountSnapshot?: { id: string } | null
   portfolioSnapshot?: { id: string } | null
   /**
-   * 浼氳瘽 ID锛堢敤浜庤法宸ュ叿璋冪敤鍏变韩缂撳瓨锛屼緥濡備娇鐢?contextId 鏃讹級
+   * 会话 ID（用于跨工具调用共享缓存，例如使用 contextId 时）
    */
   sessionId?: string
 }
@@ -26,7 +26,7 @@ export interface LlmToolExecutionResult {
   name: string
   id: string
   /**
-   * 杩斿洖缁?LLM 鐨勫師濮?JSON 鍙簭鍒楀寲鏁版嵁
+   * 返回给 LLM 的原始 JSON 可序列化数据
    */
   output: unknown
 }
@@ -38,12 +38,12 @@ export class LlmToolsService {
   constructor(private readonly toolsExecutor: LlmV3ToolsExecutor) {}
 
   /**
-   * 鎵ц鍗曚釜宸ュ叿璋冪敤銆?
+   * 执行单个工具调用。
    *
-   * 璇存槑锛?
-   * - 鏁版嵁鏌ヨ涓庤绠楀伐鍏凤紙get_symbol_universe銆乬et_market_data_raw銆乧ompute_technical_indicators銆乧ompute_financial_metrics锛?
-   *   濮旀墭缁?LlmV3ToolsExecutor 鎵ц
-   * - generate_trading_signal 浣滀负"缁堟宸ュ叿"鐢?orchestrator 鐩存帴瑙ｆ瀽鍙傛暟
+   * 说明：
+   * - 数据查询与计算工具（get_symbol_universe、get_market_data_raw、compute_technical_indicators、compute_financial_metrics）
+   *   委托给 LlmV3ToolsExecutor 执行
+   * - generate_trading_signal 作为“终止工具”，由 orchestrator 直接解析参数
    */
   async executeTool(
     call: ChatCompletionToolCall,
@@ -55,7 +55,7 @@ export class LlmToolsService {
       `Executing LLM tool "${name}" for instance ${context.instance.id} (strategy ${context.instance.strategyId})`,
     )
 
-    // 鏁版嵁鏌ヨ涓庤绠楀伐鍏凤細濮旀墭缁?LlmV3ToolsExecutor
+    // 数据查询与计算工具：委托给 LlmV3ToolsExecutor
     const dataQueryTools: LlmV3ToolName[] = [
       'get_symbol_universe',
       'get_market_data_raw',
@@ -67,12 +67,12 @@ export class LlmToolsService {
       try {
         const params = JSON.parse(call.function.arguments || '{}')
 
-        // 浼犻€?sessionId锛屾敮鎸?contextId 璺ㄥ伐鍏疯皟鐢ㄧ紦瀛?
+        // 传递 sessionId，支持 contextId 跨工具调用缓存
         const output = await this.toolsExecutor.executeTool(
           name as LlmV3ToolName,
           params,
           context.instance.id,
-          context.sessionId, // 浠?context 浼犻€?sessionId锛堥€氬父鏄?runId锛?
+          context.sessionId, // 从 context 传递 sessionId（通常为 runId）
         )
 
         return {
@@ -95,7 +95,7 @@ export class LlmToolsService {
       }
     }
 
-    // 鍏朵粬宸ュ叿锛氳繑鍥炲崰浣嶇粨鏋?
+    // 其他工具：返回占位结果
     return {
       name,
       id: call.id,
@@ -108,8 +108,8 @@ export class LlmToolsService {
   }
 
   /**
-   * 娓呯悊鎸囧畾浼氳瘽鐨勭紦瀛?
-   * 鍦?LLM 杩愯缁撴潫锛堟棤璁烘垚鍔熸垨澶辫触锛夊悗璋冪敤锛岄伩鍏嶅唴瀛樹腑绉疮鏃犵敤鐨勪細璇濈紦瀛?
+   * 清理指定会话的缓存。
+   * 在 LLM 运行结束（无论成功或失败）后调用，避免内存中积累无用的会话缓存。
    */
   clearSessionCache(strategyInstanceId: string, sessionId: string): void {
     this.toolsExecutor.clearSessionCache(strategyInstanceId, sessionId)

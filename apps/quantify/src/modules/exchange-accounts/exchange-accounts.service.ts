@@ -26,7 +26,7 @@ export class ExchangeAccountsService {
     const config = this.buildConfig(dto)
     let lastValidatedAt: Date | null = null
 
-    // 楠岃瘉浜ゆ槗鎵€鍑嵁锛堟墍鏈変氦鏄撴墍閮介渶瑕侀獙璇侊級
+    // 验证交易所凭据（所有交易所都需要验证）
     if (dto.exchangeId === 'binance' || dto.exchangeId === 'okx') {
       await this.tradingService.validateCexCredentials(
         dto.exchangeId,
@@ -36,10 +36,10 @@ export class ExchangeAccountsService {
       lastValidatedAt = new Date()
     }
     else if (dto.exchangeId === 'hyperliquid') {
-      // Hyperliquid 涔熼渶瑕侀獙璇佸嚟鎹紙閫氳繃 ping/fetchBalance 楠岃瘉绛惧悕锛?
+      // Hyperliquid 也需要验证凭据（通过 ping/fetchBalance 验证签名）
       await this.tradingService.validateCexCredentials(
         dto.exchangeId,
-        'perp', // Hyperliquid 鍙敮鎸?perp
+        'perp', // Hyperliquid 只支持 perp
         config as HyperliquidConfig,
       )
       lastValidatedAt = new Date()
@@ -70,7 +70,7 @@ export class ExchangeAccountsService {
   async delete(userId: string, accountId: string): Promise<void> {
     const client = this.prisma.getClient()
 
-    // 鍏堥獙璇佽处鎴峰綊灞烇紝闃叉瓒婃潈鎿嶄綔
+    // 先验证账户归属，防止越权操作
     const account = await client.exchangeAccount.findFirst({
       where: { id: accountId, userId },
       select: { id: true },
@@ -79,9 +79,9 @@ export class ExchangeAccountsService {
       throw new ExchangeAccountNotFoundException({ accountId })
     }
 
-    // 鍒犻櫎璐︽埛鍓嶏紝蹇呴』鍏堟殏鍋滆鐢ㄦ埛浣跨敤璇ヨ处鎴风殑鎵€鏈?active LLM 璁㈤槄
-    // 娉ㄦ剰锛氬繀椤诲悓鏃惰繃婊?userId锛岄槻姝㈣秺鏉冩殏鍋滀粬浜鸿闃?
-    // 鍚﹀垯澶栭敭 onDelete:SetNull 浼氳璁㈤槄鍙樻垚 active 浣?exchangeAccountId=null 鐨勮剰鐘舵€?
+    // 删除账户前，必须先暂停该用户使用该账户的所有 active LLM 订阅
+    // 注意：必须同时过滤 userId，防止越权暂停他人订阅
+    // 否则外键 onDelete:SetNull 会让订阅变成 active 且 exchangeAccountId=null 的脏状态
     const pausedCount = await client.userLlmStrategySubscription.updateMany({
       where: {
         userId,
@@ -95,7 +95,7 @@ export class ExchangeAccountsService {
 
     if (pausedCount.count > 0) {
       console.log(
-        `鐢ㄦ埛 ${userId} 鍒犻櫎璐︽埛 ${accountId} 鍓嶈嚜鍔ㄦ殏鍋滀簡 ${pausedCount.count} 涓?active LLM 璁㈤槄`,
+        `用户 ${userId} 删除账户 ${accountId} 前自动暂停了 ${pausedCount.count} 个 active LLM 订阅`,
       )
     }
 
@@ -160,7 +160,7 @@ export class ExchangeAccountsService {
     if (!dto.mainWalletAddress || !dto.agentPrivateKey)
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'hyperliquid' })
 
-    // 涓ユ牸楠岃瘉鏍煎紡锛堥槻寰℃€х紪绋嬶紝鍗充娇 DTO 灞傚凡楠岃瘉锛?
+    // 严格验证格式（防御性编程，即使 DTO 层已验证）
     const addressRegex = /^0x[0-9a-fA-F]{40}$/
     const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
 
@@ -175,7 +175,7 @@ export class ExchangeAccountsService {
     return {
       mainWalletAddress: dto.mainWalletAddress,
       agentPrivateKey: dto.agentPrivateKey,
-      // 灏?isTestnet 鏍囧織閫忎紶鍒?HyperliquidConfig锛屼究浜庡鎴风鎸夎处鎴风淮搴﹂€夋嫨娴嬭瘯缃?涓荤綉
+      // 将 isTestnet 标志透传到 HyperliquidConfig，便于客户端按账户维度选择测试网/主网
       isTestnet: dto.isTestnet ?? false,
     }
   }

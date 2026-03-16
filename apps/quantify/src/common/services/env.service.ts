@@ -1,6 +1,6 @@
 import type { AppEnv } from '../env/env.accessor'
 import { Inject, Injectable } from '@nestjs/common'
-// Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 ConfigService锛屼繚鐣欏€煎鍏?
+// Nest 注入需要运行时引用 ConfigService，保留值导入
 
 import { ConfigService } from '@nestjs/config'
 import { defaultEnvAccessor, normalizeAppEnv } from '../env/env.accessor'

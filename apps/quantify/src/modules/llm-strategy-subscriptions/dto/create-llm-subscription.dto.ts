@@ -2,18 +2,18 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsNotEmpty, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator'
 
 export class CreateLlmSubscriptionDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiProperty({ description: 'LLM 绛栫暐瀹炰緥 ID' })
+  @ApiProperty({ description: 'LLM 策略实例 ID' })
   @IsString()
   @IsNotEmpty()
   llmStrategyInstanceId!: string
 
   @ApiPropertyOptional({
-    description: '鐢ㄦ埛鑷畾涔夊弬鏁帮紙鍙€夛級',
+    description: '用户自定义参数（可选）',
     type: 'object',
     additionalProperties: true,
     nullable: true,
@@ -23,7 +23,7 @@ export class CreateLlmSubscriptionDto {
   @IsObject()
   customParams?: Record<string, unknown> | null
 
-  @ApiProperty({ description: '缁戝畾鐨勪氦鏄撴墍璐︽埛 ID锛堝繀濉級' })
+  @ApiProperty({ description: '绑定的交易所账户 ID（必填）' })
   @IsString()
   @IsNotEmpty()
   exchangeAccountId!: string

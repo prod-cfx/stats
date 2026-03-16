@@ -29,7 +29,7 @@ export class TransactionEventsService {
       list.push(task)
       this.cls.set(AFTER_COMMIT_TASKS_KEY, list)
     } catch (error) {
-      // 褰?CLS 涓婁笅鏂囦笉瀛樺湪鏃讹紝鐩存帴浠ラ潪浜嬪姟鏂瑰紡鎵ц浠诲姟锛岄伩鍏嶆姏鍑哄紓甯稿鑷磋姹傚け璐?
+      // 当 CLS 上下文不存在时，直接以非事务方式执行任务，避免抛出异常导致请求失败。
       this.logger.warn(
         `afterCommit called without CLS context, executing task immediately: ${(error as Error)?.message}`,
       )
@@ -48,7 +48,7 @@ export class TransactionEventsService {
       this.cls.set(AFTER_COMMIT_TASKS_KEY, [])
       return list
     } catch {
-      // 鏃?CLS 涓婁笅鏂囨椂鐩存帴杩斿洖绌轰换鍔″垪琛?
+      // 无 CLS 上下文时直接返回空任务列表
       return []
     }
   }
@@ -73,7 +73,7 @@ export class TransactionEventsService {
     try {
       this.cls.set(AFTER_COMMIT_TASKS_KEY, [])
     } catch {
-      // 鏃?CLS 涓婁笅鏂囨椂璺宠繃閲嶇疆
+      // 无 CLS 上下文时跳过重置
     }
   }
 }
