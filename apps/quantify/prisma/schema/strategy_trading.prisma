@@ -1,4 +1,4 @@
-/// 绛栫暐涓庝氦鏄撳煙鏋氫妇
+/// 策略与交易域枚举
 enum TradeSide {
   BUY
   SELL
@@ -74,10 +74,10 @@ enum StrategyInstanceStatus {
 }
 
 enum StrategyInstanceMode {
-  BACKTEST  // 鍘嗗彶鍥炴祴
-  PAPER     // 绾镐笂浜ゆ槗
-  TESTNET   // 娴嬭瘯缃戜氦鏄?
-  LIVE      // 瀹炵洏浜ゆ槗
+  BACKTEST  // 历史回测
+  PAPER     // 纸上交易
+  TESTNET   // 测试网交易
+  LIVE      // 实盘交易
 }
 
 enum SubscriptionStatus {
@@ -217,11 +217,11 @@ model StrategyTemplate {
   id                    String                 @id @default(cuid())
   name                  String                 @unique
   description           String
-  /// 绛栫暐鑵垮畾涔?JSON: [{ id, symbol, role, description? }]
+  /// 策略腿定义 JSON: [{ id, symbol, role, description? }]
   legs                  Json?
-  /// 绛栫暐鎵ц閰嶇疆 JSON: { timeframe, cooldownMinutes? }
+  /// 策略执行配置 JSON: { timeframe, cooldownMinutes? }
   execution             Json?
-  /// 鏁版嵁闇€姹傞厤缃?JSON: { [legId]: ["1h", "4h", ...] }
+  /// 数据需求配置 JSON: { [legId]: ["1h", "4h", ...] }
   dataRequirements      Json?                  @map("data_requirements")
   llmModel              String                 @map("llm_model")
   promptTemplate        String                 @map("prompt_template") @db.Text
@@ -229,7 +229,7 @@ model StrategyTemplate {
   paramsSchema          Json                   @map("params_schema")
   defaultParams         Json?                  @map("default_params")
   rulesJson             Json?                  @map("rules_json")
-  /// @deprecated 浣跨敤 dataRequirements 鏇夸唬
+  /// @deprecated 使用 dataRequirements 替代
   requiredFields        String[]               @default([]) @map("required_fields")
   rulesVersion          Int                    @default(0) @map("rules_version")
   status                StrategyTemplateStatus @default(draft)
@@ -280,10 +280,10 @@ model StrategyInstance {
 
 model TradingSignal {
   id                    String           @id @default(cuid())
-  strategyId            String?          @map("strategy_id") // 鍙€夛紝鐢ㄤ簬鏃х瓥鐣ユā鏉?
-  strategyInstanceId    String?          @map("strategy_instance_id") // 鍙€夛紝鐢ㄤ簬鏃х瓥鐣ュ疄渚?
-  llmStrategyId         String?          @map("llm_strategy_id") // LLM绛栫暐ID
-  llmStrategyInstanceId String?          @map("llm_strategy_instance_id") // LLM绛栫暐瀹炰緥ID
+  strategyId            String?          @map("strategy_id") // 可选，用于旧策略模板
+  strategyInstanceId    String?          @map("strategy_instance_id") // 可选，用于旧策略实例
+  llmStrategyId         String?          @map("llm_strategy_id") // LLM策略ID
+  llmStrategyInstanceId String?          @map("llm_strategy_instance_id") // LLM策略实例ID
   symbolId              String           @map("symbol_id")
   sourceType            SignalSourceType @default(AI_GENERATED) @map("source_type")
   signalType            SignalType       @map("signal_type")
@@ -293,9 +293,9 @@ model TradingSignal {
   targetPrice           Decimal?         @map("target_price") @db.Decimal(30, 10)
   stopLoss              Decimal?         @map("stop_loss") @db.Decimal(30, 10)
   takeProfit            Decimal?         @map("take_profit") @db.Decimal(30, 10)
-  /// 绛栫暐寤鸿鐨勪粨浣嶅ぇ灏忥紙鎶ヤ环甯佺閲戦锛屽 USDT锛?
+  /// 策略建议的仓位大小（报价币种金额，如 USDT）
   positionSizeQuote     Decimal?         @map("position_size_quote") @db.Decimal(30, 10)
-  /// 绛栫暐寤鸿鐨勪粨浣嶆瘮渚嬶紙鐩稿浜庤处鎴蜂綑棰濓紝0-1涔嬮棿锛?
+  /// 策略建议的仓位比例（相对于账户余额，0-1之间）
   positionSizeRatio     Decimal?         @map("position_size_ratio") @db.Decimal(5, 4)
   aiModel               String?          @map("ai_model")
   aiReasoning           String?          @map("ai_reasoning") @db.Text
@@ -377,9 +377,9 @@ model UserStrategySubscription {
   userId             String             @map("user_id")
   strategyInstanceId String             @map("strategy_instance_id")
   status             SubscriptionStatus @default(active)
-  /// 鐢ㄦ埛鑷畾涔夊弬鏁帮紙瑕嗙洊妯℃澘榛樿鍙傛暟锛?
+  /// 用户自定义参数（覆盖模板默认参数）
   customParams       Json?              @map("custom_params")
-  /// 缁戝畾鐨勪氦鏄撴墍璐︽埛
+  /// 绑定的交易所账户
   exchangeAccountId  String?            @map("exchange_account_id")
   subscribedAt       DateTime           @default(now()) @map("subscribed_at")
   unsubscribedAt     DateTime?          @map("unsubscribed_at")
@@ -401,9 +401,9 @@ model UserLlmStrategySubscription {
   userId              String             @map("user_id")
   llmStrategyInstanceId String           @map("llm_strategy_instance_id")
   status              SubscriptionStatus @default(active)
-  /// 鐢ㄦ埛鑷畾涔夊弬鏁帮紙鐢ㄤ簬瑕嗙洊/琛ュ厖瀹炰緥鎴栫瓥鐣ラ粯璁ら厤缃級
+  /// 用户自定义参数（用于覆盖/补充实例或策略默认配置）
   customParams        Json?              @map("custom_params")
-  /// 缁戝畾鐨勪氦鏄撴墍璐︽埛
+  /// 绑定的交易所账户
   exchangeAccountId   String?            @map("exchange_account_id")
   subscribedAt        DateTime           @default(now()) @map("subscribed_at")
   unsubscribedAt      DateTime?          @map("unsubscribed_at")
@@ -431,10 +431,10 @@ model PositionSyncLog {
   exchangePositions     Int      @default(0) @map("exchange_positions")
   localPositions        Int      @default(0) @map("local_positions")
   differencesCount      Int      @default(0) @map("differences_count")
-  differences           Json? // 璇︾粏宸紓淇℃伅
-  errors                Json? // 閿欒淇℃伅鏁扮粍
+  differences           Json? // 详细差异信息
+  errors                Json? // 错误信息数组
   durationMs            Int?     @map("duration_ms")
-  triggeredBy           String?  @map("triggered_by") // 瑙﹀彂鍚屾鐨勭敤鎴?ID
+  triggeredBy           String?  @map("triggered_by") // 触发同步的用户 ID
   createdAt             DateTime @default(now()) @map("created_at")
 
   @@index([userId, createdAt], map: "idx_position_sync_log_user_time")

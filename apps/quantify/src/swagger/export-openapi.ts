@@ -8,8 +8,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: ['error', 'warn'] })
 
   const config = new DocumentBuilder()
-    .setTitle('AI Backend API')
-    .setDescription('Auto generated OpenAPI for contracts')
+    .setTitle('Quantify API')
+    .setDescription('Auto generated OpenAPI for quantify contracts')
     .setVersion('1.0')
     .build()
 
@@ -25,7 +25,7 @@ async function bootstrap() {
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true })
     }
-    const outputPath = join(outputDir, 'backend.json')
+    const outputPath = join(outputDir, 'quantify.json')
     writeFileSync(outputPath, documentJson, 'utf8')
     console.log(`OpenAPI schema exported to ${outputPath}`)
   }

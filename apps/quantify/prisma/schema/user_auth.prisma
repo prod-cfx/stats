@@ -1,4 +1,4 @@
-/// 鐢ㄦ埛涓庤璇佺浉鍏虫ā鍨?
+/// 用户与认证相关模型
 enum ExchangeId {
   binance
   okx

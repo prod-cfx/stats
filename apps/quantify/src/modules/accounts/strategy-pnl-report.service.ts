@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -103,7 +103,7 @@ export class StrategyPnlReportService {
     }
 
     this.logger.log(
-      `宸茬敓鎴?${processed} 涓处鎴风殑鏃ュ害鏀剁泭: ${dayStart.toISOString().slice(0, 10)}`,
+      `已生成 ${processed} 个账户的日度收益: ${dayStart.toISOString().slice(0, 10)}`,
     )
     return {
       date: dayStart.toISOString(),

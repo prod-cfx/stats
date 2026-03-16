@@ -7,7 +7,7 @@ import { Prisma } from '@/prisma/prisma.types'
 import { DomainException } from '../exceptions/domain.exception'
 import { EnvService } from '../services/env.service'
 
-// Prisma 7: 浣跨敤 Prisma namespace 璁块棶绫诲瀷鍜屽€?
+// Prisma 7: 使用 Prisma namespace 访问类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
@@ -34,15 +34,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       throw exception
     }
 
-    // 瀵逛簬宸茬粡寮€濮嬪彂閫佸搷搴旓紙濡?SSE 娴侊級鏃舵姏鍑虹殑寮傚父锛岄伩鍏嶅啀娆″啓鍏ュ搷搴斿ご/鍝嶅簲浣擄紝
-    // 鍚﹀垯浼氳Е鍙?"Cannot set headers after they are sent to the client" 閿欒銆?
+    // 对于已经开始发送响应（如 SSE 流）时抛出的异常，避免再次写入响应头/响应体，
+    // 否则会触发 "Cannot set headers after they are sent to the client" 错误。
     if (response.headersSent) {
       this.logger.error(
         `Exception thrown after headers were sent on ${request.method} ${request.url}`,
         exception instanceof Error ? exception.stack : undefined,
       )
-      // 鏄惧紡鍏抽棴鍝嶅簲锛岄伩鍏嶈繛鎺ユ偓鎸?
-      // 浣跨敤 destroy() 鑰岄潪 end()锛屽洜涓哄搷搴斿ご宸插彂閫侊紝鏃犳硶姝ｅ父缁撴潫娴?
+      // 显式关闭响应，避免连接悬挂。
+      // 使用 destroy() 而非 end()，因为响应头已发送，无法正常结束。
       try {
         response.destroy()
       } catch (destroyError) {
@@ -87,7 +87,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           args = candidate.args as Record<string, unknown>
         }
 
-        // 淇濈暀 class-validator 鐨勯獙璇侀敊璇鎯?
+        // 保留 class-validator 的验证错误详情
         if (Array.isArray(candidate.message) && candidate.message.length > 0) {
           args = {
             ...(args ?? {}),
@@ -121,8 +121,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: request.originalUrl || request.url,
     }
 
-    // 浠呭湪闈炵敓浜х幆澧冭繑鍥?message锛堥伒寰?鍚庣浠呰繑鍥?code + args"鐨勬灦鏋勮鑼冿級
-    // 鐢熶骇鐜渚濊禆鍓嶇鏍规嵁 error.code 鍜?error.args 杩涜 i18n
+    // 仅在非生产环境返回 message（遵循“后端仅返回 code + args”的架构规范）
+    // 生产环境依赖前端根据 error.code 和 error.args 进行 i18n
     if (!this.env.isProd()) {
       body.message = message
     }
@@ -162,7 +162,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (code === 'P2034') {
-      this.logger.error(`馃毃 Prisma transaction timeout`, logMeta)
+      this.logger.error(`🚨 Prisma transaction timeout`, logMeta)
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         error: {
@@ -252,8 +252,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const requestId =
       typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : randomUUID()
 
-    // 濡傛灉鍝嶅簲澶村凡缁忓彂閫侊紙渚嬪 SSE 宸茬粡寮€濮嬫帹娴侊級锛屼笉瑕佸啀灏濊瘯璁剧疆鍝嶅簲澶达紝
-    // 鍚﹀垯浼氳Е鍙?"Cannot set headers after they are sent to the client" 閿欒銆?
+    // 如果响应头已经发送（例如 SSE 已经开始推流），不要再尝试设置响应头，
+    // 否则会触发 "Cannot set headers after they are sent to the client" 错误。
     if (!res.headersSent) {
       res.setHeader('X-Request-Id', requestId)
     }

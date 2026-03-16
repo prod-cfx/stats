@@ -1,9 +1,9 @@
 import type { TestingModule } from '@nestjs/testing';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
-import { Prisma } from '@/prisma/prisma.types'
-
 import { PrismaService } from '@/prisma/prisma.service'
+
+import { Prisma } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsService } from '../strategy-instance-stats.service'
 
@@ -45,7 +45,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
     })
 
     it('应该拒绝超大批量请求', async () => {
-      const largeArray: string[] = Array.from({length: 101}, () => 'c12345678901234567890123')
+      const largeArray: string[] = Array.from({length: 101}, () => 'c123456789012345678901234')
       
       await expect(
         service.calculateBatchStats(largeArray)
@@ -63,9 +63,9 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
     it('应该拒绝包含无效 ID 的批量请求', async () => {
       const mixedArray = [
-        'c12345678901234567890123',  // 有效
+        'c123456789012345678901234',  // 有效
         'invalid-id',                 // 无效
-        'c98765432109876543210987'   // 有效
+        'c987654321098765432109876'   // 有效
       ]
 
       await expect(
@@ -215,8 +215,18 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
     })
 
     it('uTC 时区应该使用 UTC 午夜', () => {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
       const today = new Date('2025-11-28T15:30:00Z')
-      const todayStart = new Date(today.toLocaleDateString('en-US', { timeZone: 'UTC' }))
+      const parts = formatter.formatToParts(today)
+      const year = Number(parts.find(p => p.type === 'year')!.value)
+      const month = Number(parts.find(p => p.type === 'month')!.value)
+      const day = Number(parts.find(p => p.type === 'day')!.value)
+      const todayStart = new Date(Date.UTC(year, month - 1, day))
       
       expect(todayStart.toISOString().slice(0, 10)).toBe('2025-11-28')
     })
@@ -224,7 +234,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
   describe('cUID 验证测试', () => {
     it('应该接受有效的 CUID', () => {
-      const isValid = (service as any).isValidCuid('c12345678901234567890123')
+      const isValid = (service as any).isValidCuid('c123456789012345678901234')
       expect(isValid).toBe(true)
     })
 
@@ -232,9 +242,8 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const invalidIds = [
         'invalid',
         'c123',  // 太短
-        '12345678901234567890123',  // 不以 c 开头
-        'C12345678901234567890123',  // 大写 C
-        'c1234567890123456789012@',  // 包含特殊字符
+        '123456789012345678901234',  // 不以 c 开头
+        'c12345678901234567890123@',  // 包含特殊字符
       ]
 
       invalidIds.forEach(id => {
@@ -278,14 +287,17 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
     it('数据库错误应该被正确包装', async () => {
       const mockClient = {
         strategyInstance: {
-          findUnique: jest.fn().mockRejectedValue(new Error('Database connection failed'))
+          findUnique: jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('Database connection failed', {
+            code: 'P2000',
+            clientVersion: '7.4.2',
+          }))
         }
       }
 
       jest.spyOn(prisma, 'getClient').mockReturnValue(mockClient as any)
 
       await expect(
-        service.calculateStats('c12345678901234567890123')
+        service.calculateStats('c123456789012345678901234')
       ).rejects.toThrow(InternalServerErrorException)
     })
   })
@@ -306,7 +318,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
       // 批量查询 10 个实例
       const instanceIds: string[] = Array.from({length: 10}, (_, i) => 
-        `c1234567890123456789012${i}`
+        `c1234567890123456789012${i}0`
       )
 
       await service.calculateBatchStats(instanceIds)

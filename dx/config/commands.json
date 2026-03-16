@@ -122,7 +122,7 @@
       }
     },
     "contracts": {
-      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; pnpm exec openapi-zod-client dist/openapi/backend.json --output packages/api-contracts/src/generated/backend.ts --api-client-name aiBackendClient --base-url \"/api/v1\" --with-alias --with-docs --with-deprecated --export-schemas --prettier prettier.config.js'",
+      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; node scripts/generate-backend-contracts.mjs'",
       "app": "backend",
       "description": "生成 API 合约 (packages/api-contracts)"
     }
@@ -287,6 +287,8 @@
       "backend": {
         "command": "npx nx test:e2e backend",
         "app": "backend",
+        "requiresPath": true,
+        "fileCommand": "npx nx test:e2e backend -- {TEST_PATH}",
         "description": "运行后端E2E测试"
       },
       "quantify": {
@@ -300,7 +302,7 @@
       "all": {
         "command": "npx nx test:e2e backend",
         "app": "backend",
-        "description": "运行所有E2E测试"
+        "description": "保留占位；CLI 层已禁止 E2E 全量聚合执行"
       }
     },
     "unit": {

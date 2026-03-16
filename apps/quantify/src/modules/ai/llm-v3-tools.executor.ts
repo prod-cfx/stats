@@ -1,12 +1,11 @@
 /**
  * LLM Orchestrated Engine v3 - Function Calling Tools Executor
  *
- * 瀹炵幇鎵€鏈?v3 寮曟搸宸ュ叿鐨勬墽琛岄€昏緫
+ * 实现 v3 引擎工具的执行逻辑
  */
 
 import type { MarketBarPayload, MarketTimeframe } from '@ai/shared'
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common'
-import type { Prisma } from '@/prisma/prisma.types'
 import type {
   ComputeFinancialMetricsParams,
   ComputeFinancialMetricsResult,
@@ -18,6 +17,7 @@ import type {
   GetSymbolUniverseResult,
   LlmV3ToolName,
 } from './llm-v3-tools.schemas'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import {
   annualizedReturn,
@@ -38,50 +38,50 @@ import { Injectable, Logger } from '@nestjs/common'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 PrismaService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
 import { PrismaService } from '@/prisma/prisma.service'
 
 /**
- * 宸ュ叿鎵ц涓婁笅鏂囷紙鐢ㄤ簬瀛樺偍涓棿鏁版嵁锛?
+ * 工具执行上下文（用于存储中间数据）
  */
 interface ToolExecutionContext {
-  /** 绛栫暐瀹炰緥 ID锛堢敤浜庢潈闄愭牎楠岋級 */
+  /** 策略实例 ID（用于权限校验） */
   strategyInstanceId: string
-  /** 浼氳瘽 ID锛堢敤浜庤法宸ュ叿璋冪敤鍏变韩缂撳瓨锛?*/
+  /** 会话 ID（用于跨工具调用共享缓存） */
   sessionId?: string
-  /** 鍏佽鐨?symbols锛堜粠绛栫暐閰嶇疆涓幏鍙栵級 */
+  /** 允许的 symbols（从策略配置中获取） */
   allowedSymbols?: string[]
-  /** 鍏佽鐨?timeframes锛堜粠绛栫暐閰嶇疆涓幏鍙栵級 */
+  /** 允许的 timeframes（从策略配置中获取） */
   allowedTimeframes?: string[]
-  /** 鏁版嵁涓婁笅鏂囩紦瀛橈紙contextId -> cached data with metadata锛?*/
+  /** 数据上下文缓存（contextId -> cached data with metadata） */
   dataContextCache: Map<string, CachedMarketData>
 }
 
 /**
- * 缂撳瓨鐨勫競鍦烘暟鎹紙鍖呭惈鍏冩暟鎹敤浜庢潈闄愭牎楠岋級
+ * 缓存的市场数据（包含元数据用于权限校验）
  */
 interface CachedMarketData {
-  /** 鏍囩殑浠ｇ爜 */
+  /** 标的代码 */
   symbol: string
-  /** 鏃堕棿鍛ㄦ湡 */
+  /** 时间周期 */
   timeframe: string
-  /** K 绾挎暟鎹?*/
+  /** K 线数量 */
   bars: MarketBarPayload[]
-  /** 缂撳瓨鏃堕棿鎴筹紙鐢ㄤ簬 TTL锛?*/
+  /** 缓存时间戳（用于 TTL） */
   cachedAt: number
 }
 
 /**
- * 浼氳瘽缂撳瓨鍏冩暟鎹?
+ * 会话缓存元数据
  */
 interface SessionCacheMetadata {
-  /** 绛栫暐瀹炰緥 ID锛堢敤浜庨殧绂讳笉鍚岀瓥鐣ョ殑缂撳瓨锛?*/
+  /** 策略实例 ID（用于隔离不同策略的缓存） */
   strategyInstanceId: string
-  /** 鏁版嵁涓婁笅鏂囩紦瀛?*/
+  /** 数据上下文缓存 */
   dataCache: Map<string, CachedMarketData>
-  /** 鍒涘缓鏃堕棿 */
+  /** 创建时间 */
   createdAt: number
-  /** 鏈€鍚庤闂椂闂?*/
+  /** 最后访问时间 */
   lastAccessedAt: number
 }
 
@@ -90,38 +90,38 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   private readonly logger = new Logger(LlmV3ToolsExecutor.name)
 
   /**
-   * 浼氳瘽绾ф暟鎹紦瀛橈紙璺ㄥ伐鍏疯皟鐢ㄥ叡浜級
+   * 会话级数据缓存（跨工具调用共享）
    * Key: `${strategyInstanceId}:${sessionId}`, Value: SessionCacheMetadata
    */
   private readonly sessionCaches = new Map<string, SessionCacheMetadata>()
 
   /**
-   * 缂撳瓨 TTL锛堟绉掞級- 榛樿 1 灏忔椂
+   * 缓存 TTL（毫秒）- 默认 1 小时
    */
   private readonly CACHE_TTL_MS = 60 * 60 * 1000
 
   /**
-   * 缂撳瓨娓呯悊闂撮殧锛堟绉掞級- 榛樿 5 鍒嗛挓
+   * 缓存清理间隔（毫秒）- 默认 5 分钟
    */
   private readonly CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000
 
   /**
-   * 鏈€澶х紦瀛樻潯鐩暟閲?- 闃叉鏃犻檺澧為暱
+   * 最大缓存条目数，防止无限增长
    */
   private readonly MAX_CACHE_ENTRIES = 1000
 
   /**
-   * 瀹氭椂娓呯悊浠诲姟鍙ユ焺
+   * 定时清理任务句柄
    */
   private cacheCleanupInterval?: NodeJS.Timeout
 
   constructor(private readonly prisma: PrismaService) {
-    // 鍚姩瀹氭椂娓呯悊浠诲姟
+    // 启动定时清理任务
     this.startCacheCleanupTimer()
   }
 
   /**
-   * 鍚姩缂撳瓨鑷姩娓呯悊瀹氭椂鍣?
+   * 启动缓存自动清理定时器
    */
   private startCacheCleanupTimer(): void {
     if (this.cacheCleanupInterval) {
@@ -132,14 +132,14 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       this.cleanupExpiredCaches()
     }, this.CACHE_CLEANUP_INTERVAL_MS)
 
-    // 閬垮厤闃诲娴嬭瘯/鑴氭湰杩涚▼閫€鍑?
+    // 避免阻塞测试或脚本进程退出
     interval.unref?.()
 
     this.cacheCleanupInterval = interval
   }
 
   /**
-   * 鍋滄缂撳瓨娓呯悊瀹氭椂鍣?
+   * 停止缓存清理定时器
    */
   private stopCacheCleanupTimer(): void {
     if (this.cacheCleanupInterval) {
@@ -149,14 +149,14 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 娓呯悊杩囨湡鐨勭紦瀛?
+   * 清理过期的缓存
    */
   private cleanupExpiredCaches(): void {
     const now = Date.now()
     let cleanedCount = 0
 
     for (const [key, metadata] of this.sessionCaches.entries()) {
-      // 娓呯悊瓒呰繃 TTL 鐨勭紦瀛?
+      // 清理超过 TTL 的缓存
       if (now - metadata.lastAccessedAt > this.CACHE_TTL_MS) {
         this.sessionCaches.delete(key)
         cleanedCount++
@@ -177,12 +177,12 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 鎵ц宸ュ叿璋冪敤锛堜富鍏ュ彛锛?
-   * @param toolName 宸ュ叿鍚嶇О
-   * @param params 宸ュ叿鍙傛暟
-   * @param strategyInstanceId 绛栫暐瀹炰緥ID锛堢敤浜庡姞杞界櫧鍚嶅崟閰嶇疆锛?
-   * @param sessionId 浼氳瘽ID锛堢敤浜庤法宸ュ叿璋冪敤鍏变韩缂撳瓨锛屽彲閫夛級
-   * @returns 宸ュ叿鎵ц缁撴灉
+   * 执行工具调用（主入口）
+   * @param toolName 工具名称
+   * @param params 工具参数
+   * @param strategyInstanceId 策略实例 ID（用于加载白名单配置）
+   * @param sessionId 会话ID（用于跨工具调用共享缓存，可选）
+   * @returns 工具执行结果
    */
   async executeTool(
     toolName: LlmV3ToolName,
@@ -203,8 +203,8 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       )
     }
 
-    // 鏈嶅姟绔己鍒跺姞杞?context锛屼笉淇′换璋冪敤鏂逛紶鍏ョ殑閰嶇疆
-    // 濡傛灉鎻愪緵浜?sessionId锛屽垯浣跨敤鍏变韩鐨勭紦瀛?
+    // 服务端强制加入 context，不信任调用方传入的配置
+    // 如果提供 sessionId，则使用共享缓存
     const context = await this.createContext(strategyInstanceId, sessionId)
 
     switch (toolName) {
@@ -224,9 +224,9 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 娓呯悊浼氳瘽缂撳瓨锛堝湪绛栫暐鎵ц瀹屾垚鍚庤皟鐢級
-   * @param strategyInstanceId 绛栫暐瀹炰緥ID
-   * @param sessionId 浼氳瘽ID
+   * 清理会话缓存（在策略执行完成后调用）
+   * @param strategyInstanceId 策略实例ID
+   * @param sessionId 会话ID
    */
   clearSessionCache(strategyInstanceId: string, sessionId: string): void {
     const cacheKey = `${strategyInstanceId}:${sessionId}`
@@ -235,7 +235,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 灏嗚緭鍏ヨ鑼冨寲涓哄瓧绗︿覆鏁扮粍锛屽苟瀵归潪娉曢厤缃粰鍑烘槑纭敊璇?
+   * 将输入规范化为字符串数组，并对非法配置给出明确错误
    */
   private normalizeStringArray(
     raw: unknown,
@@ -292,7 +292,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 灏嗚緭鍏ヨ鑼冨寲涓烘暟瀛楁暟缁勶紝骞跺闈炴硶鍊兼姏鍑?DomainException
+   * 将输入规范化为数字数组，并对非法值抛出 DomainException
    */
   private normalizeNumberArray(
     raw: unknown,
@@ -368,7 +368,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 鏍规嵁鏉冪泭鏇茬嚎鎺ㄥ鏀剁泭鐜囧簭鍒?
+   * 根据权益曲线推导收益率序列
    */
   private deriveReturnsFromEquityCurve(equityCurve: number[]): number[] {
     const returns: number[] = []
@@ -383,7 +383,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 宸ュ叿 1: 鑾峰彇绛栫暐鍏佽鐨勪氦鏄撴爣鐨勫拰鏃堕棿妗嗘灦
+   * 工具 1: 获取策略允许的交易标的和时间框架
    */
   async getSymbolUniverse(
     params: GetSymbolUniverseParams,
@@ -391,14 +391,14 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   ): Promise<GetSymbolUniverseResult> {
     const client = this.prisma.getClient()
 
-    // 鏋勫缓鏌ヨ鏉′欢
+    // 构建查询条件
     const where: Prisma.SymbolWhereInput = {
       status: 'ACTIVE',
     }
 
     const filter = params.filter
 
-    // 杩愯鏃舵牎楠岋細exchange/baseAsset 蹇呴』鏄潪绌哄瓧绗︿覆
+    // 运行时校验：exchange/baseAsset 必须是非空字符串
     if (filter?.exchange != null) {
       if (typeof filter.exchange !== 'string' || filter.exchange.trim().length === 0) {
         throw new DomainException('filter.exchange must be a non-empty string', {
@@ -417,7 +417,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       where.baseAsset = filter.baseAsset.trim().toUpperCase()
     }
 
-    // 杩愯鏃舵牎楠岋細type 浠呭厑璁稿悎娉曟灇涓惧€硷紙涓庣幇鏈?Symbol.type 鍖归厤锛?
+    // 运行时校验：type 仅允许合法枚举值（与现有 Symbol.type 匹配）
     if (filter?.type != null) {
       const allowedTypes = ['CRYPTO', 'STOCK', 'FOREX']
       if (!allowedTypes.includes(filter.type)) {
@@ -431,7 +431,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       where.type = filter.type
     }
 
-    // 濡傛灉绛栫暐閰嶇疆浜嗗厑璁哥殑 symbols锛屽垯杩涗竴姝ヨ繃婊?
+    // 如果策略配置了允许的 symbols，则进一步过滤
     if (context.allowedSymbols && context.allowedSymbols.length > 0) {
       where.code = {
         in: context.allowedSymbols,
@@ -448,10 +448,10 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         type: true,
       },
       orderBy: { code: 'asc' },
-      take: 100, // 闄愬埗杩斿洖鏁伴噺锛岄伩鍏嶈繃澶?
+      take: 100, // 限制返回数量，避免过大
     })
 
-    // 鏀寔鐨勬椂闂村懆鏈燂紙浠庣瓥鐣ラ厤缃垨榛樿鍊硷級
+    // 支持的时间周期（从策略配置或默认值）
     const supportedTimeframes = context.allowedTimeframes ?? ['1m', '5m', '15m', '1h', '4h', '1d']
 
     return {
@@ -467,7 +467,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 宸ュ叿 2: 鑾峰彇鍘熷甯傚満鏁版嵁锛圞绾匡級
+   * 工具 2: 获取原始市场数据（K线）
    */
   async getMarketDataRaw(
     params: GetMarketDataRawParams,
@@ -475,7 +475,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   ): Promise<GetMarketDataRawResult> {
     const client = this.prisma.getClient()
 
-    // 瑙勮寖鍖?symbol锛堝幓绌烘牸 + 澶у啓锛夛紝涓庣櫧鍚嶅崟鍙婃暟鎹簱淇濇寔涓€鑷?
+    // 规范化 symbol（去空格 + 大写），与白名单及数据库保持一致
     if (typeof params.symbol !== 'string' || params.symbol.trim().length === 0) {
       throw new DomainException('symbol must be a non-empty string', {
         code: ErrorCode.BAD_REQUEST,
@@ -483,7 +483,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
     }
     const normalizedSymbol = params.symbol.trim().toUpperCase()
 
-    // 鏌ユ壘 symbol
+    // 查找 symbol
     const symbol = await client.symbol.findUnique({
       where: { code: normalizedSymbol },
     })
@@ -495,8 +495,8 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 鏉冮檺鏍￠獙锛氭槸鍚﹀湪鍏佽鐨?symbols 涓?
-    // createContext 宸茬‘淇?allowedSymbols 涓嶄负绌猴紝姝ゅ鐩存帴妫€鏌ョ櫧鍚嶅崟
+    // 权限校验：是否在允许的 symbols 中
+    // createContext 已确认 allowedSymbols 不为空，此处直接检查白名单
     if (!context.allowedSymbols?.includes(normalizedSymbol)) {
       throw new DomainException(
         `Symbol not allowed: ${normalizedSymbol}. Allowed symbols: ${context.allowedSymbols?.join(', ')}`,
@@ -510,8 +510,8 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       )
     }
 
-    // 鏉冮檺鏍￠獙锛氭槸鍚﹀湪鍏佽鐨?timeframes 涓?
-    // createContext 宸茬‘淇?allowedTimeframes 涓嶄负绌猴紝姝ゅ鐩存帴妫€鏌ョ櫧鍚嶅崟
+    // 权限校验：是否在允许的 timeframes 中
+    // createContext 已确认 allowedTimeframes 不为空，此处直接检查白名单
     if (!context.allowedTimeframes?.includes(params.timeframe)) {
       throw new DomainException(
         `Timeframe not allowed: ${params.timeframe}. Allowed timeframes: ${context.allowedTimeframes?.join(', ')}`,
@@ -527,7 +527,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
 
     const timeframe = mapTimeframe(params.timeframe as MarketTimeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
-    // 瑙勮寖鍖?lookbackBars锛氳浆鎹负鏁存暟骞跺仛鑼冨洿鏍￠獙
+    // 规范化 lookbackBars：转换为整数并做范围校验
     const rawLookback = params.lookbackBars ?? 100
     const lookbackBars = Math.trunc(Number(rawLookback))
 
@@ -537,7 +537,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 鑼冨洿鏍￠獙锛氶槻姝㈡伓鎰忔垨閿欒鐨勫弬鏁?
+    // 范围校验：防止恶意或错误的参数
     if (lookbackBars < 1) {
       throw new DomainException(`Invalid lookbackBars: ${lookbackBars}, must be >= 1`, {
         code: ErrorCode.BAD_REQUEST,
@@ -549,7 +549,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 鏌ヨ鏈€杩戠殑 K 绾挎暟鎹?
+    // 查询最近的 K 线数据
     const bars = await client.marketBar.findMany({
       where: {
         symbolId: symbol.id,
@@ -559,7 +559,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       take: lookbackBars,
     })
 
-    // 鍙嶈浆涓烘椂闂村崌搴?
+    // 反转为时间升序
     const orderedBars = bars.reverse()
 
     const result: GetMarketDataRawResult = {
@@ -575,7 +575,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })),
     }
 
-    // 濡傛灉鎻愪緵浜?contextId锛岀紦瀛樻暟鎹緵鍚庣画寮曠敤
+    // 如果提供 contextId，缓存数据供后续引用
     if (params.contextId) {
       if (!context.sessionId) {
         throw new DomainException(
@@ -588,10 +588,10 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       }
 
       result.contextId = params.contextId
-      // 瀛樺偍涓?CachedMarketData 鏍煎紡锛屽寘鍚厓鏁版嵁鐢ㄤ簬鏉冮檺鏍￠獙
+      // 存储为 CachedMarketData 格式，包含元数据用于权限校验
       const existingContext = context.dataContextCache.get(params.contextId)
 
-      // 浼氳瘽绾у埆鐨?contextId 鏁伴噺涓婇檺锛岄槻姝㈠唴瀛樿鏃犻檺鍫嗙Н
+      // 会话级别的 contextId 数量上限，防止内存被无限堆积
       const maxContextsPerSession = 100
       if (!existingContext && context.dataContextCache.size >= maxContextsPerSession) {
         throw new DomainException(
@@ -623,20 +623,20 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 宸ュ叿 3: 璁＄畻鎶€鏈寚鏍?
+   * 工具 3: 计算技术指标
    */
   async computeTechnicalIndicators(
     params: ComputeTechnicalIndicatorsParams,
     context: ToolExecutionContext,
   ): Promise<ComputeTechnicalIndicatorsResult> {
-    // 鍩虹鍙傛暟鏍￠獙锛歩ndicators 蹇呴』鏄潪绌烘暟缁?
+    // 基础参数校验：indicators 必须是非空数组
     if (!Array.isArray(params.indicators) || params.indicators.length === 0) {
       throw new DomainException('indicators must be a non-empty array', {
         code: ErrorCode.BAD_REQUEST,
       })
     }
 
-    // 鑾峰彇鏁版嵁婧愶細浠?contextId 鎴栫洿鎺ヤ紶鍏ョ殑 bars
+    // 获取数据源：来自 contextId 或直接传入的 bars
     let bars: Array<{ timestamp: number; open: number; high: number; low: number; close: number; volume?: number }>
 
     if (params.contextId) {
@@ -657,7 +657,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         })
       }
 
-      // 鏍￠獙缂撳瓨鐨?symbol/timeframe 鏄惁鍦ㄥ綋鍓嶇瓥鐣ョ殑鐧藉悕鍗曚腑
+      // 校验缓存的 symbol/timeframe 是否在当前策略的白名单中
       if (!context.allowedSymbols?.includes(cached.symbol)) {
         throw new DomainException(
           `Cached symbol not allowed: ${cached.symbol}. Allowed symbols: ${context.allowedSymbols?.join(', ')}`,
@@ -702,7 +702,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         })
       }
 
-      // 鍩虹缁撴瀯鏍￠獙锛氭瘡涓?bar 鑷冲皯闇€瑕?timestamp/open/high/low/close
+      // 基础结构校验：每个 bar 至少需要 timestamp/open/high/low/close
       params.bars.forEach((bar, index) => {
         if (
           typeof bar !== 'object' ||
@@ -724,7 +724,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
 
       bars = params.bars
 
-      // 涓?getMarketDataRaw 淇濇寔涓€鑷寸殑闃插尽鎬ч檺鍒讹紝闃叉 LLM 鐩存帴浼犲叆杩囧 K 绾挎嫋鍨湇鍔″櫒
+      // 与 getMarketDataRaw 保持一致的防御性限制，防止 LLM 直接传入过多 K 线拖垮服务器
       const maxBars = 1000
       if (bars.length > maxBars) {
         throw new DomainException(
@@ -747,10 +747,10 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 娉細浠呮敮鎸佽繑鍥炴渶鏂板崟鍊硷紝瀹屾暣搴忓垪杩斿洖鍔熻兘寰呭悗缁?PR 瀹炵幇
+    // 注：仅支持返回最新单值，完整序列返回功能待后续 PR 实现
     const results: ComputeTechnicalIndicatorsResult['indicators'] = []
 
-    // 璁＄畻姣忎釜鎸囨爣
+    // 计算每个指标
     for (const indicator of params.indicators) {
       if (!indicator || typeof indicator.type !== 'string') {
         throw new DomainException('Each indicator must have a valid type', {
@@ -794,7 +794,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
             const result = macd(closes, fastPeriod, slowPeriod, signalPeriod)
 
             if (result) {
-              // 濡傛灉鎸囧畾浜?field锛岃繑鍥炲搴斿瓧娈碉紱鍚﹀垯杩斿洖鎵€鏈夊瓧娈?
+              // 如果指定 field，返回对应字段；否则返回所有字段
               if (field === 'macd') {
                 results.push({ type, field: 'macd', value: result.macd })
               }
@@ -805,7 +805,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
                 results.push({ type, field: 'histogram', value: result.histogram })
               }
               else {
-                // 杩斿洖鎵€鏈夊瓧娈?
+                // 返回所有字段
                 results.push({ type, field: 'macd', value: result.macd })
                 results.push({ type, field: 'signal', value: result.signal })
                 results.push({ type, field: 'histogram', value: result.histogram })
@@ -816,7 +816,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
 
           case 'ATR': {
             const period = (indicatorParams?.period as number) ?? 14
-            // 纭繚 bars 绗﹀悎 Bar 绫诲瀷锛坴olume 蹇呴渶锛?
+            // 确保 bars 符合 Bar 类型（volume 必需）
             const barsWithVolume = bars.map(b => ({
               ...b,
               volume: b.volume ?? 0,
@@ -829,7 +829,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
           case 'STOCH': {
             const kPeriod = (indicatorParams?.kPeriod as number) ?? 14
             const dPeriod = (indicatorParams?.dPeriod as number) ?? 3
-            // 纭繚 bars 绗﹀悎 Bar 绫诲瀷锛坴olume 蹇呴渶锛?
+            // 确保 bars 符合 Bar 类型（volume 必需）
             const barsWithVolume = bars.map(b => ({
               ...b,
               volume: b.volume ?? 0,
@@ -865,7 +865,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 宸ュ叿 4: 璁＄畻閲戣瀺鎸囨爣
+   * 工具 4: 计算金融指标
    */
   async computeFinancialMetrics(
     params: ComputeFinancialMetricsParams,
@@ -880,7 +880,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
 
     let returnsArray: number[] | undefined
 
-    // 浠?returns 鎴?equityCurve 璁＄畻鏀剁泭鐜?
+    // 从 returns 或 equityCurve 计算收益率
     if (normalizedReturns && normalizedReturns.length > 0) {
       const returnsFormat = params.returnsFormat || 'decimal'
       returnsArray =
@@ -906,12 +906,12 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
     const riskFreeRate = params.riskFreeRate ?? 0.02
     const periodsPerYear = params.periodsPerYear ?? 252
 
-    // 璁＄畻鍚勯」鎸囨爣
+    // 计算各项指标
     const sharpe = sharpeRatio(returnsArray, riskFreeRate, periodsPerYear)
     const annReturn = annualizedReturn(returnsArray, periodsPerYear)
     const annVol = annualizedVolatility(returnsArray, periodsPerYear)
 
-    // 璁＄畻鏈€澶у洖鎾わ紙闇€瑕佹潈鐩婃洸绾匡級
+    // 计算最大回撤（需要权益曲线）
     let maxDD: number | undefined
     let maxDDPercent: number | undefined
     if (normalizedEquityCurve && normalizedEquityCurve.length > 0) {
@@ -922,10 +922,10 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         })
       }
       maxDD = ddResult.maxDrawdown
-      maxDDPercent = ddResult.maxDrawdown * 100 // 杞崲涓虹櫨鍒嗘瘮
+      maxDDPercent = ddResult.maxDrawdown * 100 // 转换为百分比
     }
 
-    // 璁＄畻鑳滅巼鍜岀泩浜忔瘮
+    // 计算胜率和盈亏比
     const wins = returnsArray.filter(r => r > 0)
     const losses = returnsArray.filter(r => r < 0)
     const winRateValue = winRate(returnsArray)
@@ -937,7 +937,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       profitFactor = totalLoss > 0 ? totalWin / totalLoss : undefined
     }
 
-    // Calmar Ratio = 骞村寲鏀剁泭 / 鏈€澶у洖鎾?
+    // Calmar Ratio = 年化收益 / 最大回撤
     let calmarRatio: number | undefined
     if (annReturn !== null && maxDD !== undefined && maxDD > 0) {
       calmarRatio = annReturn / maxDD
@@ -956,19 +956,19 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   }
 
   /**
-   * 鍒涘缓宸ュ叿鎵ц涓婁笅鏂囷紙浠庢暟鎹簱鍔犺浇绛栫暐瀹炰緥閰嶇疆锛?
+   * 创建工具执行上下文（从数据库加载策略实例配置）
    *
-   * 瀹夊叏娉ㄦ剰锛氭鏂规硶浠庢暟鎹簱鍔犺浇绛栫暐瀹炰緥鐨勫疄闄呴厤缃紝鑰屼笉鏄俊浠昏皟鐢ㄦ柟浼犲叆鐨勫弬鏁?
-   * 杩欐牱鍙互闃叉瓒婃潈璁块棶锛堜緥濡傝鍙栨湭鎺堟潈鐨?symbols 鎴?timeframes锛?
+   * 安全注意：此方法从数据库加载策略实例的实际配置，而不是信任调用方传入的参数。
+   * 这样可以防止越权访问（例如读取未授权的 symbols 或 timeframes）。
    *
-   * @param strategyInstanceId 绛栫暐瀹炰緥 ID
-   * @param sessionId 浼氳瘽ID锛堢敤浜庤法宸ュ叿璋冪敤鍏变韩缂撳瓨锛屽彲閫夛級
-   * @returns 鎵ц涓婁笅鏂?
+   * @param strategyInstanceId 策略实例 ID
+   * @param sessionId 会话ID（用于跨工具调用共享缓存，可选）
+   * @returns 执行上下文
    */
   async createContext(strategyInstanceId: string, sessionId?: string): Promise<ToolExecutionContext> {
     const client = this.prisma.getClient()
 
-    // 灏濊瘯浠庢柊鐨?LLM 绛栫暐绯荤粺鍔犺浇瀹炰緥
+    // 尝试从新的 LLM 策略系统加载实例
     const llmInstance = await client.llmStrategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: {
@@ -985,8 +985,8 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
     })
 
     if (llmInstance) {
-      // 浣跨敤 LLM 绛栫暐瀹炰緥鐨勯厤缃紝浼樺厛璇诲彇瀹炰緥绾?metadata锛屽叾娆″洖閫€鍒扮瓥鐣ョ骇閰嶇疆
-      // 鍒嗗埆 normalize 鍚勪釜鏉ユ簮锛岀‘淇濈┖鏁扮粍/闈炴硶鍊间笉浼氬睆钄藉悗缁?fallback
+      // 使用 LLM 策略实例的配置，优先读取实例 metadata，其次回退到策略级配置
+      // 分别 normalize 各个来源，确保空数组或非法值不会屏蔽后续 fallback
       const instanceMetadata = (llmInstance.metadata as any) || {}
       const strategyMetadata = (llmInstance.strategy.metadata as any) || {}
 
@@ -1041,19 +1041,19 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         )
       }
 
-      // 鑾峰彇鎴栧垱寤轰細璇濈骇缂撳瓨
+      // 获取或创建会话级缓存
       let dataContextCache: Map<string, CachedMarketData>
       if (sessionId) {
         const cacheKey = `${strategyInstanceId}:${sessionId}`
         if (!this.sessionCaches.has(cacheKey)) {
-          // 妫€鏌ョ紦瀛樺ぇ灏忥紝闃叉鏃犻檺澧為暱
+          // 检查缓存大小，防止无限增长
           if (this.sessionCaches.size >= this.MAX_CACHE_ENTRIES) {
             this.logger.warn(
               `Cache size limit reached (${this.MAX_CACHE_ENTRIES}), forcing cleanup`,
             )
             this.cleanupExpiredCaches()
 
-            // 濡傛灉娓呯悊鍚庝粛瓒呴檺锛岀Щ闄ゆ渶鏃х殑缂撳瓨鏉＄洰
+            // 如果清理后仍超限，移除最旧的缓存条目
             if (this.sessionCaches.size >= this.MAX_CACHE_ENTRIES) {
               const entries = Array.from(this.sessionCaches.entries())
               const oldestEntry = entries.sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)[0]
@@ -1100,7 +1100,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       }
     }
 
-    // 鍥為€€鍒版棫鐨勭瓥鐣ユā鏉跨郴缁?
+    // 回退到旧的策略模板系统
     const instance = await client.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: {
@@ -1123,12 +1123,12 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 浠?metadata 涓彁鍙?allowedSymbols 鍜?allowedTimeframes
-    // 浼樺厛浣跨敤瀹炰緥绾у埆閰嶇疆锛屽洖閫€鍒版ā鏉块厤缃?
+    // 从 metadata 中提取 allowedSymbols 和 allowedTimeframes
+    // 优先使用实例级别配置，回退到模板配置
     const instanceMetadata = (instance.metadata as any) || {}
     const templateMetadata = (instance.strategyTemplate?.metadata as any) || {}
 
-    // 浠庢ā鏉跨殑 legs 涓彁鍙?symbols锛堝鏋?metadata 涓病鏈夐厤缃級
+    // 从模板的 legs 中提取 symbols（如果 metadata 中没有配置）
     const templateLegs = (instance.strategyTemplate?.legs as any) || []
     const legSymbolCandidates = Array.isArray(templateLegs)
       ? templateLegs
@@ -1146,7 +1146,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
           .filter((symbol): symbol is string => Boolean(symbol))
       : undefined
 
-    // 鎻愬彇鐧藉悕鍗曢厤缃紙浼樺厛绾э細瀹炰緥 metadata > 妯℃澘 metadata > 妯℃澘 legs锛?
+    // 提取白名单配置（优先级：实例 metadata > 模板 metadata > 模板 legs）
     const allowedSymbols =
       this.normalizeStringArray(instanceMetadata.allowedSymbols, {
         fieldName: 'instance.metadata.allowedSymbols',
@@ -1164,7 +1164,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         uppercase: true,
       })
 
-    // 鎻愬彇鍏佽鐨?timeframes锛堜紭鍏堢骇锛氬疄渚?metadata > 妯℃澘 metadata > 妯℃澘 execution/dataRequirements > 榛樿鍊硷級
+    // 提取允许的 timeframes（优先级：实例 metadata > 模板 metadata > 模板 execution/dataRequirements > 默认值）
     let allowedTimeframes =
       this.normalizeStringArray(instanceMetadata.allowedTimeframes, {
         fieldName: 'instance.metadata.allowedTimeframes',
@@ -1175,7 +1175,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         strategyInstanceId,
       })
 
-    // 鍚戝悗鍏煎锛氫粠 execution 閰嶇疆涓洖閫€璇诲彇 timeframe锛堣 Prisma 娉ㄩ噴锛?
+    // 向后兼容：从 execution 配置中回退读取 timeframe（见 Prisma 注释）
     if (!allowedTimeframes || allowedTimeframes.length === 0) {
       const templateExecution = (instance.strategyTemplate as any)?.execution
       if (templateExecution && typeof templateExecution === 'object') {
@@ -1190,7 +1190,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       }
     }
 
-    // 濡傛灉浠嶇劧娌℃湁閰嶇疆 timeframes锛屽垯鎷掔粷鎵ц锛岄伩鍏嶉潤榛樻斁澶х櫧鍚嶅崟
+    // 如果仍然没有配置 timeframes，则拒绝执行，避免静默放大白名单
     if (!allowedTimeframes || allowedTimeframes.length === 0) {
       throw new DomainException(
         `Strategy instance ${strategyInstanceId} has no allowedTimeframes configured. ` +
@@ -1202,7 +1202,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       )
     }
 
-    // 瀹夊叏绛栫暐锛氭湭閰嶇疆 symbols 鐧藉悕鍗曟椂鎷掔粷鎵ц锛堥粯璁ゆ嫆缁濓紝鑰岄潪榛樿鏀捐锛?
+    // 安全策略：未配置 symbols 白名单时拒绝执行（默认拒绝，而非默认放行）
     if (!allowedSymbols || allowedSymbols.length === 0) {
       throw new DomainException(
         `Strategy instance ${strategyInstanceId} has no allowedSymbols configured. ` +
@@ -1214,24 +1214,24 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       )
     }
 
-    // allowedTimeframes 鐜板湪濮嬬粓鏈夊€硷紙鏉ヨ嚜 metadata/execution/榛樿鍊硷級
+    // allowedTimeframes 现在始终有值（来自 metadata/execution/默认值）
 
-    // 鑾峰彇鎴栧垱寤轰細璇濈骇缂撳瓨
+    // 获取或创建会话级缓存
     let dataContextCache: Map<string, CachedMarketData>
     if (sessionId) {
-      // 浣跨敤鍏变韩鐨勪細璇濈骇缂撳瓨锛堣法宸ュ叿璋冪敤澶嶇敤锛?
-      // 缂撳瓨 key 鍖呭惈 strategyInstanceId锛岄槻姝㈣法绛栫暐绐滆
+      // 使用共享的会话级缓存（跨工具调用复用）
+      // 缓存 key 包含 strategyInstanceId，防止跨策略窜读
       const cacheKey = `${strategyInstanceId}:${sessionId}`
 
       if (!this.sessionCaches.has(cacheKey)) {
-        // 妫€鏌ョ紦瀛樺ぇ灏忥紝闃叉鏃犻檺澧為暱
+        // 检查缓存大小，防止无限增长
         if (this.sessionCaches.size >= this.MAX_CACHE_ENTRIES) {
           this.logger.warn(
             `Cache size limit reached (${this.MAX_CACHE_ENTRIES}), forcing cleanup`,
           )
           this.cleanupExpiredCaches()
 
-          // 濡傛灉娓呯悊鍚庝粛瓒呴檺锛岀Щ闄ゆ渶鏃х殑缂撳瓨鏉＄洰
+          // 如果清理后仍超限，移除最旧的缓存条目
           if (this.sessionCaches.size >= this.MAX_CACHE_ENTRIES) {
             const entries = Array.from(this.sessionCaches.entries())
             const oldestEntry = entries.sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)[0]
@@ -1256,7 +1256,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
 
       const sessionCache = this.sessionCaches.get(cacheKey)!
 
-      // 楠岃瘉 strategyInstanceId 鍖归厤锛堥槻姝?sessionId 璇敤锛?
+      // 验证 strategyInstanceId 匹配（防止 sessionId 误用）
       if (sessionCache.strategyInstanceId !== strategyInstanceId) {
         throw new DomainException(
           `Session ${sessionId} belongs to strategy ${sessionCache.strategyInstanceId}, cannot be used by ${strategyInstanceId}`,
@@ -1267,12 +1267,12 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
         )
       }
 
-      // 鏇存柊鏈€鍚庤闂椂闂?
+      // 更新最后访问时间
       sessionCache.lastAccessedAt = Date.now()
       dataContextCache = sessionCache.dataCache
     }
     else {
-      // 鏃?sessionId锛屼娇鐢ㄤ复鏃剁紦瀛橈紙涓嶈法宸ュ叿璋冪敤锛?
+      // 无 sessionId，使用临时缓存（不跨工具调用）
       dataContextCache = new Map()
     }
 

@@ -1,21 +1,21 @@
 /**
- * Prisma 7 鏋氫妇鏄犲皠宸ュ叿
+ * Prisma 7 枚举映射工具
  *
- * Prisma 7 鐨?@map 鎸囦护浣垮緱鏋氫妇閿悕锛堝簲鐢ㄥ眰锛夊拰鏁版嵁搴撳€煎垎绂?
- * 渚嬪: m1 @map("1m") 琛ㄧず搴旂敤灞備娇鐢?"m1"锛屾暟鎹簱瀛樺偍 "1m"
+ * Prisma 7 中，@map 指令使得枚举键名（应用层）和数据库值分离。
+ * 例如: m1 @map("1m") 表示应用层使用 "m1"，数据库存储 "1m"
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
-import { $Enums } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { $Enums } from '@/prisma/prisma.types'
 
 export type PrismaMarketTimeframe = $Enums.MarketTimeframe
 export type PrismaIndicatorType = $Enums.IndicatorType
 export type PrismaSymbolStatus = $Enums.SymbolStatus
 
 /**
- * 鏃堕棿鍛ㄦ湡鏋氫妇閿悕甯搁噺
- * 鐢ㄤ簬绫诲瀷瀹夊叏鐨勬灇涓炬槧灏?
+ * 时间周期枚举键名常量
+ * 用于类型安全的枚举映射
  */
 export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   M1: 'm1' as PrismaMarketTimeframe,
@@ -29,10 +29,10 @@ export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
 export const SUPPORTED_MARKET_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly MarketTimeframe[]
 
 /**
- * 灏嗗簲鐢ㄥ眰鏃堕棿鍛ㄦ湡鏄犲皠涓?Prisma 鏋氫妇閿悕
- * @param timeframe - 搴旂敤灞傛椂闂村懆鏈燂紙濡?"1m", "5m"锛?
- * @param errorCode - 鍙€夌殑閿欒鐮侊紝榛樿涓?INDICATOR_UNSUPPORTED_TIMEFRAME
- * @returns Prisma 鏋氫妇閿悕锛堝 "m1", "m5"锛?
+ * 将应用层时间周期映射为 Prisma 枚举键名
+ * @param timeframe - 应用层时间周期（如 "1m", "5m"）
+ * @param errorCode - 可选的错误码，默认是 INDICATOR_UNSUPPORTED_TIMEFRAME
+ * @returns Prisma 枚举键名（如 "m1", "m5"）
  */
 export function mapTimeframe(
   timeframe: MarketTimeframe,
@@ -58,11 +58,11 @@ export function mapTimeframe(
 }
 
 /**
- * 灏?Prisma 鏋氫妇鍊兼槧灏勫洖搴旂敤灞傛椂闂村懆鏈?
- * Prisma 浠庢暟鎹簱璇诲彇鏃惰繑鍥炴灇涓鹃敭鍚嶏紙濡?"m1"锛夛紝闇€瑕佽浆鎹㈠洖搴旂敤灞傛牸寮忥紙濡?"1m"锛?
- * @param timeframe - Prisma 鏋氫妇鍊硷紙鏋氫妇閿悕锛?
- * @returns 搴旂敤灞傛椂闂村懆鏈燂紙鏁版嵁搴撳瓨鍌ㄦ牸寮忥級
- * @throws DomainException 褰撴灇涓惧€兼棤鏁堟椂
+ * 将 Prisma 枚举值映射回应用层时间周期
+ * Prisma 从数据库读取时返回枚举键名（如 "m1"），需要转换回应用层格式（如 "1m"）
+ * @param timeframe - Prisma 枚举值（枚举键名）
+ * @returns 应用层时间周期（数据库存储格式）
+ * @throws DomainException 当枚举值无效时
  */
 export function reverseMapTimeframe(timeframe: PrismaMarketTimeframe): MarketTimeframe {
   const reverseMapping: Record<string, MarketTimeframe> = {
@@ -85,7 +85,7 @@ export function reverseMapTimeframe(timeframe: PrismaMarketTimeframe): MarketTim
 }
 
 /**
- * 灏嗗簲鐢ㄥ眰鎸囨爣绫诲瀷鏄犲皠涓?Prisma 鏋氫妇
+ * 将应用层指标类型映射为 Prisma 枚举
  */
 export function mapIndicatorType(type: IndicatorType): PrismaIndicatorType {
   const mapping: Record<string, PrismaIndicatorType> = {
@@ -106,10 +106,10 @@ export function mapIndicatorType(type: IndicatorType): PrismaIndicatorType {
 }
 
 /**
- * 绗﹀彿鐘舵€佹槧灏?
- * @param status - 搴旂敤灞傜鍙风姸鎬?
- * @returns Prisma 鏋氫妇鍊?
- * @throws DomainException 褰撶姸鎬佸€兼棤鏁堟椂
+ * 符号状态映射
+ * @param status - 应用层符号状态
+ * @returns Prisma 枚举值
+ * @throws DomainException 当状态值无效时
  */
 export function mapSymbolStatus(status: string): PrismaSymbolStatus {
   const upperStatus = status.toUpperCase()

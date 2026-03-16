@@ -4,11 +4,11 @@ import { IsNotEmpty, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 /**
- * 鐢ㄦ埛渚э細LLM 绛栫暐瀹炰緥淇″彿鍒楄〃鏌ヨ鍙傛暟
- * 鐩墠浠呮敮鎸佸熀纭€鍒嗛〉鍙傛暟锛屽悗缁闇€鎸夋椂闂淬€佺姸鎬佺瓑绛涢€夊彲鍦ㄦ鎵╁睍
+ * 用户侧：LLM 策略实例信号列表查询参数
+ * 目前仅支持基础分页参数，后续如需按时间、状态等筛选可在此扩展
  */
 export class LiveLlmStrategySignalsQueryDto extends BasePaginationRequestDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId: string

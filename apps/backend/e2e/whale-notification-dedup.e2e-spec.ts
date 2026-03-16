@@ -30,6 +30,13 @@ describe('Whale notification deduplicator (service E2E)', () => {
     deduplicator = app.get(WhaleNotificationDeduplicatorService)
 
     const client = prisma.getClient()
+    await client.whaleNotificationCooldownGuard.deleteMany({
+      where: {
+        dedupKey: {
+          startsWith: 'e2e-dedup-user:',
+        },
+      },
+    })
     await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
     await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
     await client.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
@@ -49,6 +56,13 @@ describe('Whale notification deduplicator (service E2E)', () => {
   afterAll(async () => {
     if (prisma) {
       const client = prisma.getClient()
+      await client.whaleNotificationCooldownGuard.deleteMany({
+        where: {
+          dedupKey: {
+            startsWith: 'e2e-dedup-user:',
+          },
+        },
+      })
       await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
       await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
       await client.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
@@ -71,35 +85,28 @@ describe('Whale notification deduplicator (service E2E)', () => {
       },
     })
 
-    const dedupKey = 'e2e-dedup-user:0xabc:BTC:Long:WEB'
-
-    await client.whaleNotificationDelivery.create({
-      data: {
+    const candidates = [
+      {
         userId: 'e2e-dedup-user',
         ruleId: rule.id,
-        dedupKey,
-        channel: 'WEB',
-        status: 'SENT',
+        channel: 'WEB' as const,
         whaleAddress: '0xabc',
         symbol: 'BTC',
         side: 'Long',
-        tradeValueUsd: 200000,
+        tradeValueUsd: 250000,
         tradeTime: new Date(),
       },
-    })
+    ]
 
+    // 第一次调用会占用 cooldown 槽位
+    const first = await deduplicator.filterByCooldown(candidates, 60)
+    expect(first.allowed).toHaveLength(1)
+    expect(first.skipped).toHaveLength(0)
+
+    // 第二次调用命中同一 dedupKey，应被 cooldown 拦截
     const result = await deduplicator.filterByCooldown(
       [
-        {
-          userId: 'e2e-dedup-user',
-          ruleId: rule.id,
-          channel: 'WEB',
-          whaleAddress: '0xabc',
-          symbol: 'BTC',
-          side: 'Long',
-          tradeValueUsd: 250000,
-          tradeTime: new Date(),
-        },
+        ...candidates,
       ],
       60,
     )

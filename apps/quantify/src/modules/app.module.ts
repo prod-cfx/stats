@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bull'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
@@ -26,6 +27,8 @@ import { LlmStrategiesModule } from './llm-strategies/llm-strategies.module'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen/llm-strategy-codegen.module'
 import { LlmStrategySubscriptionsModule } from './llm-strategy-subscriptions/llm-strategy-subscriptions.module'
 import { MarketDataModule } from './market-data/market-data.module'
+import { MessageBusModule } from './message-bus/message-bus.module'
+import { isMessageBusRuntimeEnabled } from './message-bus/message-bus.runtime'
 import { PositionsModule } from './positions/positions.module'
 import { SettingsModule } from './settings/settings.module'
 import { StrategyInstancesModule } from './strategy-instances/strategy-instances.module'
@@ -34,25 +37,44 @@ import { StrategySubscriptionsModule } from './strategy-subscriptions/strategy-s
 import { StrategyTemplatesModule } from './strategy-templates/strategy-templates.module'
 import { TradingModule } from './trading/trading.module'
 
-// 缁熶竴鐜璇嗗埆锛氭敮鎸?APP_ENV/NODE_ENV fallback 鍜屽埆鍚嶏紙prod/stage 绛夛級
+// 统一环境识别：支持 APP_ENV/NODE_ENV fallback 和别名（prod/stage 等）
 const currentEnv = defaultEnvAccessor.appEnv()
+const bullImports = isMessageBusRuntimeEnabled()
+  ? [
+      BullModule.forRootAsync({
+        useFactory: (env: EnvService) => {
+          const url = env.getString('REDIS_URL')
+          if (!url) {
+            throw new Error('REDIS_URL is required for Bull queue initialization')
+          }
+
+          return { url }
+        },
+        inject: [EnvService],
+      }),
+    ]
+  : []
+
+const infrastructureImports = isMessageBusRuntimeEnabled()
+  ? [MessageBusModule]
+  : []
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      // 浼樺厛鍔犺浇 .env.<env>.local锛屽洖閫€鍒?.env.<env>
+      // 优先加载 .env.<env>.local，回退到 .env.<env>
       envFilePath: [`.env.${currentEnv}.local`, `.env.${currentEnv}`],
       load: allConfigLoaders,
     }),
     EnvModule,
-    ClsConfigModule, // 蹇呴』鍦?PrismaModule 涔嬪墠瀵煎叆
+    ClsConfigModule, // 必须在 PrismaModule 之前导入
     EventEmitterModule.forRoot({
-      // SSE 绛夊満鏅彲鑳芥湁澶ч噺鐩戝惉鍣紙姣忎釜杩炴帴涓€涓級锛岀Щ闄ら粯璁?10 涓殑闄愬埗
+      // SSE 等场景可能有大量监听器（每个连接一个），移除默认 10 个的限制
       maxListeners: 0,
-      // 寮€鍚€氶厤绗︽敮鎸侊紙濡傛灉闇€瑕侊級
+      // 开启通配符支持（如果需要）
       wildcard: false,
-      // 閿欒澶勭悊锛氶粯璁ゆ姏鍑洪敊璇?
+      // 错误处理：默认抛出错误
       ignoreErrors: false,
     }),
     WinstonModule.forRootAsync({
@@ -65,10 +87,12 @@ const currentEnv = defaultEnvAccessor.appEnv()
       },
       inject: [EnvService],
     }),
-    CacheModule, // 蹇呴』鍦?WinstonModule 涔嬪悗,鍥犱负 RedisService 渚濊禆 WINSTON_MODULE_NEST_PROVIDER
-    TransactionEventsModule, // 鍏ㄥ眬浜嬪姟浜嬩欢鏈嶅姟
-    PrismaModule, // Global 妯″潡锛岄渶瑕佸湪鍏朵粬妯″潡涔嬪墠瀵煎叆
+    ...bullImports,
+    CacheModule, // 必须在 WinstonModule 之后，因为 RedisService 依赖 WINSTON_MODULE_NEST_PROVIDER
+    TransactionEventsModule, // 全局事务事件服务
+    PrismaModule, // Global 模块，需要在其他模块之前导入
     ScheduleModule.forRoot(),
+    ...infrastructureImports,
     HealthModule,
     SettingsModule,
     BacktestingModule,

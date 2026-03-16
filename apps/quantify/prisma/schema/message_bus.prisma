@@ -1,0 +1,32 @@
+enum OutboxStatus {
+  PENDING
+  CLAIMED
+  RETRY
+  SENT
+  DEAD
+}
+
+model OutboxMessage {
+  id            BigInt       @id @default(autoincrement())
+  topic         String
+  type          String
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextVisibleAt DateTime     @map("next_visible_at")
+  lockedBy      String?      @map("locked_by")
+  lockedAt      DateTime?    @map("locked_at")
+  lastError     String?      @map("last_error") @db.Text
+  dedupeKey     String?      @map("dedupe_key")
+  correlationId String?      @map("correlation_id")
+  partitionKey  String?      @map("partition_key")
+  priority      Int?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  @@index([status, nextVisibleAt], map: "idx_outbox_status_visible_at")
+  @@index([lockedAt], map: "idx_outbox_locked_at")
+  @@index([createdAt], map: "idx_outbox_created_at")
+  @@index([dedupeKey], map: "idx_outbox_dedupe_key")
+  @@map("outbox_message")
+}

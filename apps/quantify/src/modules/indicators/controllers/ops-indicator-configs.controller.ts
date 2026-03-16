@@ -13,7 +13,7 @@ import {
 } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { mapIndicatorType, mapTimeframe, reverseMapTimeframe   } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 IndicatorConfigService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 IndicatorConfigService
 import { IndicatorConfigService } from '../services/indicator-config.service'
 
 @ApiTags('ops-indicator-configs')
@@ -23,7 +23,7 @@ export class OpsIndicatorConfigsController {
   constructor(private readonly indicatorConfigService: IndicatorConfigService) {}
 
   @Get()
-  @ApiOperation({ summary: '鏌ヨ鎸囨爣閰嶇疆鍒楄〃锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '查询指标配置列表（运营接口）' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -52,7 +52,7 @@ export class OpsIndicatorConfigsController {
       page,
       limit,
     })
-    // 灏?Prisma 鏋氫妇鍊艰浆鎹㈠洖搴旂敤灞傛牸寮?
+    // 将 Prisma 枚举值转换回应用层格式
     const items = result.items.map(item => ({
       ...item,
       timeframe: reverseMapTimeframe(item.timeframe as any),
@@ -61,7 +61,7 @@ export class OpsIndicatorConfigsController {
   }
 
   @Post()
-  @ApiOperation({ summary: '鍒涘缓鎸囨爣閰嶇疆锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '创建指标配置（运营接口）' })
   async create(@Body() dto: CreateIndicatorConfigDto) {
     const created = await this.indicatorConfigService.create({
       symbolId: dto.symbolId,
@@ -72,7 +72,7 @@ export class OpsIndicatorConfigsController {
       isEnabled: dto.isEnabled ?? true,
       description: dto.description,
     })
-    // 灏?Prisma 鏋氫妇鍊艰浆鎹㈠洖搴旂敤灞傛牸寮?
+    // 将 Prisma 枚举值转换回应用层格式
     return {
       ...created,
       timeframe: reverseMapTimeframe(created.timeframe as any),
@@ -80,7 +80,7 @@ export class OpsIndicatorConfigsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: '鏇存柊鎸囨爣閰嶇疆锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '更新指标配置（运营接口）' })
   async update(@Param('id') id: string, @Body() dto: UpdateIndicatorConfigDto) {
     const updated = await this.indicatorConfigService.update(id, {
       symbolId: dto.symbolId,
@@ -91,7 +91,7 @@ export class OpsIndicatorConfigsController {
       isEnabled: dto.isEnabled,
       description: dto.description,
     })
-    // 灏?Prisma 鏋氫妇鍊艰浆鎹㈠洖搴旂敤灞傛牸寮?
+    // 将 Prisma 枚举值转换回应用层格式
     return {
       ...updated,
       timeframe: reverseMapTimeframe(updated.timeframe as any),
@@ -100,13 +100,13 @@ export class OpsIndicatorConfigsController {
 
   @Delete(':id')
   @HttpCode(204)
-  @ApiOperation({ summary: '鍒犻櫎鎸囨爣閰嶇疆锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '删除指标配置（运营接口）' })
   async remove(@Param('id') id: string) {
     await this.indicatorConfigService.delete(id)
   }
 
   @Patch('reload/cache')
-  @ApiOperation({ summary: '閲嶆柊鍔犺浇鎸囨爣閰嶇疆缂撳瓨锛堣繍钀ユ帴鍙ｏ級' })
+  @ApiOperation({ summary: '重新加载指标配置缓存（运营接口）' })
   async reloadCache() {
     await this.indicatorConfigService.reloadAllRuntimeConfigs()
     return { success: true }

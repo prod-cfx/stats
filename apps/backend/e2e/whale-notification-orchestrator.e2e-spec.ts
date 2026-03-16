@@ -38,6 +38,13 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
     const client = prisma.getClient()
 
+    await client.whaleNotificationCooldownGuard.deleteMany({
+      where: {
+        dedupKey: {
+          startsWith: `${userId}:`,
+        },
+      },
+    })
     await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
     await client.whaleNotificationRule.deleteMany({ where: { userId } })
     await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
@@ -67,6 +74,18 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     })
   })
 
+  beforeEach(async () => {
+    const client = prisma.getClient()
+    await client.whaleNotificationCooldownGuard.deleteMany({
+      where: {
+        dedupKey: {
+          startsWith: `${userId}:`,
+        },
+      },
+    })
+    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
+  })
+
   afterAll(async () => {
     process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
@@ -74,6 +93,13 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
     if (prisma) {
       const client = prisma.getClient()
+      await client.whaleNotificationCooldownGuard.deleteMany({
+        where: {
+          dedupKey: {
+            startsWith: `${userId}:`,
+          },
+        },
+      })
       await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
       await client.whaleNotificationRule.deleteMany({ where: { userId } })
       await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })

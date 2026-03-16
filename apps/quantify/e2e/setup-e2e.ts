@@ -2,38 +2,38 @@ import { execSync } from 'node:child_process'
 import * as crypto from 'node:crypto'
 import * as path from 'node:path'
 
-// 鎺у埗 E2E 鏃ュ織璇︾粏绋嬪害锛岄粯璁ゅ叧闂紝浠呭湪 E2E_VERBOSE_LOG=true 鏃惰緭鍑鸿缁嗘棩蹇?
+// 控制 E2E 日志详细程度，默认关闭，仅在 E2E_VERBOSE_LOG=true 时输出详细日志
 const E2E_VERBOSE_LOG = process.env.E2E_VERBOSE_LOG === 'true'
 const logE2eInfo = (...args: unknown[]) => {
   if (E2E_VERBOSE_LOG)
     console.log(...args)
 }
 
-// 鍏ㄥ眬瀛樺偍褰撳墠娴嬭瘯浣跨敤鐨勬暟鎹簱鍚嶇О
+// 全局存储当前测试使用的数据库名称
 let currentTestDatabase: string | null = null
 let originalDatabaseUrl: string | null = null
 
 /**
- * 杞箟 SQL 鏍囪瘑绗?(琛ㄥ悕銆佸垪鍚嶃€佹暟鎹簱鍚嶇瓑)
- * 浣跨敤鍙屽紩鍙峰寘瑁瑰苟杞箟鍐呴儴鍙屽紩鍙?
+ * 转义 SQL 标识符（表名、列名、数据库名等）
+ * 使用双引号包裹并转义内部双引号
  */
 function escapeIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`
 }
 
 /**
- * 杞箟 SQL 瀛楃涓插父閲?
- * 浣跨敤鍗曞紩鍙峰寘瑁瑰苟杞箟鍐呴儴鍗曞紩鍙?
+ * 转义 SQL 字符串常量
+ * 使用单引号包裹并转义内部单引号
  */
 function escapeLiteral(literal: string): string {
   return `'${literal.replace(/'/g, "''")}'`
 }
 
 /**
- * 鐢熸垚鍞竴鐨勬祴璇曟暟鎹簱鍚嶇О
+ * 生成唯一的测试数据库名称
  */
 function generateTestDatabaseName(): string {
-  // 鏍煎紡: test_db_YYYYMMDDHHmmss_hex
+  // 格式: test_db_YYYYMMDDHHmmss_hex
   const timestamp = new Date()
     .toISOString()
     .replace(/[-:T.]/g, '')
@@ -43,7 +43,7 @@ function generateTestDatabaseName(): string {
 }
 
 /**
- * 浠?DATABASE_URL 涓彁鍙栬繛鎺ュ弬鏁?
+ * 从 DATABASE_URL 中提取连接参数
  */
 function parseDatabaseUrl(dbUrl: string): {
   host: string
@@ -57,11 +57,11 @@ function parseDatabaseUrl(dbUrl: string): {
     const url = new URL(dbUrl)
     const host = url.hostname
     const port = url.port || '5432'
-    const database = url.pathname.slice(1) // 绉婚櫎寮€澶寸殑 '/'
+    const database = url.pathname.slice(1) // 移除开头的 '/'
     const username = url.username
     const password = url.password
 
-    // 浣跨敤 URL API 鏋勫缓 baseUrl,鑷姩澶勭悊鐗规畩瀛楃缂栫爜
+    // 使用 URL API 构建 baseUrl,自动处理特殊字符编码
     const baseUrlObj = new URL(dbUrl)
     baseUrlObj.pathname = '/postgres'
     const baseUrl = baseUrlObj.toString()
@@ -69,12 +69,12 @@ function parseDatabaseUrl(dbUrl: string): {
     return { host, port, database, username, password, baseUrl }
   }
   catch (error) {
-    throw new Error(`鏃犳晥鐨?DATABASE_URL 鏍煎紡: ${error instanceof Error ? error.message : error}`)
+    throw new Error(`无效的 DATABASE_URL 格式: ${error instanceof Error ? error.message : error}`)
   }
 }
 
 /**
- * 鏋勫缓鎸囧悜鎸囧畾鏁版嵁搴撶殑 URL
+ * 构建指向指定数据库的 URL
  */
 function buildDatabaseUrl(params: {
   username: string
@@ -83,7 +83,7 @@ function buildDatabaseUrl(params: {
   port: string
   database: string
 }): string {
-  // 浣跨敤 URL API 鑷姩澶勭悊缂栫爜
+  // 使用 URL API 自动处理编码
   const url = new URL(`postgresql://${params.host}:${params.port}/`)
   if (params.username)
     url.username = params.username
@@ -94,7 +94,7 @@ function buildDatabaseUrl(params: {
 }
 
 /**
- * 鎵ц PostgreSQL 鍛戒护
+ * 执行 PostgreSQL 命令
  */
 function executePsqlCommand(connectionUrl: string, command: string, silent = false): string {
   try {
@@ -107,12 +107,12 @@ function executePsqlCommand(connectionUrl: string, command: string, silent = fal
     })
   }
   catch (error) {
-    throw new Error(`鎵ц PostgreSQL 鍛戒护澶辫触: ${error instanceof Error ? error.message : error}`)
+    throw new Error(`执行 PostgreSQL 命令失败: ${error instanceof Error ? error.message : error}`)
   }
 }
 
 /**
- * 妫€鏌ユ暟鎹簱鏉冮檺
+ * 检查数据库权限
  */
 function checkDatabasePermissions(baseUrl: string): boolean {
   try {
@@ -122,25 +122,25 @@ function checkDatabasePermissions(baseUrl: string): boolean {
     return true
   }
   catch (error) {
-    console.error('[E2E setup] 鏁版嵁搴撴潈闄愭鏌ュけ璐?', error instanceof Error ? error.message : error)
+    console.error('[E2E setup] 数据库权限检查失败:', error instanceof Error ? error.message : error)
     return false
   }
 }
 
 /**
- * 娓呯悊瓒呰繃鎸囧畾鏃堕棿鐨勫巻鍙叉暟鎹簱
+ * 清理超过指定时间的历史数据库
  */
 function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
-  // 鐜鍙橀噺鎺у埗
+  // 环境变量控制
   if (process.env.E2E_CLEANUP_OLD_DB !== 'true') {
-    logE2eInfo('[E2E setup] 鍘嗗彶鏁版嵁搴撴竻鐞嗗凡绂佺敤 (E2E_CLEANUP_OLD_DB != true)')
+    logE2eInfo('[E2E setup] 历史数据库清理已禁用 (E2E_CLEANUP_OLD_DB != true)')
     return
   }
 
   try {
-    logE2eInfo(`[E2E setup] 寮€濮嬫竻鐞嗚秴杩?${maxAgeHours} 灏忔椂鐨勫巻鍙?test_db_* ...`)
+    logE2eInfo(`[E2E setup] 开始清理超过${maxAgeHours} 小时的历史 test_db_* ...`)
 
-    // 鏌ヨ鎵€鏈?test_db_* 寮€澶寸殑鏁版嵁搴?
+    // 查询所有 test_db_* 开头的数据库
     const result = executePsqlCommand(
       baseUrl,
       "SELECT datname FROM pg_database WHERE datname LIKE 'test_db_%'",
@@ -152,27 +152,27 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
       .map(line => line.trim())
       .filter(line => line.length > 0 && line.startsWith('test_db_'))
 
-      if (databases.length === 0) {
-      logE2eInfo('[E2E setup] 娌℃湁鎵惧埌闇€瑕佹竻鐞嗙殑鍘嗗彶鏁版嵁搴?)
+    if (databases.length === 0) {
+      logE2eInfo('[E2E setup] 没有找到需要清理的历史测试数据库')
       return
     }
 
-    logE2eInfo(`[E2E setup] 鍙戠幇 ${databases.length} 涓巻鍙?test_db_*`)
+    logE2eInfo(`[E2E setup] 发现 ${databases.length} 个历史 test_db_*`)
 
     let cleanedCount = 0
     let skippedCount = 0
 
     for (const dbName of databases) {
       try {
-        // 1. 瑙ｆ瀽鏃堕棿鎴? test_db_YYYYMMDDHHmmss_xxx
+        // 1. 解析时间戳 test_db_YYYYMMDDHHmmss_xxx
         const match = dbName.match(/^test_db_(\d{14})_[a-f0-9]+$/)
         if (!match) {
-          logE2eInfo(`[E2E setup] 璺宠繃鏁版嵁搴?${dbName} (鏍煎紡涓嶅尮閰?`)
+          logE2eInfo(`[E2E setup] 跳过数据库 ${dbName} (格式不匹配)`)
           skippedCount++
           continue
         }
 
-        // 2. 璁＄畻骞撮緞
+        // 2. 计算年龄
         const timestampStr = match[1]
         const dbTimestamp = new Date(
           `${timestampStr.slice(0, 4)}-${timestampStr.slice(4, 6)}-${timestampStr.slice(
@@ -185,7 +185,7 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
         )
 
         if (Number.isNaN(dbTimestamp.getTime())) {
-          logE2eInfo(`[E2E setup] 璺宠繃鏁版嵁搴?${dbName} (鏃堕棿鎴宠В鏋愬け璐?`)
+          logE2eInfo(`[E2E setup] 跳过数据库 ${dbName} (时间戳解析失败)`)
           skippedCount++
           continue
         }
@@ -194,13 +194,13 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
 
         if (ageHours < maxAgeHours) {
           logE2eInfo(
-            `[E2E setup] 璺宠繃鏁版嵁搴?${dbName} (浠?${ageHours.toFixed(1)} 灏忔椂,鏈秴杩?${maxAgeHours} 灏忔椂)`,
+            `[E2E setup] 跳过数据库 ${dbName} (${ageHours.toFixed(1)} 小时,未超过 ${maxAgeHours} 小时)`,
           )
           skippedCount++
           continue
         }
 
-        // 3. 妫€鏌ユ椿鍔ㄨ繛鎺?
+        // 3. 检查活动连接
         const activeConnsResult = executePsqlCommand(
           baseUrl,
           `SELECT COUNT(*) FROM pg_stat_activity WHERE datname = '${dbName.replace(/'/g, "''")}'`,
@@ -210,39 +210,39 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
 
         if (activeConns > 0) {
           logE2eInfo(
-            `[E2E setup] 璺宠繃鏁版嵁搴?${dbName} (鏈?${activeConns} 涓椿鍔ㄨ繛鎺?鍙兘姝ｅ湪娴嬭瘯涓?`,
+            `[E2E setup] 跳过数据库 ${dbName} (${activeConns} 个活动连接,可能正在测试中)`,
           )
           skippedCount++
           continue
         }
 
-        // 4. 鍒犻櫎鏁版嵁搴?(鏃犻渶寮哄埗缁堟杩炴帴)
+        // 4. 删除数据库(无需强制终止连接)
         executePsqlCommand(baseUrl, `DROP DATABASE IF EXISTS "${dbName.replace(/"/g, '""')}"`, true)
-        logE2eInfo(`[E2E setup] 宸叉竻鐞嗘暟鎹簱 ${dbName} (骞撮緞: ${ageHours.toFixed(1)} 灏忔椂)`)
+        logE2eInfo(`[E2E setup] 已清理数据库 ${dbName} (年龄: ${ageHours.toFixed(1)} 小时)`)
         cleanedCount++
       }
       catch (error) {
         console.warn(
-          `[E2E setup] 娓呯悊鏁版嵁搴?${dbName} 澶辫触:`,
+          `[E2E setup] 清理数据库 ${dbName} 失败:`,
           error instanceof Error ? error.message : error,
         )
       }
     }
 
     logE2eInfo(
-      `[E2E setup] 娓呯悊瀹屾垚: 鎴愬姛 ${cleanedCount} 涓? 璺宠繃 ${skippedCount} 涓? 鎬昏 ${databases.length} 涓猔,
+      `[E2E setup] 清理完成: 成功 ${cleanedCount} 个, 跳过 ${skippedCount} 个, 总计 ${databases.length} 个`,
     )
   }
   catch (error) {
     console.warn(
-      '[E2E setup] 娓呯悊鍘嗗彶鏁版嵁搴撳け璐?蹇界暐):',
+      '[E2E setup] 清理历史数据库失败(忽略):',
       error instanceof Error ? error.message : error,
     )
   }
 }
 
 /**
- * 鍒涘缓娴嬭瘯鏁版嵁搴撳苟杩愯杩佺Щ
+ * 创建测试数据库并运行迁移
  */
 function setupTestDatabase(
   baseUrl: string,
@@ -250,12 +250,12 @@ function setupTestDatabase(
   urlParams: ReturnType<typeof parseDatabaseUrl>,
 ): void {
   try {
-    logE2eInfo(`[E2E setup] 鍒涘缓娴嬭瘯鏁版嵁搴? ${dbName}`)
+    logE2eInfo(`[E2E setup] 创建测试数据库 ${dbName}`)
 
-    // 鍒涘缓鏁版嵁搴?
+    // 创建数据库
     executePsqlCommand(baseUrl, `CREATE DATABASE ${escapeIdentifier(dbName)}`, true)
 
-    // 鏋勫缓鎸囧悜鏂版暟鎹簱鐨?URL
+    // 构建指向新数据库的 URL
     const testDbUrl = buildDatabaseUrl({
       username: urlParams.username,
       password: urlParams.password,
@@ -264,67 +264,71 @@ function setupTestDatabase(
       database: dbName,
     })
 
-    logE2eInfo(`[E2E setup] 鍦ㄦ暟鎹簱 ${dbName} 涓悓姝?schema...`)
-    logE2eInfo(`[E2E setup] 浣跨敤 DATABASE_URL: ${testDbUrl.replace(/:[^:@]+@/, ':****@')}`)
+    logE2eInfo(`[E2E setup] 在数据库 ${dbName} 中同步 schema...`)
+    logE2eInfo(`[E2E setup] 使用 DATABASE_URL: ${testDbUrl.replace(/:[^:@]+@/, ':****@')}`)
 
-    // 鐩存帴鍚屾褰撳墠 schema锛涘綋鍓嶉」鐩笉淇濈暀鍘嗗彶 migrations锛屾祴璇曞簱濮嬬粓鎸夌┖搴撳垵濮嬪寲銆?
+    // 直接同步当前 schema；当前项目不保留历史 migrations，测试库始终按空库初始化。
     const backendDir = path.resolve(__dirname, '..')
 
     try {
-      logE2eInfo('[E2E setup] 浣跨敤 prisma db push 鍚屾褰撳墠 schema')
+      logE2eInfo('[E2E setup] 使用 prisma db push 同步当前 schema')
       execSync('npx prisma db push', {
         stdio: 'inherit',
         cwd: backendDir,
         env: {
           ...process.env,
           DATABASE_URL: testDbUrl,
+          QUANTIFY_DATABASE_URL: testDbUrl,
+          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
           APP_ENV: 'e2e',
         },
       })
     }
     catch (schemaSyncErr) {
       console.error(
-        '[E2E setup] Schema 鍚屾澶辫触:',
+        '[E2E setup] Schema 同步失败:',
         schemaSyncErr instanceof Error ? schemaSyncErr.message : schemaSyncErr,
       )
       throw schemaSyncErr
     }
 
-    // 杩愯绉嶅瓙鏁版嵁 - 鐩存帴璋冪敤 Prisma
+    // 运行种子数据 - 直接调用 Prisma
     try {
-      logE2eInfo(`[E2E setup] 鍦ㄦ暟鎹簱 ${dbName} 涓繍琛岀瀛愭暟鎹?..`)
+      logE2eInfo(`[E2E setup] 在数据库 ${dbName} 中运行种子数据...`)
       execSync('npx prisma db seed', {
         stdio: 'inherit',
         cwd: backendDir,
         env: {
           ...process.env,
           DATABASE_URL: testDbUrl,
+          QUANTIFY_DATABASE_URL: testDbUrl,
+          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
           APP_ENV: 'e2e',
         },
       })
     }
     catch (seedErr) {
       console.warn(
-        '[E2E setup] 绉嶅瓙鏁版嵁瀵煎叆澶辫触(蹇界暐,缁х画鎵ц娴嬭瘯):',
+        '[E2E setup] 种子数据导入失败(忽略,继续执行测试):',
         seedErr instanceof Error ? seedErr.message : seedErr,
       )
     }
 
-    logE2eInfo(`[E2E setup] 鏁版嵁搴?${dbName} 鍒濆鍖栧畬鎴恅)
+    logE2eInfo(`[E2E setup] 数据库 ${dbName} 初始化完成`)
   }
   catch (error) {
-    throw new Error(`璁剧疆娴嬭瘯鏁版嵁搴撳け璐? ${error instanceof Error ? error.message : error}`)
+    throw new Error(`设置测试数据库失败: ${error instanceof Error ? error.message : error}`)
   }
 }
 
 /**
- * 娓呯悊娴嬭瘯鏁版嵁搴?
+ * 清理测试数据库
  */
 function cleanupTestDatabase(baseUrl: string, dbName: string): void {
   try {
-    logE2eInfo(`[E2E setup] 娓呯悊娴嬭瘯鏁版嵁搴? ${dbName}`)
+    logE2eInfo(`[E2E setup] 清理测试数据库 ${dbName}`)
 
-    // 缁堟鎵€鏈夊埌璇ユ暟鎹簱鐨勮繛鎺?
+    // 终止所有到该数据库的连接
     try {
       executePsqlCommand(
         baseUrl,
@@ -333,24 +337,24 @@ function cleanupTestDatabase(baseUrl: string, dbName: string): void {
       )
     }
     catch {
-      // 蹇界暐缁堟杩炴帴鐨勯敊璇?
+      // 忽略终止连接的错误
     }
 
-    // 鍒犻櫎鏁版嵁搴?
+    // 删除数据库
     executePsqlCommand(baseUrl, `DROP DATABASE IF EXISTS ${escapeIdentifier(dbName)}`, true)
-    logE2eInfo(`[E2E setup] 鏁版嵁搴?${dbName} 宸叉竻鐞哷)
+    logE2eInfo(`[E2E setup] 数据库 ${dbName} 已清理`)
   }
   catch (error) {
     console.error(
-      `[E2E setup] 娓呯悊鏁版嵁搴?${dbName} 澶辫触:`,
+      `[E2E setup] 清理数据库 ${dbName} 失败:`,
       error instanceof Error ? error.message : error,
     )
   }
 }
 
-// ========== 涓诲叆鍙?==========
+// ========== 主入口==========
 
-// 楠岃瘉娴嬭瘯鏁版嵁搴揢RL
+// 验证测试数据库URL
 const dbUrl = process.env.DATABASE_URL
 if (!dbUrl || (!dbUrl.includes('e2e') && !dbUrl.includes('test'))) {
   const maskedUrl = (() => {
@@ -366,33 +370,33 @@ if (!dbUrl || (!dbUrl.includes('e2e') && !dbUrl.includes('test'))) {
       return '(invalid format)'
     }
   })()
-  console.error('[E2E setup] 缂哄皯鏈夋晥鐨?DATABASE_URL,妫€娴嬬粨鏋?', maskedUrl)
+  console.error('[E2E setup] 缺少有效的 DATABASE_URL,检测结果:', maskedUrl)
   console.error('[E2E setup] APP_ENV:', process.env.APP_ENV, ' NODE_ENV:', process.env.NODE_ENV)
   process.exit(1)
 }
 
-// 瑙ｆ瀽鍘熷 URL 骞朵繚瀛?
+// 解析原始 URL 并保存
 const urlParams = parseDatabaseUrl(dbUrl)
 originalDatabaseUrl = urlParams.baseUrl
 
-// 妫€鏌ユ暟鎹簱鏉冮檺
-logE2eInfo('[E2E setup] 妫€鏌ユ暟鎹簱 CREATE DATABASE 鏉冮檺...')
+// 检查数据库权限
+logE2eInfo('[E2E setup] 检查数据库 CREATE DATABASE 权限...')
 if (!checkDatabasePermissions(originalDatabaseUrl)) {
-  console.error('[E2E setup] 鉂?鏁版嵁搴撴潈闄愪笉瓒?鏃犳硶鍒涘缓鏁版嵁搴?)
-  console.error('[E2E setup] 璇风‘淇濇暟鎹簱鐢ㄦ埛鎷ユ湁 CREATE DATABASE 鏉冮檺')
-  console.error('[E2E setup] 鎴栬€呰仈绯荤鐞嗗憳鎺堜簣鏉冮檺')
+  console.error('[E2E setup] 数据库权限不足，无法创建测试数据库')
+  console.error('[E2E setup] 请确认数据库用户拥有 CREATE DATABASE 权限')
+  console.error('[E2E setup] 或联系管理员授予权限')
   process.exit(1)
 }
-logE2eInfo('[E2E setup] 鉁?鏁版嵁搴撴潈闄愭鏌ラ€氳繃')
+logE2eInfo('[E2E setup] 数据库权限检查通过')
 
-// 娓呯悊鍘嗗彶娈嬬暀鏁版嵁搴?
+// 清理历史残留数据库
 cleanupOldDatabases(originalDatabaseUrl, 24)
 
-// 鐢熸垚鍞竴鐨勬祴璇曟暟鎹簱
+// 生成唯一的测试数据库
 currentTestDatabase = generateTestDatabaseName()
-logE2eInfo(`[E2E setup] 浣跨敤娴嬭瘯鏁版嵁搴? ${currentTestDatabase}`)
+logE2eInfo(`[E2E setup] 使用测试数据库 ${currentTestDatabase}`)
 
-// 鏋勫缓鏂扮殑 DATABASE_URL
+// 构建新的 DATABASE_URL
 const testDbUrl = buildDatabaseUrl({
   username: urlParams.username,
   password: urlParams.password,
@@ -401,34 +405,36 @@ const testDbUrl = buildDatabaseUrl({
   database: currentTestDatabase,
 })
 
-// 璁剧疆鐜鍙橀噺
+// 设置环境变量
 process.env.DATABASE_URL = testDbUrl
+process.env.QUANTIFY_DATABASE_URL = testDbUrl
+process.env.QUANTIFY_E2E_DATABASE_URL = testDbUrl
 
-// 鍒濆鍖栨祴璇曟暟鎹簱
+// 初始化测试数据库
 try {
   setupTestDatabase(originalDatabaseUrl, currentTestDatabase, urlParams)
 }
 catch (error) {
-  console.error('[E2E setup] 鍒濆鍖栨祴璇曟暟鎹簱澶辫触:', error instanceof Error ? error.message : error)
-  // 娓呯悊澶辫触鐨勬暟鎹簱
+  console.error('[E2E setup] 初始化测试数据库失败:', error instanceof Error ? error.message : error)
+  // 清理失败的数据库
   if (currentTestDatabase) {
     cleanupTestDatabase(originalDatabaseUrl, currentTestDatabase)
   }
   process.exit(1)
 }
 
-// 娉ㄥ唽鍏ㄥ眬閽╁瓙:鍦ㄦ墍鏈夋祴璇曠粨鏉熷悗娓呯悊鏁版嵁搴?
+// 注册全局钩子:在所有测试结束后清理数据库
 afterAll(async () => {
   if (currentTestDatabase && originalDatabaseUrl) {
-    logE2eInfo(`[E2E teardown] 寮€濮嬫竻鐞嗘祴璇曟暟鎹簱: ${currentTestDatabase}`)
+    logE2eInfo(`[E2E teardown] 开始清理测试数据库: ${currentTestDatabase}`)
 
-    // Prisma 7 浣跨敤 Driver Adapter 妯″紡锛屾棤闇€鎵嬪姩鏂紑杩炴帴
-    // cleanupTestDatabase 浼氶€氳繃 pg_terminate_backend 寮哄埗缁堟鎵€鏈夎繛鎺?
+    // Prisma 7 使用 Driver Adapter 模式，无需手动断开连接
+    // cleanupTestDatabase 会通过 pg_terminate_backend 强制终止所有连接
 
-    // 娓呯悊鏁版嵁搴?
+    // 清理数据库
     cleanupTestDatabase(originalDatabaseUrl, currentTestDatabase)
 
-    // 鎭㈠鍘熷 URL
+    // 恢复原始 URL
     process.env.DATABASE_URL = buildDatabaseUrl(urlParams)
     currentTestDatabase = null
     originalDatabaseUrl = null

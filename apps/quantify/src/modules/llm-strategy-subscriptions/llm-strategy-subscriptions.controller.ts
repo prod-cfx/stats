@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -24,14 +24,14 @@ export class LlmStrategySubscriptionsController {
   constructor(private readonly service: LlmStrategySubscriptionsService) {}
 
   @Post()
-  @ApiOperation({ summary: '璁㈤槄 LLM 绛栫暐瀹炰緥' })
+  @ApiOperation({ summary: '订阅 LLM 策略实例' })
   @ApiResponse({ status: 201, type: LlmSubscriptionResponseDto })
   async subscribe(@Body() dto: CreateLlmSubscriptionDto): Promise<LlmSubscriptionResponseDto> {
     return this.service.subscribe(dto.userId, dto)
   }
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇涓氬姟鐢ㄦ埛鐨?LLM 绛栫暐璁㈤槄鍒楄〃' })
+  @ApiOperation({ summary: '获取业务用户的 LLM 策略订阅列表' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -54,7 +54,7 @@ export class LlmStrategySubscriptionsController {
   }
 
   @Get(':subscriptionId')
-  @ApiOperation({ summary: '鑾峰彇 LLM 璁㈤槄璇︽儏' })
+  @ApiOperation({ summary: '获取 LLM 订阅详情' })
   @ApiResponse({ status: 200, type: LlmSubscriptionResponseDto })
   async detail(
     @Param('subscriptionId') subscriptionId: string,
@@ -64,7 +64,7 @@ export class LlmStrategySubscriptionsController {
   }
 
   @Patch(':subscriptionId')
-  @ApiOperation({ summary: '鏇存柊 LLM 璁㈤槄锛堝弬鏁?鐘舵€侊級' })
+  @ApiOperation({ summary: '更新 LLM 订阅（参数、状态）' })
   @ApiResponse({ status: 200, type: LlmSubscriptionResponseDto })
   async update(
     @Param('subscriptionId') subscriptionId: string,
@@ -74,8 +74,8 @@ export class LlmStrategySubscriptionsController {
   }
 
   @Delete(':subscriptionId')
-  @ApiOperation({ summary: '鍙栨秷 LLM 璁㈤槄' })
-  @ApiResponse({ status: 200, description: '鍙栨秷璁㈤槄鎴愬姛' })
+  @ApiOperation({ summary: '取消 LLM 订阅' })
+  @ApiResponse({ status: 200, description: '取消订阅成功' })
   async cancel(
     @Param('subscriptionId') subscriptionId: string,
     @Query() query: LlmSubscriptionUserQueryDto,

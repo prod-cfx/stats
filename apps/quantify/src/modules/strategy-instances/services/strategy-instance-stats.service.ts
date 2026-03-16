@@ -1,12 +1,12 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄥ拰渚濊禆娉ㄥ叆闇€瑕佽繍琛屾椂瀵煎叆 */
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
-
 import { PrismaService } from '@/prisma/prisma.service'
+
+import { Prisma } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsDto } from '../dto/strategy-instance-stats.dto'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -15,7 +15,7 @@ type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 /* eslint-enable no-redeclare, ts/no-redeclare */
 
-// 甯搁噺瀹氫箟
+// 常量定义
 const DECIMAL_PLACES = 2
 const MAX_BATCH_SIZE = 100
 const CUID_REGEX = /^c[a-z0-9]{24}$/i
@@ -46,23 +46,23 @@ export class StrategyInstanceStatsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 璁＄畻绛栫暐瀹炰緥鐨勭粺璁℃暟鎹?
+   * 计算策略实例的统计数据
    *
-   * 娉ㄦ剰锛氬綋鍓嶅疄鐜板熀浜?UserStrategyAccount 琛紝璇ヨ〃涓庣瓥鐣ュ疄渚嬮棿鎺ュ叧鑱?
-   * 閫氳繃 strategyId 瀛楁鍏宠仈鍒扮瓥鐣ユā鏉匡紝鍐嶉€氳繃绛栫暐妯℃澘鍏宠仈鍒扮瓥鐣ュ疄渚?
+   * 注意：当前实现基于 UserStrategyAccount 表，该表与策略实例间接关联
+   * 通过 strategyId 字段关联到策略模板，再通过策略模板关联到策略实例
    *
-   * 鏈潵濡傛灉闇€瑕佹洿绮剧‘鐨勭粺璁★紝寤鸿鍦ㄦ暟鎹簱 schema 涓坊鍔犵洿鎺ュ叧鑱?
+   * 未来如果需要更精确的统计，建议在数据库 schema 中添加直接关联
    *
-   * @param strategyInstanceId 绛栫暐瀹炰緥 ID
-   * @param timezone 鏃跺尯 (榛樿 UTC)
-   * @returns 缁熻鏁版嵁鎴?null
-   * @throws InternalServerErrorException 璁＄畻澶辫触鏃舵姏鍑?
+   * @param strategyInstanceId 策略实例 ID
+   * @param timezone 时区 (默认 UTC)
+   * @returns 统计数据或 null
+   * @throws InternalServerErrorException 计算失败时抛出
    */
   async calculateStats(
     strategyInstanceId: string,
     timezone: string = 'UTC'
   ): Promise<StrategyInstanceStatsDto | null> {
-    // 杈撳叆楠岃瘉
+    // 输入验证
     if (!strategyInstanceId || !this.isValidCuid(strategyInstanceId)) {
       throw new BadRequestException('Invalid strategy instance ID format')
     }
@@ -70,7 +70,7 @@ export class StrategyInstanceStatsService {
     try {
       const client = this.prisma.getClient()
 
-      // 鑾峰彇绛栫暐瀹炰緥淇℃伅
+      // 获取策略实例信息
       const instance = await client.strategyInstance.findUnique({
         where: { id: strategyInstanceId },
         include: {
@@ -85,7 +85,7 @@ export class StrategyInstanceStatsService {
         return null
       }
 
-      // 閫氳繃璁㈤槄鍏崇郴鑾峰彇鍏宠仈鐨勮处鎴凤紙鏇寸簿纭殑鍏宠仈锛?
+      // 通过订阅关系获取关联的账户（更精确的关联）
       const subscriptions = await client.userStrategySubscription.findMany({
         where: {
           strategyInstanceId,
@@ -97,14 +97,14 @@ export class StrategyInstanceStatsService {
       })
 
       if (subscriptions.length === 0) {
-        // 娌℃湁娲昏穬璁㈤槄锛岃繑鍥炵┖缁熻
+        // 没有活跃订阅，返回空统计
         this.logger.debug(`No active subscriptions for instance: ${strategyInstanceId}`)
         return this.createEmptyStats()
       }
 
       const userIds = subscriptions.map(s => s.userId)
 
-      // 鏌ヨ璁㈤槄鐢ㄦ埛鐨勭瓥鐣ヨ处鎴?
+      // 查询订阅用户的策略账户
       const accounts = await client.userStrategyAccount.findMany({
         where: {
           userId: { in: userIds },
@@ -126,7 +126,7 @@ export class StrategyInstanceStatsService {
 
       const accountIds = accounts.map(a => a.id)
 
-      // 骞惰鏌ヨ鎵€鏈夌粺璁℃暟鎹?
+      // 并行查询所有统计数据
       const [accountStats, positionStats, tradeStats, todayStats] = await Promise.all([
         Promise.resolve(this.aggregateAccountStats(accounts)),
         this.getPositionStats(accountIds),
@@ -134,7 +134,7 @@ export class StrategyInstanceStatsService {
         this.getTodayStats(accountIds, timezone)
       ])
 
-      // 璁＄畻姹囨€荤粺璁?
+      // 计算汇总统计
       return this.buildStatsDto(
         accountStats,
         positionStats,
@@ -165,19 +165,19 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鎵归噺璁＄畻澶氫釜绛栫暐瀹炰緥鐨勭粺璁℃暟鎹?
+   * 批量计算多个策略实例的统计数据
    *
-   * 浼樺寲鐗堟湰锛氫娇鐢ㄦ壒閲忔煡璇㈠噺灏戞暟鎹簱寰€杩旀鏁?
+   * 优化版本：使用批量查询减少数据库往返次数
    *
-   * @param strategyInstanceIds 绛栫暐瀹炰緥 ID 鏁扮粍
-   * @param timezone 鏃跺尯 (榛樿 UTC)
-   * @returns 瀹炰緥 ID 鍒扮粺璁℃暟鎹殑鏄犲皠
+   * @param strategyInstanceIds 策略实例 ID 数组
+   * @param timezone 时区 (默认 UTC)
+   * @returns 实例 ID 到统计数据的映射
    */
   async calculateBatchStats(
     strategyInstanceIds: string[],
     timezone: string = 'UTC'
   ): Promise<Map<string, StrategyInstanceStatsDto | null>> {
-    // 杈撳叆楠岃瘉
+    // 输入验证
     if (!Array.isArray(strategyInstanceIds)) {
       throw new BadRequestException('strategyInstanceIds must be an array')
     }
@@ -186,14 +186,14 @@ export class StrategyInstanceStatsService {
       return new Map()
     }
 
-    // 闃叉 DOS 鏀诲嚮
+    // 防止 DOS 攻击
     if (strategyInstanceIds.length > MAX_BATCH_SIZE) {
       throw new BadRequestException(
         `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`
       )
     }
 
-    // 楠岃瘉鎵€鏈?ID 鏍煎紡
+    // 验证所有实例 ID 格式
     const invalidIds = strategyInstanceIds.filter(id => !this.isValidCuid(id))
     if (invalidIds.length > 0) {
       throw new BadRequestException(
@@ -204,7 +204,7 @@ export class StrategyInstanceStatsService {
     try {
       const client = this.prisma.getClient()
 
-      // 1. 鎵归噺鏌ヨ鎵€鏈夌瓥鐣ュ疄渚?
+      // 1. 批量查询所有策略实例
       const instances = await client.strategyInstance.findMany({
         where: { id: { in: strategyInstanceIds } },
         include: {
@@ -222,7 +222,7 @@ export class StrategyInstanceStatsService {
       const instanceMap = new Map(instances.map(i => [i.id, i]))
       const templateIds = [...new Set(instances.map(i => i.strategyTemplateId))]
 
-      // 2. 鎵归噺鏌ヨ娲昏穬璁㈤槄
+      // 2. 批量查询活跃订阅
       const subscriptions = await client.userStrategySubscription.findMany({
         where: {
           strategyInstanceId: { in: strategyInstanceIds },
@@ -234,20 +234,20 @@ export class StrategyInstanceStatsService {
         }
       })
 
-      // 鎸夊疄渚嬪垎缁勮闃?
+      // 按实例分组订阅
       const subscriptionsByInstance = this.groupBy(subscriptions, 'strategyInstanceId')
 
-      // 鑾峰彇鎵€鏈夎闃呯敤鎴?ID
+      // 获取所有订阅用户 ID
       const allUserIds = [...new Set(subscriptions.map(s => s.userId))]
 
       if (allUserIds.length === 0) {
-        // 娌℃湁娲昏穬璁㈤槄锛岃繑鍥炵┖缁熻
+        // 没有活跃订阅，返回空统计
         return new Map(
           strategyInstanceIds.map(id => [id, this.createEmptyStats()])
         )
       }
 
-      // 3. 鎵归噺鏌ヨ鎵€鏈夌浉鍏宠处鎴?
+      // 3. 批量查询所有相关账户
       const accounts = await client.userStrategyAccount.findMany({
         where: {
           userId: { in: allUserIds },
@@ -273,7 +273,7 @@ export class StrategyInstanceStatsService {
         )
       }
 
-      // 4. 鎵归噺鏌ヨ鎸佷粨鍜屼粖鏃ョ粺璁?
+      // 4. 批量查询持仓和今日统计
       const [positions, closedPositionsForWinRate, todayMetrics] = await Promise.all([
         client.position.findMany({
           where: { userStrategyAccountId: { in: allAccountIds } },
@@ -295,11 +295,11 @@ export class StrategyInstanceStatsService {
         this.getTodayMetricsBatch(allAccountIds, timezone)
       ])
 
-      // 5. 鎸夎处鎴峰垎缁勬暟鎹?
+      // 5. 按账户分组数据
       const positionsByAccountId = this.groupBy(positions, 'userStrategyAccountId')
       const closedPositionsMap = this.groupBy(closedPositionsForWinRate, 'userStrategyAccountId')
 
-      // 6. 涓烘瘡涓疄渚嬭绠楃粺璁?
+      // 6. 为每个实例计算统计
       const statsMap = new Map<string, StrategyInstanceStatsDto | null>()
 
       for (const [instanceId, instance] of instanceMap.entries()) {
@@ -311,7 +311,7 @@ export class StrategyInstanceStatsService {
           continue
         }
 
-        // 鑾峰彇璇ュ疄渚嬬浉鍏崇殑璐︽埛
+        // 获取该实例相关的账户
         const instanceAccounts = accounts.filter(
           a => instanceUserIds.includes(a.userId) &&
                a.strategyId === instance.strategyTemplateId
@@ -324,7 +324,7 @@ export class StrategyInstanceStatsService {
 
         const instanceAccountIds = instanceAccounts.map(a => a.id)
 
-        // 鑱氬悎缁熻
+        // 聚合统计
         const accountStats = this.aggregateAccountStats(instanceAccounts)
         const positionStats = this.aggregatePositionStatsFromGrouped(
           instanceAccountIds,
@@ -345,7 +345,7 @@ export class StrategyInstanceStatsService {
         )
       }
 
-      // 涓烘湭鎵惧埌鐨勫疄渚?ID 娣诲姞绌虹粺璁?
+      // 为未找到的实例 ID 添加空统计
       for (const id of strategyInstanceIds) {
         if (!statsMap.has(id)) {
           statsMap.set(id, null)
@@ -368,7 +368,7 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 姹囨€昏处鎴风粺璁?
+   * 汇总账户统计
    */
   private aggregateAccountStats(
     accounts: Array<{
@@ -403,7 +403,7 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鑾峰彇鎸佷粨缁熻
+   * 获取持仓统计
    */
   private async getPositionStats(accountIds: string[]): Promise<PositionStats> {
     const client = this.prisma.getClient()
@@ -430,17 +430,17 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鑾峰彇浜ゆ槗缁熻
+   * 获取交易统计
    *
-   * 娉ㄦ剰锛歍rade 琛ㄤ笉鐩存帴瀛樺偍 PnL锛岄渶瑕佷粠鍏宠仈鐨?Position 鑾峰彇
-   * 涓轰繚鎸侀噺绾蹭竴鑷达紝totalCount 鍜?winCount/lossCount 閮藉熀浜?Position 缁熻
+   * 注意：Trade 表不直接存储 PnL，需要从关联 Position 获取
+   * 为保持量纲一致，totalCount 和 winCount/lossCount 都基于 Position 统计
    *
-   * @returns TradeStats 鍖呭惈骞充粨浣嶆€绘暟銆佺泩鍒╂暟銆佷簭鎹熸暟
+   * @returns TradeStats 包含平仓位数、盈利数、亏损数
    */
   private async getTradeStats(accountIds: string[]): Promise<TradeStats> {
     const client = this.prisma.getClient()
 
-    // 鑾峰彇鎵€鏈夊凡骞充粨浣嶆潵璁＄畻鑳滅巼
+    // 获取所有已平仓位来计算胜率
     const closedPositions = await client.position.findMany({
       where: {
         userStrategyAccountId: { in: accountIds },
@@ -462,7 +462,7 @@ export class StrategyInstanceStatsService {
       }
     }
 
-    // 鎬绘暟浣跨敤宸插钩浠撲綅鏁伴噺锛屼繚鎸侀噺绾蹭竴鑷?
+    // 总数使用已平仓位数量，保持量纲一致
     const totalCount = closedPositions.length
 
     return {
@@ -473,10 +473,10 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鑾峰彇浠婃棩缁熻
+   * 获取今日统计
    *
-   * @param accountIds 璐︽埛 ID 鍒楄〃
-   * @param timezone 鏃跺尯 (榛樿 UTC)
+   * @param accountIds 账户 ID 列表
+   * @param timezone 时区 (默认 UTC)
    */
   private async getTodayStats(
     accountIds: string[],
@@ -484,7 +484,7 @@ export class StrategyInstanceStatsService {
   ): Promise<{ todayPnl: Decimal }> {
     const client = this.prisma.getClient()
 
-    // 璁＄畻浠婃棩寮€濮嬫椂闂达紙姝ｇ‘澶勭悊鏃跺尯锛?
+    // 计算今日开始时间（正确处理时区）
     const todayStart = this.getTodayStartInTimezone(timezone)
 
     const todayMetrics = await client.strategyPnlDaily.findMany({
@@ -502,7 +502,7 @@ export class StrategyInstanceStatsService {
 
     let todayPnl = new Decimal(0)
     for (const metric of todayMetrics) {
-      // 浠婃棩鐩堜簭 = 宸插疄鐜扮泩浜?+ 鏈疄鐜扮泩浜?
+      // 今日盈亏 = 已实现盈亏 + 未实现盈亏
       todayPnl = todayPnl.plus(metric.realizedPnl).plus(metric.unrealizedPnl)
     }
 
@@ -510,7 +510,7 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鎵归噺鑾峰彇浠婃棩缁熻锛堢敤浜庢壒閲忚绠楋級
+   * 批量获取今日统计（用于批量计算）
    */
   private async getTodayMetricsBatch(
     accountIds: string[],
@@ -518,7 +518,7 @@ export class StrategyInstanceStatsService {
   ): Promise<Map<string, Decimal>> {
     const client = this.prisma.getClient()
 
-    // 璁＄畻浠婃棩寮€濮嬫椂闂达紙姝ｇ‘澶勭悊鏃跺尯锛?
+    // 计算今日开始时间（正确处理时区）
     const todayStart = this.getTodayStartInTimezone(timezone)
 
     const todayMetrics = await client.strategyPnlDaily.findMany({
@@ -538,7 +538,7 @@ export class StrategyInstanceStatsService {
     const metricsMap = new Map<string, Decimal>()
     for (const metric of todayMetrics) {
       const current = metricsMap.get(metric.userStrategyAccountId) || new Decimal(0)
-      // 浠婃棩鐩堜簭 = 宸插疄鐜扮泩浜?+ 鏈疄鐜扮泩浜?
+      // 今日盈亏 = 已实现盈亏 + 未实现盈亏
       const dailyPnl = metric.realizedPnl.plus(metric.unrealizedPnl)
       metricsMap.set(
         metric.userStrategyAccountId,
@@ -550,18 +550,18 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 鑾峰彇鎸囧畾鏃跺尯鐨勪粖鏃ュ紑濮嬫椂闂达紙UTC 鏃堕棿鎴筹級
+   * 获取指定时区的今日开始时间（UTC 时间戳）
    *
-   * 渚嬪锛歵imezone=Asia/Shanghai锛屽綋鍓嶄笂娴锋椂闂存槸 2025-11-29 15:30
-   * 搴旇繑鍥炰笂娴风殑 2025-11-29 00:00:00锛屽搴旂殑 UTC 鏃堕棿鏄?2025-11-28 16:00:00
+   * 例如：timezone=Asia/Shanghai，当前上海时间是 2025-11-29 15:30
+   * 应返回上海的 2025-11-29 00:00:00，对应的 UTC 时间为 2025-11-28 16:00:00
    *
-   * @param timezone IANA 鏃跺尯鍚嶇О锛屽 'Asia/Shanghai', 'America/New_York'
-   * @returns UTC Date 瀵硅薄锛岃〃绀鸿鏃跺尯浠婃棩闆剁偣
+   * @param timezone IANA 时区名称，如 'Asia/Shanghai', 'America/New_York'
+   * @returns UTC Date 对象，表示该时区今日零点
    */
   private getTodayStartInTimezone(timezone: string): Date {
     const now = new Date()
 
-    // 浣跨敤 Intl.DateTimeFormat 鑾峰彇鎸囧畾鏃跺尯鐨勫勾鏈堟棩
+    // 使用 Intl.DateTimeFormat 获取指定时区的年月日
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       year: 'numeric',
@@ -574,7 +574,7 @@ export class StrategyInstanceStatsService {
     const month = parts.find(p => p.type === 'month')!.value
     const day = parts.find(p => p.type === 'day')!.value
 
-    // 鍒涘缓涓€涓复鏃舵牸寮忓寲鍣ㄦ潵璁＄畻鍋忕Щ閲?
+    // 创建一个临时格式化器来计算偏移量
     const utcFormatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'UTC',
       year: 'numeric',
@@ -597,12 +597,12 @@ export class StrategyInstanceStatsService {
       hour12: false
     })
 
-    // 浣跨敤褰撳墠鏃堕棿浣滀负鍙傝€冪偣璁＄畻鍋忕Щ閲?
+    // 使用当前时间作为参考点计算偏移量
     const refDate = new Date()
     const utcTime = utcFormatter.format(refDate)
     const targetTime = targetFormatter.format(refDate)
 
-    // 瑙ｆ瀽鏃堕棿瀛楃涓茶绠楀亸绉伙紙浠ュ皬鏃朵负鍗曚綅锛?
+    // 解析时间字符串计算偏移（以小时为单位）
     const utcParts = utcTime.match(/(\d+)\/(\d+)\/(\d+),\s+(\d+):(\d+):(\d+)/)!
     const targetParts = targetTime.match(/(\d+)\/(\d+)\/(\d+),\s+(\d+):(\d+):(\d+)/)!
 
@@ -617,19 +617,19 @@ export class StrategyInstanceStatsService {
 
     const offsetMs = targetDate.getTime() - utcDate.getTime()
 
-    // 鏋勯€犵洰鏍囨椂鍖虹殑浠婃棩闆剁偣
+    // 构建目标时区的今日零点
     const todayInTarget = new Date(
       Number.parseInt(year), Number.parseInt(month) - 1, Number.parseInt(day), 0, 0, 0, 0
     )
 
-    // 鍑忓幓鍋忕Щ閲忓緱鍒?UTC 鏃堕棿
+    // 减去偏移量得到 UTC 时间
     return new Date(todayInTarget.getTime() - offsetMs)
   }
 
   /**
-   * 鏋勫缓缁熻 DTO
+   * 构建统计 DTO
    *
-   * 浣跨敤 Decimal 绫诲瀷杩涜绮剧‘璁＄畻锛岄伩鍏嶆诞鐐圭簿搴﹂棶棰?
+   * 使用 Decimal 类型进行精确计算，避免浮点精度问题
    */
   private buildStatsDto(
     accountStats: AccountStats,
@@ -637,13 +637,13 @@ export class StrategyInstanceStatsService {
     tradeStats: TradeStats,
     todayStats: { todayPnl: Decimal }
   ): StrategyInstanceStatsDto {
-    // 浣跨敤 Decimal 杩涜绮剧‘璁＄畻
+    // 使用 Decimal 进行精确计算
     const investedAmount = accountStats.totalInitialBalance
     const currentValue = accountStats.totalEquity
     const totalPnl = accountStats.totalPnl
     const todayPnl = todayStats.todayPnl
 
-    // 璁＄畻鏀剁泭鐜囷紙浣跨敤 Decimal 淇濇寔绮惧害锛?
+    // 计算收益率（使用 Decimal 保持精度）
     const totalPnlRate = investedAmount.greaterThan(0)
       ? totalPnl.dividedBy(investedAmount).times(100)
       : new Decimal(0)
@@ -652,7 +652,7 @@ export class StrategyInstanceStatsService {
       ? todayPnl.dividedBy(currentValue).times(100)
       : new Decimal(0)
 
-    // 鉁?淇锛氭纭绠楄儨鐜?= 鐩堝埄浜ゆ槗鏁?/ 鎬讳氦鏄撴暟
+    // 修复：正确计算胜率 = 盈利交易数 / 总交易数
     const winRate = tradeStats.totalCount > 0
       ? (tradeStats.winCount / tradeStats.totalCount) * 100
       : undefined
@@ -669,14 +669,14 @@ export class StrategyInstanceStatsService {
       totalTradesCount: tradeStats.totalCount,
       winningTradesCount: tradeStats.winCount,
       winRate: winRate !== undefined ? Number(winRate.toFixed(DECIMAL_PLACES)) : undefined,
-      maxDrawdown: undefined, // 闇€瑕佹洿澶嶆潅鐨勫巻鍙叉暟鎹垎鏋?
-      sharpeRatio: undefined, // 闇€瑕佸巻鍙叉敹鐩婄巼鍜屾尝鍔ㄧ巼鏁版嵁
+      maxDrawdown: undefined, // 需要更复杂的历史数据分析
+      sharpeRatio: undefined, // 需要历史收益率和波动率数据
       lastUpdatedAt: new Date()
     }
   }
 
   /**
-   * 鍒涘缓绌虹粺璁℃暟鎹?
+   * 创建空统计数据
    */
   private createEmptyStats(): StrategyInstanceStatsDto {
     return {
@@ -690,7 +690,7 @@ export class StrategyInstanceStatsService {
       closedPositionsCount: 0,
       totalTradesCount: 0,
       winningTradesCount: 0,
-      winRate: undefined, // 鉁?淇锛氭棤鏁版嵁鏃跺簲涓?undefined锛岃€岄潪 0
+      winRate: undefined, // 修复：无数据时应为 undefined，而非 0
       maxDrawdown: undefined,
       sharpeRatio: undefined,
       lastUpdatedAt: new Date()
@@ -698,14 +698,14 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 楠岃瘉 CUID 鏍煎紡
+   * 验证 CUID 格式
    */
   private isValidCuid(id: string): boolean {
     return CUID_REGEX.test(id)
   }
 
   /**
-   * 鍒嗙粍杈呭姪鏂规硶
+   * 分组辅助方法
    */
   private groupBy<T>(items: T[], key: keyof T): Map<any, T[]> {
     const map = new Map()
@@ -718,7 +718,7 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 浠庡垎缁勬暟鎹仛鍚堟寔浠撶粺璁?
+   * 从分组数据聚合持仓统计
    */
   private aggregatePositionStatsFromGrouped(
     accountIds: string[],
@@ -742,9 +742,9 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 浠庡垎缁勬暟鎹仛鍚堜氦鏄撶粺璁?
+   * 从分组数据聚合交易统计
    *
-   * 娉ㄦ剰锛氫负淇濇寔閲忕翰涓€鑷达紝totalCount 鍜?winCount/lossCount 閮藉熀浜?Position 缁熻
+   * 注意：为保持量纲一致，totalCount 和 winCount/lossCount 都基于 Position 统计
    */
   private aggregateTradeStatsFromGrouped(
     accountIds: string[],
@@ -755,7 +755,7 @@ export class StrategyInstanceStatsService {
     let lossCount = 0
 
     for (const accountId of accountIds) {
-      // 閫氳繃宸插钩浠撲綅璁＄畻鑳滅巼鍜屾€绘暟
+      // 通过已平仓位计算胜率和亏损数
       const closedPositions = closedPositionsMap.get(accountId) || []
       totalCount += closedPositions.length
 
@@ -774,7 +774,7 @@ export class StrategyInstanceStatsService {
   }
 
   /**
-   * 浠庡垎缁勬暟鎹仛鍚堜粖鏃ョ粺璁?
+   * 从分组数据聚合今日统计
    */
   private aggregateTodayStatsFromGrouped(
     accountIds: string[],

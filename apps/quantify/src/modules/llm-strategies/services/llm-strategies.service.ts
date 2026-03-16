@@ -1,15 +1,15 @@
-import type { LlmStrategy, Prisma } from '@/prisma/prisma.types'
 import type { CreateLlmStrategyDto } from '../dto/create-llm-strategy.dto'
 import type { LlmStrategyListQueryDto } from '../dto/llm-strategy-list.query.dto'
 import type { UpdateLlmStrategyDto } from '../dto/update-llm-strategy.dto'
+import type { LlmStrategy, Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
-
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+
+import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
 
 import { LlmStrategyNameConflictException } from '../exceptions/llm-strategy-name-conflict.exception'
 import { LlmStrategyNotFoundException } from '../exceptions/llm-strategy-not-found.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategiesRepository } from '../repositories/llm-strategies.repository'
 
 @Injectable()
@@ -37,7 +37,7 @@ export class LlmStrategiesService {
       orderBy: parsedOrderBy,
     })
 
-    // 鑾峰彇鎬绘暟
+    // 获取总数
     const total = await this.repository.count({ status, keyword })
 
     return new BasePaginationResponseDto(total, page, limit, items)
@@ -88,7 +88,7 @@ export class LlmStrategiesService {
       return await this.repository.create(payload)
     }
     catch (error) {
-      // 鎹曡幏 Prisma 鍞竴绾︽潫鍐茬獊閿欒
+      // 捕获 Prisma 唯一约束冲突错误
       if (error instanceof PrismaNamespace.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new LlmStrategyNameConflictException({ name: dto.name })
       }
@@ -128,7 +128,7 @@ export class LlmStrategiesService {
       return updated
     }
     catch (error) {
-      // 鎹曡幏 Prisma 鍞竴绾︽潫鍐茬獊閿欒
+      // 捕获 Prisma 唯一约束冲突错误
       if (error instanceof PrismaNamespace.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new LlmStrategyNameConflictException({ name: dto.name ?? current.name })
       }

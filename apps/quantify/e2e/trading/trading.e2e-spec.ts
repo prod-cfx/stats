@@ -2,13 +2,16 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { CreateOrderInput, ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { ExchangeAccountConfig, ExchangeAccountStore } from '@/modules/trading/factory/account-store'
+import { ConfigModule } from '@nestjs/config'
 import { Test } from '@nestjs/testing'
+import { EnvModule } from '@/common/modules/env.module'
 import { TradingModule } from '@/modules/trading/trading.module'
 import { TradingService } from '@/modules/trading/trading.service'
+import { PrismaService } from '@/prisma/prisma.service'
 
 class InMemoryAccountStore implements ExchangeAccountStore {
   async getAccountConfig(userId: string, exchangeId: ExchangeId): Promise<ExchangeAccountConfig | null> {
-    // 娴嬭瘯鍦烘櫙涓拷鐣?userId锛岀洿鎺ヨ繑鍥炲浐瀹氶厤缃?
+    // 测试场景中忽略 userId，直接返回固定配置
     if (exchangeId === 'binance') {
       return {
         exchangeId: 'binance',
@@ -42,12 +45,12 @@ describe('TradingService (E2E, trading module only)', () => {
   const originalFetch = globalThis.fetch
 
   beforeAll(async () => {
-    // 鍏ㄥ眬 mock fetch锛屾嫤鎴?Binance / OKX 璇锋眰锛岄伩鍏嶈闂湡瀹炰氦鏄撴墍
+    // 全局 mock fetch，拦截 Binance / OKX 请求，避免访问真实交易所
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
       const method = (init?.method || 'GET').toUpperCase()
 
-      // Binance 鐜拌揣涓嬪崟
+      // Binance 现货下单
       if (url.hostname === 'api.binance.com' && url.pathname === '/api/v3/order' && method === 'POST') {
         const body = {
           orderId: 123456,
@@ -64,7 +67,7 @@ describe('TradingService (E2E, trading module only)', () => {
         })
       }
 
-      // OKX 姘哥画涓嬪崟
+      // OKX 永续下单
       if (url.hostname === 'www.okx.com' && url.pathname === '/api/v5/trade/order' && method === 'POST') {
         const body = {
           data: [
@@ -89,7 +92,7 @@ describe('TradingService (E2E, trading module only)', () => {
         })
       }
 
-      // 鍏朵粬璇锋眰涓€寰嬭繑鍥?200 绌哄璞★紝閬垮厤骞叉壈
+      // 其他请求一律返回 200 空对象，避免干扰
       return new Response('{}', {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -97,8 +100,10 @@ describe('TradingService (E2E, trading module only)', () => {
     }) as typeof fetch
 
     moduleFixture = await Test.createTestingModule({
-      imports: [TradingModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), EnvModule, TradingModule],
     })
+      .overrideProvider(PrismaService)
+      .useValue({})
       .overrideProvider('ExchangeAccountStore')
       .useClass(InMemoryAccountStore)
       .compile()
@@ -110,7 +115,9 @@ describe('TradingService (E2E, trading module only)', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    if (app) {
+      await app.close()
+    }
     globalThis.fetch = originalFetch
   })
 
@@ -157,7 +164,7 @@ describe('TradingService (E2E, trading module only)', () => {
     expect(order.marketType).toBe('perp')
     expect(order.side).toBe('buy')
     expect(order.type).toBe('limit')
-    expect(order.amount).toBeCloseTo(0.01) // 鏉ヨ嚜 OKX mock 鍝嶅簲鐨?sz
+    expect(order.amount).toBeCloseTo(0.01) // 来自 OKX mock 响应的 sz
     expect(order.price).toBeCloseTo(60000)
     expect(order.status).toBe('open')
     expect(order.raw).toBeDefined()

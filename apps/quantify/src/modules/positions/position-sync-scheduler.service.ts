@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionSyncService } from './position-sync.service'
 
 /**
- * 浠撲綅鍚屾瀹氭椂浠诲姟璋冨害鍣?
- * 瀹氭湡鎵ц涓庝氦鏄撴墍鐨勪粨浣嶅璐?
+ * 仓位同步定时任务调度
+ * 定期执行与交易所的仓位对账
  */
 @Injectable()
 export class PositionSyncSchedulerService {
@@ -14,8 +14,8 @@ export class PositionSyncSchedulerService {
   constructor(private readonly positionSyncService: PositionSyncService) {}
 
   /**
-   * 姣?0鍒嗛挓鎵ц涓€娆℃壒閲忎粨浣嶅悓姝?
-   * 鍙牴鎹笟鍔￠渶姹傝皟鏁撮鐜?
+   * 每 30 分钟执行一次批量仓位同步
+   * 可根据业务需求调整频率
    */
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handlePositionReconciliation() {
@@ -35,7 +35,7 @@ export class PositionSyncSchedulerService {
         `${totalDifferences} total differences found`,
       )
 
-      // 璁板綍鏈夐棶棰樼殑璐︽埛
+      // 记录有问题的账户
       const failedResults = results.filter(r => !r.success)
       if (failedResults.length > 0) {
         this.logger.warn(
@@ -45,7 +45,7 @@ export class PositionSyncSchedulerService {
         )
       }
 
-      // 璁板綍鏈夋樉钁楀樊寮傜殑璐︽埛
+      // 记录有显著差异的账户
       const significantDiffs = results.filter(r => r.differences.length > 0)
       if (significantDiffs.length > 0) {
         this.logger.log(
@@ -69,8 +69,8 @@ export class PositionSyncSchedulerService {
   }
 
   /**
-   * 姣忓ぉ鍑屾櫒2鐐规墽琛屽畬鏁寸殑浠撲綅瀹¤
-   * 鐢ㄤ簬鐢熸垚鏃ユ姤鍜屾娴嬮暱鏈熸湭淇鐨勫樊寮?
+   * 每天凌晨2点执行完整的仓位审计
+   * 用于生成日报和检测长期未修正的差异
    */
   @Cron('0 2 * * *')
   async handleDailyPositionAudit() {
@@ -79,10 +79,10 @@ export class PositionSyncSchedulerService {
     try {
       const results = await this.positionSyncService.syncAllActivePositions()
 
-      // 鍙互鍦ㄨ繖閲屾坊鍔犳洿璇︾粏鐨勫璁￠€昏緫锛屼緥濡傦細
-      // - 鐢熸垚瀹¤鎶ュ憡
-      // - 鍙戦€佸憡璀﹂€氱煡
-      // - 璁板綍鍒颁笓闂ㄧ殑瀹¤鏃ュ織琛?
+      // 可以在这里添加更详细的审计逻辑，例如：
+      // - 生成审计报告
+      // - 发送告警通知
+      // - 记录到专门的审计日志
 
       const totalAccounts = results.length
       const accountsWithDiffs = results.filter(r => r.differences.length > 0).length
@@ -93,7 +93,7 @@ export class PositionSyncSchedulerService {
         `${accountsWithDiffs} with differences, ${totalDiffs} total differences`,
       )
 
-      // 淇濆瓨瀹¤缁撴灉鍒版暟鎹簱锛堝彲閫夛級
+      // 保存审计结果到数据库（可选）
       // await this.saveAuditResults(results)
     }
     catch (error) {

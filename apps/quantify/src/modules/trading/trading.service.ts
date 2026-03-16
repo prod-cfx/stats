@@ -33,11 +33,11 @@ export class TradingService {
     exchangeId: ExchangeId,
     marketType: MarketType,
     input: CreateOrderInput,
-    /** 鍙€夛細绮剧‘鎸囧畾浜ゆ槗鎵€璐︽埛 ID锛堢敤浜?LLM 璁㈤槄绛夊満鏅級 */
+    /** 可选：精确指定交易所账户 ID（用于 LLM 订阅等场景） */
     exchangeAccountId?: string,
   ): Promise<UnifiedOrder> {
-    // 濡傛灉鎸囧畾浜嗗叿浣撹处鎴?ID锛屽垯绮剧‘鏌ユ壘锛涘惁鍒欐寜 (userId, exchangeId) 鍙栨渶鏂拌处鎴?
-    // 娉ㄦ剰锛歡etAccountConfigById 蹇呴』浼犲叆 userId锛岄槻姝㈣秺鏉冭闂粬浜鸿处鎴?
+    // 如果指定了具体账户 ID，则精确查找；否则按 (userId, exchangeId) 取最新账户
+    // 注意：getAccountConfigById 必须传入 userId，防止越权访问他人账户
     const account = exchangeAccountId
       ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
       : await this.accountStore.getAccountConfig(userId, exchangeId)
@@ -45,7 +45,7 @@ export class TradingService {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
 
-    // 鏍￠獙 marketType 涓€鑷存€э細鍙傛暟涓?input 涓殑 marketType 蹇呴』涓€鑷?
+    // 校验 marketType 一致性：参数和 input 中的 marketType 必须一致
     if (input.marketType && input.marketType !== marketType) {
       throw new UnsupportedMarketTypeException({ exchangeId, marketType: input.marketType })
     }
@@ -53,11 +53,11 @@ export class TradingService {
     const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
 
     try {
-      // 棰勭暀椋庢帶鍏ュ彛锛氫笅鍗曞墠鍙湪姝ゅ姞鍏ラ檺棰濄€侀粦鍚嶅崟绛夋鏌?
+      // 预留风控入口：下单前可在此加入限额、黑名单等检查
       return await client.createOrder(input)
     }
     catch (error) {
-      // 鎹曡幏浜ゆ槗鎵€閿欒骞舵槧灏勪负涓氬姟寮傚父锛岄伩鍏嶇洿鎺ユ毚闇茬涓夋柟閿欒璇︽儏
+      // 捕获交易所错误并映射为业务异常，避免直接暴露第三方错误详情
       if (error instanceof ExchangeError) {
         throw new OrderCreationFailedException({ exchangeId, reason: error.message })
       }
@@ -110,17 +110,17 @@ export class TradingService {
   }
 
   /**
-   * 鏍￠獙浜ゆ槗鎵€鍑嵁鏄惁鏈夋晥銆?
+   * 校验交易所凭据是否有效。
    *
-   * 鏀寔鐨勪氦鏄撴墍锛?
-   * - Binance/OKX锛氶獙璇?API key/secret锛堥€氳繃 fetchBalance锛?
-   * - Hyperliquid锛氶獙璇侀挶鍖呭湴鍧€鍜岀閽ョ鍚嶏紙閫氳繃涓撶敤鐨?validateCredentials 鏂规硶锛?
+   * 支持的交易所：
+   * - Binance/OKX：验证 API key/secret（通过 fetchBalance）
+   * - Hyperliquid：验证钱包地址和私钥签名（通过专用 validateCredentials 方法）
    *
-   * 浣跨敤鏂瑰紡锛?
-   * - 鍦ㄧ敤鎴锋彁浜ゅ嚟鎹悗锛岃皟鐢ㄨ鏂规硶杩涜涓€娆¤交閲忕殑绉佹湁鎺ュ彛璁块棶锛?
-   * - 鑻ヨ繑鍥?true锛岃鏄庤璇侀€氳繃锛?
-   * - 鑻ユ姏鍑?InvalidCredentialsException锛岃〃绀哄瘑閽ユ棤鏁堟垨鏉冮檺涓嶈冻锛?
-   * - 鑻ユ姏鍑?ExchangeOperationFailedException锛屽垯灞炰簬鐜鎴栦氦鏄撴墍閿欒锛屽簲鎻愮ず鐢ㄦ埛绋嶅悗閲嶈瘯銆?
+   * 使用方式：
+   * - 在用户提交凭据后，调用该方法进行一次轻量的私有接口访问
+   * - 若返回 true，说明认证通过
+   * - 若抛出 InvalidCredentialsException，表示密钥无效或权限不足
+   * - 若抛出 ExchangeOperationFailedException，则属于环境或交易所错误，应提示用户稍后重试
    */
   async validateCexCredentials(
     exchangeId: ExchangeId,
@@ -146,21 +146,21 @@ export class TradingService {
 
     try {
       if (exchangeId === 'hyperliquid') {
-        // Hyperliquid 闇€瑕佷娇鐢ㄤ笓闂ㄧ殑鍑嵁楠岃瘉鏂规硶
-        // 鍥犱负 fetchBalance 浣跨敤鐨勬槸鍏紑 API锛屼笉楠岃瘉绛惧悕
-        // validateCredentials 浼氬皾璇曡皟鐢ㄩ渶瑕佺鍚嶇殑鎺ュ彛鏉ラ獙璇?agent 鎺堟潈
+        // Hyperliquid 需要使用专门的凭据验证方法
+        // 因为 fetchBalance 使用的是公开 API，不验证签名
+        // validateCredentials 会尝试调用需要签名的接口来验证 agent 授权
         await (client as any).validateCredentials()
       }
       else {
-        // Binance/OKX 浣跨敤 fetchBalance 楠岃瘉 API key/secret
+        // Binance/OKX 使用 fetchBalance 验证 API key/secret
         await client.fetchBalance()
       }
       return true
     }
     catch (error) {
       if (error instanceof AuthError) {
-        // 璁よ瘉閿欒锛歬ey/secret 鏃犳晥銆佹潈闄愪笉瓒崇瓑
-        // 浼犻€掕缁嗙殑閿欒淇℃伅缁欏紓甯?
+        // 认证错误：key/secret 无效、权限不足等
+        // 传递详细的错误信息给异常
         throw new InvalidCredentialsException({
           exchangeId,
           message: error.message
@@ -168,7 +168,7 @@ export class TradingService {
       }
 
       if (error instanceof ExchangeError) {
-        // 闈炶璇佺被鐨勪氦鏄撴墍閿欒缁熶竴鍖呰涓洪鍩熷紓甯革紝閬垮厤鐩存帴鏆撮湶绗笁鏂归敊璇?
+        // 非认证类的交易所错误统一包装为领域异常，避免直接暴露第三方错误
         throw new ExchangeOperationFailedException({ operation: 'validate credentials', exchangeId, reason: error.message })
       }
 

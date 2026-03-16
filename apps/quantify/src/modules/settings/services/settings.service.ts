@@ -1,12 +1,12 @@
 import type { OnModuleInit } from '@nestjs/common'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-// Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 CacheService锛屼繚鐣欏€煎鍏?
+// Nest 注入需要运行时引用 CacheService，保留普通导入
 import { CacheService } from '@/common/services/cache.service'
 import {
   InvalidSettingJsonException,
   JsonExpectedObjectOrArrayException,
 } from '../exceptions'
-// Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 SettingsRepository锛屼繚鐣欏€煎鍏?
+// Nest 注入需要运行时引用 SettingsRepository，保留普通导入
 import { SettingsRepository } from '../repositories/settings.repository'
 // ^ reorganized imports
 import { mergeMaskedJson } from '../utils/mask.util'
@@ -35,27 +35,27 @@ export class SettingsService implements OnModuleInit {
 
   async onModuleInit() {
     await this.loadAllSettings()
-    this.logger.log('绯荤粺閰嶇疆宸插姞杞藉埌鍐呭瓨')
+    this.logger.log('系统配置已加载到内存')
   }
 
-  // 鍔犺浇鎵€鏈夐厤缃埌鍐呭瓨鍜岀紦瀛?
+  // 加载所有配置到内存和缓存
   async loadAllSettings(): Promise<void> {
     const settings = await this.settingsRepository.findAll()
 
-    // 娓呴櫎褰撳墠缂撳瓨
+    // 清除当前缓存
     this.settingsCache.clear()
 
-    // 鍔犺浇鍒板唴瀛?
+    // 加载到内存
     for (const setting of settings) {
       this.settingsCache.set(setting.key, this.parseValue(setting))
     }
 
-    // 鏇存柊缂撳瓨
+    // 更新缓存
     const cacheData = Object.fromEntries(this.settingsCache)
     await this.cacheService.set(this.cacheKey, cacheData)
   }
 
-  // 瑙ｆ瀽閰嶇疆鍊?
+  // 解析配置值
   private parseValue(setting: SettingRecord): unknown {
     try {
       switch (setting.type) {
@@ -72,19 +72,19 @@ export class SettingsService implements OnModuleInit {
     }
     catch (error) {
       const errorMsg = error instanceof Error ? error.stack : String(error)
-      this.logger.error(`瑙ｆ瀽閰嶇疆鍊煎け璐? ${setting.key}`, errorMsg)
-      return setting.value // 瑙ｆ瀽澶辫触杩斿洖鍘熷瀛楃涓?
+      this.logger.error(`解析配置值失败: ${setting.key}`, errorMsg)
+      return setting.value // 解析失败返回原始字符串
     }
   }
 
-  // 鑾峰彇閰嶇疆鍊?
+  // 获取配置值
   async get<T>(key: string, defaultValue?: T): Promise<T | undefined> {
-    // 鍏堜粠鍐呭瓨涓幏鍙?
+    // 先从内存中获取
     if (this.settingsCache.has(key)) {
       return this.settingsCache.get(key) as T
     }
 
-    // 濡傛灉鍐呭瓨涓病鏈夛紝灏濊瘯浠庢暟鎹簱鍔犺浇
+    // 如果内存中没有，尝试从数据库加载
     const setting = await this.settingsRepository.findByKey(key)
     if (setting) {
       const value = this.parseValue(setting)
@@ -96,34 +96,34 @@ export class SettingsService implements OnModuleInit {
   }
 
   /**
-   * 鑾峰彇 JSON 绫诲瀷閰嶇疆骞惰嚜鍔ㄨВ鏋愪负瀵硅薄鎴栨暟缁?
+   * 获取 JSON 类型配置并自动解析为对象或数组
    */
   async getJson<T = unknown>(key: string, defaultValue?: T): Promise<T | undefined> {
     return this.get<T>(key, defaultValue)
   }
 
   /**
-   * 鑾峰彇鏁板€肩被鍨嬮厤缃紝瑙ｆ瀽澶辫触鏃跺洖閫€榛樿鍊?
+   * 获取数字类型配置，解析失败时回退到默认值
    */
   async getNumber(key: string, defaultValue?: number): Promise<number | undefined> {
     return this.get<number>(key, defaultValue)
   }
 
   /**
-   * 鑾峰彇甯冨皵绫诲瀷閰嶇疆锛岃В鏋愬け璐ユ椂鍥為€€榛樿鍊?
+   * 获取布尔类型配置，解析失败时回退到默认值
    */
   async getBoolean(key: string, defaultValue?: boolean): Promise<boolean | undefined> {
     return this.get<boolean>(key, defaultValue)
   }
 
   /**
-   * 鑾峰彇瀛楃涓茬被鍨嬮厤缃?
+   * 获取字符串类型配置
    */
   async getString(key: string, defaultValue?: string): Promise<string | undefined> {
     return this.get<string>(key, defaultValue)
   }
 
-  // 璁剧疆閰嶇疆鍊?
+  // 设置配置值
   async set(
     key: string,
     value: unknown,
@@ -136,7 +136,7 @@ export class SettingsService implements OnModuleInit {
   ): Promise<SettingRecord> {
     const existingSetting = await this.settingsRepository.findByKey(key)
 
-    // 纭畾鍊肩殑绫诲瀷
+    // 确定值的类型
     let type = options?.type
     if (!type) {
       if (typeof value === 'number')
@@ -148,33 +148,33 @@ export class SettingsService implements OnModuleInit {
       else type = 'string'
     }
 
-    // 杞崲鍊间负瀛楃涓诧紙鍚晱鎰?JSON 鍚堝苟閫昏緫锛?
+    // 转换值为字符串（含敏感 JSON 合并逻辑）
     let stringValue: string
     if (type === 'json') {
-      // 瑙勮寖锛氬厑璁镐紶鍏ュ瓧绗︿覆鎴栧璞?
+      // 规范：允许传入字符串或对象
       let incoming: unknown = value
       if (typeof incoming === 'string') {
         try {
           incoming = JSON.parse(incoming)
         }
         catch {
-          // fallback锛氬浜庨渶瑕佽嚜鍔ㄦ暟缁勫寲鐨勯敭鍗曠嫭澶勭悊
+          // fallback：对于需要自动数组化的键单独处理
           if (this.shouldConvertStringToArray(key)) {
             incoming = [value]
           }
           else {
-            // JSON 绫诲瀷浣嗘棤娉曡В鏋愶紝鐩存帴鎶ラ敊锛岄伩鍏嶅瓨鍏ヤ笉鍚堟硶 JSON
+            // JSON 类型但无法解析，直接报错，避免存入不合法 JSON
             throw new InvalidSettingJsonException({ key, error: 'JSON parse failed' })
           }
         }
       }
 
-      // JSON 绫诲瀷蹇呴』鏄璞℃垨鏁扮粍
+      // JSON 类型必须是对象或数组
       const isObjOrArray = typeof incoming === 'object' && incoming !== null
       if (!isObjOrArray) {
         throw new JsonExpectedObjectOrArrayException({ key, actualType: typeof incoming })
       }
-      // 閽堝鏁忔劅 JSON锛氳嫢鍖呭惈鎺╃爜鍊硷紝杩涜涓庣幇鏈夊€肩殑娣卞害鍚堝苟锛屼繚鐣欐湭淇敼鐨勭湡瀹炲€?
+      // 针对敏感 JSON：若包含掩码值，进行与现有值的深度合并，保留未修改的真实值
       if (key === 'payment.wgqpay' || key === 'payment.webhookSecrets') {
         if (existingSetting && existingSetting.type === 'json') {
           try {
@@ -196,7 +196,7 @@ export class SettingsService implements OnModuleInit {
     const category = options?.category ?? existingSetting?.category ?? 'general'
     const isSystem = options?.isSystem ?? existingSetting?.isSystem ?? false
 
-    // 淇濆瓨鍒版暟鎹簱
+    // 保存到数据库
     const setting = await this.settingsRepository.upsert({
       key,
       value: stringValue,
@@ -206,46 +206,46 @@ export class SettingsService implements OnModuleInit {
       isSystem,
     })
 
-    // 鏇存柊鍐呭瓨缂撳瓨
+    // 更新内存缓存
     this.settingsCache.set(key, this.parseValue(setting))
 
-    // 鏇存柊缂撳瓨
+    // 更新缓存
     const cacheData = Object.fromEntries(this.settingsCache)
     await this.cacheService.set(this.cacheKey, cacheData)
 
     return setting
   }
 
-  // 鍒犻櫎閰嶇疆
+  // 删除配置
   async delete(key: string): Promise<SettingRecord> {
     const setting = await this.settingsRepository.delete(key)
 
-    // 鏇存柊鍐呭瓨缂撳瓨
+    // 更新内存缓存
     this.settingsCache.delete(key)
 
-    // 鏇存柊缂撳瓨
+    // 更新缓存
     const cacheData = Object.fromEntries(this.settingsCache)
     await this.cacheService.set(this.cacheKey, cacheData)
 
     return setting
   }
 
-  // 鑾峰彇鎵€鏈夐厤缃?
+  // 获取所有配置
   async getAllSettings(): Promise<SettingRecord[]> {
     return this.settingsRepository.findAll()
   }
 
-  // 鎸夊垎绫昏幏鍙栭厤缃?
+  // 按分类获取配置
   async getSettingsByCategory(category: string): Promise<SettingRecord[]> {
     return this.settingsRepository.findByCategory(category)
   }
 
-  // 鍒ゆ柇鏄惁闇€瑕佸皢鍗曚釜瀛楃涓茶浆鎹负鏁扮粍
+  // 判断是否需要将单个字符串转换为数组
   private shouldConvertStringToArray(key: string): boolean {
-    // 瀵逛簬杩欎簺閰嶇疆椤癸紝濡傛灉杈撳叆鐨勬槸瀛楃涓诧紝鑷姩杞崲涓烘暟缁?
+    // 对于这些配置项，如果输入的是字符串，自动转换为数组
     const stringToArrayKeys = [
       'debug.chat.userIds',
-      // 鍙互鍦ㄨ繖閲屾坊鍔犲叾浠栭渶瑕佽嚜鍔ㄨ浆鎹㈢殑閰嶇疆椤?
+      // 可以在这里添加其他需要自动转换的配置项
     ]
     return stringToArrayKeys.includes(key)
   }

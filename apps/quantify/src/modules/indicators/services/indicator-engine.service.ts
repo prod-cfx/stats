@@ -34,7 +34,7 @@ export class IndicatorEngineService {
   ) {}
 
   /**
-   * 褰撴柊鐨?K 绾夸繚瀛樺悗璋冪敤锛屽熀浜庡綋鍓嶉厤缃绠楁墍鏈夌浉鍏虫寚鏍?
+   * 当新 K 线保存后调用，基于当前配置计算所有相关指标
    */
   async handleNewBar(ctx: NewBarContext): Promise<void> {
     const configs = this.configService.getRuntimeConfigs(ctx.symbolId, mapTimeframe(ctx.timeframe))
