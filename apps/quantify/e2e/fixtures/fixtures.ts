@@ -51,13 +51,13 @@ export interface TestingAppContext {
   prisma?: PrismaService
 }
 
-function resolveCreateTestingAppOptions(
+async function resolveCreateTestingAppOptions(
   input?: CreateTestingAppOptions | any[],
-): NormalizedCreateTestingAppOptions {
-  const resolveDefaultImports = () => {
+): Promise<NormalizedCreateTestingAppOptions> {
+  const resolveDefaultImports = async () => {
     // Avoid importing AppModule eagerly so focused E2E suites can bootstrap
     // a smaller module graph without pulling unrelated runtime dependencies.
-    const { AppModule } = require('@/modules/app.module') as typeof import('@/modules/app.module')
+    const { AppModule } = await import('@/modules/app.module')
     return [AppModule]
   }
 
@@ -70,7 +70,7 @@ function resolveCreateTestingAppOptions(
 
   const options = input ?? {}
   return {
-    imports: options.imports ?? resolveDefaultImports(),
+    imports: options.imports ?? await resolveDefaultImports(),
     globalPrefix: options.globalPrefix ?? API_PREFIX,
     onAppInit: options.onAppInit,
   }
@@ -144,7 +144,7 @@ export async function createTestingApp(
     console.warn('[E2E] 警告: 测试未在测试环境中运行，可能会影响生产数据库')
   }
 
-  const normalizedOptions = resolveCreateTestingAppOptions(options)
+  const normalizedOptions = await resolveCreateTestingAppOptions(options)
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: normalizedOptions.imports,
   }).compile()

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common'
+import { OutboxDispatcher } from './outbox.dispatcher'
 import { OutboxRepository } from './outbox.repository'
 import { OutboxService } from './outbox.service'
-import { OutboxDispatcher } from './outbox.dispatcher'
 
 @Module({
   providers: [OutboxRepository, OutboxService, OutboxDispatcher],

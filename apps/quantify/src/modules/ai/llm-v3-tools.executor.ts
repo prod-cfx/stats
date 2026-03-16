@@ -6,7 +6,6 @@
 
 import type { MarketBarPayload, MarketTimeframe } from '@ai/shared'
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common'
-import type { Prisma } from '@/prisma/prisma.types'
 import type {
   ComputeFinancialMetricsParams,
   ComputeFinancialMetricsResult,
@@ -18,6 +17,7 @@ import type {
   GetSymbolUniverseResult,
   LlmV3ToolName,
 } from './llm-v3-tools.schemas'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import {
   annualizedReturn,

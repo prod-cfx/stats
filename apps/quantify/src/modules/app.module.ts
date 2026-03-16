@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common'
 import { BullModule } from '@nestjs/bull'
+import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'

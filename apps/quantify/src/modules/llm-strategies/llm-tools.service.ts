@@ -1,6 +1,6 @@
-import type { LlmStrategy, LlmStrategyInstance } from '@/prisma/prisma.types'
 import type { LlmV3ToolName } from '@/modules/ai/llm-v3-tools.schemas'
 import type { ChatCompletionToolCall } from '@/modules/ai/providers/llm-provider-adapter.interface'
+import type { LlmStrategy, LlmStrategyInstance } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 LlmV3ToolsExecutor
 import { LlmV3ToolsExecutor } from '@/modules/ai/llm-v3-tools.executor'

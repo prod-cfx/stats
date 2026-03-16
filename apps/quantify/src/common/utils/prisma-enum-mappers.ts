@@ -6,8 +6,8 @@
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
-import { $Enums } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { $Enums } from '@/prisma/prisma.types'
 
 export type PrismaMarketTimeframe = $Enums.MarketTimeframe
 export type PrismaIndicatorType = $Enums.IndicatorType

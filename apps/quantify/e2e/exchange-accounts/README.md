@@ -104,36 +104,45 @@ dx db deploy --e2e
 ### 运行全部 E2E
 
 ```bash
-dx test e2e backend
+dx test e2e quantify apps/quantify/e2e/exchange-accounts
 ```
 
 ### 运行当前套件
 
 ```bash
-dx test e2e backend exchange-accounts
+dx test e2e quantify apps/quantify/e2e/exchange-accounts
 ```
 
 ### 运行指定文件
 
 ```bash
-dx test e2e backend apps/backend/e2e/exchange-accounts/exchange-accounts.e2e-spec.ts
+# 或指定完整路径
+dx test e2e quantify apps/quantify/e2e/exchange-accounts
+
+dx test e2e quantify apps/quantify/e2e/exchange-accounts/exchange-accounts.e2e-spec.ts
 ```
 
 ### 运行特定测试
 
 ```bash
-dx test e2e backend exchange-accounts -t "Binance"
-dx test e2e backend exchange-accounts -t "OKX"
-dx test e2e backend exchange-accounts -t "should reject"
+# 运行 Binance 相关测试
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "Binance"
+
+# 运行 OKX 相关测试
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "OKX"
+
+# 运行错误场景测试
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "should reject"
 ```
 
 ### 调试模式
 
 ```bash
-E2E_VERBOSE_LOG=true dx test e2e backend exchange-accounts
+# 启用详细日志
+E2E_VERBOSE_LOG=true dx test e2e quantify apps/quantify/e2e/exchange-accounts
 
 # 直接使用 jest 调试
-node --inspect-brk node_modules/.bin/jest --config apps/backend/e2e/jest-e2e.json exchange-accounts.e2e-spec.ts
+node --inspect-brk node_modules/.bin/jest --config apps/quantify/e2e/jest-e2e.json exchange-accounts.e2e-spec.ts
 ```
 
 ## 测试数据清理

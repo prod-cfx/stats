@@ -1,6 +1,6 @@
 import { OutboxDispatcher } from '../outbox.dispatcher'
 
-describe('OutboxDispatcher', () => {
+describe('outboxDispatcher', () => {
   const message = {
     id: BigInt(1),
     topic: 'test.topic',
