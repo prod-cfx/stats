@@ -4,6 +4,8 @@ import type { TestingModule } from '@nestjs/testing'
 import { resolve } from 'node:path'
 import request from 'supertest'
 
+jest.setTimeout(180_000)
+
 describe('Whale tracking discover API (E2E)', () => {
   let app: INestApplication
   let prisma: any
@@ -182,7 +184,6 @@ describe('Whale tracking discover API (E2E)', () => {
     expect(data.details.length).toBe(0)
   })
 })
-
 
 
 

@@ -287,6 +287,8 @@
       "backend": {
         "command": "npx nx test:e2e backend",
         "app": "backend",
+        "requiresPath": true,
+        "fileCommand": "npx nx test:e2e backend -- {TEST_PATH}",
         "description": "运行后端E2E测试"
       },
       "quantify": {
@@ -300,7 +302,7 @@
       "all": {
         "command": "npx nx test:e2e backend",
         "app": "backend",
-        "description": "运行所有E2E测试"
+        "description": "保留占位；CLI 层已禁止 E2E 全量聚合执行"
       }
     },
     "unit": {

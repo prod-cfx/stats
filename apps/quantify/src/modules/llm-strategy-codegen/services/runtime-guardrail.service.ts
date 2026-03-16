@@ -43,7 +43,7 @@ export class RuntimeGuardrailService {
       return {
         runtimePassed: false,
         outputPassed: false,
-        reason: result.error?.message ?? '鑴氭湰鎵ц澶辫触',
+        reason: result.error?.message ?? '脚本执行失败',
       }
     }
 
@@ -52,7 +52,7 @@ export class RuntimeGuardrailService {
       return {
         runtimePassed: true,
         outputPassed: false,
-        reason: output.error ?? '鑴氭湰杈撳嚭缁撴瀯闈炴硶',
+        reason: output.error ?? '脚本输出结构非法',
       }
     }
 

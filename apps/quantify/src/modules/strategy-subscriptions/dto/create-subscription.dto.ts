@@ -2,23 +2,23 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class CreateSubscriptionDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiProperty({ description: '绛栫暐瀹炰緥 ID' })
+  @ApiProperty({ description: '策略实例 ID' })
   @IsString()
   @IsNotEmpty()
   strategyInstanceId!: string
 
-  @ApiPropertyOptional({ description: '鍏宠仈鐨勪氦鏄撴墍璐︽埛 ID' })
+  @ApiPropertyOptional({ description: '关联的交易所账户 ID' })
   @IsString()
   @IsNotEmpty()
   @IsOptional()
   exchangeAccountId?: string
 
-  @ApiPropertyOptional({ description: '鑷畾涔夊弬鏁?JSON' })
+  @ApiPropertyOptional({ description: '自定义参数 JSON' })
   @IsObject()
   @IsOptional()
   customParams?: Record<string, unknown>

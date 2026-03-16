@@ -1,11 +1,12 @@
-import { Global, Module, Provider } from '@nestjs/common'
+import type { Provider } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull'
-import { MESSAGE_BUS_QUEUE } from './message-bus.types'
+import { Global, Module } from '@nestjs/common'
 import { MessageBusService } from './message-bus.service'
-import { OutboxModule } from './outbox/outbox.module'
+import { MESSAGE_BUS_QUEUE } from './message-bus.types'
 import { MessageBusMetricsService } from './metrics/message-bus.metrics.service'
-import { MessageBusDedupeService } from './runtime/message-bus.dedupe.service'
+import { OutboxModule } from './outbox/outbox.module'
 import { MessageBusSelfTestProcessor } from './processors/message-bus.self-test.processor'
+import { MessageBusDedupeService } from './runtime/message-bus.dedupe.service'
 
 /**
  * MessageBusModule

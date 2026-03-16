@@ -16,16 +16,16 @@ export interface UnifiedSymbol {
   base: string
   quote: string
   /**
-   * 缁熶竴鍐欐硶锛屼緥濡?
-   * - 鐜拌揣: BTC/USDT
-   * - 姘哥画: BTC/USDT:PERP
+   * 统一写法，例如：
+   * - 现货: BTC/USDT
+   * - 永续: BTC/USDT:PERP
    */
   symbol: string
   /**
-   * 浜ゆ槗鎵€鍘熷 symbol锛屼緥濡?
-   * - Binance 鐜拌揣: BTCUSDT
-   * - OKX 鐜拌揣: BTC-USDT
-   * - OKX 姘哥画: BTC-USDT-SWAP
+   * 交易所原始 symbol，例如：
+   * - Binance 现货: BTCUSDT
+   * - OKX 现货: BTC-USDT
+   * - OKX 永续: BTC-USDT-SWAP
    */
   rawSymbol: string
 }
@@ -44,7 +44,7 @@ export interface UnifiedOrder {
   createdAt: number
   updatedAt?: number
   /**
-   * 淇濈暀浜ゆ槗鎵€鍘熷杩斿洖锛屾柟渚胯皟璇曞拰鐗规畩瀛楁璁块棶
+   * 保留交易所原始返回，方便调试和特殊字段访问
    */
   raw: unknown
 }
@@ -90,13 +90,13 @@ export interface CreateOrderInput {
   reduceOnly?: boolean
   clientOrderId?: string
   /**
-   * 棰勭暀缁欑壒瀹氫氦鏄撴墍鐨勯檮鍔犲弬鏁?
+   * 预留给特定交易所的附加参数。
    */
   extra?: Record<string, unknown>
 }
 
 /**
- * 涓轰簡鏂逛究鍦?service 灞備娇鐢?Result 妯″紡锛岃繖閲屾彁渚涗竴涓畝鍗曠殑 Result 绫诲瀷銆?
- * 濡傛灉璋冪敤鏂瑰€惧悜浜庝娇鐢?try/catch锛屽彲浠ュ拷鐣ヨ绫诲瀷銆?
+ * 为了方便 service 层使用 Result 模式，这里提供一个简单的 Result 类型。
+ * 如果调用方倾向于使用 try/catch，可以忽略该类型。
  */
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ExchangeError }

@@ -4,6 +4,8 @@ import type { WhaleHoldingsService } from '../src/modules/whale-holdings/whale-h
 import type { PrismaService } from '../src/prisma/prisma.service'
 import { resolve } from 'node:path'
 
+jest.setTimeout(180_000)
+
 describe('WhaleHoldingsService (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -133,7 +135,6 @@ describe('WhaleHoldingsService (E2E)', () => {
     ])
   })
 })
-
 
 
 

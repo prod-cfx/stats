@@ -2,7 +2,7 @@ import type { LlmStrategyRun } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
 import { LlmStrategyRunNotFoundException } from '../exceptions/llm-strategy-run-not-found.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- 闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type
+// eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { LlmStrategyRunsRepository } from '../repositories/llm-strategy-runs.repository'
 
 @Injectable()

@@ -1,6 +1,6 @@
 import { MessageBusService } from '../message-bus.service'
 
-describe('MessageBusService', () => {
+describe('messageBusService', () => {
   it('publishes a Bull job with the topic as the job name', async () => {
     const queue = {
       add: jest.fn().mockResolvedValue({ id: 'job-1' }),

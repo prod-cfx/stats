@@ -1,10 +1,11 @@
-import 'reflect-metadata'
+import type { Job } from 'bull'
+import type { MessageEnvelope } from '../message-bus.types';
 import { BULL_MODULE_QUEUE, BULL_MODULE_QUEUE_PROCESS } from '@nestjs/bull/dist/bull.constants'
-import { Job } from 'bull'
 import { MessageHandler } from '../decorators/message-handler.decorator'
-import { MESSAGE_BUS_QUEUE, MessageEnvelope } from '../message-bus.types'
+import { MESSAGE_BUS_QUEUE } from '../message-bus.types'
+import 'reflect-metadata'
 
-describe('MessageHandler decorator', () => {
+describe('messageHandler decorator', () => {
   it('adds queue metadata to the host class and topic metadata to the handler method', () => {
     class TestConsumer {
       @MessageHandler({ topic: 'message-bus.self-test' })

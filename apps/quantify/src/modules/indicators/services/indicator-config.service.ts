@@ -55,7 +55,7 @@ export class IndicatorConfigService implements OnModuleInit {
   }
 
   /**
-   * 鐢ㄤ簬鎸囨爣寮曟搸锛氭寜 symbolId + timeframe 鑾峰彇宸茶В鏋愬弬鏁扮殑杩愯鏃堕厤缃?
+   * 用于指标引擎：按 symbolId + timeframe 获取已解析参数的运行时配置
    */
   getRuntimeConfigs(symbolId: string, timeframe: MarketTimeframe): RuntimeIndicatorConfig[] {
     const key = this.buildKey(symbolId, timeframe)

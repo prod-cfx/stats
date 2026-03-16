@@ -1,10 +1,10 @@
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal

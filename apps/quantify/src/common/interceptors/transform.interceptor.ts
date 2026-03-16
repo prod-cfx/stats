@@ -46,7 +46,7 @@ export class TransformInterceptor<T>
           return undefined
         }
 
-        // 鍏佽 controller 鏄惧紡杩斿洖宸叉牸寮忓寲鐨勫搷搴旓紙渚嬪鏌愪簺鐗规畩鎺ュ彛闇€瑕佽嚜瀹氫箟鍝嶅簲缁撴瀯锛?
+        // 允许 controller 显式返回已格式化的响应（例如某些特殊接口需要自定义响应结构）
         if (data instanceof BaseResponseDto || data instanceof BasePaginationResponseDto) {
           return data
         }

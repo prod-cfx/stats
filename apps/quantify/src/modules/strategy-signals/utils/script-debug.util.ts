@@ -1,13 +1,13 @@
 /**
- * 鑴氭湰璋冭瘯宸ュ叿绫?
- * 鐢ㄤ簬鏍煎紡鍖栧拰杈撳嚭绛栫暐鑴氭湰璋冭瘯淇℃伅
+ * 脚本调试工具
+ * 用于格式化和输出策略脚本调试信息
  */
 export class ScriptDebugUtil {
   /**
-   * 鏍煎紡鍖栧€肩敤浜庢棩蹇楄緭鍑?
-   * @param value 瑕佹牸寮忓寲鐨勫€?
-   * @param maxLength 鏈€澶ч暱搴︼紝榛樿 200
-   * @returns 鏍煎紡鍖栧悗鐨勫瓧绗︿覆
+   * 格式化值用于日志输出
+   * @param value 要格式化的值
+   * @param maxLength 最大长度，默认 200
+   * @returns 格式化后的字符串
    */
   static formatValueForLog(value: unknown, maxLength = 200): string {
     try {
@@ -39,10 +39,10 @@ export class ScriptDebugUtil {
   }
 
   /**
-   * 鏍煎紡鍖栬剼鏈敤浜庢棩蹇楄緭鍑?
-   * @param script 鑴氭湰鍐呭
-   * @param maxLength 鏈€澶ч暱搴︼紝榛樿 1000
-   * @returns 鏍煎紡鍖栧悗鐨勮剼鏈?
+   * 格式化脚本用于日志输出
+   * @param script 脚本内容
+   * @param maxLength 最大长度，默认 1000
+   * @returns 格式化后的脚本
    */
   static formatScriptForLog(script: string, maxLength = 1000): string {
     if (!script) {
@@ -57,9 +57,9 @@ export class ScriptDebugUtil {
   }
 
   /**
-   * 鍒涘缓鑴氭湰鎽樿锛堢敤浜庣敓浜х幆澧冿級
-   * @param script 鑴氭湰鍐呭
-   * @returns 鑴氭湰鎽樿淇℃伅
+   * 创建脚本摘要（用于生产环境）
+   * @param script 脚本内容
+   * @returns 脚本摘要信息
    */
   static createScriptSummary(script: string): string {
     const lines = script.split('\n').length

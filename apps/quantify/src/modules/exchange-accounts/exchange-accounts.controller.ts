@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Inject, Param, Post, Query } from '@nest
 import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 
 import { CreateExchangeAccountDto } from './dto/create-exchange-account.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest 闇€瑕佽繍琛屾椂绫诲厓鏁版嵁鐢ㄤ簬 query DTO 鏍￠獙
+// eslint-disable-next-line ts/consistent-type-imports -- Nest 需要运行时类元数据用于 query DTO 校验
 import { ExchangeAccountUserQueryDto } from './dto/exchange-account-user.query.dto'
 import { ExchangeAccountResponseDto } from './dto/exchange-account.response.dto'
 import { ExchangeAccountsService } from './exchange-accounts.service'
@@ -16,7 +16,7 @@ export class ExchangeAccountsController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: '缁戝畾鏂扮殑浜ゆ槗鎵€璐︽埛' })
+  @ApiOperation({ summary: '绑定新的交易所账户' })
   @ApiBody({ type: CreateExchangeAccountDto })
   @ApiCreatedResponse({ type: ExchangeAccountResponseDto })
   async create(@Body() dto: CreateExchangeAccountDto): Promise<ExchangeAccountResponseDto> {
@@ -24,15 +24,15 @@ export class ExchangeAccountsController {
   }
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇涓氬姟鐢ㄦ埛鐨勪氦鏄撴墍璐︽埛鍒楄〃' })
+  @ApiOperation({ summary: '获取业务用户的交易所账户列表' })
   @ApiOkResponse({ type: [ExchangeAccountResponseDto] })
   async list(@Query() query: ExchangeAccountUserQueryDto): Promise<ExchangeAccountResponseDto[]> {
     return this.service.list(query.userId)
   }
 
   @Delete(':accountId')
-  @ApiOperation({ summary: '瑙ｇ粦浜ゆ槗鎵€璐︽埛' })
-  @ApiOkResponse({ description: '瑙ｇ粦鎴愬姛' })
+  @ApiOperation({ summary: '解绑交易所账户' })
+  @ApiOkResponse({ description: '解绑成功' })
   async delete(
     @Query() query: ExchangeAccountUserQueryDto,
     @Param('accountId') accountId: string,

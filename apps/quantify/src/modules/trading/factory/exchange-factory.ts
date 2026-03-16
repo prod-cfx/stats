@@ -14,7 +14,7 @@ export class ExchangeFactory {
     marketType: MarketType,
     account: ExchangeAccountConfig,
   ): IExchangeClient {
-    // 閫氳繃鍒ゅ畾 account.exchangeId 璁?TypeScript 鎺ㄦ柇鍑虹簿纭被鍨?
+    // 通过判定 account.exchangeId 让 TypeScript 推断出精确类型
     if (account.exchangeId === 'binance' && exchangeId === 'binance') {
       return new BinanceClient(marketType, account.config)
     }
@@ -24,11 +24,11 @@ export class ExchangeFactory {
     }
 
     if (account.exchangeId === 'hyperliquid' && exchangeId === 'hyperliquid') {
-      // Hyperliquid 鍙敮鎸佹案缁悎绾?
+      // Hyperliquid 只支持永续合约
       if (marketType !== 'perp') {
         throw new UnsupportedExchangeException({ exchangeId })
       }
-      // 杩斿洖瀹㈡埛绔疄渚嬶紙娉ㄦ剰锛氬綋鍓嶄负楠ㄦ灦瀹炵幇锛屾柟娉曚細鎶?ExchangeError锛?
+      // 返回客户端实例（注意：方法会抛出 ExchangeError）
       return new HyperliquidClient(account.config)
     }
 

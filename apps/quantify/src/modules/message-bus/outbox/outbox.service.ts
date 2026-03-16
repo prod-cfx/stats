@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
+import type { OnModuleInit } from '@nestjs/common'
+import type { MessageEnvelope } from '../message-bus.types'
+import type { Prisma } from '@/prisma/prisma.types'
+import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
 import { OutboxRepository } from './outbox.repository'
-import { MessageEnvelope } from '../message-bus.types'
 
 export interface OutboxRecordOptions {
   dedupeKey?: string

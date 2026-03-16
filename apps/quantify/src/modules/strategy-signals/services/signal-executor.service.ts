@@ -1,31 +1,31 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
+import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 ConfigService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
 import { OnEvent } from '@nestjs/event-emitter'
 import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from '@/modules/positions/positions.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalExecutionRepository } from '../repositories/signal-execution.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -91,8 +91,8 @@ export class SignalExecutorService implements OnModuleInit {
   }
 
   /**
-   * 鍚姩鏃跺浠嶅浜?PENDING/FAILED 涓旀湭杩囨湡鐨勪俊鍙峰仛涓€娆¤ˉ鍋挎墽琛岋紝
-   * 閬垮厤渚濊禆杩涚▼鍐呬簨浠跺鑷存湇鍔￠噸鍚椂淇″彿褰诲簳涓㈠け銆?
+   * 启动时对仍处于 PENDING/FAILED 且未过期的信号做一次补偿执行，
+   * 避免依赖进程内事件导致服务重启时信号彻底丢失
    */
   private async recoverPendingSignals(config: StrategySignalsRuntimeConfig) {
     const now = new Date()
@@ -133,14 +133,14 @@ export class SignalExecutorService implements OnModuleInit {
       includeSymbol: true,
     })
 
-    // LLM 淇″彿鍙兘涓嶄細鍏宠仈鏃х増 strategy锛坰trategyId 涓虹┖锛夛紝浣嗕粛搴旇繘鍏ユ墽琛岄摼璺?
-    // 鍥犳杩欓噷浠呰姹?signal 涓?symbol 瀛樺湪
+    // LLM 信号可能不会关联旧版 strategy（strategyId 为空），但仍应进入执行链路
+    // 因此这里仅要求 signal 和 symbol 存在
     if (!signal || !signal.symbol) {
       this.logger.warn(`Signal ${signalId} not found or missing relations, aborting execution`)
       return
     }
 
-    // 鍏煎锛氭棫绛栫暐浣跨敤 strategyId锛孡LM 绛栫暐浣跨敤 llmStrategyId
+    // 兼容：旧策略使用 strategyId，LLM 策略使用 llmStrategyId
     const effectiveStrategyId = signal.strategyId ?? signal.llmStrategyId
     if (!effectiveStrategyId) {
       this.logger.warn(`Signal ${signal.id} missing strategyId/llmStrategyId, aborting execution`)
@@ -148,10 +148,10 @@ export class SignalExecutorService implements OnModuleInit {
     }
 
     const where: Prisma.UserStrategyAccountWhereInput = {
-      // 娉ㄦ剰锛氳繖閲屾部鐢?userStrategyAccount.strategyId 浣滀负鈥滅瓥鐣ョ淮搴︹€濈殑璐︽埛鏄犲皠閿紱
-      // 鏃х瓥鐣ュ～ strategyId锛孡LM 绛栫暐濉?llmStrategyId锛堟墽琛屽櫒鎸?effectiveStrategyId 缁熶竴澶勭悊锛?
+      // 注意：这里沿用 userStrategyAccount.strategyId 作为“策略维度”的账户映射键；
+      // 旧策略填 strategyId，LLM 策略填 llmStrategyId（执行器用 effectiveStrategyId 统一处理）
       strategyId: effectiveStrategyId,
-      // 浠呴€夋嫨灏氭湭涓哄綋鍓?signal 鍒涘缓鎵ц璁板綍鐨勮处鎴凤紝閬垮厤閲嶅鎵ц
+      // 仅选择尚未为当前 signal 创建执行记录的账户，避免重复执行
       signalExecutions: {
         none: {
           signalId: signal.id,
@@ -159,7 +159,7 @@ export class SignalExecutorService implements OnModuleInit {
       },
     }
 
-    // 濡傛灉淇″彿缁戝畾鍒颁簡鍏蜂綋鐨勭瓥鐣ュ疄渚嬶紝鍒欏彧瀵硅闃呬簡璇ュ疄渚嬬殑鐢ㄦ埛鎵ц
+    // 如果信号绑定到了具体的策略实例，则只对订阅了该实例的用户执行
     if (signal.strategyInstanceId) {
       where.user = {
         strategySubscriptions: {
@@ -170,9 +170,9 @@ export class SignalExecutorService implements OnModuleInit {
         },
       }
     } else if (signal.llmStrategyInstanceId) {
-      // LLM 瀹炰緥绾ц闃呰繃婊わ細浠呭璁㈤槄浜嗚 LLM 瀹炰緥鐨勭敤鎴锋墽琛?
-      // 鎵ц鍣ㄩ€氳繃 signal.llmStrategyId 鏌ユ壘 UserStrategyAccount.strategyId 鏉ュ尮閰嶈处鎴?
-      // 璁㈤槄鏈嶅姟鍦ㄥ垱寤?婵€娲昏闃呮椂浼氳嚜鍔ㄥ垱寤哄搴旂殑 UserStrategyAccount
+      // LLM 实例级订阅过滤：仅对订阅了该 LLM 实例的用户执行
+      // 执行器通过 signal.llmStrategyId 查找 UserStrategyAccount.strategyId 来匹配账户
+      // 订阅服务在创建/激活订阅时会自动创建对应的 UserStrategyAccount
       where.user = {
         llmStrategySubscriptions: {
           some: {
@@ -253,8 +253,8 @@ export class SignalExecutorService implements OnModuleInit {
         return 'skipped'
       }
 
-      // 瀵逛簬 LLM 绛栫暐淇″彿锛岃幏鍙栫敤鎴疯闃呮椂缁戝畾鐨勪氦鏄撴墍璐︽埛
-      // 绛栫暐鏈韩涓嶉檺鍒朵氦鏄撴墍锛岀敤鎴疯闃呮椂閫夋嫨鐨勮处鎴峰喅瀹氬疄闄呬娇鐢ㄧ殑浜ゆ槗鎵€
+      // 对于 LLM 策略信号，获取用户订阅时绑定的交易所账户
+      // 策略本身不限制交易所，用户订阅时选择的账户决定实际使用的交易所
       let exchangeAccountId: string | undefined
       let effectiveExchangeId = orderParams.exchangeId
       let effectiveOrderParams = orderParams
@@ -273,10 +273,10 @@ export class SignalExecutorService implements OnModuleInit {
         })
         if (subscription?.exchangeAccountId) {
           exchangeAccountId = subscription.exchangeAccountId
-          // 浣跨敤鐢ㄦ埛璁㈤槄鏃堕€夋嫨鐨勮处鎴风殑 exchangeId锛岃€屼笉鏄俊鍙蜂腑鐨?symbol.exchange
+          // 使用用户订阅时选择的账户的 exchangeId，而不是信号中 symbol.exchange
           const accountExchangeId = this.normalizeExchangeId(subscription.exchangeAccount?.exchangeId)
           if (accountExchangeId && accountExchangeId !== orderParams.exchangeId) {
-            // 妫€娴嬪埌璺ㄤ氦鏄撴墍璺熷崟锛氶渶瑕侀噸鏂拌幏鍙栫洰鏍囦氦鏄撴墍鐨?symbol metadata 骞堕噸鏂拌绠?orderParams
+            // 检测到跨交易所跟单：需要重新获取目标交易所 symbol metadata 并重新计算 orderParams
             effectiveExchangeId = accountExchangeId
 
             this.logger.log(
@@ -284,9 +284,9 @@ export class SignalExecutorService implements OnModuleInit {
               `user account exchange=${accountExchangeId}. Recalculating orderParams for target exchange.`,
             )
 
-            // 閲嶆柊鑾峰彇鐩爣浜ゆ槗鎵€鐨?symbol metadata
-            // 娉ㄦ剰锛歮arket_symbols.exchange 瀛樺偍鐨勬槸澶у啓锛堝 BINANCE/OKX锛夛紝
-            // 鑰?exchangeAccount.exchangeId 鍙兘鏄皬鍐欙紝闇€瑕佺粺涓€杞负澶у啓杩涜鏌ヨ
+            // 重新获取目标交易所的 symbol metadata
+            // 注意：market_symbols.exchange 存储的是大写（如 BINANCE/OKX），
+            // exchangeAccount.exchangeId 可能是小写，需要统一转为大写进行查询
             const targetExchangeForQuery = (subscription.exchangeAccount?.exchangeId ?? '').toUpperCase()
             const targetSymbolMeta = await this.prisma.symbol.findFirst({
               where: {
@@ -312,7 +312,7 @@ export class SignalExecutorService implements OnModuleInit {
               return 'skipped'
             }
 
-            // 浣跨敤鐩爣浜ゆ槗鎵€鐨?symbol metadata 閲嶆柊璁＄畻 orderParams
+            // 使用目标交易所的 symbol metadata 重新计算 orderParams
             const recalcResult = this.recalculateOrderParamsForTargetExchange(
               orderParams,
               resolvedSignal.symbol,
@@ -320,9 +320,9 @@ export class SignalExecutorService implements OnModuleInit {
               accountExchangeId,
             )
 
-            // 妫€鏌ラ噸鏂拌绠楁槸鍚︽垚鍔?
+            // 检查重新计算是否成功
             if ('reason' in recalcResult) {
-              // 閲嶆柊璁＄畻澶辫触锛岃烦杩囨湰娆℃墽琛?
+              // 重新计算失败，跳过本次执行
               this.logger.warn(
                 `Failed to recalculate orderParams for target exchange ${accountExchangeId}: ${recalcResult.reason}. ` +
                 `Skipping execution for account ${account.id}.`,
@@ -332,7 +332,7 @@ export class SignalExecutorService implements OnModuleInit {
               return 'skipped'
             }
 
-            // 鎴愬姛锛氫娇鐢ㄩ噸鏂拌绠楃殑鍙傛暟
+            // 成功：使用重新计算的参数
             effectiveOrderParams = recalcResult.params
           } else if (accountExchangeId) {
             effectiveExchangeId = accountExchangeId
@@ -364,9 +364,9 @@ export class SignalExecutorService implements OnModuleInit {
           executedQuote = new Decimal(order.price).mul(executedQuantity)
         }
 
-        // 璁＄畻鏈璁板綍鍦ㄨ处鐨勭湡瀹炴墸娆句笌鈥滆秴棰勭畻鈥濋儴鍒嗭細
-        // - 榛樿鍙厑璁告湰鍦板彴璐︽墸鍑忚嚦澶?reservedQuote锛岃秴鍑洪儴鍒嗕氦鐢卞悗缁祫閲戝璐︽祦绋嬪鐞?
-        // - 鑻?executedQuote 灏忎簬绛変簬 reservedQuote锛屾甯稿綊杩樺墿浣欓鐣?
+        // 计算本次记录在账的真实扣款与“超预算”部分：
+        // - 默认只允许本地台账扣减至 reservedQuote，超出部分交由后续资金对账流程处理
+        // - 若 executedQuote 小于等于 reservedQuote，正常归还剩余预留
         const overBudget =
           executedQuote && executedQuote.gt(0) && executedQuote.gt(reservedQuote)
             ? executedQuote.sub(reservedQuote)
@@ -396,16 +396,16 @@ export class SignalExecutorService implements OnModuleInit {
           metadata: {
             providerOrderId: order.id,
             providerStatus: order.status,
-            // 鏍囪鏈湴璐﹂潰涓庡疄闄呮垚浜や箣闂寸殑娼滃湪宸紓锛屼緵鍚庣画璧勯噾瀵硅处浠诲姟浣跨敤
+            // 标记本地账面与实际成交之间的潜在差异，供后续资金对账任务使用
             executedQuote: executedQuote?.toString(),
             reservedQuote: reservedQuote.toString(),
             overBudget: overBudget?.toString() ?? null,
           },
         })
 
-        // 璁板綍鎴愪氦鍒版湰鍦颁粨浣嶇郴缁燂紝纭繚鏈湴浠撲綅涓庝氦鏄撴墍鍚屾
-        // 娉ㄦ剰锛氬繀椤讳娇鐢?effectiveExchangeId 鍜?effectiveOrderParams锛堝疄闄呬笅鍗曠殑浜ゆ槗鎵€鍜屽弬鏁帮級
-        // 鑰屼笉鏄?orderParams.exchangeId锛堜俊鍙蜂腑鐨勪氦鏄撴墍锛夛紝鍚﹀垯浼氬嚭鐜拌处闈笉涓€鑷撮棶棰?
+        // 记录成交到本地仓位系统，确保本地仓位与交易所同步
+        // 注意：必须使用 effectiveExchangeId 和 effectiveOrderParams（实际下单的交易所和参数）
+        // 而不是 orderParams.exchangeId（信号中的交易所），否则会出现账面不一致问题
         if (order.price && executedQuantity && executedQuantity > 0) {
           try {
             const symbolParts = effectiveOrderParams.symbol.split('/')
@@ -420,7 +420,7 @@ export class SignalExecutorService implements OnModuleInit {
               positionSide,
               price: order.price.toString(),
               quantity: executedQuantity.toString(),
-              fee: '0', // TODO: 浠庝氦鏄撴墍鑾峰彇瀹為檯鎵嬬画璐?
+              fee: '0', // TODO: 从交易所获取实际手续费
               feeCurrency: quoteSymbol,
               orderId: order.id,
               externalTradeId: order.id,
@@ -438,7 +438,7 @@ export class SignalExecutorService implements OnModuleInit {
             )
           }
           catch (error) {
-            // 璁板綍鎴愪氦澶辫触涓嶅簲闃绘柇璁㈠崟鎵ц娴佺▼锛屼粎璁板綍閿欒鏃ュ織锛岀瓑寰呭悗缁璐︿换鍔′慨姝?
+            // 记录成交失败不应阻断订单执行流程，仅记录错误日志，等待后续对账任务修复
             this.logger.error(
               `Failed to record trade to local position for account ${account.id}: ${(error as Error).message}`,
               (error as Error).stack,
@@ -451,13 +451,13 @@ export class SignalExecutorService implements OnModuleInit {
       catch (error) {
         await this.executionRepository.markFailed(execution.id, (error as Error).message)
         this.logger.error(`Signal execution failed for account ${account.id}: ${(error as Error).message}`)
-        // 涓嬪崟澶辫触鏃堕噴鏀惧叏閮ㄩ鐣?
+        // 下单失败时释放全部预留
         await this.releaseReservation(account.id, reservedQuote, reserveReference)
         return 'failed'
       }
     }
     catch (error) {
-      // 鍏滃簳鎹曡幏 prepareExecution/浜嬪姟涓殑寮傚父锛岄伩鍏嶆墦鏂暣涓俊鍙锋墽琛屽惊鐜?
+      // 兜底捕获 prepareExecution/事务中的异常，避免打断整个信号执行循环
       this.logger.error(
         `Unexpected error while processing account ${account.id} for signal ${signal.id}: ${(error as Error).message}`,
       )
@@ -495,7 +495,7 @@ export class SignalExecutorService implements OnModuleInit {
         return { type: 'skip', reason: 'Account not found' }
       }
 
-      // 濡傛灉鏄钩浠?閫€鍑轰俊鍙凤紝鍏堟煡鎵惧綋鍓嶆寔浠撹妯★紝鐢ㄤ簬鏋勯€犳纭殑骞充粨鏁伴噺
+      // 如果是平仓/退出信号，先查找当前持仓规模，用于构建正确的平仓数量
       let closePositionQuantity: Decimal | undefined
       const isCloseSignal =
         signal.direction === 'CLOSE_LONG' ||
@@ -573,9 +573,9 @@ export class SignalExecutorService implements OnModuleInit {
 
       const reserveReference = `signal:${signal.id}:acct:${account.id}:reserve`
 
-      // 瀵瑰紑浠撲笌骞充粨淇″彿閲囩敤涓嶅悓鐨勮祫閲戣矾寰勶細
-      // - 寮€浠擄細棰勭暀 quoteBudget 骞跺湪鎵ц鎴愬姛鍚庢牴鎹疄闄呮垚浜ら噴鏀惧墿浣?
-      // - 骞充粨/EXIT锛氫笉棰勭暀璧勯噾锛屾垚浜ゅ悗鐨勭幇閲戝叆璐︾敱浜ゆ槗鎵€浣欓鍚屾/瀵硅处娴佺▼璐熻矗锛岄伩鍏嶆妸鍗栧嚭瑙嗕负鍐嶆鏀嚭
+      // 对开仓与平仓信号采用不同的资金路径：
+      // - 开仓：预留 quoteBudget 并在执行成功后根据实际成交释放剩余
+      // - 平仓/EXIT：不预留资金，成交后的现金入账由交易所余额同步/对账流程负责，避免把卖出视为再次支出
       let reservedQuoteForExecution = orderParamsResult.quoteBudget
 
       if (!isCloseSignal) {
@@ -653,7 +653,7 @@ export class SignalExecutorService implements OnModuleInit {
       return { ok: false, reason: 'Unsupported exchange or instrument type' }
     }
 
-    // 鐩墠浠呮敮鎸佽处鎴峰熀鍑嗗竵绉嶄笌鏍囩殑鎶ヤ环甯佺涓ユ牸涓€鑷寸殑鍦烘櫙锛岄伩鍏嶈祫閲戣璐︿笌瀹為檯涓嬪崟甯佺涓嶅尮閰?
+    // 目前仅支持账户基准币种与标的报价币种严格一致的场景，避免资金记账与实际下单币种不匹配
     const accountCurrency = account.baseCurrency?.toUpperCase()
     const quoteCurrency = symbolMeta.quoteAsset?.toUpperCase()
     if (!accountCurrency || !quoteCurrency || accountCurrency !== quoteCurrency) {
@@ -667,7 +667,7 @@ export class SignalExecutorService implements OnModuleInit {
     const side = this.mapOrderSide(signal.direction)
     if (!side) return { ok: false, reason: 'Unsupported signal direction' }
 
-    // 鏍规嵁鏄紑浠撹繕鏄钩浠撳喅瀹氶绠椾笌鍘熷鏁伴噺鏉ユ簮
+    // 根据是开仓还是平仓决定预算与原始数量来源
     const isCloseSignal =
       signal.direction === 'CLOSE_LONG' ||
       signal.direction === 'CLOSE_SHORT' ||
@@ -679,7 +679,7 @@ export class SignalExecutorService implements OnModuleInit {
     }
 
     const balance = account.balance
-    // 寮€浠撳満鏅墠妫€鏌ユ渶浣庝綑棰濅笌椋庨櫓棰勭畻锛涘钩浠?EXIT 涓嶅簲鍥犱负 quote 浣欓涓嶈冻鑰屾棤娉曞崠鍑?
+    // 开仓场景才检查最低余额与风险预算；平仓/EXIT 不应因为 quote 余额不足而无法卖出
     if (!isCloseSignal) {
       const minBalance = new Decimal(config.execution.minBalanceThreshold)
       if (balance.lt(minBalance)) {
@@ -695,18 +695,18 @@ export class SignalExecutorService implements OnModuleInit {
         return { ok: false, reason: 'Position quantity not positive for close signal' }
       }
       rawAmount = closePositionQuantity
-      // 骞充粨涓嶉鐣欓绠楋紝鐢卞疄闄呮垚浜や笌浜ゆ槗鎵€浣欓鍚屾/瀵硅处妯″潡璐熻矗璧勯噾鍏ヨ处锛岃繖閲岀殑棰勭畻浠呯敤浜庡唴閮ㄧ粺璁?
+      // 平仓不预留预算，由实际成交与交易所余额同步/对账模块负责资金入账，这里的预算仅用于内部统计
       quoteBudget = new Decimal(0)
     }
     else {
-      // 璁＄畻椋庨櫓涓婇檺锛堝熀浜庤处鎴蜂綑棰濆拰椋庨櫓姣斾緥锛?
+      // 计算风险上限（基于账户余额和风险比例）
       const maxRiskQuote = balance.mul(config.execution.maxRiskFraction)
       const defaultQuote = new Decimal(config.execution.defaultQuoteAmount)
 
-      // 浼樺厛浣跨敤绛栫暐鎸囧畾鐨勪粨浣嶅ぇ灏忥紝浠呭彈 maxRiskFraction 绾︽潫
-      // defaultQuoteAmount 浠呭湪绛栫暐鏈寚瀹氫粨浣嶆椂浣滀负 fallback
+      // 优先使用策略指定的仓位大小，仅受 maxRiskFraction 约束
+      // defaultQuoteAmount 仅在策略未指定仓位时作为 fallback
       if (signal.positionSizeQuote && new Decimal(signal.positionSizeQuote).gt(0)) {
-        // 绛栫暐鎸囧畾浜嗙粷瀵归噾棰?
+        // 策略指定了绝对金额
         const strategyQuote = new Decimal(signal.positionSizeQuote)
         quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
         this.logger.debug(
@@ -716,7 +716,7 @@ export class SignalExecutorService implements OnModuleInit {
         )
       }
       else if (signal.positionSizeRatio && new Decimal(signal.positionSizeRatio).gt(0)) {
-        // 绛栫暐鎸囧畾浜嗕粨浣嶆瘮渚?
+        // 策略指定了仓位比例
         const ratio = new Decimal(signal.positionSizeRatio)
         const strategyQuote = balance.mul(ratio)
         quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
@@ -727,7 +727,7 @@ export class SignalExecutorService implements OnModuleInit {
         )
       }
       else {
-        // 鍥為€€鍒板叏灞€閰嶇疆锛氭鏃舵墠浣跨敤 defaultQuoteAmount
+        // 回退到全局配置：此时才使用 defaultQuoteAmount
         quoteBudget = Decimal.min(maxRiskQuote, defaultQuote)
         this.logger.debug(
           `No strategy position size, using global config: ` +
@@ -745,17 +745,17 @@ export class SignalExecutorService implements OnModuleInit {
       }
     }
 
-    // 鍩轰簬绗﹀彿閰嶇疆閲忓寲浠锋牸涓庢暟閲忥紝閬垮厤纭紪鐮佸皬鏁颁綅
+    // 基于符号配置量化价格与数量，避免硬编码小数位
     const precisionQuantity = symbolMeta.precisionQuantity ?? 6
     const precisionPrice = symbolMeta.precisionPrice ?? 2
     const lotSize = symbolMeta.lotSize ? new Decimal(symbolMeta.lotSize) : null
     const tickSize = symbolMeta.tickSize ? new Decimal(symbolMeta.tickSize) : null
 
-    // 鍏堟寜绮惧害鎴柇鍒板彲琛ㄧず鐨勫皬鏁颁綅
+    // 先按精度截断到可表示的小数位
     const amountScale = new Decimal(10).pow(precisionQuantity)
     let quantity = rawAmount.mul(amountScale).floor().div(amountScale)
 
-    // 鍐嶆寜鏈€灏忔墜鏁帮紙lotSize锛夊悜涓嬪彇鏁村埌鏈€杩戠殑鏁存暟鍊?
+    // 再按最小手数（lotSize）向下取整到最近的整数倍
     if (lotSize) {
       const lots = quantity.div(lotSize).floor()
       quantity = lots.mul(lotSize)
@@ -765,7 +765,7 @@ export class SignalExecutorService implements OnModuleInit {
       return { ok: false, reason: 'Computed order amount below lotSize or precision' }
     }
 
-    // 浠锋牸鎸?tickSize 鎴?precisionPrice 閲忓寲
+    // 价格按 tickSize 或 precisionPrice 量化
     let priceDecimal = new Decimal(entryPrice)
     if (tickSize) {
       const ticks = priceDecimal.div(tickSize).floor()
@@ -877,14 +877,14 @@ export class SignalExecutorService implements OnModuleInit {
   }
 
   /**
-   * 褰撶敤鎴烽€夋嫨鐨勪氦鏄撴墍涓庝俊鍙峰師濮嬩氦鏄撴墍涓嶅悓鏃讹紝閲嶆柊璁＄畻 orderParams
-   * 浣跨敤鐩爣浜ゆ槗鎵€鐨勭簿搴︿俊鎭紙lotSize銆乼ickSize锛夐噸鏂伴噺鍖?amount 鍜?price
+   * 当用户选择的交易所与信号原始交易所不同时，重新计算 orderParams
+   * 使用目标交易所的精度信息（lotSize、tickSize）重新量化 amount 和 price
    *
-   * @param originalParams 鍘熷鐨?orderParams锛堝熀浜庝俊鍙峰師濮嬩氦鏄撴墍璁＄畻锛?
-   * @param originalSymbolMeta 淇″彿鍘熷浜ゆ槗鎵€鐨?symbol metadata
-   * @param targetSymbolMeta 鐩爣浜ゆ槗鎵€鐨?symbol metadata
-   * @param targetExchangeId 鐩爣浜ゆ槗鎵€ ID
-   * @returns 閲嶆柊璁＄畻鍚庣殑 orderParams 鎴栭敊璇俊鎭?
+   * @param originalParams 原始 orderParams（基于信号原始交易所计算）
+   * @param originalSymbolMeta 信号原始交易所的 symbol metadata
+   * @param targetSymbolMeta 目标交易所的 symbol metadata
+   * @param targetExchangeId 目标交易所 ID
+   * @returns 重新计算后的 orderParams 或错误信息
    */
   private recalculateOrderParamsForTargetExchange(
     originalParams: OrderParams,
@@ -892,7 +892,7 @@ export class SignalExecutorService implements OnModuleInit {
     targetSymbolMeta: PrismaSymbol,
     targetExchangeId: ExchangeId,
   ): { ok: true; params: OrderParams } | { ok: false; reason: string } {
-    // 楠岃瘉鍩虹璧勪骇鍜屾姤浠疯祫浜ф槸鍚﹀尮閰?
+    // 验证基础资产和报价资产是否匹配
     if (
       originalSymbolMeta.baseAsset !== targetSymbolMeta.baseAsset ||
       originalSymbolMeta.quoteAsset !== targetSymbolMeta.quoteAsset
@@ -903,7 +903,7 @@ export class SignalExecutorService implements OnModuleInit {
       }
     }
 
-    // 浣跨敤鐩爣浜ゆ槗鎵€鐨?symbol 鏋勫缓缁熶竴鐨?symbol 瀛楃涓?
+    // 使用目标交易所的 symbol 构建统一的 symbol 字符串
     const targetSymbol = this.buildUnifiedSymbol(targetSymbolMeta)
     const targetMarketType = this.normalizeMarketType(targetSymbolMeta.instrumentType)
 
@@ -911,20 +911,20 @@ export class SignalExecutorService implements OnModuleInit {
       return { ok: false, reason: 'Unsupported target instrument type' }
     }
 
-    // 鑾峰彇鐩爣浜ゆ槗鎵€鐨勭簿搴︿俊鎭?
+    // 获取目标交易所的精度信息
     const targetLotSize = targetSymbolMeta.lotSize ? new Decimal(targetSymbolMeta.lotSize) : null
     const targetTickSize = targetSymbolMeta.tickSize ? new Decimal(targetSymbolMeta.tickSize) : null
     const targetPrecisionQuantity = targetSymbolMeta.precisionQuantity
     const targetPrecisionPrice = targetSymbolMeta.precisionPrice
 
-    // 閲嶆柊閲忓寲 amount锛堟暟閲忥級
+    // 重新量化 amount（数量）
     const rawAmount = new Decimal(originalParams.amount)
 
-    // 鎸夌簿搴︽埅鏂埌鍙〃绀虹殑灏忔暟浣?
+    // 按精度截断到可表示的小数位
     const amountScale = new Decimal(10).pow(targetPrecisionQuantity)
     let quantity = rawAmount.mul(amountScale).floor().div(amountScale)
 
-    // 鎸夋渶灏忔墜鏁帮紙lotSize锛夊悜涓嬪彇鏁村埌鏈€杩戠殑鏁存暟鍊?
+    // 按最小手数（lotSize）向下取整到最近的整数倍
     if (targetLotSize) {
       const lots = quantity.div(targetLotSize).floor()
       quantity = lots.mul(targetLotSize)
@@ -937,7 +937,7 @@ export class SignalExecutorService implements OnModuleInit {
       }
     }
 
-    // 閲嶆柊閲忓寲 price锛堜环鏍硷級
+    // 重新量化 price（价格）
     let priceDecimal = new Decimal(originalParams.price)
     if (targetTickSize) {
       const ticks = priceDecimal.div(targetTickSize).floor()

@@ -10,95 +10,106 @@ import type {
 } from '../core/types'
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
-import * as hl from '@nktkas/hyperliquid'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
 
+type HyperliquidSdk = {
+  HttpTransport: new (config: unknown) => unknown
+  InfoClient: new (config: unknown) => any
+  ExchangeClient: new (config: unknown) => any
+}
+
+function loadHyperliquidSdk(): HyperliquidSdk {
+  return require('@nktkas/hyperliquid') as HyperliquidSdk
+}
+
 /**
- * Hyperliquid 浜ゆ槗鎵€閫傞厤鍣紙鍩轰簬 @nktkas/hyperliquid SDK锛?
+ * Hyperliquid 交易所适配器（基于 @nktkas/hyperliquid SDK）。
  *
- * 鐗规€э細
- * - 浣跨敤 Agent Private Key 瀵硅鍗曡繘琛岀鍚?
- * - 浣跨敤 mainWalletAddress 浣滀负璧勯噾褰掑睘閽卞寘
- * - 瀹屾暣瀹炵幇缁熶竴浜ゆ槗鎺ュ彛
- * - 鍐呯疆閫熺巼闄愬埗鍜岃姹傞噸璇曟満鍒?
+ * 特点：
+ * - 使用 Agent Private Key 对订单进行签名
+ * - 使用 mainWalletAddress 作为资金归属钱包
+ * - 完整实现统一交易接口
+ * - 内置速率限制和请求重试机制
  */
 export class HyperliquidClient implements IExchangeClient {
-  // ========== 閰嶇疆甯搁噺 ==========
+  // ========== 配置常量 ==========
 
-  /** 甯備环鍗曟粦鐐瑰蹇嶅害 (10%) */
+  /** 市价单滑点容忍度 (10%) */
   private readonly MARKET_ORDER_SLIPPAGE = 0.1
 
-  /** Ticker 缂撳瓨鏈夋晥鏈?(5绉? */
+  /** Ticker 缓存有效期（5秒） */
   private readonly TICKER_CACHE_TTL = 5000
 
-  /** 鏈€灏忚姹傞棿闅?(100姣) */
+  /** 最小请求间隔（100毫秒） */
   private readonly MIN_REQUEST_INTERVAL = 100
 
-  /** 鏈€澶у苟鍙戣姹傛暟 */
+  /** 最大并发请求数 */
   private readonly MAX_CONCURRENT_REQUESTS = 10
 
-  /** 鏈€澶ч噸璇曟鏁?*/
+  /** 最大重试次数 */
   private readonly MAX_RETRIES = 3
 
-  /** 閲嶈瘯鍩虹寤惰繜 (1绉? */
+  /** 重试基础延迟（1秒） */
   private readonly RETRY_BASE_DELAY = 1000
 
-  /** Ticker 浠峰樊鐧惧垎姣?(0.01%) */
+  /** Ticker 价差百分比（0.01%） */
   private readonly TICKER_SPREAD_PERCENTAGE = 0.0001
 
-  // ========== 瀹炰緥瀛楁 ==========
+  // ========== 实例字段 ==========
 
   private readonly mainWalletAddress: string
   private readonly agentPrivateKey: string
 
-  // 瀹為檯鐢ㄤ簬浜ゆ槗鍜屾煡璇㈢殑閽卞寘鍦板潃锛坅gent 閽卞寘鍦板潃锛?
+  // 实际用于交易和查询的钱包地址（agent 钱包地址）
   private readonly tradingWalletAddress: string
 
-  private readonly infoClient: hl.InfoClient
-  private readonly exchClient: hl.ExchangeClient
+  private readonly infoClient: any
+  private readonly exchClient: any
 
-  // 閫熺巼闄愬埗
+  // 速率限制
   private lastRequestTime = 0
   private pendingRequests = 0
 
-  // Ticker 缂撳瓨
+  // Ticker 缓存
   private tickerCache = new Map<string, { data: UnifiedTicker; timestamp: number }>()
 
-  // 璧勪骇鍏冩暟鎹紦瀛橈紙coin -> assetId 鏄犲皠锛?
+  // 资产元数据缓存（coin -> assetId 映射）
   private assetMetaCache: Map<string, number> | null = null
   private assetMetaCacheTime = 0
-  private readonly ASSET_META_CACHE_TTL = 3600000 // 1灏忔椂
+  private readonly ASSET_META_CACHE_TTL = 3600000 // 1小时
 
   constructor(config: HyperliquidConfig) {
+    const hl = loadHyperliquidSdk()
+
     this.mainWalletAddress = config.mainWalletAddress
     this.agentPrivateKey = config.agentPrivateKey
 
-    // 鍒濆鍖?HTTP Transport
-    // 鏍规嵁閰嶇疆鐨?isTestnet 鏍囧織閫夋嫨缃戠粶锛堟祴璇曠綉鎴栦富缃戯級
+    // 初始化 HTTP Transport
+    // 根据配置的 isTestnet 标志选择网络（测试网或主网）
     const transport = new hl.HttpTransport({
-      // SDK 浼氭牴鎹?isTestnet 閫夋嫨姝ｇ‘鐨?endpoint锛?
+      // SDK 会根据 isTestnet 选择正确的 endpoint
       // - true  => https://api.hyperliquid-testnet.xyz
       // - false => https://api.hyperliquid.xyz
       isTestnet: config.isTestnet ?? false,
     } as any)
 
-    // 鍒涘缓绛惧悕閽卞寘锛堜娇鐢?agent 绉侀挜锛?
+    // 创建签名钱包（使用 agent 私钥）
     const wallet = new Wallet(this.agentPrivateKey)
 
-    // Hyperliquid Agent/Vault 鏋舵瀯锛?
-    // - agent 閽卞寘锛氱敤浜庣鍚嶄氦鏄?
-    // - vault/涓婚挶鍖咃細璧勯噾瀹為檯瀛樻斁鐨勫湴鏂?
-    // - 閫氳繃 defaultVaultAddress 鎸囧畾璧勯噾褰掑睘
-    // - 鏌ヨ鏃朵娇鐢ㄤ富閽卞寘鍦板潃
+    // Hyperliquid Agent/Vault 架构：
+    // - agent 钱包：用于签名交易
+    // - vault/主钱包：资金实际存放的地址
+    // - 通过 defaultVaultAddress 指定资金归属
+    // - 查询时使用主钱包地址
     this.tradingWalletAddress = this.mainWalletAddress
 
-    // 鍒濆鍖栧鎴风
+    // 初始化客户端
     this.infoClient = new hl.InfoClient({ transport })
     this.exchClient = new hl.ExchangeClient({
       transport,
       wallet,
-      defaultVaultAddress: this.mainWalletAddress, // 鎸囧畾璧勯噾褰掑睘鍒颁富閽卞寘
+      defaultVaultAddress: this.mainWalletAddress, // 指定资金归属到主钱包
     } as any)
   }
 
@@ -108,7 +119,7 @@ export class HyperliquidClient implements IExchangeClient {
 
   async ping(): Promise<void> {
     try {
-      // 浣跨敤杞婚噺绾ф帴鍙ｆ帰娲伙細鑾峰彇鎵€鏈夊竵绉嶄腑闂翠环
+      // 使用轻量级接口探活：获取所有币种中间价
       await this.infoClient.allMids()
     }
     catch (error) {
@@ -121,24 +132,24 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 楠岃瘉鍑嵁鏈夋晥鎬э紙绉侀挜鍜屾巿鏉冨叧绯伙級
+   * 验证凭据有效性（私钥和授权关系）
    *
-   * 閫氳繃灏濊瘯鍙栨秷涓€涓笉瀛樺湪鐨勮鍗曟潵楠岃瘉绛惧悕锛?
-   * - 濡傛灉绉侀挜鏃犳晥鎴?agent 鏈涓婚挶鍖呮巿鏉冿紝浼氳繑鍥炵鍚?鎺堟潈閿欒
-   * - 濡傛灉绛惧悕鏈夋晥浣嗚鍗曚笉瀛樺湪锛屼細杩斿洖"璁㈠崟涓嶅瓨鍦?閿欒锛岃繖璇佹槑鍑嵁鏈夋晥
+   * 通过尝试取消一个不存在的订单来验证签名。
+   * - 如果私钥无效或 agent 未被主钱包授权，会返回签名/授权错误
+   * - 如果签名有效但订单不存在，会返回“订单不存在”错误，这证明凭据有效
    *
-   * 杩欎釜鏂规硶涓嶄細浜х敓浠讳綍瀹為檯鍓綔鐢ㄣ€?
+   * 这个方法不会产生任何实际副作用。
    */
   async validateCredentials(): Promise<boolean> {
-    // 浣跨敤涓€涓殢鏈虹殑 clientOrderId 鏉ラ獙璇佺鍚?
+    // 使用一个随机的 clientOrderId 来验证签名
     const fakeCloid = this.generateClientOrderId()
 
     try {
-      // 鑾峰彇 BTC 鐨?assetId锛堟渶甯哥敤鐨勮祫浜э級
+      // 获取 BTC 的 assetId（最常用的资产）
       const assetId = await this.getAssetId('BTC')
 
-      // 灏濊瘯閫氳繃 cloid 鍙栨秷涓€涓笉瀛樺湪鐨勮鍗?
-      // 杩欎細瑙﹀彂绛惧悕楠岃瘉锛屼絾涓嶄細浜х敓瀹為檯鍓綔鐢?
+      // 尝试通过 cloid 取消一个不存在的订单
+      // 这会触发签名验证，但不会产生实际副作用
       const cancelByCloidAction: any = {
         type: 'cancelByCloid',
         cancels: [{ asset: assetId, cloid: fakeCloid }],
@@ -148,11 +159,11 @@ export class HyperliquidClient implements IExchangeClient {
         (this.exchClient as any).cancelByCloid(cancelByCloidAction),
       )
 
-      // 濡傛灉鍝嶅簲鐘舵€佹槸 err锛屾鏌ラ敊璇被鍨?
+      // 如果响应状态是 err，检查错误类型
       if (response.status === 'err') {
         const errorMsg = String(response.response || '').toLowerCase()
 
-        // 绛惧悕/鎺堟潈鐩稿叧閿欒 - 鍑嵁鏃犳晥
+        // 签名/授权相关错误 - 凭据无效
         if (
           errorMsg.includes('signature') ||
           errorMsg.includes('invalid') ||
@@ -165,16 +176,16 @@ export class HyperliquidClient implements IExchangeClient {
         }
       }
 
-      // 妫€鏌ュ搷搴斾腑鐨勫叿浣撶姸鎬?
+      // 检查响应中的具体状态
       const statuses = response.response?.data?.statuses
       if (statuses && statuses.length > 0) {
         const cancelStatus = statuses[0]
 
-        // "璁㈠崟涓嶅瓨鍦?閿欒璇存槑绛惧悕楠岃瘉閫氳繃浜?
+        // “订单不存在”错误说明签名验证通过
         if ('error' in cancelStatus) {
           const errorMsg = String(cancelStatus.error).toLowerCase()
 
-          // 绛惧悕/鎺堟潈鐩稿叧閿欒
+          // 签名/授权相关错误
           if (
             errorMsg.includes('signature') ||
             errorMsg.includes('invalid') ||
@@ -186,25 +197,25 @@ export class HyperliquidClient implements IExchangeClient {
             throw new AuthError(`Hyperliquid authentication failed: ${cancelStatus.error}`)
           }
 
-          // 鍏朵粬閿欒锛堝"璁㈠崟涓嶅瓨鍦?锛夎鏄庣鍚嶉獙璇侀€氳繃
+          // 其他错误（如“订单不存在”）说明签名验证通过
           return true
         }
       }
 
-      // 娌℃湁閿欒璇存槑绛惧悕楠岃瘉閫氳繃
+      // 没有错误说明签名验证通过
       return true
     }
     catch (error) {
-      // 濡傛灉鏄垜浠姏鍑虹殑 AuthError锛岀洿鎺ヤ紶閫?
+      // 如果是我们抛出的 AuthError，直接透传
       if (error instanceof AuthError) {
         throw error
       }
 
-      // 鍒嗘瀽鍏朵粬閿欒
+      // 分析其他错误
       const message = String((error as Error).message || '').toLowerCase()
 
-      // 瀵逛簬 "璁㈠崟涓嶅瓨鍦?宸茬粡鍙栨秷/宸叉垚浜? 杩欑被閿欒锛岃鏄庣鍚嶅凡閫氳繃銆佸彧鏄鍗曟湰韬笉瀛樺湪锛?
-      // 杩欐鏄垜浠湡鏈涚殑楠岃瘉璺緞锛屽洜姝ゅ簲瑙嗕负鍑嵁鏈夋晥鑰屼笉鏄敊璇€?
+      // 对于“订单不存在 / 已取消 / 已成交”这类错误，说明签名已通过，只是订单本身不存在。
+      // 这正是我们期望的验证路径，因此应视为凭据有效而不是错误。
       if (
         message.includes('order was never placed') ||
         message.includes('already canceled') ||
@@ -214,7 +225,7 @@ export class HyperliquidClient implements IExchangeClient {
         return true
       }
 
-      // 绛惧悕/鎺堟潈鐩稿叧閿欒
+      // 签名/授权相关错误
       if (
         message.includes('signature') ||
         message.includes('invalid private key') ||
@@ -226,7 +237,7 @@ export class HyperliquidClient implements IExchangeClient {
         throw new AuthError(`Hyperliquid authentication failed: ${(error as Error).message}`)
       }
 
-      // 缃戠粶鎴栧叾浠栦复鏃堕敊璇紝鍖呰鍚庢姏鍑?
+      // 网络或其他临时错误，包装后抛出
       throw new ExchangeError(
         `Credential validation failed: ${(error as Error).message}`,
         undefined,
@@ -235,18 +246,18 @@ export class HyperliquidClient implements IExchangeClient {
     }
   }
 
-  // ========== 閫熺巼闄愬埗涓庨噸璇曟満鍒?==========
+  // ========== 速率限制与重试机制 ==========
 
   /**
-   * 閫熺巼闄愬埗鍖呰鍣?- 纭繚璇锋眰闂撮殧鍜屽苟鍙戦檺鍒?
+   * 速率限制包装器，确保请求间隔和并发限制。
    */
   private async rateLimit<T>(fn: () => Promise<T>): Promise<T> {
-    // 妫€鏌ュ苟鍙戦檺鍒?
+    // 检查并发限制
     while (this.pendingRequests >= this.MAX_CONCURRENT_REQUESTS) {
       await new Promise(resolve => setTimeout(resolve, 50))
     }
 
-    // 妫€鏌ヨ姹傞棿闅?
+    // 检查请求间隔
     const now = Date.now()
     const timeSinceLastRequest = now - this.lastRequestTime
 
@@ -268,7 +279,7 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 閲嶈瘯鍖呰鍣?- 澶勭悊涓存椂鎬ф晠闅?
+   * 重试包装器，处理临时性故障。
    */
   private async withRetry<T>(
     fn: () => Promise<T>,
@@ -283,7 +294,7 @@ export class HyperliquidClient implements IExchangeClient {
       catch (error) {
         lastError = error as Error
 
-        // 涓嶉噸璇曠殑閿欒绫诲瀷
+        // 不重试的错误类型
         if (error instanceof ExchangeError) {
           const noRetryErrors = ['INVALID_SYMBOL', 'INVALID_ORDER_TYPE', 'REQUIRES_PRICE']
           if (noRetryErrors.includes(error.code || '')) {
@@ -291,12 +302,12 @@ export class HyperliquidClient implements IExchangeClient {
           }
         }
 
-        // 鏈€鍚庝竴娆″皾璇曞け璐?
+        // 最后一次尝试失败
         if (attempt >= this.MAX_RETRIES) {
           break
         }
 
-        // 鎸囨暟閫€閬?
+        // 指数退避
         const delay = this.RETRY_BASE_DELAY * (2 ** attempt)
         await new Promise(resolve => setTimeout(resolve, delay))
       }
@@ -310,7 +321,7 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鍑€鍖栭敊璇鎯?- 绉婚櫎鏁忔劅淇℃伅
+   * 净化错误详情，移除敏感信息。
    */
   private sanitizeError(error: unknown, operation: string): Record<string, unknown> {
     const errorObj = error as Error
@@ -318,16 +329,16 @@ export class HyperliquidClient implements IExchangeClient {
       timestamp: Date.now(),
       operation,
       message: errorObj.message,
-      // 涓嶅寘鍚彲鑳藉惈鏈夋晱鎰熶俊鎭殑瀹屾暣閿欒瀵硅薄
+      // 不包含可能含有敏感信息的完整错误对象
     }
   }
 
   /**
-   * 鍒涘缓璁㈠崟
+   * 创建订单
    *
-   * @param input - 璁㈠崟鍙傛暟锛屽寘鎷?symbol, side, type, amount, price 绛?
-   * @returns 缁熶竴鏍煎紡鐨勮鍗曞璞?
-   * @throws {ExchangeError} 璁㈠崟鍒涘缓澶辫触鎴栧弬鏁伴敊璇?
+   * @param input - 订单参数，包含 symbol、side、type、amount、price 等
+   * @returns 统一格式的订单对象
+   * @throws {ExchangeError} 订单创建失败或参数错误
    *
    * @example
    * ```typescript
@@ -342,7 +353,7 @@ export class HyperliquidClient implements IExchangeClient {
    * ```
    */
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
-    // 鍙敮鎸佹案缁悎绾?
+    // 只支持永续合约
     if (input.marketType !== 'perp') {
       throw new ExchangeError(
         'Hyperliquid only supports perpetual contracts',
@@ -354,28 +365,28 @@ export class HyperliquidClient implements IExchangeClient {
     const isBuy = input.side === 'buy'
     const sz = Number(input.amount)
 
-    // 寮哄埗鐢熸垚鍞竴 clientOrderId 浠ョ‘淇濆箓绛夋€э紙闃叉閲嶅涓嬪崟锛?
+    // 强制生成唯一 clientOrderId 以确保幂等性（防止重复下单）
     const clientOrderId = input.clientOrderId || this.generateClientOrderId()
 
-    // 鑾峰彇璧勪骇 ID锛圚yperliquid SDK 瑕佹眰锛?
+    // 获取资产 ID（Hyperliquid SDK 要求）
     const assetId = await this.getAssetId(coin)
 
-    // 鍑嗗璁㈠崟绫诲瀷鍜屼环鏍?
+    // 准备订单类型和价格
     const { orderType, limitPx } = await this.prepareOrderRequest(input, coin, isBuy)
 
-    // 鏋勯€犺鍗曡姹傦紙浣跨敤 SDK 鐨勬纭牸寮忥級
-    // 娉ㄦ剰锛歛 = assetId锛堟暣鏁帮級锛宻 = size锛堝瓧绗︿覆锛夛紝p = price锛堝瓧绗︿覆锛?
+    // 构造订单请求（使用 SDK 的正确格式）
+    // 注意：a = assetId（整数），s = size（字符串），p = price（字符串）
     const orderRequest: any = {
-      a: assetId, // 鉁?璧勪骇 ID锛堟暣鏁帮級
+      a: assetId, // 资产 ID（整数）
       b: isBuy,
       p: String(limitPx),
-      s: String(sz), // 鉁?涓嬪崟鏁伴噺锛堝瓧绗︿覆锛?
+      s: String(sz), // 下单数量（字符串）
       r: input.reduceOnly ?? false,
       t: orderType,
       c: clientOrderId,
     }
 
-    // 鏋勯€犺鍗曞姩浣?
+    // 构造订单动作
     const orderAction: any = {
       type: 'order',
       orders: [orderRequest],
@@ -383,17 +394,17 @@ export class HyperliquidClient implements IExchangeClient {
     }
 
     try {
-      // 鍙戦€佽鍗曪紙涓嶄娇鐢?withRetry 閬垮厤閲嶅涓嬪崟锛?
+      // 发送订单（不使用 withRetry，避免重复下单）
       const response: any = await this.rateLimit(async () =>
         (this.exchClient as any).order(orderAction),
       )
 
-      // 妫€鏌ュ搷搴旂姸鎬?
+      // 检查响应状态
       if (response.status === 'err') {
         throw new ExchangeError(`Order failed: ${response.response}`)
       }
 
-      // 瑙ｆ瀽鍝嶅簲
+      // 解析响应
       const statuses = response.response.data?.statuses
       if (!statuses || statuses.length === 0) {
         throw new ExchangeError('No order status returned')
@@ -405,13 +416,13 @@ export class HyperliquidClient implements IExchangeClient {
         throw new ExchangeError(`Order failed: ${errorMsg}`)
       }
 
-      // 鑾峰彇璁㈠崟璇︽儏
+      // 获取订单详情
       const filled = orderStatus.filled || { totalSz: '0', avgPx: '0' }
 
-      // 鑾峰彇璁㈠崟 ID锛?
-      // 1. 浼樺厛浣跨敤 resting.oid锛堟湭瀹屽叏鎴愪氦鐨勮鍗曪級
-      // 2. 鍏舵浣跨敤 filled.oid锛堢灛鏃舵垚浜ょ殑璁㈠崟锛?
-      // 3. 鏈€鍚庝娇鐢?clientOrderId 浣滀负涓存椂鏍囪瘑
+      // 获取订单 ID：
+      // 1. 优先使用 resting.oid（未完全成交的订单）
+      // 2. 其次使用 filled.oid（瞬时成交的订单）
+      // 3. 最后使用 clientOrderId 作为临时标识
       const orderId = String(
         orderStatus.resting?.oid ||
         orderStatus.filled?.oid ||
@@ -443,7 +454,7 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鍑嗗璁㈠崟璇锋眰 - 绛栫暐妯″紡澶勭悊涓嶅悓璁㈠崟绫诲瀷
+   * 准备订单请求 - 策略模式处理不同订单类型
    */
   private async prepareOrderRequest(
     input: CreateOrderInput,
@@ -471,7 +482,7 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鍑嗗甯備环鍗?- 浣跨敤 IOC 闄愪环鍗曞疄鐜?
+   * 准备市价单，使用 IOC 限价单实现。
    */
   private async prepareMarketOrder(
     coin: string,
@@ -484,7 +495,7 @@ export class HyperliquidClient implements IExchangeClient {
       throw new ExchangeError(`Unable to get market price for ${coin}`)
     }
 
-    // 浣跨敤閰嶇疆鐨勬粦鐐瑰蹇嶅害
+    // 使用配置的滑点容忍度
     const slippageFactor = 1 + (isBuy ? this.MARKET_ORDER_SLIPPAGE : -this.MARKET_ORDER_SLIPPAGE)
 
     return {
@@ -494,43 +505,43 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鍙栨秷璁㈠崟
+   * 取消订单
    *
-   * @param id - 璁㈠崟 ID锛堝彲浠ユ槸鏁板瓧 oid 鎴?0x 寮€澶寸殑 clientOrderId锛?
-   * @param symbol - 浜ゆ槗瀵?symbol
-   * @returns 鍙栨秷鍚庣殑璁㈠崟鐘舵€侊紙鍖呭惈鐪熷疄鐨勮鍗曚俊鎭級
-   * @throws {ExchangeError} 鍙栨秷澶辫触
+   * @param id - 订单 ID（可以是数字 oid 或 0x 开头的 clientOrderId）
+   * @param symbol - 交易对 symbol
+   * @returns 取消后的订单状态（包含真实的订单信息）
+   * @throws {ExchangeError} 取消失败
    *
    * @remarks
-   * 璇ユ柟娉曚細鑷姩鍒ゆ柇 id 鐨勭被鍨嬶細
-   * - 濡傛灉鏄暟瀛楁垨鍙浆鎹负鏈夋晥鏁板瓧锛屼娇鐢?cancel 鎺ュ彛锛堟寜 oid 鍙栨秷锛?
-   * - 濡傛灉鏄?0x 寮€澶寸殑瀛楃涓诧紝浣跨敤 cancelByCloid 鎺ュ彛锛堟寜 clientOrderId 鍙栨秷锛?
+   * 该方法会自动判断 id 的类型：
+   * - 如果是数字或可转换为有效数字，使用 cancel 接口（按 oid 取消）
+   * - 如果是 0x 开头的字符串，使用 cancelByCloid 接口（按 clientOrderId 取消）
    *
-   * 涓轰簡杩斿洖鍑嗙‘鐨勮鍗曚俊鎭紝璇ユ柟娉曚細鍏堟煡璇㈣鍗曡鎯呭啀鎵ц鍙栨秷鎿嶄綔銆?
+   * 为了返回准确的订单信息，该方法会先查询订单详情再执行取消操作。
    */
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     return this.withRetry(async () => {
       const coin = this.mapSymbolToHl(symbol)
 
-      // 鑾峰彇璧勪骇 ID锛圚yperliquid SDK 瑕佹眰锛?
+      // 获取资产 ID（Hyperliquid SDK 要求）
       const assetId = await this.getAssetId(coin)
 
-      // 鍏堟煡璇㈣鍗曡鎯咃紝浠ヤ究杩斿洖鍑嗙‘鐨勮鍗曚俊鎭?
+      // 先查询订单详情，以便返回准确的订单信息
       let orderInfo: UnifiedOrder | null = null
       try {
         orderInfo = await this.fetchOrder(id, symbol)
       }
       catch {
-        // 濡傛灉鏌ヨ澶辫触锛岀户缁彇娑堟搷浣滐紝浣嗘棤娉曡繑鍥炲畬鏁翠俊鎭?
-        // 涓嶆姏鍑哄紓甯革紝浠呰褰曢敊璇?
+        // 如果查询失败，继续取消操作，但无法返回完整信息
+        // 不抛出异常，仅记录错误
       }
 
-      // 鍒ゆ柇 id 绫诲瀷骞堕€夋嫨鍚堥€傜殑鍙栨秷鎺ュ彛
+      // 判断 id 类型并选择合适的取消接口
       const isCloid = id.startsWith('0x')
       let response: any
 
       if (isCloid) {
-        // 浣跨敤 cancelByCloid 鎺ュ彛锛堟寜 clientOrderId 鍙栨秷锛?
+        // 使用 cancelByCloid 接口（按 clientOrderId 取消）
         const cancelByCloidAction: any = {
           type: 'cancelByCloid',
           cancels: [{ asset: assetId, cloid: id }],
@@ -541,7 +552,7 @@ export class HyperliquidClient implements IExchangeClient {
         )
       }
       else {
-        // 楠岃瘉 id 鏄惁涓烘湁鏁堟暟瀛?
+        // 验证 id 是否为有效数字
         const oid = Number(id)
         if (Number.isNaN(oid)) {
           throw new ExchangeError(
@@ -550,7 +561,7 @@ export class HyperliquidClient implements IExchangeClient {
           )
         }
 
-        // 浣跨敤 cancel 鎺ュ彛锛堟寜 oid 鍙栨秷锛?
+        // 使用 cancel 接口（按 oid 取消）
         const cancelAction: any = {
           type: 'cancel',
           cancels: [{ a: assetId, o: oid }],
@@ -561,7 +572,7 @@ export class HyperliquidClient implements IExchangeClient {
         )
       }
 
-      // 妫€鏌ュ搷搴?
+      // 检查响应
       if (response.status === 'err') {
         throw new ExchangeError(`Cancel failed: ${response.response}`)
       }
@@ -577,7 +588,7 @@ export class HyperliquidClient implements IExchangeClient {
         throw new ExchangeError(`Cancel failed: ${errorMsg}`)
       }
 
-      // 杩斿洖鍙栨秷鍚庣殑璁㈠崟鐘舵€侊紙浣跨敤鏌ヨ鍒扮殑鐪熷疄淇℃伅锛?
+      // 返回取消后的订单状态（使用查询到的真实信息）
       if (orderInfo) {
         return {
           ...orderInfo,
@@ -586,14 +597,14 @@ export class HyperliquidClient implements IExchangeClient {
         }
       }
 
-      // 濡傛灉鏃犳硶鏌ヨ鍒拌鍗曚俊鎭紝杩斿洖鍩烘湰淇℃伅
+      // 如果无法查询到订单信息，返回基本信息
       return {
         id,
         clientOrderId: isCloid ? id : undefined,
         symbol,
         marketType: 'perp',
-        side: 'buy', // 鏃犳硶纭畾鐪熷疄鏂瑰悜
-        type: 'limit', // 鏃犳硶纭畾鐪熷疄绫诲瀷
+        side: 'buy', // 无法确定真实方向
+        type: 'limit', // 无法确定真实类型
         price: 0,
         amount: 0,
         filled: 0,
@@ -605,29 +616,29 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ鍗曚釜璁㈠崟
+   * 查询单个订单
    *
-   * @param id - 璁㈠崟 ID锛堝彲浠ユ槸鏁板瓧 oid 鎴?0x 寮€澶寸殑 clientOrderId锛?
-   * @param symbol - 浜ゆ槗瀵?symbol
-   * @returns 璁㈠崟璇︽儏锛堣仛鍚堜簡澶氱瑪鎴愪氦锛?
-   * @throws {OrderNotFoundError} 璁㈠崟涓嶅瓨鍦?
+   * @param id - 订单 ID（可以是数字 oid 或 0x 开头的 clientOrderId）
+   * @param symbol - 交易对 symbol
+   * @returns 订单详情（聚合了多笔成交）
+   * @throws {OrderNotFoundError} 订单不存在
    *
    * @remarks
-   * 璇ユ柟娉曚細鑷姩鍒ゆ柇 id 鐨勭被鍨嬶細
-   * - 濡傛灉鏄暟瀛楋紝鎸?oid 鏌ヨ
-   * - 濡傛灉鏄?0x 寮€澶寸殑瀛楃涓诧紝鎸?clientOrderId 鏌ヨ
+   * 该方法会自动判断 id 的类型：
+   * - 如果是数字，按 oid 查询
+   * - 如果是 0x 开头的字符串，按 clientOrderId 查询
    *
-   * 瀵逛簬宸插叧闂殑璁㈠崟锛屼細鑱氬悎鎵€鏈夌浉鍚?oid/cloid 鐨?fill 璁板綍锛?
-   * 璁＄畻鎬绘垚浜ら噺鍜屽姞鏉冨钩鍧囦环鏍硷紝纭繚杩斿洖鍑嗙‘鐨勮鍗曚俊鎭€?
+   * 对于已关闭的订单，会聚合所有相同 oid/cloid 的 fill 记录。
+   * 计算总成交量和加权平均价格，确保返回准确的订单信息。
    */
   async fetchOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     return this.withRetry(async () => {
       const isCloid = id.startsWith('0x')
 
-      // 鑾峰彇鐢ㄦ埛鐨勬墍鏈夋湭瀹屾垚璁㈠崟锛堜娇鐢?trading 閽卞寘鍦板潃锛?
+      // 获取用户的所有未完成订单（使用 trading 钱包地址）
       const openOrders: any = await this.infoClient.openOrders({ user: this.tradingWalletAddress })
 
-      // 鏍规嵁 id 绫诲瀷鏌ユ壘鍖归厤鐨勮鍗?
+      // 根据 id 类型查找匹配的订单
       const order = openOrders.find((o: any) => {
         if (isCloid) {
           return o.cloid === id
@@ -636,10 +647,10 @@ export class HyperliquidClient implements IExchangeClient {
       })
 
       if (!order) {
-        // 濡傛灉鍦ㄦ湭瀹屾垚璁㈠崟涓壘涓嶅埌锛屽皾璇曚粠璁㈠崟鍘嗗彶涓煡鎵?
+        // 如果在未完成订单中找不到，尝试从订单历史中查找
         const fills: any = await this.infoClient.userFills({ user: this.tradingWalletAddress })
 
-        // 鏍规嵁 id 绫诲瀷鏌ユ壘鎵€鏈夊尮閰嶇殑 fill 璁板綍
+        // 根据 id 类型查找所有匹配的 fill 记录
         const matchedFills = fills.filter((f: any) => {
           if (isCloid) {
             return f.cloid === id
@@ -651,7 +662,7 @@ export class HyperliquidClient implements IExchangeClient {
           throw new OrderNotFoundError(`Order ${id} not found`)
         }
 
-        // 鑱氬悎鎵€鏈?fill锛堜笌 fetchClosedOrders 淇濇寔涓€鑷达級
+        // 聚合所有 fill（与 fetchClosedOrders 保持一致）
         const side = matchedFills[0].side === 'B' ? 'buy' : 'sell'
         const coin = matchedFills[0].coin
 
@@ -659,7 +670,7 @@ export class HyperliquidClient implements IExchangeClient {
         let totalValue = 0
         let lastTime = 0
         let clientOrderId: string | undefined
-        let orderId = id  // 榛樿浣跨敤浼犲叆鐨?id
+        let orderId = id // 默认使用传入的 id
 
         for (const fill of matchedFills) {
           totalSz += Number(fill.sz)
@@ -668,7 +679,7 @@ export class HyperliquidClient implements IExchangeClient {
           if (fill.cloid) {
             clientOrderId = fill.cloid
           }
-          // 濡傛灉鏄€氳繃 cloid 鏌ヨ鐨勶紝灏濊瘯鑾峰彇鐪熷疄鐨?oid
+          // 如果是通过 cloid 查询的，尝试获取真实 oid
           if (isCloid && fill.oid !== undefined) {
             orderId = String(fill.oid)
           }
@@ -677,17 +688,17 @@ export class HyperliquidClient implements IExchangeClient {
         const avgPx = totalSz > 0 ? totalValue / totalSz : 0
 
         return {
-          id: orderId,  // 浼樺厛杩斿洖鐪熷疄鐨?oid
+          id: orderId, // 优先返回真实 oid
           clientOrderId,
           symbol,
           marketType: 'perp',
           side,
-          // 娉ㄦ剰锛欻yperliquid fills API 涓嶈繑鍥炲師濮?orderType
-          // 鐢变簬 Hyperliquid 鐨勫競浠峰崟鏈川涓婃槸 IOC 闄愪环鍗曪紝
-          // 杩欓噷浣跨敤 'limit' 浣滀负榛樿鍊硷紝姣旂‖缂栫爜 'market' 鏇村噯纭?
+          // 注意：Hyperliquid fills API 不返回原始 orderType
+          // 由于 Hyperliquid 的市价单本质上是 IOC 限价单，
+          // 这里使用 'limit' 作为默认值，比硬编码 'market' 更准确
           type: 'limit',
-          price: avgPx, // 鍔犳潈骞冲潎浠锋牸
-          amount: totalSz, // 鎬绘垚浜ら噺
+          price: avgPx, // 加权平均价格
+          amount: totalSz, // 总成交量
           filled: totalSz,
           status: 'closed',
           createdAt: lastTime,
@@ -695,11 +706,11 @@ export class HyperliquidClient implements IExchangeClient {
         }
       }
 
-      // 璁㈠崟浠嶅湪闃熷垪涓紝闇€瑕佹煡璇㈠凡鎴愪氦閮ㄥ垎
-      // Hyperliquid 鐨勯儴鍒嗘垚浜や細璁板綍鍦?userFills 涓紝鍗充娇璁㈠崟杩樺湪 openOrders 涓?
+      // 订单仍在队列中，需要查询已成交部分
+      // Hyperliquid 的部分成交会记录在 userFills 中，即使订单还在 openOrders 里
       const fills: any = await this.infoClient.userFills({ user: this.tradingWalletAddress })
 
-      // 鏍规嵁 id 绫诲瀷鏌ユ壘鍖归厤鐨?fills
+      // 根据 id 类型查找匹配的 fills
       const matchedFills = fills.filter((f: any) => {
         if (isCloid) {
           return f.cloid === id
@@ -707,7 +718,7 @@ export class HyperliquidClient implements IExchangeClient {
         return String(f.oid) === id
       })
 
-      // 璁＄畻宸叉垚浜ゆ暟閲忓拰鍔犳潈骞冲潎浠锋牸
+      // 计算已成交数量和加权平均价格
       let totalFilledSz = 0
       let totalFilledValue = 0
 
@@ -718,18 +729,18 @@ export class HyperliquidClient implements IExchangeClient {
 
       const avgFilledPx = totalFilledSz > 0 ? totalFilledValue / totalFilledSz : 0
 
-      // 鏄犲皠璁㈠崟淇℃伅
+      // 映射订单信息
       const unifiedOrder = this.mapOpenOrderToUnified(order, symbol)
 
-      // 鏇存柊宸叉垚浜や俊鎭紝骞舵牴鎹垚浜ゆ儏鍐佃缃纭殑鐘舵€?
-      // 濡傛灉鏈夐儴鍒嗘垚浜や絾璁㈠崟浠嶅湪 order book 涓紝鐘舵€佸簲涓?'partially_filled'
-      // 杩欐牱璋冪敤鏂瑰彲浠ュ尯鍒?绛夊緟棣栨鎴愪氦"鍜?宸查儴鍒嗘垚浜?
+      // 更新已成交信息，并根据成交情况设置正确的状态
+      // 如果有部分成交但订单仍在 order book 中，状态应为 'partially_filled'
+      // 这样调用方可以区分“等待首次成交”和“已部分成交”
       const status = totalFilledSz > 0 ? 'partially_filled' : 'open'
 
       return {
         ...unifiedOrder,
         filled: totalFilledSz,
-        // 濡傛灉鏈夋垚浜わ紝浣跨敤瀹為檯鎴愪氦鍧囦环锛涘惁鍒欎娇鐢ㄦ寕鍗曚环鏍?
+        // 如果有成交，使用实际成交均价；否则使用挂单价格
         price: totalFilledSz > 0 ? avgFilledPx : unifiedOrder.price,
         status,
         updatedAt: Date.now(),
@@ -738,16 +749,16 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ鏈畬鎴愯鍗?
+   * 查询未完成订单
    *
-   * @param symbol - 鍙€夌殑浜ゆ槗瀵硅繃婊?
-   * @returns 鏈畬鎴愯鍗曞垪琛?
+   * @param symbol - 可选的交易对过滤条件
+   * @returns 未完成订单列表
    */
   async fetchOpenOrders(symbol?: string): Promise<UnifiedOrder[]> {
     return this.withRetry(async () => {
       const orders: any = await this.infoClient.openOrders({ user: this.tradingWalletAddress })
 
-      // 濡傛灉鎸囧畾浜唖ymbol锛岃繃婊よ鍗?
+      // 如果指定了 symbol，过滤订单
       const filtered = symbol
         ? orders.filter((o: any) => o.coin === this.mapSymbolToHl(symbol))
         : orders
@@ -757,27 +768,27 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ鍘嗗彶璁㈠崟
+   * 查询历史订单
    *
-   * @param symbol - 鍙€夌殑浜ゆ槗瀵硅繃婊?
-   * @returns 鍘嗗彶璁㈠崟鍒楄〃锛堣仛鍚堜簡澶氱瑪鎴愪氦鐨勫畬鏁磋鍗曪級
+   * @param symbol - 可选的交易对过滤条件
+   * @returns 历史订单列表（聚合了多笔成交的完整订单）
    *
    * @remarks
-   * Hyperliquid 閫氳繃 fills 鎺ュ彛鑾峰彇鎴愪氦璁板綍銆?
-   * 瀵逛簬鍒嗗娆℃垚浜ょ殑璁㈠崟锛岃鏂规硶浼氭寜 oid 鑱氬悎鎵€鏈?fill锛?
-   * 璁＄畻鎬绘垚浜ら噺鍜屽姞鏉冨钩鍧囦环鏍硷紝纭繚杩斿洖鐨勮鍗曟暟鎹噯纭€?
+   * Hyperliquid 通过 fills 接口获取成交记录。
+   * 对于分多次成交的订单，该方法会按 oid 聚合所有 fill。
+   * 计算总成交量和加权平均价格，确保返回的订单数据准确。
    */
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
     return this.withRetry(async () => {
-      // Hyperliquid 閫氳繃 fills 鎺ュ彛鑾峰彇鍘嗗彶鎴愪氦
+      // Hyperliquid 通过 fills 接口获取历史成交
       const fills: any = await this.infoClient.userFills({ user: this.tradingWalletAddress })
 
-      // 濡傛灉鎸囧畾浜唖ymbol锛岃繃婊ゆ垚浜?
+      // 如果指定了 symbol，过滤成交
       const filtered = symbol
         ? fills.filter((f: any) => f.coin === this.mapSymbolToHl(symbol))
         : fills
 
-      // 鎸夎鍗旾D鑱氬悎鎵€鏈?fill锛堝鐞嗗垎澶氭鎴愪氦鐨勮鍗曪級
+      // 按订单 ID 聚合所有 fill（处理分多次成交的订单）
       const orderMap = new Map<
         string,
         {
@@ -808,12 +819,12 @@ export class HyperliquidClient implements IExchangeClient {
         })
       }
 
-      // 灏嗚仛鍚堝悗鐨勮鍗曡浆鎹负缁熶竴鏍煎紡
+      // 将聚合后的订单转换为统一格式
       return Array.from(orderMap.values()).map((order) => {
         const side = order.side === 'B' ? 'buy' : 'sell'
         const internalSymbol = symbol || this.mapHlSymbolToInternal(order.coin)
 
-        // 璁＄畻鎬绘垚浜ら噺鍜屽姞鏉冨钩鍧囦环鏍?
+        // 计算总成交量和加权平均价格
         let totalSz = 0
         let totalValue = 0
         let lastTime = 0
@@ -836,11 +847,11 @@ export class HyperliquidClient implements IExchangeClient {
           symbol: internalSymbol,
           marketType: 'perp' as MarketType,
           side,
-          // 娉ㄦ剰锛欻yperliquid fills API 涓嶈繑鍥炲師濮?orderType
-          // 鐢变簬 Hyperliquid 鐨勫競浠峰崟鏈川涓婃槸 IOC 闄愪环鍗曪紝
-          // 杩欓噷浣跨敤 'limit' 浣滀负榛樿鍊硷紝姣旂‖缂栫爜 'market' 鏇村噯纭?
+          // 注意：Hyperliquid fills API 不返回原始 orderType
+          // 由于 Hyperliquid 的市价单本质上是 IOC 限价单，
+          // 这里使用 'limit' 作为默认值，比硬编码 'market' 更准确
           type: 'limit' as OrderType,
-          price: avgPx, // 浣跨敤鍔犳潈骞冲潎浠锋牸
+          price: avgPx, // 使用加权平均价格
           amount: totalSz,
           filled: totalSz,
           status: 'closed' as const,
@@ -852,9 +863,9 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ鎸佷粨
+   * 查询持仓
    *
-   * @returns 鎸佷粨鍒楄〃
+   * @returns 持仓列表
    */
   async fetchPositions(): Promise<UnifiedPosition[]> {
     return this.withRetry(async () => {
@@ -867,7 +878,7 @@ export class HyperliquidClient implements IExchangeClient {
       return clearinghouseState.assetPositions
         .filter((p: any) => {
           const size = Number(p.position?.szi || 0)
-          return size !== 0 // 鍙繑鍥炴湁鎸佷粨鐨?
+          return size !== 0 // 只返回有持仓的项
         })
         .map((p: any) => {
           const size = Number(p.position.szi)
@@ -890,15 +901,15 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ浣欓
+   * 查询余额
    *
-   * @returns 浣欓鍒楄〃
+   * @returns 余额列表
    */
   async fetchBalance(): Promise<UnifiedBalance[]> {
     return this.withRetry(async () => {
       const clearinghouseState: any = await this.infoClient.clearinghouseState({ user: this.tradingWalletAddress })
 
-      // Hyperliquid 浣跨敤 USDC 浣滀负淇濊瘉閲?
+      // Hyperliquid 使用 USDC 作为保证金
       const withdrawable = Number(clearinghouseState?.withdrawable || 0)
       const accountValue = Number(clearinghouseState?.marginSummary?.accountValue || 0)
       const marginUsed = accountValue - withdrawable
@@ -915,13 +926,13 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏌ヨ琛屾儏鏁版嵁
+   * 查询行情数据
    *
-   * @param symbol - 浜ゆ槗瀵?symbol
-   * @returns 琛屾儏鏁版嵁锛堝寘鍚渶鏂颁环銆佷拱鍗栦环銆?4h楂樹綆浠峰拰鎴愪氦閲忥級
+   * @param symbol - 交易对 symbol
+   * @returns 行情数据（包含最新价、买卖价、24h 高低价和成交量）
    */
   async fetchTicker(symbol: string): Promise<UnifiedTicker> {
-    // 妫€鏌ョ紦瀛?
+    // 检查缓存
     const cached = this.tickerCache.get(symbol)
     if (cached && Date.now() - cached.timestamp < this.TICKER_CACHE_TTL) {
       return cached.data
@@ -930,7 +941,7 @@ export class HyperliquidClient implements IExchangeClient {
     return this.withRetry(async () => {
       const coin = this.mapSymbolToHl(symbol)
 
-      // 骞惰鑾峰彇鎵€鏈夐渶瑕佺殑鏁版嵁
+      // 并行获取所有需要的数据
       const [midsResult, metaResult, candlesResult] = await Promise.allSettled([
         this.infoClient.allMids(),
         this.infoClient.meta(),
@@ -942,7 +953,7 @@ export class HyperliquidClient implements IExchangeClient {
         }),
       ])
 
-      // 澶勭悊 mids 缁撴灉
+      // 处理 mids 结果
       if (midsResult.status === 'rejected') {
         throw new ExchangeError(`Failed to fetch market price: ${midsResult.reason}`)
       }
@@ -953,12 +964,12 @@ export class HyperliquidClient implements IExchangeClient {
         throw new ExchangeError(`Ticker not found for ${coin}`)
       }
 
-      // 澶勭悊 meta 缁撴灉锛堝彲閫夛級
+      // 处理 meta 结果（可选）
       const assetInfo = metaResult.status === 'fulfilled'
         ? metaResult.value.universe.find(u => u.name === coin)
         : undefined
 
-      // 澶勭悊 candles 缁撴灉骞惰绠?4灏忔椂缁熻
+      // 处理 candles 结果并计算 24 小时统计
       let high = Number(mid)
       let low = Number(mid)
       let volume = 0
@@ -970,7 +981,7 @@ export class HyperliquidClient implements IExchangeClient {
         volume = candles.reduce((sum, c) => sum + Number(c.v), 0)
       }
 
-      // 璁＄畻涔板崠浠峰樊
+      // 计算买卖价差
       const spread = Number(mid) * this.TICKER_SPREAD_PERCENTAGE
       const bid = Number(mid) - spread
       const ask = Number(mid) + spread
@@ -986,30 +997,30 @@ export class HyperliquidClient implements IExchangeClient {
         raw: { mid, assetInfo, coin },
       }
 
-      // 鏇存柊缂撳瓨
+      // 更新缓存
       this.tickerCache.set(symbol, { data: ticker, timestamp: Date.now() })
 
       return ticker
     }, 'fetchTicker')
   }
 
-  // ========== 绉佹湁鏄犲皠鏂规硶 ==========
+  // ========== 私有映射方法 ==========
 
   /**
-   * 灏嗗唴閮ㄧ粺涓€ symbol 杞崲涓?Hyperliquid 甯佺鍚嶇О
+   * 将内部统一 symbol 转换为 Hyperliquid 币种名称。
    *
-   * @param symbol - 缁熶竴鏍煎紡 symbol (濡? BTC/USDT:PERP)
-   * @returns Hyperliquid 甯佺鍚嶇О (濡? BTC)
-   * @throws {ExchangeError} symbol 鏍煎紡鏃犳晥
+   * @param symbol - 统一格式 symbol（如 BTC/USDT:PERP）
+   * @returns Hyperliquid 币种名称（如 BTC）
+   * @throws {ExchangeError} symbol 格式无效
    *
    * @example
    * ```typescript
-   * mapSymbolToHl('BTC/USDT:PERP') // 杩斿洖: 'BTC'
-   * mapSymbolToHl('ETH/USDT:PERP') // 杩斿洖: 'ETH'
+   * mapSymbolToHl('BTC/USDT:PERP') // 返回: 'BTC'
+   * mapSymbolToHl('ETH/USDT:PERP') // 返回: 'ETH'
    * ```
    */
   private mapSymbolToHl(symbol: string): string {
-    // 楠岃瘉 symbol 鏍煎紡: BASE/QUOTE:PERP
+    // 验证 symbol 格式: BASE/QUOTE:PERP
     const perpPattern = /^([A-Z0-9]+)\/[A-Z]+:PERP$/i
     const match = symbol.match(perpPattern)
 
@@ -1024,41 +1035,41 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 灏?Hyperliquid 甯佺鍚嶇О杞崲涓哄唴閮ㄧ粺涓€ symbol
+   * 将 Hyperliquid 币种名称转换为内部统一 symbol。
    *
-   * @param coin - Hyperliquid 甯佺鍚嶇О (濡? BTC)
-   * @returns 缁熶竴鏍煎紡 symbol (濡? BTC/USDT:PERP)
+   * @param coin - Hyperliquid 币种名称（如 BTC）
+   * @returns 统一格式 symbol（如 BTC/USDT:PERP）
    *
    * @example
    * ```typescript
-   * mapHlSymbolToInternal('BTC') // 杩斿洖: 'BTC/USDT:PERP'
-   * mapHlSymbolToInternal('ETH') // 杩斿洖: 'ETH/USDT:PERP'
+   * mapHlSymbolToInternal('BTC') // 返回: 'BTC/USDT:PERP'
+   * mapHlSymbolToInternal('ETH') // 返回: 'ETH/USDT:PERP'
    * ```
    */
   private mapHlSymbolToInternal(coin: string): string {
-    // Hyperliquid 鎵€鏈夊悎绾﹂兘鏄?USDT 姘哥画
+    // Hyperliquid 所有合约都是 USDT 永续
     return `${coin.toUpperCase()}/USDT:PERP`
   }
 
   /**
-   * 鑾峰彇甯佺瀵瑰簲鐨勮祫浜?ID锛坅sset index锛?
+   * 获取币种对应的资产 ID（asset index）。
    *
-   * @param coin - 甯佺鍚嶇О (濡? BTC)
-   * @returns 璧勪骇 ID
-   * @throws {ExchangeError} 甯佺涓嶅瓨鍦?
+   * @param coin - 币种名称（如 BTC）
+   * @returns 资产 ID
+   * @throws {ExchangeError} 币种不存在
    *
    * @remarks
-   * Hyperliquid SDK 瑕佹眰鍦ㄤ笅鍗曞拰鎾ゅ崟鏃朵娇鐢ㄨ祫浜?ID锛堟暣鏁帮級鑰岄潪甯佺鍚嶇О銆?
-   * 璇ユ柟娉曚細缂撳瓨 meta 淇℃伅 1 灏忔椂锛岄伩鍏嶉绻佽姹傘€?
+   * Hyperliquid SDK 要求在下单和撤单时使用资产 ID（整数）而非币种名称。
+   * 该方法会缓存 meta 信息 1 小时，避免频繁请求。
    *
    * @example
    * ```typescript
-   * const assetId = await this.getAssetId('BTC') // 杩斿洖: 0
-   * const assetId = await this.getAssetId('ETH') // 杩斿洖: 1
+   * const assetId = await this.getAssetId('BTC') // 返回: 0
+   * const assetId = await this.getAssetId('ETH') // 返回: 1
    * ```
    */
   private async getAssetId(coin: string): Promise<number> {
-    // 妫€鏌ョ紦瀛?
+    // 检查缓存
     const now = Date.now()
     if (this.assetMetaCache && now - this.assetMetaCacheTime < this.ASSET_META_CACHE_TTL) {
       const assetId = this.assetMetaCache.get(coin)
@@ -1067,10 +1078,10 @@ export class HyperliquidClient implements IExchangeClient {
       }
     }
 
-    // 缂撳瓨杩囨湡鎴栦笉瀛樺湪锛岄噸鏂拌幏鍙?
+    // 缓存过期或不存在，重新获取
     const meta: any = await this.infoClient.meta()
 
-    // 鏋勫缓 coin -> assetId 鏄犲皠
+    // 构建 coin -> assetId 映射
     const newCache = new Map<string, number>()
     if (meta && meta.universe && Array.isArray(meta.universe)) {
       for (const asset of meta.universe) {
@@ -1080,11 +1091,11 @@ export class HyperliquidClient implements IExchangeClient {
       }
     }
 
-    // 鏇存柊缂撳瓨
+    // 更新缓存
     this.assetMetaCache = newCache
     this.assetMetaCacheTime = now
 
-    // 鏌ユ壘鐩爣甯佺
+    // 查找目标币种
     const assetId = newCache.get(coin)
     if (assetId === undefined) {
       throw new ExchangeError(
@@ -1097,18 +1108,18 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 灏?Hyperliquid 鐨勬湭瀹屾垚璁㈠崟鏄犲皠涓虹粺涓€鏍煎紡
+   * 将 Hyperliquid 的未完成订单映射为统一格式。
    *
-   * @param order - Hyperliquid 鏈畬鎴愯鍗曞璞?
-   * @param symbol - 缁熶竴鏍煎紡 symbol
-   * @returns 缁熶竴鏍煎紡璁㈠崟瀵硅薄
+   * @param order - Hyperliquid 未完成订单对象
+   * @param symbol - 统一格式 symbol
+   * @returns 统一格式订单对象
    */
   private mapOpenOrderToUnified(order: any, symbol: string): UnifiedOrder {
     const side = order.side === 'B' ? 'buy' : 'sell'
     const sz = Number(order.sz)
     const limitPx = Number(order.limitPx)
 
-    // 鍒ゆ柇璁㈠崟绫诲瀷
+    // 判断订单类型
     let type: OrderType = 'limit'
     if (order.orderType && typeof order.orderType === 'object') {
       if ('limit' in order.orderType && order.orderType.limit.tif === 'Ioc') {
@@ -1125,7 +1136,7 @@ export class HyperliquidClient implements IExchangeClient {
       type,
       price: limitPx,
       amount: sz,
-      filled: 0, // 鏈畬鎴愯鍗曠殑宸叉垚浜ゆ暟閲忛渶瑕佷粠鍏朵粬鎺ュ彛鑾峰彇
+      filled: 0, // 未完成订单的已成交数量需要从其他接口获取
       status: 'open',
       createdAt: order.timestamp,
       raw: order,
@@ -1133,11 +1144,11 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 灏?Hyperliquid 鐨勬垚浜よ褰曟槧灏勪负缁熶竴璁㈠崟鏍煎紡
+   * 将 Hyperliquid 的成交记录映射为统一订单格式。
    *
-   * @param fill - Hyperliquid 鎴愪氦璁板綍
-   * @param symbol - 缁熶竴鏍煎紡 symbol
-   * @returns 缁熶竴鏍煎紡璁㈠崟瀵硅薄
+   * @param fill - Hyperliquid 成交记录
+   * @param symbol - 统一格式 symbol
+   * @returns 统一格式订单对象
    */
   private mapFillToOrder(fill: any, symbol: string): UnifiedOrder {
     const side = fill.side === 'B' ? 'buy' : 'sell'
@@ -1150,10 +1161,10 @@ export class HyperliquidClient implements IExchangeClient {
       symbol,
       marketType: 'perp',
       side,
-      type: 'market', // 宸叉垚浜ょ殑璁㈠崟绫诲瀷闅句互鍒ゆ柇锛岄粯璁や负甯備环
+      type: 'market', // 已成交的订单类型难以判断，默认为市价
       price: px,
       amount: sz,
-      filled: sz, // 鎴愪氦璁板綍鐨勬暟閲忓嵆涓哄凡鎴愪氦鏁伴噺
+      filled: sz, // 成交记录的数量即为已成交数量
       status: 'closed',
       createdAt: fill.time,
       raw: fill,
@@ -1161,10 +1172,10 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鏄犲皠璁㈠崟鐘舵€?
+   * 映射订单状态。
    *
-   * @param status - Hyperliquid 璁㈠崟鐘舵€?
-   * @returns 缁熶竴鏍煎紡璁㈠崟鐘舵€?
+   * @param status - Hyperliquid 订单状态
+   * @returns 统一格式订单状态
    */
   private mapOrderStatus(status: any): UnifiedOrder['status'] {
     if ('error' in status) {
@@ -1189,26 +1200,26 @@ export class HyperliquidClient implements IExchangeClient {
   }
 
   /**
-   * 鐢熸垚鍞竴鐨勫鎴风璁㈠崟ID锛堢鍚?Hyperliquid SDK 瑕佹眰锛?
+   * 生成唯一的客户端订单 ID（符合 Hyperliquid SDK 要求）。
    *
-   * @returns 鍞竴鐨勫鎴风璁㈠崟ID锛堟牸寮忥細0x + 32涓崄鍏繘鍒跺瓧绗︼紝鍏?6瀛楄妭锛?
+   * @returns 唯一的客户端订单 ID（格式：0x + 32 个十六进制字符，16 字节）
    * @remarks
-   * Hyperliquid SDK 瑕佹眰 clientOrderId 蹇呴』鏄?0x 寮€澶寸殑 16 瀛楄妭鍗佸叚杩涘埗瀛楃涓诧紙32涓崄鍏繘鍒跺瓧绗︼級锛?
-   * 鍚﹀垯浼氭姤閿欙細
+   * Hyperliquid SDK 要求 clientOrderId 必须是 0x 开头的 16 字节十六进制字符串（32 个十六进制字符）。
+   * 否则会报错：
    *   "Invalid length: Expected 34 but received 66 at action.cancels.0.cloid"
-   * 鍏朵腑 34 = 2 (0x 鍓嶇紑) + 32 (鍗佸叚杩涘埗瀛楃涓暟)銆?
-   * 鍥犳杩欓噷浣跨敤 crypto.randomBytes(16) 鐢熸垚 16 瀛楄妭闅忔満鏁般€?
-   * 鐢ㄤ簬纭繚璁㈠崟骞傜瓑鎬э紝闃叉閲嶅涓嬪崟銆?
+   * 其中 34 = 2（0x 前缀）+ 32（十六进制字符个数）。
+   * 因此这里使用 crypto.randomBytes(16) 生成 16 字节随机数。
+   * 用于确保订单幂等性，防止重复下单。
    *
    * @example
    * ```typescript
    * generateClientOrderId()
-   * // 杩斿洖: '0x1234567890abcdef1234567890abcdef'
-   * //       (0x + 32涓崄鍏繘鍒跺瓧绗?= 34涓瓧绗︼紝浠ｈ〃16瀛楄妭)
+   * // 返回: '0x1234567890abcdef1234567890abcdef'
+   * //       (0x + 32 个十六进制字符 = 34 个字符，代表 16 字节)
    * ```
    */
   private generateClientOrderId(): string {
-    // 鐢熸垚鐪熸鐨?16 瀛楄妭闅忔満鏁版嵁 = 32 涓崄鍏繘鍒跺瓧绗?
+    // 生成真正的 16 字节随机数据 = 32 个十六进制字符
     const buf = randomBytes(16)
     return `0x${buf.toString('hex')}`
   }

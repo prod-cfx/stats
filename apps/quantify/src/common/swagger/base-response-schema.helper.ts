@@ -2,8 +2,8 @@ import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec
 import { getSchemaPath } from '@nestjs/swagger'
 
 /**
- * 鏋勫缓 BaseResponseDto<T> 鐨勯€氱敤 Swagger Schema
- * 绾﹀畾缁撴瀯锛?
+ * 构建 BaseResponseDto<T> 的通用 Swagger Schema
+ * 约定结构：
  * {
  *   data: T
  *   message?: string
