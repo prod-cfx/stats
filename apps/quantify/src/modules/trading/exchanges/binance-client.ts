@@ -369,6 +369,11 @@ export class BinanceClient extends BaseCexClient {
         return new AuthError('API Key权限不足，请确保开启"读取"和"交易"权限', data)
       }
 
+      // API Key 被禁用/删除
+      if (code === '-2011' || messageLower.includes('disabled') || messageLower.includes('delete')) {
+        return new AuthError('API Key已被禁用，请在币安API管理页面检查状态', data)
+      }
+
       return new ExchangeError(message, code, data)
     }
 

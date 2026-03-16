@@ -2,9 +2,12 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { CreateOrderInput, ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { ExchangeAccountConfig, ExchangeAccountStore } from '@/modules/trading/factory/account-store'
+import { ConfigModule } from '@nestjs/config'
 import { Test } from '@nestjs/testing'
+import { EnvModule } from '@/common/modules/env.module'
 import { TradingModule } from '@/modules/trading/trading.module'
 import { TradingService } from '@/modules/trading/trading.service'
+import { PrismaService } from '@/prisma/prisma.service'
 
 class InMemoryAccountStore implements ExchangeAccountStore {
   async getAccountConfig(userId: string, exchangeId: ExchangeId): Promise<ExchangeAccountConfig | null> {
@@ -97,8 +100,10 @@ describe('TradingService (E2E, trading module only)', () => {
     }) as typeof fetch
 
     moduleFixture = await Test.createTestingModule({
-      imports: [TradingModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), EnvModule, TradingModule],
     })
+      .overrideProvider(PrismaService)
+      .useValue({})
       .overrideProvider('ExchangeAccountStore')
       .useClass(InMemoryAccountStore)
       .compile()
@@ -110,7 +115,9 @@ describe('TradingService (E2E, trading module only)', () => {
   })
 
   afterAll(async () => {
-    await app.close()
+    if (app) {
+      await app.close()
+    }
     globalThis.fetch = originalFetch
   })
 

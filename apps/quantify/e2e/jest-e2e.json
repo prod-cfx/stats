@@ -22,7 +22,7 @@
     "^@nktkas/hyperliquid$": "<rootDir>/../node_modules/@nktkas/hyperliquid/script/src/mod.js"
   },
   "transformIgnorePatterns": [
-    "/node_modules/(?!(?:@nktkas/hyperliquid|@noble/hashes|@noble/secp256k1)/)"
+    "/node_modules/(?!(?:\\.pnpm/(?:@nktkas\\+hyperliquid|@noble\\+hashes|@noble\\+secp256k1)@|@nktkas/hyperliquid|@noble/hashes|@noble/secp256k1)/)"
   ],
   "setupFilesAfterEnv": ["./setup-e2e.ts"],
   "maxWorkers": 1,

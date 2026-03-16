@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
-import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@prisma/client'
+import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
@@ -57,7 +57,7 @@ describe('StrategySignals (E2E, DB only)', () => {
         code: 'E2E-BTCUSDT',
         baseAsset: 'BTC',
         quoteAsset: 'USDT',
-        exchange: 'E2E-EXCHANGE',
+        exchange: 'BINANCE',
         type: 'CRYPTO',
         instrumentType: 'SPOT',
         status: 'ACTIVE',
@@ -299,7 +299,8 @@ describe('StrategySignals (E2E, DB only)', () => {
 
       // 验证实际下单金额被限制在风险上限内（200 USDT），而非 defaultQuoteAmount 的 100 USDT
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls[0]
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
       // amount 应该是 200 / 50000 = 0.004（受 maxRiskFraction 限制）
@@ -378,7 +379,8 @@ describe('StrategySignals (E2E, DB only)', () => {
 
       // 验证实际下单金额被限制在风险上限内（200 USDT）
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls[0]
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
       // amount 应该是 200 / 50000 = 0.004
@@ -454,7 +456,8 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(execution!.status).toBe(ExecutionStatus.EXECUTED)
 
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls[0]
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
       // 应该使用全局配置 min(200, 100) = 100 USDT

@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import type { PrismaClient, User } from '@prisma/client'
+import type { PrismaClient, User } from '@/prisma/prisma.types'
 
 import type { PrismaService } from '@/prisma/prisma.service'
 import { ErrorCode } from '@ai/shared'
@@ -59,6 +59,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
         description: 'E2E 测试用运行实例',
         llmModel: 'gpt-4',
         status: 'running',
+        mode: 'LIVE',
       },
     })
 
