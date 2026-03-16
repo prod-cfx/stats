@@ -1,4 +1,4 @@
-/// 琛屾儏涓庢寚鏍囩浉鍏冲畾涔?
+/// 行情与指标相关定义
 enum SymbolType {
   CRYPTO
   STOCK
@@ -17,10 +17,10 @@ enum InstrumentType {
 }
 
 enum IndicatorType {
-  RET /// 鍖洪棿鏀剁泭
-  MOVING_AVG /// 绠€鍗曠Щ鍔ㄥ潎绾?
-  VOLATILITY /// 娉㈠姩鐜?
-  VOLUME_RATIO /// 閲忚兘姣?
+  RET /// 区间收益
+  MOVING_AVG /// 简单移动均线
+  VOLATILITY /// 波动率
+  VOLUME_RATIO /// 量能比
 }
 
 enum MarketTimeframe {
@@ -71,7 +71,7 @@ model MarketBar {
   volume      Decimal?        @db.Decimal(30, 12)
   quoteVolume Decimal?        @map("quote_volume") @db.Decimal(30, 12)
   trades      Int?
-  source      String? /// 鏁版嵁鏉ユ簮锛堝 BINANCE_REST / BINANCE_WS锛?
+  source      String? /// 数据来源（如 BINANCE_REST / BINANCE_WS）
   isFinal     Boolean         @default(true) @map("is_final")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at")
@@ -99,7 +99,7 @@ model MarketQuote {
   askPrice           Decimal? @map("ask_price") @db.Decimal(30, 10)
   askQty             Decimal? @map("ask_qty") @db.Decimal(30, 12)
   eventTime          DateTime @map("event_time")
-  source             String? /// 鏁版嵁鏉ユ簮
+  source             String? /// 数据来源
   createdAt          DateTime @default(now()) @map("created_at")
 
   symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
