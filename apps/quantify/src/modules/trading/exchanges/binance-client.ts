@@ -370,7 +370,7 @@ export class BinanceClient extends BaseCexClient {
       }
 
       // API Key 被禁用/删除
-      if (code === '-2011' || messageLower.includes('disabled') || messageLower.includes('delete')) {
+      if (messageLower.includes('disabled') || messageLower.includes('delete')) {
         return new AuthError('API Key已被禁用，请在币安API管理页面检查状态', data)
       }
 
