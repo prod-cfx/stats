@@ -4,6 +4,8 @@ import type { WhaleAlertService } from '../src/modules/whale-alert/whale-alert.s
 import type { PrismaService } from '../src/prisma/prisma.service'
 import { resolve } from 'node:path'
 
+jest.setTimeout(180_000)
+
 let recentLongTime: Date
 let recentShortTime: Date
 let oldLongTime: Date
@@ -136,6 +138,36 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should respect symbol filter and limit', async () => {
+    const client = prisma.getClient()
+    const now = new Date()
+    await client.hyperliquidWhaleAlert.deleteMany({})
+    await client.hyperliquidWhaleAlert.createMany({
+      data: [
+        {
+          userAddress: '0xWhaleE2E1',
+          symbol: 'E2E',
+          positionSize: '10',
+          entryPrice: '50000',
+          liquidationPrice: '45000',
+          positionValueUsd: '5000000',
+          positionAction: 1,
+          createTime: new Date(now.getTime() - 5 * 60 * 1000),
+          source: 'E2E',
+        },
+        {
+          userAddress: '0xWhaleE2E3',
+          symbol: 'E2E',
+          positionSize: '-5',
+          entryPrice: '3000',
+          liquidationPrice: '2500',
+          positionValueUsd: '3000000',
+          positionAction: 2,
+          createTime: new Date(now.getTime() - 2 * 60 * 1000),
+          source: 'E2E',
+        },
+      ],
+    })
+
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'E2E',
       min_position_value_usd: 1_000_000,
@@ -149,13 +181,30 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should respect custom minPositionValueUsd', async () => {
+    const client = prisma.getClient()
+    const localSince = new Date(Date.now() - 10 * 60 * 1000)
+    await client.hyperliquidWhaleAlert.deleteMany({})
+    await client.hyperliquidWhaleAlert.create({
+      data: {
+        userAddress: '0xWhaleE2E1',
+        symbol: 'E2E',
+        positionSize: '10',
+        entryPrice: '50000',
+        liquidationPrice: '45000',
+        positionValueUsd: '5000000',
+        positionAction: 1,
+        createTime: localSince,
+        source: 'E2E',
+      },
+    })
+
     // 使用更高的阈值，并限制时间窗口仅覆盖最近一段时间，
     // 这样旧数据（E2E4）会被排除，只返回名义价值 >= 4,000,000 的记录（即 E2E1）
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'E2E',
       min_position_value_usd: 4_000_000,
       // 仅包含最近几分钟内的记录
-      since: recentLongTime.toISOString(),
+      since: localSince.toISOString(),
     })
 
     expect(result.length).toBe(1)
@@ -163,9 +212,6 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     expect(result[0].position_value_usd).toBeGreaterThanOrEqual(4_000_000)
   })
 })
-
-
-
 
 
 

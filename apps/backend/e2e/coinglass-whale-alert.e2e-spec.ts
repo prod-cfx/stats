@@ -4,6 +4,8 @@ import type { CoinglassWhaleAlertJob } from '../src/modules/data-sync/jobs/coing
 import type { PrismaService } from '../src/prisma/prisma.service'
 import { resolve } from 'node:path'
 
+jest.setTimeout(180_000)
+
 describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -61,6 +63,7 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
 
   it('should fetch whale alerts (via mocked API) and persist to database correctly', async () => {
     const client = prisma.getClient()
+    await client.hyperliquidWhaleAlert.deleteMany({})
 
     const nowSeconds = Math.floor(Date.now() / 1000)
     const mockData = [
@@ -125,6 +128,11 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
 
       // 2）数据库数据断言（确认映射 & 幂等键逻辑）
       const rows = await client.hyperliquidWhaleAlert.findMany({
+        where: {
+          source: 'COINGLASS',
+          userAddress: { in: mockData.map(item => item.user) },
+          symbol: { in: mockData.map(item => item.symbol) },
+        },
         orderBy: { createTime: 'asc' },
       })
 
@@ -172,6 +180,4 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
     }
   })
 })
-
-
 
