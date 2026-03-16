@@ -28,11 +28,16 @@ type BacktestJobView = Omit<BacktestJobRecord, 'result'>
 
 @Injectable()
 export class BacktestJobsService {
+  private static readonly COMPLETED_JOB_RETENTION_MS = 1000 * 60 * 60 * 24
+  private static readonly MAX_JOBS = 1000
+
   private readonly jobs = new Map<string, BacktestJobRecord>()
 
   constructor(private readonly runner: BacktestRunnerService) {}
 
   createJob(input: BacktestRunInput): BacktestJobView {
+    this.pruneJobs()
+
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const job: BacktestJobRecord = {
       id,
@@ -49,6 +54,7 @@ export class BacktestJobsService {
       },
     }
     this.jobs.set(id, job)
+    this.evictOverflowJobs()
     queueMicrotask(() => this.executeJob(id, input))
     return this.toView(job)
   }
@@ -97,5 +103,24 @@ export class BacktestJobsService {
       inputSummary: job.inputSummary,
     }
   }
-}
 
+  private pruneJobs() {
+    const now = Date.now()
+    for (const [id, job] of this.jobs) {
+      if (!job.finishedAt) continue
+      const finishedAtMs = Date.parse(job.finishedAt)
+      if (Number.isNaN(finishedAtMs)) continue
+      if (now - finishedAtMs > BacktestJobsService.COMPLETED_JOB_RETENTION_MS) {
+        this.jobs.delete(id)
+      }
+    }
+  }
+
+  private evictOverflowJobs() {
+    while (this.jobs.size > BacktestJobsService.MAX_JOBS) {
+      const oldestJobId = this.jobs.keys().next().value
+      if (!oldestJobId) break
+      this.jobs.delete(oldestJobId)
+    }
+  }
+}
