@@ -53,6 +53,26 @@ const knownMojibakeByFile: Record<string, string[]> = {
   'src/modules/llm-strategies/README_SIGNAL_INTEGRATION.md': [
     'LLM绛栫暐淇″彿闆嗘垚鍒板紑浠撴祦绋',
   ],
+  'src/main.ts': [
+    '閰嶇疆鍏ㄥ眬楠岃瘉绠￠亾',
+    '璁剧疆鍏ㄥ眬璺敱鍓嶇紑',
+  ],
+  'src/modules/backtesting/backtesting.controller.ts': [
+    'Nest DI 闇€瑕佽繍琛屾椂寮曠敤',
+  ],
+  'src/modules/backtesting/core/backtest-runner.service.ts': [
+    'Nest DI 闇€瑕佽繍琛屾椂寮曠敤',
+  ],
+  'src/modules/llm-strategies/services/llm-strategy-runs.service.ts': [
+    '闇€瑕佺敤浜庝緷璧栨敞鍏ワ紝涓嶈兘浣跨敤 import type',
+  ],
+  'src/modules/llm-strategy-codegen/repositories/codegen-sessions.repository.ts': [
+    'Nest DI 闇€瑕佽繍琛屾椂瀵煎叆',
+  ],
+  'src/modules/positions/positions-valuation.service.ts': [
+    'Nest DI 闇€瑕佽繍琛屾椂寮曠敤',
+    'Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?',
+  ],
 }
 
 describe('quantify mojibake guard', () => {
