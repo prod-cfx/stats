@@ -6,8 +6,9 @@ import type { WhaleNotificationDispatcherService } from './whale-notification-di
 import type { WhaleNotificationMatcherService } from './whale-notification-matcher.service'
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
 import { Inject, Injectable } from '@nestjs/common'
+import { Logger } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
+import { Prisma, WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
 import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 import { WhaleNotificationDeduplicatorService as WhaleNotificationDeduplicatorServiceToken } from './whale-notification-deduplicator.service'
@@ -25,6 +26,8 @@ export interface WhaleTradeEventInput {
 
 @Injectable()
 export class WhaleNotificationOrchestratorService {
+  private readonly logger = new Logger(WhaleNotificationOrchestratorService.name)
+
   constructor(
     @Inject(WhaleNotificationMatcherServiceToken)
     private readonly matcher: WhaleNotificationMatcherService,
@@ -84,21 +87,28 @@ export class WhaleNotificationOrchestratorService {
     this.metricsService.addSkippedCooldownDeliveries(dedupResult.skipped.length)
 
     for (const skipped of dedupResult.skipped) {
-      await this.repository.createDelivery({
-        userId: skipped.userId,
-        ruleId: skipped.ruleId,
-        dedupKey: skipped.dedupKey,
-        channel: this.toChannelEnum(skipped.channel),
-        status: WhaleNotificationDeliveryStatus.SKIPPED_COOLDOWN,
-        whaleAddress: skipped.whaleAddress,
-        symbol: skipped.symbol,
-        side: skipped.side,
-        tradeValueUsd: skipped.tradeValueUsd,
-        tradeTime: skipped.tradeTime,
-        title: 'Whale Trade Alert',
-        content: `${skipped.whaleAddress} ${skipped.side} ${skipped.symbol} $${skipped.tradeValueUsd.toLocaleString('en-US')}`,
-        errorMessage: 'cooldown',
-      })
+      try {
+        await this.repository.createDelivery({
+          userId: skipped.userId,
+          ruleId: skipped.ruleId,
+          dedupKey: skipped.dedupKey,
+          channel: this.toChannelEnum(skipped.channel),
+          status: WhaleNotificationDeliveryStatus.SKIPPED_COOLDOWN,
+          whaleAddress: skipped.whaleAddress,
+          symbol: skipped.symbol,
+          side: skipped.side,
+          tradeValueUsd: skipped.tradeValueUsd,
+          tradeTime: skipped.tradeTime,
+          title: 'Whale Trade Alert',
+          content: `${skipped.whaleAddress} ${skipped.side} ${skipped.symbol} $${skipped.tradeValueUsd.toLocaleString('en-US')}`,
+          errorMessage: 'cooldown',
+        })
+      } catch (error) {
+        if (!this.isStaleRelationError(error)) {
+          throw error
+        }
+        this.logger.warn(`Skip stale skipped-delivery write for user=${skipped.userId} rule=${skipped.ruleId}`)
+      }
     }
 
     for (const item of dedupResult.allowed) {
@@ -138,6 +148,16 @@ export class WhaleNotificationOrchestratorService {
           content: dispatchResult.content,
           errorMessage: dispatchResult.errorMessage,
         })
+      } catch (error) {
+        if (!this.isStaleRelationError(error)) {
+          throw error
+        }
+        this.logger.warn(`Skip stale delivery write for user=${item.userId} rule=${item.ruleId}`)
+        await this.repository.releaseCooldownSlot({
+          dedupKey: item.dedupKey,
+          channel,
+        })
+        continue
       } finally {
         if (dispatchResult.status === WhaleNotificationDeliveryStatus.FAILED) {
           await this.repository.releaseCooldownSlot({
@@ -182,5 +202,12 @@ export class WhaleNotificationOrchestratorService {
   private applyGrayRelease<T extends { userId: string }>(matches: T[]): T[] {
     // 已取消灰度白名单逻辑：命中规则的用户全部继续派发
     return matches
+  }
+
+  private isStaleRelationError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false
+    }
+    return error.code === 'P2003' || error.code === 'P2025'
   }
 }
