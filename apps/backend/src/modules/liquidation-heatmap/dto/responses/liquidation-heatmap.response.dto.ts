@@ -42,19 +42,30 @@ export class LiquidationHeatmapResponseDto {
   y_axis!: number[]
 
   @ApiProperty({
-    type: [Number],
-    isArray: true,
     description: '清算热力值，[xIndex, yIndex, value] 三元组数组',
+    type: 'array',
+    items: {
+      type: 'array',
+      items: { type: 'number' },
+      minItems: 3,
+      maxItems: 3,
+    },
   })
   liquidation_leverage_data!: [number, number, number][]
 
   @ApiProperty({
-    type: [Number],
-    isArray: true,
     description:
       '价格 K 线数据，[timestamp(sec), open, high, low, close, volume] 六元组数组，价格与成交量为字符串形式',
+    type: 'array',
+    items: {
+      type: 'array',
+      items: {
+        oneOf: [{ type: 'number' }, { type: 'string' }],
+      },
+      minItems: 6,
+      maxItems: 6,
+    },
   })
   price_candlesticks!: [number, string, string, string, string, string][]
 }
-
 

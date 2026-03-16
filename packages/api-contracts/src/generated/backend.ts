@@ -344,8 +344,8 @@ const LiquidationHeatmapResponseDto = z
     effectiveFrom: z.string().datetime({ offset: true }).nullable(),
     effectiveTo: z.string().datetime({ offset: true }).nullable(),
     y_axis: z.array(z.number()),
-    liquidation_leverage_data: z.array(z.array(z.any())),
-    price_candlesticks: z.array(z.array(z.any())),
+    liquidation_leverage_data: z.array(z.array(z.number())),
+    price_candlesticks: z.array(z.array(z.union([z.number(), z.string()]))),
   })
   .passthrough()
 const CreateOpenInterestDto = z
