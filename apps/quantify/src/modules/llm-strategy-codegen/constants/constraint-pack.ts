@@ -10,7 +10,7 @@ export const FORBIDDEN_TOKENS = [
 ] as const
 
 export const ALLOWED_HELPER_PREFIXES = [
-  'helpers.math.',
+  'helpers.finance.',
   'helpers.array.',
   'helpers.ta.',
   'helpers.signal.',

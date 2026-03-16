@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.in
 import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
 
 import { ErrorCode } from '@ai/shared'
+import { getHelperDocs } from '@ai/shared/script-engine/helpers'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -31,6 +32,9 @@ interface ChecklistPayload {
   exitRules?: string[]
   riskRules?: Record<string, unknown>
 }
+
+const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
+const MAX_HELPER_SIGNATURE_LINES = 24
 
 @Injectable()
 export class CodegenConversationService {
@@ -263,15 +267,18 @@ export class CodegenConversationService {
   }
 
   private async generateScript(checklist: ChecklistPayload, userMessage: string): Promise<string> {
+    const helperSignatures = this.buildHelperSignaturesPrompt()
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: [
           '你是量化策略脚本生成器。',
           '只能输出 JavaScript 脚本代码，不要使用 markdown 代码块。',
-          '只能使用 helpers.math/helpers.array/helpers.ta/helpers.signal。',
+          '只能使用 helpers.finance/helpers.array/helpers.ta/helpers.signal。',
           '禁止使用 import/require/eval/Function/process。',
           '脚本必须返回非空对象。',
+          '以下是当前环境允许使用的 helper 函数签名（严格按签名调用，不要臆造函数）：',
+          helperSignatures,
         ].join('\n'),
       },
       {
@@ -295,6 +302,17 @@ export class CodegenConversationService {
     }
 
     return code
+  }
+
+  private buildHelperSignaturesPrompt(): string {
+    const docs = getHelperDocs().filter(doc =>
+      ALLOWED_HELPER_CATEGORIES.includes(doc.category),
+    )
+
+    return docs
+      .slice(0, MAX_HELPER_SIGNATURE_LINES)
+      .map(doc => `- ${doc.signature}`)
+      .join('\n')
   }
 
   static isTerminalStatus(status: LlmCodegenSessionStatus): boolean {
