@@ -1,4 +1,5 @@
 import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
 
@@ -7,6 +8,7 @@ export class ExchangeAccountNotFoundException extends DomainException {
     super('Exchange account not found', {
       code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
       args: params,
+      status: HttpStatus.NOT_FOUND,
     })
   }
 }

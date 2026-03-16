@@ -10,9 +10,18 @@ import type {
 } from '../core/types'
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
-import * as hl from '@nktkas/hyperliquid'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
+
+type HyperliquidSdk = {
+  HttpTransport: new (config: unknown) => unknown
+  InfoClient: new (config: unknown) => any
+  ExchangeClient: new (config: unknown) => any
+}
+
+function loadHyperliquidSdk(): HyperliquidSdk {
+  return require('@nktkas/hyperliquid') as HyperliquidSdk
+}
 
 /**
  * Hyperliquid 交易所适配器（基于 @nktkas/hyperliquid SDK）。
@@ -55,8 +64,8 @@ export class HyperliquidClient implements IExchangeClient {
   // 实际用于交易和查询的钱包地址（agent 钱包地址）
   private readonly tradingWalletAddress: string
 
-  private readonly infoClient: hl.InfoClient
-  private readonly exchClient: hl.ExchangeClient
+  private readonly infoClient: any
+  private readonly exchClient: any
 
   // 速率限制
   private lastRequestTime = 0
@@ -71,6 +80,8 @@ export class HyperliquidClient implements IExchangeClient {
   private readonly ASSET_META_CACHE_TTL = 3600000 // 1小时
 
   constructor(config: HyperliquidConfig) {
+    const hl = loadHyperliquidSdk()
+
     this.mainWalletAddress = config.mainWalletAddress
     this.agentPrivateKey = config.agentPrivateKey
 

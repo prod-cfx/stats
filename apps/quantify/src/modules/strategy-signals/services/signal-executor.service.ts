@@ -16,7 +16,6 @@ import { PositionsService } from '@/modules/positions/positions.service'
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
-import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalExecutionRepository } from '../repositories/signal-execution.repository'

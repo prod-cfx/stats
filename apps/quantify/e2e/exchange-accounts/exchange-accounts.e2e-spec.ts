@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
-import type { User } from '@prisma/client'
+import type { User } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
@@ -12,6 +12,10 @@ describe('ExchangeAccounts (E2E)', () => {
   const withUserId = <T extends Record<string, unknown>>(payload: T) => ({ userId: testUser.id, ...payload })
   const withUserIdPath = (path: string, userId = testUser.id) =>
     `${path}${path.includes('?') ? '&' : '?'}userId=${userId}`
+  const dataOf = <T>(response: { body: unknown }): T => {
+    const body = response.body as Record<string, unknown>
+    return ((body?.data as T | undefined) ?? (response.body as T))
+  }
 
   beforeAll(async () => {
     // Mock fetch 拦截交易所 API 请求
@@ -24,7 +28,12 @@ describe('ExchangeAccounts (E2E)', () => {
       const urlParams = new URLSearchParams(url.search)
 
       // ===== Binance Mock =====
-      if (url.hostname === 'api.binance.com' || url.hostname === 'testnet.binance.vision') {
+      if (
+        url.hostname === 'api.binance.com'
+        || url.hostname === 'fapi.binance.com'
+        || url.hostname === 'testnet.binance.vision'
+        || url.hostname === 'testnet.binancefuture.com'
+      ) {
         // Binance 查询余额
         if (url.pathname === '/api/v3/account' && method === 'GET') {
           const apiKey = headers['X-MBX-APIKEY'] || headers['x-mbx-apikey']
@@ -53,8 +62,8 @@ describe('ExchangeAccounts (E2E)', () => {
 
           if (apiKey === 'ip_restricted') {
             return new Response(JSON.stringify({
-              code: -2010,
-              msg: 'API-key format invalid.'
+              code: -1022,
+              msg: 'Signature for this request is not valid: ip not in whitelist.'
             }), {
               status: 403,
               headers: { 'content-type': 'application/json' },
@@ -73,8 +82,8 @@ describe('ExchangeAccounts (E2E)', () => {
 
           if (apiKey === 'no_permission') {
             return new Response(JSON.stringify({
-              code: -2015,
-              msg: 'Invalid API-key, IP, or permissions for action. Permission not enabled.'
+              code: -1100,
+              msg: 'Permission not enabled for this operation.'
             }), {
               status: 403,
               headers: { 'content-type': 'application/json' },
@@ -271,14 +280,15 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body).toMatchObject({
+      const account = dataOf<any>(response)
+      expect(account).toMatchObject({
         exchangeId: 'binance',
         name: 'My Binance Account',
         isTestnet: false,
       })
-      expect(response.body.id).toBeDefined()
-      expect(response.body.lastValidatedAt).toBeDefined()
-      expect(response.body.createdAt).toBeDefined()
+      expect(account.id).toBeDefined()
+      expect(account.lastValidatedAt).toBeDefined()
+      expect(account.createdAt).toBeDefined()
     })
 
     it('should reject invalid Binance API key', async () => {
@@ -308,7 +318,7 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(400)
 
       expect(response.body.message).toContain('API签名验证失败')
-      expect(response.body.message).toContain('检查API Secret')
+      expect(response.body.message).toContain('API Secret')
     })
 
     it('should reject IP restricted Binance key', async () => {
@@ -369,8 +379,9 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.exchangeId).toBe('binance')
-      expect(response.body.name).toBe('Binance Futures')
+      const account = dataOf<any>(response)
+      expect(account.exchangeId).toBe('binance')
+      expect(account.name).toBe('Binance Futures')
     })
   })
 
@@ -388,12 +399,13 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body).toMatchObject({
+      const account = dataOf<any>(response)
+      expect(account).toMatchObject({
         exchangeId: 'okx',
         name: 'My OKX Account',
         isTestnet: false,
       })
-      expect(response.body.lastValidatedAt).toBeDefined()
+      expect(account.lastValidatedAt).toBeDefined()
     })
 
     it('should reject invalid OKX API key', async () => {
@@ -525,7 +537,7 @@ describe('ExchangeAccounts (E2E)', () => {
           name: 'Test Account for List',
         }))
 
-      createdAccountId = response.body.id
+      createdAccountId = dataOf<any>(response).id
     })
 
     it('should list user exchange accounts', async () => {
@@ -533,10 +545,11 @@ describe('ExchangeAccounts (E2E)', () => {
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      expect(Array.isArray(response.body)).toBe(true)
-      expect(response.body.length).toBeGreaterThan(0)
+      const accounts = dataOf<any[]>(response)
+      expect(Array.isArray(accounts)).toBe(true)
+      expect(accounts.length).toBeGreaterThan(0)
 
-      const account = response.body.find((a: any) => a.id === createdAccountId)
+      const account = accounts.find((a: any) => a.id === createdAccountId)
       expect(account).toBeDefined()
       expect(account.exchangeId).toBe('binance')
       expect(account.name).toBe('Test Account for List')
@@ -547,7 +560,8 @@ describe('ExchangeAccounts (E2E)', () => {
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      const account = response.body[0]
+      const accounts = dataOf<any[]>(response)
+      const account = accounts[0]
       expect(account.encryptedConfig).toBeUndefined()
       expect(account.apiKey).toBeUndefined()
       expect(account.apiSecret).toBeUndefined()
@@ -576,7 +590,7 @@ describe('ExchangeAccounts (E2E)', () => {
           name: 'Account to Delete',
         }))
 
-      accountToDelete = response.body.id
+      accountToDelete = dataOf<any>(response).id
     })
 
     it('should delete exchange account', async () => {
@@ -589,7 +603,8 @@ describe('ExchangeAccounts (E2E)', () => {
         .get(withUserIdPath('exchange-accounts'))
         .expect(200)
 
-      const account = response.body.find((a: any) => a.id === accountToDelete)
+      const accounts = dataOf<any[]>(response)
+      const account = accounts.find((a: any) => a.id === accountToDelete)
       expect(account).toBeUndefined()
     })
 
@@ -688,7 +703,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.name).toBeNull()
+      const account = dataOf<any>(response)
+      expect(account.name).toBeNull()
     })
 
     it('should accept testnet flag', async () => {
@@ -703,7 +719,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.isTestnet).toBe(true)
+      const account = dataOf<any>(response)
+      expect(account.isTestnet).toBe(true)
     })
   })
 
@@ -742,7 +759,8 @@ describe('ExchangeAccounts (E2E)', () => {
         }))
         .expect(201)
 
-      expect(response.body.name).toBe(longName)
+      const account = dataOf<any>(response)
+      expect(account.name).toBe(longName)
     })
 
     it('should reject account names exceeding max length', async () => {

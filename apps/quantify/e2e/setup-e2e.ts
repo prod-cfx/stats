@@ -278,6 +278,8 @@ function setupTestDatabase(
         env: {
           ...process.env,
           DATABASE_URL: testDbUrl,
+          QUANTIFY_DATABASE_URL: testDbUrl,
+          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
           APP_ENV: 'e2e',
         },
       })
@@ -299,6 +301,8 @@ function setupTestDatabase(
         env: {
           ...process.env,
           DATABASE_URL: testDbUrl,
+          QUANTIFY_DATABASE_URL: testDbUrl,
+          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
           APP_ENV: 'e2e',
         },
       })
@@ -403,6 +407,8 @@ const testDbUrl = buildDatabaseUrl({
 
 // 设置环境变量
 process.env.DATABASE_URL = testDbUrl
+process.env.QUANTIFY_DATABASE_URL = testDbUrl
+process.env.QUANTIFY_E2E_DATABASE_URL = testDbUrl
 
 // 初始化测试数据库
 try {

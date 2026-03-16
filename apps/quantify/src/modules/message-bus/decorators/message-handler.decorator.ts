@@ -1,6 +1,7 @@
 import type { Job } from 'bull'
-import type { MessageEnvelope, MESSAGE_BUS_QUEUE  } from '../message-bus.types'
+import type { MessageEnvelope } from '../message-bus.types'
 import { Process, Processor } from '@nestjs/bull'
+import { MESSAGE_BUS_QUEUE } from '../message-bus.types'
 import { MessageBusService } from '../message-bus.service'
 import { IdempotentConsumer } from './idempotent-consumer.decorator'
 
