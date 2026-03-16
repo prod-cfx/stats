@@ -1,8 +1,8 @@
 import type { MarketTimeframe } from '@ai/shared'
 import { DEFAULT_MARKET_SYMBOLS, MARKET_TIMEFRAMES } from '@ai/shared'
 import { registerAs } from '@nestjs/config'
-import { SUPPORTED_MARKET_TIMEFRAMES } from '../common/utils/prisma-enum-mappers'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'
+import { SUPPORTED_MARKET_TIMEFRAMES } from '../common/utils/prisma-enum-mappers'
 
 const env = defaultEnvAccessor
 const SUPPORTED_MARKET_TIMEFRAME_SET = new Set<string>(SUPPORTED_MARKET_TIMEFRAMES)

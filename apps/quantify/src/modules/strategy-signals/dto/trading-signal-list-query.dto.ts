@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { SignalStatus } from '@/prisma/prisma.types'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
-
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+
+import { SignalStatus } from '@/prisma/prisma.types'
 
 export class TradingSignalListQueryDto extends BasePaginationRequestDto {
   @ApiProperty({ description: '策略实例 ID 筛选（旧版策略）', required: false })

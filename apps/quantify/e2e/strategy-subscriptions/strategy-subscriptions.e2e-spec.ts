@@ -56,7 +56,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
       data: {
         strategyTemplateId: liveStrategyTemplateId,
         name: 'E2E-Test-Running-Instance',
-        description: 'E2E 娴嬭瘯鐢ㄨ繍琛屽疄渚?,
+        description: 'E2E test running instance',
         llmModel: 'gpt-4',
         status: 'running',
       },

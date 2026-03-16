@@ -1,6 +1,6 @@
 import { MessageBusDedupeService } from '../runtime/message-bus.dedupe.service'
 
-describe('MessageBusDedupeService', () => {
+describe('messageBusDedupeService', () => {
   it('prefixes dedupe keys and delegates lock creation to cache', async () => {
     const cache = {
       setIfNotExists: jest.fn().mockResolvedValue(true),

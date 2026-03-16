@@ -1,6 +1,6 @@
+import type { MessageEnvelope, PublishOptions } from '../message-bus.types'
 import { MessageBusService } from '../message-bus.service'
 import { OutboxService } from '../outbox/outbox.service'
-import { MessageEnvelope, PublishOptions } from '../message-bus.types'
 
 type ValueOrFn<TArgs extends any[], T> = T | ((...args: TArgs) => T)
 
