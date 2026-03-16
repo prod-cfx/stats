@@ -108,40 +108,40 @@ dx db deploy --e2e
 ### 杩愯鎵€鏈?E2E 娴嬭瘯
 
 ```bash
-dx test e2e backend
+dx test e2e quantify apps/quantify/e2e/exchange-accounts
 ```
 
 ### 杩愯 CEX 楠岃瘉娴嬭瘯
 
 ```bash
 # 浠呰繍琛岃娴嬭瘯濂椾欢
-dx test e2e backend exchange-accounts
+dx test e2e quantify apps/quantify/e2e/exchange-accounts
 
 # 鎴栨寚瀹氬畬鏁磋矾寰?
-dx test e2e backend apps/backend/e2e/exchange-accounts/exchange-accounts.e2e-spec.ts
+dx test e2e quantify apps/quantify/e2e/exchange-accounts/exchange-accounts.e2e-spec.ts
 ```
 
 ### 杩愯鐗瑰畾娴嬭瘯
 
 ```bash
 # 杩愯 Binance 鐩稿叧娴嬭瘯
-dx test e2e backend exchange-accounts -t "Binance"
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "Binance"
 
 # 杩愯 OKX 鐩稿叧娴嬭瘯
-dx test e2e backend exchange-accounts -t "OKX"
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "OKX"
 
 # 杩愯閿欒鍦烘櫙娴嬭瘯
-dx test e2e backend exchange-accounts -t "should reject"
+dx test e2e quantify apps/quantify/e2e/exchange-accounts -t "should reject"
 ```
 
 ### 璋冭瘯妯″紡
 
 ```bash
 # 鍚敤璇︾粏鏃ュ織
-E2E_VERBOSE_LOG=true dx test e2e backend exchange-accounts
+E2E_VERBOSE_LOG=true dx test e2e quantify apps/quantify/e2e/exchange-accounts
 
 # 浣跨敤 Node 璋冭瘯鍣紙闇€瑕佺洿鎺ヤ娇鐢?npx jest锛?
-node --inspect-brk node_modules/.bin/jest --config apps/backend/e2e/jest-e2e.json exchange-accounts.e2e-spec.ts
+node --inspect-brk node_modules/.bin/jest --config apps/quantify/e2e/jest-e2e.json exchange-accounts.e2e-spec.ts
 ```
 
 ## 娴嬭瘯鏁版嵁娓呯悊
