@@ -2,10 +2,10 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
-import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
+import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
 import { createTestingApp } from '../fixtures/fixtures'
 
 describe('StrategySignals (E2E, DB only)', () => {

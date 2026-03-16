@@ -1,8 +1,8 @@
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import { Injectable, Logger } from '@nestjs/common'
-import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */

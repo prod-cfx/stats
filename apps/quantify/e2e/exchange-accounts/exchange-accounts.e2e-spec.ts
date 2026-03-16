@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
-import type { User } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
+import type { User } from '@/prisma/prisma.types'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 describe('ExchangeAccounts (E2E)', () => {
