@@ -1,10 +1,10 @@
 import type { ExchangeId, MarketType, UnifiedPosition } from '@/modules/trading/core/types'
 import { Injectable, Logger } from '@nestjs/common'
-import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
 
@@ -227,64 +227,55 @@ export class PositionSyncService {
   async syncAllActivePositions(): Promise<PositionSyncResult[]> {
     this.logger.log('Starting batch position sync for all active accounts')
 
-    // 获取所有有效的用户交易账户配置
-    const _accounts = await this.prisma.userStrategyAccount.findMany({
-      where: {
-        // 可以添加更多过滤条件，比如只同步最近活跃的账户
-      },
-      include: {
-        user: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 100, // 每次最多同步 100 个账户
-    })
-
     const results: PositionSyncResult[] = []
+    // 按“订阅绑定交易账户”构建同步任务，避免误同步无绑定账户
+    const tasks = await this.collectBatchSyncTasks()
 
-    // TODO: 实现完整的批量同步逻辑
-    // 需要从账户配置或其他地方获取交易所和市场类型信息
-    // 当前实现依赖的数据结构还不完整，暂时返回空结果
-    this.logger.warn('Batch sync not fully implemented: missing exchange account mapping')
+    if (tasks.length === 0) {
+      this.logger.log('Batch sync skipped: no active subscriptions with exchange account binding')
+      return results
+    }
 
-    /*
-    for (const account of accounts) {
+    for (const task of tasks) {
       try {
-        // 需要从用户配置中获取交易所信息
-        const userExchangeAccount = await this.prisma.exchangeAccount.findFirst({
+        const account = await this.prisma.userStrategyAccount.findUnique({
           where: {
-            userId: account.userId,
+            userId_strategyId: {
+              userId: task.userId,
+              strategyId: task.strategyId,
+            },
           },
+          select: { id: true },
         })
 
-        if (!userExchangeAccount) {
-          this.logger.debug(`No active exchange account for user ${account.userId}`)
+        if (!account) {
+          this.logger.warn(
+            `Batch sync skipped: strategy account not found for user=${task.userId}, strategy=${task.strategyId}`,
+          )
           continue
         }
 
-        const exchangeId = userExchangeAccount.exchangeId as ExchangeId
-        // marketType 需要从其他地方获取或配置
-        const marketType: MarketType = 'perp' // 默认合约
-
+        const marketType = await this.inferMarketType(account.id, task.exchangeId)
         const result = await this.syncUserPositions(
-          account.userId,
+          task.userId,
           account.id,
-          exchangeId,
+          task.exchangeId,
           marketType,
           'scheduled',
         )
+
         results.push(result)
 
-        // 添加延迟避免过于频繁请求交易所 API
-        await this.delay(1000)
+        // 轻微限速，避免交易所 API 峰值
+        await this.delay(300)
       }
       catch (error) {
         this.logger.error(
-          `Failed to sync account ${account.id}: ${(error as Error).message}`,
+          `Failed to batch sync user=${task.userId}, strategy=${task.strategyId}: ${(error as Error).message}`,
           (error as Error).stack,
         )
       }
     }
-    */
 
     this.logger.log(
       `Batch sync completed: ${results.length} accounts processed, ` +
@@ -292,6 +283,103 @@ export class PositionSyncService {
     )
 
     return results
+  }
+
+  private async collectBatchSyncTasks(): Promise<Array<{ userId: string; strategyId: string; exchangeId: ExchangeId }>> {
+    const [strategySubs, llmSubs] = await Promise.all([
+      this.prisma.userStrategySubscription.findMany({
+        where: {
+          status: 'active',
+          exchangeAccountId: { not: null },
+        },
+        select: {
+          userId: true,
+          strategyInstance: {
+            select: {
+              strategyTemplateId: true,
+            },
+          },
+          exchangeAccount: {
+            select: {
+              exchangeId: true,
+            },
+          },
+        },
+        take: 200,
+      }),
+      this.prisma.userLlmStrategySubscription.findMany({
+        where: {
+          status: 'active',
+          exchangeAccountId: { not: null },
+        },
+        select: {
+          userId: true,
+          llmStrategyInstance: {
+            select: {
+              strategyId: true,
+            },
+          },
+          exchangeAccount: {
+            select: {
+              exchangeId: true,
+            },
+          },
+        },
+        take: 200,
+      }),
+    ])
+
+    const taskMap = new Map<string, { userId: string; strategyId: string; exchangeId: ExchangeId }>()
+
+    for (const sub of strategySubs) {
+      const strategyId = sub.strategyInstance?.strategyTemplateId
+      const exchangeId = sub.exchangeAccount?.exchangeId as ExchangeId | undefined
+      if (!strategyId || !exchangeId) continue
+
+      const key = `${sub.userId}:${strategyId}:${exchangeId}`
+      taskMap.set(key, {
+        userId: sub.userId,
+        strategyId,
+        exchangeId,
+      })
+    }
+
+    for (const sub of llmSubs) {
+      const strategyId = sub.llmStrategyInstance?.strategyId
+      const exchangeId = sub.exchangeAccount?.exchangeId as ExchangeId | undefined
+      if (!strategyId || !exchangeId) continue
+
+      const key = `${sub.userId}:${strategyId}:${exchangeId}`
+      taskMap.set(key, {
+        userId: sub.userId,
+        strategyId,
+        exchangeId,
+      })
+    }
+
+    return Array.from(taskMap.values())
+  }
+
+  private async inferMarketType(accountId: string, exchangeId: ExchangeId): Promise<MarketType> {
+    const latestPosition = await this.prisma.position.findFirst({
+      where: {
+        userStrategyAccountId: accountId,
+        exchangeId,
+        marketType: {
+          in: ['spot', 'perp'],
+        },
+      },
+      select: {
+        marketType: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    if (latestPosition?.marketType === 'spot' || latestPosition?.marketType === 'perp') {
+      return latestPosition.marketType
+    }
+
+    return exchangeId === 'hyperliquid' ? 'perp' : 'spot'
   }
 
   private getPositionKey(symbol: string, side: PositionSide): string {
