@@ -1,13 +1,12 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
-import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤 ConfigService
 import { ConfigService } from '@nestjs/config'
 import { OnEvent } from '@nestjs/event-emitter'
-import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
@@ -16,6 +15,7 @@ import { PositionsService } from '@/modules/positions/positions.service'
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { PrismaService } from '@/prisma/prisma.service'
+import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
 import { SignalExecutionRepository } from '../repositories/signal-execution.repository'
@@ -358,6 +358,7 @@ export class SignalExecutorService implements OnModuleInit {
         )
 
         const executedQuantity = order.filled ?? order.amount
+        const { amount: executedFee, currency: executedFeeCurrency } = this.extractOrderFee(order)
 
         let executedQuote: Decimal | null = null
         if (order.price && executedQuantity) {
@@ -391,6 +392,8 @@ export class SignalExecutorService implements OnModuleInit {
         await this.executionRepository.markExecuted(execution.id, {
           executedPrice: order.price,
           executedQuantity,
+          fee: executedFee,
+          feeCurrency: executedFeeCurrency ?? undefined,
           tradeId: order.id,
           executedAt: new Date(order.createdAt),
           metadata: {
@@ -420,8 +423,8 @@ export class SignalExecutorService implements OnModuleInit {
               positionSide,
               price: order.price.toString(),
               quantity: executedQuantity.toString(),
-              fee: '0', // TODO: 浠庝氦鏄撴墍鑾峰彇瀹為檯鎵嬬画璐?
-              feeCurrency: quoteSymbol,
+              fee: executedFee > 0 ? executedFee.toString() : '0',
+              feeCurrency: executedFeeCurrency ?? quoteSymbol,
               orderId: order.id,
               externalTradeId: order.id,
               provider: effectiveExchangeId,
@@ -968,5 +971,28 @@ export class SignalExecutorService implements OnModuleInit {
         reduceOnly: originalParams.reduceOnly,
       },
     }
+  }
+
+  private extractOrderFee(order: UnifiedOrder): { amount: number; currency: string | null } {
+    const raw = order.raw as any
+
+    if (typeof raw?.fee === 'number' && Number.isFinite(raw.fee)) {
+      const currency = typeof raw?.feeCurrency === 'string' ? raw.feeCurrency : null
+      return { amount: raw.fee, currency }
+    }
+
+    if (Array.isArray(raw?.fills) && raw.fills.length > 0) {
+      const amount = raw.fills.reduce((sum: number, fill: any) => {
+        const fee = Number(fill?.commission ?? 0)
+        return Number.isFinite(fee) ? sum + fee : sum
+      }, 0)
+      const currency =
+        typeof raw.fills[0]?.commissionAsset === 'string'
+          ? raw.fills[0].commissionAsset
+          : null
+      return { amount, currency }
+    }
+
+    return { amount: 0, currency: null }
   }
 }

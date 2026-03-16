@@ -1,12 +1,13 @@
-import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import type { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals-query.dto'
+import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import { ForbiddenException, Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
-
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+
+import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 import { LlmStrategyInstancePublicResponseDto } from '../dto/live-llm-strategy-instance-response.dto'
 import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy-instance-not-found.exception'
 
@@ -156,14 +157,14 @@ export class LiveLlmStrategyInstancesService {
   }
 
   /**
-   * 用户端：LLM 策略实例信号列表（当前先返回空列表；后续可接入 runs/生成信号持久化）
+   * 用户端：LLM 策略实例信号列表
    * - 生产环境：要求用户必须订阅后才可访问（避免泄露策略行为细节）
    */
   async getRunningInstanceSignals(
     id: string,
     query: LiveLlmStrategySignalsQueryDto,
     userId: string,
-  ): Promise<BasePaginationResponseDto<any>> {
+  ): Promise<BasePaginationResponseDto<TradingSignalResponseDto>> {
     const isDevEnv =
       process.env.NODE_ENV === 'development' ||
       process.env.APP_ENV === 'development'
@@ -198,6 +199,36 @@ export class LiveLlmStrategyInstancesService {
       }
     }
 
-    return new BasePaginationResponseDto(0, query.page, query.limit, [])
+    const skip = (query.page - 1) * query.limit
+    const client = this.prisma.getClient()
+    const [items, total] = await Promise.all([
+      client.tradingSignal.findMany({
+        where: {
+          llmStrategyInstanceId: id,
+        },
+        include: {
+          symbol: {
+            select: {
+              code: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: query.limit,
+      }),
+      client.tradingSignal.count({
+        where: {
+          llmStrategyInstanceId: id,
+        },
+      }),
+    ])
+
+    return new BasePaginationResponseDto(
+      total,
+      query.page,
+      query.limit,
+      items.map(item => new TradingSignalResponseDto(item)),
+    )
   }
 }

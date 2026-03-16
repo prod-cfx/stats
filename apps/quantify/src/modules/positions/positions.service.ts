@@ -1,12 +1,11 @@
-import type { Position, Trade } from '@/prisma/prisma.types'
 import type { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
-import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { Position, Trade } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
@@ -15,6 +14,7 @@ import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
 import { TradeConflictException } from './exceptions/trade-conflict.exception'
@@ -500,13 +500,45 @@ export class PositionsService {
         },
       )
 
-      // 6. 返回平仓结果
+      const filledQuantity =
+        typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+          ? order.filled
+          : closeQuantity.toNumber()
+      const tradePrice =
+        typeof order.price === 'number' && Number.isFinite(order.price) && order.price > 0
+          ? order.price
+          : Number(position.avgEntryPrice)
+      const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
+
+      // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
+      await this.recordTrade({
+        userStrategyAccountId: dto.userStrategyAccountId,
+        symbol: position.symbol,
+        market: `${exchangeId}:${marketType}`,
+        side: orderSide === 'buy' ? TradeSide.BUY : TradeSide.SELL,
+        positionSide: position.positionSide,
+        price: tradePrice.toString(),
+        quantity: filledQuantity.toString(),
+        fee: feeAmount > 0 ? feeAmount.toString() : '0',
+        feeCurrency: feeCurrency ?? undefined,
+        orderId: order.id,
+        externalTradeId: order.id,
+        provider: exchangeId,
+        executedAt: new Date(order.createdAt).toISOString(),
+        metadata: {
+          source: 'manual-close-position',
+          positionId: dto.positionId,
+          note: dto.note ?? null,
+        },
+      })
+
+      // 7. 返回平仓结果
       return {
         success: true,
         orderId: order.id,
         positionId: dto.positionId,
-        filledQuantity: order.filled.toString(),
-        averagePrice: order.price?.toString(),
+        filledQuantity: filledQuantity.toString(),
+        averagePrice: tradePrice.toString(),
         message: dto.note || '市价平仓成功',
       }
     } catch (error) {
@@ -539,5 +571,26 @@ export class PositionsService {
       executedAt: trade.executedAt.toISOString(),
     }
   }
-}
 
+  private extractOrderFee(order: UnifiedOrder): { amount: number; currency: string | null } {
+    const raw = order.raw as any
+    if (typeof raw?.fee === 'number' && Number.isFinite(raw.fee)) {
+      const currency = typeof raw?.feeCurrency === 'string' ? raw.feeCurrency : null
+      return { amount: raw.fee, currency }
+    }
+
+    if (Array.isArray(raw?.fills) && raw.fills.length > 0) {
+      const amount = raw.fills.reduce((sum: number, fill: any) => {
+        const fee = Number(fill?.commission ?? 0)
+        return Number.isFinite(fee) ? sum + fee : sum
+      }, 0)
+      const currency =
+        typeof raw.fills[0]?.commissionAsset === 'string'
+          ? raw.fills[0].commissionAsset
+          : null
+      return { amount, currency }
+    }
+
+    return { amount: 0, currency: null }
+  }
+}

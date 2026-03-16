@@ -10,6 +10,7 @@ import {
 } from '@nestjs/swagger'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
 
 import { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import { LlmStrategyInstancePublicResponseDto } from '../dto/live-llm-strategy-instance-response.dto'
@@ -17,7 +18,7 @@ import { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals
 import { LiveLlmStrategyInstancesService } from '../services/live-llm-strategy-instances.service'
 
 @ApiTags('llm-strategy-instances')
-@ApiExtraModels(BasePaginationResponseDto, LlmStrategyInstancePublicResponseDto)
+@ApiExtraModels(BasePaginationResponseDto, LlmStrategyInstancePublicResponseDto, TradingSignalResponseDto)
 @Controller('llm-strategy-instances')
 export class LiveLlmStrategyInstancesController {
   constructor(
@@ -58,7 +59,7 @@ export class LiveLlmStrategyInstancesController {
   }
 
   @Get(':id/signals')
-  @ApiOperation({ summary: '获取指定 LLM 策略实例的信号记录（当前占位返回空列表）' })
+  @ApiOperation({ summary: '获取指定 LLM 策略实例的信号记录' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -67,7 +68,7 @@ export class LiveLlmStrategyInstancesController {
           properties: {
             items: {
               type: 'array',
-              items: { type: 'object' },
+              items: { $ref: getSchemaPath(TradingSignalResponseDto) },
             },
           },
         },
@@ -77,7 +78,7 @@ export class LiveLlmStrategyInstancesController {
   async listSignals(
     @Param('id') id: string,
     @Query() query: LiveLlmStrategySignalsQueryDto,
-  ): Promise<BasePaginationResponseDto<any>> {
+  ): Promise<BasePaginationResponseDto<TradingSignalResponseDto>> {
     return this.service.getRunningInstanceSignals(id, query, query.userId)
   }
 }
