@@ -112,4 +112,37 @@ describe('backtestingController (e2e)', () => {
       baseTimeframe: '5m',
     }))
   })
+
+  it('POST /api/v1/backtesting/run should reject invalid leverage', async () => {
+    const payload = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 10000,
+      leverage: 0,
+      execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
+      strategy: { id: 'demo-strategy', params: { fast: 9, slow: 21 } },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        {
+          symbol: 'BTCUSDT',
+          timeframe: '5m',
+          openTime: 1,
+          closeTime: 2,
+          open: 100,
+          high: 110,
+          low: 90,
+          close: 105,
+          volume: 100,
+        },
+      ],
+    }
+
+    await supertestRequest(app.getHttpServer())
+      .post('/api/v1/backtesting/run')
+      .send(payload)
+      .expect(400)
+
+    expect(runnerMock.run).toHaveBeenCalledTimes(0)
+  })
 })

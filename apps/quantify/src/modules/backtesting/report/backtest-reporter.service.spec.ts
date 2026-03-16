@@ -11,4 +11,26 @@ describe('backtestReporterService', () => {
     expect(out.trades[0].entryPrice).toBe(100)
     expect(out.trades[0].exitPrice).toBe(110)
   })
+
+  it('should compute short trade returnPct as positive when price falls', () => {
+    const reporter = new BacktestReporter()
+    reporter.onTradeOpen({ symbol: 'BTCUSDT', ts: 1, price: 100, side: 'SHORT', qty: 1, fee: 0 })
+    reporter.onTradeClose({ symbol: 'BTCUSDT', ts: 2, price: 90, side: 'SHORT', qty: 1, fee: 0, pnl: 10 })
+
+    const out = reporter.toReport(1000)
+    expect(out.trades[0].returnPct).toBeCloseTo(10)
+  })
+
+  it('should return percent-unit metrics for netProfitPct and maxDrawdownPct', () => {
+    const reporter = new BacktestReporter()
+    reporter.pushEquity(1, 100)
+    reporter.pushEquity(2, 80)
+    reporter.pushEquity(3, 120)
+    reporter.onTradeOpen({ symbol: 'BTCUSDT', ts: 1, price: 100, side: 'LONG', qty: 1, fee: 0 })
+    reporter.onTradeClose({ symbol: 'BTCUSDT', ts: 2, price: 110, side: 'LONG', qty: 1, fee: 0, pnl: 10 })
+
+    const out = reporter.toReport(100)
+    expect(out.summary.netProfitPct).toBeCloseTo(10)
+    expect(out.summary.maxDrawdownPct).toBeCloseTo(20)
+  })
 })
