@@ -2,8 +2,8 @@ import { ErrorCode } from '@ai/shared/constants/error-codes'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
 /**
- * 杩愯鏃朵氦鏄撴墍鎿嶄綔澶辫触锛堝鏌ヨ浣欓/鎸佷粨锛夈€?
- * 涓庡垵濮嬪寲澶辫触锛圱RADING_EXCHANGE_INIT_FAILED锛夊尯鍒嗭紝渚夸簬璋冪敤鏂瑰仛绮剧粏鍖栧鐞嗐€?
+ * 运行时交易所操作失败（如查询余额/持仓）。
+ * 与初始化失败（TRADING_EXCHANGE_INIT_FAILED）区分，便于调用方做精细化处理。
  */
 export class ExchangeOperationFailedException extends DomainException {
   constructor(params: { operation: string; exchangeId: string; reason: string }) {

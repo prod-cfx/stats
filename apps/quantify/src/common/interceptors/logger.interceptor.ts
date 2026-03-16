@@ -4,7 +4,7 @@ import type { Observable } from 'rxjs'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import chalk from 'chalk'
 import { catchError, tap } from 'rxjs/operators'
-// Nest 渚濊禆杩愯鏃剁被鍨嬪厓鏁版嵁锛岄渶淇濈暀鍊煎鍏?
+// Nest 依赖运行时类型元数据，需保留值导入
 
 import { EnvService } from '../services/env.service'
 

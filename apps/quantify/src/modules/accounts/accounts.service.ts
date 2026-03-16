@@ -12,14 +12,14 @@ import { Injectable } from '@nestjs/common'
 import { LedgerEntryType, PositionStatus, Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { InsufficientBalanceException } from './exceptions/insufficient-balance.exception'
 import { LedgerEntryConflictException } from './exceptions/ledger-entry-conflict.exception'
 import { StrategyAccountConflictException } from './exceptions/strategy-account-conflict.exception'
 import { StrategyAccountNotFoundException } from './exceptions/strategy-account-not-found.exception'
 
-// Prisma 7: 浠?Prisma namespace 瀵煎嚭绫诲瀷鍜屽€?
+// Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
@@ -41,7 +41,7 @@ interface ApplyLedgerDeltaParams {
   description?: string
   requireSufficientBalance?: boolean
   /**
-   * 涓氬姟鍙戠敓鏃堕棿锛堢敤浜庢棩绾ф姤琛ㄨ仛鍚堬級锛屾湭鎻愪緵鏃堕粯璁や负褰撳墠鏃堕棿
+   * 业务发生时间（用于日级报表聚合），未提供时默认为当前时间
    */
   occurredAt?: Date
 }
@@ -155,7 +155,7 @@ export class AccountsService {
       }
     }
 
-    // 纭繚鍒嗛〉鍙傛暟鏈夋晥鍊?
+    // 确保分页参数有效
     const page = query.page || 1
     const limit = query.limit || 20
     const skip = (page - 1) * limit
@@ -194,7 +194,7 @@ export class AccountsService {
       where.date = { gte: start }
     }
 
-    // 纭繚鍒嗛〉鍙傛暟鏈夋晥鍊?
+    // 确保分页参数有效
     const page = query.page || 1
     const limit = query.limit || 20
     const skip = (page - 1) * limit
@@ -370,7 +370,7 @@ export class AccountsService {
       }
     }
 
-    // 浣跨敤鍘熷瓙閫掑閬垮厤 lost update锛屽苟鍦ㄦ洿鏂板悗妫€鏌ヤ綑棰濇槸鍚︿负璐燂紝渚濊禆浜嬪姟鍥炴粴淇濊瘉璧勯噾瀹夊叏
+    // 使用原子递增避免 lost update，并在更新后检查余额是否为负，依赖事务回滚保证资金安全
     const updatedAccount = await prisma.userStrategyAccount.update({
       where: { id: accountId },
       data: {
@@ -383,7 +383,7 @@ export class AccountsService {
     })
 
     if (requireSufficientBalance && updatedAccount.balance.lt(0)) {
-      // 浜嬪姟涓姏鍑哄紓甯镐細瀵艰嚧鏈璐︽埛鏇存柊涓庡悗缁?ledger 鍐欏叆涓€骞跺洖婊?
+      // 事务中抛出异常会导致本次账户更新与后续 ledger 写入一并回滚
       throw new InsufficientBalanceException({
         accountId,
         required: delta.abs().toString(),

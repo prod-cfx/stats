@@ -7,22 +7,22 @@ import type {
 } from '../types/strategy-template.types'
 
 /**
- * StrategyTemplate 浠ｈ〃绛栫暐鐨?钃濆浘"锛屽畾涔夌瓥鐣ョ殑浜ゆ槗瀵硅薄銆佹暟鎹渶姹傚拰鎵ц閰嶇疆銆?
+ * StrategyTemplate 代表策略“蓝图”，定义策略的交易对象、数据需求和执行配置。
  */
 export interface StrategyTemplateEntity {
   id: string
   name: string
   description: string
   /**
-   * 绛栫暐鑵垮畾涔?- 瀹氫箟绛栫暐鐨勪氦鏄撳璞?
+   * 策略腿定义 - 定义策略的交易对象
    */
   legs?: StrategyLegDefinition[]
   /**
-   * 绛栫暐鎵ц閰嶇疆 - 瀹氫箟淇″彿瑙﹀彂鍛ㄦ湡鍜屽喎鍗存椂闂?
+   * 策略执行配置 - 定义信号触发周期和冷却时间
    */
   execution?: StrategyExecutionConfig
   /**
-   * 鏁版嵁闇€姹?- 瀹氫箟姣忎釜 leg 闇€瑕佸姞杞界殑鏃堕棿鍛ㄦ湡鏁版嵁
+   * 数据需求 - 定义每个 leg 需要加载的时间周期数据
    */
   dataRequirements?: StrategyDataRequirements
   llmModel: string
@@ -32,7 +32,7 @@ export interface StrategyTemplateEntity {
   defaultParams?: JsonValue
   rulesJson: JsonValue | null
   /**
-   * @deprecated 浣跨敤 dataRequirements 鏇夸唬
+   * @deprecated 使用 dataRequirements 替代
    */
   requiredFields: string[]
   rulesVersion: number

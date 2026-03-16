@@ -1,6 +1,6 @@
 import type { SystemSetting } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
-// Nest 娉ㄥ叆闇€瑕佽繍琛屾椂寮曠敤 PrismaService锛屼繚鐣欏€煎鍏?
+// Nest 注入需要运行时引用 PrismaService，保留普通导入
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()

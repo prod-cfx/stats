@@ -6,7 +6,7 @@ import type {
   ToolChoice,
 } from './providers/llm-provider-adapter.interface'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂娉ㄥ叆 ConfigService
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 ConfigService
 import { ConfigService } from '@nestjs/config'
 
 import { AiProviderErrorException } from './exceptions/ai-provider-error.exception'
@@ -26,7 +26,7 @@ export interface AiChatOptions {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name)
-  // 褰撳墠绯荤粺榛樿浠呴厤缃?uniapi 浣滀负 OpenAI 鍏煎鎻愪緵鍟?
+  // 当前系统默认仅配置 uniapi 作为 OpenAI 兼容提供商
   private static readonly DEFAULT_PROVIDER_CODE = 'uniapi'
   private static readonly DEFAULT_MODEL = 'gpt-4'
 
@@ -45,7 +45,7 @@ export class AiService {
 
     const providerCode = options.providerCode ?? AiService.DEFAULT_PROVIDER_CODE
 
-    // 鐩墠鍙敮鎸?uniapi 鎻愪緵鍟?
+    // 目前只支持 uniapi 提供商
     if (providerCode !== AiService.DEFAULT_PROVIDER_CODE) {
       throw new AiProviderNotFoundException({ providerCode })
     }
@@ -64,7 +64,7 @@ export class AiService {
     const adapter: LlmProviderAdapter = new OpenAiCompatibleAdapter({
       baseUrl,
       apiKey,
-      // 榛樿瓒呮椂鏃堕棿 30s锛岄伩鍏嶅杞伐鍏疯皟鐢ㄥ満鏅繃鏃╀腑鏂?
+      // 默认超时时间 30s，避免多轮工具调用场景过早中断
       timeoutMs: 30_000,
     })
     try {

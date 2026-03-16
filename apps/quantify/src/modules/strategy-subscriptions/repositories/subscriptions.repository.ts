@@ -1,4 +1,4 @@
-/* eslint-disable ts/consistent-type-imports -- PrismaService 闇€瑕佽繍琛屾椂瀵煎叆浠ヤ緵 Nest 娉ㄥ叆 */
+/* eslint-disable ts/consistent-type-imports -- PrismaService 需要运行时导入以供 Nest 注入 */
 import type { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
@@ -59,7 +59,7 @@ export class SubscriptionsRepository {
   }
 
   /**
-   * 鏌ヨ璁㈤槄鍙婂叾鏍￠獙鎵€闇€鐨勬暟鎹紙鐢ㄤ簬鍙傛暟鏍￠獙鍦烘櫙锛?
+   * 查询订阅及其校验所需的数据（用于参数校验场景）
    */
   async findByIdWithValidationData(id: string) {
     return this.client.userStrategySubscription.findUnique({
@@ -69,7 +69,7 @@ export class SubscriptionsRepository {
           select: {
             id: true,
             status: true,
-            mode: true, // 馃敶 鏂板锛氶€夊嚭 mode 瀛楁鐢ㄤ簬鎭㈠璁㈤槄鏃剁殑鏍￠獙
+            mode: true, // 🔴 新增：带出 mode 字段用于恢复订阅时的校验
             strategyTemplate: {
               select: {
                 id: true,

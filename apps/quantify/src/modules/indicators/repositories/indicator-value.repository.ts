@@ -118,7 +118,7 @@ export class IndicatorValueRepository {
       }
     }
 
-    // 涓烘瘡涓?indicatorConfigId 鍙彇涓€鏉♀€滄渶鏂板€尖€濓紙time 鏈€澶т笖 <= at锛?
+    // 为每个 indicatorConfigId 只取一条最新记录（time 最大且 <= at）
     const groups = await this.client.indicatorValue.groupBy({
       by: ['indicatorConfigId'],
       where,

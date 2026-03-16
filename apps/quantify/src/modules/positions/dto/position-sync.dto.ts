@@ -2,48 +2,48 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator'
 
 export class TriggerPositionSyncDto {
-  @ApiProperty({ description: '涓氬姟鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '业务用户 ID' })
   @IsString()
   @IsNotEmpty()
   userId!: string
 
-  @ApiProperty({ description: '鐢ㄦ埛绛栫暐璐︽埛 ID' })
+  @ApiProperty({ description: '用户策略账户 ID' })
   @IsString()
   @IsNotEmpty()
   userStrategyAccountId!: string
 
-  @ApiProperty({ description: '浜ゆ槗鎵€ ID', enum: ['binance', 'okx', 'hyperliquid'] })
+  @ApiProperty({ description: '交易所 ID', enum: ['binance', 'okx', 'hyperliquid'] })
   @IsEnum(['binance', 'okx', 'hyperliquid'])
   exchangeId!: 'binance' | 'okx' | 'hyperliquid'
 
-  @ApiProperty({ description: '甯傚満绫诲瀷', enum: ['spot', 'perp'] })
+  @ApiProperty({ description: '市场类型', enum: ['spot', 'perp'] })
   @IsEnum(['spot', 'perp'])
   marketType!: 'spot' | 'perp'
 }
 
 export class PositionSyncResultDto {
-  @ApiProperty({ description: '鐢ㄦ埛 ID' })
+  @ApiProperty({ description: '用户 ID' })
   userId!: string
 
-  @ApiProperty({ description: '浜ゆ槗鎵€ ID' })
+  @ApiProperty({ description: '交易所 ID' })
   exchangeId!: string
 
-  @ApiProperty({ description: '甯傚満绫诲瀷' })
+  @ApiProperty({ description: '市场类型' })
   marketType!: string
 
-  @ApiProperty({ description: '鍚屾鏄惁鎴愬姛' })
+  @ApiProperty({ description: '同步是否成功' })
   success!: boolean
 
-  @ApiProperty({ description: '鍚屾鏃堕棿' })
+  @ApiProperty({ description: '同步时间' })
   syncedAt!: Date
 
-  @ApiProperty({ description: '浜ゆ槗鎵€浠撲綅鏁伴噺' })
+  @ApiProperty({ description: '交易所仓位数量' })
   exchangePositions!: number
 
-  @ApiProperty({ description: '鏈湴浠撲綅鏁伴噺' })
+  @ApiProperty({ description: '本地仓位数量' })
   localPositions!: number
 
-  @ApiProperty({ description: '宸紓鍒楄〃', type: [Object] })
+  @ApiProperty({ description: '差异列表', type: [Object] })
   differences!: Array<{
     symbol: string
     positionSide: string
@@ -53,6 +53,6 @@ export class PositionSyncResultDto {
     action: string
   }>
 
-  @ApiPropertyOptional({ description: '閿欒淇℃伅', type: [String] })
+  @ApiPropertyOptional({ description: '错误信息', type: [String] })
   errors?: string[]
 }
