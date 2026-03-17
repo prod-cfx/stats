@@ -212,6 +212,7 @@ export class MarketDataService {
       quoteVolume: bar.quoteVolume?.toString() ?? null,
       trades: bar.trades ?? null,
       isFinal: bar.isFinal,
+      source: bar.source ?? null,
     }))
   }
 

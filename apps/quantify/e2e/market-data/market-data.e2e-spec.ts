@@ -95,6 +95,17 @@ describe('market-data (e2e)', () => {
       })
   })
 
+  it('GET /api/v1/market/quote should keep query symbol in error args when symbol is missing', async () => {
+    await supertestRequest(app.getHttpServer())
+      .get('/api/v1/market/quote')
+      .query({ symbol: 'NOTEXIST' })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body?.error?.code).toBe('MARKET_SYMBOL_NOT_FOUND')
+        expect(res.body?.error?.args?.symbol).toBe('NOTEXIST')
+      })
+  })
+
   it('GET /api/v1/market/bars should return bars in ascending time order', async () => {
     await prisma.marketBar.createMany({
       data: [
@@ -130,6 +141,18 @@ describe('market-data (e2e)', () => {
         expect(Array.isArray(payload)).toBe(true)
         expect(payload.length).toBe(2)
         expect(new Date(payload[0].time).getTime()).toBeLessThan(new Date(payload[1].time).getTime())
+      })
+  })
+
+  it('GET /api/v1/market/bars should reject invalid limit through validation pipe', async () => {
+    await supertestRequest(app.getHttpServer())
+      .get('/api/v1/market/bars')
+      .query({ symbol: 'BTCUSDT', timeframe: '1h', limit: 'abc' })
+      .expect(400)
+      .expect((res) => {
+        const errorCode = res.body?.error?.code ?? res.body?.error ?? res.body?.statusCode
+
+        expect(['BAD_REQUEST', 'Bad Request', 400]).toContain(errorCode)
       })
   })
 })

@@ -36,6 +36,14 @@ describe('llm v3 tools executor gateway integration', () => {
         close: 1.5,
         volume: 10,
       },
+      {
+        timestamp: 2000,
+        open: 1.5,
+        high: 2.5,
+        low: 1,
+        close: 2,
+        volume: 12,
+      },
     ])
 
     const context = {
@@ -46,11 +54,13 @@ describe('llm v3 tools executor gateway integration', () => {
     }
     const typedContext = context as Parameters<LlmV3ToolsExecutor['getMarketDataRaw']>[1]
 
-    await executor.getMarketDataRaw(
+    const result = await executor.getMarketDataRaw(
       { symbol: 'BTCUSDT', timeframe: '1h', lookbackBars: 50 },
       typedContext,
     )
 
     expect(mockGateway.getRecentBars).toHaveBeenCalledWith('BTCUSDT', '1h', 50)
+    const timestamps = result.bars.map(bar => bar.timestamp)
+    expect(timestamps.every((ts, index) => index === 0 || ts > timestamps[index - 1]!)).toBe(true)
   })
 })

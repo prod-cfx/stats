@@ -1,7 +1,4 @@
 import type { Observable } from 'rxjs';
-import type { MarketBarsQueryDto } from '../dto/market-bars-query.dto'
-import type { MarketQuoteQueryDto } from '../dto/market-quote-query.dto'
-import type { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'
 import type { MarketQuoteEvent } from '../services/market-data-stream.service';
 import { MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES } from '@ai/shared'
 import { Controller, Get, Inject, Query, Sse } from '@nestjs/common'
@@ -10,8 +7,14 @@ import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSche
 import { fromEvent, map } from 'rxjs'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { MarketBarDto } from '../dto/market-bar.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
+import { MarketBarsQueryDto } from '../dto/market-bars-query.dto'
 import { MarketQuoteDto } from '../dto/market-quote.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
+import { MarketQuoteQueryDto } from '../dto/market-quote-query.dto'
 import { MarketSymbolDto } from '../dto/market-symbol.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
+import { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'
 import { MARKET_QUOTE_EVENT } from '../services/market-data-stream.service'
 import { MarketDataService } from '../services/market-data.service'
 
@@ -97,4 +100,3 @@ export class MarketDataController {
     )
   }
 }
-

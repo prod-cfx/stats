@@ -1,9 +1,3 @@
-[loadEnvironment] envName: development, basePath: /Users/zengmengdan/coinfulx-new/stats
-[loadEnvironment] loading .env.development from /Users/zengmengdan/coinfulx-new/stats/.env.development
-[loadEnvironment] loading .env.development.local from /Users/zengmengdan/coinfulx-new/stats/.env.development.local
-[loadEnvironment] loading .env from /Users/zengmengdan/coinfulx-new/stats/.env
-[loadEnvironment] loading .env.local from /Users/zengmengdan/coinfulx-new/stats/.env.local
-[loadEnvironment] APP_ENV after loading: development
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -930,4 +924,3 @@ ALTER TABLE "public"."user_strategy_subscriptions" ADD CONSTRAINT "user_strategy
 
 -- AddForeignKey
 ALTER TABLE "public"."users" ADD CONSTRAINT "users_inviter_id_fkey" FOREIGN KEY ("inviter_id") REFERENCES "public"."users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
