@@ -56,6 +56,7 @@
 2. 真实 WS 推送持续，quote/bar 能落库并可被查询。
 3. strategy/ai/trading 在 mock 依赖下消费 gateway 通过最小冒烟矩阵（见 3.5），无契约断裂。
 4. 无持续不可恢复错误日志（允许偶发可恢复异常）。
+5. 真实链路环境固定为 Binance production public market-data endpoints（不使用 testnet）。
 
 ### 3.3 Gate-3 24h 长稳观测（24 小时）
 
@@ -63,8 +64,8 @@
 
 1. quantify 连续运行 24 小时，无进程崩溃。
 2. 按 4.5 阈值表执行判定，24h 内不得触发任一“失败阈值”。允许短时抖动，但必须满足对应“恢复判定”。
-3. `market_ws_reconnect_total`、`market_latest_bar_age_ms`、`market_gapfill_failed_total` 均有完整 24h 观测记录，且窗口计算口径与 4.6 一致。
-5. 24h 内不出现超过 10 分钟的数据停更窗口（重点 1m/3m）。
+3. `market_ws_reconnect_total`、`market_latest_bar_age_ms`（BTC/ETH 的 1m 与 3m）与 `market_gapfill_failed_total` 均有完整 24h 观测记录，且窗口计算口径与 4.6 一致。
+4. 24h 内不出现超过 10 分钟的数据停更窗口（重点 1m/3m）。
 
 ### 3.5 Mock 消费最小冒烟矩阵（Gate-2 强制）
 
