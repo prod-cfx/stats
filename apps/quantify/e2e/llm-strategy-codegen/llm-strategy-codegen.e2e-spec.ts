@@ -145,4 +145,47 @@ describe('llm strategy codegen (E2E)', () => {
     expect(continuePayload.status).toBe('REJECTED')
     expect(String(continuePayload.rejectReason)).toContain('helpers.math')
   })
+
+  it('tests engine endpoint with provider/model overrides', async () => {
+    const chatSpy = jest.spyOn(aiService, 'chat').mockResolvedValue({
+      content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80 }',
+      toolCalls: [],
+    })
+
+    const server = app.getHttpServer()
+    const res = await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').send({
+      userId: 'u-e2e-4',
+      message: '请测试引擎生成策略脚本',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['rsi < 30'],
+      exitRules: ['atr stop'],
+      riskRules: { maxPositionPct: 0.1 },
+      providerCode: 'uniapi',
+      model: 'gpt-4.1-mini',
+      temperature: 0.1,
+      maxTokens: 900,
+    }).expect(200)
+
+    const payload = res.body.data ?? res.body
+    expect(payload.staticPassed).toBe(true)
+    expect(payload.runtimePassed).toBe(true)
+    expect(payload.outputPassed).toBe(true)
+    expect(payload.providerCode).toBe('uniapi')
+    expect(payload.model).toBe('gpt-4.1-mini')
+    expect(chatSpy).toHaveBeenCalledWith(expect.objectContaining({
+      providerCode: 'uniapi',
+      model: 'gpt-4.1-mini',
+      temperature: 0.1,
+      maxTokens: 900,
+    }))
+  })
+
+  it('rejects engine test when required checklist fields are missing', async () => {
+    const server = app.getHttpServer()
+    await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').send({
+      userId: 'u-e2e-5',
+      message: '测试',
+    }).expect(400)
+  })
 })

@@ -1,10 +1,12 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Body, Controller, Param, Post } from '@nestjs/common'
+import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
 import { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
+import { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
+import { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import { CodegenConversationService } from '../services/codegen-conversation.service'
 
 @ApiTags('llm-strategy-codegen')
@@ -27,5 +29,13 @@ export class LiveLlmStrategyCodegenController {
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
     return this.service.continueSession(id, dto)
+  }
+
+  @Post('engine/test')
+  @HttpCode(200)
+  @ApiOperation({ summary: '真实调用 LLM 引擎测试策略脚本生成能力' })
+  @ApiResponse({ status: 200, type: LlmCodegenEngineTestResponseDto })
+  async testEngine(@Body() dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
+    return this.service.testEngine(dto)
   }
 }

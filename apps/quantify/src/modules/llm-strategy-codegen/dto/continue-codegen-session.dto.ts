@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsArray, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator'
 
 export class ContinueCodegenSessionDto {
   @ApiProperty({ description: '业务用户 ID' })
@@ -40,4 +50,28 @@ export class ContinueCodegenSessionDto {
   @IsOptional()
   @IsObject()
   riskRules?: Record<string, unknown>
+
+  @ApiPropertyOptional({ description: 'LLM 提供商编码（本轮覆盖）' })
+  @IsOptional()
+  @IsString()
+  providerCode?: string
+
+  @ApiPropertyOptional({ description: 'LLM 模型名（本轮覆盖）' })
+  @IsOptional()
+  @IsString()
+  model?: string
+
+  @ApiPropertyOptional({ description: '采样温度，范围 0-2（本轮覆盖）', minimum: 0, maximum: 2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(2)
+  temperature?: number
+
+  @ApiPropertyOptional({ description: '最大输出 token 数（本轮覆盖）', minimum: 1, maximum: 4000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4000)
+  maxTokens?: number
 }
