@@ -10,17 +10,18 @@ import type {
 } from '../core/types'
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
+import * as hyperliquidSdk from '@nktkas/hyperliquid'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
 
-type HyperliquidSdk = {
+interface HyperliquidSdk {
   HttpTransport: new (config: unknown) => unknown
   InfoClient: new (config: unknown) => any
   ExchangeClient: new (config: unknown) => any
 }
 
 function loadHyperliquidSdk(): HyperliquidSdk {
-  return require('@nktkas/hyperliquid') as HyperliquidSdk
+  return hyperliquidSdk as unknown as HyperliquidSdk
 }
 
 /**

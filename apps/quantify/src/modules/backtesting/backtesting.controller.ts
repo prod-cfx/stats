@@ -3,6 +3,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common'
 import { RunBacktestDto } from './dto/run-backtest.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 
 @Controller('backtesting')

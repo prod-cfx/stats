@@ -2,7 +2,9 @@ import type { OnModuleInit } from '@nestjs/common'
 import type { MessageEnvelope } from '../message-bus.types'
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { OutboxRepository } from './outbox.repository'
 
 export interface OutboxRecordOptions {

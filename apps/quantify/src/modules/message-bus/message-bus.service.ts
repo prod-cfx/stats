@@ -6,7 +6,9 @@ import type {
 import { randomUUID } from 'node:crypto'
 import { InjectQueue } from '@nestjs/bull'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ConfigService } from '@nestjs/config'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { CacheService } from '@/common/services/cache.service'
 import {
   MESSAGE_HANDSHAKE_DONE_PREFIX,

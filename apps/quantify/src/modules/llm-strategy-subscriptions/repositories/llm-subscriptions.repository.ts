@@ -1,8 +1,8 @@
 import type { SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类型
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class LlmSubscriptionsRepository {
