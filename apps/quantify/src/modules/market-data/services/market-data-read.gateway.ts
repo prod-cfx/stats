@@ -13,8 +13,8 @@ export interface GatewayBar {
   high: number
   low: number
   close: number
-  volume: number
-  quoteVolume: number
+  volume: number | null
+  quoteVolume: number | null
   trades: number | null
   isFinal: boolean
 }
@@ -25,6 +25,17 @@ export class MarketDataReadGateway {
 
   async getRecentBars(symbol: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
     const bars = await this.repository.findRecentBars(symbol, timeframe, limit)
+    return this.toGatewayBars(bars)
+  }
+
+  async getLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
+    const bar = await this.repository.findLatestBar(symbol, timeframe)
+    return this.toGatewayBar(bar)
+  }
+
+  private toGatewayBars(
+    bars: Awaited<ReturnType<MarketDataRepository['findRecentBars']>>,
+  ): GatewayBar[] {
     return bars.map(bar => ({
       time: bar.time,
       timestamp: bar.time.getTime(),
@@ -32,15 +43,16 @@ export class MarketDataReadGateway {
       high: Number(bar.high),
       low: Number(bar.low),
       close: Number(bar.close),
-      volume: bar.volume !== null ? Number(bar.volume) : 0,
-      quoteVolume: bar.quoteVolume !== null ? Number(bar.quoteVolume) : 0,
+      volume: bar.volume !== null ? Number(bar.volume) : null,
+      quoteVolume: bar.quoteVolume !== null ? Number(bar.quoteVolume) : null,
       trades: bar.trades,
       isFinal: bar.isFinal,
     }))
   }
 
-  async getLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
-    const bar = await this.repository.findLatestBar(symbol, timeframe)
+  private toGatewayBar(
+    bar: Awaited<ReturnType<MarketDataRepository['findLatestBar']>>,
+  ): GatewayBar | null {
     if (!bar) return null
     return {
       time: bar.time,
@@ -49,8 +61,8 @@ export class MarketDataReadGateway {
       high: Number(bar.high),
       low: Number(bar.low),
       close: Number(bar.close),
-      volume: bar.volume !== null ? Number(bar.volume) : 0,
-      quoteVolume: bar.quoteVolume !== null ? Number(bar.quoteVolume) : 0,
+      volume: bar.volume !== null ? Number(bar.volume) : null,
+      quoteVolume: bar.quoteVolume !== null ? Number(bar.quoteVolume) : null,
       trades: bar.trades,
       isFinal: bar.isFinal,
     }
