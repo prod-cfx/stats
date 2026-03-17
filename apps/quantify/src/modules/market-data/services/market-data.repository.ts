@@ -33,11 +33,15 @@ export class MarketDataRepository {
 
   async findRecentBars(symbol: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
     const target = await this.findSymbolOrThrow(symbol)
+    return this.findRecentBarsBySymbolId(target.id, timeframe, limit)
+  }
+
+  async findRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
     const bars = await this.prisma.marketBar.findMany({
       where: {
-        symbolId: target.id,
+        symbolId,
         timeframe: prismaTimeframe,
       },
       orderBy: { time: 'desc' },
@@ -49,10 +53,14 @@ export class MarketDataRepository {
 
   async findLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
     const target = await this.findSymbolOrThrow(symbol)
+    return this.findLatestBarBySymbolId(target.id, timeframe)
+  }
+
+  async findLatestBarBySymbolId(symbolId: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
     return this.prisma.marketBar.findFirst({
       where: {
-        symbolId: target.id,
+        symbolId,
         timeframe: prismaTimeframe,
       },
       orderBy: { time: 'desc' },

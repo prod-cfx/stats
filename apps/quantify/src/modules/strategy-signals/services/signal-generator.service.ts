@@ -60,7 +60,7 @@ interface LoadedBar {
   high: number
   low: number
   close: number
-  volume: number
+  volume: number | null
 }
 
 const DEFAULT_RAW_RESPONSE_LIMIT = 4000
@@ -491,7 +491,7 @@ export class SignalGeneratorService {
       }
     }
 
-    const referenceBar = await this.loadLatestBar(group.symbol.code, group.timeframe)
+    const referenceBar = await this.loadLatestBar(group.symbol.id, group.timeframe)
     const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
 
     const aiPayload = await this.generateSignalWithAi(
@@ -644,7 +644,7 @@ export class SignalGeneratorService {
         const engine = createScriptEngine()
         
         // 构建脚本执行上下文
-        const marketBars = await this.loadRecentBars(symbol.code, timeframe, DEFAULT_BAR_LIMIT)
+        const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
         // 转换 MarketBar 到 Bar 类型
         const bars = marketBars ? marketBars.map(bar => ({
           open: Number(bar.open),
@@ -861,8 +861,8 @@ export class SignalGeneratorService {
     return result
   }
 
-  private async loadLatestBar(symbolCode: string, timeframe: MarketTimeframe): Promise<LoadedBar | null> {
-    const bar = await this.marketDataReadGateway.getLatestBar(symbolCode, reverseMapTimeframe(timeframe))
+  private async loadLatestBar(symbolId: string, timeframe: MarketTimeframe): Promise<LoadedBar | null> {
+    const bar = await this.marketDataReadGateway.getLatestBarBySymbolId(symbolId, reverseMapTimeframe(timeframe))
     if (!bar) return null
     return {
       time: bar.time,
@@ -875,13 +875,13 @@ export class SignalGeneratorService {
   }
 
   private async loadRecentBars(
-    symbolCode: string,
+    symbolId: string,
     timeframe: MarketTimeframe,
     limit: number = 100,
   ): Promise<LoadedBar[] | null> {
     try {
-      const bars = await this.marketDataReadGateway.getRecentBars(
-        symbolCode,
+      const bars = await this.marketDataReadGateway.getRecentBarsBySymbolId(
+        symbolId,
         reverseMapTimeframe(timeframe),
         limit,
       )
@@ -973,6 +973,7 @@ export class SignalGeneratorService {
     // 2. 收集所有需要加载的 (legId, symbolCode, timeframe) 组合
     interface DataRequest {
       legId: string
+      symbolId: string
       symbolCode: string
       timeframe: MarketTimeframe  // Prisma 枚举格式（如 'h1'）
       originalTimeframe: string   // 应用层格式（如 '1h'）
@@ -996,6 +997,7 @@ export class SignalGeneratorService {
       for (const tf of timeframes) {
         dataRequests.push({ 
           legId: leg.id, 
+          symbolId: symbol.id,
           symbolCode: symbol.code,
           timeframe: mapTimeframe(tf as import('@ai/shared').MarketTimeframe),  // 从应用层 '1h' 转换为 Prisma 'h1'
           originalTimeframe: tf,  // 保留原始应用层格式用于返回
@@ -1005,7 +1007,7 @@ export class SignalGeneratorService {
     
     // 3. 并行加载所有 bars 数据
     const barsPromises = dataRequests.map(async req => {
-      const bars = await this.loadRecentBars(req.symbolCode, req.timeframe, DEFAULT_BAR_LIMIT)
+      const bars = await this.loadRecentBars(req.symbolId, req.timeframe, DEFAULT_BAR_LIMIT)
       return { ...req, bars }
     })
     

@@ -28,8 +28,18 @@ export class MarketDataReadGateway {
     return this.toGatewayBars(bars)
   }
 
+  async getRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
+    const bars = await this.repository.findRecentBarsBySymbolId(symbolId, timeframe, limit)
+    return this.toGatewayBars(bars)
+  }
+
   async getLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
     const bar = await this.repository.findLatestBar(symbol, timeframe)
+    return this.toGatewayBar(bar)
+  }
+
+  async getLatestBarBySymbolId(symbolId: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
+    const bar = await this.repository.findLatestBarBySymbolId(symbolId, timeframe)
     return this.toGatewayBar(bar)
   }
 

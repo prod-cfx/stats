@@ -407,6 +407,7 @@ export class StrategyInstancesService {
     // 2. 收集所有需要加载的 (legId, symbolCode, timeframe) 组合
     interface DataRequest {
       legId: string
+      symbolId: string
       symbolCode: string
       timeframe: PrismaMarketTimeframe // Prisma 枚举格式（如 'h1'）
       originalTimeframe: string // 应用层格式（如 '1h'）
@@ -429,6 +430,7 @@ export class StrategyInstancesService {
       for (const tf of timeframes) {
         dataRequests.push({
           legId: leg.id,
+          symbolId: symbol.id,
           symbolCode: symbol.code,
           timeframe: mapTimeframe(tf as import('@ai/shared').MarketTimeframe),
           originalTimeframe: tf,
@@ -441,8 +443,8 @@ export class StrategyInstancesService {
       {}
 
     for (const req of dataRequests) {
-      const bars = await this.marketDataReadGateway.getRecentBars(
-        req.symbolCode,
+      const bars = await this.marketDataReadGateway.getRecentBarsBySymbolId(
+        req.symbolId,
         reverseMapTimeframe(req.timeframe),
         StrategyInstancesService.DEBUG_BAR_LIMIT,
       )
