@@ -79,7 +79,7 @@ describe('signal generator market-data gateway smoke', () => {
       { time: new Date('2026-03-17T11:00:00Z'), open: 1.5, high: 2.5, low: 1, close: 2, volume: 12 },
     ])
 
-    const bars = await (service as any).loadRecentBars('symbol-1', 'h1', 50)
+    const bars = await (service as any).loadRecentBars('symbol-1', '1h', 50)
 
     expect(mockGateway.getRecentBarsBySymbolId).toHaveBeenCalledWith('symbol-1', '1h', 50)
     expect(bars).toHaveLength(2)
