@@ -1,9 +1,9 @@
 import type { FuturesPairsMarket } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import { PRISMA_TIMEFRAME } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 export interface VolumeByExchange {
   exchange: string

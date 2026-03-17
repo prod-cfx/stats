@@ -1,6 +1,6 @@
-import type { WhaleNotificationDelivery } from '@/prisma/prisma.types'
 import type { WhaleNotificationInboxResponseDto } from '../dto/whale-notification-inbox.response.dto'
 import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
+import type { WhaleNotificationDelivery } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'

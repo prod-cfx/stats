@@ -1,2 +1,2 @@
 export * from '../../generated/prisma'
-export { Prisma, PrismaClient, $Enums } from '../../generated/prisma'
+export { $Enums, Prisma, PrismaClient } from '../../generated/prisma'

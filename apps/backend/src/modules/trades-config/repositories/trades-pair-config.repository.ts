@@ -1,7 +1,7 @@
-import type { TradesPairConfig } from '@/prisma/prisma.types'
 import type { CreateTradesPairConfigDto } from '../dto/create-trades-pair-config.dto'
 import type { QueryTradesPairConfigDto } from '../dto/query-trades-pair-config.dto'
 import type { UpdateTradesPairConfigDto } from '../dto/update-trades-pair-config.dto'
+import type { TradesPairConfig } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

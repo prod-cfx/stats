@@ -5,11 +5,11 @@ import type {
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 import { TradeSide } from './dto/whale-trade.dto'
 

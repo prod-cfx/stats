@@ -7,8 +7,8 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { AppModule } from '../src/modules/app.module'
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
-import { WhaleNotificationDeduplicatorService } from '../src/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { WhaleAlertService as WhaleAlertServiceToken } from '../src/modules/whale-alert/whale-alert.service'
+import { WhaleNotificationDeduplicatorService } from '../src/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '../src/prisma/prisma.service'
 
 describe('Whale notification gray release allowlist placeholder (E2E)', () => {

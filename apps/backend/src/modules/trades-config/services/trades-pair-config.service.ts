@@ -1,7 +1,7 @@
-import type { TradesPairConfig } from '@/prisma/prisma.types'
 import type { CreateTradesPairConfigDto } from '../dto/create-trades-pair-config.dto'
 import type { QueryTradesPairConfigDto } from '../dto/query-trades-pair-config.dto'
 import type { UpdateTradesPairConfigDto } from '../dto/update-trades-pair-config.dto'
+import type { TradesPairConfig } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'

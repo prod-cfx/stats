@@ -1,4 +1,3 @@
-import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
 import type {
   WhaleDiscoverResponseDto,
   WhaleDiscoverTraderAiTagDto,
@@ -26,6 +25,7 @@ import type {
   HyperliquidOpenOrder,
   HyperliquidSpotBalance,
 } from './services/hyperliquid-api.service'
+import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
 import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 PrismaService，保留值导入

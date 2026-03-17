@@ -1,7 +1,7 @@
 import type { MarketId, VenueOrderBook } from '@ai/shared'
-import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import type { Redis } from 'ioredis'
 import type { OrderbookAdapterKey, OrderbookWsAdapter } from '../../orderbook-ws-adapter'
+import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import { inspect } from 'node:util'
 import { toMarketKey } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
