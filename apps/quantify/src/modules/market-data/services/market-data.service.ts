@@ -43,8 +43,8 @@ export class MarketDataService {
     }
 
     // 确保分页参数有效值
-    const page = query.page || 1
-    const limit = query.limit || 20
+    const page = this.normalizePositiveInt(query.page, 1)
+    const limit = this.normalizePositiveInt(query.limit, 20)
     const skip = (page - 1) * limit
     
     const [items, total] = await Promise.all([
@@ -190,10 +190,12 @@ export class MarketDataService {
     const hasTimeFilter = Boolean(query.start || query.end)
     const orderBy = hasTimeFilter ? { time: 'asc' as const } : { time: 'desc' as const }
 
+    const limit = this.normalizePositiveInt(query.limit, 500, 1000)
+
     const bars = await this.prisma.marketBar.findMany({
       where,
       orderBy,
-      take: query.limit,
+      take: limit,
     })
 
     // 如果是降序查询（默认最新数据），需要反转结果以保持时间升序
@@ -211,6 +213,16 @@ export class MarketDataService {
       trades: bar.trades ?? null,
       isFinal: bar.isFinal,
     }))
+  }
+
+  private normalizePositiveInt(value: unknown, fallback: number, max?: number): number {
+    const raw = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(raw)) return fallback
+
+    const normalized = Math.floor(raw)
+    if (normalized < 1) return fallback
+    if (typeof max === 'number') return Math.min(normalized, max)
+    return normalized
   }
 
   async getLatestQuote(query: MarketQuoteQueryDto) {

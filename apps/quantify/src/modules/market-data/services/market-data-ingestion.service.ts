@@ -71,7 +71,14 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleGapFill() {
     const config = this.getConfig()
-    await this.syncHistoricalBars(config)
+    const startedAt = Date.now()
+    try {
+      await this.syncHistoricalBars(config)
+      this.logger.log(`metric=market_gapfill_duration_ms value=${Date.now() - startedAt}`)
+    } catch (error) {
+      this.logger.warn(`metric=market_gapfill_failed_total value=1 reason=${(error as Error).message}`)
+      throw error
+    }
   }
 
   private getConfig(): MarketDataRuntimeConfig {
@@ -108,6 +115,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   }
 
   private async syncHistoricalBars(config: MarketDataRuntimeConfig) {
+    let failedCount = 0
     const lookbackMs = config.historicalLookbackMinutes * 60 * 1000
     const now = Date.now()
     const start = new Date(now - lookbackMs)
@@ -144,6 +152,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
             cursor = new Date(nextCursorMs)
           } catch (error) {
             const err = error as Error
+            failedCount += 1
             this.logger.error(
               `同步 K 线失败: ${symbol} ${timeframe} - ${err.message}`,
               err.stack,
@@ -153,6 +162,9 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
           }
         }
       }
+    }
+    if (failedCount > 0) {
+      this.logger.warn(`metric=market_gapfill_failed_total value=${failedCount}`)
     }
   }
 
@@ -187,4 +199,3 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     })
   }
 }
-

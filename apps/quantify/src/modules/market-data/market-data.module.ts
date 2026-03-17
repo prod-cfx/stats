@@ -8,8 +8,11 @@ import { MARKET_DATA_PROVIDER } from './constants/market-data.constants'
 import { MarketDataController } from './controllers/market-data.controller'
 import { OpsMarketSymbolsController } from './controllers/ops-market-symbols.controller'
 import { BinanceMarketDataProvider } from './providers/binance-market-data.provider'
+import { MarketDataHealthService } from './services/market-data-health.service'
 import { MarketDataIngestionService } from './services/market-data-ingestion.service'
+import { MarketDataReadGateway } from './services/market-data-read.gateway'
 import { MarketDataStreamService } from './services/market-data-stream.service'
+import { MarketDataRepository } from './services/market-data.repository'
 import { MarketDataService } from './services/market-data.service'
 
 @Module({
@@ -17,6 +20,9 @@ import { MarketDataService } from './services/market-data.service'
   controllers: [MarketDataController, OpsMarketSymbolsController],
   providers: [
     MarketDataService,
+    MarketDataRepository,
+    MarketDataReadGateway,
+    MarketDataHealthService,
     MarketDataIngestionService,
     MarketDataStreamService,
     {
@@ -24,6 +30,6 @@ import { MarketDataService } from './services/market-data.service'
       useClass: BinanceMarketDataProvider,
     },
   ],
-  exports: [MarketDataService],
+  exports: [MarketDataService, MarketDataReadGateway, MarketDataHealthService],
 })
 export class MarketDataModule {}

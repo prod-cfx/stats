@@ -8,7 +8,8 @@ import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { StrategyTemplateNotFoundException } from '@/modules/strategy-templates/exceptions/strategy-template-not-found.exception'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -83,6 +84,7 @@ export class StrategyInstancesService {
     private readonly instancesRepo: StrategyInstancesRepository,
     private readonly statsService: StrategyInstanceStatsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
+    private readonly marketDataReadGateway: MarketDataReadGateway,
   ) {}
 
   async createInstance(
@@ -402,10 +404,10 @@ export class StrategyInstancesService {
     })
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
 
-    // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
+    // 2. 收集所有需要加载的 (legId, symbolCode, timeframe) 组合
     interface DataRequest {
       legId: string
-      symbolId: string
+      symbolCode: string
       timeframe: PrismaMarketTimeframe // Prisma 枚举格式（如 'h1'）
       originalTimeframe: string // 应用层格式（如 '1h'）
     }
@@ -427,8 +429,8 @@ export class StrategyInstancesService {
       for (const tf of timeframes) {
         dataRequests.push({
           legId: leg.id,
-          symbolId: symbol.id,
-          timeframe: mapTimeframe(tf as any),
+          symbolCode: symbol.code,
+          timeframe: mapTimeframe(tf as import('@ai/shared').MarketTimeframe),
           originalTimeframe: tf,
         })
       }
@@ -439,25 +441,21 @@ export class StrategyInstancesService {
       {}
 
     for (const req of dataRequests) {
-      const bars = await client.marketBar.findMany({
-        where: {
-          symbolId: req.symbolId,
-          timeframe: req.timeframe,
-        },
-        orderBy: { time: 'desc' },
-        take: StrategyInstancesService.DEBUG_BAR_LIMIT,
-      })
+      const bars = await this.marketDataReadGateway.getRecentBars(
+        req.symbolCode,
+        reverseMapTimeframe(req.timeframe),
+        StrategyInstancesService.DEBUG_BAR_LIMIT,
+      )
 
       const normalizedBars =
         bars
-          .reverse()
           .map(bar => ({
-            open: Number(bar.open),
-            high: Number(bar.high),
-            low: Number(bar.low),
-            close: Number(bar.close),
-            volume: Number(bar.volume),
-            timestamp: bar.time.getTime(),
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+            volume: bar.volume,
+            timestamp: bar.timestamp,
           })) ?? []
 
       const currentPrice =

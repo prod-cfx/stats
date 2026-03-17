@@ -2,6 +2,7 @@ import type { TestingModule } from '@nestjs/testing'
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { Test } from '@nestjs/testing'
 
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { PrismaService } from '@/prisma/prisma.service'
 import { InvalidInstanceModeTransitionException } from '../../exceptions'
@@ -31,6 +32,10 @@ describe('strategyInstancesService - mode management', () => {
   }
 
   const mockTradingSignalRepository = {}
+  const mockMarketDataReadGateway = {
+    getRecentBars: jest.fn(),
+    getLatestBar: jest.fn(),
+  }
 
   const mockStrategyTemplate = {
     id: 'template-123',
@@ -74,6 +79,10 @@ describe('strategyInstancesService - mode management', () => {
         {
           provide: TradingSignalRepository,
           useValue: mockTradingSignalRepository,
+        },
+        {
+          provide: MarketDataReadGateway,
+          useValue: mockMarketDataReadGateway,
         },
       ],
     }).compile()

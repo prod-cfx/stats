@@ -262,6 +262,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
 
     this.ws.on('open', () => {
       this.logger.log(`Binance WebSocket 已连接: ${this.currentStreams}`)
+      this.logger.log('metric=market_ws_connected value=1')
     })
 
     this.ws.on('message', data => {
@@ -275,6 +276,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
 
     this.ws.on('close', () => {
       this.logger.warn('Binance WebSocket 连接关闭')
+      this.logger.warn('metric=market_ws_connected value=0')
       this.scheduleReconnect()
     })
 
@@ -287,6 +289,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
   private scheduleReconnect() {
     if (!this.shouldReconnect) return
     if (this.reconnectTimer) return
+    this.logger.warn(`metric=market_ws_reconnect_total value=1 delayMs=${this.reconnectDelayMs}`)
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = undefined
       await this.openWebSocket()

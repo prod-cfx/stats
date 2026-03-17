@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 
+import { MarketDataModule } from '@/modules/market-data/market-data.module'
 import { StrategySignalsGenerationModule } from '@/modules/strategy-signals/strategy-signals-generation.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 
@@ -10,7 +11,7 @@ import { StrategyInstanceStatsService } from './services/strategy-instance-stats
 import { StrategyInstancesService } from './services/strategy-instances.service'
 
 @Module({
-  imports: [PrismaModule, StrategySignalsGenerationModule],
+  imports: [PrismaModule, StrategySignalsGenerationModule, MarketDataModule],
   controllers: [OpsStrategyInstancesController, LiveStrategyInstancesController],
   providers: [StrategyInstancesService, StrategyInstancesRepository, StrategyInstanceStatsService],
   exports: [StrategyInstancesService, StrategyInstanceStatsService],

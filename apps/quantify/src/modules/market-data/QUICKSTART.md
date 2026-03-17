@@ -7,7 +7,7 @@
 ## 启动服务
 
 ```bash
-dx start backend --dev
+dx start quantify --dev
 ```
 
 ## 建立连接
@@ -15,7 +15,7 @@ dx start backend --dev
 使用任意支持 SSE 的内部客户端连接：
 
 ```text
-http://localhost:3000/api/v1/market/stream/ticker
+http://localhost:3010/api/v1/market/stream/ticker
 ```
 
 如果服务已开始接收行情数据，会持续收到推送事件。
@@ -23,5 +23,6 @@ http://localhost:3000/api/v1/market/stream/ticker
 ## 接入建议
 
 - 内部模块可直接使用标准 SSE 客户端消费该端点
+- 内部策略/AI 模块优先通过 `MarketDataReadGateway` 获取 bars/quote，避免分散直查 Prisma
 - 调用方自行负责重连、节流和下游分发
 - 当前服务不再提供浏览器前端专用接入说明或 CORS 配置

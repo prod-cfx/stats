@@ -4,7 +4,6 @@ import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-con
 import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import type {
   IndicatorConfig,
-  MarketBar,
   MarketTimeframe,
   Prisma,
   SignalSourceType,
@@ -27,6 +26,8 @@ import { CronJob } from 'cron'
 import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
@@ -51,6 +52,15 @@ interface IndicatorSnapshot {
   field: string
   value: number
   recordedAt: Date
+}
+
+interface LoadedBar {
+  time: Date
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
 }
 
 const DEFAULT_RAW_RESPONSE_LIMIT = 4000
@@ -85,6 +95,7 @@ export class SignalGeneratorService {
     private readonly stateRepository: StrategySignalStateRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly telemetry: SignalTelemetryService,
+    private readonly marketDataReadGateway: MarketDataReadGateway,
   ) {
     this.registerCronJob()
   }
@@ -480,7 +491,7 @@ export class SignalGeneratorService {
       }
     }
 
-    const referenceBar = await this.loadLatestBar(group.symbol.id, group.timeframe)
+    const referenceBar = await this.loadLatestBar(group.symbol.code, group.timeframe)
     const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
 
     const aiPayload = await this.generateSignalWithAi(
@@ -633,7 +644,7 @@ export class SignalGeneratorService {
         const engine = createScriptEngine()
         
         // 构建脚本执行上下文
-        const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
+        const marketBars = await this.loadRecentBars(symbol.code, timeframe, DEFAULT_BAR_LIMIT)
         // 转换 MarketBar 到 Bar 类型
         const bars = marketBars ? marketBars.map(bar => ({
           open: Number(bar.open),
@@ -850,26 +861,38 @@ export class SignalGeneratorService {
     return result
   }
 
-  private async loadLatestBar(symbolId: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
-    return this.prisma.marketBar.findFirst({
-      where: { symbolId, timeframe },
-      orderBy: { time: 'desc' },
-    })
+  private async loadLatestBar(symbolCode: string, timeframe: MarketTimeframe): Promise<LoadedBar | null> {
+    const bar = await this.marketDataReadGateway.getLatestBar(symbolCode, reverseMapTimeframe(timeframe))
+    if (!bar) return null
+    return {
+      time: bar.time,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+    }
   }
 
   private async loadRecentBars(
-    symbolId: string,
+    symbolCode: string,
     timeframe: MarketTimeframe,
     limit: number = 100,
-  ): Promise<MarketBar[] | null> {
+  ): Promise<LoadedBar[] | null> {
     try {
-      const bars = await this.prisma.marketBar.findMany({
-        where: { symbolId, timeframe },
-        orderBy: { time: 'desc' },
-        take: limit,
-      })
-      // 返回时间升序的结果（最旧的在前）
-      return bars.reverse()
+      const bars = await this.marketDataReadGateway.getRecentBars(
+        symbolCode,
+        reverseMapTimeframe(timeframe),
+        limit,
+      )
+      return bars.map(bar => ({
+        time: bar.time,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.volume,
+      }))
     } catch (error) {
       this.logger.error(`Failed to load recent bars: ${(error as Error).message}`)
       return null
@@ -947,10 +970,10 @@ export class SignalGeneratorService {
     })
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
     
-    // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
+    // 2. 收集所有需要加载的 (legId, symbolCode, timeframe) 组合
     interface DataRequest {
       legId: string
-      symbolId: string
+      symbolCode: string
       timeframe: MarketTimeframe  // Prisma 枚举格式（如 'h1'）
       originalTimeframe: string   // 应用层格式（如 '1h'）
     }
@@ -973,8 +996,8 @@ export class SignalGeneratorService {
       for (const tf of timeframes) {
         dataRequests.push({ 
           legId: leg.id, 
-          symbolId: symbol.id, 
-          timeframe: mapTimeframe(tf as any),  // 从应用层 '1h' 转换为 Prisma 'h1'
+          symbolCode: symbol.code,
+          timeframe: mapTimeframe(tf as import('@ai/shared').MarketTimeframe),  // 从应用层 '1h' 转换为 Prisma 'h1'
           originalTimeframe: tf,  // 保留原始应用层格式用于返回
         })
       }
@@ -982,7 +1005,7 @@ export class SignalGeneratorService {
     
     // 3. 并行加载所有 bars 数据
     const barsPromises = dataRequests.map(async req => {
-      const bars = await this.loadRecentBars(req.symbolId, req.timeframe, DEFAULT_BAR_LIMIT)
+      const bars = await this.loadRecentBars(req.symbolCode, req.timeframe, DEFAULT_BAR_LIMIT)
       return { ...req, bars }
     })
     
