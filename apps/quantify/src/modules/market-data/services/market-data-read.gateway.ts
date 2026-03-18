@@ -22,6 +22,24 @@ export interface GatewayBar {
   isFinal: boolean
 }
 
+export interface GatewayQuote {
+  lastPrice: Prisma.Decimal
+  priceChange: Prisma.Decimal | null
+  priceChangePercent: Prisma.Decimal | null
+  openPrice: Prisma.Decimal | null
+  highPrice: Prisma.Decimal | null
+  lowPrice: Prisma.Decimal | null
+  volume: Prisma.Decimal | null
+  quoteVolume: Prisma.Decimal | null
+  bidPrice: Prisma.Decimal | null
+  bidQty: Prisma.Decimal | null
+  askPrice: Prisma.Decimal | null
+  askQty: Prisma.Decimal | null
+  eventTime: Date
+  source: string | null
+  createdAt: Date
+}
+
 @Injectable()
 export class MarketDataReadGateway {
   constructor(
@@ -133,12 +151,10 @@ export class MarketDataReadGateway {
     return mergedBars.slice(-limit)
   }
 
-  async getLatestQuote(symbol: string): Promise<MarketQuote> {
+  async getLatestQuote(symbol: string): Promise<GatewayQuote> {
     const snapshot = this.marketDataService.getLatestQuoteSnapshot(symbol)
     if (snapshot) {
       return {
-        id: '',
-        symbolId: '',
         lastPrice: new Prisma.Decimal(Number(snapshot.lastPrice)),
         priceChange: this.toDecimalOrNull(snapshot.priceChange),
         priceChangePercent: this.toDecimalOrNull(snapshot.priceChangePercent),
@@ -154,10 +170,11 @@ export class MarketDataReadGateway {
         eventTime: new Date(snapshot.eventTime),
         source: snapshot.source,
         createdAt: new Date(snapshot.eventTime),
-      } as MarketQuote
+      }
     }
     const quote = await this.repository.findLatestQuote(symbol)
-    if (quote) return quote
+    const mappedQuote = this.toGatewayQuote(quote)
+    if (mappedQuote) return mappedQuote
 
     throw new DomainException('No market data available', {
       code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
@@ -168,6 +185,27 @@ export class MarketDataReadGateway {
   private toDecimalOrNull(value: string | number | null | undefined): Prisma.Decimal | null {
     if (value == null) return null
     return new Prisma.Decimal(Number(value))
+  }
+
+  private toGatewayQuote(quote: MarketQuote | null): GatewayQuote | null {
+    if (!quote) return null
+    return {
+      lastPrice: quote.lastPrice,
+      priceChange: quote.priceChange,
+      priceChangePercent: quote.priceChangePercent,
+      openPrice: quote.openPrice,
+      highPrice: quote.highPrice,
+      lowPrice: quote.lowPrice,
+      volume: quote.volume,
+      quoteVolume: quote.quoteVolume,
+      bidPrice: quote.bidPrice,
+      bidQty: quote.bidQty,
+      askPrice: quote.askPrice,
+      askQty: quote.askQty,
+      eventTime: quote.eventTime,
+      source: quote.source,
+      createdAt: quote.createdAt,
+    }
   }
 
   async getIndicatorSnapshot(
