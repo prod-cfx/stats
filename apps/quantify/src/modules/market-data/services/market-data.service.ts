@@ -449,7 +449,9 @@ export class MarketDataService {
     const legacyCode = exact.endsWith(':SPOT') ? exact.slice(0, -':SPOT'.length) : undefined
     const resolved = exact.includes(':')
       ? (symbolMap.get(exact) ?? (legacyCode ? symbolMap.get(legacyCode) : undefined))
-      : (symbolMap.get(normalizeRequestedCode(exact)) ?? symbolMap.get(exact))
+      : (symbolMap.get(normalizeRequestedCode(exact))
+          ?? symbolMap.get(toSymbolCode(exact, 'PERP'))
+          ?? symbolMap.get(exact))
 
     if (!resolved) {
       throw new MarketSymbolNotFoundException({ symbol: symbolCode })

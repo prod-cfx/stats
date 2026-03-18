@@ -43,6 +43,12 @@ describe('marketDataService symbol code compatibility', () => {
     await expect(service.getSymbolOrThrow('BTCUSDT')).resolves.toEqual({ id: 'legacy-id', code: 'BTCUSDT' })
   })
 
+  it('falls back unsuffixed symbol to :PERP when :SPOT is missing', async () => {
+    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+
+    await expect(service.getSymbolOrThrow('BTCUSDT')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
+  })
+
   it('warns when both spot and perp exist for unsuffixed input', async () => {
     const warnSpy = jest.spyOn((service as any).logger, 'warn')
     prismaMock.symbol.findMany.mockResolvedValue([
