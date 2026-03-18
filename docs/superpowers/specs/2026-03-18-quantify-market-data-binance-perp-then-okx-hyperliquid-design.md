@@ -24,14 +24,14 @@
 1. Binance 行情层支持 `SPOT + PERP` 并存采集（REST 历史 + WS 实时）。
 2. 对策略消费侧保持统一数据结构，不破坏 `MarketDataReadGateway` 对外使用方式。
 3. 为后续接入 OKX/Hyperliquid 复用同一抽象与代码结构。
-4. 支持“同一套代码同时跑实盘/测试网”，通过配置切换 URL 与少量参数，不分叉实现。
+4. 支持“同一交易所内现货/合约 API 同形态接入”，通过切换 URL 与参数模板实现，不分叉实现。
 
 ### 2.2 非目标
 
 1. 本次不改交易下单客户端（`trading/exchanges/*-client.ts`）的业务逻辑。
 2. 本次不做跨交易所深度聚合引擎（仅 provider 级别接入）。
 3. 本次不引入新的公开 API 版本。
-4. 本次不新增“实盘版 provider”和“测试版 provider”两套类。
+4. 本次不新增“现货版 provider”和“合约版 provider”两套类。
 
 ## 3. 备选方案与取舍
 
@@ -76,14 +76,15 @@
 
 外部模块仍只消费统一 payload，不感知交易所差异。
 
-### 4.3 环境切换原则（实盘/测试网）
+### 4.3 现货/合约切换原则（同交易所）
 
-1. 统一通过配置切换环境，不复制代码：
-   - `MARKET_DATA_API_BASE_URL`
-   - `MARKET_DATA_WS_URL`
-   - 必要时补充交易所专属参数开关（例如 market type / channel 参数）
-2. provider 逻辑保持同一套 adapter 与解析流程，仅端点和入参模板可配置。
-3. 默认按实盘配置运行；测试网由显式环境变量切换。
+1. 统一通过配置切换 market 目标，不复制代码：
+   - `MARKET_DATA_SPOT_REST_BASE_URL`
+   - `MARKET_DATA_PERP_REST_BASE_URL`
+   - `MARKET_DATA_SPOT_WS_BASE_URL`
+   - `MARKET_DATA_PERP_WS_BASE_URL`
+2. provider 逻辑保持同一套 adapter 与解析流程，仅端点与参数模板可配置（例如 interval/channel/instType）。
+3. REST 与 WS 都按“同形态 API + 差异参数模板”实现路由，不引入分叉代码路径。
 
 ## 5. 数据模型与兼容策略
 
@@ -114,7 +115,7 @@
 1. `fetchSymbols()` 同时拉 spot/perp 元数据，产出双 market symbol。
 2. `fetchHistoricalBars()` 根据 code 后缀路由到 spot/perp REST 端点。
 3. `subscribe()` 建立 spot/perp 独立流并统一转为 `onKline` 回调。
-4. 实盘/测试网共用同一 provider：仅切换 base URL 与必要参数模板。
+4. spot/perp 共用同一 provider：仅切换 URL 与必要参数模板。
 
 ### 6.2 OKX / Hyperliquid（第二阶段）
 
@@ -122,7 +123,7 @@
 
 1. 保持接口函数一致（`fetchHistoricalBars`/`subscribe` 对应 `get_klines`/`subscribe_kline` 语义）。
 2. 输出统一 Kline 结构（timestamp/open/high/low/close/volume/symbol/interval）。
-3. 默认采用“API 结构一致，靠 URL+参数切换环境”的接入策略。
+3. 默认采用“API 结构一致，靠 URL+参数切换现货/合约”的接入策略。
 
 ## 7. 异常处理与可观测性
 
@@ -156,12 +157,12 @@
 ### Phase 2：OKX 接入
 
 1. 新增 OKX market-data provider（REST+WS）。
-2. 接入实盘/测试网 URL 与参数切换配置（不新增第二套 provider 实现）。
+2. 接入 spot/perp URL 与参数模板配置（不新增第二套 provider 实现）。
 
 ### Phase 3：Hyperliquid 接入
 
 1. 新增 Hyperliquid market-data provider（REST+WS）。
-2. 复用统一 symbol 编码与 Kline 映射，并按 URL/参数切换环境。
+2. 复用统一 symbol 编码与 Kline 映射，并按 URL/参数切换现货/合约。
 
 ## 10. 风险与回滚
 
@@ -170,14 +171,14 @@
 1. code 规范切换引发旧调用找不到 symbol。
 2. 双 market 并存引发数据重复或覆盖。
 3. WS 双链路并发导致资源开销上升。
-4. 实盘/测试网配置误切导致连错环境。
+4. 现货/合约 URL 或参数模板配置错误导致取错市场数据。
 
 缓解：
 
 1. 保留旧码到 `:SPOT` 的兼容窗口。
 2. 上线前运行迁移校验与双写核对脚本。
 3. 每阶段都提供开关与快速回退路径（按 provider 维度禁用）。
-4. 启动时打印当前 market-data endpoint 与环境标识，避免误连。
+4. 启动时打印当前 spot/perp endpoints 与参数模板摘要，避免误配。
 
 ## 11. 验收标准
 
