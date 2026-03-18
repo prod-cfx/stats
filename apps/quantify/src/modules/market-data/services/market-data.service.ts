@@ -17,6 +17,12 @@ import { IndicatorEngineService } from '@/modules/indicators/services/indicator-
 import { PrismaService } from '@/prisma/prisma.service'
 import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
+import {
+  normalizeExactCode,
+  normalizeProviderCode,
+  normalizeRequestedCode,
+  toSymbolCode,
+} from '../utils/market-symbol-code.util'
 
 @Injectable()
 export class MarketDataService {
@@ -268,7 +274,7 @@ export class MarketDataService {
   async upsertSymbolsFromProvider(symbols: ProviderSymbol[], exchangeFallback: string) {
     for (const symbol of symbols) {
       const exchange = symbol.exchange?.toUpperCase() ?? exchangeFallback
-      const code = this.normalizeSymbol(symbol.symbol)
+      const code = normalizeProviderCode(symbol.symbol, symbol.instrumentType)
       await this.prisma.symbol.upsert({
         where: { code },
         create: {
@@ -410,22 +416,50 @@ export class MarketDataService {
   }
 
   async getSymbolOrThrow(symbolCode: string) {
-    const normalized = this.normalizeSymbol(symbolCode)
-    const cached = this.symbolIdCache.get(normalized)
+    const exact = normalizeExactCode(symbolCode)
+    const cached = this.symbolIdCache.get(exact)
     if (cached) {
-      this.symbolCodeCache.set(cached, normalized)
-      return { id: cached, code: normalized }
+      const canonical = this.symbolCodeCache.get(cached) ?? exact
+      return { id: cached, code: canonical }
     }
-    const symbol = await this.prisma.symbol.findUnique({
-      where: { code: normalized },
+
+    const codeCandidates: string[] = [exact]
+    if (!exact.includes(':')) {
+      const spotCode = toSymbolCode(exact, 'SPOT')
+      const perpCode = toSymbolCode(exact, 'PERP')
+      codeCandidates.unshift(spotCode)
+      codeCandidates.push(perpCode)
+    } else if (exact.endsWith(':SPOT')) {
+      codeCandidates.push(exact.slice(0, -':SPOT'.length))
+    }
+
+    const symbols = await this.prisma.symbol.findMany({
+      where: { code: { in: codeCandidates } },
       select: { id: true, code: true },
     })
-    if (!symbol) {
+
+    const symbolMap = new Map(symbols.map(item => [item.code, item]))
+    const hasSpot = symbolMap.has(toSymbolCode(exact, 'SPOT'))
+    const hasPerp = symbolMap.has(toSymbolCode(exact, 'PERP'))
+
+    if (!exact.includes(':') && hasSpot && hasPerp) {
+      this.logger.warn(`ambiguous symbol code, default to SPOT: ${symbolCode}`)
+    }
+
+    const legacyCode = exact.endsWith(':SPOT') ? exact.slice(0, -':SPOT'.length) : undefined
+    const resolved = exact.includes(':')
+      ? (symbolMap.get(exact) ?? (legacyCode ? symbolMap.get(legacyCode) : undefined))
+      : (symbolMap.get(normalizeRequestedCode(exact)) ?? symbolMap.get(exact))
+
+    if (!resolved) {
       throw new MarketSymbolNotFoundException({ symbol: symbolCode })
     }
-    this.symbolIdCache.set(normalized, symbol.id)
-    this.symbolCodeCache.set(symbol.id, symbol.code)
-    return symbol
+
+    const canonicalCode = normalizeExactCode(resolved.code)
+    this.symbolIdCache.set(exact, resolved.id)
+    this.symbolIdCache.set(canonicalCode, resolved.id)
+    this.symbolCodeCache.set(resolved.id, canonicalCode)
+    return resolved
   }
 
   private toMarketSymbolResponse(symbol: PrismaSymbol) {
