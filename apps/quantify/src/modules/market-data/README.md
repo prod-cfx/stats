@@ -15,6 +15,22 @@
    - `bash scripts/acceptance/quantify-market-data-gate1-check.sh BTCUSDT`
    - `bash scripts/acceptance/quantify-market-data-runtime.sh stop`
 
+## Symbol 回填
+
+在引入 `:SPOT/:PERP` 编码后，可执行一次历史回填：
+
+1. 先 dry-run：
+   - `pnpm --filter @net/quantify exec tsx scripts/backfill-market-symbol-codes.ts --dry-run`
+2. 再 apply：
+   - `pnpm --filter @net/quantify exec tsx scripts/backfill-market-symbol-codes.ts --apply`
+
+说明：
+
+- 脚本只处理无后缀 code，例如 `BTCUSDT -> BTCUSDT:SPOT`。
+- 已有后缀（如 `:PERP`）不会被改写。
+- 重复执行是幂等的，第二次不会继续更新。
+- 回滚按 dry-run / apply 输出清单逐条恢复 `code` 字段即可。
+
 ## 文档索引
 
 - [QUICKSTART.md](./QUICKSTART.md)：快速接入说明
