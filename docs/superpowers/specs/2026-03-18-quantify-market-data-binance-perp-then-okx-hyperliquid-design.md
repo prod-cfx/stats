@@ -4,6 +4,12 @@
 - 状态：Draft（已与用户确认方向）
 - 范围：`apps/quantify/src/modules/market-data/*` 及 `apps/quantify/prisma/schema/market_indicator.prisma` 的最小必要改造
 
+## 0. 决策记录（已确认）
+
+1. 需要并行支持现货策略与合约策略。
+2. 接受方案：不改 schema，采用 symbol code 规范化（`:SPOT`/`:PERP`）+ 存量数据回填。
+3. 不采用方案：仅切换 URL/参数且完全不改数据（该方案无法支持同码 spot/perp 并存）。
+
 ## 1. 背景与问题判断
 
 用户目标是：先把 Binance 行情数据层调到可支撑 AI 策略合约，再接入 OKX 与 Hyperliquid。
