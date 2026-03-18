@@ -70,6 +70,7 @@ redis_ping() {
 
   python3 - "$redis_url" <<'PY'
 import sys
+import os
 from urllib.parse import urlparse
 
 url = sys.argv[1]
@@ -87,12 +88,20 @@ password = parsed.password or ""
 cmd = ["redis-cli", "-h", host, "-p", str(port), "-n", db]
 if parsed.scheme == "rediss":
     cmd.append("--tls")
-if password:
-    cmd.extend(["-a", password])
 cmd.append("PING")
 
 import subprocess
-completed = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+env = None
+if password:
+    env = dict(os.environ, REDISCLI_AUTH=password)
+
+completed = subprocess.run(
+    cmd,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    env=env,
+)
 sys.exit(completed.returncode)
 PY
 }

@@ -24,6 +24,16 @@ require_command curl
 require_command rg
 require_command python3
 
+validate_symbol() {
+  local symbol="$1"
+  if [[ ! "$symbol" =~ ^[A-Z0-9_-]+$ ]]; then
+    echo "invalid symbol: $symbol" >&2
+    exit 1
+  fi
+}
+
+validate_symbol "$SYMBOL"
+
 json_eval() {
   local file="$1"
   local expr="$2"
@@ -122,24 +132,24 @@ PY
 T0="$(cat "$STATE_DIR/t0.txt")"
 T0_UTC_EXPR="('${T0}'::timestamptz at time zone 'utc')"
 
-psql -At "$QUANTIFY_DATABASE_URL" -c "select code from market_symbols where code='${SYMBOL}'" > "$TMP_DIR/symbol.txt"
+psql -At -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "select code from market_symbols where code = :'symbol'" > "$TMP_DIR/symbol.txt"
 [ -s "$TMP_DIR/symbol.txt" ]
 
-psql -At -F $'\t' "$QUANTIFY_DATABASE_URL" -c "
+psql -At -F $'\t' -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "
 select q.event_time, q.created_at, q.last_price, coalesce(q.source, '')
 from market_quotes q
 join market_symbols s on s.id=q.symbol_id
-where s.code='${SYMBOL}' and (q.event_time >= ${T0_UTC_EXPR} or q.created_at >= ${T0_UTC_EXPR})
+where s.code = :'symbol' and (q.event_time >= ${T0_UTC_EXPR} or q.created_at >= ${T0_UTC_EXPR})
 order by q.event_time desc
 limit 1
 " > "$TMP_DIR/latest-quote.tsv"
 [ -s "$TMP_DIR/latest-quote.tsv" ]
 
-psql -At -F $'\t' "$QUANTIFY_DATABASE_URL" -c "
+psql -At -F $'\t' -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "
 select b.time, b.created_at, b.updated_at, b.open, b.high, b.low, b.close, coalesce(b.source, '')
 from market_bars b
 join market_symbols s on s.id=b.symbol_id
-where s.code='${SYMBOL}'
+where s.code = :'symbol'
   and b.timeframe = '1h'
   and (b.created_at >= ${T0_UTC_EXPR} or b.updated_at >= ${T0_UTC_EXPR})
 order by b.created_at desc
