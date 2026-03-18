@@ -19,17 +19,11 @@ describe('PrismaService.runInTransaction', () => {
     const baseClient = {
       $transaction: jest.fn(async (callback: (innerTx: typeof tx) => Promise<unknown>) => callback(tx)),
     }
-    const service = Object.create(PrismaService.prototype) as PrismaService & {
-      cls: typeof cls
-      envService: typeof envService
-      extendedClient: typeof baseClient
-      logger: { error: jest.Mock }
-    }
-
-    service.cls = cls as any
-    service.envService = envService as any
-    service.extendedClient = baseClient as any
-    service.logger = { error: jest.fn() } as any
+    const service = Object.create(PrismaService.prototype) as PrismaService
+    ;(service as any).cls = cls
+    ;(service as any).envService = envService
+    ;(service as any).extendedClient = baseClient
+    ;(service as any).logger = { error: jest.fn() }
 
     return { service, cls, tx, baseClient }
   }
