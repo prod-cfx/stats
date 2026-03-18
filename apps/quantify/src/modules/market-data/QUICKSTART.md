@@ -65,3 +65,18 @@ http://localhost:3010/api/v1/market/stream/ticker
 2. 持续观察 `30~120` 分钟
 3. 执行一次 `bash scripts/acceptance/quantify-market-data-runtime.sh restart`
 4. 跑 `strategy-signals`、`strategy-instances`、`ai`、`trading(mock)` 的 smoke 测试
+
+## 最小真实链路验收（一键）
+
+```bash
+export ACCEPT_SYMBOL_BINANCE=BTCUSDT
+export ACCEPT_SYMBOL_OKX=BTCUSDT
+export ACCEPT_SYMBOL_HYPERLIQUID=BTCUSDC
+export ACCEPT_STRATEGY_INSTANCE_ID=<existing-instance-id>
+
+bash scripts/acceptance/quantify-min-acceptance.sh
+```
+
+输出产物：
+
+- `tmp/quantify-min-acceptance/acceptance-summary.json`

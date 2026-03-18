@@ -74,6 +74,23 @@
 - `market-data` 本体必须是真实 Binance 链路
 - `strategy` / `ai` / `trading` 只在第二层通过 mock smoke 验证消费契约
 
+### 最小真实链路验收（多交易所 + 策略信号）
+
+```bash
+export ACCEPT_SYMBOL_BINANCE=BTCUSDT
+export ACCEPT_SYMBOL_OKX=BTCUSDT
+export ACCEPT_SYMBOL_HYPERLIQUID=BTCUSDC
+export ACCEPT_STRATEGY_INSTANCE_ID=<existing-instance-id>
+
+bash scripts/acceptance/quantify-min-acceptance.sh
+```
+
+说明：
+
+- `gate2` 会顺序验证 `binance/okx/hyperliquid` 的 `quote + bars + DB`。
+- `gate3` 会调用 `POST /api/v1/ops/strategy-instances/:id/generate-signal` 并校验 `strategy_signals` 新增记录。
+- 汇总结果输出到 `tmp/quantify-min-acceptance/acceptance-summary.json`。
+
 ## 故障排查
 
 - 连接失败：确认 quantify 服务已经启动，且调用方可访问 `/api/v1/market/stream/ticker`
