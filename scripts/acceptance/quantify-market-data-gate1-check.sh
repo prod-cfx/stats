@@ -130,28 +130,34 @@ PY
 }
 
 T0="$(cat "$STATE_DIR/t0.txt")"
-T0_UTC_EXPR="('${T0}'::timestamptz at time zone 'utc')"
 
 psql -At -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "select code from market_symbols where code = :'symbol'" > "$TMP_DIR/symbol.txt"
 [ -s "$TMP_DIR/symbol.txt" ]
 
-psql -At -F $'\t' -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "
+psql -At -F $'\t' -v symbol="$SYMBOL" -v t0="$T0" "$QUANTIFY_DATABASE_URL" -c "
 select q.event_time, q.created_at, q.last_price, coalesce(q.source, '')
 from market_quotes q
 join market_symbols s on s.id=q.symbol_id
-where s.code = :'symbol' and (q.event_time >= ${T0_UTC_EXPR} or q.created_at >= ${T0_UTC_EXPR})
+where s.code = :'symbol'
+  and (
+    q.event_time >= (:'t0'::timestamptz at time zone 'utc')
+    or q.created_at >= (:'t0'::timestamptz at time zone 'utc')
+  )
 order by q.event_time desc
 limit 1
 " > "$TMP_DIR/latest-quote.tsv"
 [ -s "$TMP_DIR/latest-quote.tsv" ]
 
-psql -At -F $'\t' -v symbol="$SYMBOL" "$QUANTIFY_DATABASE_URL" -c "
+psql -At -F $'\t' -v symbol="$SYMBOL" -v t0="$T0" "$QUANTIFY_DATABASE_URL" -c "
 select b.time, b.created_at, b.updated_at, b.open, b.high, b.low, b.close, coalesce(b.source, '')
 from market_bars b
 join market_symbols s on s.id=b.symbol_id
 where s.code = :'symbol'
   and b.timeframe = '1h'
-  and (b.created_at >= ${T0_UTC_EXPR} or b.updated_at >= ${T0_UTC_EXPR})
+  and (
+    b.created_at >= (:'t0'::timestamptz at time zone 'utc')
+    or b.updated_at >= (:'t0'::timestamptz at time zone 'utc')
+  )
 order by b.created_at desc
 limit 1
 " > "$TMP_DIR/latest-bar.tsv"

@@ -62,6 +62,31 @@ sys.exit(completed.returncode)
 PY
 }
 
+redact_url() {
+  local value="$1"
+  python3 - "$value" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+raw = sys.argv[1]
+parsed = urlsplit(raw)
+
+if not parsed.scheme:
+    print("<invalid-url>")
+    raise SystemExit(0)
+
+host = parsed.hostname or ""
+if not host:
+    print(f"{parsed.scheme}://<unknown-host>")
+    raise SystemExit(0)
+
+out = f"{parsed.scheme}://{host}"
+if parsed.port is not None:
+    out += f":{parsed.port}"
+print(out)
+PY
+}
+
 redis_ping() {
   local redis_url="$1"
   python3 - "$redis_url" <<'PY'
@@ -122,8 +147,8 @@ echo "check: cwd=$(pwd)"
 echo "check: QUANTIFY_DATABASE_URL=set"
 echo "check: QUANTIFY_REDIS_URL=set"
 echo "check: MARKET_DATA_PROVIDER=$PROVIDER"
-echo "check: MARKET_DATA_API_BASE_URL=$REST_URL"
-echo "check: MARKET_DATA_WS_URL=$WS_URL"
+echo "check: MARKET_DATA_API_BASE_URL=$(redact_url "$REST_URL")"
+echo "check: MARKET_DATA_WS_URL=$(redact_url "$WS_URL")"
 
 redis_ping "$QUANTIFY_REDIS_URL"
 curl -fsS "${REST_URL%/}/api/v3/ping" >/dev/null
