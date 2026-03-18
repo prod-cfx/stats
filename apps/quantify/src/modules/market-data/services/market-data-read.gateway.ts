@@ -30,21 +30,27 @@ export class MarketDataReadGateway {
   ) {}
 
   async getRecentBars(symbol: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
-    const snapshot = this.marketDataService.getRecentBarsSnapshot(symbol, timeframe, limit)
-    if (snapshot.length > 0) {
-      return snapshot.map(bar => this.toGatewayBarFromPayload(bar))
+    const snapshotBars = this.marketDataService
+      .getRecentBarsSnapshot(symbol, timeframe, limit)
+      .map(bar => this.toGatewayBarFromPayload(bar))
+    if (snapshotBars.length >= limit) {
+      return snapshotBars
     }
-    const bars = await this.repository.findRecentBars(symbol, timeframe, limit)
-    return this.toGatewayBars(bars)
+
+    const repositoryBars = this.toGatewayBars(await this.repository.findRecentBars(symbol, timeframe, limit))
+    return this.mergeRecentBars(snapshotBars, repositoryBars, limit)
   }
 
   async getRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
-    const snapshot = this.marketDataService.getRecentBarsSnapshotBySymbolId(symbolId, timeframe, limit)
-    if (snapshot.length > 0) {
-      return snapshot.map(bar => this.toGatewayBarFromPayload(bar))
+    const snapshotBars = this.marketDataService
+      .getRecentBarsSnapshotBySymbolId(symbolId, timeframe, limit)
+      .map(bar => this.toGatewayBarFromPayload(bar))
+    if (snapshotBars.length >= limit) {
+      return snapshotBars
     }
-    const bars = await this.repository.findRecentBarsBySymbolId(symbolId, timeframe, limit)
-    return this.toGatewayBars(bars)
+
+    const repositoryBars = this.toGatewayBars(await this.repository.findRecentBarsBySymbolId(symbolId, timeframe, limit))
+    return this.mergeRecentBars(snapshotBars, repositoryBars, limit)
   }
 
   async getLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
@@ -104,6 +110,27 @@ export class MarketDataReadGateway {
       trades: bar.trades,
       isFinal: bar.isFinal,
     }
+  }
+
+  private mergeRecentBars(
+    snapshotBars: readonly GatewayBar[],
+    repositoryBars: readonly GatewayBar[],
+    limit: number,
+  ): GatewayBar[] {
+    const mergedByTimestamp = new Map<number, GatewayBar>()
+    for (const bar of repositoryBars) {
+      mergedByTimestamp.set(bar.timestamp, bar)
+    }
+    for (const bar of snapshotBars) {
+      mergedByTimestamp.set(bar.timestamp, bar)
+    }
+
+    const mergedBars = [...mergedByTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp)
+    if (mergedBars.length <= limit) {
+      return mergedBars
+    }
+
+    return mergedBars.slice(-limit)
   }
 
   async getLatestQuote(symbol: string): Promise<MarketQuote> {

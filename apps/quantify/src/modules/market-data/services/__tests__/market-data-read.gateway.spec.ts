@@ -134,6 +134,132 @@ describe('market data read gateway', () => {
     expect(mockRepository.findRecentBars).not.toHaveBeenCalled()
   })
 
+  it('falls back to repository when snapshot bars are fewer than requested limit', async () => {
+    mockMarketDataService.getRecentBarsSnapshot.mockReturnValue([
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        timestamp: 1710000060000,
+        open: '101',
+        high: '111',
+        low: '91',
+        close: '106',
+        volume: '11',
+        quoteVolume: '1100',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+      },
+    ])
+
+    mockRepository.findRecentBars.mockResolvedValue([
+      {
+        id: 'bar-1',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: new Date(1710000000000),
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+        createdAt: new Date(1710000000000),
+        updatedAt: new Date(1710000000000),
+      } as unknown as MarketBar,
+      {
+        id: 'bar-2',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: new Date(1710000060000),
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+        createdAt: new Date(1710000060000),
+        updatedAt: new Date(1710000060000),
+      } as unknown as MarketBar,
+    ])
+
+    const bars = await gateway.getRecentBars('BTCUSDT', '1h', 2)
+
+    expect(mockRepository.findRecentBars).toHaveBeenCalledWith('BTCUSDT', '1h', 2)
+    expect(bars).toHaveLength(2)
+    expect(bars.map(bar => bar.timestamp)).toEqual([1710000000000, 1710000060000])
+    expect(bars[1]?.close).toBe(106)
+  })
+
+  it('falls back to repository by symbolId when snapshot bars are fewer than requested limit', async () => {
+    mockMarketDataService.getRecentBarsSnapshotBySymbolId.mockReturnValue([
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        timestamp: 1710000060000,
+        open: '101',
+        high: '111',
+        low: '91',
+        close: '106',
+        volume: '11',
+        quoteVolume: '1100',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+      },
+    ])
+
+    mockRepository.findRecentBarsBySymbolId.mockResolvedValue([
+      {
+        id: 'bar-1',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: new Date(1710000000000),
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+        createdAt: new Date(1710000000000),
+        updatedAt: new Date(1710000000000),
+      } as unknown as MarketBar,
+      {
+        id: 'bar-2',
+        symbolId: 'symbol-1',
+        timeframe: 'h1',
+        time: new Date(1710000060000),
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+        createdAt: new Date(1710000060000),
+        updatedAt: new Date(1710000060000),
+      } as unknown as MarketBar,
+    ])
+
+    const bars = await gateway.getRecentBarsBySymbolId('symbol-1', '1h', 2)
+
+    expect(mockRepository.findRecentBarsBySymbolId).toHaveBeenCalledWith('symbol-1', '1h', 2)
+    expect(bars).toHaveLength(2)
+    expect(bars.map(bar => bar.timestamp)).toEqual([1710000000000, 1710000060000])
+    expect(bars[1]?.close).toBe(106)
+  })
+
   it('prefers in-memory quote snapshot before repository', async () => {
     mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({
       symbol: 'BTCUSDT',
