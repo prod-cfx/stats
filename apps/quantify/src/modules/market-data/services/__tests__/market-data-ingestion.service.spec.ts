@@ -89,6 +89,21 @@ describe('market data ingestion service', () => {
     expect(marketDataServiceMock.upsertSymbolsFromProvider).toHaveBeenCalledWith([], 'OKX')
   })
 
+  it('maps USDT symbols to USDC when provider is hyperliquid', async () => {
+    ;(providerMock as any).name = 'HYPERLIQUID'
+
+    await service.onModuleInit()
+
+    const symbolsFromHistory = providerMock.fetchHistoricalBars.mock.calls.map(call => call[0]?.symbol)
+    expect(symbolsFromHistory).toContain('BTCUSDC:SPOT')
+    expect(symbolsFromHistory).toContain('BTCUSDC:PERP')
+    expect(providerMock.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbols: ['BTCUSDC:SPOT', 'BTCUSDC:PERP'],
+      }),
+    )
+  })
+
   it('throws for unsupported timeframe instead of silently falling back to 1m', () => {
     expect(() => getMarketTimeframeMs('2m')).toThrow('Unsupported market timeframe: 2m')
   })

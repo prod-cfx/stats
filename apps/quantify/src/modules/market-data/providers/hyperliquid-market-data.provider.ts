@@ -85,12 +85,13 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
       this.http.post<HyperliquidMetaResponse>(url.toString(), body, { timeout: this.restTimeoutMs }),
     )
 
+    const requestedRawSymbols = this.buildRequestedRawSymbolSet(symbols)
     const rows = data.universe ?? []
     const selected = rows
       .map(item => `${item.name.toUpperCase()}USDC`)
       .filter(raw => {
-        if (!symbols?.length) return true
-        return symbols.map(value => extractRawSymbol(value)).includes(raw)
+        if (!requestedRawSymbols) return true
+        return requestedRawSymbols.has(raw)
       })
 
     return selected.flatMap(raw => ([
@@ -117,6 +118,22 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
         exchange: this.name,
       },
     ]))
+  }
+
+  private buildRequestedRawSymbolSet(symbols?: string[]): Set<string> | null {
+    if (!symbols?.length) return null
+
+    const set = new Set<string>()
+    for (const value of symbols) {
+      const raw = extractRawSymbol(value)
+      if (!raw) continue
+      set.add(raw)
+      // Hyperliquid 现货/永续主流稳定币计价为 USDC，兼容默认 USDT symbol 输入。
+      if (raw.endsWith('USDT')) {
+        set.add(`${raw.slice(0, -4)}USDC`)
+      }
+    }
+    return set
   }
 
   async fetchHistoricalBars(query: HistoricalBarQuery): Promise<MarketBarPayload[]> {

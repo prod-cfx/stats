@@ -39,11 +39,11 @@ fi
 
 FOUND=0
 for _ in $(seq 1 "$MAX_POLL"); do
-  if psql -At -v sid="$ACCEPT_STRATEGY_INSTANCE_ID" -v t0="$TRIGGER_T0" "$QUANTIFY_DATABASE_URL" -c "
+  if psql -At "$QUANTIFY_DATABASE_URL" -c "
 select 1
 from strategy_signals
-where strategy_instance_id = :'sid'
-  and created_at >= (:'t0'::timestamptz at time zone 'utc')
+where strategy_instance_id = '${ACCEPT_STRATEGY_INSTANCE_ID}'
+  and created_at >= ('${TRIGGER_T0}'::timestamptz at time zone 'utc')
 limit 1
 " | rg -q '^1$'; then
     FOUND=1
@@ -60,11 +60,11 @@ if [ "$FOUND" != "1" ]; then
 fi
 
 ROW_TSV="$STATE_DIR/gate3-signal-row.tsv"
-psql -At -F $'\t' -v sid="$ACCEPT_STRATEGY_INSTANCE_ID" -v t0="$TRIGGER_T0" "$QUANTIFY_DATABASE_URL" -c "
+psql -At -F $'\t' "$QUANTIFY_DATABASE_URL" -c "
 select id, coalesce(strategy_id, ''), symbol_id, direction::text, status::text, created_at
 from strategy_signals
-where strategy_instance_id = :'sid'
-  and created_at >= (:'t0'::timestamptz at time zone 'utc')
+where strategy_instance_id = '${ACCEPT_STRATEGY_INSTANCE_ID}'
+  and created_at >= ('${TRIGGER_T0}'::timestamptz at time zone 'utc')
 order by created_at desc
 limit 1
 " > "$ROW_TSV"

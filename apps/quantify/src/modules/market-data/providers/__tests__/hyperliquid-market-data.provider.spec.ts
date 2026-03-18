@@ -40,4 +40,18 @@ describe('hyperliquid market data provider', () => {
     )
     expect(bars[0]?.symbol).toBe('BTCUSDC:PERP')
   })
+
+  it('accepts USDT requested symbols by mapping to USDC universe symbols', async () => {
+    httpMock.post.mockReturnValue(of({
+      data: {
+        universe: [{ name: 'BTC' }, { name: 'ETH' }],
+      },
+    }))
+
+    const symbols = await provider.fetchSymbols(['BTCUSDT:SPOT'])
+
+    expect(symbols).toHaveLength(2)
+    expect(symbols.map(item => item.symbol)).toEqual(['BTCUSDC', 'BTCUSDC'])
+    expect(symbols.map(item => item.instrumentType)).toEqual(['SPOT', 'PERPETUAL'])
+  })
 })

@@ -104,11 +104,16 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   private normalizeIngestionSymbols(symbols: string[]): string[] {
     const normalizedSymbols: string[] = []
     const seen = new Set<string>()
+    const providerName = this.provider.name?.toUpperCase() ?? ''
 
     const pushUnique = (symbol: string) => {
-      if (!seen.has(symbol)) {
-        seen.add(symbol)
-        normalizedSymbols.push(symbol)
+      const adaptedSymbol = providerName === 'HYPERLIQUID'
+        ? this.normalizeHyperliquidSymbol(symbol)
+        : symbol
+
+      if (!seen.has(adaptedSymbol)) {
+        seen.add(adaptedSymbol)
+        normalizedSymbols.push(adaptedSymbol)
       }
     }
 
@@ -137,6 +142,21 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
 
     return normalizedSymbols
+  }
+
+  private normalizeHyperliquidSymbol(symbol: string): string {
+    const normalized = normalizeExactCode(symbol)
+    const [raw, market] = normalized.split(':')
+    if (!raw) return normalized
+
+    const adaptedRaw = raw.endsWith('USDT')
+      ? `${raw.slice(0, -4)}USDC`
+      : raw
+
+    if (market === 'SPOT' || market === 'PERP') {
+      return `${adaptedRaw}:${market}`
+    }
+    return adaptedRaw
   }
 
   private async bootstrapSymbols(config: MarketDataRuntimeConfig) {

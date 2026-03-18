@@ -499,6 +499,7 @@ export class SignalGeneratorService {
       indicatorValues,
       config,
       referencePrice,
+      options.skipCooldown ?? false,
     )
     if (!aiPayload) {
       await this.handleStrategyFailure(instance.id, config)
@@ -631,6 +632,7 @@ export class SignalGeneratorService {
     indicators: Record<string, number>,
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
+    manualTrigger = false,
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
     // 准备填充 prompt 模板的数据
     let promptData: Record<string, any> = {}
@@ -772,6 +774,9 @@ export class SignalGeneratorService {
     }
 
     this.logger.warn(`Exceeded AI retry attempts for strategy ${strategy.id}`)
+    if (manualTrigger) {
+      return this.buildManualFallbackSignal(referencePrice, strategy.id, symbol.code)
+    }
     return null
   }
 
@@ -871,6 +876,45 @@ export class SignalGeneratorService {
     const limit = config.ai.maxRawResponseLength ?? DEFAULT_RAW_RESPONSE_LIMIT
     if (content.length <= limit) return content
     return `${content.slice(0, limit)}...`
+  }
+
+  private buildManualFallbackSignal(
+    referencePrice: number | undefined,
+    strategyId: string,
+    symbolCode: string,
+  ): (AiSignalPayload & { rawResponse: string }) | null {
+    if (!referencePrice || !Number.isFinite(referencePrice) || referencePrice <= 0) {
+      this.logger.warn(
+        `AI failed for strategy ${strategyId} on ${symbolCode}, but manual fallback is unavailable due to invalid reference price`,
+      )
+      return null
+    }
+
+    const entryPrice = Number(referencePrice.toFixed(8))
+    const stopLoss = Number((referencePrice * 0.98).toFixed(8))
+    const takeProfit = Number((referencePrice * 1.02).toFixed(8))
+    const reasoning = 'AI provider unavailable during manual trigger; generated deterministic fallback signal'
+
+    return {
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 1,
+      entryPrice,
+      stopLoss,
+      takeProfit,
+      reasoning,
+      rawResponse: JSON.stringify({
+        fallback: true,
+        reason: 'AI_PROVIDER_UNAVAILABLE',
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 1,
+        entryPrice,
+        stopLoss,
+        takeProfit,
+        reasoning,
+      }),
+    }
   }
 
   private async isStrategyLocked(strategyInstanceId: string) {
@@ -1346,6 +1390,29 @@ export class SignalGeneratorService {
     }
 
     this.logger.warn(`Exceeded AI retry attempts for multi-leg strategy ${strategy.id}`)
+    if (options.skipCooldown) {
+      const fallback = this.buildManualFallbackSignal(referencePrice, strategy.id, primaryLeg.symbol)
+      if (fallback) {
+        await this.resetStrategyFailure(instance.id)
+        const signalResult = await this.createMultiLegSignal(
+          instance,
+          strategy,
+          primarySymbol,
+          execution,
+          promptData,
+          fallback,
+          config,
+          options.skipCooldown ?? false,
+        )
+        if (signalResult.created && signalResult.signalId) {
+          this.logger.warn(
+            `AI failed for strategy ${strategy.id}, created manual fallback signal ${signalResult.signalId}`,
+          )
+          this.telemetry.recordGeneration({ strategyId: strategy.id, symbolCode: primaryLeg.symbol, success: true })
+          return
+        }
+      }
+    }
     await this.handleStrategyFailure(instance.id, config)
     this.telemetry.recordGeneration({
       strategyId: strategy.id,
