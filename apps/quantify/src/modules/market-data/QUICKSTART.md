@@ -11,6 +11,11 @@
 - 兼容期无后缀 symbol 会优先映射到 `:SPOT`
 - 生产切换建议顺序：先执行回填脚本，再重启服务，再观察指标
 
+## 交易所切换
+
+- `MARKET_DATA_PROVIDER=binance|okx|hyperliquid`
+- 当前模块会按配置装配对应 provider，接口保持一致：`fetchHistoricalBars()/subscribe()`
+
 ## 启动服务
 
 ```bash
