@@ -3,7 +3,6 @@ import { normalizeGatewayBar, normalizeGatewayBars } from '../market-data-bar.ma
 describe('market data bar mapper', () => {
   it('normalizes nullable volume to zero', () => {
     const normalized = normalizeGatewayBar({
-      time: new Date('2026-03-17T11:00:00Z'),
       timestamp: 1000,
       open: 1,
       high: 2,
@@ -25,7 +24,6 @@ describe('market data bar mapper', () => {
   it('normalizes a bar list', () => {
     const normalized = normalizeGatewayBars([
       {
-        time: new Date('2026-03-17T10:00:00Z'),
         timestamp: 1,
         open: 1,
         high: 2,
@@ -34,7 +32,6 @@ describe('market data bar mapper', () => {
         volume: 10,
       },
       {
-        time: new Date('2026-03-17T11:00:00Z'),
         timestamp: 2,
         open: 1.5,
         high: 2.5,

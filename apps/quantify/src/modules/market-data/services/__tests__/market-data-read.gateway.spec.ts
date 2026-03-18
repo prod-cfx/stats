@@ -2,6 +2,7 @@ import type { MarketDataRepository } from '../market-data.repository'
 import type { MarketBar } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { MarketDataReadGateway } from '../market-data-read.gateway'
+import type { MarketDataService } from '../market-data.service'
 
 describe('market data read gateway', () => {
   const mockRepository = {
@@ -13,11 +14,24 @@ describe('market data read gateway', () => {
     findLatestIndicatorValues: jest.fn(),
   } as unknown as jest.Mocked<MarketDataRepository>
 
+  const mockMarketDataService = {
+    getRecentBarsSnapshot: jest.fn(),
+    getRecentBarsSnapshotBySymbolId: jest.fn(),
+    getLatestBarSnapshot: jest.fn(),
+    getLatestBarSnapshotBySymbolId: jest.fn(),
+    getLatestQuoteSnapshot: jest.fn(),
+  } as unknown as jest.Mocked<MarketDataService>
+
   let gateway: MarketDataReadGateway
 
   beforeEach(() => {
     jest.clearAllMocks()
-    gateway = new MarketDataReadGateway(mockRepository)
+    mockMarketDataService.getRecentBarsSnapshot.mockReturnValue([])
+    mockMarketDataService.getRecentBarsSnapshotBySymbolId.mockReturnValue([])
+    mockMarketDataService.getLatestBarSnapshot.mockReturnValue(null)
+    mockMarketDataService.getLatestBarSnapshotBySymbolId.mockReturnValue(null)
+    mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue(null)
+    gateway = new MarketDataReadGateway(mockRepository, mockMarketDataService)
   })
 
   it('returns bars in ascending time order', async () => {
@@ -93,5 +107,44 @@ describe('market data read gateway', () => {
   it('throws DomainException when quote missing', async () => {
     mockRepository.findLatestQuote.mockResolvedValue(null)
     await expect(gateway.getLatestQuote('BTCUSDT')).rejects.toBeInstanceOf(DomainException)
+  })
+
+  it('prefers in-memory bar snapshot before repository', async () => {
+    mockMarketDataService.getRecentBarsSnapshot.mockReturnValue([
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        timestamp: 1710000000000,
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+      },
+    ])
+
+    const bars = await gateway.getRecentBars('BTCUSDT', '1h', 1)
+
+    expect(bars).toHaveLength(1)
+    expect(bars[0]?.close).toBe(105)
+    expect(mockRepository.findRecentBars).not.toHaveBeenCalled()
+  })
+
+  it('prefers in-memory quote snapshot before repository', async () => {
+    mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({
+      symbol: 'BTCUSDT',
+      lastPrice: '12345.67',
+      eventTime: Date.now(),
+      source: 'BINANCE_WS',
+    })
+
+    const quote = await gateway.getLatestQuote('BTCUSDT')
+
+    expect(Number(quote.lastPrice)).toBe(12345.67)
+    expect(mockRepository.findLatestQuote).not.toHaveBeenCalled()
   })
 })

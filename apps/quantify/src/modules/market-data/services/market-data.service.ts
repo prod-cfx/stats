@@ -22,6 +22,11 @@ import { MarketSymbolNotFoundException } from '../exceptions'
 export class MarketDataService {
   private readonly logger = new Logger(MarketDataService.name)
   private readonly symbolIdCache = new Map<string, string>()
+  private readonly symbolCodeCache = new Map<string, string>()
+  private readonly latestBarCache = new Map<string, MarketBarPayload>()
+  private readonly recentBarsCache = new Map<string, MarketBarPayload[]>()
+  private readonly latestQuoteCache = new Map<string, MarketQuotePayload>()
+  private static readonly MAX_BAR_CACHE_PER_STREAM = 500
 
   constructor(
     @Inject(PrismaService)
@@ -97,6 +102,7 @@ export class MarketDataService {
     })
 
     this.symbolIdCache.set(symbol.code, symbol.id)
+    this.symbolCodeCache.set(symbol.id, symbol.code)
 
     return this.toMarketSymbolResponse(symbol)
   }
@@ -168,6 +174,7 @@ export class MarketDataService {
     })
 
     this.symbolIdCache.set(symbol.code, symbol.id)
+    this.symbolCodeCache.set(symbol.id, symbol.code)
 
     return this.toMarketSymbolResponse(symbol)
   }
@@ -339,6 +346,9 @@ export class MarketDataService {
       symbolCode: symbol.code,
       timeframe: payload.timeframe,
     })
+
+    // 更新内存快照，供低延迟读取路径优先消费
+    this.updateBarSnapshot(payload)
   }
 
   async saveQuoteFromProvider(payload: MarketQuotePayload) {
@@ -362,12 +372,48 @@ export class MarketDataService {
         source: payload.source,
       },
     })
+
+    // 保存最新报价快照，供低延迟读取路径优先消费
+    this.latestQuoteCache.set(this.normalizeSymbol(payload.symbol), payload)
+  }
+
+  getLatestBarSnapshot(symbolCode: string, timeframe: MarketTimeframe): MarketBarPayload | null {
+    const key = this.getBarSnapshotKey(symbolCode, timeframe)
+    return this.latestBarCache.get(key) ?? null
+  }
+
+  getRecentBarsSnapshot(symbolCode: string, timeframe: MarketTimeframe, limit: number): MarketBarPayload[] {
+    const key = this.getBarSnapshotKey(symbolCode, timeframe)
+    const bars = this.recentBarsCache.get(key) ?? []
+    if (limit <= 0) return []
+    return bars.slice(-limit)
+  }
+
+  getRecentBarsSnapshotBySymbolId(
+    symbolId: string,
+    timeframe: MarketTimeframe,
+    limit: number,
+  ): MarketBarPayload[] {
+    const symbolCode = this.symbolCodeCache.get(symbolId)
+    if (!symbolCode) return []
+    return this.getRecentBarsSnapshot(symbolCode, timeframe, limit)
+  }
+
+  getLatestQuoteSnapshot(symbolCode: string): MarketQuotePayload | null {
+    return this.latestQuoteCache.get(this.normalizeSymbol(symbolCode)) ?? null
+  }
+
+  getLatestBarSnapshotBySymbolId(symbolId: string, timeframe: MarketTimeframe): MarketBarPayload | null {
+    const symbolCode = this.symbolCodeCache.get(symbolId)
+    if (!symbolCode) return null
+    return this.getLatestBarSnapshot(symbolCode, timeframe)
   }
 
   async getSymbolOrThrow(symbolCode: string) {
     const normalized = this.normalizeSymbol(symbolCode)
     const cached = this.symbolIdCache.get(normalized)
     if (cached) {
+      this.symbolCodeCache.set(cached, normalized)
       return { id: cached, code: normalized }
     }
     const symbol = await this.prisma.symbol.findUnique({
@@ -378,6 +424,7 @@ export class MarketDataService {
       throw new MarketSymbolNotFoundException({ symbol: symbolCode })
     }
     this.symbolIdCache.set(normalized, symbol.id)
+    this.symbolCodeCache.set(symbol.id, symbol.code)
     return symbol
   }
 
@@ -401,6 +448,27 @@ export class MarketDataService {
 
   private normalizeSymbol(symbol?: string): string {
     return (symbol ?? '').trim().toUpperCase()
+  }
+
+  private getBarSnapshotKey(symbolCode: string, timeframe: MarketTimeframe): string {
+    return `${this.normalizeSymbol(symbolCode)}::${timeframe}`
+  }
+
+  private updateBarSnapshot(payload: MarketBarPayload) {
+    const key = this.getBarSnapshotKey(payload.symbol, payload.timeframe)
+    this.latestBarCache.set(key, payload)
+
+    const current = this.recentBarsCache.get(key) ?? []
+    const last = current[current.length - 1]
+    if (last && last.timestamp === payload.timestamp) {
+      current[current.length - 1] = payload
+    } else {
+      current.push(payload)
+      if (current.length > MarketDataService.MAX_BAR_CACHE_PER_STREAM) {
+        current.splice(0, current.length - MarketDataService.MAX_BAR_CACHE_PER_STREAM)
+      }
+    }
+    this.recentBarsCache.set(key, current)
   }
 
   private mapProviderStatus(rawStatus?: string): PrismaSymbolStatus {

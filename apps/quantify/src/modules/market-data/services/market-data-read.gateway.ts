@@ -1,10 +1,14 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type { MarketBar, MarketQuote } from '@/prisma/prisma.types'
+import type { MarketBarPayload } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataRepository
 import { MarketDataRepository } from './market-data.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataService
+import { MarketDataService } from './market-data.service'
 
 export interface GatewayBar {
   time: Date
@@ -21,24 +25,43 @@ export interface GatewayBar {
 
 @Injectable()
 export class MarketDataReadGateway {
-  constructor(private readonly repository: MarketDataRepository) {}
+  constructor(
+    private readonly repository: MarketDataRepository,
+    private readonly marketDataService: MarketDataService,
+  ) {}
 
   async getRecentBars(symbol: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
+    const snapshot = this.marketDataService.getRecentBarsSnapshot(symbol, timeframe, limit)
+    if (snapshot.length > 0) {
+      return snapshot.map(bar => this.toGatewayBarFromPayload(bar))
+    }
     const bars = await this.repository.findRecentBars(symbol, timeframe, limit)
     return this.toGatewayBars(bars)
   }
 
   async getRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
+    const snapshot = this.marketDataService.getRecentBarsSnapshotBySymbolId(symbolId, timeframe, limit)
+    if (snapshot.length > 0) {
+      return snapshot.map(bar => this.toGatewayBarFromPayload(bar))
+    }
     const bars = await this.repository.findRecentBarsBySymbolId(symbolId, timeframe, limit)
     return this.toGatewayBars(bars)
   }
 
   async getLatestBar(symbol: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
+    const snapshot = this.marketDataService.getLatestBarSnapshot(symbol, timeframe)
+    if (snapshot) {
+      return this.toGatewayBarFromPayload(snapshot)
+    }
     const bar = await this.repository.findLatestBar(symbol, timeframe)
     return this.toGatewayBar(bar)
   }
 
   async getLatestBarBySymbolId(symbolId: string, timeframe: MarketTimeframe): Promise<GatewayBar | null> {
+    const snapshot = this.marketDataService.getLatestBarSnapshotBySymbolId(symbolId, timeframe)
+    if (snapshot) {
+      return this.toGatewayBarFromPayload(snapshot)
+    }
     const bar = await this.repository.findLatestBarBySymbolId(symbolId, timeframe)
     return this.toGatewayBar(bar)
   }
@@ -47,6 +70,23 @@ export class MarketDataReadGateway {
     bars: readonly MarketBar[],
   ): GatewayBar[] {
     return bars.map(bar => this.toGatewayBar(bar)).filter((bar): bar is GatewayBar => bar !== null)
+  }
+
+  private toGatewayBarFromPayload(
+    bar: MarketBarPayload,
+  ): GatewayBar {
+    return {
+      time: new Date(bar.timestamp),
+      timestamp: bar.timestamp,
+      open: Number(bar.open),
+      high: Number(bar.high),
+      low: Number(bar.low),
+      close: Number(bar.close),
+      volume: bar.volume != null ? Number(bar.volume) : null,
+      quoteVolume: bar.quoteVolume != null ? Number(bar.quoteVolume) : null,
+      trades: bar.trades ?? null,
+      isFinal: bar.isFinal ?? true,
+    }
   }
 
   private toGatewayBar(
@@ -68,6 +108,28 @@ export class MarketDataReadGateway {
   }
 
   async getLatestQuote(symbol: string): Promise<MarketQuote> {
+    const snapshot = this.marketDataService.getLatestQuoteSnapshot(symbol)
+    if (snapshot) {
+      return {
+        id: '',
+        symbolId: '',
+        lastPrice: new Prisma.Decimal(Number(snapshot.lastPrice)),
+        priceChange: this.toDecimalOrNull(snapshot.priceChange),
+        priceChangePercent: this.toDecimalOrNull(snapshot.priceChangePercent),
+        openPrice: this.toDecimalOrNull(snapshot.openPrice),
+        highPrice: this.toDecimalOrNull(snapshot.highPrice),
+        lowPrice: this.toDecimalOrNull(snapshot.lowPrice),
+        volume: this.toDecimalOrNull(snapshot.volume),
+        quoteVolume: this.toDecimalOrNull(snapshot.quoteVolume),
+        bidPrice: this.toDecimalOrNull(snapshot.bidPrice),
+        bidQty: this.toDecimalOrNull(snapshot.bidQty),
+        askPrice: this.toDecimalOrNull(snapshot.askPrice),
+        askQty: this.toDecimalOrNull(snapshot.askQty),
+        eventTime: new Date(snapshot.eventTime),
+        source: snapshot.source,
+        createdAt: new Date(snapshot.eventTime),
+      } as MarketQuote
+    }
     const quote = await this.repository.findLatestQuote(symbol)
     if (quote) return quote
 
@@ -75,6 +137,11 @@ export class MarketDataReadGateway {
       code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
       args: { symbol },
     })
+  }
+
+  private toDecimalOrNull(value: string | number | null | undefined): Prisma.Decimal | null {
+    if (value == null) return null
+    return new Prisma.Decimal(Number(value))
   }
 
   async getIndicatorSnapshot(
