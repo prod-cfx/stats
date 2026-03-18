@@ -2,11 +2,31 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
+import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
+import type { FixedBinanceTestnetSignalContext } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { FixedBinanceTestnetSignalService } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
 import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
 import { createTestingApp } from '../fixtures/fixtures'
+
+const FIXED_BINANCE_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_BASE_ASSET ?? 'BTC').toUpperCase()
+const FIXED_BINANCE_PERP_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_PERP_TESTNET_BASE_ASSET ?? 'XRP').toUpperCase()
+const FIXED_BINANCE_QUOTE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_QUOTE_ASSET ?? 'USDT').toUpperCase()
+const FIXED_BINANCE_USER_EMAIL = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL ?? 'binance-testnet-fixed@local.dev'
+const FIXED_BINANCE_SYMBOL_CODE = `${FIXED_BINANCE_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
+const FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE = `${FIXED_BINANCE_PERP_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
+const FIXED_BINANCE_PERP_SYMBOL_CODE = `${FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE}:PERP`
+const FIXED_BINANCE_OPEN_QUOTE = resolveFixedBinanceSmokeQuote({ signalType: 'ENTRY' }) ?? '8.50'
+const LIVE_SIGNAL_REASON_PREFIX = 'TC-SIGNAL-LIVE'
+
+function isFixedBinanceTestnetEnabled() {
+  const raw = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED
+  if (!raw) return false
+  const normalized = raw.trim().toLowerCase()
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on'
+}
 
 describe('StrategySignals (E2E, DB only)', () => {
   let app: INestApplication
@@ -538,6 +558,467 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(placeOrderSpy).toHaveBeenCalled()
 
       placeOrderSpy.mockRestore()
+    })
+  })
+
+  describe('Perp Close Position Execution (TC-SIGNAL-008)', () => {
+    const PERP_CLOSE_USER_ID = 'e2e-perp-close-user'
+    const PERP_CLOSE_ACCOUNT_ID = 'e2e-perp-close-account'
+    const PERP_CLOSE_SYMBOL_ID = 'e2e-perp-close-symbol'
+    let perpCloseResolvedSymbolId = PERP_CLOSE_SYMBOL_ID
+
+    beforeAll(async () => {
+      await prisma.user.upsert({
+        where: { id: PERP_CLOSE_USER_ID },
+        update: {},
+        create: {
+          id: PERP_CLOSE_USER_ID,
+          email: 'perp-close@test.com',
+          nickname: 'Perp Close Test User',
+        },
+      })
+
+      const perpSymbol = await prisma.symbol.upsert({
+        where: { code: 'BTCUSDT:PERP' },
+        update: {
+          code: 'BTCUSDT:PERP',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          exchange: 'BINANCE',
+          instrumentType: 'PERPETUAL',
+          type: 'CRYPTO',
+          status: 'ACTIVE',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+        },
+        create: {
+          id: PERP_CLOSE_SYMBOL_ID,
+          code: 'BTCUSDT:PERP',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          exchange: 'BINANCE',
+          instrumentType: 'PERPETUAL',
+          type: 'CRYPTO',
+          status: 'ACTIVE',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+        },
+      })
+      perpCloseResolvedSymbolId = perpSymbol.id
+
+      await prisma.userStrategyAccount.upsert({
+        where: { id: PERP_CLOSE_ACCOUNT_ID },
+        update: {
+          balance: '1000',
+          equity: '1000',
+        },
+        create: {
+          id: PERP_CLOSE_ACCOUNT_ID,
+          userId: PERP_CLOSE_USER_ID,
+          strategyId: TEST_STRATEGY_TEMPLATE_ID,
+          strategyName: 'Perp Close Strategy',
+          strategyVersion: 'v1',
+          baseCurrency: 'USDT',
+          initialBalance: '1000',
+          balance: '1000',
+          equity: '1000',
+        },
+      })
+
+      await prisma.position.create({
+        data: {
+          userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID,
+          symbol: 'BTCUSDT',
+          positionSide: 'LONG',
+          quantity: '0.01',
+          avgEntryPrice: '60000',
+          realizedPnl: '0',
+          unrealizedPnl: '0',
+          status: 'OPEN',
+          exchangeId: 'binance',
+          marketType: 'perp',
+          openedAt: new Date(),
+        },
+      })
+    })
+
+    afterAll(async () => {
+      await prisma.userSignalExecution.deleteMany({
+        where: { userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID },
+      })
+      await prisma.trade.deleteMany({
+        where: { userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID },
+      })
+      await prisma.position.deleteMany({
+        where: { userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID },
+      })
+      await prisma.userStrategyAccount.deleteMany({
+        where: { id: PERP_CLOSE_ACCOUNT_ID },
+      })
+      await prisma.symbol.deleteMany({
+        where: { id: PERP_CLOSE_SYMBOL_ID },
+      })
+      await prisma.user.deleteMany({
+        where: { id: PERP_CLOSE_USER_ID },
+      })
+    })
+
+    it('[TC-SIGNAL-008] should close an open perp position using normalized local symbol lookup', async () => {
+      const signal = await prisma.tradingSignal.create({
+        data: {
+          strategyId: TEST_STRATEGY_TEMPLATE_ID,
+          symbolId: perpCloseResolvedSymbolId,
+          sourceType: SignalSourceType.AI_GENERATED,
+          signalType: SignalType.EXIT,
+          direction: SignalDirection.CLOSE_LONG,
+          status: SignalStatus.PENDING,
+          confidence: '88',
+          entryPrice: '60000',
+          aiModel: 'gpt-4',
+          aiReasoning: 'TC-SIGNAL-008 close perp position test',
+        },
+      })
+
+      const tradingService = moduleFixture.get(TradingService)
+      const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
+        id: 'TC-008-ORDER',
+        clientOrderId: 'TC-008-CLIENT',
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'sell',
+        type: 'market',
+        price: 60000,
+        amount: 0.01,
+        filled: 0.01,
+        status: 'closed',
+        createdAt: Date.now(),
+        raw: {},
+      } as any)
+
+      const signalExecutor = moduleFixture.get(SignalExecutorService)
+      const config = {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+        execution: {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+          enabled: true,
+          dryRun: false,
+          defaultQuoteAmount: 100,
+          maxRiskFraction: 0.5,
+          minBalanceThreshold: 0,
+        },
+      }
+
+      await signalExecutor.executeSignalForSubscribedUsers(signal.id, config)
+
+      const execution = await prisma.userSignalExecution.findFirstOrThrow({
+        where: {
+          signalId: signal.id,
+          userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID,
+        },
+      })
+      const closedPosition = await prisma.position.findFirst({
+        where: {
+          userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID,
+          symbol: 'BTCUSDT',
+          positionSide: 'LONG',
+        },
+        orderBy: { openedAt: 'desc' },
+      })
+
+      expect(execution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(placeOrderSpy).toHaveBeenCalled()
+      const placeOrderArgs = placeOrderSpy.mock.calls.find(call => call[0] === PERP_CLOSE_USER_ID)
+      expect(placeOrderArgs?.[3]).toMatchObject({
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'sell',
+        reduceOnly: true,
+        amount: 0.01,
+      })
+      expect(closedPosition?.status).toBe('CLOSED')
+      expect(closedPosition?.quantity.toString()).toBe('0')
+
+      placeOrderSpy.mockRestore()
+    })
+  })
+
+  describe('Fixed Binance Testnet Round Trip (TC-SIGNAL-009~010)', () => {
+    let fixedSignalService: FixedBinanceTestnetSignalService
+    let fixedContext: FixedBinanceSeedContext
+    let createdSignalIds: string[] = []
+
+    const liveConfig = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+        dryRun: false,
+        defaultQuoteAmount: 10,
+        minBalanceThreshold: 0,
+        maxRiskFraction: 1,
+      },
+    }
+
+    beforeAll(async () => {
+      if (!isFixedBinanceTestnetEnabled()) return
+
+      jest.setTimeout(120000)
+      fixedSignalService = moduleFixture.get(FixedBinanceTestnetSignalService)
+      fixedContext = await fixedSignalService.resolveContext()
+    })
+
+    beforeEach(async () => {
+      if (!isFixedBinanceTestnetEnabled()) return
+
+      createdSignalIds = []
+      await prisma.userStrategyAccount.update({
+        where: { id: fixedContext.strategyAccountId },
+        data: {
+          initialBalance: '500',
+          balance: '500',
+          equity: '500',
+        },
+      })
+    })
+
+    afterEach(async () => {
+      if (!isFixedBinanceTestnetEnabled()) return
+      if (!createdSignalIds.length) return
+
+      await prisma.userSignalExecution.deleteMany({
+        where: { signalId: { in: createdSignalIds } },
+      })
+      await prisma.tradingSignal.deleteMany({
+        where: { id: { in: createdSignalIds } },
+      })
+    })
+
+    async function createAndExecuteFixedSignal(params: {
+      marketType: 'spot' | 'perp'
+      signalType: SignalType
+      direction: SignalDirection
+      positionSizeQuote?: string
+      reason: string
+    }) {
+      const signal = await fixedSignalService.createAndExecuteSignal({
+        marketType: params.marketType,
+        signalType: params.signalType,
+        direction: params.direction,
+        positionSizeQuote: params.positionSizeQuote,
+        reason: params.reason,
+        executionConfig: liveConfig,
+      })
+      createdSignalIds.push(signal.id)
+      return signal
+    }
+
+    async function expectExecuted(signalId: string) {
+      return prisma.userSignalExecution.findFirstOrThrow({
+        where: {
+          signalId,
+          userStrategyAccountId: fixedContext.strategyAccountId,
+        },
+      })
+    }
+
+    it('[TC-SIGNAL-009] should execute a fixed seeded Binance spot round trip through signal executor', async () => {
+      if (!isFixedBinanceTestnetEnabled()) return
+
+      const openSignal = await createAndExecuteFixedSignal({
+        marketType: 'spot',
+        signalType: SignalType.ENTRY,
+        direction: SignalDirection.BUY,
+        positionSizeQuote: FIXED_BINANCE_OPEN_QUOTE,
+        reason: `${LIVE_SIGNAL_REASON_PREFIX}-SPOT-OPEN`,
+      })
+
+      const openExecution = await expectExecuted(openSignal.id)
+      const openPosition = await prisma.position.findFirst({
+        where: {
+          userStrategyAccountId: fixedContext.strategyAccountId,
+          symbol: FIXED_BINANCE_SYMBOL_CODE,
+          positionSide: 'LONG',
+          status: 'OPEN',
+        },
+        orderBy: { openedAt: 'desc' },
+      })
+
+      expect(openExecution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(Number(openExecution.executedQuantity?.toString() ?? '0')).toBeGreaterThan(0)
+      expect(openExecution.metadata).toMatchObject({
+        exchangeAccountId: expect.any(String),
+        providerStatus: 'closed',
+      })
+      expect(openPosition).toBeTruthy()
+
+      const closeSignal = await createAndExecuteFixedSignal({
+        marketType: 'spot',
+        signalType: SignalType.EXIT,
+        direction: SignalDirection.CLOSE_LONG,
+        reason: `${LIVE_SIGNAL_REASON_PREFIX}-SPOT-CLOSE`,
+      })
+
+      const closeExecution = await expectExecuted(closeSignal.id)
+      const remainingOpenPosition = await prisma.position.findFirst({
+        where: {
+          userStrategyAccountId: fixedContext.strategyAccountId,
+          symbol: FIXED_BINANCE_SYMBOL_CODE,
+          positionSide: 'LONG',
+          status: 'OPEN',
+        },
+      })
+
+      expect(closeExecution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(remainingOpenPosition).toBeNull()
+    })
+
+    it('[TC-SIGNAL-010] should execute a fixed seeded Binance perp round trip through signal executor', async () => {
+      if (!isFixedBinanceTestnetEnabled()) return
+
+      const openSignal = await createAndExecuteFixedSignal({
+        marketType: 'perp',
+        signalType: SignalType.ENTRY,
+        direction: SignalDirection.BUY,
+        positionSizeQuote: FIXED_BINANCE_OPEN_QUOTE,
+        reason: `${LIVE_SIGNAL_REASON_PREFIX}-PERP-OPEN`,
+      })
+
+      const openExecution = await expectExecuted(openSignal.id)
+      const openPosition = await prisma.position.findFirst({
+        where: {
+          userStrategyAccountId: fixedContext.strategyAccountId,
+          symbol: FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE,
+          positionSide: 'LONG',
+          status: 'OPEN',
+          marketType: 'perp',
+        },
+        orderBy: { openedAt: 'desc' },
+      })
+
+      expect(openExecution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(Number(openExecution.executedQuantity?.toString() ?? '0')).toBeGreaterThan(0)
+      expect(openExecution.metadata).toMatchObject({
+        exchangeAccountId: expect.any(String),
+        providerStatus: 'closed',
+      })
+      expect(openPosition).toBeTruthy()
+
+      const closeSignal = await createAndExecuteFixedSignal({
+        marketType: 'perp',
+        signalType: SignalType.EXIT,
+        direction: SignalDirection.CLOSE_LONG,
+        reason: `${LIVE_SIGNAL_REASON_PREFIX}-PERP-CLOSE`,
+      })
+
+      const closeExecution = await expectExecuted(closeSignal.id)
+      const remainingOpenPosition = await prisma.position.findFirst({
+        where: {
+          userStrategyAccountId: fixedContext.strategyAccountId,
+          symbol: FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE,
+          positionSide: 'LONG',
+          status: 'OPEN',
+          marketType: 'perp',
+        },
+      })
+
+      expect(closeExecution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(remainingOpenPosition).toBeNull()
+    })
+  })
+
+  describe('Execution Metadata Persistence (TC-SIGNAL-007)', () => {
+    it('[TC-SIGNAL-007] should persist order stage history and Binance execution payload metadata', async () => {
+      const signal = await prisma.tradingSignal.create({
+        data: {
+          strategyId: TEST_STRATEGY_TEMPLATE_ID,
+          symbolId: TEST_SYMBOL_ID,
+          sourceType: SignalSourceType.AI_GENERATED,
+          signalType: SignalType.ENTRY,
+          direction: SignalDirection.BUY,
+          status: SignalStatus.PENDING,
+          confidence: '90',
+          entryPrice: '60000',
+          aiModel: 'gpt-4',
+          aiReasoning: 'TC-SIGNAL-007 metadata persistence test',
+        },
+      })
+
+      const tradingService = moduleFixture.get(TradingService)
+      const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
+        id: 'TC-007-ORDER',
+        clientOrderId: 'TC-007-CLIENT',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'market',
+        price: 60000,
+        amount: 0.00166667,
+        filled: 0.00166667,
+        status: 'closed',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        raw: {},
+      } as any)
+
+      const signalExecutor = moduleFixture.get(SignalExecutorService)
+      const config = {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+        execution: {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+          enabled: true,
+          dryRun: false,
+          defaultQuoteAmount: 100,
+          maxRiskFraction: 0.5,
+          minBalanceThreshold: 10,
+        },
+      }
+
+      try {
+        await signalExecutor.executeSignalForSubscribedUsers(signal.id, config)
+      }
+      finally {
+        placeOrderSpy.mockRestore()
+      }
+
+      const execution = await prisma.userSignalExecution.findFirstOrThrow({
+        where: {
+          signalId: signal.id,
+          userStrategyAccountId: TEST_ACCOUNT_ID,
+        },
+      })
+
+      expect(execution.status).toBe(ExecutionStatus.EXECUTED)
+      expect(execution.metadata).toBeDefined()
+
+      const metadata = execution.metadata as { [key: string]: unknown }
+      const stageHistory = Array.isArray(metadata.stageHistory)
+        ? metadata.stageHistory as Array<{ stage?: string }>
+        : []
+
+      expect(stageHistory.map(stage => stage.stage)).toEqual(
+        expect.arrayContaining(['ORDER_SUBMITTED', 'ORDER_ACKED', 'LEDGER_APPLIED']),
+      )
+
+      expect(metadata.orderRequest).toMatchObject({
+        exchangeId: 'binance',
+        exchangeAccountId: null,
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        marketType: 'spot',
+        type: 'market',
+      })
+
+      expect(metadata.orderResponse).toMatchObject({
+        id: 'TC-007-ORDER',
+        status: 'closed',
+        amount: 0.00166667,
+        filled: 0.00166667,
+        price: 60000,
+      })
+
+      expect(metadata.providerOrderId).toBe('TC-007-ORDER')
+      expect(metadata.providerStatus).toBe('closed')
+      expect(metadata.exchangeAccountId).toBeNull()
     })
   })
 })
