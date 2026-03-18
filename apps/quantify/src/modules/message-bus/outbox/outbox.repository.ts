@@ -1,6 +1,7 @@
-import type { PrismaService } from '@/prisma/prisma.service'
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PrismaService } from '@/prisma/prisma.service'
 import { OutboxStatus } from '@/prisma/prisma.types'
 
 @Injectable()

@@ -1,11 +1,16 @@
-import type { ConfigService } from '@nestjs/config'
-import type { MessageBusService } from '../message-bus.service'
-import type { MessageBusMetricsService } from '../metrics/message-bus.metrics.service'
-import type { OutboxRepository } from './outbox.repository'
-import type { EnvService } from '@/common/services/env.service'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { ConfigService } from '@nestjs/config'
 import { Cron } from '@nestjs/schedule'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 import { isMessageBusRuntimeEnabled } from '../message-bus.runtime'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MessageBusService } from '../message-bus.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MessageBusMetricsService } from '../metrics/message-bus.metrics.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { OutboxRepository } from './outbox.repository'
 
 @Injectable()
 export class OutboxDispatcher {

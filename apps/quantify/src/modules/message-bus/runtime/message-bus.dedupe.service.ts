@@ -1,6 +1,7 @@
 import type { OnModuleInit } from '@nestjs/common'
-import type { CacheService } from '@/common/services/cache.service'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { CacheService } from '@/common/services/cache.service'
 import { MESSAGE_DEDUPE_PREFIX } from '../message-bus.types'
 
 @Injectable()
