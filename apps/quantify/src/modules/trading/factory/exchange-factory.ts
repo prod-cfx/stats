@@ -4,7 +4,6 @@ import type { ExchangeAccountConfig } from './account-store'
 import { Injectable } from '@nestjs/common'
 import { UnsupportedExchangeException } from '../exceptions'
 import { BinanceClient } from '../exchanges/binance-client'
-import { HyperliquidClient } from '../exchanges/hyperliquid-client'
 import { OkxClient } from '../exchanges/okx-client'
 
 @Injectable()
@@ -28,6 +27,7 @@ export class ExchangeFactory {
       if (marketType !== 'perp') {
         throw new UnsupportedExchangeException({ exchangeId })
       }
+      const { HyperliquidClient } = require('../exchanges/hyperliquid-client') as typeof import('../exchanges/hyperliquid-client')
       // 返回客户端实例（注意：方法会抛出 ExchangeError）
       return new HyperliquidClient(account.config)
     }

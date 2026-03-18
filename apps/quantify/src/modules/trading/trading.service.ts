@@ -65,6 +65,38 @@ export class TradingService {
     }
   }
 
+  async getOrder(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    orderId: string,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.fetchOrder(orderId, symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch order', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch order',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
   async getPositions(
     userId: string,
     exchangeId: ExchangeId,

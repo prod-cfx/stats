@@ -305,7 +305,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         : undefined
     const txOptions = { ...(defaultTestOptions || {}), ...(options || {}) }
 
-    return baseClient.$transaction(async tx => {
+    const runTransaction = () => baseClient.$transaction(async tx => {
       this.cls.set(TRANSACTION_KEY, tx)
       try {
         return await fn(tx)
@@ -316,6 +316,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         this.cls.set(TRANSACTION_KEY, null)
       }
     }, txOptions)
+
+    if (!this.cls.isActive()) {
+      return this.cls.run(() => runTransaction())
+    }
+
+    return runTransaction()
   }
 
   async getPaginatedList<
@@ -337,4 +343,3 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return [items, total]
   }
 }
-
