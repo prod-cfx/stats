@@ -3,7 +3,6 @@ import type { MarketBar, MarketQuote } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataRepository
 import { MarketDataRepository } from './market-data.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 MarketDataService
@@ -23,18 +22,18 @@ export interface GatewayBar {
 }
 
 export interface GatewayQuote {
-  lastPrice: Prisma.Decimal
-  priceChange: Prisma.Decimal | null
-  priceChangePercent: Prisma.Decimal | null
-  openPrice: Prisma.Decimal | null
-  highPrice: Prisma.Decimal | null
-  lowPrice: Prisma.Decimal | null
-  volume: Prisma.Decimal | null
-  quoteVolume: Prisma.Decimal | null
-  bidPrice: Prisma.Decimal | null
-  bidQty: Prisma.Decimal | null
-  askPrice: Prisma.Decimal | null
-  askQty: Prisma.Decimal | null
+  lastPrice: string
+  priceChange: string | null
+  priceChangePercent: string | null
+  openPrice: string | null
+  highPrice: string | null
+  lowPrice: string | null
+  volume: string | null
+  quoteVolume: string | null
+  bidPrice: string | null
+  bidQty: string | null
+  askPrice: string | null
+  askQty: string | null
   eventTime: Date
   source: string | null
   createdAt: Date
@@ -155,18 +154,18 @@ export class MarketDataReadGateway {
     const snapshot = this.marketDataService.getLatestQuoteSnapshot(symbol)
     if (snapshot) {
       return {
-        lastPrice: new Prisma.Decimal(Number(snapshot.lastPrice)),
-        priceChange: this.toDecimalOrNull(snapshot.priceChange),
-        priceChangePercent: this.toDecimalOrNull(snapshot.priceChangePercent),
-        openPrice: this.toDecimalOrNull(snapshot.openPrice),
-        highPrice: this.toDecimalOrNull(snapshot.highPrice),
-        lowPrice: this.toDecimalOrNull(snapshot.lowPrice),
-        volume: this.toDecimalOrNull(snapshot.volume),
-        quoteVolume: this.toDecimalOrNull(snapshot.quoteVolume),
-        bidPrice: this.toDecimalOrNull(snapshot.bidPrice),
-        bidQty: this.toDecimalOrNull(snapshot.bidQty),
-        askPrice: this.toDecimalOrNull(snapshot.askPrice),
-        askQty: this.toDecimalOrNull(snapshot.askQty),
+        lastPrice: String(snapshot.lastPrice),
+        priceChange: this.toStringOrNull(snapshot.priceChange),
+        priceChangePercent: this.toStringOrNull(snapshot.priceChangePercent),
+        openPrice: this.toStringOrNull(snapshot.openPrice),
+        highPrice: this.toStringOrNull(snapshot.highPrice),
+        lowPrice: this.toStringOrNull(snapshot.lowPrice),
+        volume: this.toStringOrNull(snapshot.volume),
+        quoteVolume: this.toStringOrNull(snapshot.quoteVolume),
+        bidPrice: this.toStringOrNull(snapshot.bidPrice),
+        bidQty: this.toStringOrNull(snapshot.bidQty),
+        askPrice: this.toStringOrNull(snapshot.askPrice),
+        askQty: this.toStringOrNull(snapshot.askQty),
         eventTime: new Date(snapshot.eventTime),
         source: snapshot.source,
         createdAt: new Date(snapshot.eventTime),
@@ -182,26 +181,26 @@ export class MarketDataReadGateway {
     })
   }
 
-  private toDecimalOrNull(value: string | number | null | undefined): Prisma.Decimal | null {
+  private toStringOrNull(value: string | number | null | undefined): string | null {
     if (value == null) return null
-    return new Prisma.Decimal(Number(value))
+    return String(value)
   }
 
   private toGatewayQuote(quote: MarketQuote | null): GatewayQuote | null {
     if (!quote) return null
     return {
-      lastPrice: quote.lastPrice,
-      priceChange: quote.priceChange,
-      priceChangePercent: quote.priceChangePercent,
-      openPrice: quote.openPrice,
-      highPrice: quote.highPrice,
-      lowPrice: quote.lowPrice,
-      volume: quote.volume,
-      quoteVolume: quote.quoteVolume,
-      bidPrice: quote.bidPrice,
-      bidQty: quote.bidQty,
-      askPrice: quote.askPrice,
-      askQty: quote.askQty,
+      lastPrice: quote.lastPrice.toString(),
+      priceChange: quote.priceChange?.toString() ?? null,
+      priceChangePercent: quote.priceChangePercent?.toString() ?? null,
+      openPrice: quote.openPrice?.toString() ?? null,
+      highPrice: quote.highPrice?.toString() ?? null,
+      lowPrice: quote.lowPrice?.toString() ?? null,
+      volume: quote.volume?.toString() ?? null,
+      quoteVolume: quote.quoteVolume?.toString() ?? null,
+      bidPrice: quote.bidPrice?.toString() ?? null,
+      bidQty: quote.bidQty?.toString() ?? null,
+      askPrice: quote.askPrice?.toString() ?? null,
+      askQty: quote.askQty?.toString() ?? null,
       eventTime: quote.eventTime,
       source: quote.source,
       createdAt: quote.createdAt,

@@ -64,10 +64,6 @@ PY
 
 redis_ping() {
   local redis_url="$1"
-  if redis-cli -u "$redis_url" PING >/dev/null 2>&1; then
-    return
-  fi
-
   python3 - "$redis_url" <<'PY'
 import sys
 import os

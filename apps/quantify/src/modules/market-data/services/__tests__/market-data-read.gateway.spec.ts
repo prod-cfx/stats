@@ -273,4 +273,18 @@ describe('market data read gateway', () => {
     expect(Number(quote.lastPrice)).toBe(12345.67)
     expect(mockRepository.findLatestQuote).not.toHaveBeenCalled()
   })
+
+  it('preserves high precision quote value from snapshot without Number round-trip', async () => {
+    const precise = '12345.123456789123456789'
+    mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({
+      symbol: 'BTCUSDT',
+      lastPrice: precise,
+      eventTime: Date.now(),
+      source: 'BINANCE_WS',
+    })
+
+    const quote = await gateway.getLatestQuote('BTCUSDT')
+
+    expect(quote.lastPrice).toBe(precise)
+  })
 })
