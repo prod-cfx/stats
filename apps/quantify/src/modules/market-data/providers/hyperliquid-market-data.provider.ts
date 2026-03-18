@@ -25,6 +25,7 @@ import {
   toSymbolCode
   
 } from '../utils/market-symbol-code.util'
+import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface HyperliquidMetaResponse {
   universe?: Array<{ name: string }>
@@ -44,9 +45,12 @@ interface HyperliquidCandle {
 export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModuleDestroy {
   readonly name = 'HYPERLIQUID'
   private readonly logger = new Logger(HyperliquidMarketDataProvider.name)
-  private ws?: WebSocket
-  private reconnectTimer?: NodeJS.Timeout
-  private shouldReconnect = false
+  private readonly wsLifecycle = new WsLifecycleManager<'ALL'>({
+    getReconnectDelayMs: () => this.reconnectDelayMs,
+    onScheduleReconnect: (_market, delayMs) => {
+      this.logger.warn(`metric=market_ws_reconnect_total value=1 market=ALL delayMs=${delayMs}`)
+    },
+  })
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
   private subscriptions: Array<{ market: SymbolMarketType; raw: string; timeframe: MarketTimeframe }> = []
@@ -154,7 +158,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
     this.tickHandler = params.onTick
     this.klineHandler = params.onKline
-    this.shouldReconnect = true
+    this.wsLifecycle.setShouldReconnect(true)
     this.subscriptions = []
 
     for (const symbol of params.symbols) {
@@ -168,20 +172,13 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
     await this.openWebSocket()
 
     return async () => {
-      this.shouldReconnect = false
+      this.wsLifecycle.setShouldReconnect(false)
       await this.disconnect()
     }
   }
 
   async disconnect(): Promise<void> {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = undefined
-    }
-    if (this.ws) {
-      this.ws.close()
-      this.ws = undefined
-    }
+    await this.wsLifecycle.closeSocket('ALL')
   }
 
   async onModuleDestroy() {
@@ -190,12 +187,13 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
 
   private async openWebSocket() {
     if (!this.subscriptions.length) return
-    this.ws = new WebSocket(this.wsBaseUrl)
+    const ws = new WebSocket(this.wsBaseUrl)
+    this.wsLifecycle.registerSocket('ALL', ws)
 
-    this.ws.on('open', () => {
+    ws.on('open', () => {
       for (const item of this.subscriptions) {
         const coin = item.raw.replace(/USDC$/, '')
-        this.ws?.send(JSON.stringify({
+        ws.send(JSON.stringify({
           method: 'subscribe',
           subscription: {
             type: 'candle',
@@ -207,7 +205,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
       this.logger.log('metric=market_ws_connected value=1 market=ALL')
     })
 
-    this.ws.on('message', data => {
+    ws.on('message', data => {
       try {
         const payload = JSON.parse(data.toString()) as {
           channel?: string
@@ -219,26 +217,15 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
       }
     })
 
-    this.ws.on('close', () => {
+    ws.on('close', () => {
       this.logger.warn('metric=market_ws_connected value=0 market=ALL')
-      this.scheduleReconnect()
+      this.wsLifecycle.scheduleReconnect('ALL', () => this.openWebSocket())
     })
 
-    this.ws.on('error', error => {
+    ws.on('error', error => {
       this.logger.error(`hyperliquid ws error reason=${(error as Error).message}`)
-      this.scheduleReconnect()
+      this.wsLifecycle.scheduleReconnect('ALL', () => this.openWebSocket())
     })
-  }
-
-  private scheduleReconnect() {
-    if (!this.shouldReconnect) return
-    if (this.reconnectTimer) return
-
-    this.logger.warn(`metric=market_ws_reconnect_total value=1 market=ALL delayMs=${this.reconnectDelayMs}`)
-    this.reconnectTimer = setTimeout(async () => {
-      this.reconnectTimer = undefined
-      await this.openWebSocket()
-    }, this.reconnectDelayMs)
   }
 
   private async handleWsPayload(payload: {

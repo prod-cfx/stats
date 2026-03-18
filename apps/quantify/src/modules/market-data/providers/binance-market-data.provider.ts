@@ -25,6 +25,7 @@ import {
   toSymbolCode
   
 } from '../utils/market-symbol-code.util'
+import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface BinanceSymbolFilter {
   filterType: string
@@ -119,10 +120,13 @@ interface BinanceStreamPayload {
 export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDestroy {
   readonly name = 'BINANCE'
   private readonly logger = new Logger(BinanceMarketDataProvider.name)
-  private readonly wsByMarket: Partial<Record<SymbolMarketType, WebSocket>> = {}
-  private readonly reconnectTimerByMarket: Partial<Record<SymbolMarketType, NodeJS.Timeout>> = {}
+  private readonly wsLifecycle = new WsLifecycleManager<SymbolMarketType>({
+    getReconnectDelayMs: () => this.reconnectDelayMs,
+    onScheduleReconnect: (market, delayMs) => {
+      this.logger.warn(`metric=market_ws_reconnect_total value=1 market=${market} delayMs=${delayMs}`)
+    },
+  })
   private readonly streamsByMarket: Partial<Record<SymbolMarketType, string>> = {}
-  private shouldReconnect = false
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
 
@@ -232,7 +236,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
     this.tickHandler = params.onTick
     this.klineHandler = params.onKline
-    this.shouldReconnect = true
+    this.wsLifecycle.setShouldReconnect(true)
 
     const grouped = this.groupSymbolsByMarket(params.symbols)
     this.streamsByMarket.SPOT = this.buildStreamParam(grouped.SPOT, params.timeframes)
@@ -244,7 +248,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     ])
 
     return async () => {
-      this.shouldReconnect = false
+      this.wsLifecycle.setShouldReconnect(false)
       await this.disconnect()
     }
   }
@@ -383,7 +387,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     const url = `${base}${path}${streams}`
 
     const ws = new WebSocket(url)
-    this.wsByMarket[market] = ws
+    this.wsLifecycle.registerSocket(market, ws)
 
     ws.on('open', () => {
       this.logger.log(`Binance WebSocket 已连接: market=${market} streams=${streams}`)
@@ -402,46 +406,17 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     ws.on('close', () => {
       this.logger.warn(`Binance WebSocket 连接关闭 market=${market}`)
       this.logger.warn(`metric=market_ws_connected value=0 market=${market}`)
-      this.scheduleReconnect(market)
+      this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
 
     ws.on('error', error => {
       this.logger.error(`Binance WebSocket 错误: ${(error as Error).message} market=${market}`)
-      this.scheduleReconnect(market)
+      this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
   }
 
   private async closeWebSocket(market: SymbolMarketType): Promise<void> {
-    const timer = this.reconnectTimerByMarket[market]
-    if (timer) {
-      clearTimeout(timer)
-      this.reconnectTimerByMarket[market] = undefined
-    }
-
-    const ws = this.wsByMarket[market]
-    if (!ws) return
-
-    if (ws.readyState === WebSocket.OPEN) {
-      await new Promise<void>(resolve => {
-        ws.once('close', () => resolve())
-        ws.close()
-      })
-    } else {
-      ws.close()
-    }
-
-    this.wsByMarket[market] = undefined
-  }
-
-  private scheduleReconnect(market: SymbolMarketType) {
-    if (!this.shouldReconnect) return
-    if (this.reconnectTimerByMarket[market]) return
-
-    this.logger.warn(`metric=market_ws_reconnect_total value=1 market=${market} delayMs=${this.reconnectDelayMs}`)
-    this.reconnectTimerByMarket[market] = setTimeout(async () => {
-      this.reconnectTimerByMarket[market] = undefined
-      await this.openWebSocket(market, this.streamsByMarket[market])
-    }, this.reconnectDelayMs)
+    await this.wsLifecycle.closeSocket(market)
   }
 
   private async handleStreamPayload(payload: BinanceStreamPayload, market: SymbolMarketType) {

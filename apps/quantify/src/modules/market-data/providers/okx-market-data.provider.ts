@@ -25,6 +25,7 @@ import {
   toSymbolCode
   
 } from '../utils/market-symbol-code.util'
+import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface OkxInstrument {
   instId: string
@@ -49,9 +50,12 @@ interface OkxCandlesResponse {
 export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestroy {
   readonly name = 'OKX'
   private readonly logger = new Logger(OkxMarketDataProvider.name)
-  private readonly wsByMarket: Partial<Record<SymbolMarketType, WebSocket>> = {}
-  private readonly reconnectTimerByMarket: Partial<Record<SymbolMarketType, NodeJS.Timeout>> = {}
-  private shouldReconnect = false
+  private readonly wsLifecycle = new WsLifecycleManager<SymbolMarketType>({
+    getReconnectDelayMs: () => this.reconnectDelayMs,
+    onScheduleReconnect: (market, delayMs) => {
+      this.logger.warn(`metric=market_ws_reconnect_total value=1 market=${market} delayMs=${delayMs}`)
+    },
+  })
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
   private readonly subscriptionsByMarket: Partial<Record<SymbolMarketType, Array<{ raw: string; timeframe: MarketTimeframe }>>> = {}
@@ -130,7 +134,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
   async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
     this.tickHandler = params.onTick
     this.klineHandler = params.onKline
-    this.shouldReconnect = true
+    this.wsLifecycle.setShouldReconnect(true)
 
     const grouped = this.groupSymbolsByMarket(params.symbols, params.timeframes)
     this.subscriptionsByMarket.SPOT = grouped.SPOT
@@ -142,7 +146,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     ])
 
     return async () => {
-      this.shouldReconnect = false
+      this.wsLifecycle.setShouldReconnect(false)
       await this.disconnect()
     }
   }
@@ -258,7 +262,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     if (!subscriptions.length) return
 
     const ws = new WebSocket(this.wsBaseUrl)
-    this.wsByMarket[market] = ws
+    this.wsLifecycle.registerSocket(market, ws)
 
     ws.on('open', () => {
       const args = subscriptions.flatMap(item => ([
@@ -283,38 +287,23 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
 
     ws.on('close', () => {
       this.logger.warn(`metric=market_ws_connected value=0 market=${market}`)
-      this.scheduleReconnect(market)
+      this.wsLifecycle.scheduleReconnect(market, async () => {
+        const subscriptions = this.subscriptionsByMarket[market] ?? []
+        await this.openWebSocket(market, subscriptions)
+      })
     })
 
     ws.on('error', error => {
       this.logger.error(`okx ws error market=${market} reason=${(error as Error).message}`)
-      this.scheduleReconnect(market)
+      this.wsLifecycle.scheduleReconnect(market, async () => {
+        const subscriptions = this.subscriptionsByMarket[market] ?? []
+        await this.openWebSocket(market, subscriptions)
+      })
     })
   }
 
   private async closeWebSocket(market: SymbolMarketType) {
-    const timer = this.reconnectTimerByMarket[market]
-    if (timer) {
-      clearTimeout(timer)
-      this.reconnectTimerByMarket[market] = undefined
-    }
-
-    const ws = this.wsByMarket[market]
-    if (!ws) return
-    ws.close()
-    this.wsByMarket[market] = undefined
-  }
-
-  private scheduleReconnect(market: SymbolMarketType) {
-    if (!this.shouldReconnect) return
-    if (this.reconnectTimerByMarket[market]) return
-
-    this.logger.warn(`metric=market_ws_reconnect_total value=1 market=${market} delayMs=${this.reconnectDelayMs}`)
-    this.reconnectTimerByMarket[market] = setTimeout(async () => {
-      this.reconnectTimerByMarket[market] = undefined
-      const subscriptions = this.subscriptionsByMarket[market] ?? []
-      await this.openWebSocket(market, subscriptions)
-    }, this.reconnectDelayMs)
+    await this.wsLifecycle.closeSocket(market)
   }
 
   private async handleWsPayload(
