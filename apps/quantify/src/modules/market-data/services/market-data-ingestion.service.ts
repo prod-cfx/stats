@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { MARKET_DATA_LOG_CONTEXT, MARKET_DATA_PROVIDER } from '../constants/market-data.constants'
 import { normalizeExactCode, toSymbolCode } from '../utils/market-symbol-code.util'
+import { getMarketTimeframeMs } from '../utils/market-timeframe.util'
 import { MarketDataStreamService } from './market-data-stream.service'
 import { MarketDataService } from './market-data.service'
 
@@ -138,29 +139,10 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     return normalizedSymbols
   }
 
-  private getTimeframeMs(timeframe: MarketTimeframe): number {
-    switch (timeframe) {
-      case '1m':
-        return 60_000
-      case '5m':
-        return 5 * 60_000
-      case '15m':
-        return 15 * 60_000
-      case '1h':
-        return 60 * 60_000
-      case '4h':
-        return 4 * 60 * 60_000
-      case '1d':
-        return 24 * 60 * 60_000
-      default:
-        // 理论上不会走到这里，兜底返回 1 分钟
-        return 60_000
-    }
-  }
-
   private async bootstrapSymbols(config: MarketDataRuntimeConfig) {
     const symbols = await this.provider.fetchSymbols(config.symbols)
-    await this.marketDataService.upsertSymbolsFromProvider(symbols, 'BINANCE')
+    const exchangeFallback = this.provider.name?.toUpperCase() || config.provider.toUpperCase()
+    await this.marketDataService.upsertSymbolsFromProvider(symbols, exchangeFallback)
   }
 
   private async syncHistoricalBars(config: MarketDataRuntimeConfig) {
@@ -171,7 +153,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
     for (const symbol of config.symbols) {
       for (const timeframe of config.timeframes) {
-        const frameMs = this.getTimeframeMs(timeframe as MarketTimeframe)
+        const frameMs = getMarketTimeframeMs(timeframe)
         // 粗略估算需要的批次数，避免意外死循环
         const maxIterations = Math.ceil(lookbackMs / (frameMs * config.restBatchSize)) + 2
         let cursor = new Date(start)

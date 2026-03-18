@@ -1,6 +1,7 @@
 import type { MarketDataProvider } from '../../interfaces/market-data-provider.interface'
 import type { MarketDataStreamService } from '../market-data-stream.service'
 import type { MarketDataService } from '../market-data.service'
+import { getMarketTimeframeMs } from '../../utils/market-timeframe.util'
 import { MarketDataIngestionService } from '../market-data-ingestion.service'
 
 describe('market data ingestion service', () => {
@@ -9,6 +10,7 @@ describe('market data ingestion service', () => {
   }
 
   const providerMock = {
+    name: 'BINANCE',
     fetchSymbols: jest.fn(),
     fetchHistoricalBars: jest.fn(),
     subscribe: jest.fn(),
@@ -77,5 +79,17 @@ describe('market data ingestion service', () => {
         symbols: ['BTCUSDT:SPOT', 'BTCUSDT:PERP'],
       }),
     )
+  })
+
+  it('uses provider name as symbol exchange fallback', async () => {
+    ;(providerMock as any).name = 'OKX'
+
+    await service.onModuleInit()
+
+    expect(marketDataServiceMock.upsertSymbolsFromProvider).toHaveBeenCalledWith([], 'OKX')
+  })
+
+  it('throws for unsupported timeframe instead of silently falling back to 1m', () => {
+    expect(() => getMarketTimeframeMs('2m')).toThrow('Unsupported market timeframe: 2m')
   })
 })
