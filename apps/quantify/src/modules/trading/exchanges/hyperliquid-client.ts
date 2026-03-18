@@ -10,7 +10,6 @@ import type {
 } from '../core/types'
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
-import * as hyperliquidSdk from '@nktkas/hyperliquid'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
 
@@ -21,7 +20,9 @@ interface HyperliquidSdk {
 }
 
 function loadHyperliquidSdk(): HyperliquidSdk {
-  return hyperliquidSdk as unknown as HyperliquidSdk
+  // 延迟加载：避免在未使用 Hyperliquid 交易路径时触发 ESM 依赖解析（尤其是 Jest e2e 场景）
+  // eslint-disable-next-line ts/no-require-imports -- Runtime lazy-loading is intentional here.
+  return require('@nktkas/hyperliquid') as HyperliquidSdk
 }
 
 /**
