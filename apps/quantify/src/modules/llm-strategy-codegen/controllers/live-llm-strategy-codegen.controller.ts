@@ -1,6 +1,8 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { Body, Controller, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 import { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
@@ -35,7 +37,25 @@ export class LiveLlmStrategyCodegenController {
   @HttpCode(200)
   @ApiOperation({ summary: '真实调用 LLM 引擎测试策略脚本生成能力' })
   @ApiResponse({ status: 200, type: LlmCodegenEngineTestResponseDto })
-  async testEngine(@Body() dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
+  async testEngine(
+    @Headers('x-user-id') callerUserId: string | undefined,
+    @Body() dto: TestLlmCodegenEngineDto,
+  ): Promise<LlmCodegenEngineTestResponseDto> {
+    const normalizedCallerUserId = callerUserId?.trim()
+    if (!normalizedCallerUserId) {
+      throw new DomainException('缺少调用者身份，请提供 x-user-id 请求头', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+    if (normalizedCallerUserId !== dto.userId) {
+      throw new DomainException('调用者身份与请求 userId 不一致', {
+        code: ErrorCode.FORBIDDEN,
+        status: HttpStatus.FORBIDDEN,
+        args: { callerUserId: normalizedCallerUserId, requestUserId: dto.userId },
+      })
+    }
+
     return this.service.testEngine(dto)
   }
 }

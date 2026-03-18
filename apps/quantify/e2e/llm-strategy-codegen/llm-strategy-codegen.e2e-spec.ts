@@ -153,7 +153,7 @@ describe('llm strategy codegen (E2E)', () => {
     })
 
     const server = app.getHttpServer()
-    const res = await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').send({
+    const res = await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').set('x-user-id', 'u-e2e-4').send({
       userId: 'u-e2e-4',
       message: '请测试引擎生成策略脚本',
       symbols: ['BTCUSDT'],
@@ -183,9 +183,35 @@ describe('llm strategy codegen (E2E)', () => {
 
   it('rejects engine test when required checklist fields are missing', async () => {
     const server = app.getHttpServer()
-    await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').send({
+    await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').set('x-user-id', 'u-e2e-5').send({
       userId: 'u-e2e-5',
       message: '测试',
     }).expect(400)
+  })
+
+  it('rejects engine test when caller identity header is missing', async () => {
+    const server = app.getHttpServer()
+    await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').send({
+      userId: 'u-e2e-6',
+      message: '测试',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['rsi < 30'],
+      exitRules: ['atr stop'],
+      riskRules: { maxPositionPct: 0.1 },
+    }).expect(401)
+  })
+
+  it('rejects engine test when caller identity does not match userId', async () => {
+    const server = app.getHttpServer()
+    await supertestRequest(server).post('/api/v1/llm-strategy-codegen/engine/test').set('x-user-id', 'u-e2e-7').send({
+      userId: 'u-e2e-8',
+      message: '测试',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['rsi < 30'],
+      exitRules: ['atr stop'],
+      riskRules: { maxPositionPct: 0.1 },
+    }).expect(403)
   })
 })
