@@ -1,5 +1,5 @@
-import type { WhaleNotificationRule } from '@/prisma/prisma.types'
 import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
+import type { WhaleNotificationRule } from '@/prisma/prisma.types'
 import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'

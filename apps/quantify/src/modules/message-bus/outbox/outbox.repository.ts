@@ -1,6 +1,6 @@
+import type { PrismaService } from '@/prisma/prisma.service'
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
-import { PrismaService } from '@/prisma/prisma.service'
 import { OutboxStatus } from '@/prisma/prisma.types'
 
 @Injectable()

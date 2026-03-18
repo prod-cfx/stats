@@ -1,5 +1,5 @@
-import type { Role } from '@/prisma/prisma.types'
 import type { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.dto'
+import type { Role } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'

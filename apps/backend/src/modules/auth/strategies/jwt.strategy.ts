@@ -6,12 +6,12 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
-import { PrincipalType } from '@/prisma/prisma.types'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { PrismaService } from '@/prisma/prisma.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
  
-import { PrismaService } from '@/prisma/prisma.service'
+import { PrincipalType } from '@/prisma/prisma.types'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

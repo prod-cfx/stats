@@ -1,11 +1,11 @@
-import type { AdminMenu } from '@/prisma/prisma.types'
 import type { CreateAdminMenuDto, UpdateAdminMenuDto } from '../dto/admin-menu.dto'
 import type { AdminUserInfoDto } from '../dto/admin-user-info.dto'
+import type { AdminMenu } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
-import { AdminMenuType, PrincipalType } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
+import { AdminMenuType, PrincipalType } from '@/prisma/prisma.types'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'
 
 interface AdminMenuTreeNode extends AdminMenu {

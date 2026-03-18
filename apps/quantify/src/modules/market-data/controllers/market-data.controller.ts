@@ -9,9 +9,9 @@ import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response
 import { MarketBarDto } from '../dto/market-bar.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
 import { MarketBarsQueryDto } from '../dto/market-bars-query.dto'
-import { MarketQuoteDto } from '../dto/market-quote.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
 import { MarketQuoteQueryDto } from '../dto/market-quote-query.dto'
+import { MarketQuoteDto } from '../dto/market-quote.response.dto'
 import { MarketSymbolDto } from '../dto/market-symbol.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
 import { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'

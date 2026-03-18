@@ -1,6 +1,6 @@
 import type { OnModuleInit } from '@nestjs/common'
+import type { CacheService } from '@/common/services/cache.service'
 import { Injectable, Logger } from '@nestjs/common'
-import { CacheService } from '@/common/services/cache.service'
 import { MESSAGE_DEDUPE_PREFIX } from '../message-bus.types'
 
 @Injectable()

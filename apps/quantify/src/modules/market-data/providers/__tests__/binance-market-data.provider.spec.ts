@@ -1,7 +1,7 @@
 import { of } from 'rxjs'
 import { BinanceMarketDataProvider } from '../binance-market-data.provider'
 
-describe('BinanceMarketDataProvider', () => {
+describe('binanceMarketDataProvider', () => {
   const httpMock = {
     get: jest.fn(),
   }

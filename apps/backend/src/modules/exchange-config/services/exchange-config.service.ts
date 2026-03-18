@@ -1,12 +1,12 @@
-import type { ExchangeConfig } from '@/prisma/prisma.types'
 import type { CreateExchangeConfigDto } from '../dto/create-exchange-config.dto'
 import type { QueryExchangeConfigDto } from '../dto/query-exchange-config.dto'
 import type { UpdateExchangeConfigDto } from '../dto/update-exchange-config.dto'
+import type { ExchangeConfig } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { Prisma } from '@/prisma/prisma.types'
 // Nest 注入需要运行时引用 Repository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ExchangeConfigRepository } from '../repositories/exchange-config.repository'

@@ -1,8 +1,8 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import type { PrismaClient, User } from '@/prisma/prisma.types'
-
 import type { PrismaService } from '@/prisma/prisma.service'
+
+import type { PrismaClient, User } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import {
   createApiClient,

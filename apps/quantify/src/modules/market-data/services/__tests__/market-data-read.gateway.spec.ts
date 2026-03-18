@@ -1,8 +1,8 @@
 import type { MarketDataRepository } from '../market-data.repository'
+import type { MarketDataService } from '../market-data.service'
 import type { MarketBar } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { MarketDataReadGateway } from '../market-data-read.gateway'
-import type { MarketDataService } from '../market-data.service'
 
 describe('market data read gateway', () => {
   const mockRepository = {

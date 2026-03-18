@@ -1,5 +1,5 @@
-import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
 import type { HeatmapQueryCriteria, HeatmapSnapshotWithData } from './liquidation-heatmap.repository'
+import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
 import { Injectable, NotFoundException } from '@nestjs/common'
 // Nest 注入需要运行时引用 Repository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

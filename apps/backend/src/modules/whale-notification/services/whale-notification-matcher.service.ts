@@ -1,9 +1,9 @@
+import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import type {
   WhaleNotificationRule,
   WhaleNotificationRuleAddress,
   WhaleNotificationRuleSymbolOverride,
 } from '@/prisma/prisma.types'
-import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { Inject, Injectable } from '@nestjs/common'
 import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 

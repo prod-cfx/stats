@@ -1,11 +1,11 @@
 import type { TestingModule } from '@nestjs/testing'
+import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.dto'
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
-import { Test } from '@nestjs/testing'
 
+import { Test } from '@nestjs/testing'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { PrismaService } from '@/prisma/prisma.service'
-import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.dto'
 import { InvalidInstanceModeTransitionException } from '../../exceptions'
 import { StrategyInstancesRepository } from '../../repositories/strategy-instances.repository'
 import { StrategyInstanceStatsService } from '../strategy-instance-stats.service'

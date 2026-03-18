@@ -1,11 +1,11 @@
+import type { ConfigService } from '@nestjs/config'
+import type { MessageBusService } from '../message-bus.service'
+import type { MessageBusMetricsService } from '../metrics/message-bus.metrics.service'
+import type { OutboxRepository } from './outbox.repository'
+import type { EnvService } from '@/common/services/env.service'
 import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
 import { Cron } from '@nestjs/schedule'
-import { EnvService } from '@/common/services/env.service'
-import { MessageBusMetricsService } from '../metrics/message-bus.metrics.service'
 import { isMessageBusRuntimeEnabled } from '../message-bus.runtime'
-import { MessageBusService } from '../message-bus.service'
-import { OutboxRepository } from './outbox.repository'
 
 @Injectable()
 export class OutboxDispatcher {

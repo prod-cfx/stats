@@ -1,6 +1,6 @@
 import { MarketDataService } from '../market-data.service'
 
-describe('MarketDataService symbol code compatibility', () => {
+describe('marketDataService symbol code compatibility', () => {
   const prismaMock = {
     symbol: {
       findMany: jest.fn(),
@@ -44,7 +44,7 @@ describe('MarketDataService symbol code compatibility', () => {
   })
 
   it('warns when both spot and perp exist for unsuffixed input', async () => {
-    const warnSpy = jest.spyOn(service['logger'], 'warn')
+    const warnSpy = jest.spyOn(service.logger, 'warn')
     prismaMock.symbol.findMany.mockResolvedValue([
       { id: 'spot-id', code: 'BTCUSDT:SPOT' },
       { id: 'perp-id', code: 'BTCUSDT:PERP' },

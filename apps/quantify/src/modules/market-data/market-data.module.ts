@@ -1,7 +1,6 @@
 import { HttpModule } from '@nestjs/axios'
 import { Module } from '@nestjs/common'
-import { ConfigModule } from '@nestjs/config'
-import { ConfigService } from '@nestjs/config'
+import { ConfigModule, ConfigService } from '@nestjs/config'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { marketDataConfig } from '@/config'
 import { IndicatorsModule } from '@/modules/indicators/indicators.module'
@@ -34,6 +33,7 @@ import { MarketDataService } from './services/market-data.service'
     {
       provide: MARKET_DATA_PROVIDER,
       inject: [ConfigService, BinanceMarketDataProvider, OkxMarketDataProvider, HyperliquidMarketDataProvider],
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix -- NestJS API requires the `useFactory` key name.
       useFactory: (
         configService: ConfigService,
         binanceProvider: BinanceMarketDataProvider,

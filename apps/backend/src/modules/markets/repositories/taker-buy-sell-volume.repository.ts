@@ -1,7 +1,7 @@
 import type { TakerBuySellVolume } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class TakerBuySellVolumeRepository {

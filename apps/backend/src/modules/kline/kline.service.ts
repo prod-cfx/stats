@@ -1,8 +1,7 @@
-import type { MarketTimeframe } from '@/prisma/prisma.types'
 import type { KlineBarDto } from './dto/kline-bar.dto'
+import type { MarketTimeframe } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 RedisService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -11,6 +10,7 @@ import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class KlineService {

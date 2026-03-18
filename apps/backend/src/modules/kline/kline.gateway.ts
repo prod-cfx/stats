@@ -1,6 +1,5 @@
 import type { OrderBookLevel, VenueOrderBook } from '@ai/shared'
 import type { OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets'
-import type { MarketTrade } from '@/prisma/prisma.types'
 import type { Server, Socket } from 'socket.io'
 import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { KlineSubscriptionDto } from './dto/kline-subscription.dto'
@@ -8,6 +7,7 @@ import type { OrderbookSubscriptionDto } from './dto/orderbook-subscription.dto'
 import type { TickerBroadcastDto } from './dto/ticker-broadcast.dto'
 import type { TickerSubscriptionDto } from './dto/ticker-subscription.dto'
 import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
+import type { MarketTrade } from '@/prisma/prisma.types'
 
 import { Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports

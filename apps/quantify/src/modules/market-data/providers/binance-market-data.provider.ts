@@ -13,6 +13,7 @@ import type {
   ProviderSymbol,
   SubscribeParams,
 } from '../interfaces/market-data-provider.interface'
+import type {SymbolMarketType} from '../utils/market-symbol-code.util';
 import { HttpService } from '@nestjs/axios'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -21,8 +22,8 @@ import WebSocket from 'ws'
 import {
   extractRawSymbol,
   parseSymbolMarket,
-  toSymbolCode,
-  type SymbolMarketType,
+  toSymbolCode
+  
 } from '../utils/market-symbol-code.util'
 
 interface BinanceSymbolFilter {
