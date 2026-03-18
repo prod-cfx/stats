@@ -339,4 +339,159 @@ describe('OkxClient', () => {
     expect(order.price).toBeCloseTo(74147.2)
     expect(order.status).toBe('closed')
   })
+
+  it('converts perp contract size back to base size when canceling orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-order-1',
+            instId: 'BTC-USDT-SWAP',
+            state: 'canceled',
+            side: 'buy',
+            ordType: 'market',
+            sz: '0.13',
+            fillSz: '0.13',
+            avgPx: '74147.2',
+            uTime: '1773829253570',
+            cTime: '1773829253522',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).cancelOrder('perp-order-1', 'BTC/USDT:PERP')
+
+    expect(order.amount).toBeCloseTo(0.0013)
+    expect(order.filled).toBeCloseTo(0.0013)
+    expect(order.status).toBe('canceled')
+  })
+
+  it('converts perp contract sizes back to base sizes when listing open orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-order-1',
+            instId: 'BTC-USDT-SWAP',
+            state: 'live',
+            side: 'buy',
+            ordType: 'market',
+            sz: '0.13',
+            fillSz: '0',
+            avgPx: '74147.2',
+            uTime: '1773829253570',
+            cTime: '1773829253522',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const orders = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).fetchOpenOrders()
+
+    expect(orders).toHaveLength(1)
+    expect(orders[0]?.amount).toBeCloseTo(0.0013)
+  })
+
+  it('converts perp contract sizes back to base sizes when listing closed orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-order-1',
+            instId: 'BTC-USDT-SWAP',
+            state: 'filled',
+            side: 'buy',
+            ordType: 'market',
+            sz: '0.13',
+            fillSz: '0.13',
+            avgPx: '74147.2',
+            uTime: '1773829253570',
+            cTime: '1773829253522',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const orders = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).fetchClosedOrders()
+
+    expect(orders).toHaveLength(1)
+    expect(orders[0]?.amount).toBeCloseTo(0.0013)
+    expect(orders[0]?.status).toBe('closed')
+  })
 })

@@ -175,6 +175,7 @@ export class OkxClient extends BaseCexClient {
 
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(symbol, this.marketType)
+    const instrumentSpec = await this.getInstrumentSpec(instId)
     const body: Record<string, unknown> = { instId, ordId: id }
 
     const res = await this.request<{ data: OkxOrderResponse[] }>(
@@ -197,8 +198,8 @@ export class OkxClient extends BaseCexClient {
       side: order.side === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
-      amount: Number.parseFloat(order.sz),
-      filled: Number.parseFloat(order.fillSz ?? '0'),
+      amount: this.fromExchangeSize(order.sz, instrumentSpec),
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -253,7 +254,13 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data.map(order => this.mapOrderFromResponse(order, symbol ?? this.fromInstrumentId(order.instId)))
+    return Promise.all(
+      res.data.map(async (order) => {
+        const resolvedSymbol = symbol ?? this.fromInstrumentId(order.instId)
+        const instrumentSpec = await this.getInstrumentSpec(order.instId)
+        return this.mapOrderFromResponse(order, resolvedSymbol, instrumentSpec)
+      }),
+    )
   }
 
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
@@ -270,9 +277,15 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data
-      .filter(order => order.state !== 'live' && order.state !== 'partially_filled')
-      .map(order => this.mapOrderFromResponse(order, symbol ?? this.fromInstrumentId(order.instId)))
+    const closed = res.data.filter(order => order.state !== 'live' && order.state !== 'partially_filled')
+
+    return Promise.all(
+      closed.map(async (order) => {
+        const resolvedSymbol = symbol ?? this.fromInstrumentId(order.instId)
+        const instrumentSpec = await this.getInstrumentSpec(order.instId)
+        return this.mapOrderFromResponse(order, resolvedSymbol, instrumentSpec)
+      }),
+    )
   }
 
   async fetchPositions(): Promise<UnifiedPosition[]> {
@@ -625,7 +638,11 @@ export class OkxClient extends BaseCexClient {
     return Number(value).toString()
   }
 
-  private mapOrderFromResponse(order: OkxOrderResponse, symbol: string): UnifiedOrder {
+  private mapOrderFromResponse(
+    order: OkxOrderResponse,
+    symbol: string,
+    instrumentSpec?: OkxInstrumentSpecItem | null,
+  ): UnifiedOrder {
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -637,8 +654,8 @@ export class OkxClient extends BaseCexClient {
       side: order.side === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
-      amount: this.fromExchangeSize(order.sz),
-      filled: this.fromExchangeSize(order.fillSz ?? '0'),
+      amount: this.fromExchangeSize(order.sz, instrumentSpec),
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
