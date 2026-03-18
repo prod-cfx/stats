@@ -5,6 +5,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { MARKET_DATA_LOG_CONTEXT, MARKET_DATA_PROVIDER } from '../constants/market-data.constants'
+import { normalizeExactCode, toSymbolCode } from '../utils/market-symbol-code.util'
 import { MarketDataStreamService } from './market-data-stream.service'
 import { MarketDataService } from './market-data.service'
 
@@ -93,7 +94,48 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     if (!config) {
       throw new Error('marketData 配置未加载')
     }
-    return config
+    return {
+      ...config,
+      symbols: this.normalizeIngestionSymbols(config.symbols),
+    }
+  }
+
+  private normalizeIngestionSymbols(symbols: string[]): string[] {
+    const normalizedSymbols: string[] = []
+    const seen = new Set<string>()
+
+    const pushUnique = (symbol: string) => {
+      if (!seen.has(symbol)) {
+        seen.add(symbol)
+        normalizedSymbols.push(symbol)
+      }
+    }
+
+    for (const symbol of symbols) {
+      const normalized = normalizeExactCode(symbol)
+      if (!normalized) continue
+
+      if (!normalized.includes(':')) {
+        const spotSymbol = toSymbolCode(normalized, 'SPOT')
+        const perpSymbol = toSymbolCode(normalized, 'PERP')
+        pushUnique(spotSymbol)
+        pushUnique(perpSymbol)
+        this.logger.warn(`MARKET_DATA_SYMBOLS 使用无后缀 symbol，已自动展开: ${normalized} -> ${spotSymbol}, ${perpSymbol}`)
+        continue
+      }
+
+      if (!normalized.endsWith(':SPOT') && !normalized.endsWith(':PERP')) {
+        throw new Error(`MARKET_DATA_SYMBOLS 包含未知 market 后缀: ${symbol}`)
+      }
+
+      pushUnique(normalized)
+    }
+
+    if (normalizedSymbols.length === 0) {
+      throw new Error('marketData.symbols 配置为空')
+    }
+
+    return normalizedSymbols
   }
 
   private getTimeframeMs(timeframe: MarketTimeframe): number {
