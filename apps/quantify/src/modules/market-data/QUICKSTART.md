@@ -4,6 +4,13 @@
 
 所有命令都从仓库根目录执行。
 
+## Symbol 规范
+
+- 现货：`<RAW_SYMBOL>:SPOT`，例如 `BTCUSDT:SPOT`
+- 合约：`<RAW_SYMBOL>:PERP`，例如 `BTCUSDT:PERP`
+- 兼容期无后缀 symbol 会优先映射到 `:SPOT`
+- 生产切换建议顺序：先执行回填脚本，再重启服务，再观察指标
+
 ## 启动服务
 
 ```bash

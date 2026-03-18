@@ -12,6 +12,7 @@ describe('market-data (e2e)', () => {
   let moduleFixture: TestingModule
   let prisma: PrismaService
   let symbolId: string
+  let perpSymbolId: string
 
   const mockProvider = {
     name: 'BINANCE',
@@ -60,13 +61,33 @@ describe('market-data (e2e)', () => {
       select: { id: true },
     })
     symbolId = symbol.id
+
+    const perpSymbol = await prisma.symbol.upsert({
+      where: { code: 'BTCUSDT:PERP' },
+      create: {
+        code: 'BTCUSDT:PERP',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        exchange: 'BINANCE',
+        type: 'CRYPTO',
+        instrumentType: 'PERPETUAL',
+        status: 'ACTIVE',
+        precisionPrice: 2,
+        precisionQuantity: 6,
+      },
+      update: {
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    })
+    perpSymbolId = perpSymbol.id
   })
 
   afterEach(async () => {
     if (prisma) {
-      await prisma.marketQuote.deleteMany({ where: { symbolId } })
-      await prisma.marketBar.deleteMany({ where: { symbolId } })
-      await prisma.symbol.deleteMany({ where: { id: symbolId } })
+      await prisma.marketQuote.deleteMany({ where: { symbolId: { in: [symbolId, perpSymbolId] } } })
+      await prisma.marketBar.deleteMany({ where: { symbolId: { in: [symbolId, perpSymbolId] } } })
+      await prisma.symbol.deleteMany({ where: { id: { in: [symbolId, perpSymbolId] } } })
     }
 
     if (app) {
@@ -153,6 +174,31 @@ describe('market-data (e2e)', () => {
         const errorCode = res.body?.error?.code ?? res.body?.error ?? res.body?.statusCode
 
         expect(['BAD_REQUEST', 'Bad Request', 400]).toContain(errorCode)
+      })
+  })
+
+  it('GET /api/v1/market/bars supports :PERP symbol', async () => {
+    await prisma.marketBar.create({
+      data: {
+        symbolId: perpSymbolId,
+        timeframe: 'm1',
+        time: new Date('2026-03-17T10:00:00.000Z'),
+        open: '64000',
+        high: '64500',
+        low: '63800',
+        close: '64300',
+        source: 'TEST',
+      },
+    })
+
+    await supertestRequest(app.getHttpServer())
+      .get('/api/v1/market/bars')
+      .query({ symbol: 'BTCUSDT:PERP', timeframe: '1m', limit: 10 })
+      .expect(200)
+      .expect((res) => {
+        const payload = res.body.data ?? res.body
+        expect(payload.length).toBe(1)
+        expect(payload[0].close).toBe('64300')
       })
   })
 })
