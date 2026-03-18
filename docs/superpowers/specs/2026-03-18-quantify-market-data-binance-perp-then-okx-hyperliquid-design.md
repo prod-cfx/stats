@@ -2,7 +2,7 @@
 
 - 日期：2026-03-18
 - 状态：Draft（已与用户确认方向）
-- 范围：`apps/quantify/src/modules/market-data/*` 及 `apps/quantify/prisma/schema/market_indicator.prisma` 的最小必要改造
+- 范围：`apps/quantify/src/modules/market-data/*` 的最小必要改造（本次不改 Prisma schema）
 
 ## 0. 决策记录（已确认）
 
