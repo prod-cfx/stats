@@ -12,6 +12,10 @@ interface MarketDataRuntimeConfig {
   provider: string
   restBaseUrl: string
   wsBaseUrl: string
+  spotRestBaseUrl: string
+  perpRestBaseUrl: string
+  spotWsBaseUrl: string
+  perpWsBaseUrl: string
   symbols: string[]
   timeframes: MarketTimeframe[]
   historicalLookbackMinutes: number
@@ -38,6 +42,9 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   async onModuleInit() {
     const config = this.getConfig()
+    this.logger.log(
+      `marketData endpoints spotRest=${config.spotRestBaseUrl} spotWs=${config.spotWsBaseUrl} perpRest=${config.perpRestBaseUrl} perpWs=${config.perpWsBaseUrl}`,
+    )
 
     try {
       await this.bootstrapSymbols(config)
