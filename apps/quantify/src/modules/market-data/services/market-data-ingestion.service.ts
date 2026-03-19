@@ -4,6 +4,7 @@ import type { MarketDataProvider } from '../interfaces/market-data-provider.inte
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
+import { PrismaService } from '@/prisma/prisma.service'
 import { MARKET_DATA_LOG_CONTEXT, MARKET_DATA_PROVIDER } from '../constants/market-data.constants'
 import { normalizeExactCode, toSymbolCode } from '../utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '../utils/market-timeframe.util'
@@ -30,10 +31,14 @@ interface MarketDataRuntimeConfig {
 export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MarketDataIngestionService.name)
   private unsubscribe?: () => Promise<void> | void
+  private subscribedSymbols: string[] = []
+  private refreshInProgress = false
 
   constructor(
     @Inject(ConfigService)
     private readonly configService: ConfigService,
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
     @Inject(MarketDataService)
     private readonly marketDataService: MarketDataService,
     @Inject(MARKET_DATA_PROVIDER)
@@ -43,7 +48,8 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   ) {}
 
   async onModuleInit() {
-    const config = this.getConfig()
+    const baseConfig = this.getConfig()
+    const config = await this.mergeDynamicSymbols(baseConfig)
     this.logger.log(
       `marketData endpoints spotRest=${config.spotRestBaseUrl} spotWs=${config.spotWsBaseUrl} perpRest=${config.perpRestBaseUrl} perpWs=${config.perpWsBaseUrl}`,
     )
@@ -61,7 +67,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
 
     try {
-      await this.startRealtimeSubscription(config)
+      await this.replaceRealtimeSubscription(config)
     } catch (error) {
       this.logger.error(`实时行情订阅失败: ${(error as Error).message}，将在后台重试`, (error as Error).stack)
     }
@@ -79,7 +85,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleGapFill() {
-    const config = this.getConfig()
+    const config = await this.mergeDynamicSymbols(this.getConfig())
     const startedAt = Date.now()
     try {
       await this.syncHistoricalBars(config)
@@ -87,6 +93,36 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     } catch (error) {
       this.logger.warn(`metric=market_gapfill_failed_total value=1 reason=${(error as Error).message}`)
       throw error
+    }
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async handleDynamicSymbolRefresh() {
+    if (this.refreshInProgress) return
+    this.refreshInProgress = true
+
+    try {
+      const config = await this.mergeDynamicSymbols(this.getConfig())
+      const nextSymbols = config.symbols
+      const currentSymbols = this.subscribedSymbols
+      const hasChanged = nextSymbols.length !== currentSymbols.length
+        || nextSymbols.some(symbol => !currentSymbols.includes(symbol))
+
+      if (!hasChanged) return
+
+      const addedSymbols = nextSymbols.filter(symbol => !currentSymbols.includes(symbol))
+      if (addedSymbols.length > 0) {
+        const addedConfig = { ...config, symbols: addedSymbols }
+        await this.bootstrapSymbols(addedConfig)
+        await this.syncHistoricalBars(addedConfig)
+      }
+
+      await this.replaceRealtimeSubscription(config)
+      this.logger.log(`动态行情订阅已更新: ${config.symbols.join(', ')}`)
+    } catch (error) {
+      this.logger.error(`动态行情订阅刷新失败: ${(error as Error).message}`, (error as Error).stack)
+    } finally {
+      this.refreshInProgress = false
     }
   }
 
@@ -99,6 +135,96 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
       ...config,
       symbols: this.normalizeIngestionSymbols(config.symbols),
     }
+  }
+
+  private async mergeDynamicSymbols(config: MarketDataRuntimeConfig): Promise<MarketDataRuntimeConfig> {
+    const dynamicSymbols = await this.collectDynamicStrategySymbols()
+    if (dynamicSymbols.length === 0) {
+      return config
+    }
+
+    return {
+      ...config,
+      symbols: this.normalizeIngestionSymbols([...config.symbols, ...dynamicSymbols]),
+    }
+  }
+
+  private async collectDynamicStrategySymbols(): Promise<string[]> {
+    const symbolSet = new Set<string>()
+
+    const [strategySubscriptions, llmSubscriptions] = await Promise.all([
+      this.prisma.userStrategySubscription.findMany({
+        where: { status: 'active' },
+        select: {
+          strategyInstance: {
+            select: {
+              strategyTemplate: {
+                select: {
+                  legs: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.userLlmStrategySubscription.findMany({
+        where: { status: 'active' },
+        select: {
+          llmStrategyInstance: {
+            select: {
+              strategy: {
+                select: {
+                  allowedSymbols: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ])
+
+    for (const item of strategySubscriptions) {
+      const legs = item.strategyInstance?.strategyTemplate?.legs
+      const legSymbols = this.extractStrategyLegSymbols(legs)
+      for (const symbol of legSymbols) {
+        symbolSet.add(symbol)
+      }
+    }
+
+    for (const item of llmSubscriptions) {
+      const allowedSymbols = item.llmStrategyInstance?.strategy?.allowedSymbols
+      const values = this.extractStringArray(allowedSymbols)
+      for (const symbol of values) {
+        symbolSet.add(symbol)
+      }
+    }
+
+    return [...symbolSet]
+  }
+
+  private extractStrategyLegSymbols(legs: unknown): string[] {
+    if (!Array.isArray(legs)) return []
+
+    const symbols: string[] = []
+    for (const leg of legs) {
+      if (!leg || typeof leg !== 'object') continue
+      const symbol = (leg as { symbol?: unknown }).symbol
+      if (typeof symbol !== 'string') continue
+      const normalized = symbol.trim().toUpperCase()
+      if (normalized) symbols.push(normalized)
+    }
+    return symbols
+  }
+
+  private extractStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    const normalized: string[] = []
+    for (const entry of value) {
+      if (typeof entry !== 'string') continue
+      const symbol = entry.trim().toUpperCase()
+      if (symbol) normalized.push(symbol)
+    }
+    return normalized
   }
 
   private normalizeIngestionSymbols(symbols: string[]): string[] {
@@ -219,7 +345,12 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  private async startRealtimeSubscription(config: MarketDataRuntimeConfig) {
+  private async replaceRealtimeSubscription(config: MarketDataRuntimeConfig) {
+    if (this.unsubscribe) {
+      await this.unsubscribe()
+      this.unsubscribe = undefined
+    }
+
     this.unsubscribe = await this.provider.subscribe({
       symbols: config.symbols,
       timeframes: config.timeframes,
@@ -248,5 +379,6 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
         }
       },
     })
+    this.subscribedSymbols = [...config.symbols]
   }
 }

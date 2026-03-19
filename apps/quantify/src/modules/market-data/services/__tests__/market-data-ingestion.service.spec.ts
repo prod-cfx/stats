@@ -1,6 +1,7 @@
 import type { MarketDataProvider } from '../../interfaces/market-data-provider.interface'
 import type { MarketDataStreamService } from '../market-data-stream.service'
 import type { MarketDataService } from '../market-data.service'
+import type { PrismaService } from '@/prisma/prisma.service'
 import { getMarketTimeframeMs } from '../../utils/market-timeframe.util'
 import { MarketDataIngestionService } from '../market-data-ingestion.service'
 
@@ -27,10 +28,20 @@ describe('market data ingestion service', () => {
     emitQuote: jest.fn(),
   } as unknown as jest.Mocked<MarketDataStreamService>
 
+  const prismaMock = {
+    userStrategySubscription: {
+      findMany: jest.fn(),
+    },
+    userLlmStrategySubscription: {
+      findMany: jest.fn(),
+    },
+  } as unknown as jest.Mocked<PrismaService>
+
   let service: MarketDataIngestionService
 
   beforeEach(() => {
     jest.clearAllMocks()
+    ;(providerMock as { name: string }).name = 'BINANCE'
 
     configServiceMock.get.mockImplementation((key: string) => {
       if (key !== 'marketData') return undefined
@@ -58,9 +69,12 @@ describe('market data ingestion service', () => {
     marketDataServiceMock.upsertSymbolsFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveBarFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveQuoteFromProvider.mockResolvedValue(undefined)
+    prismaMock.userStrategySubscription.findMany.mockResolvedValue([])
+    prismaMock.userLlmStrategySubscription.findMany.mockResolvedValue([])
 
     service = new MarketDataIngestionService(
       configServiceMock as never,
+      prismaMock,
       marketDataServiceMock,
       providerMock,
       streamServiceMock,
@@ -106,5 +120,55 @@ describe('market data ingestion service', () => {
 
   it('throws for unsupported timeframe instead of silently falling back to 1m', () => {
     expect(() => getMarketTimeframeMs('2m')).toThrow('Unsupported market timeframe: 2m')
+  })
+
+  it('merges dynamic symbols from active strategy subscriptions', async () => {
+    prismaMock.userStrategySubscription.findMany.mockResolvedValue([
+      {
+        strategyInstance: {
+          strategyTemplate: {
+            legs: [{ id: 'main', symbol: 'SOLUSDT', role: 'primary' }],
+          },
+        },
+      },
+    ])
+
+    await service.onModuleInit()
+
+    expect(providerMock.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbols: ['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'SOLUSDT:SPOT', 'SOLUSDT:PERP'],
+      }),
+    )
+  })
+
+  it('refreshes realtime subscription when dynamic symbols change', async () => {
+    const firstUnsubscribe = jest.fn().mockResolvedValue(undefined)
+    const secondUnsubscribe = jest.fn().mockResolvedValue(undefined)
+    providerMock.subscribe
+      .mockResolvedValueOnce(firstUnsubscribe)
+      .mockResolvedValueOnce(secondUnsubscribe)
+    prismaMock.userStrategySubscription.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          strategyInstance: {
+            strategyTemplate: {
+              legs: [{ id: 'main', symbol: 'XRPUSDT', role: 'primary' }],
+            },
+          },
+        },
+      ])
+
+    await service.onModuleInit()
+    await service.handleDynamicSymbolRefresh()
+
+    expect(firstUnsubscribe).toHaveBeenCalledTimes(1)
+    expect(providerMock.subscribe).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        symbols: ['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'XRPUSDT:SPOT', 'XRPUSDT:PERP'],
+      }),
+    )
   })
 })
