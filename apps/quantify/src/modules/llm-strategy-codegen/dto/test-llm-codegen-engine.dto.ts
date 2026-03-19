@@ -51,7 +51,7 @@ export class TestLlmCodegenEngineDto {
   @IsObject()
   riskRules?: Record<string, unknown>
 
-  @ApiPropertyOptional({ description: 'LLM 提供商编码，默认 uniapi' })
+  @ApiPropertyOptional({ description: 'LLM 提供商编码，默认 strategy-codegen' })
   @IsOptional()
   @IsString()
   providerCode?: string
@@ -75,4 +75,3 @@ export class TestLlmCodegenEngineDto {
   @Max(4000)
   maxTokens?: number
 }
-

@@ -222,7 +222,14 @@ const nextConfig = {
       /\/$/,
       '',
     )
+    const quantifyApiServer = (
+      process.env.NEXT_PUBLIC_QUANTIFY_API_SERVER_URL || 'http://localhost:3010'
+    ).replace(/\/$/, '')
     return [
+      {
+        source: '/api/v1/llm-strategy-codegen/:path*',
+        destination: `${quantifyApiServer}/api/v1/llm-strategy-codegen/:path*`,
+      },
       {
         source: '/api/v1/:path*',
         destination: `${apiServer}/api/v1/:path*`,

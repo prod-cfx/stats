@@ -44,7 +44,7 @@ interface GenerationOptions {
 
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
-const DEFAULT_PROVIDER_CODE = 'uniapi'
+const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
 const DEFAULT_MODEL = 'gpt-4'
 
 @Injectable()
@@ -60,7 +60,10 @@ export class CodegenConversationService {
   ) {}
 
   async startSession(dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
-    const checklist = this.extractChecklist(dto)
+    const checklist = this.normalizeChecklist(this.checklistGate.mergeChecklist(
+      this.extractChecklist(dto),
+      this.inferChecklistFromMessage(dto.initialMessage),
+    ))
     const missing = this.checklistGate.getMissingFields(checklist)
     const status: LlmCodegenSessionStatus = missing.length > 0 ? 'DRAFTING' : 'CHECKLIST_GATE'
 
@@ -78,7 +81,7 @@ export class CodegenConversationService {
       id: session.id,
       status,
       missingFields: missing,
-      assistantPrompt: this.buildGuidePrompt(missing),
+      assistantPrompt: this.buildGuidePrompt(missing, dto.initialMessage),
     }
   }
 
@@ -99,10 +102,15 @@ export class CodegenConversationService {
       })
     }
 
-    const mergedChecklist = this.normalizeChecklist(this.checklistGate.mergeChecklist(
-      this.readChecklist(session.checklist),
-      this.extractChecklist(dto),
-    ))
+    const mergedChecklist = this.normalizeChecklist(
+      this.checklistGate.mergeChecklist(
+        this.checklistGate.mergeChecklist(
+          this.readChecklist(session.checklist),
+          this.inferChecklistFromMessage(dto.message),
+        ),
+        this.extractChecklist(dto),
+      ),
+    )
 
     const missing = this.checklistGate.getMissingFields(mergedChecklist)
     if (missing.length > 0) {
@@ -115,10 +123,11 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: missing,
-        assistantPrompt: this.buildGuidePrompt(missing),
+        assistantPrompt: this.buildGuidePrompt(missing, dto.message),
       }
     }
 
+    const providerCode = this.resolveProviderCode(dto.providerCode)
     try {
       await this.sessionsRepo.updateSession(session.id, {
         status: 'GENERATING',
@@ -127,7 +136,7 @@ export class CodegenConversationService {
       })
 
       const scriptCode = await this.generateScript(mergedChecklist, dto.message, {
-        providerCode: dto.providerCode,
+        providerCode,
         model: dto.model,
         temperature: dto.temperature,
         maxTokens: dto.maxTokens,
@@ -254,8 +263,9 @@ export class CodegenConversationService {
       })
     }
 
+    const providerCode = this.resolveProviderCode(dto.providerCode)
     const scriptCode = await this.generateScript(checklist, dto.message, {
-      providerCode: dto.providerCode,
+      providerCode,
       model: dto.model,
       temperature: dto.temperature,
       maxTokens: dto.maxTokens,
@@ -264,7 +274,7 @@ export class CodegenConversationService {
     const staticResult = this.staticGuardrail.validate(scriptCode)
     if (!staticResult.passed) {
       return {
-        providerCode: dto.providerCode ?? DEFAULT_PROVIDER_CODE,
+        providerCode,
         model: dto.model ?? DEFAULT_MODEL,
         scriptCode,
         staticPassed: false,
@@ -276,7 +286,7 @@ export class CodegenConversationService {
 
     const runtimeResult = await this.runtimeGuardrail.validate(scriptCode)
     return {
-      providerCode: dto.providerCode ?? DEFAULT_PROVIDER_CODE,
+      providerCode,
       model: dto.model ?? DEFAULT_MODEL,
       scriptCode,
       staticPassed: true,
@@ -296,6 +306,82 @@ export class CodegenConversationService {
       exitRules: input.exitRules,
       riskRules: input.riskRules,
     }
+  }
+
+  private inferChecklistFromMessage(message?: string): ChecklistPayload {
+    if (!message || !message.trim()) {
+      return {}
+    }
+    const text = message.trim()
+    const upper = text.toUpperCase()
+
+    const symbolMatches = upper.match(/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/g) ?? []
+    const symbols = Array.from(new Set(symbolMatches))
+    if (symbols.length === 0) {
+      if (/比特币|大饼|BTC/i.test(text)) {
+        symbols.push('BTCUSDT')
+      } else if (/以太|ETH/i.test(text)) {
+        symbols.push('ETHUSDT')
+      }
+    }
+
+    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/gi))
+    const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
+      const normalizedUnit = unit.toLowerCase()
+      if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
+      if (normalizedUnit === 'h' || normalizedUnit === '小时') return `${value}h`
+      return `${value}d`
+    })))
+
+    const entryRules: string[] = []
+    const exitRules: string[] = []
+    if (/金叉|上穿|突破|入场|开仓|买入/.test(text)) {
+      entryRules.push('短均线上穿长均线（金叉）入场')
+    }
+    if (/死叉|跌破|止盈|止损|回撤|平仓|离场|出场|卖出/.test(text)) {
+      if (/死叉/.test(text)) {
+        exitRules.push('短均线下穿长均线（死叉）出场')
+      } else if (/跌破/.test(text)) {
+        exitRules.push('价格跌破关键均线出场')
+      } else if (/止盈|止损|回撤/.test(text)) {
+        exitRules.push('触发止盈/止损阈值出场')
+      } else {
+        exitRules.push('满足出场条件后平仓')
+      }
+    }
+
+    const riskRules: Record<string, unknown> = {}
+    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/i)
+    if (positionMatch?.[1]) {
+      riskRules.positionPct = Number(positionMatch[1])
+    }
+    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/i)
+    if (stopLossMatch?.[1]) {
+      riskRules.stopLossPct = Number(stopLossMatch[1])
+    }
+    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/i)
+    if (drawdownMatch?.[1]) {
+      riskRules.maxDrawdownPct = Number(drawdownMatch[1])
+    }
+
+    return {
+      symbols: symbols.length > 0 ? symbols : undefined,
+      timeframes: timeframes.length > 0 ? timeframes : undefined,
+      entryRules: entryRules.length > 0 ? entryRules : undefined,
+      exitRules: exitRules.length > 0 ? exitRules : undefined,
+      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+    }
+  }
+
+  private resolveProviderCode(rawProviderCode?: string): string {
+    if (!rawProviderCode) {
+      return DEFAULT_PROVIDER_CODE
+    }
+    const normalized = rawProviderCode.trim()
+    if (!normalized || normalized === 'uniapi') {
+      return DEFAULT_PROVIDER_CODE
+    }
+    return normalized
   }
 
   private normalizeChecklist(payload: CodegenChecklist | Record<string, unknown>): ChecklistPayload {
@@ -320,11 +406,40 @@ export class CodegenConversationService {
     }
   }
 
-  private buildGuidePrompt(missing: string[]): string {
+  private buildGuidePrompt(missing: string[], userMessage?: string): string {
     if (missing.length === 0) {
       return '信息已齐全，将开始生成并校验策略脚本。'
     }
-    return `还缺少以下信息：${missing.join(', ')}。请补充后再生成。`
+    const text = (userMessage ?? '').trim()
+    const isMovingAverageIntent = /均线|ma|moving average/i.test(text)
+    const opener = isMovingAverageIntent
+      ? '明白了，你想做一个均线策略。为了直接给你可运行版本，我先确认这几项：'
+      : '收到，我先把关键信息确认一下，这样下一步可以直接生成策略：'
+
+    const questionBodies: string[] = []
+    if (missing.includes('symbols')) {
+      questionBodies.push('做哪个交易标的？例如 BTCUSDT 或 ETHUSDT。')
+    }
+    if (missing.includes('timeframes')) {
+      questionBodies.push('你想用什么周期？例如 5m 做信号、1h 做趋势过滤。')
+    }
+    if (missing.includes('entryRules')) {
+      questionBodies.push(isMovingAverageIntent
+        ? '入场规则想用哪组均线？例如 5/20 金叉入场。'
+        : '入场条件是什么？例如 “15m 内回撤 1% 后买入”。')
+    }
+    if (missing.includes('exitRules')) {
+      questionBodies.push(isMovingAverageIntent
+        ? '出场规则怎么定？例如 5/20 死叉或跌破 20MA 出场。'
+        : '出场条件是什么？例如 “上涨 2% 止盈或回撤 1.5% 止损”。')
+    }
+    if (missing.includes('riskRules')) {
+      questionBodies.push('风控偏好是什么？例如 仓位 10%、止损 2%、最大回撤 15%。')
+    }
+
+    const questions = questionBodies.map((q, idx) => `${idx + 1}) ${q}`)
+    const compactReplyTemplate = '你可以直接回：标的=BTCUSDT；周期=5m/15m；入场=5/20金叉；出场=5/20死叉；风控=仓位10% 止损2% 最大回撤15%。'
+    return `${opener}\n${questions.join('\n')}\n${compactReplyTemplate}`
   }
 
   private async generateScript(

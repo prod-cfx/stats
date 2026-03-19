@@ -51,6 +51,11 @@ export const aiConfig = registerAs('ai', () => ({
     apiKey: env.str('UNIAPI_API_KEY'),
     baseUrl: env.str('UNIAPI_BASE_URL', 'https://api.uniapi.io'),
   },
+  strategyCodegen: {
+    apiKey: env.str('LLM_STRATEGY_CODEGEN_API_KEY'),
+    baseUrl: env.str('LLM_STRATEGY_CODEGEN_BASE_URL', 'https://api.uniapi.io'),
+    defaultModel: env.str('LLM_STRATEGY_CODEGEN_MODEL', 'deepseek-chat'),
+  },
 }))
 
 export const throttleConfig = registerAs('throttle', () => ({

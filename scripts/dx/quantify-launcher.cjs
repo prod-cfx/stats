@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 const { spawn } = require('node:child_process')
+const { existsSync, readFileSync } = require('node:fs')
+const { resolve } = require('node:path')
 
 const REQUIRED_KEYS = [
   'QUANTIFY_DATABASE_URL',
@@ -110,8 +112,43 @@ function resolveQuantifyEnv(rawEnv) {
   return env
 }
 
+function loadEnvironmentFiles() {
+  const envName = process.env.APP_ENV || process.env.NODE_ENV || 'development'
+  const files = [
+    `.env.${envName}`,
+    `.env.${envName}.local`,
+    '.env',
+    '.env.local',
+  ]
+
+  for (const file of files) {
+    const fullPath = resolve(process.cwd(), file)
+    if (!existsSync(fullPath))
+      continue
+    const content = readFileSync(fullPath, 'utf8')
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#'))
+        continue
+      const eqIndex = line.indexOf('=')
+      if (eqIndex <= 0)
+        continue
+      const key = line.slice(0, eqIndex).trim()
+      let value = line.slice(eqIndex + 1).trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith('\'') && value.endsWith('\''))
+      ) {
+        value = value.slice(1, -1)
+      }
+      process.env[key] = value
+    }
+  }
+}
+
 function run() {
   const args = process.argv.slice(2)
+  loadEnvironmentFiles()
   const env = resolveQuantifyEnv(process.env)
   const child = spawn(args[0], args.slice(1), {
     stdio: 'inherit',
