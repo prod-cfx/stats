@@ -29,6 +29,7 @@ export class AiService {
   // 当前系统默认仅配置 uniapi 作为 OpenAI 兼容提供商
   private static readonly DEFAULT_PROVIDER_CODE = 'uniapi'
   private static readonly DEFAULT_MODEL = 'gpt-4'
+  private static readonly MOCK_SIGNAL_TOOL_NAME = 'generate_trading_signal'
 
   constructor(
     private readonly configService: ConfigService,
@@ -44,6 +45,12 @@ export class AiService {
     }
 
     const providerCode = options.providerCode ?? AiService.DEFAULT_PROVIDER_CODE
+
+    // 开发联调开关：允许在没有外部 AI provider 的情况下走“模拟自动产出”。
+    // 用于 LLM 策略实例的端到端前端测试，不依赖 UNIAPI key。
+    if (this.isMockAiEnabled()) {
+      return this.buildMockCompletion(options)
+    }
 
     // 目前只支持 uniapi 提供商
     if (providerCode !== AiService.DEFAULT_PROVIDER_CODE) {
@@ -85,6 +92,52 @@ export class AiService {
         this.logger.error(`Error stack: ${stack}`)
       }
       throw new AiProviderErrorException({ providerCode, reason: 'PROVIDER_REQUEST_FAILED', detail })
+    }
+  }
+
+  private isMockAiEnabled(): boolean {
+    const raw = process.env.QUANTIFY_AI_MOCK_ENABLED
+    if (!raw) return false
+    return raw === '1' || raw.toLowerCase() === 'true'
+  }
+
+  private buildMockCompletion(options: AiChatOptions): ChatCompletionResult {
+    const signalTool = options.tools?.find(tool => tool.function?.name === AiService.MOCK_SIGNAL_TOOL_NAME)
+
+    if (!signalTool) {
+      return {
+        content: 'MOCK_AI_RESPONSE',
+      }
+    }
+
+    const toolArguments = {
+      symbol: 'BTCUSDT',
+      direction: 'BUY',
+      signalType: 'ALERT',
+      confidence: 68,
+      entryPrice: 70120,
+      stopLoss: 69480,
+      takeProfit: 70980,
+      reasoning: 'Mock AI signal for local integration testing.',
+      positionSizeQuote: 120,
+      positionSizeRatio: 0.05,
+      meta: {
+        source: 'mock-ai-provider',
+      },
+    }
+
+    return {
+      content: '',
+      toolCalls: [
+        {
+          id: `mock-call-${Date.now()}`,
+          type: 'function',
+          function: {
+            name: AiService.MOCK_SIGNAL_TOOL_NAME,
+            arguments: JSON.stringify(toolArguments),
+          },
+        },
+      ],
     }
   }
 }
