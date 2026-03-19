@@ -192,6 +192,11 @@ export class MarketDataService {
       symbolId: symbol.id,
       timeframe,
     }
+    if (query.provider) {
+      where.source = {
+        startsWith: query.provider.trim().toUpperCase(),
+      }
+    }
     if (query.start || query.end) {
       where.time = {}
       if (query.start) where.time!.gte = new Date(query.start)

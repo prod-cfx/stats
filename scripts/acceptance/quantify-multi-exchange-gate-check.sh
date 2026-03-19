@@ -10,6 +10,8 @@ STATE_DIR="${STATE_DIR:-tmp/quantify-min-acceptance}"
 PORT="${PORT:-3010}"
 OUT_FILE="${OUT_FILE:-$STATE_DIR/gate2-multi-exchange-summary.json}"
 MAX_RETRY="${MAX_RETRY:-3}"
+READY_TIMEOUT_SECONDS="${READY_TIMEOUT_SECONDS:-45}"
+READY_POLL_INTERVAL_SEC="${READY_POLL_INTERVAL_SEC:-2}"
 
 require_command bash
 require_command curl
@@ -103,6 +105,32 @@ limit 1
   [ -s "$bar_tsv" ]
 }
 
+wait_provider_ready() {
+  local provider="$1"
+  local symbol="$2"
+  local t0="$3"
+
+  local started_at
+  started_at="$(date +%s)"
+
+  for attempt in $(seq 1 "$MAX_RETRY"); do
+    if check_provider_once "$provider" "$symbol" "$t0"; then
+      return 0
+    fi
+
+    local now elapsed
+    now="$(date +%s)"
+    elapsed="$((now - started_at))"
+    if [ "$elapsed" -ge "$READY_TIMEOUT_SECONDS" ]; then
+      return 1
+    fi
+
+    sleep "$READY_POLL_INTERVAL_SEC"
+  done
+
+  return 1
+}
+
 check_provider() {
   local provider="$1"
   local symbol="$2"
@@ -118,15 +146,9 @@ check_provider() {
   local error_code=""
   local error_message=""
 
-  for attempt in $(seq 1 "$MAX_RETRY"); do
-    if check_provider_once "$provider" "$symbol" "$t0"; then
-      ok=1
-      break
-    fi
-    error_code="EXCHANGE_DATA_NOT_READY"
-    error_message="provider=${provider} symbol=${symbol} attempt=${attempt}"
-    sleep "$attempt"
-  done
+  if wait_provider_ready "$provider" "$symbol" "$t0"; then
+    ok=1
+  fi
 
   if [ "$ok" -eq 1 ]; then
     echo "[gate2] PASS provider=${provider} symbol=${symbol}" >&2
@@ -141,6 +163,8 @@ print(json.dumps({
 }, ensure_ascii=False))
 PY
   else
+    error_code="EXCHANGE_DATA_NOT_READY"
+    error_message="provider=${provider} symbol=${symbol} timeout=${READY_TIMEOUT_SECONDS}s retries=${MAX_RETRY}"
     echo "[gate2] FAIL provider=${provider} symbol=${symbol} code=${error_code}" >&2
     python3 - "$provider" "$symbol" "$error_code" "$error_message" <<'PY'
 import json

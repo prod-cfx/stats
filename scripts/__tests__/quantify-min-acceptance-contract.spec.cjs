@@ -28,6 +28,14 @@ test('multi-exchange gate script checks three exchanges explicitly', () => {
   assert.match(source, /api\/v1\/market\/bars/)
 })
 
+test('multi-exchange gate script supports readiness wait window', () => {
+  const source = read('scripts/acceptance/quantify-multi-exchange-gate-check.sh')
+
+  assert.match(source, /READY_TIMEOUT_SECONDS/)
+  assert.match(source, /READY_POLL_INTERVAL_SEC/)
+  assert.match(source, /wait_provider_ready/)
+})
+
 test('signal gate script uses ops generate-signal endpoint', () => {
   const source = read('scripts/acceptance/quantify-strategy-signal-gate-check.sh')
 
@@ -44,4 +52,11 @@ test('orchestrator runs all gates in order and writes acceptance-summary.json', 
   assert.match(source, /quantify-multi-exchange-gate-check\.sh/)
   assert.match(source, /quantify-strategy-signal-gate-check\.sh/)
   assert.match(source, /acceptance-summary\.json/)
+})
+
+test('runtime script has force cleanup path for occupied port during stop/restart', () => {
+  const source = read('scripts/acceptance/quantify-market-data-runtime.sh')
+
+  assert.match(source, /kill -9/)
+  assert.match(source, /force stop/)
 })

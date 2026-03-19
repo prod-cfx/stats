@@ -13,7 +13,7 @@ import type {
   ProviderSymbol,
   SubscribeParams,
 } from '../interfaces/market-data-provider.interface'
-import type {SymbolMarketType} from '../utils/market-symbol-code.util';
+import type { SymbolMarketType } from '../utils/market-symbol-code.util'
 import { HttpService } from '@nestjs/axios'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -23,7 +23,6 @@ import {
   extractRawSymbol,
   parseSymbolMarket,
   toSymbolCode
-  
 } from '../utils/market-symbol-code.util'
 import { WsLifecycleManager } from './ws-lifecycle.manager'
 
@@ -31,14 +30,30 @@ interface HyperliquidMetaResponse {
   universe?: Array<{ name: string }>
 }
 
+interface HyperliquidSpotMetaResponse {
+  universe?: Array<{ tokens?: number[]; index?: number }>
+  tokens?: Array<{ name?: string }>
+}
+
 interface HyperliquidCandle {
   t: number
   T?: number
+  s?: string
+  i?: string
   o: string
   h: string
   l: string
   c: string
   v?: string
+}
+
+interface HyperliquidAllMids {
+  [coin: string]: string
+}
+
+interface HyperliquidWsPayload {
+  channel?: string
+  data?: (HyperliquidCandle & { coin?: string; interval?: string }) | HyperliquidAllMids | { mids?: HyperliquidAllMids }
 }
 
 @Injectable()
@@ -53,7 +68,15 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
   })
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
-  private subscriptions: Array<{ market: SymbolMarketType; raw: string; timeframe: MarketTimeframe }> = []
+  private subscriptions: Array<{
+    market: SymbolMarketType
+    raw: string
+    timeframe: MarketTimeframe
+    coinKey: string
+    midKey: string
+  }> = []
+  private spotCoinKeyMap = new Map<string, string>()
+  private spotMetaLoaded = false
 
   constructor(
     @Inject(HttpService)
@@ -79,6 +102,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
   }
 
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
+    await this.ensureSpotMetaLoaded()
     const url = new URL('/info', this.restBaseUrl)
     const body = { type: 'meta' }
     const { data } = await lastValueFrom(
@@ -139,7 +163,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
   async fetchHistoricalBars(query: HistoricalBarQuery): Promise<MarketBarPayload[]> {
     const market = parseSymbolMarket(query.symbol)
     const raw = extractRawSymbol(query.symbol)
-    const coin = raw.replace(/USDC$/, '')
+    const coin = await this.resolveCoinKey(raw, market)
     const endTime = query.end?.getTime() ?? Date.now()
     const startTime = query.start?.getTime() ?? endTime - (query.limit ?? 500) * 60_000
 
@@ -181,8 +205,10 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
     for (const symbol of params.symbols) {
       const market = parseSymbolMarket(symbol)
       const raw = extractRawSymbol(symbol)
+      const coinKey = await this.resolveCoinKey(raw, market)
+      const midKey = market === 'SPOT' ? coinKey : raw.replace(/USDC$/, '')
       for (const timeframe of params.timeframes) {
-        this.subscriptions.push({ market, raw, timeframe })
+        this.subscriptions.push({ market, raw, timeframe, coinKey, midKey })
       }
     }
 
@@ -208,13 +234,21 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
     this.wsLifecycle.registerSocket('ALL', ws)
 
     ws.on('open', () => {
+      ws.send(JSON.stringify({
+        method: 'subscribe',
+        subscription: { type: 'allMids' },
+      }))
+
+      const subscribed = new Set<string>()
       for (const item of this.subscriptions) {
-        const coin = item.raw.replace(/USDC$/, '')
+        const key = `${item.coinKey}:${item.timeframe}`
+        if (subscribed.has(key)) continue
+        subscribed.add(key)
         ws.send(JSON.stringify({
           method: 'subscribe',
           subscription: {
             type: 'candle',
-            coin,
+            coin: item.coinKey,
             interval: this.toHyperliquidInterval(item.timeframe),
           },
         }))
@@ -224,10 +258,7 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
 
     ws.on('message', data => {
       try {
-        const payload = JSON.parse(data.toString()) as {
-          channel?: string
-          data?: HyperliquidCandle & { coin?: string; interval?: string }
-        }
+        const payload = JSON.parse(data.toString()) as HyperliquidWsPayload
         void this.handleWsPayload(payload)
       } catch (error) {
         this.logger.error(`hyperliquid ws payload parse failed reason=${(error as Error).message}`)
@@ -245,20 +276,24 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
     })
   }
 
-  private async handleWsPayload(payload: {
-    channel?: string
-    data?: HyperliquidCandle & { coin?: string; interval?: string }
-  }) {
+  private async handleWsPayload(payload: HyperliquidWsPayload) {
+    if (payload.channel === 'allMids' && payload.data) {
+      const mids = this.extractMids(payload.data)
+      if (!mids) return
+      await this.emitMidQuotes(mids)
+      return
+    }
+
     if (payload.channel !== 'candle' || !payload.data) return
-    const candle = payload.data
-    const coin = candle.coin?.toUpperCase() ?? 'BTC'
-    const raw = `${coin}USDC`
-    const timeframe = this.fromHyperliquidInterval(candle.interval ?? '1m')
+    const candle = payload.data as HyperliquidCandle & { coin?: string; interval?: string }
+    const coinKey = (candle.coin ?? candle.s ?? '').toUpperCase()
+    const timeframe = this.fromHyperliquidInterval(candle.interval ?? candle.i ?? '1m')
+    if (!coinKey) return
 
     for (const item of this.subscriptions) {
-      if (item.raw !== raw || item.timeframe !== timeframe) continue
+      if (item.coinKey !== coinKey || item.timeframe !== timeframe) continue
       await this.klineHandler?.({
-        symbol: toSymbolCode(raw, item.market),
+        symbol: toSymbolCode(item.raw, item.market),
         timeframe: item.timeframe,
         open: candle.o,
         high: candle.h,
@@ -269,14 +304,88 @@ export class HyperliquidMarketDataProvider implements MarketDataProvider, OnModu
         isFinal: true,
         source: 'HYPERLIQUID_WS',
       })
+    }
+  }
+
+  private async emitMidQuotes(mids: HyperliquidAllMids) {
+    const now = Date.now()
+    const emitted = new Set<string>()
+
+    for (const item of this.subscriptions) {
+      const mid = mids[item.midKey]
+      if (!mid) continue
+
+      const symbol = toSymbolCode(item.raw, item.market)
+      if (emitted.has(symbol)) continue
+      emitted.add(symbol)
 
       await this.tickHandler?.({
-        symbol: toSymbolCode(raw, item.market),
-        lastPrice: candle.c,
-        eventTime: candle.t,
+        symbol,
+        lastPrice: mid,
+        eventTime: now,
         source: 'HYPERLIQUID_WS',
       } as MarketQuotePayload)
     }
+  }
+
+  private extractMids(data: HyperliquidWsPayload['data']): HyperliquidAllMids | null {
+    if (!data || typeof data !== 'object') return null
+
+    const maybeEnvelope = data as { mids?: unknown }
+    if (maybeEnvelope.mids && typeof maybeEnvelope.mids === 'object') {
+      return maybeEnvelope.mids as HyperliquidAllMids
+    }
+
+    return data as HyperliquidAllMids
+  }
+
+  private async ensureSpotMetaLoaded() {
+    if (this.spotMetaLoaded) return
+
+    const url = new URL('/info', this.restBaseUrl)
+    const body = { type: 'spotMeta' }
+    const { data } = await lastValueFrom(
+      this.http.post<HyperliquidSpotMetaResponse>(url.toString(), body, { timeout: this.restTimeoutMs }),
+    )
+
+    const tokens = data.tokens ?? []
+    const universe = data.universe ?? []
+    const usdcIndex = tokens.findIndex(token => (token.name ?? '').toUpperCase() === 'USDC')
+    if (usdcIndex < 0) {
+      this.spotMetaLoaded = true
+      return
+    }
+
+    for (const pair of universe) {
+      const pairTokens = pair.tokens ?? []
+      const pairIndex = pair.index
+      if (pairTokens.length !== 2 || typeof pairIndex !== 'number') continue
+      if (!pairTokens.includes(usdcIndex)) continue
+
+      const baseIndex = pairTokens[0] === usdcIndex ? pairTokens[1] : pairTokens[0]
+      const baseName = (tokens[baseIndex]?.name ?? '').toUpperCase()
+      if (!baseName) continue
+
+      const normalizedBase = this.normalizeSpotBaseAsset(baseName)
+      const raw = `${normalizedBase}USDC`
+      this.spotCoinKeyMap.set(raw, `@${pairIndex}`)
+    }
+
+    this.spotMetaLoaded = true
+  }
+
+  private normalizeSpotBaseAsset(baseName: string): string {
+    if (baseName === 'UBTC') return 'BTC'
+    if (baseName === 'UETH') return 'ETH'
+    if (baseName === 'USOL') return 'SOL'
+    return baseName
+  }
+
+  private async resolveCoinKey(raw: string, market: SymbolMarketType): Promise<string> {
+    if (market === 'PERP') return raw.replace(/USDC$/, '')
+
+    await this.ensureSpotMetaLoaded()
+    return this.spotCoinKeyMap.get(raw) ?? raw.replace(/USDC$/, '')
   }
 
   private toHyperliquidInterval(timeframe: MarketTimeframe): string {

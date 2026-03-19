@@ -8,9 +8,11 @@ describe('marketDataService symbol code compatibility', () => {
     },
     marketBar: {
       upsert: jest.fn(),
+      findMany: jest.fn(),
     },
     marketQuote: {
       create: jest.fn(),
+      findFirst: jest.fn(),
     },
   }
 
@@ -80,6 +82,27 @@ describe('marketDataService symbol code compatibility', () => {
         where: { code: 'BTCUSDT:PERP' },
         create: expect.objectContaining({ code: 'BTCUSDT:PERP', instrumentType: 'PERPETUAL' }),
         update: expect.objectContaining({ instrumentType: 'PERPETUAL' }),
+      }),
+    )
+  })
+
+  it('filters bars by provider prefix when provider query is provided', async () => {
+    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    prismaMock.marketBar.findMany.mockResolvedValue([])
+
+    await service.getBars({
+      symbol: 'BTCUSDT:SPOT',
+      timeframe: '1h',
+      limit: 10,
+      provider: 'OKX',
+    } as any)
+
+    expect(prismaMock.marketBar.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          symbolId: 'spot-id',
+          source: { startsWith: 'OKX' },
+        }),
       }),
     )
   })

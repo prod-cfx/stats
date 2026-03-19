@@ -7,6 +7,8 @@ cd "$ROOT_DIR"
 ACTION="${1:-status}"
 STATE_DIR="${STATE_DIR:-tmp/quantify-market-data-review}"
 PORT="${PORT:-3010}"
+STOP_TIMEOUT_SEC="${STOP_TIMEOUT_SEC:-30}"
+FORCE_KILL_TIMEOUT_SEC="${FORCE_KILL_TIMEOUT_SEC:-10}"
 PID_FILE="$STATE_DIR/quantify.pid"
 T0_FILE="$STATE_DIR/t0.txt"
 LOG_FILE="$STATE_DIR/quantify-runtime.log"
@@ -24,6 +26,10 @@ require_command lsof
 
 server_pid() {
   lsof -ti "tcp:${PORT}" | head -n 1 || true
+}
+
+list_port_pids() {
+  lsof -ti "tcp:${PORT}" 2>/dev/null | sort -u || true
 }
 
 is_running() {
@@ -78,15 +84,40 @@ start_runtime() {
 stop_runtime() {
   local pid
   pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-  if [ -z "$pid" ]; then
-    pid="$(server_pid)"
-  fi
+  local pids=()
 
   if [ -n "$pid" ] && is_running "$pid"; then
-    kill "$pid" || true
+    pids+=("$pid")
   fi
 
-  for _ in $(seq 1 30); do
+  while IFS= read -r listener; do
+    if [ -n "$listener" ] && is_running "$listener"; then
+      pids+=("$listener")
+    fi
+  done < <(list_port_pids)
+
+  if [ "${#pids[@]}" -gt 0 ]; then
+    for candidate in "${pids[@]}"; do
+      kill "$candidate" >/dev/null 2>&1 || true
+    done
+  fi
+
+  for _ in $(seq 1 "$STOP_TIMEOUT_SEC"); do
+    if [ -z "$(server_pid)" ]; then
+      rm -f "$PID_FILE"
+      echo "STOPPED"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "warn: force stop on port ${PORT}" >&2
+  while IFS= read -r listener; do
+    [ -n "$listener" ] || continue
+    kill -9 "$listener" >/dev/null 2>&1 || true
+  done < <(list_port_pids)
+
+  for _ in $(seq 1 "$FORCE_KILL_TIMEOUT_SEC"); do
     if [ -z "$(server_pid)" ]; then
       rm -f "$PID_FILE"
       echo "STOPPED"
@@ -116,7 +147,7 @@ case "$ACTION" in
   stop) stop_runtime ;;
   status) status_runtime ;;
   restart)
-    stop_runtime || true
+    stop_runtime
     start_runtime
     ;;
   *)
