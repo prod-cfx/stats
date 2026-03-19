@@ -1,6 +1,8 @@
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
+import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
+import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { CodegenChecklist } from './checklist-gate.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
@@ -33,8 +35,17 @@ interface ChecklistPayload {
   riskRules?: Record<string, unknown>
 }
 
+interface GenerationOptions {
+  providerCode?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+}
+
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
+const DEFAULT_PROVIDER_CODE = 'uniapi'
+const DEFAULT_MODEL = 'gpt-4'
 
 @Injectable()
 export class CodegenConversationService {
@@ -115,7 +126,12 @@ export class CodegenConversationService {
         rejectReason: null,
       })
 
-      const scriptCode = await this.generateScript(mergedChecklist, dto.message)
+      const scriptCode = await this.generateScript(mergedChecklist, dto.message, {
+        providerCode: dto.providerCode,
+        model: dto.model,
+        temperature: dto.temperature,
+        maxTokens: dto.maxTokens,
+      })
 
       await this.sessionsRepo.updateSession(session.id, {
         status: 'VALIDATING_STATIC',
@@ -227,7 +243,52 @@ export class CodegenConversationService {
     return this.normalizeChecklist(payload as Record<string, unknown>)
   }
 
-  private extractChecklist(input: StartCodegenSessionDto | ContinueCodegenSessionDto): ChecklistPayload {
+  async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
+    const checklist = this.extractChecklist(dto)
+    const missing = this.checklistGate.getMissingFields(checklist)
+    if (missing.length > 0) {
+      throw new DomainException(`缺少必填信息: ${missing.join(', ')}`, {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { missingFields: missing },
+      })
+    }
+
+    const scriptCode = await this.generateScript(checklist, dto.message, {
+      providerCode: dto.providerCode,
+      model: dto.model,
+      temperature: dto.temperature,
+      maxTokens: dto.maxTokens,
+    })
+
+    const staticResult = this.staticGuardrail.validate(scriptCode)
+    if (!staticResult.passed) {
+      return {
+        providerCode: dto.providerCode ?? DEFAULT_PROVIDER_CODE,
+        model: dto.model ?? DEFAULT_MODEL,
+        scriptCode,
+        staticPassed: false,
+        runtimePassed: false,
+        outputPassed: false,
+        rejectReason: staticResult.reason,
+      }
+    }
+
+    const runtimeResult = await this.runtimeGuardrail.validate(scriptCode)
+    return {
+      providerCode: dto.providerCode ?? DEFAULT_PROVIDER_CODE,
+      model: dto.model ?? DEFAULT_MODEL,
+      scriptCode,
+      staticPassed: true,
+      runtimePassed: runtimeResult.runtimePassed,
+      outputPassed: runtimeResult.outputPassed,
+      rejectReason: runtimeResult.reason,
+    }
+  }
+
+  private extractChecklist(
+    input: StartCodegenSessionDto | ContinueCodegenSessionDto | TestLlmCodegenEngineDto,
+  ): ChecklistPayload {
     return {
       symbols: input.symbols,
       timeframes: input.timeframes,
@@ -266,7 +327,11 @@ export class CodegenConversationService {
     return `还缺少以下信息：${missing.join(', ')}。请补充后再生成。`
   }
 
-  private async generateScript(checklist: ChecklistPayload, userMessage: string): Promise<string> {
+  private async generateScript(
+    checklist: ChecklistPayload,
+    userMessage: string,
+    options?: GenerationOptions,
+  ): Promise<string> {
     const helperSignatures = this.buildHelperSignaturesPrompt()
     const messages: ChatMessage[] = [
       {
@@ -288,9 +353,11 @@ export class CodegenConversationService {
     ]
 
     const result = await this.aiService.chat({
+      providerCode: options?.providerCode,
+      model: options?.model,
       messages,
-      temperature: 0.2,
-      maxTokens: 1000,
+      temperature: options?.temperature ?? 0.2,
+      maxTokens: options?.maxTokens ?? 1000,
     })
 
     const code = result.content?.trim()
