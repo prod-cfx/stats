@@ -126,6 +126,29 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
   }
 
+  async ensureSymbolsSubscribed(symbols: string[]): Promise<void> {
+    const normalizedRequested = this.normalizeIngestionSymbols(symbols)
+    if (normalizedRequested.length === 0) return
+
+    const config = await this.mergeDynamicSymbols(this.getConfig())
+    const nextSymbols = this.normalizeIngestionSymbols([...config.symbols, ...normalizedRequested])
+    const currentSymbols = this.subscribedSymbols
+    const hasChanged = nextSymbols.length !== currentSymbols.length
+      || nextSymbols.some(symbol => !currentSymbols.includes(symbol))
+
+    if (!hasChanged) return
+
+    const addedSymbols = nextSymbols.filter(symbol => !currentSymbols.includes(symbol))
+    if (addedSymbols.length > 0) {
+      const addedConfig = { ...config, symbols: addedSymbols }
+      await this.bootstrapSymbols(addedConfig)
+      await this.syncHistoricalBars(addedConfig)
+    }
+
+    await this.replaceRealtimeSubscription({ ...config, symbols: nextSymbols })
+    this.logger.log(`按需补订阅完成: ${nextSymbols.join(', ')}`)
+  }
+
   private getConfig(): MarketDataRuntimeConfig {
     const config = this.configService.get<MarketDataRuntimeConfig>('marketData')
     if (!config) {
