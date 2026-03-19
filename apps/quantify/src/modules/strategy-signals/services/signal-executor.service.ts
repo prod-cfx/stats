@@ -380,14 +380,27 @@ export class SignalExecutorService implements OnModuleInit {
           exchangeAccountId,
         )
 
-        const order = await this.resolveFinalOrderState(
-          account.userId,
-          effectiveExchangeId,
-          effectiveOrderParams.marketType,
-          effectiveOrderParams.symbol,
-          initialOrder,
-          exchangeAccountId,
-        )
+        let order: UnifiedOrder
+        try {
+          order = await this.resolveFinalOrderState(
+            account.userId,
+            effectiveExchangeId,
+            effectiveOrderParams.marketType,
+            effectiveOrderParams.symbol,
+            initialOrder,
+            exchangeAccountId,
+          )
+        }
+        catch (error) {
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: 'ORDER_RECONCILE_ERROR',
+            error: (error as Error).message,
+            orderResponse: this.buildOrderResponseSnapshot(initialOrder),
+          })
+          await this.executionRepository.markFailed(execution.id, 'ORDER_RECONCILE_ERROR')
+          return 'failed'
+        }
 
         await this.executionRepository.markStage(execution.id, 'ORDER_ACKED', {
           orderResponse: this.buildOrderResponseSnapshot(order),

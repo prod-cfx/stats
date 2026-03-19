@@ -165,4 +165,87 @@ describe('SignalExecutorService', () => {
     expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-2', 'ORDER_NOT_FILLED')
     expect((service as any).releaseReservation).not.toHaveBeenCalled()
   })
+
+  it('keeps reservation when order submitted but order query throws', async () => {
+    const prisma = {}
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const service = new SignalExecutorService(
+      prisma as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+    )
+
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-ref'
+
+    const submittedOrder = {
+      id: 'ord-3',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'open',
+      amount: 0.001,
+      filled: 0,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-3' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: undefined,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).resolveFinalOrderState = jest.fn().mockRejectedValue(new Error('getOrder timeout'))
+
+    tradingService.placeOrder.mockResolvedValue(submittedOrder)
+
+    const result = await (service as any).processAccount(
+      { id: 'sig-3', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'acct-3', userId: 'user-3' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-3',
+      'RECONCILE_REQUIRED',
+      expect.objectContaining({
+        reconcileRequired: true,
+        reason: 'ORDER_RECONCILE_ERROR',
+      }),
+    )
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-3', 'ORDER_RECONCILE_ERROR')
+    expect((service as any).releaseReservation).not.toHaveBeenCalled()
+  })
 })
