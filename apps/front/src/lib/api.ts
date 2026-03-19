@@ -1441,6 +1441,122 @@ export interface UserLlmStrategyInstanceResponse {
   isSubscribed?: boolean
 }
 
+export interface LlmCodegenSessionResponse {
+  id: string
+  status: string
+  missingFields?: string[]
+  scriptCode?: string | null
+  specDesc?: Record<string, unknown> | null
+  rejectReason?: string | null
+  assistantPrompt?: string
+}
+
+export interface StartLlmCodegenSessionPayload {
+  userId: string
+  initialMessage?: string
+  symbols?: string[]
+  timeframes?: string[]
+  entryRules?: string[]
+  exitRules?: string[]
+  riskRules?: Record<string, unknown>
+}
+
+export interface ContinueLlmCodegenSessionPayload {
+  userId: string
+  message: string
+  symbols?: string[]
+  timeframes?: string[]
+  entryRules?: string[]
+  exitRules?: string[]
+  riskRules?: Record<string, unknown>
+  providerCode?: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+function parseApiErrorMessage(status: number, payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const message = (payload as Record<string, unknown>).message
+    if (typeof message === 'string' && message.trim().length > 0) return message
+    const error = (payload as Record<string, unknown>).error
+    if (typeof error === 'string' && error.trim().length > 0) return error
+    if (error && typeof error === 'object') {
+      const nested = (error as Record<string, unknown>).message
+      if (typeof nested === 'string' && nested.trim().length > 0) return nested
+    }
+  }
+  return `${fallback} (HTTP ${status})`
+}
+
+async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
+  const token = getToken()
+  const isTransientStatus = (status: number) => status === 408 || status === 429 || status >= 500
+  const request = async () => fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  })
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await request()
+      let json: unknown = null
+      try {
+        json = await response.json()
+      } catch {
+        json = null
+      }
+
+      if (!response.ok) {
+        if (attempt === 0 && isTransientStatus(response.status)) {
+          continue
+        }
+        const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
+        throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
+      }
+
+      return unwrapResponse<T>(json as T | BaseResponse<T>)
+    } catch (error) {
+      if (attempt === 0) {
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new ApiError('LLM 策略生成请求失败', 'LLM_CODEGEN_ERROR')
+}
+
+export async function startLlmCodegenSession(
+  payload: StartLlmCodegenSessionPayload,
+): Promise<LlmCodegenSessionResponse> {
+  if (!payload.userId.trim()) {
+    throw new ApiError('userId is required', 'INVALID_INPUT')
+  }
+  return postLlmCodegen<LlmCodegenSessionResponse>('/sessions', payload)
+}
+
+export async function continueLlmCodegenSession(
+  sessionId: string,
+  payload: ContinueLlmCodegenSessionPayload,
+): Promise<LlmCodegenSessionResponse> {
+  validateId(sessionId, 'llm codegen session ID')
+  if (!payload.userId.trim()) {
+    throw new ApiError('userId is required', 'INVALID_INPUT')
+  }
+  if (!payload.message.trim()) {
+    throw new ApiError('message is required', 'INVALID_INPUT')
+  }
+  return postLlmCodegen<LlmCodegenSessionResponse>(
+    `/sessions/${sessionId}/messages`,
+    payload,
+  )
+}
+
 export async function fetchLlmStrategyInstances(query?: {
   page?: number
   limit?: number

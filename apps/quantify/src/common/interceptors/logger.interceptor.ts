@@ -82,18 +82,22 @@ export class LoggerInterceptor implements NestInterceptor<unknown, unknown> {
       }),
       catchError(error => {
         const duration = Date.now() - now
-        const statusCode = error.status || 500
+        const statusCode = this.resolveStatusCode(error)
         const errorData = {
           method: request.method,
           path: request.url,
           statusCode,
           duration: `${duration}ms`,
           traceId: request.headers['x-request-id'] || 'N/A',
-          message: error.message,
-          stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack trace',
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error && error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack trace',
         }
 
-        this.logger.error(errorData)
+        if (statusCode >= 500) {
+          this.logger.error(errorData)
+        } else {
+          this.logger.warn(errorData)
+        }
         throw error
       }),
     )
@@ -125,14 +129,37 @@ export class LoggerInterceptor implements NestInterceptor<unknown, unknown> {
       }),
       catchError(error => {
         const delay = Date.now() - now
-        const statusCode = error.status || 500
+        const statusCode = this.resolveStatusCode(error)
         const statusColor = this.getStatusColor(statusCode)
-        this.logger.error(
-          `\n${chalk.red.bold('=== Error ===')}\n${chalk.blue('->')} ${requestMethod} ${requestUrl}\n${statusColor(`${statusCode}`)} ${chalk.magenta(`${delay}ms`)}\n${chalk.yellow('Message:')} ${chalk.red(error.message)}\n${chalk.yellow('Stack:')} ${chalk.gray(error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack trace')}\n${chalk.red.bold('=============')}`,
-        )
+        const message = error instanceof Error ? error.message : String(error)
+
+        if (statusCode >= 500) {
+          const stack =
+            error instanceof Error && error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : 'No stack trace'
+          const errorLog =
+            `\n${chalk.red.bold('=== Error ===')}\n${chalk.blue('->')} ${requestMethod} ${requestUrl}\n${statusColor(`${statusCode}`)} ${chalk.magenta(`${delay}ms`)}\n${chalk.yellow('Message:')} ${chalk.red(message)}\n${chalk.yellow('Stack:')} ${chalk.gray(stack)}\n${chalk.red.bold('=============')}`
+          this.logger.error(errorLog)
+        } else {
+          const warnLog =
+            `\n${chalk.yellow.bold('=== Warn ===')}\n${chalk.blue('->')} ${requestMethod} ${requestUrl}\n${statusColor(`${statusCode}`)} ${chalk.magenta(`${delay}ms`)}\n${chalk.yellow('Message:')} ${chalk.yellow(message)}\n${chalk.yellow.bold('============')}`
+          this.logger.warn(warnLog)
+        }
         throw error
       }),
     )
+  }
+
+  private resolveStatusCode(error: unknown): number {
+    if (typeof error === 'object' && error !== null) {
+      const maybeError = error as { status?: unknown; getStatus?: () => number }
+      if (typeof maybeError.status === 'number') {
+        return maybeError.status
+      }
+      if (typeof maybeError.getStatus === 'function') {
+        return maybeError.getStatus()
+      }
+    }
+    return 500
   }
 
   private getStatusColor(status: number): (text: string) => string {
