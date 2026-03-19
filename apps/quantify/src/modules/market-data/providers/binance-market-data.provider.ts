@@ -209,7 +209,9 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
   }
 
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
-    const requestedRawSymbols = symbols?.map(item => extractRawSymbol(item))
+    const requestedRawSymbols = symbols
+      ? [...new Set(symbols.map(item => extractRawSymbol(item)).filter(Boolean))]
+      : undefined
     const [spot, perp] = await Promise.all([
       this.fetchSpotSymbols(requestedRawSymbols),
       this.fetchPerpSymbols(requestedRawSymbols),
