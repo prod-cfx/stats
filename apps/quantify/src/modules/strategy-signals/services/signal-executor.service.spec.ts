@@ -83,6 +83,89 @@ describe('SignalExecutorService', () => {
     expect((service as any).releaseReservation).not.toHaveBeenCalled()
   })
 
+  it('does not markExecuted when a market order stays open with partial fill after reconciliation', async () => {
+    const prisma = {}
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const service = new SignalExecutorService(
+      prisma as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+    )
+
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-ref'
+
+    const partialOpenOrder = {
+      id: 'ord-1b',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'open',
+      amount: 0.001,
+      filled: 0.0004,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-1b' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: undefined,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(partialOpenOrder)
+
+    tradingService.placeOrder.mockResolvedValue(partialOpenOrder)
+
+    const result = await (service as any).processAccount(
+      { id: 'sig-1b', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'acct-1b', userId: 'user-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-1b',
+      'RECONCILE_REQUIRED',
+      expect.objectContaining({
+        reconcileRequired: true,
+        reason: 'ORDER_NOT_FINAL',
+      }),
+    )
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-1b', 'ORDER_NOT_FINAL')
+    expect((service as any).releaseReservation).not.toHaveBeenCalled()
+  })
+
   it('does not markExecuted when a market order is canceled with 0 fill', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }

@@ -410,7 +410,7 @@ export class SignalExecutorService implements OnModuleInit {
         const unfilledTerminalStatus = orderStatus === 'canceled' || orderStatus === 'rejected' || orderStatus === 'expired'
         // If we cannot reconcile a market order into a filled state, do not treat it as executed.
         // Keep the reservation in place and flag for reconciliation.
-        if (order.type === 'market' && (order.filled ?? 0) <= 0 && (orderStatus === 'open' || unfilledTerminalStatus)) {
+        if (order.type === 'market' && (orderStatus === 'open' || (order.filled ?? 0) <= 0 && unfilledTerminalStatus)) {
           const failureReason = orderStatus === 'open' ? 'ORDER_NOT_FINAL' : 'ORDER_NOT_FILLED'
           await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
             reconcileRequired: true,
@@ -910,7 +910,7 @@ export class SignalExecutorService implements OnModuleInit {
     exchangeAccountId?: string,
   ): Promise<UnifiedOrder> {
     if (order.type !== 'market') return order
-    if (order.status !== 'open' && (order.filled ?? 0) > 0) return order
+    if (order.status !== 'open') return order
 
     let currentOrder = order
     for (let attempt = 0; attempt < ORDER_RECONCILE_RETRY_COUNT; attempt += 1) {
@@ -923,7 +923,7 @@ export class SignalExecutorService implements OnModuleInit {
         symbol,
         exchangeAccountId,
       )
-      if (currentOrder.status !== 'open' || (currentOrder.filled ?? 0) > 0) {
+      if (currentOrder.status !== 'open') {
         return currentOrder
       }
     }
