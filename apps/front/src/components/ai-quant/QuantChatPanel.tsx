@@ -248,7 +248,7 @@ export function QuantChatPanel({
             value={input}
             onChange={event => setInput(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (event.key === 'Enter' && event.shiftKey) {
                 event.preventDefault()
                 submit()
               }
