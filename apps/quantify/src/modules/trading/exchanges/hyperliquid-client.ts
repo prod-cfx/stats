@@ -11,9 +11,13 @@ import type {
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
 import * as hyperliquidSdk from '@nktkas/hyperliquid'
-import { formatPrice, formatSize } from '@nktkas/hyperliquid/utils'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
+
+const { formatPrice, formatSize } = require('@nktkas/hyperliquid/utils') as {
+  formatPrice: (price: string | number, szDecimals: number, rounding?: boolean) => string
+  formatSize: (size: string | number, szDecimals: number) => string
+}
 
 interface HyperliquidSdk {
   HttpTransport: new (config: unknown) => unknown

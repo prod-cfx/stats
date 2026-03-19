@@ -1,7 +1,6 @@
 import type { INestApplication, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
 import type { ClsService } from 'nestjs-cls'
-import type { Pool as PgPool } from 'pg'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
 import type { Prisma } from '@/prisma/prisma.types'
@@ -10,7 +9,6 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
-import { Pool } from 'pg'
 import { PrismaClient } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
@@ -27,8 +25,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name)
   private extendedClient: ExtendedPrismaClient | null = null
   private static readonly MODEL_DELEGATES = [] as const
-  // Prisma 7: 连接池由 pg 管理
-  private pool: PgPool | null = null
 
   constructor(
     @Inject(ClsServiceToken) private readonly cls: ClsService,
@@ -71,16 +67,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
       connectionString = dbUrl
     }
-    const pool = new Pool({ connectionString })
-    const adapter = new PrismaPg(pool)
+    const adapter = new PrismaPg({ connectionString })
 
     super({
       adapter,
       log: logConfig,
     })
-
-    // 保存连接池引用以便在销毁时关闭
-    this.pool = pool
   }
 
   async onModuleInit() {
@@ -121,27 +113,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleDestroy() {
-    // SKIP_PRISMA_CONNECT: 离线模式下跳过 Prisma 断开，但仍需清理 pool
+    // SKIP_PRISMA_CONNECT: 离线模式下跳过 Prisma 断开
     if (defaultEnvAccessor.bool('SKIP_PRISMA_CONNECT', false)) {
       this.logger.log('SKIP_PRISMA_CONNECT=true, skipping database disconnect')
-      // 仍然尝试关闭 pool（即使是空连接字符串创建的）
-      if (this.pool) {
-        try {
-          await this.pool.end()
-        } catch {
-          // 忽略空连接池关闭时的错误
-        }
-      }
       return
     }
 
     this.logger.log('Disconnecting from database...')
     await this.$disconnect()
-    // Prisma 7: 关闭 pg 连接池
-    if (this.pool) {
-      await this.pool.end()
-      this.logger.log('PostgreSQL connection pool closed')
-    }
     this.logger.log('Database disconnected successfully')
   }
 
