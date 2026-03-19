@@ -107,11 +107,6 @@ function resolveQuantifyEnv(rawEnv) {
       env[targetKey] = sourceValue
   }
 
-  for (const key of Object.keys(env)) {
-    if (key.startsWith('QUANTIFY_') && !Object.prototype.hasOwnProperty.call(MAPPINGS, key) && key !== 'QUANTIFY_BASE_URL')
-      delete env[key]
-  }
-
   return env
 }
 

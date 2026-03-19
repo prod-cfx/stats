@@ -117,14 +117,14 @@ test('fails when QUANTIFY_JWT_SECRET is missing', () => {
   )
 })
 
-test('ignores unknown QUANTIFY_* keys', () => {
+test('preserves extra QUANTIFY_* keys for quantify runtime flags', () => {
   const env = resolveQuantifyEnv({
     QUANTIFY_DATABASE_URL: 'postgresql://quant:pass@localhost:5432/quantify',
     QUANTIFY_REDIS_URL: 'redis://:redis@localhost:6379/1',
     QUANTIFY_APP_SECRET: 'app-secret',
     QUANTIFY_JWT_SECRET: 'jwt-secret',
-    QUANTIFY_UNUSED: 'noop',
+    QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED: 'true',
   })
 
-  assert.equal(env.QUANTIFY_UNUSED, undefined)
+  assert.equal(env.QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED, 'true')
 })

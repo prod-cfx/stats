@@ -155,7 +155,24 @@ export class PositionsService {
     positionSide: PositionSide,
   ): Promise<Position | null> {
     const lockedPositions = await prisma.$queryRaw<Position[]>`
-      SELECT *
+      SELECT
+        "id",
+        "user_strategy_account_id" AS "userStrategyAccountId",
+        "symbol",
+        "position_side" AS "positionSide",
+        "leverage",
+        "quantity",
+        "avg_entry_price" AS "avgEntryPrice",
+        "realized_pnl" AS "realizedPnl",
+        "unrealized_pnl" AS "unrealizedPnl",
+        "status",
+        "opened_at" AS "openedAt",
+        "closed_at" AS "closedAt",
+        "exchange_id" AS "exchangeId",
+        "market_type" AS "marketType",
+        "metadata",
+        "created_at" AS "createdAt",
+        "updated_at" AS "updatedAt"
       FROM "positions"
       WHERE "user_strategy_account_id" = ${accountId}
         AND "symbol" = ${normalizedSymbol}
