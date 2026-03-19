@@ -125,4 +125,5 @@ describe('codegenConversationService', () => {
     await expect(service.continueSession('s4', { userId: 'u1', message: '生成策略' })).rejects.toThrow('provider down')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({ status: 'REJECTED' }))
   })
+
 })

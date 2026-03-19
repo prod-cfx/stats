@@ -15,11 +15,17 @@ import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
+import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { buildLogicGraphFromPrompt } from '@/components/ai-quant/logic-graph-generator'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
+import {
+  continueLlmCodegenSession,
+  startLlmCodegenSession,
+} from '@/lib/api'
+import { ApiError } from '@/lib/errors'
 
 export interface QuantParams {
   exchange: 'binance' | 'okx'
@@ -52,6 +58,7 @@ interface ConversationState {
   params: QuantParams
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
+  llmCodegenSessionId: string | null
   latestSignalMessage: string | null
   updatedAt: number
 }
@@ -94,6 +101,7 @@ export function AiQuantPageClient() {
       params: DEFAULT_PARAMS,
       backtestResult: null,
       logicGraph: null,
+      llmCodegenSessionId: null,
       latestSignalMessage: null,
       updatedAt: now,
     }
@@ -134,6 +142,7 @@ export function AiQuantPageClient() {
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => ({
         ...item,
+        llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
       }))
       setConversations(normalized)
@@ -205,72 +214,122 @@ export function AiQuantPageClient() {
     )
   }
 
-  const onSend = (input: string) => {
-    if (!input.trim()) return
+  const requestBackendGraphGeneration = async (args: {
+    conversationId: string
+    message: string
+    params: QuantParams
+    sessionId: string | null
+    usePresetRules?: boolean
+  }) => {
+    const { conversationId, message, params: targetParams, sessionId, usePresetRules = false } = args
+    if (!session?.userId) return
+    const trimmedMessage = message.trim()
+    if (!trimmedMessage) return
 
-    updateActiveConversation(curr => {
-      const nextVersion = (curr.logicGraph?.version || 0) + 1
-      const draftGraph = buildLogicGraphFromPrompt(input, curr.params, nextVersion, t)
-      const triggerPreview = draftGraph.trigger[0]
-      const nextMessages: QuantMessage[] = [
-        ...curr.messages,
-        { id: `u-${Date.now()}`, role: 'user', content: input },
-        {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: triggerPreview
-            ? `${t('aiQuant.messages.graphGenerated')} ${triggerPreview.subject} ${triggerPreview.operator} ${triggerPreview.value}`
-            : t('aiQuant.messages.graphGenerated'),
-        },
-      ]
+    try {
+      const checklistPayload = usePresetRules
+        ? {
+            symbols: [targetParams.symbol],
+            timeframes: [`${targetParams.buyWindowMin}m`, `${targetParams.sellWindowMin}m`],
+            entryRules: [`${targetParams.buyWindowMin}m 内下跌 ${targetParams.buyDropPct}%`],
+            exitRules: [`${targetParams.sellWindowMin}m 内上涨 ${targetParams.sellRisePct}%`],
+            riskRules: {
+              positionPct: targetParams.positionPct,
+              maxDrawdownPct: 20,
+            },
+          }
+        : {}
 
-      const derivedTitle = curr.title === t('aiQuant.newChat') ? input.trim().slice(0, 16) || t('aiQuant.newChat') : curr.title
-      return {
-        ...curr,
-        title: derivedTitle,
-        messages: nextMessages,
-        logicGraph: draftGraph,
-        backtestResult: null,
-        latestSignalMessage: null,
-        updatedAt: Date.now(),
+      const startNewSession = async () =>
+        startLlmCodegenSession({
+          userId: session.userId,
+          initialMessage: trimmedMessage,
+          ...checklistPayload,
+        })
+
+      const continueSession = async (id: string) =>
+        continueLlmCodegenSession(id, {
+          userId: session.userId,
+          message: trimmedMessage,
+          ...checklistPayload,
+        })
+
+      let activeSessionId = sessionId
+      if (!activeSessionId) {
+        const created = await startNewSession()
+        activeSessionId = created.id
       }
-    })
-  }
 
-  const onEditStrategy = (
-    _strategyId: string,
-    preset: Partial<QuantParams>,
-    presetName: string,
-    fromLoginIntent = false,
-  ) => {
-    updateActiveConversation(curr => ({
-      ...curr,
-      params: { ...curr.params, ...preset },
-      logicGraph: buildLogicGraphFromPrompt(
-        `${presetName}：${preset.buyWindowMin || curr.params.buyWindowMin}m drop ${preset.buyDropPct || curr.params.buyDropPct}% buy`,
-        { ...curr.params, ...preset },
-        (curr.logicGraph?.version || 0) + 1,
-        t,
-      ),
-      backtestResult: null,
-      latestSignalMessage: null,
-      messages: [
-        ...curr.messages,
-        {
-          id: `pick-${Date.now()}`,
-          role: 'assistant',
-          content: fromLoginIntent
-            ? t('aiQuant.messages.restorePreset', { name: presetName })
-            : t('aiQuant.messages.applyPreset', { name: presetName }),
-        },
-      ],
-      updatedAt: Date.now(),
-    }))
-  }
+      let continued
+      try {
+        continued = await continueSession(activeSessionId)
+      } catch (error) {
+        const isTerminalSessionError = error instanceof ApiError
+          && error.statusCode === 409
+          && error.message.includes('会话已终态')
+        if (!isTerminalSessionError) {
+          throw error
+        }
+        const recreated = await startNewSession()
+        activeSessionId = recreated.id
+        continued = await continueSession(activeSessionId)
+      }
 
-  const runBacktestWithParams = (targetParams: QuantParams) => {
-    const result = getMockBacktest(targetParams)
-    return result
+      setConversations(prev => prev.map((conv) => {
+        if (conv.id !== conversationId) return conv
+        const nextVersion = (conv.logicGraph?.version || 0) + 1
+        const shouldReuseCodegenSession = continued.status !== 'PUBLISHED' && continued.status !== 'REJECTED'
+        const nextGraph = buildLogicGraphFromCodegenSpec(
+          continued.specDesc ?? {},
+          {
+            exchange: targetParams.exchange,
+            symbol: targetParams.symbol,
+            positionPct: targetParams.positionPct,
+          },
+          nextVersion,
+        )
+        const replyContent = continued.assistantPrompt
+          || (continued.status === 'PUBLISHED'
+            ? t('aiQuant.messages.graphGenerated')
+            : t('aiQuant.messages.graphRevise'))
+        return {
+          ...conv,
+          llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+          logicGraph: nextGraph,
+          backtestResult: null,
+          latestSignalMessage: null,
+          messages: [
+            ...conv.messages,
+            {
+              id: `a-${Date.now()}`,
+              role: 'assistant',
+              content: replyContent,
+            },
+          ],
+          updatedAt: Date.now(),
+        }
+      }))
+    } catch {
+      setConversations(prev => prev.map((conv) => {
+        if (conv.id !== conversationId) return conv
+        const nextVersion = (conv.logicGraph?.version || 0) + 1
+        const fallbackGraph = buildLogicGraphFromPrompt(trimmedMessage, targetParams, nextVersion, t)
+        return {
+          ...conv,
+          logicGraph: fallbackGraph,
+          latestSignalMessage: null,
+          messages: [
+            ...conv.messages,
+            {
+              id: `a-err-${Date.now()}`,
+              role: 'assistant',
+              content: t('common.error'),
+            },
+          ],
+          updatedAt: Date.now(),
+        }
+      }))
+    }
   }
 
   const getQuoteSymbol = (symbol: string) => (symbol.includes(':') ? symbol : `${symbol}:SPOT`)
@@ -326,21 +385,99 @@ export function AiQuantPageClient() {
     }
   }
 
+  const onSend = async (input: string) => {
+    if (!input.trim()) return
+    const trimmedInput = input.trim()
+    const currentConversationId = activeConversation.id
+    const currentParams = activeConversation.params
+    const currentSessionId = activeConversation.llmCodegenSessionId
+
+    updateActiveConversation(curr => {
+      const nextMessages: QuantMessage[] = [
+        ...curr.messages,
+        { id: `u-${Date.now()}`, role: 'user', content: trimmedInput },
+      ]
+
+      const derivedTitle = curr.title === t('aiQuant.newChat')
+        ? trimmedInput.slice(0, 16) || t('aiQuant.newChat')
+        : curr.title
+      return {
+        ...curr,
+        title: derivedTitle,
+        messages: nextMessages,
+        backtestResult: null,
+        latestSignalMessage: null,
+        updatedAt: Date.now(),
+      }
+    })
+    await requestBackendGraphGeneration({
+      conversationId: currentConversationId,
+      message: trimmedInput,
+      params: currentParams,
+      sessionId: currentSessionId,
+      usePresetRules: false,
+    })
+  }
+
+  const onEditStrategy = (
+    _strategyId: string,
+    preset: Partial<QuantParams>,
+    presetName: string,
+    fromLoginIntent = false,
+  ) => {
+    if (!activeConversation) return
+    const nextParams = { ...activeConversation.params, ...preset }
+    const currentConversationId = activeConversation.id
+    const currentSessionId = activeConversation.llmCodegenSessionId
+    const prompt = `${presetName}：${nextParams.buyWindowMin}m drop ${nextParams.buyDropPct}% buy`
+
+    updateActiveConversation(curr => ({
+      ...curr,
+      params: nextParams,
+      backtestResult: null,
+      latestSignalMessage: null,
+      messages: [
+        ...curr.messages,
+        {
+          id: `pick-${Date.now()}`,
+          role: 'assistant',
+          content: fromLoginIntent
+            ? t('aiQuant.messages.restorePreset', { name: presetName })
+            : t('aiQuant.messages.applyPreset', { name: presetName }),
+        },
+      ],
+      updatedAt: Date.now(),
+    }))
+
+    void requestBackendGraphGeneration({
+      conversationId: currentConversationId,
+      message: prompt,
+      params: nextParams,
+      sessionId: currentSessionId,
+      usePresetRules: true,
+    })
+  }
+
+  const runBacktestWithParams = (targetParams: QuantParams) => {
+    const result = getMockBacktest(targetParams)
+    return result
+  }
+
   const onRunStrategy = (
     _strategyId: string,
     preset: Partial<QuantParams>,
     presetName: string,
     fromLoginIntent = false,
   ) => {
+    if (!activeConversation) return
+    const nextParams = { ...activeConversation.params, ...preset }
+    const currentConversationId = activeConversation.id
+    const currentSessionId = activeConversation.llmCodegenSessionId
+    const prompt = `${presetName}, generate logic graph`
+
     updateActiveConversation(curr => ({
       ...curr,
-      params: { ...curr.params, ...preset },
-      logicGraph: buildLogicGraphFromPrompt(
-        `${presetName}, generate logic graph`,
-        { ...curr.params, ...preset },
-        (curr.logicGraph?.version || 0) + 1,
-        t,
-      ),
+      params: nextParams,
       backtestResult: null,
       latestSignalMessage: null,
       messages: [
@@ -355,6 +492,14 @@ export function AiQuantPageClient() {
       ],
       updatedAt: Date.now(),
     }))
+
+    void requestBackendGraphGeneration({
+      conversationId: currentConversationId,
+      message: prompt,
+      params: nextParams,
+      sessionId: currentSessionId,
+      usePresetRules: true,
+    })
   }
 
   const onRunBacktest = () => {
