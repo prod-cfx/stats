@@ -393,15 +393,18 @@ export class SignalExecutorService implements OnModuleInit {
           orderResponse: this.buildOrderResponseSnapshot(order),
         })
 
-        // If we cannot reconcile a market order into a terminal or filled state, do not treat it as executed.
+        const orderStatus = String(order.status).toLowerCase()
+        const unfilledTerminalStatus = orderStatus === 'canceled' || orderStatus === 'rejected' || orderStatus === 'expired'
+        // If we cannot reconcile a market order into a filled state, do not treat it as executed.
         // Keep the reservation in place and flag for reconciliation.
-        if (order.type === 'market' && order.status === 'open' && (order.filled ?? 0) <= 0) {
+        if (order.type === 'market' && (order.filled ?? 0) <= 0 && (orderStatus === 'open' || unfilledTerminalStatus)) {
+          const failureReason = orderStatus === 'open' ? 'ORDER_NOT_FINAL' : 'ORDER_NOT_FILLED'
           await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
             reconcileRequired: true,
-            reason: 'ORDER_NOT_FINAL',
+            reason: failureReason,
             orderResponse: this.buildOrderResponseSnapshot(order),
           })
-          await this.executionRepository.markFailed(execution.id, 'ORDER_NOT_FINAL')
+          await this.executionRepository.markFailed(execution.id, failureReason)
           return 'failed'
         }
         const executedQuantity = order.filled ?? order.amount

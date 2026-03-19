@@ -82,5 +82,87 @@ describe('SignalExecutorService', () => {
     expect(executionRepository.markFailed).toHaveBeenCalled()
     expect((service as any).releaseReservation).not.toHaveBeenCalled()
   })
-})
 
+  it('does not markExecuted when a market order is canceled with 0 fill', async () => {
+    const prisma = {}
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const service = new SignalExecutorService(
+      prisma as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+    )
+
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-ref'
+
+    const canceledOrder = {
+      id: 'ord-2',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'canceled',
+      amount: 0.001,
+      filled: 0,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-2' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: undefined,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(canceledOrder)
+
+    tradingService.placeOrder.mockResolvedValue(canceledOrder)
+
+    const result = await (service as any).processAccount(
+      { id: 'sig-2', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'acct-2', userId: 'user-2' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-2',
+      'RECONCILE_REQUIRED',
+      expect.objectContaining({
+        reconcileRequired: true,
+        reason: 'ORDER_NOT_FILLED',
+      }),
+    )
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-2', 'ORDER_NOT_FILLED')
+    expect((service as any).releaseReservation).not.toHaveBeenCalled()
+  })
+})
