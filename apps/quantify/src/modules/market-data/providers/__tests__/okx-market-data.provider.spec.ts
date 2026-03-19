@@ -33,4 +33,24 @@ describe('okx market data provider', () => {
     expect(requestConfig.params.bar).toBe('1m')
     expect(bars[0]?.symbol).toBe('BTCUSDT:PERP')
   })
+
+  it('dedupes requested symbols when filtering instruments', async () => {
+    httpMock.get.mockReturnValue(of({
+      data: {
+        code: '0',
+        msg: '',
+        data: [
+          { instId: 'BTC-USDT', baseCcy: 'BTC', quoteCcy: 'USDT', state: 'live' },
+          { instId: 'ETH-USDT', baseCcy: 'ETH', quoteCcy: 'USDT', state: 'live' },
+        ],
+      },
+    }))
+
+    const symbols = await provider.fetchSymbols(['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'BTCUSDT'])
+    const btcRows = symbols.filter(item => item.symbol === 'BTCUSDT')
+    const ethRows = symbols.filter(item => item.symbol === 'ETHUSDT')
+
+    expect(btcRows).toHaveLength(2)
+    expect(ethRows).toHaveLength(0)
+  })
 })

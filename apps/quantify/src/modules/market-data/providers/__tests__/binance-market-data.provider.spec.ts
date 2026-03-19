@@ -1,4 +1,4 @@
-import { of } from 'rxjs'
+import { of, throwError } from 'rxjs'
 import { BinanceMarketDataProvider } from '../binance-market-data.provider'
 
 describe('binanceMarketDataProvider', () => {
@@ -81,6 +81,66 @@ describe('binanceMarketDataProvider', () => {
 
     expect(symbols.some(item => item.instrumentType === 'PERPETUAL')).toBe(true)
     expect(symbols.some(item => item.instrumentType === 'SPOT')).toBe(true)
+  })
+
+  it('dedupes raw symbols before requesting exchangeInfo', async () => {
+    httpMock.get.mockImplementation((url: string) => {
+      if (url.includes('/api/v3/exchangeInfo')) {
+        return of({ data: { symbols: [] } })
+      }
+      return of({ data: { symbols: [] } })
+    })
+
+    await provider.fetchSymbols(['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'BTCUSDT'])
+
+    const [, spotConfig] = httpMock.get.mock.calls.find(([url]: [string]) => url.includes('/api/v3/exchangeInfo')) as [
+      string,
+      { params?: { symbols?: string } },
+    ]
+    expect(spotConfig.params?.symbols).toBe('["BTCUSDT"]')
+  })
+
+  it('falls back to full spot exchangeInfo when filtered request fails', async () => {
+    httpMock.get.mockImplementation((url: string, config?: { params?: { symbols?: string } }) => {
+      if (url.includes('/api/v3/exchangeInfo')) {
+        if (config?.params?.symbols) {
+          return throwError(() => new Error('400 bad request'))
+        }
+        return of({
+          data: {
+            symbols: [
+              {
+                symbol: 'SOLUSDT',
+                status: 'TRADING',
+                baseAsset: 'SOL',
+                quoteAsset: 'USDT',
+                isMarginTradingAllowed: true,
+                filters: [],
+              },
+            ],
+          },
+        })
+      }
+
+      return of({
+        data: {
+          symbols: [
+            {
+              symbol: 'SOLUSDT',
+              status: 'TRADING',
+              baseAsset: 'SOL',
+              quoteAsset: 'USDT',
+              contractType: 'PERPETUAL',
+              filters: [],
+            },
+          ],
+        },
+      })
+    })
+
+    const symbols = await provider.fetchSymbols(['SOLUSDT:SPOT', 'SOLUSDT:PERP'])
+    expect(symbols.some(item => item.symbol === 'SOLUSDT' && item.instrumentType === 'SPOT')).toBe(true)
+    expect(symbols.some(item => item.symbol === 'SOLUSDT' && item.instrumentType === 'PERPETUAL')).toBe(true)
   })
 
   it('maps ws kline payload to normalized symbol', () => {

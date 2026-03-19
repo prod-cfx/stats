@@ -272,19 +272,38 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
 
   private async fetchSpotSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
     const url = new URL(this.spotExchangeInfoPath, this.spotRestBaseUrl)
-    const params: Record<string, string> = {}
-    if (symbols?.length) {
-      params.symbols = JSON.stringify(symbols)
+    const requestedSet = symbols?.length ? new Set(symbols) : null
+    let rows: SpotExchangeInfoResponse['symbols'] = []
+
+    try {
+      const params: Record<string, string> = {}
+      if (requestedSet) {
+        params.symbols = JSON.stringify([...requestedSet])
+      }
+      const { data } = await lastValueFrom(
+        this.http.get<SpotExchangeInfoResponse>(url.toString(), {
+          params,
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
+    } catch (error) {
+      if (!requestedSet) throw error
+      this.logger.warn(`spot exchangeInfo 按 symbols 拉取失败，降级为全量拉取后本地过滤: ${(error as Error).message}`)
+      const { data } = await lastValueFrom(
+        this.http.get<SpotExchangeInfoResponse>(url.toString(), {
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
     }
 
-    const { data } = await lastValueFrom(
-      this.http.get<SpotExchangeInfoResponse>(url.toString(), {
-        params,
-        timeout: this.restTimeoutMs,
-      }),
-    )
-
-    return data.symbols.map(item => ({
+    return rows
+      .filter(item => {
+        if (!requestedSet) return true
+        return requestedSet.has(extractRawSymbol(item.symbol))
+      })
+      .map(item => ({
       symbol: extractRawSymbol(item.symbol),
       status: item.status,
       baseAsset: item.baseAsset,
@@ -294,24 +313,42 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       isMarginTradingAllowed: item.isMarginTradingAllowed,
       filters: this.mapFilters(item.filters),
       exchange: this.name,
-    }))
+      }))
   }
 
   private async fetchPerpSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
     const url = new URL(this.perpExchangeInfoPath, this.perpRestBaseUrl)
-    const params: Record<string, string> = {}
-    if (symbols?.length) {
-      params.symbols = JSON.stringify(symbols)
+    const requestedSet = symbols?.length ? new Set(symbols) : null
+    let rows: PerpExchangeInfoResponse['symbols'] = []
+
+    try {
+      const params: Record<string, string> = {}
+      if (requestedSet) {
+        params.symbols = JSON.stringify([...requestedSet])
+      }
+      const { data } = await lastValueFrom(
+        this.http.get<PerpExchangeInfoResponse>(url.toString(), {
+          params,
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
+    } catch (error) {
+      if (!requestedSet) throw error
+      this.logger.warn(`perp exchangeInfo 按 symbols 拉取失败，降级为全量拉取后本地过滤: ${(error as Error).message}`)
+      const { data } = await lastValueFrom(
+        this.http.get<PerpExchangeInfoResponse>(url.toString(), {
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
     }
 
-    const { data } = await lastValueFrom(
-      this.http.get<PerpExchangeInfoResponse>(url.toString(), {
-        params,
-        timeout: this.restTimeoutMs,
-      }),
-    )
-
-    return data.symbols
+    return rows
+      .filter(item => {
+        if (!requestedSet) return true
+        return requestedSet.has(extractRawSymbol(item.symbol))
+      })
       .filter(item => item.contractType !== 'PERPETUAL_DELIVERING')
       .map(item => ({
         symbol: extractRawSymbol(item.symbol),

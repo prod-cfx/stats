@@ -55,6 +55,21 @@ describe('hyperliquid market data provider', () => {
     expect(symbols.map(item => item.instrumentType)).toEqual(['SPOT', 'PERPETUAL'])
   })
 
+  it('dedupes duplicated requested symbols', async () => {
+    httpMock.post.mockReturnValue(of({
+      data: {
+        universe: [{ name: 'BTC' }, { name: 'ETH' }],
+      },
+    }))
+
+    const symbols = await provider.fetchSymbols(['BTCUSDT:SPOT', 'BTCUSDT:PERP', 'BTCUSDT'])
+    const btcRows = symbols.filter(item => item.symbol === 'BTCUSDC')
+    const ethRows = symbols.filter(item => item.symbol === 'ETHUSDC')
+
+    expect(btcRows).toHaveLength(2)
+    expect(ethRows).toHaveLength(0)
+  })
+
   it('emits quote ticks from allMids payload', async () => {
     const onTick = jest.fn()
     ;(provider as any).tickHandler = onTick

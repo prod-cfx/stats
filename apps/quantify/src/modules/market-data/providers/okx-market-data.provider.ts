@@ -84,7 +84,9 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
   }
 
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
-    const requested = symbols?.map(item => extractRawSymbol(item))
+    const requested = symbols
+      ? new Set(symbols.map(item => extractRawSymbol(item)).filter(Boolean))
+      : undefined
     const [spot, perp] = await Promise.all([
       this.fetchInstruments('SPOT', requested),
       this.fetchInstruments('PERP', requested),
@@ -159,7 +161,7 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     await this.disconnect()
   }
 
-  private async fetchInstruments(market: SymbolMarketType, symbols?: string[]): Promise<ProviderSymbol[]> {
+  private async fetchInstruments(market: SymbolMarketType, symbols?: Set<string>): Promise<ProviderSymbol[]> {
     const url = new URL('/api/v5/public/instruments', this.restBaseUrl)
     const params = { instType: market === 'PERP' ? 'SWAP' : 'SPOT' }
     const { data } = await lastValueFrom(
@@ -172,8 +174,8 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     return (data.data ?? [])
       .map(item => this.toProviderSymbol(item, market))
       .filter(item => {
-        if (!symbols?.length) return true
-        return symbols.includes(item.symbol)
+        if (!symbols || symbols.size === 0) return true
+        return symbols.has(item.symbol)
       })
   }
 
