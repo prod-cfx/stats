@@ -206,7 +206,8 @@
       "QUANTIFY_API_BASE_URL",
       "QUANTIFY_HTTP_TIMEOUT_MS",
       "QUANTIFY_PORT",
-      "QUANTIFY_BASE_URL"
+      "QUANTIFY_BASE_URL",
+      "QUANTIFY_AI_MOCK_ENABLED"
     ]
   },
   "appToTarget": {

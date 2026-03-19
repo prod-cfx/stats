@@ -52,6 +52,7 @@ interface ConversationState {
   params: QuantParams
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
+  latestSignalMessage: string | null
   updatedAt: number
 }
 
@@ -93,6 +94,7 @@ export function AiQuantPageClient() {
       params: DEFAULT_PARAMS,
       backtestResult: null,
       logicGraph: null,
+      latestSignalMessage: null,
       updatedAt: now,
     }
   }
@@ -130,8 +132,12 @@ export function AiQuantPageClient() {
     try {
       const parsed = JSON.parse(raw) as ConversationState[]
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
-      setConversations(parsed)
-      setActiveConversationId(parsed[0].id)
+      const normalized = parsed.map(item => ({
+        ...item,
+        latestSignalMessage: item.latestSignalMessage ?? null,
+      }))
+      setConversations(normalized)
+      setActiveConversationId(normalized[0].id)
     } catch {
       const seed = createConversation()
       setConversations([seed])
@@ -205,13 +211,16 @@ export function AiQuantPageClient() {
     updateActiveConversation(curr => {
       const nextVersion = (curr.logicGraph?.version || 0) + 1
       const draftGraph = buildLogicGraphFromPrompt(input, curr.params, nextVersion, t)
+      const triggerPreview = draftGraph.trigger[0]
       const nextMessages: QuantMessage[] = [
         ...curr.messages,
         { id: `u-${Date.now()}`, role: 'user', content: input },
         {
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content: t('aiQuant.messages.graphGenerated'),
+          content: triggerPreview
+            ? `${t('aiQuant.messages.graphGenerated')} ${triggerPreview.subject} ${triggerPreview.operator} ${triggerPreview.value}`
+            : t('aiQuant.messages.graphGenerated'),
         },
       ]
 
@@ -222,6 +231,7 @@ export function AiQuantPageClient() {
         messages: nextMessages,
         logicGraph: draftGraph,
         backtestResult: null,
+        latestSignalMessage: null,
         updatedAt: Date.now(),
       }
     })
@@ -243,6 +253,7 @@ export function AiQuantPageClient() {
         t,
       ),
       backtestResult: null,
+      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -262,6 +273,59 @@ export function AiQuantPageClient() {
     return result
   }
 
+  const getQuoteSymbol = (symbol: string) => (symbol.includes(':') ? symbol : `${symbol}:SPOT`)
+
+  const emitMockSignalPreview = async (targetParams: QuantParams) => {
+    const symbol = getQuoteSymbol(targetParams.symbol)
+    const fallback = `已生成模拟信号：BUY ${targetParams.symbol}。可继续点击“开始回测”验证策略表现。`
+
+    try {
+      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1').replace(/\/$/, '')
+      const resp = await fetch(`${apiBaseUrl}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+      if (!resp.ok) throw new Error(`http_${resp.status}`)
+
+      const payload = await resp.json() as {
+        data?: {
+          lastPrice?: string
+          source?: string
+        }
+      }
+      const price = payload?.data?.lastPrice
+      const source = payload?.data?.source
+      const message = price
+        ? `已生成模拟信号：BUY ${targetParams.symbol}（当前价 ${price}${source ? `，数据源 ${source}` : ''}）。可继续点击“开始回测”验证策略表现。`
+        : fallback
+
+      updateActiveConversation(curr => ({
+        ...curr,
+        latestSignalMessage: message,
+        messages: [
+          ...curr.messages,
+          {
+            id: `signal-preview-${Date.now()}`,
+            role: 'assistant',
+            content: message,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+    } catch {
+      updateActiveConversation(curr => ({
+        ...curr,
+        latestSignalMessage: fallback,
+        messages: [
+          ...curr.messages,
+          {
+            id: `signal-preview-fallback-${Date.now()}`,
+            role: 'assistant',
+            content: fallback,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+    }
+  }
+
   const onRunStrategy = (
     _strategyId: string,
     preset: Partial<QuantParams>,
@@ -278,6 +342,7 @@ export function AiQuantPageClient() {
         t,
       ),
       backtestResult: null,
+      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -476,6 +541,7 @@ export function AiQuantPageClient() {
                   ],
                   updatedAt: Date.now(),
                 }))
+                void emitMockSignalPreview(activeConversation.params)
               }}
               onRevise={() => {
                 updateActiveConversation(curr => ({
@@ -492,6 +558,13 @@ export function AiQuantPageClient() {
                 }))
               }}
             />
+          )}
+
+          {activeConversation.latestSignalMessage && (
+            <section className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+              <p className="text-xs font-semibold text-emerald-300">MOCK SIGNAL</p>
+              <p className="mt-2 text-sm text-emerald-100">{activeConversation.latestSignalMessage}</p>
+            </section>
           )}
 
           {activeConversation.backtestResult && (

@@ -127,6 +127,8 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     },
   })
   private readonly streamsByMarket: Partial<Record<SymbolMarketType, string>> = {}
+  private readonly lastMessageAtByMarket: Partial<Record<SymbolMarketType, number>> = {}
+  private readonly watchdogTimerByMarket: Partial<Record<SymbolMarketType, NodeJS.Timeout>> = {}
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
 
@@ -199,6 +201,11 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
 
   private get reconnectDelayMs() {
     return this.configService.get<number>('marketData.wsReconnectDelayMs', 5_000)
+  }
+
+  private get staleTimeoutMs() {
+    // 防止连接“假活跃”（TCP 未断开但长期无任何消息）。
+    return this.configService.get<number>('marketData.wsStaleTimeoutMs', 60_000)
   }
 
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
@@ -390,11 +397,14 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     this.wsLifecycle.registerSocket(market, ws)
 
     ws.on('open', () => {
+      this.lastMessageAtByMarket[market] = Date.now()
+      this.startWatchdog(market)
       this.logger.log(`Binance WebSocket 已连接: market=${market} streams=${streams}`)
       this.logger.log(`metric=market_ws_connected value=1 market=${market}`)
     })
 
     ws.on('message', data => {
+      this.lastMessageAtByMarket[market] = Date.now()
       try {
         const payload = JSON.parse(data.toString()) as BinanceStreamPayload
         void this.handleStreamPayload(payload, market)
@@ -404,19 +414,49 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     })
 
     ws.on('close', () => {
+      this.stopWatchdog(market)
       this.logger.warn(`Binance WebSocket 连接关闭 market=${market}`)
       this.logger.warn(`metric=market_ws_connected value=0 market=${market}`)
       this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
 
     ws.on('error', error => {
+      this.stopWatchdog(market)
       this.logger.error(`Binance WebSocket 错误: ${(error as Error).message} market=${market}`)
       this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
   }
 
   private async closeWebSocket(market: SymbolMarketType): Promise<void> {
+    this.stopWatchdog(market)
     await this.wsLifecycle.closeSocket(market)
+  }
+
+  private startWatchdog(market: SymbolMarketType): void {
+    const existing = this.watchdogTimerByMarket[market]
+    if (existing) clearInterval(existing)
+
+    this.watchdogTimerByMarket[market] = setInterval(() => {
+      const ws = this.wsLifecycle.getSocket(market)
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+      const lastMessageAt = this.lastMessageAtByMarket[market] ?? 0
+      const idleMs = Date.now() - lastMessageAt
+      if (idleMs < this.staleTimeoutMs) return
+
+      this.logger.warn(
+        `Binance WebSocket 长时间无消息，主动重连: market=${market} idleMs=${idleMs} timeoutMs=${this.staleTimeoutMs}`,
+      )
+      ws.terminate()
+    }, 10_000)
+  }
+
+  private stopWatchdog(market: SymbolMarketType): void {
+    const timer = this.watchdogTimerByMarket[market]
+    if (timer) {
+      clearInterval(timer)
+      this.watchdogTimerByMarket[market] = undefined
+    }
   }
 
   private async handleStreamPayload(payload: BinanceStreamPayload, market: SymbolMarketType) {
