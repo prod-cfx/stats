@@ -74,10 +74,10 @@ enum StrategyInstanceStatus {
 }
 
 enum StrategyInstanceMode {
-  BACKTEST  // 历史回测
-  PAPER     // 纸上交易
-  TESTNET   // 测试网交易
-  LIVE      // 实盘交易
+  BACKTEST // 历史回测
+  PAPER // 纸上交易
+  TESTNET // 测试网交易
+  LIVE // 实盘交易
 }
 
 enum SubscriptionStatus {
@@ -397,22 +397,22 @@ model UserStrategySubscription {
 }
 
 model UserLlmStrategySubscription {
-  id                  String             @id @default(cuid())
-  userId              String             @map("user_id")
-  llmStrategyInstanceId String           @map("llm_strategy_instance_id")
-  status              SubscriptionStatus @default(active)
+  id                    String             @id @default(cuid())
+  userId                String             @map("user_id")
+  llmStrategyInstanceId String             @map("llm_strategy_instance_id")
+  status                SubscriptionStatus @default(active)
   /// 用户自定义参数（用于覆盖/补充实例或策略默认配置）
-  customParams        Json?              @map("custom_params")
+  customParams          Json?              @map("custom_params")
   /// 绑定的交易所账户
-  exchangeAccountId   String?            @map("exchange_account_id")
-  subscribedAt        DateTime           @default(now()) @map("subscribed_at")
-  unsubscribedAt      DateTime?          @map("unsubscribed_at")
-  createdAt           DateTime           @default(now()) @map("created_at")
-  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at")
+  exchangeAccountId     String?            @map("exchange_account_id")
+  subscribedAt          DateTime           @default(now()) @map("subscribed_at")
+  unsubscribedAt        DateTime?          @map("unsubscribed_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at")
 
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   llmStrategyInstance LlmStrategyInstance @relation(fields: [llmStrategyInstanceId], references: [id], onDelete: Cascade)
-  exchangeAccount    ExchangeAccount?  @relation(fields: [exchangeAccountId], references: [id], onDelete: SetNull)
+  exchangeAccount     ExchangeAccount?    @relation(fields: [exchangeAccountId], references: [id], onDelete: SetNull)
 
   @@unique([userId, llmStrategyInstanceId], map: "uniq_user_llm_strategy_subscription")
   @@index([userId, status], map: "idx_user_llm_strategy_subscription_user_status")

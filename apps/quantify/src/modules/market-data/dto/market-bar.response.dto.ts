@@ -30,5 +30,7 @@ export class MarketBarDto {
 
   @ApiProperty({ description: '是否闭合', example: true })
   isFinal!: boolean
-}
 
+  @ApiProperty({ description: '行情来源', example: 'BINANCE_REST', nullable: true })
+  source?: string | null
+}

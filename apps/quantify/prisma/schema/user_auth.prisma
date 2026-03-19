@@ -6,24 +6,24 @@ enum ExchangeId {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  nickname        String?
-  avatarUrl       String?   @map("avatar_url")
-  bio             String?   @db.Text
-  invitationCode  String?   @map("invitation_code")
-  inviterId       String?   @map("inviter_id")
-  isGuest         Boolean   @default(false) @map("is_guest")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  email          String   @unique
+  nickname       String?
+  avatarUrl      String?  @map("avatar_url")
+  bio            String?  @db.Text
+  invitationCode String?  @map("invitation_code")
+  inviterId      String?  @map("inviter_id")
+  isGuest        Boolean  @default(false) @map("is_guest")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
-  inviter               User?                      @relation("UserInviter", fields: [inviterId], references: [id])
-  invitedUsers          User[]                     @relation("UserInviter")
-  exchangeAccounts      ExchangeAccount[]
-  strategyAccounts      UserStrategyAccount[]
-  strategySubscriptions UserStrategySubscription[]
+  inviter                  User?                         @relation("UserInviter", fields: [inviterId], references: [id])
+  invitedUsers             User[]                        @relation("UserInviter")
+  exchangeAccounts         ExchangeAccount[]
+  strategyAccounts         UserStrategyAccount[]
+  strategySubscriptions    UserStrategySubscription[]
   llmStrategySubscriptions UserLlmStrategySubscription[]
-  signalExecutions      UserSignalExecution[]
+  signalExecutions         UserSignalExecution[]
 
   @@map("users")
 }
@@ -39,8 +39,8 @@ model ExchangeAccount {
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at")
 
-  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  strategySubscriptions UserStrategySubscription[]
+  user                     User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategySubscriptions    UserStrategySubscription[]
   llmStrategySubscriptions UserLlmStrategySubscription[]
 
   @@unique([userId, exchangeId, name], map: "uniq_exchange_accounts_user_exchange_name")

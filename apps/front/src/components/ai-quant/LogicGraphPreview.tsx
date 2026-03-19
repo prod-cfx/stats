@@ -37,11 +37,13 @@ export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPrev
         <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
           <p className="text-xs font-bold text-sky-400">THEN</p>
           <div className="mt-2 space-y-2">
-            {graph.actions.map(item => (
-              <div key={item.id} className="text-sm text-[color:var(--cf-text)]">
-                {item.action} {item.amount} 的 {item.target}
-              </div>
-            ))}
+            {graph.actions.length > 0
+              ? graph.actions.map(item => (
+                  <div key={item.id} className="text-sm text-[color:var(--cf-text)]">
+                    {item.action} {item.amount} 的 {item.target}
+                  </div>
+                ))
+              : <div className="text-sm text-[color:var(--cf-muted)]">等待策略规则补充</div>}
           </div>
         </div>
 
