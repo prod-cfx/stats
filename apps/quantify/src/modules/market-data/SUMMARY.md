@@ -5,6 +5,9 @@
 - 采集并持久化行情数据
 - 提供内部 SSE 实时推送接口
 - 支持多订阅方同时消费
+- 提供统一读侧契约 `MarketDataReadGateway` 供策略与 AI 模块消费
+- 支持 `SPOT/PERP` 双市场 symbol 编码与兼容读取（`<RAW_SYMBOL>:SPOT|PERP`）
+- 提供最小真实链路验收脚本：`scripts/acceptance/quantify-min-acceptance.sh`
 
 ## 适用场景
 

@@ -37,7 +37,8 @@ import {
 import { Injectable, Logger } from '@nestjs/common'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 MarketDataReadGateway
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -115,7 +116,10 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
    */
   private cacheCleanupInterval?: NodeJS.Timeout
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly marketDataReadGateway: MarketDataReadGateway,
+  ) {
     // 启动定时清理任务
     this.startCacheCleanupTimer()
   }
@@ -525,8 +529,6 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       )
     }
 
-    const timeframe = mapTimeframe(params.timeframe as MarketTimeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
-
     // 规范化 lookbackBars：转换为整数并做范围校验
     const rawLookback = params.lookbackBars ?? 100
     const lookbackBars = Math.trunc(Number(rawLookback))
@@ -549,29 +551,22 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
       })
     }
 
-    // 查询最近的 K 线数据
-    const bars = await client.marketBar.findMany({
-      where: {
-        symbolId: symbol.id,
-        timeframe,
-      },
-      orderBy: { time: 'desc' },
-      take: lookbackBars,
-    })
-
-    // 反转为时间升序
-    const orderedBars = bars.reverse()
+    const orderedBars = await this.marketDataReadGateway.getRecentBars(
+      normalizedSymbol,
+      params.timeframe as MarketTimeframe,
+      lookbackBars,
+    )
 
     const result: GetMarketDataRawResult = {
       symbol: normalizedSymbol,
       timeframe: params.timeframe,
       bars: orderedBars.map(bar => ({
-        timestamp: bar.time.getTime(),
-        open: Number(bar.open),
-        high: Number(bar.high),
-        low: Number(bar.low),
-        close: Number(bar.close),
-        volume: bar.volume != null ? Number(bar.volume) : undefined,
+        timestamp: bar.timestamp,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: Number.isFinite(bar.volume) ? bar.volume : undefined,
       })),
     }
 

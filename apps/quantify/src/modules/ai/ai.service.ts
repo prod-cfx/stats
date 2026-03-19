@@ -30,6 +30,7 @@ export class AiService {
   private static readonly DEFAULT_PROVIDER_CODE = 'uniapi'
   private static readonly STRATEGY_CODEGEN_PROVIDER_CODE = 'strategy-codegen'
   private static readonly DEFAULT_MODEL = 'gpt-4'
+  private static readonly MOCK_SIGNAL_TOOL_NAME = 'generate_trading_signal'
 
   constructor(
     private readonly configService: ConfigService,
@@ -51,6 +52,11 @@ export class AiService {
       && providerCode !== AiService.STRATEGY_CODEGEN_PROVIDER_CODE
     ) {
       throw new AiProviderNotFoundException({ providerCode })
+    }
+
+    // 本地联调用：允许在未配置真实 provider 时仍能产出 tool call 信号。
+    if (this.isMockAiEnabled()) {
+      return this.buildMockCompletion(options)
     }
 
     const aiConfig = this.configService.get('ai')
@@ -97,6 +103,62 @@ export class AiService {
         this.logger.error(`Error stack: ${stack}`)
       }
       throw new AiProviderErrorException({ providerCode, reason: nestedReason ?? 'PROVIDER_REQUEST_FAILED', detail })
+    }
+  }
+
+  private isMockAiEnabled(): boolean {
+    const raw = process.env.QUANTIFY_AI_MOCK_ENABLED
+    if (!raw) return false
+    return raw === '1' || raw.toLowerCase() === 'true'
+  }
+
+  private extractSymbolFromMessages(messages: ChatMessage[]): string {
+    for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+      const message = messages[idx]
+      if (!message || typeof message.content !== 'string') continue
+      const matched = message.content.toUpperCase().match(/\b[A-Z]{2,12}USDT\b/)
+      if (matched?.[0]) return matched[0]
+    }
+    return 'BTCUSDT'
+  }
+
+  private buildMockCompletion(options: AiChatOptions): ChatCompletionResult {
+    const signalTool = options.tools?.find(tool => tool.function?.name === AiService.MOCK_SIGNAL_TOOL_NAME)
+    if (!signalTool) {
+      return {
+        content: 'MOCK_AI_RESPONSE',
+      }
+    }
+
+    const symbol = this.extractSymbolFromMessages(options.messages)
+    const toolArguments = {
+      symbol,
+      direction: 'BUY',
+      signalType: 'ALERT',
+      confidence: 68,
+      entryPrice: 70120,
+      stopLoss: 69480,
+      takeProfit: 70980,
+      reasoning: 'Mock AI signal for local integration testing.',
+      positionSizeQuote: 120,
+      positionSizeRatio: 0.05,
+      meta: {
+        source: 'mock-ai-provider',
+      },
+    }
+
+    return {
+      content: '',
+      toolCalls: [
+        {
+          id: `mock-call-${Date.now()}`,
+          type: 'function',
+          function: {
+            name: AiService.MOCK_SIGNAL_TOOL_NAME,
+            arguments: JSON.stringify(toolArguments),
+          },
+        },
+      ],
     }
   }
 }

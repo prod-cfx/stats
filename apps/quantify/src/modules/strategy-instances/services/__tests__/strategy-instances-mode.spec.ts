@@ -1,7 +1,9 @@
 import type { TestingModule } from '@nestjs/testing'
+import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.dto'
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
-import { Test } from '@nestjs/testing'
 
+import { Test } from '@nestjs/testing'
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { PrismaService } from '@/prisma/prisma.service'
 import { InvalidInstanceModeTransitionException } from '../../exceptions'
@@ -31,6 +33,11 @@ describe('strategyInstancesService - mode management', () => {
   }
 
   const mockTradingSignalRepository = {}
+  const mockMarketDataReadGateway = {
+    getRecentBars: jest.fn(),
+    getLatestBar: jest.fn(),
+    getRecentBarsBySymbolId: jest.fn(),
+  }
 
   const mockStrategyTemplate = {
     id: 'template-123',
@@ -74,6 +81,10 @@ describe('strategyInstancesService - mode management', () => {
         {
           provide: TradingSignalRepository,
           useValue: mockTradingSignalRepository,
+        },
+        {
+          provide: MarketDataReadGateway,
+          useValue: mockMarketDataReadGateway,
         },
       ],
     }).compile()
@@ -367,6 +378,38 @@ describe('strategyInstancesService - mode management', () => {
           mode: undefined,
         })
       )
+    })
+  })
+
+  describe('buildTestPayload', () => {
+    it('loads bars via gateway and keeps timestamps ascending in multiLegData', async () => {
+      mockPrismaService.getClient.mockReturnValue({
+        strategyInstance: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'instance-123',
+            strategyTemplate: {
+              execution: { mode: 'MULTI_LEG' },
+              dataRequirements: { leg1: ['1h'] },
+              legs: [{ id: 'leg1', symbol: 'BTCUSDT' }],
+            },
+          }),
+        },
+        symbol: {
+          findMany: jest.fn().mockResolvedValue([{ id: 'symbol-1', code: 'BTCUSDT' }]),
+        },
+      })
+      mockMarketDataReadGateway.getRecentBarsBySymbolId.mockResolvedValue([
+        { open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, timestamp: 1000 },
+        { open: 1.5, high: 2.5, low: 1, close: 2, volume: 12, timestamp: 2000 },
+      ])
+
+      const payload = await service.buildTestPayload('instance-123')
+      const timeframeData = payload.multiLegData?.leg1?.['1h'] as TestLegTimeframeDataDto | undefined
+      const bars = timeframeData?.bars ?? []
+
+      expect(mockMarketDataReadGateway.getRecentBarsBySymbolId).toHaveBeenCalledWith('symbol-1', '1h', 100)
+      expect(bars.length).toBeGreaterThan(0)
+      expect(bars.at(-1)?.timestamp).toBeGreaterThan(bars[0]!.timestamp)
     })
   })
 })
