@@ -1,11 +1,11 @@
-import type { AiSignalPayload } from '@ai/shared'
+import type { AiSignalPayload, MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
 import type { LegTimeframeData, MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
+import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
 import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import type {
   IndicatorConfig,
-  MarketBar,
-  MarketTimeframe,
   Prisma,
   SignalSourceType,
   SignalStatus,
@@ -24,10 +24,17 @@ import { EventEmitter2 } from '@nestjs/event-emitter'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
-import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
+import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
+import {
+  mapLegDataRequirementTimeframes,
+  parseDataRequirements,
+} from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
@@ -43,7 +50,7 @@ import { SignalTelemetryService } from './signal-telemetry.service'
 
 interface IndicatorGroup {
   symbol: Symbol
-  timeframe: MarketTimeframe
+  timeframe: PrismaMarketTimeframe
   fields: Map<string, IndicatorConfig>
 }
 
@@ -85,6 +92,7 @@ export class SignalGeneratorService {
     private readonly stateRepository: StrategySignalStateRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly telemetry: SignalTelemetryService,
+    private readonly marketDataReadGateway: MarketDataReadGateway,
   ) {
     this.registerCronJob()
   }
@@ -344,7 +352,7 @@ export class SignalGeneratorService {
 
     // 检查策略是否使用新架构（有 execution 和 dataRequirements）
     const execution = strategy.execution as unknown as StrategyExecutionConfig | null | undefined
-    const dataRequirements = strategy.dataRequirements as unknown as StrategyDataRequirements | null | undefined
+    const dataRequirements = parseDataRequirements(strategy.dataRequirements)
     const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
     
     if (execution && dataRequirements && legs && legs.length > 0) {
@@ -487,10 +495,11 @@ export class SignalGeneratorService {
       instance,
       strategy,
       group.symbol,
-      group.timeframe,
+      reverseMapTimeframe(group.timeframe),
       indicatorValues,
       config,
       referencePrice,
+      options.skipCooldown ?? false,
     )
     if (!aiPayload) {
       await this.handleStrategyFailure(instance.id, config)
@@ -581,7 +590,7 @@ export class SignalGeneratorService {
         aiReasoning: aiPayload.reasoning,
         aiRawResponse: aiPayload.rawResponse,
         marketContext: {
-          timeframe: reverseMapTimeframe(group.timeframe as any),  // 转换为应用层格式 "1m"
+          timeframe: reverseMapTimeframe(group.timeframe),
           indicatorTimestamp: latestIndicatorTime?.toISOString() ?? null,
           indicators: indicatorValues,
         } satisfies Prisma.JsonValue,
@@ -619,10 +628,11 @@ export class SignalGeneratorService {
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
     symbol: Symbol,
-    timeframe: MarketTimeframe,
+    timeframe: AppMarketTimeframe,
     indicators: Record<string, number>,
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
+    manualTrigger = false,
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
     // 准备填充 prompt 模板的数据
     let promptData: Record<string, any> = {}
@@ -632,17 +642,8 @@ export class SignalGeneratorService {
       try {
         const engine = createScriptEngine()
         
-        // 构建脚本执行上下文
         const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
-        // 转换 MarketBar 到 Bar 类型
-        const bars = marketBars ? marketBars.map(bar => ({
-          open: Number(bar.open),
-          high: Number(bar.high),
-          low: Number(bar.low),
-          close: Number(bar.close),
-          volume: Number(bar.volume),
-          timestamp: bar.time.getTime(),
-        })) : []
+        const bars = normalizeGatewayBars(marketBars ?? [])
         
         const scriptContext = buildStrategyContext({
           bars,
@@ -773,6 +774,9 @@ export class SignalGeneratorService {
     }
 
     this.logger.warn(`Exceeded AI retry attempts for strategy ${strategy.id}`)
+    if (manualTrigger) {
+      return this.buildManualFallbackSignal(referencePrice, strategy.id, symbol.code)
+    }
     return null
   }
 
@@ -850,26 +854,17 @@ export class SignalGeneratorService {
     return result
   }
 
-  private async loadLatestBar(symbolId: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
-    return this.prisma.marketBar.findFirst({
-      where: { symbolId, timeframe },
-      orderBy: { time: 'desc' },
-    })
+  private async loadLatestBar(symbolId: string, timeframe: PrismaMarketTimeframe): Promise<GatewayBar | null> {
+    return this.marketDataReadGateway.getLatestBarBySymbolId(symbolId, reverseMapTimeframe(timeframe))
   }
 
   private async loadRecentBars(
     symbolId: string,
-    timeframe: MarketTimeframe,
+    timeframe: AppMarketTimeframe,
     limit: number = 100,
-  ): Promise<MarketBar[] | null> {
+  ): Promise<GatewayBar[] | null> {
     try {
-      const bars = await this.prisma.marketBar.findMany({
-        where: { symbolId, timeframe },
-        orderBy: { time: 'desc' },
-        take: limit,
-      })
-      // 返回时间升序的结果（最旧的在前）
-      return bars.reverse()
+      return await this.marketDataReadGateway.getRecentBarsBySymbolId(symbolId, timeframe, limit)
     } catch (error) {
       this.logger.error(`Failed to load recent bars: ${(error as Error).message}`)
       return null
@@ -881,6 +876,45 @@ export class SignalGeneratorService {
     const limit = config.ai.maxRawResponseLength ?? DEFAULT_RAW_RESPONSE_LIMIT
     if (content.length <= limit) return content
     return `${content.slice(0, limit)}...`
+  }
+
+  private buildManualFallbackSignal(
+    referencePrice: number | undefined,
+    strategyId: string,
+    symbolCode: string,
+  ): (AiSignalPayload & { rawResponse: string }) | null {
+    if (!referencePrice || !Number.isFinite(referencePrice) || referencePrice <= 0) {
+      this.logger.warn(
+        `AI failed for strategy ${strategyId} on ${symbolCode}, but manual fallback is unavailable due to invalid reference price`,
+      )
+      return null
+    }
+
+    const entryPrice = Number(referencePrice.toFixed(8))
+    const stopLoss = Number((referencePrice * 0.98).toFixed(8))
+    const takeProfit = Number((referencePrice * 1.02).toFixed(8))
+    const reasoning = 'AI provider unavailable during manual trigger; generated deterministic fallback signal'
+
+    return {
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 1,
+      entryPrice,
+      stopLoss,
+      takeProfit,
+      reasoning,
+      rawResponse: JSON.stringify({
+        fallback: true,
+        reason: 'AI_PROVIDER_UNAVAILABLE',
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 1,
+        entryPrice,
+        stopLoss,
+        takeProfit,
+        reasoning,
+      }),
+    }
   }
 
   private async isStrategyLocked(strategyInstanceId: string) {
@@ -951,8 +985,8 @@ export class SignalGeneratorService {
     interface DataRequest {
       legId: string
       symbolId: string
-      timeframe: MarketTimeframe  // Prisma 枚举格式（如 'h1'）
-      originalTimeframe: string   // 应用层格式（如 '1h'）
+      timeframe: AppMarketTimeframe
+      prismaTimeframe: PrismaMarketTimeframe
     }
     
     const dataRequests: DataRequest[] = []
@@ -963,19 +997,18 @@ export class SignalGeneratorService {
         continue
       }
       
-      const timeframes = dataRequirements[leg.id]
-      if (!timeframes || timeframes.length === 0) {
+      const timeframes = mapLegDataRequirementTimeframes(dataRequirements, leg.id)
+      if (timeframes.length === 0) {
         this.logger.warn(`No timeframes defined for leg ${leg.id}`)
         continue
       }
       
-      // 将应用层时间周期映射为 Prisma 枚举
-      for (const tf of timeframes) {
+      for (const timeframe of timeframes) {
         dataRequests.push({ 
           legId: leg.id, 
-          symbolId: symbol.id, 
-          timeframe: mapTimeframe(tf as any),  // 从应用层 '1h' 转换为 Prisma 'h1'
-          originalTimeframe: tf,  // 保留原始应用层格式用于返回
+          symbolId: symbol.id,
+          timeframe: timeframe.appTimeframe,
+          prismaTimeframe: timeframe.prismaTimeframe,
         })
       }
     }
@@ -996,22 +1029,14 @@ export class SignalGeneratorService {
         result[data.legId] = {}
       }
       
-      const bars = data.bars ? data.bars.map(bar => ({
-        open: Number(bar.open),
-        high: Number(bar.high),
-        low: Number(bar.low),
-        close: Number(bar.close),
-        volume: Number(bar.volume),
-        timestamp: bar.time.getTime(),
-      })) : []
+      const bars = normalizeGatewayBars(data.bars ?? [])
       
       const currentPrice = bars.length > 0 ? bars[bars.length - 1].close : 0
       
       // TODO: 加载指标数据（需要扩展 IndicatorConfig 以支持按 leg 查询）
       const indicators: Record<string, number> = {}
       
-      // 使用应用层格式作为 key（如 '1h'）
-      result[data.legId][data.originalTimeframe] = {
+      result[data.legId][data.timeframe] = {
         bars,
         indicators,
         currentPrice,
@@ -1365,6 +1390,29 @@ export class SignalGeneratorService {
     }
 
     this.logger.warn(`Exceeded AI retry attempts for multi-leg strategy ${strategy.id}`)
+    if (options.skipCooldown) {
+      const fallback = this.buildManualFallbackSignal(referencePrice, strategy.id, primaryLeg.symbol)
+      if (fallback) {
+        await this.resetStrategyFailure(instance.id)
+        const signalResult = await this.createMultiLegSignal(
+          instance,
+          strategy,
+          primarySymbol,
+          execution,
+          promptData,
+          fallback,
+          config,
+          options.skipCooldown ?? false,
+        )
+        if (signalResult.created && signalResult.signalId) {
+          this.logger.warn(
+            `AI failed for strategy ${strategy.id}, created manual fallback signal ${signalResult.signalId}`,
+          )
+          this.telemetry.recordGeneration({ strategyId: strategy.id, symbolCode: primaryLeg.symbol, success: true })
+          return
+        }
+      }
+    }
     await this.handleStrategyFailure(instance.id, config)
     this.telemetry.recordGeneration({
       strategyId: strategy.id,

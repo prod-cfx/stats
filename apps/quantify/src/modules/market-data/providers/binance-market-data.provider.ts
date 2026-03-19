@@ -13,11 +13,19 @@ import type {
   ProviderSymbol,
   SubscribeParams,
 } from '../interfaces/market-data-provider.interface'
+import type {SymbolMarketType} from '../utils/market-symbol-code.util';
 import { HttpService } from '@nestjs/axios'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { lastValueFrom } from 'rxjs'
 import WebSocket from 'ws'
+import {
+  extractRawSymbol,
+  parseSymbolMarket,
+  toSymbolCode
+  
+} from '../utils/market-symbol-code.util'
+import { WsLifecycleManager } from './ws-lifecycle.manager'
 
 interface BinanceSymbolFilter {
   filterType: string
@@ -29,69 +37,77 @@ interface BinanceSymbolFilter {
   maxQty?: string
 }
 
-interface ExchangeInfoResponse {
+interface SpotExchangeInfoResponse {
   symbols: Array<{
     symbol: string
     status: MarketSymbolStatus
     baseAsset: string
     quoteAsset: string
-    baseAssetPrecision: number
-    quotePrecision: number
     isMarginTradingAllowed: boolean
     filters: BinanceSymbolFilter[]
   }>
 }
 
-// Binance Kline API 返回数组格式：[openTime, open, high, low, close, volume, closeTime, quoteVolume, trades, ...]
+interface PerpExchangeInfoResponse {
+  symbols: Array<{
+    symbol: string
+    status: string
+    baseAsset: string
+    quoteAsset: string
+    contractType?: string
+    filters: BinanceSymbolFilter[]
+  }>
+}
+
 type BinanceKlineEntry = [
-  number, // 0: openTime
-  string, // 1: open
-  string, // 2: high
-  string, // 3: low
-  string, // 4: close
-  string, // 5: volume
-  number, // 6: closeTime
-  string, // 7: quoteVolume
-  number, // 8: trades
-  string, // 9: takerBuyBaseVolume
-  string, // 10: takerBuyQuoteVolume
-  string, // 11: ignore
+  number,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  string,
+  number,
+  string,
+  string,
+  string,
 ]
 
 interface BinanceTickerPayload {
   e: '24hrTicker'
-  s: string // symbol
-  c: string // lastPrice
-  p: string // priceChange
-  P: string // priceChangePercent
-  o: string // openPrice
-  h: string // highPrice
-  l: string // lowPrice
-  v: string // volume
-  q: string // quoteVolume
-  b: string // bidPrice
-  B: string // bidQty
-  a: string // askPrice
-  A: string // askQty
-  E: number // eventTime
+  s: string
+  c: string
+  p: string
+  P: string
+  o: string
+  h: string
+  l: string
+  v: string
+  q: string
+  b: string
+  B: string
+  a: string
+  A: string
+  E: number
 }
 
 interface BinanceKlinePayload {
   e: 'kline'
-  s: string // symbol
+  s: string
   k: {
-    t: number // openTime
-    T: number // closeTime
-    s: string // symbol
-    i: string // interval
-    o: string // open
-    h: string // high
-    l: string // low
-    c: string // close
-    v: string // volume
-    q: string // quoteVolume
-    n: number // trades
-    x: boolean // isFinal
+    t: number
+    T: number
+    s: string
+    i: string
+    o: string
+    h: string
+    l: string
+    c: string
+    v: string
+    q: string
+    n: number
+    x: boolean
   }
 }
 
@@ -104,12 +120,17 @@ interface BinanceStreamPayload {
 export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDestroy {
   readonly name = 'BINANCE'
   private readonly logger = new Logger(BinanceMarketDataProvider.name)
-  private ws?: WebSocket
-  private shouldReconnect = false
-  private reconnectTimer?: NodeJS.Timeout
+  private readonly wsLifecycle = new WsLifecycleManager<SymbolMarketType>({
+    getReconnectDelayMs: () => this.reconnectDelayMs,
+    onScheduleReconnect: (market, delayMs) => {
+      this.logger.warn(`metric=market_ws_reconnect_total value=1 market=${market} delayMs=${delayMs}`)
+    },
+  })
+  private readonly streamsByMarket: Partial<Record<SymbolMarketType, string>> = {}
+  private readonly lastMessageAtByMarket: Partial<Record<SymbolMarketType, number>> = {}
+  private readonly watchdogTimerByMarket: Partial<Record<SymbolMarketType, NodeJS.Timeout>> = {}
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
-  private currentStreams?: string
 
   constructor(
     @Inject(HttpService)
@@ -118,16 +139,60 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     private readonly configService: ConfigService,
   ) {}
 
-  private get restBaseUrl() {
-    return this.configService.get<string>('marketData.restBaseUrl') ?? 'https://api.binance.com'
+  private get spotRestBaseUrl() {
+    return (
+      this.configService.get<string>('marketData.spotRestBaseUrl')
+      ?? this.configService.get<string>('marketData.restBaseUrl')
+      ?? 'https://api.binance.com'
+    )
   }
 
-  private get wsBaseUrl() {
-    return this.configService.get<string>('marketData.wsBaseUrl') ?? 'wss://stream.binance.com:9443'
+  private get perpRestBaseUrl() {
+    return this.configService.get<string>('marketData.perpRestBaseUrl') ?? 'https://fapi.binance.com'
   }
 
-  private get streamPathTemplate() {
-    return this.configService.get<string>('marketData.streamPathTemplate') ?? 'stream?streams='
+  private get spotWsBaseUrl() {
+    return (
+      this.configService.get<string>('marketData.spotWsBaseUrl')
+      ?? this.configService.get<string>('marketData.wsBaseUrl')
+      ?? 'wss://stream.binance.com:9443'
+    )
+  }
+
+  private get perpWsBaseUrl() {
+    return this.configService.get<string>('marketData.perpWsBaseUrl') ?? 'wss://fstream.binance.com'
+  }
+
+  private get spotExchangeInfoPath() {
+    return this.configService.get<string>('marketData.spotExchangeInfoPath') ?? '/api/v3/exchangeInfo'
+  }
+
+  private get perpExchangeInfoPath() {
+    return this.configService.get<string>('marketData.perpExchangeInfoPath') ?? '/fapi/v1/exchangeInfo'
+  }
+
+  private get spotKlinePath() {
+    return this.configService.get<string>('marketData.spotRestPathTemplate') ?? '/api/v3/klines'
+  }
+
+  private get perpKlinePath() {
+    return this.configService.get<string>('marketData.perpRestPathTemplate') ?? '/fapi/v1/klines'
+  }
+
+  private get spotWsPathTemplate() {
+    return (
+      this.configService.get<string>('marketData.spotWsPathTemplate')
+      ?? this.configService.get<string>('marketData.streamPathTemplate')
+      ?? 'stream?streams='
+    )
+  }
+
+  private get perpWsPathTemplate() {
+    return (
+      this.configService.get<string>('marketData.perpWsPathTemplate')
+      ?? this.configService.get<string>('marketData.streamPathTemplate')
+      ?? 'stream?streams='
+    )
   }
 
   private get restTimeoutMs() {
@@ -138,20 +203,108 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     return this.configService.get<number>('marketData.wsReconnectDelayMs', 5_000)
   }
 
+  private get staleTimeoutMs() {
+    // 防止连接“假活跃”（TCP 未断开但长期无任何消息）。
+    return this.configService.get<number>('marketData.wsStaleTimeoutMs', 60_000)
+  }
+
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
-    const url = new URL('/api/v3/exchangeInfo', this.restBaseUrl)
-    const params: Record<string, string> = {}
-    if (symbols?.length) {
-      params.symbols = JSON.stringify(symbols.map(symbol => symbol.toUpperCase()))
+    const requestedRawSymbols = symbols
+      ? [...new Set(symbols.map(item => extractRawSymbol(item)).filter(Boolean))]
+      : undefined
+    const [spot, perp] = await Promise.all([
+      this.fetchSpotSymbols(requestedRawSymbols),
+      this.fetchPerpSymbols(requestedRawSymbols),
+    ])
+    return [...spot, ...perp]
+  }
+
+  async fetchHistoricalBars(query: HistoricalBarQuery): Promise<MarketBarPayload[]> {
+    const market = parseSymbolMarket(query.symbol)
+    const rawSymbol = extractRawSymbol(query.symbol)
+    const url = new URL(this.getKlinePath(market), this.getRestBaseUrl(market))
+
+    const params: Record<string, string> = {
+      symbol: rawSymbol,
+      interval: query.timeframe,
+      limit: String(query.limit ?? 500),
     }
+    if (query.start) params.startTime = String(query.start.getTime())
+    if (query.end) params.endTime = String(query.end.getTime())
+
     const { data } = await lastValueFrom(
-      this.http.get<ExchangeInfoResponse>(url.toString(), {
+      this.http.get<BinanceKlineEntry[]>(url.toString(), {
         params,
         timeout: this.restTimeoutMs,
       }),
     )
-    return data.symbols.map(item => ({
-      symbol: item.symbol,
+
+    return data.map(item => this.adaptRestBar(item, query.timeframe, rawSymbol, market))
+  }
+
+  async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
+    this.tickHandler = params.onTick
+    this.klineHandler = params.onKline
+    this.wsLifecycle.setShouldReconnect(true)
+
+    const grouped = this.groupSymbolsByMarket(params.symbols)
+    this.streamsByMarket.SPOT = this.buildStreamParam(grouped.SPOT, params.timeframes)
+    this.streamsByMarket.PERP = this.buildStreamParam(grouped.PERP, params.timeframes)
+
+    await Promise.all([
+      this.openWebSocket('SPOT', this.streamsByMarket.SPOT),
+      this.openWebSocket('PERP', this.streamsByMarket.PERP),
+    ])
+
+    return async () => {
+      this.wsLifecycle.setShouldReconnect(false)
+      await this.disconnect()
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    await Promise.all([this.closeWebSocket('SPOT'), this.closeWebSocket('PERP')])
+  }
+
+  async onModuleDestroy() {
+    await this.disconnect()
+  }
+
+  private async fetchSpotSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
+    const url = new URL(this.spotExchangeInfoPath, this.spotRestBaseUrl)
+    const requestedSet = symbols?.length ? new Set(symbols) : null
+    let rows: SpotExchangeInfoResponse['symbols'] = []
+
+    try {
+      const params: Record<string, string> = {}
+      if (requestedSet) {
+        params.symbols = JSON.stringify([...requestedSet])
+      }
+      const { data } = await lastValueFrom(
+        this.http.get<SpotExchangeInfoResponse>(url.toString(), {
+          params,
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
+    } catch (error) {
+      if (!requestedSet) throw error
+      this.logger.warn(`spot exchangeInfo 按 symbols 拉取失败，降级为全量拉取后本地过滤: ${(error as Error).message}`)
+      const { data } = await lastValueFrom(
+        this.http.get<SpotExchangeInfoResponse>(url.toString(), {
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
+    }
+
+    return rows
+      .filter(item => {
+        if (!requestedSet) return true
+        return requestedSet.has(extractRawSymbol(item.symbol))
+      })
+      .map(item => ({
+      symbol: extractRawSymbol(item.symbol),
       status: item.status,
       baseAsset: item.baseAsset,
       quoteAsset: item.quoteAsset,
@@ -160,63 +313,91 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       isMarginTradingAllowed: item.isMarginTradingAllowed,
       filters: this.mapFilters(item.filters),
       exchange: this.name,
-    }))
+      }))
   }
 
-  async fetchHistoricalBars(query: HistoricalBarQuery): Promise<MarketBarPayload[]> {
-    const url = new URL('/api/v3/klines', this.restBaseUrl)
-    const params: Record<string, string> = {
-      symbol: query.symbol.toUpperCase(),
-      interval: query.timeframe,
-      limit: String(query.limit ?? 500),
-    }
-    if (query.start) params.startTime = String(query.start.getTime())
-    if (query.end) params.endTime = String(query.end.getTime())
-    const { data } = await lastValueFrom(
-      this.http.get<BinanceKlineEntry[]>(url.toString(), {
-        params,
-        timeout: this.restTimeoutMs,
-      }),
-    )
+  private async fetchPerpSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
+    const url = new URL(this.perpExchangeInfoPath, this.perpRestBaseUrl)
+    const requestedSet = symbols?.length ? new Set(symbols) : null
+    let rows: PerpExchangeInfoResponse['symbols'] = []
 
-    return data.map(item => this.adaptRestBar(item, query.timeframe, query.symbol))
-  }
-
-  async subscribe(params: SubscribeParams): Promise<() => Promise<void> | void> {
-    this.tickHandler = params.onTick
-    this.klineHandler = params.onKline
-    this.currentStreams = this.buildStreamParam(params.symbols, params.timeframes)
-    this.shouldReconnect = true
-    await this.openWebSocket()
-    return async () => {
-      this.shouldReconnect = false
-      await this.disconnect()
+    try {
+      const params: Record<string, string> = {}
+      if (requestedSet) {
+        params.symbols = JSON.stringify([...requestedSet])
+      }
+      const { data } = await lastValueFrom(
+        this.http.get<PerpExchangeInfoResponse>(url.toString(), {
+          params,
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
+    } catch (error) {
+      if (!requestedSet) throw error
+      this.logger.warn(`perp exchangeInfo 按 symbols 拉取失败，降级为全量拉取后本地过滤: ${(error as Error).message}`)
+      const { data } = await lastValueFrom(
+        this.http.get<PerpExchangeInfoResponse>(url.toString(), {
+          timeout: this.restTimeoutMs,
+        }),
+      )
+      rows = data.symbols ?? []
     }
-  }
 
-  async disconnect(): Promise<void> {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = undefined
-    }
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      await new Promise<void>(resolve => {
-        this.ws?.once('close', () => resolve())
-        this.ws?.close()
+    return rows
+      .filter(item => {
+        if (!requestedSet) return true
+        return requestedSet.has(extractRawSymbol(item.symbol))
       })
-    } else if (this.ws) {
-      this.ws.close()
+      .filter(item => item.contractType !== 'PERPETUAL_DELIVERING')
+      .map(item => ({
+        symbol: extractRawSymbol(item.symbol),
+        status: item.status,
+        baseAsset: item.baseAsset,
+        quoteAsset: item.quoteAsset,
+        type: 'CRYPTO' satisfies MarketSymbolType,
+        instrumentType: 'PERPETUAL' satisfies MarketInstrumentType,
+        isMarginTradingAllowed: false,
+        filters: this.mapFilters(item.filters),
+        exchange: this.name,
+      }))
+  }
+
+  private getRestBaseUrl(market: SymbolMarketType): string {
+    return market === 'PERP' ? this.perpRestBaseUrl : this.spotRestBaseUrl
+  }
+
+  private getKlinePath(market: SymbolMarketType): string {
+    return market === 'PERP' ? this.perpKlinePath : this.spotKlinePath
+  }
+
+  private getWsBaseUrl(market: SymbolMarketType): string {
+    return market === 'PERP' ? this.perpWsBaseUrl : this.spotWsBaseUrl
+  }
+
+  private getWsPathTemplate(market: SymbolMarketType): string {
+    return market === 'PERP' ? this.perpWsPathTemplate : this.spotWsPathTemplate
+  }
+
+  private groupSymbolsByMarket(symbols: string[]): Record<SymbolMarketType, string[]> {
+    const grouped: Record<SymbolMarketType, string[]> = { SPOT: [], PERP: [] }
+
+    for (const symbol of symbols) {
+      const market = parseSymbolMarket(symbol)
+      grouped[market].push(extractRawSymbol(symbol))
     }
-    this.ws = undefined
+
+    return grouped
   }
 
-  async onModuleDestroy() {
-    await this.disconnect()
-  }
-
-  private adaptRestBar(entry: BinanceKlineEntry, timeframe: MarketTimeframe, symbol: string): MarketBarPayload {
+  private adaptRestBar(
+    entry: BinanceKlineEntry,
+    timeframe: MarketTimeframe,
+    rawSymbol: string,
+    market: SymbolMarketType,
+  ): MarketBarPayload {
     return {
-      symbol: symbol.toUpperCase(),
+      symbol: toSymbolCode(rawSymbol, market),
       timeframe,
       open: entry[1],
       high: entry[2],
@@ -225,7 +406,7 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       volume: entry[5],
       quoteVolume: entry[7],
       trades: entry[8],
-      timestamp: entry[0], // 使用 openTime 而非 closeTime，确保游标推进正确
+      timestamp: entry[0],
       isFinal: true,
       source: 'BINANCE_REST',
     }
@@ -243,76 +424,100 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     return streams.join('/')
   }
 
-  private async openWebSocket() {
-    if (!this.currentStreams) return
-    const base = this.wsBaseUrl.replace(/\/$/, '')
-    const template = this.streamPathTemplate
+  private async openWebSocket(market: SymbolMarketType, streams?: string) {
+    if (!streams) return
+
+    const base = this.getWsBaseUrl(market).replace(/\/$/, '')
+    const template = this.getWsPathTemplate(market)
     const path = template.startsWith('/') ? template : `/${template}`
+    const url = `${base}${path}${streams}`
 
-    let url: string
+    const ws = new WebSocket(url)
+    this.wsLifecycle.registerSocket(market, ws)
 
-    if (template.includes('streams=')) {
-      // 多路复用模式，例如 /stream?streams=btcusdt@ticker/ethusdt@kline_1m
-      url = `${base}${path}${this.currentStreams}`
-    } else {
-      // 单流模式，例如 /ws/<streamName>
-      url = `${base}${path}${this.currentStreams}`
-    }
-    this.ws = new WebSocket(url)
-
-    this.ws.on('open', () => {
-      this.logger.log(`Binance WebSocket 已连接: ${this.currentStreams}`)
+    ws.on('open', () => {
+      this.lastMessageAtByMarket[market] = Date.now()
+      this.startWatchdog(market)
+      this.logger.log(`Binance WebSocket 已连接: market=${market} streams=${streams}`)
+      this.logger.log(`metric=market_ws_connected value=1 market=${market}`)
     })
 
-    this.ws.on('message', data => {
+    ws.on('message', data => {
+      this.lastMessageAtByMarket[market] = Date.now()
       try {
         const payload = JSON.parse(data.toString()) as BinanceStreamPayload
-        this.handleStreamPayload(payload)
+        void this.handleStreamPayload(payload, market)
       } catch (error) {
-        this.logger.error(`解析 WebSocket 消息失败: ${(error as Error).message}`)
+        this.logger.error(`解析 WebSocket 消息失败: ${(error as Error).message} market=${market}`)
       }
     })
 
-    this.ws.on('close', () => {
-      this.logger.warn('Binance WebSocket 连接关闭')
-      this.scheduleReconnect()
+    ws.on('close', () => {
+      this.stopWatchdog(market)
+      this.logger.warn(`Binance WebSocket 连接关闭 market=${market}`)
+      this.logger.warn(`metric=market_ws_connected value=0 market=${market}`)
+      this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
 
-    this.ws.on('error', error => {
-      this.logger.error(`Binance WebSocket 错误: ${(error as Error).message}`)
-      this.scheduleReconnect()
+    ws.on('error', error => {
+      this.stopWatchdog(market)
+      this.logger.error(`Binance WebSocket 错误: ${(error as Error).message} market=${market}`)
+      this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
   }
 
-  private scheduleReconnect() {
-    if (!this.shouldReconnect) return
-    if (this.reconnectTimer) return
-    this.reconnectTimer = setTimeout(async () => {
-      this.reconnectTimer = undefined
-      await this.openWebSocket()
-    }, this.reconnectDelayMs)
+  private async closeWebSocket(market: SymbolMarketType): Promise<void> {
+    this.stopWatchdog(market)
+    await this.wsLifecycle.closeSocket(market)
   }
 
-  private async handleStreamPayload(payload: BinanceStreamPayload) {
+  private startWatchdog(market: SymbolMarketType): void {
+    const existing = this.watchdogTimerByMarket[market]
+    if (existing) clearInterval(existing)
+
+    this.watchdogTimerByMarket[market] = setInterval(() => {
+      const ws = this.wsLifecycle.getSocket(market)
+      if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+      const lastMessageAt = this.lastMessageAtByMarket[market] ?? 0
+      const idleMs = Date.now() - lastMessageAt
+      if (idleMs < this.staleTimeoutMs) return
+
+      this.logger.warn(
+        `Binance WebSocket 长时间无消息，主动重连: market=${market} idleMs=${idleMs} timeoutMs=${this.staleTimeoutMs}`,
+      )
+      ws.terminate()
+    }, 10_000)
+  }
+
+  private stopWatchdog(market: SymbolMarketType): void {
+    const timer = this.watchdogTimerByMarket[market]
+    if (timer) {
+      clearInterval(timer)
+      this.watchdogTimerByMarket[market] = undefined
+    }
+  }
+
+  private async handleStreamPayload(payload: BinanceStreamPayload, market: SymbolMarketType) {
     const data = payload?.data
     if (!data) return
 
     try {
       if (data.e === '24hrTicker') {
-        await this.tickHandler?.(this.adaptTicker(data))
+        await this.tickHandler?.(this.adaptTicker(data, market))
         return
       }
       if (data.e === 'kline') {
-        await this.klineHandler?.(this.adaptWsKline(data))
+        await this.klineHandler?.(this.adaptWsKline(data, market))
       }
     } catch (error) {
       this.logger.error(`处理 WebSocket 消息失败: ${(error as Error).message}`, (error as Error).stack)
     }
   }
 
-  private adaptTicker(data: BinanceTickerPayload): MarketQuotePayload {
+  private adaptTicker(data: BinanceTickerPayload, market: SymbolMarketType): MarketQuotePayload {
     return {
-      symbol: data.s,
+      symbol: toSymbolCode(data.s, market),
       lastPrice: data.c,
       priceChange: data.p,
       priceChangePercent: data.P,
@@ -330,10 +535,10 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
     }
   }
 
-  private adaptWsKline(data: BinanceKlinePayload): MarketBarPayload {
+  private adaptWsKline(data: BinanceKlinePayload, market: SymbolMarketType): MarketBarPayload {
     const k = data.k
     return {
-      symbol: data.s,
+      symbol: toSymbolCode(data.s, market),
       timeframe: k.i as MarketTimeframe,
       open: k.o,
       high: k.h,

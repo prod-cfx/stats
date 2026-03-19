@@ -139,4 +139,30 @@ describe('strategyInstancesControllers', () => {
       'user-2',
     )
   })
+
+  it('post /ops/strategy-instances/:id/generate-signal validates then triggers async generation', async () => {
+    signalGenerator.validateManualTriggerTarget.mockResolvedValue(undefined)
+    signalGenerator.generateSignalForInstance.mockResolvedValue(undefined)
+
+    await request(app.getHttpServer())
+      .post('/ops/strategy-instances/instance-1/generate-signal')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.instanceId).toBe('instance-1')
+      })
+
+    expect(signalGenerator.validateManualTriggerTarget).toHaveBeenCalledWith('instance-1')
+
+    await new Promise(resolve => setImmediate(resolve))
+
+    expect(signalGenerator.generateSignalForInstance).toHaveBeenCalledWith('instance-1', { skipCooldown: true })
+  })
+
+  it('post /ops/strategy-instances/:id/generate-signal maps missing instance to 404', async () => {
+    signalGenerator.validateManualTriggerTarget.mockRejectedValue(new Error('Strategy instance instance-404 not found'))
+
+    await request(app.getHttpServer())
+      .post('/ops/strategy-instances/instance-404/generate-signal')
+      .expect(404)
+  })
 })

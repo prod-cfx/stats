@@ -3,6 +3,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 
+const MARKET_BAR_PROVIDERS = ['BINANCE', 'OKX', 'HYPERLIQUID'] as const
+
 export class MarketBarsQueryDto {
   @ApiProperty({ description: '交易对代码（如 BTCUSDT）' })
   @IsString()
@@ -29,5 +31,13 @@ export class MarketBarsQueryDto {
   @Min(1)
   @Max(1000)
   limit: number = 500
-}
 
+  @ApiPropertyOptional({
+    description: '可选 provider 过滤（仅返回该来源的 K 线）',
+    enum: MARKET_BAR_PROVIDERS,
+    example: 'OKX',
+  })
+  @IsOptional()
+  @IsIn(MARKET_BAR_PROVIDERS as unknown as string[])
+  provider?: (typeof MARKET_BAR_PROVIDERS)[number]
+}

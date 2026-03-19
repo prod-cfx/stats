@@ -1,16 +1,21 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
+import type { MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
 import type { LegTimeframeData, MultiLegStrategyContext, StrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
-import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
-import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
+import type { StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 import { fillPromptTemplate } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { StrategyTemplateNotFoundException } from '@/modules/strategy-templates/exceptions/strategy-template-not-found.exception'
+import {
+  mapLegDataRequirementTimeframes,
+  parseDataRequirements,
+} from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 import { CreateStrategyInstanceDto } from '../dto/create-strategy-instance.dto'
@@ -83,6 +88,7 @@ export class StrategyInstancesService {
     private readonly instancesRepo: StrategyInstancesRepository,
     private readonly statsService: StrategyInstanceStatsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
+    private readonly marketDataReadGateway: MarketDataReadGateway,
   ) {}
 
   async createInstance(
@@ -379,10 +385,7 @@ export class StrategyInstancesService {
 
     const strategy = instance.strategyTemplate
     const execution = strategy.execution as unknown as StrategyExecutionConfig | null | undefined
-    const dataRequirements = strategy.dataRequirements as unknown as
-      | StrategyDataRequirements
-      | null
-      | undefined
+    const dataRequirements = parseDataRequirements(strategy.dataRequirements)
     const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
 
     const isMultiLeg =
@@ -406,8 +409,7 @@ export class StrategyInstancesService {
     interface DataRequest {
       legId: string
       symbolId: string
-      timeframe: PrismaMarketTimeframe // Prisma 枚举格式（如 'h1'）
-      originalTimeframe: string // 应用层格式（如 '1h'）
+      timeframe: AppMarketTimeframe
     }
 
     const dataRequests: DataRequest[] = []
@@ -418,47 +420,33 @@ export class StrategyInstancesService {
         continue
       }
 
-      const timeframes = dataRequirements![leg.id]
-      if (!timeframes || timeframes.length === 0) {
+      const timeframes = mapLegDataRequirementTimeframes(dataRequirements!, leg.id)
+      if (timeframes.length === 0) {
         this.logger.warn(`No timeframes defined for leg ${leg.id} when building test payload`)
         continue
       }
 
-      for (const tf of timeframes) {
+      for (const timeframe of timeframes) {
         dataRequests.push({
           legId: leg.id,
           symbolId: symbol.id,
-          timeframe: mapTimeframe(tf as any),
-          originalTimeframe: tf,
+          timeframe: timeframe.appTimeframe,
         })
       }
     }
 
     // 3. 为每个组合加载最近一段 K 线
-    const multiLegData: Record<string, Record<string, { bars: any[]; indicators: Record<string, number>; currentPrice: number }>> =
+    const multiLegData: Record<string, Record<string, LegTimeframeData>> =
       {}
 
     for (const req of dataRequests) {
-      const bars = await client.marketBar.findMany({
-        where: {
-          symbolId: req.symbolId,
-          timeframe: req.timeframe,
-        },
-        orderBy: { time: 'desc' },
-        take: StrategyInstancesService.DEBUG_BAR_LIMIT,
-      })
+      const bars = await this.marketDataReadGateway.getRecentBarsBySymbolId(
+        req.symbolId,
+        req.timeframe,
+        StrategyInstancesService.DEBUG_BAR_LIMIT,
+      )
 
-      const normalizedBars =
-        bars
-          .reverse()
-          .map(bar => ({
-            open: Number(bar.open),
-            high: Number(bar.high),
-            low: Number(bar.low),
-            close: Number(bar.close),
-            volume: Number(bar.volume),
-            timestamp: bar.time.getTime(),
-          })) ?? []
+      const normalizedBars = normalizeGatewayBars(bars)
 
       const currentPrice =
         normalizedBars.length > 0 ? normalizedBars[normalizedBars.length - 1]!.close : 0
@@ -468,7 +456,7 @@ export class StrategyInstancesService {
       }
 
       // 目前指标暂不从数据库加载，留空给脚本使用 K 线自行计算或由调试者补充
-      multiLegData[req.legId]![req.originalTimeframe] = {
+      multiLegData[req.legId]![req.timeframe] = {
         bars: normalizedBars,
         indicators: {},
         currentPrice,
@@ -505,10 +493,7 @@ export class StrategyInstancesService {
 
     const strategy = instance.strategyTemplate
     const execution = strategy.execution as unknown as StrategyExecutionConfig | null | undefined
-    const dataRequirements = strategy.dataRequirements as unknown as
-      | StrategyDataRequirements
-      | null
-      | undefined
+    const dataRequirements = parseDataRequirements(strategy.dataRequirements)
     const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
 
     if (!strategy.script) {

@@ -15,8 +15,8 @@ import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
-import { buildLogicGraphFromPrompt } from '@/components/ai-quant/logic-graph-generator'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
+import { buildLogicGraphFromPrompt } from '@/components/ai-quant/logic-graph-generator'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
@@ -59,6 +59,7 @@ interface ConversationState {
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
+  latestSignalMessage: string | null
   updatedAt: number
 }
 
@@ -101,6 +102,7 @@ export function AiQuantPageClient() {
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
+      latestSignalMessage: null,
       updatedAt: now,
     }
   }
@@ -138,8 +140,13 @@ export function AiQuantPageClient() {
     try {
       const parsed = JSON.parse(raw) as ConversationState[]
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
-      setConversations(parsed)
-      setActiveConversationId(parsed[0].id)
+      const normalized = parsed.map(item => ({
+        ...item,
+        llmCodegenSessionId: item.llmCodegenSessionId ?? null,
+        latestSignalMessage: item.latestSignalMessage ?? null,
+      }))
+      setConversations(normalized)
+      setActiveConversationId(normalized[0].id)
     } catch {
       const seed = createConversation()
       setConversations([seed])
@@ -290,6 +297,7 @@ export function AiQuantPageClient() {
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
           logicGraph: nextGraph,
           backtestResult: null,
+          latestSignalMessage: null,
           messages: [
             ...conv.messages,
             {
@@ -309,6 +317,7 @@ export function AiQuantPageClient() {
         return {
           ...conv,
           logicGraph: fallbackGraph,
+          latestSignalMessage: null,
           messages: [
             ...conv.messages,
             {
@@ -319,6 +328,59 @@ export function AiQuantPageClient() {
           ],
           updatedAt: Date.now(),
         }
+      }))
+    }
+  }
+
+  const getQuoteSymbol = (symbol: string) => (symbol.includes(':') ? symbol : `${symbol}:SPOT`)
+
+  const emitMockSignalPreview = async (targetParams: QuantParams) => {
+    const symbol = getQuoteSymbol(targetParams.symbol)
+    const fallback = `已生成模拟信号：BUY ${targetParams.symbol}。可继续点击“开始回测”验证策略表现。`
+
+    try {
+      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1').replace(/\/$/, '')
+      const resp = await fetch(`${apiBaseUrl}/market/quote?symbol=${encodeURIComponent(symbol)}`)
+      if (!resp.ok) throw new Error(`http_${resp.status}`)
+
+      const payload = await resp.json() as {
+        data?: {
+          lastPrice?: string
+          source?: string
+        }
+      }
+      const price = payload?.data?.lastPrice
+      const source = payload?.data?.source
+      const message = price
+        ? `已生成模拟信号：BUY ${targetParams.symbol}（当前价 ${price}${source ? `，数据源 ${source}` : ''}）。可继续点击“开始回测”验证策略表现。`
+        : fallback
+
+      updateActiveConversation(curr => ({
+        ...curr,
+        latestSignalMessage: message,
+        messages: [
+          ...curr.messages,
+          {
+            id: `signal-preview-${Date.now()}`,
+            role: 'assistant',
+            content: message,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+    } catch {
+      updateActiveConversation(curr => ({
+        ...curr,
+        latestSignalMessage: fallback,
+        messages: [
+          ...curr.messages,
+          {
+            id: `signal-preview-fallback-${Date.now()}`,
+            role: 'assistant',
+            content: fallback,
+          },
+        ],
+        updatedAt: Date.now(),
       }))
     }
   }
@@ -344,6 +406,7 @@ export function AiQuantPageClient() {
         title: derivedTitle,
         messages: nextMessages,
         backtestResult: null,
+        latestSignalMessage: null,
         updatedAt: Date.now(),
       }
     })
@@ -372,6 +435,7 @@ export function AiQuantPageClient() {
       ...curr,
       params: nextParams,
       backtestResult: null,
+      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -415,6 +479,7 @@ export function AiQuantPageClient() {
       ...curr,
       params: nextParams,
       backtestResult: null,
+      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -621,6 +686,7 @@ export function AiQuantPageClient() {
                   ],
                   updatedAt: Date.now(),
                 }))
+                void emitMockSignalPreview(activeConversation.params)
               }}
               onRevise={() => {
                 updateActiveConversation(curr => ({
@@ -637,6 +703,13 @@ export function AiQuantPageClient() {
                 }))
               }}
             />
+          )}
+
+          {activeConversation.latestSignalMessage && (
+            <section className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+              <p className="text-xs font-semibold text-emerald-300">MOCK SIGNAL</p>
+              <p className="mt-2 text-sm text-emerald-100">{activeConversation.latestSignalMessage}</p>
+            </section>
           )}
 
           {activeConversation.backtestResult && (

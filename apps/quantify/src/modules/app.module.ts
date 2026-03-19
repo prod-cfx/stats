@@ -42,6 +42,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
 const bullImports = isMessageBusRuntimeEnabled()
   ? [
       BullModule.forRootAsync({
+        // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix -- NestJS API requires the `useFactory` key name.
         useFactory: (env: EnvService) => {
           const url = env.getString('REDIS_URL')
           if (!url) {
@@ -78,6 +79,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
       ignoreErrors: false,
     }),
     WinstonModule.forRootAsync({
+      // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix -- NestJS API requires the `useFactory` key name.
       useFactory: (env: EnvService) => {
         const config = resolveLoggerConfig()
         return {
