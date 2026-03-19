@@ -70,7 +70,7 @@ export class FixedHyperliquidTestnetSignalService {
     const baseAsset = this.getBaseAsset()
     const quoteAsset = this.getQuoteAsset()
     const perpSymbolCode = `${baseAsset}${quoteAsset}:PERP`
-    const strategyName = `FIXED-HYPERLIQUID-${perpSymbolCode}`
+    const strategyName = `FIXED-HYPERLIQUID-TESTNET-${baseAsset}${quoteAsset}`
     const strategySlug = `${baseAsset}${quoteAsset}`.toLowerCase()
     const userEmail = this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_USER_EMAIL', DEFAULT_FIXED_USER_EMAIL) ?? DEFAULT_FIXED_USER_EMAIL
 

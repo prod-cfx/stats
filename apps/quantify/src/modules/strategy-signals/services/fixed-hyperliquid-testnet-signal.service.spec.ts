@@ -134,6 +134,9 @@ describe('FixedHyperliquidTestnetSignalService', () => {
 
     const context = await service.resolveContext()
 
+    expect(prisma.llmStrategy.findUnique).toHaveBeenCalledWith({
+      where: { name: 'FIXED-HYPERLIQUID-TESTNET-ETHUSDT' },
+    })
     expect(prisma.symbol.findFirst).toHaveBeenCalledWith({ where: { code: 'ETHUSDT:PERP' } })
     expect(prisma.llmStrategyInstance.findFirst).toHaveBeenCalledWith({
       where: {

@@ -25,6 +25,14 @@
 - `agentPrivateKey`：Agent 私钥
 - `isTestnet`：是否连接测试网
 
+主账户交易约定：
+
+- 使用主账户地址作为账户归属与查询地址
+- 使用 API/Agent 私钥做签名
+- 不传 `defaultVaultAddress`
+
+只有代表子账户或 vault 交易时，才应显式传入对应的 vault/subaccount 地址。
+
 ## 调试建议
 
 - 先验证 Agent 是否已被主钱包授权

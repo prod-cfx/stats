@@ -11,6 +11,7 @@ import type {
 import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
 import * as hyperliquidSdk from '@nktkas/hyperliquid'
+import { formatPrice, formatSize } from '@nktkas/hyperliquid/utils'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
 
@@ -18,6 +19,11 @@ interface HyperliquidSdk {
   HttpTransport: new (config: unknown) => unknown
   InfoClient: new (config: unknown) => any
   ExchangeClient: new (config: unknown) => any
+}
+
+interface HyperliquidAssetMeta {
+  assetId: number
+  szDecimals: number
 }
 
 function loadHyperliquidSdk(): HyperliquidSdk {
@@ -36,8 +42,8 @@ function loadHyperliquidSdk(): HyperliquidSdk {
 export class HyperliquidClient implements IExchangeClient {
   // ========== 配置常量 ==========
 
-  /** 市价单滑点容忍度 (10%) */
-  private readonly MARKET_ORDER_SLIPPAGE = 0.1
+  /** 市价单滑点容忍度 (2%) */
+  private readonly MARKET_ORDER_SLIPPAGE = 0.02
 
   /** Ticker 缓存有效期（5秒） */
   private readonly TICKER_CACHE_TTL = 5000
@@ -62,7 +68,7 @@ export class HyperliquidClient implements IExchangeClient {
   private readonly mainWalletAddress: string
   private readonly agentPrivateKey: string
 
-  // 实际用于交易和查询的钱包地址（agent 钱包地址）
+  // 实际用于查询账户状态的钱包地址（主账户或显式指定的子账户/vault）
   private readonly tradingWalletAddress: string
 
   private readonly infoClient: any
@@ -76,7 +82,7 @@ export class HyperliquidClient implements IExchangeClient {
   private tickerCache = new Map<string, { data: UnifiedTicker; timestamp: number }>()
 
   // 资产元数据缓存（coin -> assetId 映射）
-  private assetMetaCache: Map<string, number> | null = null
+  private assetMetaCache: Map<string, HyperliquidAssetMeta> | null = null
   private assetMetaCacheTime = 0
   private readonly ASSET_META_CACHE_TTL = 3600000 // 1小时
 
@@ -100,9 +106,8 @@ export class HyperliquidClient implements IExchangeClient {
 
     // Hyperliquid Agent/Vault 架构：
     // - agent 钱包：用于签名交易
-    // - vault/主钱包：资金实际存放的地址
-    // - 通过 defaultVaultAddress 指定资金归属
-    // - 查询时使用主钱包地址
+    // - 主账户地址：用于账户归属和查询
+    // - 仅在代表子账户/vault 交易时才需要 defaultVaultAddress
     this.tradingWalletAddress = this.mainWalletAddress
 
     // 初始化客户端
@@ -110,7 +115,6 @@ export class HyperliquidClient implements IExchangeClient {
     this.exchClient = new hl.ExchangeClient({
       transport,
       wallet,
-      defaultVaultAddress: this.mainWalletAddress, // 指定资金归属到主钱包
     } as any)
   }
 
@@ -147,7 +151,7 @@ export class HyperliquidClient implements IExchangeClient {
 
     try {
       // 获取 BTC 的 assetId（最常用的资产）
-      const assetId = await this.getAssetId('BTC')
+      const { assetId } = await this.getAssetMeta('BTC')
 
       // 尝试通过 cloid 取消一个不存在的订单
       // 这会触发签名验证，但不会产生实际副作用
@@ -370,7 +374,7 @@ export class HyperliquidClient implements IExchangeClient {
     const clientOrderId = input.clientOrderId || this.generateClientOrderId()
 
     // 获取资产 ID（Hyperliquid SDK 要求）
-    const assetId = await this.getAssetId(coin)
+    const { assetId, szDecimals } = await this.getAssetMeta(coin)
 
     // 准备订单类型和价格
     const { orderType, limitPx } = await this.prepareOrderRequest(input, coin, isBuy)
@@ -380,8 +384,8 @@ export class HyperliquidClient implements IExchangeClient {
     const orderRequest: any = {
       a: assetId, // 资产 ID（整数）
       b: isBuy,
-      p: String(limitPx),
-      s: String(sz), // 下单数量（字符串）
+      p: formatPrice(limitPx, szDecimals, true),
+      s: formatSize(sz, szDecimals), // 下单数量（字符串）
       r: input.reduceOnly ?? false,
       t: orderType,
       c: clientOrderId,
@@ -500,7 +504,7 @@ export class HyperliquidClient implements IExchangeClient {
     const slippageFactor = 1 + (isBuy ? this.MARKET_ORDER_SLIPPAGE : -this.MARKET_ORDER_SLIPPAGE)
 
     return {
-      orderType: { limit: { tif: 'Ioc' } },
+      orderType: { limit: { tif: 'FrontendMarket' } },
       limitPx: midPrice * slippageFactor,
     }
   }
@@ -525,7 +529,7 @@ export class HyperliquidClient implements IExchangeClient {
       const coin = this.mapSymbolToHl(symbol)
 
       // 获取资产 ID（Hyperliquid SDK 要求）
-      const assetId = await this.getAssetId(coin)
+      const { assetId } = await this.getAssetMeta(coin)
 
       // 先查询订单详情，以便返回准确的订单信息
       let orderInfo: UnifiedOrder | null = null
@@ -1069,13 +1073,13 @@ export class HyperliquidClient implements IExchangeClient {
    * const assetId = await this.getAssetId('ETH') // 返回: 1
    * ```
    */
-  private async getAssetId(coin: string): Promise<number> {
+  private async getAssetMeta(coin: string): Promise<HyperliquidAssetMeta> {
     // 检查缓存
     const now = Date.now()
     if (this.assetMetaCache && now - this.assetMetaCacheTime < this.ASSET_META_CACHE_TTL) {
-      const assetId = this.assetMetaCache.get(coin)
-      if (assetId !== undefined) {
-        return assetId
+      const assetMeta = this.assetMetaCache.get(coin)
+      if (assetMeta !== undefined) {
+        return assetMeta
       }
     }
 
@@ -1083,11 +1087,14 @@ export class HyperliquidClient implements IExchangeClient {
     const meta: any = await this.infoClient.meta()
 
     // 构建 coin -> assetId 映射
-    const newCache = new Map<string, number>()
+    const newCache = new Map<string, HyperliquidAssetMeta>()
     if (meta && meta.universe && Array.isArray(meta.universe)) {
       for (const asset of meta.universe) {
         if (asset.name) {
-          newCache.set(asset.name, asset.index ?? newCache.size)
+          newCache.set(asset.name, {
+            assetId: asset.index ?? newCache.size,
+            szDecimals: Number(asset.szDecimals ?? 0),
+          })
         }
       }
     }
@@ -1097,15 +1104,15 @@ export class HyperliquidClient implements IExchangeClient {
     this.assetMetaCacheTime = now
 
     // 查找目标币种
-    const assetId = newCache.get(coin)
-    if (assetId === undefined) {
+    const assetMeta = newCache.get(coin)
+    if (assetMeta === undefined) {
       throw new ExchangeError(
         `Asset ${coin} not found in Hyperliquid meta`,
         'ASSET_NOT_FOUND',
       )
     }
 
-    return assetId
+    return assetMeta
   }
 
   /**
