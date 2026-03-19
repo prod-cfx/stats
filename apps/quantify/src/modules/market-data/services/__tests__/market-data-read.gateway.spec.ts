@@ -274,6 +274,45 @@ describe('market data read gateway', () => {
     expect(mockRepository.findLatestQuote).not.toHaveBeenCalled()
   })
 
+  it('sorts in-memory bar snapshot before direct return when snapshot count reaches limit', async () => {
+    mockMarketDataService.getRecentBarsSnapshot.mockReturnValue([
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        timestamp: 1710000060000,
+        open: '101',
+        high: '111',
+        low: '91',
+        close: '106',
+        volume: '11',
+        quoteVolume: '1100',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+      },
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        timestamp: 1710000000000,
+        open: '100',
+        high: '110',
+        low: '90',
+        close: '105',
+        volume: '10',
+        quoteVolume: '1000',
+        trades: 1,
+        source: 'BINANCE_WS',
+        isFinal: true,
+      },
+    ])
+
+    const bars = await gateway.getRecentBars('BTCUSDT', '1h', 2)
+
+    expect(mockRepository.findRecentBars).not.toHaveBeenCalled()
+    expect(bars.map(bar => bar.timestamp)).toEqual([1710000000000, 1710000060000])
+    expect(bars[1]?.close).toBe(106)
+  })
+
   it('preserves high precision quote value from snapshot without Number round-trip', async () => {
     const precise = '12345.123456789123456789'
     mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({

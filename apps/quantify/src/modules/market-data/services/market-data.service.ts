@@ -497,17 +497,27 @@ export class MarketDataService {
 
   private updateBarSnapshot(payload: MarketBarPayload) {
     const key = this.getBarSnapshotKey(payload.symbol, payload.timeframe)
-    this.latestBarCache.set(key, payload)
+    const latest = this.latestBarCache.get(key)
+    if (!latest || payload.timestamp >= latest.timestamp) {
+      this.latestBarCache.set(key, payload)
+    }
 
     const current = this.recentBarsCache.get(key) ?? []
-    const last = current[current.length - 1]
-    if (last && last.timestamp === payload.timestamp) {
-      current[current.length - 1] = payload
-    } else {
-      current.push(payload)
-      if (current.length > MarketDataService.MAX_BAR_CACHE_PER_STREAM) {
-        current.splice(0, current.length - MarketDataService.MAX_BAR_CACHE_PER_STREAM)
-      }
+    const sameTimestampIndex = current.findIndex(bar => bar.timestamp === payload.timestamp)
+    if (sameTimestampIndex >= 0) {
+      current[sameTimestampIndex] = payload
+      this.recentBarsCache.set(key, current)
+      return
+    }
+
+    let insertAt = current.length
+    while (insertAt > 0 && current[insertAt - 1]!.timestamp > payload.timestamp) {
+      insertAt -= 1
+    }
+
+    current.splice(insertAt, 0, payload)
+    if (current.length > MarketDataService.MAX_BAR_CACHE_PER_STREAM) {
+      current.splice(0, current.length - MarketDataService.MAX_BAR_CACHE_PER_STREAM)
     }
     this.recentBarsCache.set(key, current)
   }

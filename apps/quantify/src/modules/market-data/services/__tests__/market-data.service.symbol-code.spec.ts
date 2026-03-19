@@ -106,4 +106,61 @@ describe('marketDataService symbol code compatibility', () => {
       }),
     )
   })
+
+  it('keeps recent bar snapshot in ascending timestamp order when gapfill arrives after realtime bars', async () => {
+    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+
+    await service.saveBarFromProvider({
+      symbol: 'BTCUSDT',
+      timeframe: '1m',
+      timestamp: 1_710_000_060_000,
+      open: '101',
+      high: '111',
+      low: '91',
+      close: '106',
+      volume: '11',
+      quoteVolume: '1100',
+      trades: 1,
+      source: 'BINANCE_WS',
+      isFinal: true,
+    })
+
+    await service.saveBarFromProvider({
+      symbol: 'BTCUSDT',
+      timeframe: '1m',
+      timestamp: 1_710_000_000_000,
+      open: '100',
+      high: '110',
+      low: '90',
+      close: '105',
+      volume: '10',
+      quoteVolume: '1000',
+      trades: 1,
+      source: 'BINANCE_WS',
+      isFinal: true,
+    })
+
+    await service.saveBarFromProvider({
+      symbol: 'BTCUSDT',
+      timeframe: '1m',
+      timestamp: 1_710_000_120_000,
+      open: '102',
+      high: '112',
+      low: '92',
+      close: '107',
+      volume: '12',
+      quoteVolume: '1200',
+      trades: 1,
+      source: 'BINANCE_WS',
+      isFinal: true,
+    })
+
+    const recent = service.getRecentBarsSnapshot('BTCUSDT', '1m', 3)
+    expect(recent.map(bar => bar.timestamp)).toEqual([
+      1_710_000_000_000,
+      1_710_000_060_000,
+      1_710_000_120_000,
+    ])
+    expect(service.getLatestBarSnapshot('BTCUSDT', '1m')?.timestamp).toBe(1_710_000_120_000)
+  })
 })

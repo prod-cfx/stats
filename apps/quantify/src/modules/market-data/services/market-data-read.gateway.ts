@@ -47,9 +47,9 @@ export class MarketDataReadGateway {
   ) {}
 
   async getRecentBars(symbol: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
-    const snapshotBars = this.marketDataService
+    const snapshotBars = this.normalizeSnapshotBars(this.marketDataService
       .getRecentBarsSnapshot(symbol, timeframe, limit)
-      .map(bar => this.toGatewayBarFromPayload(bar))
+      .map(bar => this.toGatewayBarFromPayload(bar)))
     if (snapshotBars.length >= limit) {
       return snapshotBars
     }
@@ -59,9 +59,9 @@ export class MarketDataReadGateway {
   }
 
   async getRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<GatewayBar[]> {
-    const snapshotBars = this.marketDataService
+    const snapshotBars = this.normalizeSnapshotBars(this.marketDataService
       .getRecentBarsSnapshotBySymbolId(symbolId, timeframe, limit)
-      .map(bar => this.toGatewayBarFromPayload(bar))
+      .map(bar => this.toGatewayBarFromPayload(bar)))
     if (snapshotBars.length >= limit) {
       return snapshotBars
     }
@@ -148,6 +148,14 @@ export class MarketDataReadGateway {
     }
 
     return mergedBars.slice(-limit)
+  }
+
+  private normalizeSnapshotBars(snapshotBars: readonly GatewayBar[]): GatewayBar[] {
+    const dedupedByTimestamp = new Map<number, GatewayBar>()
+    for (const bar of snapshotBars) {
+      dedupedByTimestamp.set(bar.timestamp, bar)
+    }
+    return [...dedupedByTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp)
   }
 
   async getLatestQuote(symbol: string): Promise<GatewayQuote> {
