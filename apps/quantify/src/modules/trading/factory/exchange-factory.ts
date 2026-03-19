@@ -6,7 +6,7 @@ import { UnsupportedExchangeException } from '../exceptions'
 import { BinanceClient } from '../exchanges/binance-client'
 import { OkxClient } from '../exchanges/okx-client'
 
-type HyperliquidClientConstructor = new (config: HyperliquidConfig) => IExchangeClient
+type HyperliquidClientConstructor = new (config: HyperliquidConfig, marketType?: MarketType) => IExchangeClient
 
 @Injectable()
 export class ExchangeFactory {
@@ -25,13 +25,9 @@ export class ExchangeFactory {
     }
 
     if (account.exchangeId === 'hyperliquid' && exchangeId === 'hyperliquid') {
-      // Hyperliquid 只支持永续合约
-      if (marketType !== 'perp') {
-        throw new UnsupportedExchangeException({ exchangeId })
-      }
       // 返回客户端实例（注意：方法会抛出 ExchangeError）
       const HyperliquidClient = this.loadHyperliquidClient()
-      return new HyperliquidClient(account.config)
+      return new HyperliquidClient(account.config, marketType)
     }
 
     throw new UnsupportedExchangeException({ exchangeId })
@@ -40,6 +36,7 @@ export class ExchangeFactory {
   private loadHyperliquidClient(): HyperliquidClientConstructor {
     // 延迟加载 Hyperliquid 适配器，避免 Binance/OKX 链路在模块初始化阶段
     // 被其 ESM 依赖牵连，导致与当前执行路径无关的测试或服务启动失败。
+    // eslint-disable-next-line ts/no-require-imports
     const hyperliquidModule = require('../exchanges/hyperliquid-client') as {
       HyperliquidClient: HyperliquidClientConstructor
     }

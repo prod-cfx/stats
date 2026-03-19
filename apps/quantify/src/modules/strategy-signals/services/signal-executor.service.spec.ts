@@ -3,6 +3,110 @@ import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-confi
 import { SignalExecutorService } from './signal-executor.service'
 
 describe('SignalExecutorService', () => {
+  function createService() {
+    const prisma = {}
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    return new SignalExecutorService(
+      prisma as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+    )
+  }
+
+  it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        entryPrice: '4.64',
+        positionSizeQuote: '12',
+        symbol: {
+          exchange: 'HYPERLIQUID',
+          instrumentType: 'SPOT',
+          baseAsset: 'PURR',
+          quoteAsset: 'USDC',
+          precisionPrice: 2,
+          precisionQuantity: 0,
+          lotSize: '1',
+        },
+      },
+      {
+        id: 'acct-spot-1',
+        userId: 'user-spot-1',
+        baseCurrency: 'USDC',
+        balance: new Prisma.Decimal(1000),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'Estimated order notional 9.28 USDC below minimum 10 USDC after precision rounding',
+    })
+  })
+
+  it('keeps hyperliquid spot entries executable once rounded notional meets the minimum', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        entryPrice: '4.64',
+        positionSizeQuote: '15',
+        symbol: {
+          exchange: 'HYPERLIQUID',
+          instrumentType: 'SPOT',
+          baseAsset: 'PURR',
+          quoteAsset: 'USDC',
+          precisionPrice: 2,
+          precisionQuantity: 0,
+          lotSize: '1',
+        },
+      },
+      {
+        id: 'acct-spot-2',
+        userId: 'user-spot-2',
+        baseCurrency: 'USDC',
+        balance: new Prisma.Decimal(1000),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      quoteBudget: new Prisma.Decimal(15),
+      params: {
+        exchangeId: 'hyperliquid',
+        marketType: 'spot',
+        symbol: 'PURR/USDC',
+        side: 'buy',
+        amount: 3,
+        price: 4.64,
+        reduceOnly: false,
+      },
+    })
+  })
+
   it('does not markExecuted when a market order stays open with 0 fill after reconciliation', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }

@@ -77,8 +77,8 @@ export class CreateExchangeAccountDto {
   passphrase?: string
 
   // ==================== Hyperliquid 专用字段 ====================
-  // 注意：Hyperliquid 客户端当前为骨架实现，可以创建账户但交易功能尚未完成
-  // 详见：apps/backend/src/modules/trading/exchanges/README_HYPERLIQUID.md
+  // Hyperliquid 账户配置同时支持 spot / perp，具体市场能力由交易链路按 marketType 校验
+  // 详见：apps/quantify/src/modules/trading/exchanges/README_HYPERLIQUID.md
   // ================================================================
 
   @ApiPropertyOptional({
@@ -105,4 +105,3 @@ export class CreateExchangeAccountDto {
   })
   agentPrivateKey?: string
 }
-

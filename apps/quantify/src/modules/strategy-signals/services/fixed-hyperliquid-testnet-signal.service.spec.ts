@@ -1,7 +1,7 @@
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { FixedHyperliquidTestnetSignalService } from './fixed-hyperliquid-testnet-signal.service'
 
-describe('FixedHyperliquidTestnetSignalService', () => {
+describe('fixedHyperliquidTestnetSignalService', () => {
   function createService() {
     const prisma = {
       llmStrategy: { findUnique: jest.fn() },
@@ -72,6 +72,42 @@ describe('FixedHyperliquidTestnetSignalService', () => {
     })
   })
 
+  it('creates a spot signal with the spot symbol and instance context', async () => {
+    const { service, prisma } = createService()
+
+    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
+    prisma.symbol.findFirst
+      .mockResolvedValueOnce({ id: 'spot-symbol-1' })
+      .mockResolvedValueOnce({ id: 'perp-symbol-1' })
+    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
+    prisma.llmStrategyInstance.findFirst
+      .mockResolvedValueOnce({ id: 'spot-instance-1' })
+      .mockResolvedValueOnce({ id: 'perp-instance-1' })
+    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-spot-1' })
+
+    jest.spyOn(service, 'fetchTickerPrice').mockResolvedValue('0.42')
+
+    const signal = await service.createSignal({
+      marketType: 'spot',
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      reason: 'unit-test-open-spot',
+      positionSizeQuote: '8',
+    })
+
+    expect(signal).toEqual({ id: 'signal-spot-1' })
+    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        llmStrategyInstanceId: 'spot-instance-1',
+        symbolId: 'spot-symbol-1',
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        entryPrice: '0.42',
+      }),
+    })
+  })
+
   it('executes a perp signal when config overrides are provided', async () => {
     const { service, prisma, signalExecutor } = createService()
 
@@ -128,22 +164,30 @@ describe('FixedHyperliquidTestnetSignalService', () => {
 
     prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst.mockResolvedValue({ id: 'perp-symbol-1' })
+    prisma.symbol.findFirst
+      .mockResolvedValueOnce({ id: 'spot-symbol-1' })
+      .mockResolvedValueOnce({ id: 'perp-symbol-1' })
     prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst.mockResolvedValue({ id: 'perp-instance-1' })
+    prisma.llmStrategyInstance.findFirst
+      .mockResolvedValueOnce({ id: 'spot-instance-1' })
+      .mockResolvedValueOnce({ id: 'perp-instance-1' })
 
     const context = await service.resolveContext()
 
     expect(prisma.llmStrategy.findUnique).toHaveBeenCalledWith({
       where: { name: 'FIXED-HYPERLIQUID-TESTNET-ETHUSDT' },
     })
-    expect(prisma.symbol.findFirst).toHaveBeenCalledWith({ where: { code: 'ETHUSDT:PERP' } })
+    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(1, { where: { code: 'ETHUSDT' } })
+    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(2, { where: { code: 'ETHUSDT:PERP' } })
     expect(prisma.llmStrategyInstance.findFirst).toHaveBeenCalledWith({
       where: {
         strategyId: 'strategy-1',
         name: 'fixed-hyperliquid-ethusdt-perp',
       },
     })
+    expect(context.spotSymbolId).toBe('spot-symbol-1')
+    expect(context.spotInstanceId).toBe('spot-instance-1')
+    expect(context.spotSymbol).toBe('ETH/USDT')
     expect(context.perpSymbol).toBe('ETH/USDT:PERP')
   })
 })

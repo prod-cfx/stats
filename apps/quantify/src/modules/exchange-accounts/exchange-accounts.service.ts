@@ -39,7 +39,7 @@ export class ExchangeAccountsService {
       // Hyperliquid 也需要验证凭据（通过 ping/fetchBalance 验证签名）
       await this.tradingService.validateCexCredentials(
         dto.exchangeId,
-        'perp', // Hyperliquid 只支持 perp
+        this.resolveMarketType(dto.marketType),
         config as HyperliquidConfig,
       )
       lastValidatedAt = new Date()

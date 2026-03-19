@@ -1,13 +1,16 @@
 import 'reflect-metadata'
 import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
+import * as path from 'node:path'
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
+import { loadEnvironment } from '@net/config'
 import { ClsConfigModule } from '@/common/modules/cls.module'
 import { EnvModule } from '@/common/modules/env.module'
 import { EnvService } from '@/common/services/env.service'
 import { TransactionEventsModule } from '@/common/modules/transaction-events.module'
 import { strategySignalsConfig } from '@/config/configuration'
+import { applyQuantifyEnvOverrides } from '@/config/quantify-env'
 import { AccountsModule } from '@/modules/accounts/accounts.module'
 import { AccountsService } from '@/modules/accounts/accounts.service'
 import { PositionsModule } from '@/modules/positions/positions.module'
@@ -23,6 +26,10 @@ import { TradingModule } from '@/modules/trading/trading.module'
 import { TradingService } from '@/modules/trading/trading.service'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { PrismaService } from '@/prisma/prisma.service'
+
+const rootDir = path.resolve(__dirname, '../../..')
+loadEnvironment({ basePath: rootDir })
+applyQuantifyEnvOverrides()
 
 @Module({
   imports: [

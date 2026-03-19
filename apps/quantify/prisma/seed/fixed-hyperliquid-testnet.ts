@@ -1,11 +1,10 @@
-import { createCipheriv, randomBytes } from 'node:crypto'
 import type { PrismaClient } from '../../generated/prisma'
+import { createCipheriv, randomBytes } from 'node:crypto'
 
 const AES_ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
 const SECRET_PLACEHOLDER = '__SET_IN_env.local__'
 const DEFAULT_TIMEFRAMES = ['1m', '5m', '15m', '1h']
-const DEFAULT_BASE_ASSET = 'BTC'
 const DEFAULT_QUOTE_ASSET = 'USDC'
 const DEFAULT_INITIAL_BALANCE = '1000'
 const EXCHANGE_ACCOUNT_NAME = 'hyperliquid-testnet-perp'
@@ -15,7 +14,8 @@ export interface FixedHyperliquidTestnetSeedConfig {
   userEmail: string
   userNickname: string
   operatorId: string
-  baseAsset: string
+  spotBaseAsset: string
+  perpBaseAsset: string
   quoteAsset: string
   initialBalance: string
   mainWalletAddress: string
@@ -34,17 +34,25 @@ interface SeedSymbolPlan {
   baseAsset: string
   quoteAsset: string
   exchange: 'HYPERLIQUID'
-  instrumentType: 'PERPETUAL'
+  instrumentType: 'SPOT' | 'PERPETUAL'
   type: 'CRYPTO'
   status: 'ACTIVE'
   precisionPrice: number
   precisionQuantity: number
+  lotSize?: string
 }
 
-interface SeedInstanceMetadata {
-  allowedSymbols: string[]
-  allowedTimeframes: string[]
-  marketType: 'perp'
+interface SeedInstancePlan {
+  name: string
+  exchangeAccountName: string
+  mode: 'LIVE'
+  status: 'paused'
+  llmModel: string
+  metadata: {
+    allowedSymbols: string[]
+    allowedTimeframes: string[]
+    marketType: 'spot' | 'perp'
+  }
 }
 
 export interface FixedHyperliquidTestnetSeedPlan {
@@ -57,6 +65,7 @@ export interface FixedHyperliquidTestnetSeedPlan {
     name: string
     config: HyperliquidExchangeAccountConfig
   }
+  symbols: SeedSymbolPlan[]
   strategy: {
     name: string
     description: string
@@ -76,14 +85,7 @@ export interface FixedHyperliquidTestnetSeedPlan {
       isTestnet: boolean
     }
   }
-  instance: {
-    name: string
-    exchangeAccountName: string
-    mode: 'LIVE'
-    status: 'paused'
-    llmModel: string
-    metadata: SeedInstanceMetadata
-  }
+  instances: SeedInstancePlan[]
   strategyAccount: {
     strategyName: string
     baseCurrency: string
@@ -124,6 +126,35 @@ function resolvePerpPrecisionQuantity(baseAsset: string): number {
   return 6
 }
 
+function resolveSpotPrecisionQuantity(baseAsset: string): number {
+  if (baseAsset === 'PURR')
+    return 0
+  return 6
+}
+
+function resolveSpotLotSize(baseAsset: string): string | undefined {
+  if (baseAsset === 'PURR')
+    return '1'
+  return undefined
+}
+
+function resolveBaseAsset(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  primaryKey: string,
+): string {
+  const primary = normalizedValue(env[primaryKey])?.toUpperCase()
+  if (primary)
+    return primary
+
+  const legacy = normalizedValue(env.QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET)?.toUpperCase()
+  if (legacy)
+    return legacy
+
+  throw new Error(
+    `[fixed-hyperliquid-testnet] Missing required environment variable: ${primaryKey} or QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET`,
+  )
+}
+
 export function readFixedHyperliquidTestnetSeedConfig(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): FixedHyperliquidTestnetSeedConfig | null {
@@ -139,8 +170,8 @@ export function readFixedHyperliquidTestnetSeedConfig(
       'Hyperliquid Testnet Fixed User',
     operatorId: normalizedValue(env.QUANTIFY_FIXED_HYPERLIQUID_TESTNET_OPERATOR_ID) ??
       'system-fixed-hyperliquid-seed',
-    baseAsset:
-      normalizedValue(env.QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET)?.toUpperCase() ?? DEFAULT_BASE_ASSET,
+    spotBaseAsset: resolveBaseAsset(env, 'QUANTIFY_FIXED_HYPERLIQUID_TESTNET_SPOT_BASE_ASSET'),
+    perpBaseAsset: resolveBaseAsset(env, 'QUANTIFY_FIXED_HYPERLIQUID_TESTNET_PERP_BASE_ASSET'),
     quoteAsset:
       normalizedValue(env.QUANTIFY_FIXED_HYPERLIQUID_TESTNET_QUOTE_ASSET)?.toUpperCase() ?? DEFAULT_QUOTE_ASSET,
     initialBalance: normalizedValue(env.QUANTIFY_FIXED_HYPERLIQUID_TESTNET_INITIAL_BALANCE) ??
@@ -154,24 +185,16 @@ export function readFixedHyperliquidTestnetSeedConfig(
 export function buildFixedHyperliquidTestnetPlan(
   config: FixedHyperliquidTestnetSeedConfig,
 ): FixedHyperliquidTestnetSeedPlan {
-  const symbolCode = `${config.baseAsset}${config.quoteAsset}:PERP`
-  const pairSlug = `${config.baseAsset}${config.quoteAsset}`.toLowerCase()
+  const spotCode = `${config.spotBaseAsset}${config.quoteAsset}`
+  const perpBaseCode = `${config.perpBaseAsset}${config.quoteAsset}`
+  const perpCode = `${perpBaseCode}:PERP`
+  const spotStrategySlug = spotCode.toLowerCase()
+  const perpStrategySlug = perpBaseCode.toLowerCase()
 
   return {
     user: {
       email: config.userEmail,
       nickname: config.userNickname,
-    },
-    symbol: {
-      code: symbolCode,
-      baseAsset: config.baseAsset,
-      quoteAsset: config.quoteAsset,
-      exchange: 'HYPERLIQUID',
-      instrumentType: 'PERPETUAL',
-      type: 'CRYPTO',
-      status: 'ACTIVE',
-      precisionPrice: 2,
-      precisionQuantity: resolvePerpPrecisionQuantity(config.baseAsset),
     },
     exchangeAccount: {
       name: EXCHANGE_ACCOUNT_NAME,
@@ -181,13 +204,38 @@ export function buildFixedHyperliquidTestnetPlan(
         isTestnet: config.isTestnet,
       },
     },
+    symbols: [
+      {
+        code: spotCode,
+        baseAsset: config.spotBaseAsset,
+        quoteAsset: config.quoteAsset,
+        exchange: 'HYPERLIQUID',
+        instrumentType: 'SPOT',
+        type: 'CRYPTO',
+        status: 'ACTIVE',
+        precisionPrice: 2,
+        precisionQuantity: resolveSpotPrecisionQuantity(config.spotBaseAsset),
+        lotSize: resolveSpotLotSize(config.spotBaseAsset),
+      },
+      {
+        code: perpCode,
+        baseAsset: config.perpBaseAsset,
+        quoteAsset: config.quoteAsset,
+        exchange: 'HYPERLIQUID',
+        instrumentType: 'PERPETUAL',
+        type: 'CRYPTO',
+        status: 'ACTIVE',
+        precisionPrice: 2,
+        precisionQuantity: resolvePerpPrecisionQuantity(config.perpBaseAsset),
+      },
+    ],
     strategy: {
-      name: `${STRATEGY_PREFIX}-${config.baseAsset}${config.quoteAsset}`,
-      description: `Fixed Hyperliquid testnet perp bootstrap for ${symbolCode}`,
+      name: `${STRATEGY_PREFIX}-${spotCode}`,
+      description: `Fixed Hyperliquid testnet bootstrap for ${spotCode} spot and ${perpCode} perpetual execution.`,
       status: 'live',
       createdBy: config.operatorId,
       updatedBy: config.operatorId,
-      allowedSymbols: [symbolCode],
+      allowedSymbols: [spotCode, perpCode],
       allowedTimeframes: DEFAULT_TIMEFRAMES,
       riskConfig: {
         bootstrapMode: 'fixed-hyperliquid-testnet',
@@ -200,20 +248,34 @@ export function buildFixedHyperliquidTestnetPlan(
         isTestnet: config.isTestnet,
       },
     },
-    instance: {
-      name: `fixed-hyperliquid-${pairSlug}-perp`,
-      exchangeAccountName: EXCHANGE_ACCOUNT_NAME,
-      mode: 'LIVE',
-      status: 'paused',
-      llmModel: 'gpt-4.1-mini',
-      metadata: {
-        allowedSymbols: [symbolCode],
-        allowedTimeframes: DEFAULT_TIMEFRAMES,
-        marketType: 'perp',
+    instances: [
+      {
+        name: `fixed-hyperliquid-${spotStrategySlug}-spot`,
+        exchangeAccountName: EXCHANGE_ACCOUNT_NAME,
+        mode: 'LIVE',
+        status: 'paused',
+        llmModel: 'gpt-4.1-mini',
+        metadata: {
+          allowedSymbols: [spotCode],
+          allowedTimeframes: DEFAULT_TIMEFRAMES,
+          marketType: 'spot',
+        },
       },
-    },
+      {
+        name: `fixed-hyperliquid-${perpStrategySlug}-perp`,
+        exchangeAccountName: EXCHANGE_ACCOUNT_NAME,
+        mode: 'LIVE',
+        status: 'paused',
+        llmModel: 'gpt-4.1-mini',
+        metadata: {
+          allowedSymbols: [perpCode],
+          allowedTimeframes: DEFAULT_TIMEFRAMES,
+          marketType: 'perp',
+        },
+      },
+    ],
     strategyAccount: {
-      strategyName: `${STRATEGY_PREFIX}-${config.baseAsset}${config.quoteAsset}`,
+      strategyName: `${STRATEGY_PREFIX}-${spotCode}`,
       baseCurrency: config.quoteAsset,
       initialBalance: config.initialBalance,
     },
@@ -286,7 +348,7 @@ async function ensureExchangeAccount(
 async function ensureStrategyInstance(
   prisma: PrismaClient,
   strategyId: string,
-  instancePlan: FixedHyperliquidTestnetSeedPlan['instance'],
+  instancePlan: FixedHyperliquidTestnetSeedPlan['instances'][number],
   operatorId: string,
 ) {
   const existing = await prisma.llmStrategyInstance.findFirst({
@@ -419,29 +481,33 @@ export async function seedFixedHyperliquidTestnet(prisma: PrismaClient): Promise
     },
   })
 
-  await prisma.symbol.upsert({
-    where: { code: plan.symbol.code },
-    update: {
-      baseAsset: plan.symbol.baseAsset,
-      quoteAsset: plan.symbol.quoteAsset,
-      exchange: plan.symbol.exchange,
-      instrumentType: plan.symbol.instrumentType,
-      status: plan.symbol.status,
-      precisionPrice: plan.symbol.precisionPrice,
-      precisionQuantity: plan.symbol.precisionQuantity,
-    },
-    create: {
-      code: plan.symbol.code,
-      baseAsset: plan.symbol.baseAsset,
-      quoteAsset: plan.symbol.quoteAsset,
-      exchange: plan.symbol.exchange,
-      instrumentType: plan.symbol.instrumentType,
-      type: plan.symbol.type,
-      status: plan.symbol.status,
-      precisionPrice: plan.symbol.precisionPrice,
-      precisionQuantity: plan.symbol.precisionQuantity,
-    },
-  })
+  for (const symbolPlan of plan.symbols) {
+    await prisma.symbol.upsert({
+      where: { code: symbolPlan.code },
+      update: {
+        baseAsset: symbolPlan.baseAsset,
+        quoteAsset: symbolPlan.quoteAsset,
+        exchange: symbolPlan.exchange,
+        instrumentType: symbolPlan.instrumentType,
+        status: symbolPlan.status,
+        precisionPrice: symbolPlan.precisionPrice,
+        precisionQuantity: symbolPlan.precisionQuantity,
+        lotSize: symbolPlan.lotSize,
+      },
+      create: {
+        code: symbolPlan.code,
+        baseAsset: symbolPlan.baseAsset,
+        quoteAsset: symbolPlan.quoteAsset,
+        exchange: symbolPlan.exchange,
+        instrumentType: symbolPlan.instrumentType,
+        type: symbolPlan.type,
+        status: symbolPlan.status,
+        precisionPrice: symbolPlan.precisionPrice,
+        precisionQuantity: symbolPlan.precisionQuantity,
+        lotSize: symbolPlan.lotSize,
+      },
+    })
+  }
 
   const strategy = await prisma.llmStrategy.upsert({
     where: { name: plan.strategy.name },
@@ -468,13 +534,14 @@ export async function seedFixedHyperliquidTestnet(prisma: PrismaClient): Promise
   })
 
   const exchangeAccount = await ensureExchangeAccount(prisma, user.id, plan.exchangeAccount, cryptoKey)
-  const instance = await ensureStrategyInstance(prisma, strategy.id, plan.instance, config.operatorId)
-
-  await ensureLlmSubscription(prisma, user.id, instance.id, exchangeAccount.id)
+  for (const instancePlan of plan.instances) {
+    const instance = await ensureStrategyInstance(prisma, strategy.id, instancePlan, config.operatorId)
+    await ensureLlmSubscription(prisma, user.id, instance.id, exchangeAccount.id)
+  }
   await ensureStrategyAccount(prisma, user.id, strategy.id, plan)
 
   console.log(
-    `[seed] Fixed Hyperliquid testnet data ready: user=${plan.user.email}, symbol=${plan.symbol.code}, ` +
+    `[seed] Fixed Hyperliquid testnet data ready: user=${plan.user.email}, symbols=${plan.symbols.map(symbol => symbol.code).join(',')}, ` +
       `account=${exchangeAccount.id}`,
   )
 }

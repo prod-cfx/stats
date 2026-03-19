@@ -9,6 +9,24 @@ import { TradingModule } from '@/modules/trading/trading.module'
 import { TradingService } from '@/modules/trading/trading.service'
 import { PrismaService } from '@/prisma/prisma.service'
 
+const hyperliquidExchangeClientMock = jest.fn()
+const hyperliquidInfoClientMock = jest.fn()
+
+jest.mock('@nktkas/hyperliquid', () => ({
+  HttpTransport: jest.fn(),
+  InfoClient: hyperliquidInfoClientMock,
+  ExchangeClient: hyperliquidExchangeClientMock,
+}))
+
+jest.mock('@nktkas/hyperliquid/utils', () => ({
+  formatPrice: jest.fn((price: string | number) => String(price)),
+  formatSize: jest.fn((size: string | number) => String(size)),
+}))
+
+jest.mock('ethers', () => ({
+  Wallet: jest.fn().mockImplementation((privateKey: string) => ({ privateKey })),
+}))
+
 class InMemoryAccountStore implements ExchangeAccountStore {
   async getAccountConfig(userId: string, exchangeId: ExchangeId): Promise<ExchangeAccountConfig | null> {
     // 测试场景中忽略 userId，直接返回固定配置
@@ -29,6 +47,17 @@ class InMemoryAccountStore implements ExchangeAccountStore {
           apiKey: 'test-api-key',
           secret: 'test-secret',
           passphrase: 'test-passphrase',
+        },
+      }
+    }
+
+    if (exchangeId === 'hyperliquid') {
+      return {
+        exchangeId: 'hyperliquid',
+        config: {
+          mainWalletAddress: '0x049351452584031Ff1f81bdDA1cDf4DB32BB1c09',
+          agentPrivateKey: '0x4ccd2503441a4913d4212a764b9bccfc73378bfa5443fc90e14da28aa5f2ddc6',
+          isTestnet: true,
         },
       }
     }
@@ -172,6 +201,11 @@ describe('TradingService (E2E, trading module only)', () => {
     tradingService = app.get(TradingService)
   })
 
+  beforeEach(() => {
+    hyperliquidExchangeClientMock.mockReset()
+    hyperliquidInfoClientMock.mockReset()
+  })
+
   afterAll(async () => {
     if (app) {
       await app.close()
@@ -248,6 +282,81 @@ describe('TradingService (E2E, trading module only)', () => {
     expect(order.type).toBe('market')
     expect(order.amount).toBeCloseTo(0.00134)
     expect(order.status).toBe('open')
+  })
+
+  it('places a spot order on Hyperliquid via TradingService', async () => {
+    const orderMock = jest.fn().mockResolvedValue({
+      status: 'ok',
+      response: {
+        data: {
+          statuses: [
+            {
+              resting: {
+                oid: 24680,
+                cloid: '0x1234567890abcdef1234567890abcdef',
+              },
+            },
+          ],
+        },
+      },
+    })
+
+    hyperliquidInfoClientMock.mockImplementation(() => ({
+      allMids: jest.fn().mockResolvedValue({}),
+      spotMeta: jest.fn().mockResolvedValue({
+        universe: [
+          { tokens: [0, 1], name: 'PURR/USDC', index: 7, isCanonical: true },
+        ],
+        tokens: [
+          {
+            name: 'PURR',
+            szDecimals: 2,
+            weiDecimals: 8,
+            index: 0,
+            tokenId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+            isCanonical: true,
+            evmContract: null,
+            fullName: 'Purr',
+            deployerTradingFeeShare: '0',
+          },
+          {
+            name: 'USDC',
+            szDecimals: 6,
+            weiDecimals: 6,
+            index: 1,
+            tokenId: '0x0000000000000000000000000000000000000000000000000000000000000001',
+            isCanonical: true,
+            evmContract: null,
+            fullName: 'USD Coin',
+            deployerTradingFeeShare: '0',
+          },
+        ],
+      }),
+    }))
+    hyperliquidExchangeClientMock.mockImplementation(() => ({
+      order: orderMock,
+    }))
+
+    const userId = 'test-user'
+    const exchangeId: ExchangeId = 'hyperliquid'
+    const marketType: MarketType = 'spot'
+
+    const order = await tradingService.placeOrder(userId, exchangeId, marketType, {
+      symbol: 'PURR/USDC',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'limit',
+      amount: 12.34,
+      price: 0.42,
+    })
+
+    expect(order.id).toBe('24680')
+    expect(order.symbol).toBe('PURR/USDC')
+    expect(order.marketType).toBe('spot')
+    expect(order.side).toBe('buy')
+    expect(order.type).toBe('limit')
+    expect(order.status).toBe('open')
+    expect(order.raw).toBeDefined()
   })
 
   it('fetches OKX order details via TradingService after order acknowledgement', async () => {
