@@ -29,6 +29,7 @@ export class ExchangeFactory {
       if (marketType !== 'perp') {
         throw new UnsupportedExchangeException({ exchangeId })
       }
+      const { HyperliquidClient } = require('../exchanges/hyperliquid-client') as typeof import('../exchanges/hyperliquid-client')
       // 返回客户端实例（注意：方法会抛出 ExchangeError）
       const HyperliquidClient = this.loadHyperliquidClient()
       return new HyperliquidClient(account.config)

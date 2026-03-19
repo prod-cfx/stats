@@ -317,11 +317,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
     }, txOptions)
 
-    if (this.cls.isActive()) {
-      return runTransaction()
+    if (!this.cls.isActive()) {
+      return this.cls.run(() => runTransaction())
     }
 
-    return this.cls.run(runTransaction)
+    return runTransaction()
   }
 
   async getPaginatedList<

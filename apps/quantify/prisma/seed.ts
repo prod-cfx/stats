@@ -8,6 +8,7 @@ import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { seedFixedBinanceTestnet } from './seed/fixed-binance-testnet'
 import { seedFixedHyperliquidTestnet } from './seed/fixed-hyperliquid-testnet'
+import { seedFixedOkxSimulated } from './seed/fixed-okx-simulated'
 
 // Load environment variables using the shared loader.
 const rootDir = path.resolve(__dirname, '../../..')
@@ -92,6 +93,8 @@ async function main() {
 
   await seedAiProviderKeys()
   await seedFixedBinanceTestnet(prisma)
+  await seedFixedHyperliquidTestnet(prisma)
+  await seedFixedOkxSimulated(prisma)
   await seedFixedHyperliquidTestnet(prisma)
 
   console.log('Quantify seed finished')

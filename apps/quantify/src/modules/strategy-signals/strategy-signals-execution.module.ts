@@ -9,12 +9,13 @@ import { PrismaModule } from "@/prisma/prisma.module"
 import { SignalExecutionRepository } from './repositories/signal-execution.repository'
 import { FixedBinanceTestnetSignalService } from "./services/fixed-binance-testnet-signal.service"
 import { FixedHyperliquidTestnetSignalService } from "./services/fixed-hyperliquid-testnet-signal.service"
+import { FixedOkxSimulatedSignalService } from "./services/fixed-okx-simulated-signal.service"
 import { SignalExecutorService } from "./services/signal-executor.service"
 import { StrategySignalsGenerationModule } from "./strategy-signals-generation.module"
 
 @Module({
   imports: [PrismaModule, AccountsModule, PositionsModule, TradingModule, StrategySignalsGenerationModule, ConfigModule.forFeature(strategySignalsConfig)],
-  providers: [SignalExecutorService, SignalExecutionRepository, FixedBinanceTestnetSignalService, FixedHyperliquidTestnetSignalService],
-  exports: [SignalExecutorService, FixedBinanceTestnetSignalService, FixedHyperliquidTestnetSignalService],
+  providers: [SignalExecutorService, SignalExecutionRepository, FixedBinanceTestnetSignalService, FixedOkxSimulatedSignalService, FixedHyperliquidTestnetSignalService],
+  exports: [SignalExecutorService, FixedBinanceTestnetSignalService, FixedOkxSimulatedSignalService, FixedHyperliquidTestnetSignalService],
 })
 export class StrategySignalsExecutionModule {}

@@ -1,5 +1,4 @@
 import 'reflect-metadata'
-import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 import * as path from 'node:path'
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
@@ -17,9 +16,9 @@ import { PositionsModule } from '@/modules/positions/positions.module'
 import { PositionsService } from '@/modules/positions/positions.service'
 import { SignalExecutionRepository } from '@/modules/strategy-signals/repositories/signal-execution.repository'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
-import { parseFixedBinanceTestnetCliOptions } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal-cli'
+import { parseFixedOkxSimulatedCliOptions } from '@/modules/strategy-signals/services/fixed-okx-simulated-signal-cli'
+import { FixedOkxSimulatedSignalService } from '@/modules/strategy-signals/services/fixed-okx-simulated-signal.service'
 import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
-import { FixedBinanceTestnetSignalService } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { SignalTelemetryService } from '@/modules/strategy-signals/services/signal-telemetry.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
@@ -97,26 +96,26 @@ applyQuantifyEnvOverrides()
       ],
     },
     {
-      provide: FixedBinanceTestnetSignalService,
+      provide: FixedOkxSimulatedSignalService,
       useFactory: (
         prisma: PrismaService,
         env: EnvService,
         signalExecutor: SignalExecutorService,
-      ) => new FixedBinanceTestnetSignalService(prisma, env, signalExecutor),
+      ) => new FixedOkxSimulatedSignalService(prisma, env, signalExecutor),
       inject: [PrismaService, EnvService, SignalExecutorService],
     },
   ],
 })
-class FixedBinanceTestnetSignalScriptModule {}
+class FixedOkxSimulatedSignalScriptModule {}
 
 async function main() {
-  const plan = parseFixedBinanceTestnetCliOptions(process.argv.slice(2))
-  const app = await NestFactory.createApplicationContext(FixedBinanceTestnetSignalScriptModule, {
+  const plan = parseFixedOkxSimulatedCliOptions(process.argv.slice(2))
+  const app = await NestFactory.createApplicationContext(FixedOkxSimulatedSignalScriptModule, {
     logger: ['error', 'warn', 'log'],
   })
 
   try {
-    const service = app.get(FixedBinanceTestnetSignalService)
+    const service = app.get(FixedOkxSimulatedSignalService)
     const results = []
 
     for (const step of plan.steps) {
