@@ -19,4 +19,10 @@ describe('runtimeGuardrailService', () => {
     expect(result.runtimePassed).toBe(true)
     expect(result.outputPassed).toBe(true)
   })
+
+  it('passes when output is a JSON string object', async () => {
+    const result = await service.validate('return JSON.stringify({ direction: "BUY" })')
+    expect(result.runtimePassed).toBe(true)
+    expect(result.outputPassed).toBe(true)
+  })
 })

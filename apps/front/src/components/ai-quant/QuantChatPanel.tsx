@@ -50,15 +50,12 @@ export function QuantChatPanel({
   const [openCombobox, setOpenCombobox] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const comboboxRef = useRef<HTMLDivElement>(null)
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    scrollToBottom()
+    const el = chatScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   // Click outside handler for combobox
@@ -141,7 +138,7 @@ export function QuantChatPanel({
               >
                 {params.symbol
                   ? SYMBOLS.find((symbol) => symbol.value === params.symbol)?.label || params.symbol
-                  : t('aiQuant.symbol') + "..."}
+                  : `${t('aiQuant.symbol')}...`}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </button>
               
@@ -151,7 +148,7 @@ export function QuantChatPanel({
                     <Search className="mr-2 h-4 w-4 opacity-50" />
                     <input
                       className="flex h-8 w-full rounded-md bg-transparent text-sm outline-none placeholder:text-[color:var(--cf-muted)]"
-                      placeholder={t('nav.search') + "..."}
+                      placeholder={`${t('nav.search')}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       autoFocus
@@ -205,7 +202,7 @@ export function QuantChatPanel({
       )}
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
         <div className="space-y-6">
           {messages.map(message => (
             <div
@@ -235,7 +232,6 @@ export function QuantChatPanel({
               )}
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 

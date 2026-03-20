@@ -5,20 +5,17 @@ describe('checklistGateService', () => {
 
   it('returns missing fields for incomplete checklist', () => {
     const missing = service.getMissingFields({
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
+      entryRules: ['short > long'],
     })
 
-    expect(missing).toEqual(expect.arrayContaining(['entryRules', 'exitRules', 'riskRules']))
+    expect(missing).toEqual(expect.arrayContaining(['exitRules']))
+    expect(missing).not.toContain('entryRules')
   })
 
   it('returns empty when checklist complete', () => {
     const missing = service.getMissingFields({
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
       entryRules: ['sma20 > sma50'],
       exitRules: ['tp/sl'],
-      riskRules: { maxPositionPct: 0.1 },
     })
 
     expect(missing).toEqual([])

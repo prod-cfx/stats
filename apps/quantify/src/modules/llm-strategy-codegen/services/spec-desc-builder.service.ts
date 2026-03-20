@@ -1,10 +1,16 @@
-import type { CodegenChecklist } from './checklist-gate.service'
-
 import { Injectable } from '@nestjs/common'
+
+interface SpecDescChecklistSnapshot {
+  symbols?: unknown
+  timeframes?: unknown
+  entryRules?: unknown
+  exitRules?: unknown
+  riskRules?: unknown
+}
 
 @Injectable()
 export class SpecDescBuilderService {
-  build(checklist: CodegenChecklist, scriptCode: string): Record<string, unknown> {
+  build(checklist: SpecDescChecklistSnapshot, scriptCode: string): Record<string, unknown> {
     const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
     const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []

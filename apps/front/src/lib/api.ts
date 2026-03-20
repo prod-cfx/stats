@@ -1464,6 +1464,7 @@ export interface StartLlmCodegenSessionPayload {
 export interface ContinueLlmCodegenSessionPayload {
   userId: string
   message: string
+  confirmGenerate?: boolean
   symbols?: string[]
   timeframes?: string[]
   entryRules?: string[]
