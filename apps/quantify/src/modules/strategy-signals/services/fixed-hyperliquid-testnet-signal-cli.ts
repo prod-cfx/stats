@@ -1,7 +1,13 @@
-import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 import type { MarketType } from '@/modules/trading/core/types'
+import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 
-export type FixedHyperliquidPreset = 'open-perp' | 'close-perp' | 'open-close-roundtrip'
+export type FixedHyperliquidPreset
+  = 'open-spot'
+    | 'close-spot'
+    | 'open-close-spot-roundtrip'
+    | 'open-perp'
+    | 'close-perp'
+    | 'open-close-roundtrip'
 
 export interface FixedHyperliquidCliStep {
   marketType: MarketType
@@ -19,7 +25,7 @@ export interface FixedHyperliquidCliPlan {
   steps: FixedHyperliquidCliStep[]
 }
 
-type ParsedArgs = {
+interface ParsedArgs {
   marketType: MarketType
   signalType: SignalType
   direction: SignalDirection
@@ -91,6 +97,44 @@ function buildPresetPlan(parsed: ParsedArgs): FixedHyperliquidCliPlan {
   const preset = parsed.preset as FixedHyperliquidPreset
 
   switch (preset) {
+    case 'open-spot':
+      return presetPlan(preset, [
+        presetStep({
+          marketType: 'spot',
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          reason: parsed.reason ?? 'fixed-hyperliquid-open-spot',
+          entryPrice: parsed.entryPrice,
+          positionSizeQuote: parsed.positionSizeQuote,
+        }),
+      ])
+    case 'close-spot':
+      return presetPlan(preset, [
+        presetStep({
+          marketType: 'spot',
+          signalType: 'EXIT',
+          direction: 'CLOSE_LONG',
+          reason: parsed.reason ?? 'fixed-hyperliquid-close-spot',
+          entryPrice: parsed.entryPrice,
+        }),
+      ])
+    case 'open-close-spot-roundtrip':
+      return presetPlan(preset, [
+        presetStep({
+          marketType: 'spot',
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          reason: parsed.reason ? `${parsed.reason}-open` : 'fixed-hyperliquid-spot-roundtrip-open',
+          entryPrice: parsed.entryPrice,
+          positionSizeQuote: parsed.positionSizeQuote,
+        }),
+        presetStep({
+          marketType: 'spot',
+          signalType: 'EXIT',
+          direction: 'CLOSE_LONG',
+          reason: parsed.reason ? `${parsed.reason}-close` : 'fixed-hyperliquid-spot-roundtrip-close',
+        }),
+      ])
     case 'open-perp':
       return presetPlan(preset, [
         presetStep({

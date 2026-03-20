@@ -869,6 +869,19 @@ export class SignalExecutorService implements OnModuleInit {
 
     const finalAmount = Number(quantity.toString())
     const finalPrice = Number(priceDecimal.toString())
+    const minimumNotional = this.getMinimumOrderNotional(exchangeId, marketType, quoteCurrency)
+
+    if (!isCloseSignal && minimumNotional) {
+      const estimatedNotional = quantity.mul(priceDecimal)
+      if (estimatedNotional.lt(minimumNotional)) {
+        return {
+          ok: false,
+          reason:
+            `Estimated order notional ${estimatedNotional.toString()} ${quoteCurrency} ` +
+            `below minimum ${minimumNotional.toString()} ${quoteCurrency} after precision rounding`,
+        }
+      }
+    }
 
     return {
       ok: true,
@@ -883,6 +896,17 @@ export class SignalExecutorService implements OnModuleInit {
       },
       quoteBudget,
     }
+  }
+
+  private getMinimumOrderNotional(
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    quoteCurrency: string,
+  ): Decimal | null {
+    if (exchangeId === 'hyperliquid' && marketType === 'spot' && quoteCurrency === 'USDC') {
+      return new Decimal(10)
+    }
+    return null
   }
 
   private async releaseReservation(accountId: string, amount: Decimal, reference: string) {

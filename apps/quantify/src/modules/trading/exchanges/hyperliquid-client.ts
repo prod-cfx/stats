@@ -12,11 +12,7 @@ import type { HyperliquidConfig } from '../factory/account-store'
 import { randomBytes } from 'node:crypto'
 import { Wallet } from 'ethers'
 import { AuthError, ExchangeError, OrderNotFoundError } from '../core/errors'
-
-const { formatPrice, formatSize } = require('@nktkas/hyperliquid/utils') as {
-  formatPrice: (price: string | number, szDecimals: number, rounding?: boolean) => string
-  formatSize: (size: string | number, szDecimals: number) => string
-}
+import { formatPrice, formatSize } from './hyperliquid-format'
 
 interface HyperliquidSdk {
   HttpTransport: new (config: unknown) => unknown
@@ -27,6 +23,7 @@ interface HyperliquidSdk {
 interface HyperliquidAssetMeta {
   assetId: number
   szDecimals: number
+  marketIndex?: number
 }
 
 function loadHyperliquidSdk(): HyperliquidSdk {
@@ -72,6 +69,7 @@ export class HyperliquidClient implements IExchangeClient {
 
   private readonly mainWalletAddress: string
   private readonly agentPrivateKey: string
+  private readonly marketType: MarketType
 
   // 实际用于查询账户状态的钱包地址（主账户或显式指定的子账户/vault）
   private readonly tradingWalletAddress: string
@@ -86,16 +84,19 @@ export class HyperliquidClient implements IExchangeClient {
   // Ticker 缓存
   private tickerCache = new Map<string, { data: UnifiedTicker; timestamp: number }>()
 
-  // 资产元数据缓存（coin -> assetId 映射）
-  private assetMetaCache: Map<string, HyperliquidAssetMeta> | null = null
-  private assetMetaCacheTime = 0
+  // 资产元数据缓存（按市场隔离）
+  private perpAssetMetaCache: Map<string, HyperliquidAssetMeta> | null = null
+  private perpAssetMetaCacheTime = 0
+  private spotAssetMetaCache: Map<string, HyperliquidAssetMeta> | null = null
+  private spotAssetMetaCacheTime = 0
   private readonly ASSET_META_CACHE_TTL = 3600000 // 1小时
 
-  constructor(config: HyperliquidConfig) {
+  constructor(config: HyperliquidConfig, marketType: MarketType = 'perp') {
     const hl = loadHyperliquidSdk()
 
     this.mainWalletAddress = config.mainWalletAddress
     this.agentPrivateKey = config.agentPrivateKey
+    this.marketType = marketType
 
     // 初始化 HTTP Transport
     // 根据配置的 isTestnet 标志选择网络（测试网或主网）
@@ -156,7 +157,7 @@ export class HyperliquidClient implements IExchangeClient {
 
     try {
       // 获取 BTC 的 assetId（最常用的资产）
-      const { assetId } = await this.getAssetMeta('BTC')
+      const { assetId } = await this.getPerpAssetMeta('BTC')
 
       // 尝试通过 cloid 取消一个不存在的订单
       // 这会触发签名验证，但不会产生实际副作用
@@ -363,15 +364,12 @@ export class HyperliquidClient implements IExchangeClient {
    * ```
    */
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
-    // 只支持永续合约
-    if (input.marketType !== 'perp') {
-      throw new ExchangeError(
-        'Hyperliquid only supports perpetual contracts',
-        'INVALID_MARKET_TYPE',
-      )
+    const marketType = input.marketType
+    if (marketType !== 'perp' && marketType !== 'spot') {
+      throw new ExchangeError('Unsupported market type', 'INVALID_MARKET_TYPE')
     }
 
-    const coin = this.mapSymbolToHl(input.symbol)
+    const coin = this.mapSymbolToHl(input.symbol, marketType)
     const isBuy = input.side === 'buy'
     const sz = Number(input.amount)
 
@@ -379,17 +377,17 @@ export class HyperliquidClient implements IExchangeClient {
     const clientOrderId = input.clientOrderId || this.generateClientOrderId()
 
     // 获取资产 ID（Hyperliquid SDK 要求）
-    const { assetId, szDecimals } = await this.getAssetMeta(coin)
+    const { assetId, szDecimals } = await this.getAssetMeta(coin, marketType)
 
     // 准备订单类型和价格
-    const { orderType, limitPx } = await this.prepareOrderRequest(input, coin, isBuy)
+    const { orderType, limitPx } = await this.prepareOrderRequest(input, coin, isBuy, marketType)
 
     // 构造订单请求（使用 SDK 的正确格式）
     // 注意：a = assetId（整数），s = size（字符串），p = price（字符串）
     const orderRequest: any = {
       a: assetId, // 资产 ID（整数）
       b: isBuy,
-      p: formatPrice(limitPx, szDecimals, true),
+      p: formatPrice(limitPx, szDecimals, marketType === 'perp'),
       s: formatSize(sz, szDecimals), // 下单数量（字符串）
       r: input.reduceOnly ?? false,
       t: orderType,
@@ -443,7 +441,7 @@ export class HyperliquidClient implements IExchangeClient {
         id: orderId,
         clientOrderId,
         symbol: input.symbol,
-        marketType: 'perp',
+        marketType,
         side: input.side,
         type: input.type,
         price: limitPx,
@@ -470,9 +468,10 @@ export class HyperliquidClient implements IExchangeClient {
     input: CreateOrderInput,
     coin: string,
     isBuy: boolean,
+    marketType: MarketType,
   ): Promise<{ orderType: any; limitPx: number }> {
     if (input.type === 'market') {
-      return this.prepareMarketOrder(coin, isBuy)
+      return this.prepareMarketOrder(coin, isBuy, marketType)
     }
 
     if (input.type === 'limit') {
@@ -497,9 +496,11 @@ export class HyperliquidClient implements IExchangeClient {
   private async prepareMarketOrder(
     coin: string,
     isBuy: boolean,
+    marketType: MarketType,
   ): Promise<{ orderType: any; limitPx: number }> {
-    const mids: any = await this.infoClient.allMids()
-    const midPrice = Number(mids[coin] || 0)
+    const midPrice = marketType === 'spot'
+      ? await this.getSpotMidPrice(coin)
+      : await this.getPerpMidPrice(coin)
 
     if (midPrice === 0) {
       throw new ExchangeError(`Unable to get market price for ${coin}`)
@@ -531,10 +532,11 @@ export class HyperliquidClient implements IExchangeClient {
    */
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     return this.withRetry(async () => {
-      const coin = this.mapSymbolToHl(symbol)
+      const marketType = this.getMarketTypeForSymbol(symbol)
+      const coin = this.mapSymbolToHl(symbol, marketType)
 
       // 获取资产 ID（Hyperliquid SDK 要求）
-      const { assetId } = await this.getAssetMeta(coin)
+      const { assetId } = await this.getAssetMeta(coin, marketType)
 
       // 先查询订单详情，以便返回准确的订单信息
       let orderInfo: UnifiedOrder | null = null
@@ -612,7 +614,7 @@ export class HyperliquidClient implements IExchangeClient {
         id,
         clientOrderId: isCloid ? id : undefined,
         symbol,
-        marketType: 'perp',
+        marketType,
         side: 'buy', // 无法确定真实方向
         type: 'limit', // 无法确定真实类型
         price: 0,
@@ -643,13 +645,17 @@ export class HyperliquidClient implements IExchangeClient {
    */
   async fetchOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     return this.withRetry(async () => {
+      const marketType = this.getMarketTypeForSymbol(symbol)
       const isCloid = id.startsWith('0x')
 
       // 获取用户的所有未完成订单（使用 trading 钱包地址）
       const openOrders: any = await this.infoClient.openOrders({ user: this.tradingWalletAddress })
 
       // 根据 id 类型查找匹配的订单
+      const normalizedCoin = this.mapSymbolToHl(symbol, marketType)
       const order = openOrders.find((o: any) => {
+        if (!this.matchesOrderSymbol(o.coin, normalizedCoin, marketType))
+          return false
         if (isCloid) {
           return o.cloid === id
         }
@@ -662,6 +668,8 @@ export class HyperliquidClient implements IExchangeClient {
 
         // 根据 id 类型查找所有匹配的 fill 记录
         const matchedFills = fills.filter((f: any) => {
+          if (!this.matchesOrderSymbol(f.coin, normalizedCoin, marketType))
+            return false
           if (isCloid) {
             return f.cloid === id
           }
@@ -701,7 +709,7 @@ export class HyperliquidClient implements IExchangeClient {
           id: orderId, // 优先返回真实 oid
           clientOrderId,
           symbol,
-          marketType: 'perp',
+          marketType,
           side,
           // 注意：Hyperliquid fills API 不返回原始 orderType
           // 由于 Hyperliquid 的市价单本质上是 IOC 限价单，
@@ -722,6 +730,8 @@ export class HyperliquidClient implements IExchangeClient {
 
       // 根据 id 类型查找匹配的 fills
       const matchedFills = fills.filter((f: any) => {
+        if (!this.matchesOrderSymbol(f.coin, normalizedCoin, marketType))
+          return false
         if (isCloid) {
           return f.cloid === id
         }
@@ -740,7 +750,7 @@ export class HyperliquidClient implements IExchangeClient {
       const avgFilledPx = totalFilledSz > 0 ? totalFilledValue / totalFilledSz : 0
 
       // 映射订单信息
-      const unifiedOrder = this.mapOpenOrderToUnified(order, symbol)
+      const unifiedOrder = this.mapOpenOrderToUnified(order, symbol, marketType)
 
       // 更新已成交信息，并根据成交情况设置正确的状态
       // 如果有部分成交但订单仍在 order book 中，状态应为 'partially_filled'
@@ -767,13 +777,21 @@ export class HyperliquidClient implements IExchangeClient {
   async fetchOpenOrders(symbol?: string): Promise<UnifiedOrder[]> {
     return this.withRetry(async () => {
       const orders: any = await this.infoClient.openOrders({ user: this.tradingWalletAddress })
+      const marketType = symbol ? this.getMarketTypeForSymbol(symbol) : this.marketType
+      const normalizedCoin = symbol ? this.mapSymbolToHl(symbol, marketType) : undefined
 
       // 如果指定了 symbol，过滤订单
       const filtered = symbol
-        ? orders.filter((o: any) => o.coin === this.mapSymbolToHl(symbol))
-        : orders
+        ? orders.filter((o: any) => this.matchesOrderSymbol(o.coin, normalizedCoin!, marketType))
+        : orders.filter((o: any) => this.matchesMarketType(o.coin, marketType))
 
-      return filtered.map((o: any) => this.mapOpenOrderToUnified(o, symbol || this.mapHlSymbolToInternal(o.coin)))
+      return filtered.map((o: any) =>
+        this.mapOpenOrderToUnified(
+          o,
+          symbol || this.mapHlSymbolToInternal(o.coin, marketType),
+          marketType,
+        ),
+      )
     }, 'fetchOpenOrders')
   }
 
@@ -792,11 +810,13 @@ export class HyperliquidClient implements IExchangeClient {
     return this.withRetry(async () => {
       // Hyperliquid 通过 fills 接口获取历史成交
       const fills: any = await this.infoClient.userFills({ user: this.tradingWalletAddress })
+      const marketType = symbol ? this.getMarketTypeForSymbol(symbol) : this.marketType
+      const normalizedCoin = symbol ? this.mapSymbolToHl(symbol, marketType) : undefined
 
       // 如果指定了 symbol，过滤成交
       const filtered = symbol
-        ? fills.filter((f: any) => f.coin === this.mapSymbolToHl(symbol))
-        : fills
+        ? fills.filter((f: any) => this.matchesOrderSymbol(f.coin, normalizedCoin!, marketType))
+        : fills.filter((f: any) => this.matchesMarketType(f.coin, marketType))
 
       // 按订单 ID 聚合所有 fill（处理分多次成交的订单）
       const orderMap = new Map<
@@ -832,7 +852,7 @@ export class HyperliquidClient implements IExchangeClient {
       // 将聚合后的订单转换为统一格式
       return Array.from(orderMap.values()).map((order) => {
         const side = order.side === 'B' ? 'buy' : 'sell'
-        const internalSymbol = symbol || this.mapHlSymbolToInternal(order.coin)
+        const internalSymbol = symbol || this.mapHlSymbolToInternal(order.coin, marketType)
 
         // 计算总成交量和加权平均价格
         let totalSz = 0
@@ -855,7 +875,7 @@ export class HyperliquidClient implements IExchangeClient {
           id: order.oid,
           clientOrderId,
           symbol: internalSymbol,
-          marketType: 'perp' as MarketType,
+          marketType,
           side,
           // 注意：Hyperliquid fills API 不返回原始 orderType
           // 由于 Hyperliquid 的市价单本质上是 IOC 限价单，
@@ -879,6 +899,10 @@ export class HyperliquidClient implements IExchangeClient {
    */
   async fetchPositions(): Promise<UnifiedPosition[]> {
     return this.withRetry(async () => {
+      if (this.marketType === 'spot') {
+        return []
+      }
+
       const clearinghouseState: any = await this.infoClient.clearinghouseState({ user: this.tradingWalletAddress })
 
       if (!clearinghouseState.assetPositions) {
@@ -893,7 +917,7 @@ export class HyperliquidClient implements IExchangeClient {
         .map((p: any) => {
           const size = Number(p.position.szi)
           const side: UnifiedPosition['side'] = size > 0 ? 'long' : size < 0 ? 'short' : 'flat'
-          const symbol = this.mapHlSymbolToInternal(p.position.coin)
+          const symbol = this.mapHlSymbolToInternal(p.position.coin, 'perp')
 
           return {
             symbol,
@@ -917,6 +941,21 @@ export class HyperliquidClient implements IExchangeClient {
    */
   async fetchBalance(): Promise<UnifiedBalance[]> {
     return this.withRetry(async () => {
+      if (this.marketType === 'spot') {
+        const spotState: any = await this.infoClient.spotClearinghouseState({ user: this.tradingWalletAddress })
+        return (spotState?.balances ?? []).map((balance: any) => {
+          const total = Number(balance.total || 0)
+          const locked = Number(balance.hold || 0)
+
+          return {
+            asset: String(balance.coin).toUpperCase(),
+            free: Math.max(0, total - locked),
+            locked,
+            total,
+          }
+        })
+      }
+
       const clearinghouseState: any = await this.infoClient.clearinghouseState({ user: this.tradingWalletAddress })
 
       // Hyperliquid 使用 USDC 作为保证金
@@ -949,7 +988,14 @@ export class HyperliquidClient implements IExchangeClient {
     }
 
     return this.withRetry(async () => {
-      const coin = this.mapSymbolToHl(symbol)
+      const marketType = this.getMarketTypeForSymbol(symbol)
+      const coin = this.mapSymbolToHl(symbol, marketType)
+
+      if (marketType === 'spot') {
+        const ticker = await this.fetchSpotTicker(symbol, coin)
+        this.tickerCache.set(symbol, { data: ticker, timestamp: Date.now() })
+        return ticker
+      }
 
       // 并行获取所有需要的数据
       const [midsResult, metaResult, candlesResult] = await Promise.allSettled([
@@ -1029,19 +1075,10 @@ export class HyperliquidClient implements IExchangeClient {
    * mapSymbolToHl('ETH/USDT:PERP') // 返回: 'ETH'
    * ```
    */
-  private mapSymbolToHl(symbol: string): string {
-    // 验证 symbol 格式: BASE/QUOTE:PERP
-    const perpPattern = /^([A-Z0-9]+)\/[A-Z]+:PERP$/i
-    const match = symbol.match(perpPattern)
-
-    if (!match) {
-      throw new ExchangeError(
-        `Invalid symbol format: ${symbol}. Expected format: BASE/USDT:PERP (e.g., BTC/USDT:PERP)`,
-        'INVALID_SYMBOL',
-      )
-    }
-
-    return match[1].toUpperCase()
+  private mapSymbolToHl(symbol: string, marketType: MarketType): string {
+    return marketType === 'spot'
+      ? this.mapSymbolToHlSpot(symbol)
+      : this.mapSymbolToHlPerp(symbol)
   }
 
   /**
@@ -1056,9 +1093,10 @@ export class HyperliquidClient implements IExchangeClient {
    * mapHlSymbolToInternal('ETH') // 返回: 'ETH/USDT:PERP'
    * ```
    */
-  private mapHlSymbolToInternal(coin: string): string {
-    // Hyperliquid 所有合约都是 USDT 永续
-    return `${coin.toUpperCase()}/USDT:PERP`
+  private mapHlSymbolToInternal(coin: string, marketType: MarketType): string {
+    return marketType === 'spot'
+      ? this.mapHlSpotSymbolToInternal(coin)
+      : this.mapHlPerpSymbolToInternal(coin)
   }
 
   /**
@@ -1078,46 +1116,10 @@ export class HyperliquidClient implements IExchangeClient {
    * const assetId = await this.getAssetId('ETH') // 返回: 1
    * ```
    */
-  private async getAssetMeta(coin: string): Promise<HyperliquidAssetMeta> {
-    // 检查缓存
-    const now = Date.now()
-    if (this.assetMetaCache && now - this.assetMetaCacheTime < this.ASSET_META_CACHE_TTL) {
-      const assetMeta = this.assetMetaCache.get(coin)
-      if (assetMeta !== undefined) {
-        return assetMeta
-      }
-    }
-
-    // 缓存过期或不存在，重新获取
-    const meta: any = await this.infoClient.meta()
-
-    // 构建 coin -> assetId 映射
-    const newCache = new Map<string, HyperliquidAssetMeta>()
-    if (meta && meta.universe && Array.isArray(meta.universe)) {
-      for (const asset of meta.universe) {
-        if (asset.name) {
-          newCache.set(asset.name, {
-            assetId: asset.index ?? newCache.size,
-            szDecimals: Number(asset.szDecimals ?? 0),
-          })
-        }
-      }
-    }
-
-    // 更新缓存
-    this.assetMetaCache = newCache
-    this.assetMetaCacheTime = now
-
-    // 查找目标币种
-    const assetMeta = newCache.get(coin)
-    if (assetMeta === undefined) {
-      throw new ExchangeError(
-        `Asset ${coin} not found in Hyperliquid meta`,
-        'ASSET_NOT_FOUND',
-      )
-    }
-
-    return assetMeta
+  private async getAssetMeta(coin: string, marketType: MarketType): Promise<HyperliquidAssetMeta> {
+    return marketType === 'spot'
+      ? this.getSpotAssetMeta(coin)
+      : this.getPerpAssetMeta(coin)
   }
 
   /**
@@ -1127,9 +1129,9 @@ export class HyperliquidClient implements IExchangeClient {
    * @param symbol - 统一格式 symbol
    * @returns 统一格式订单对象
    */
-  private mapOpenOrderToUnified(order: any, symbol: string): UnifiedOrder {
+  private mapOpenOrderToUnified(order: any, symbol: string, marketType: MarketType): UnifiedOrder {
     const side = order.side === 'B' ? 'buy' : 'sell'
-    const sz = Number(order.sz)
+    const sz = Number(order.origSz ?? order.sz)
     const limitPx = Number(order.limitPx)
 
     // 判断订单类型
@@ -1144,7 +1146,7 @@ export class HyperliquidClient implements IExchangeClient {
       id: String(order.oid),
       clientOrderId: order.cloid,
       symbol,
-      marketType: 'perp',
+      marketType,
       side,
       type,
       price: limitPx,
@@ -1163,7 +1165,7 @@ export class HyperliquidClient implements IExchangeClient {
    * @param symbol - 统一格式 symbol
    * @returns 统一格式订单对象
    */
-  private mapFillToOrder(fill: any, symbol: string): UnifiedOrder {
+  private mapFillToOrder(fill: any, symbol: string, marketType: MarketType): UnifiedOrder {
     const side = fill.side === 'B' ? 'buy' : 'sell'
     const sz = Number(fill.sz)
     const px = Number(fill.px)
@@ -1172,7 +1174,7 @@ export class HyperliquidClient implements IExchangeClient {
       id: String(fill.oid),
       clientOrderId: fill.cloid,
       symbol,
-      marketType: 'perp',
+      marketType,
       side,
       type: 'market', // 已成交的订单类型难以判断，默认为市价
       price: px,
@@ -1210,6 +1212,183 @@ export class HyperliquidClient implements IExchangeClient {
     }
 
     return 'rejected'
+  }
+
+  private mapSymbolToHlPerp(symbol: string): string {
+    const perpPattern = /^([A-Z0-9]+)\/[A-Z]+:PERP$/i
+    const match = symbol.match(perpPattern)
+
+    if (!match) {
+      throw new ExchangeError(
+        `Invalid symbol format: ${symbol}. Expected format: BASE/QUOTE:PERP`,
+        'INVALID_SYMBOL',
+      )
+    }
+
+    return match[1].toUpperCase()
+  }
+
+  private mapSymbolToHlSpot(symbol: string): string {
+    const spotPattern = /^([A-Z0-9]+)\/([A-Z0-9]+)$/i
+    const match = symbol.match(spotPattern)
+
+    if (!match) {
+      throw new ExchangeError(
+        `Invalid symbol format: ${symbol}. Expected format: BASE/QUOTE`,
+        'INVALID_SYMBOL',
+      )
+    }
+
+    return `${match[1].toUpperCase()}/${match[2].toUpperCase()}`
+  }
+
+  private mapHlPerpSymbolToInternal(coin: string): string {
+    return `${coin.toUpperCase()}/USDT:PERP`
+  }
+
+  private mapHlSpotSymbolToInternal(coin: string): string {
+    return coin.toUpperCase()
+  }
+
+  private getMarketTypeForSymbol(symbol: string): MarketType {
+    return symbol.includes(':PERP') ? 'perp' : 'spot'
+  }
+
+  private matchesMarketType(coin: string, marketType: MarketType): boolean {
+    return marketType === 'spot' ? coin.includes('/') : !coin.includes('/')
+  }
+
+  private matchesOrderSymbol(rawCoin: string, normalizedCoin: string, marketType: MarketType): boolean {
+    if (!this.matchesMarketType(rawCoin, marketType))
+      return false
+
+    return rawCoin.toUpperCase() === normalizedCoin.toUpperCase()
+  }
+
+  private async getPerpAssetMeta(coin: string): Promise<HyperliquidAssetMeta> {
+    const now = Date.now()
+    if (this.perpAssetMetaCache && now - this.perpAssetMetaCacheTime < this.ASSET_META_CACHE_TTL) {
+      const assetMeta = this.perpAssetMetaCache.get(coin)
+      if (assetMeta) {
+        return assetMeta
+      }
+    }
+
+    const meta: any = await this.infoClient.meta()
+    const nextCache = new Map<string, HyperliquidAssetMeta>()
+    for (const asset of meta?.universe ?? []) {
+      if (!asset?.name) {
+        continue
+      }
+
+      nextCache.set(asset.name, {
+        assetId: asset.index ?? nextCache.size,
+        szDecimals: Number(asset.szDecimals ?? 0),
+      })
+    }
+
+    this.perpAssetMetaCache = nextCache
+    this.perpAssetMetaCacheTime = now
+
+    const assetMeta = nextCache.get(coin)
+    if (!assetMeta) {
+      throw new ExchangeError(`Asset ${coin} not found in Hyperliquid meta`, 'ASSET_NOT_FOUND')
+    }
+
+    return assetMeta
+  }
+
+  private async getSpotAssetMeta(symbol: string): Promise<HyperliquidAssetMeta> {
+    const now = Date.now()
+    if (this.spotAssetMetaCache && now - this.spotAssetMetaCacheTime < this.ASSET_META_CACHE_TTL) {
+      const assetMeta = this.spotAssetMetaCache.get(symbol)
+      if (assetMeta) {
+        return assetMeta
+      }
+    }
+
+    const meta: any = await this.infoClient.spotMeta()
+    const tokenMap = new Map<number, { name: string; szDecimals: number }>()
+    for (const token of meta?.tokens ?? []) {
+      tokenMap.set(Number(token.index), {
+        name: String(token.name).toUpperCase(),
+        szDecimals: Number(token.szDecimals ?? 0),
+      })
+    }
+
+    const nextCache = new Map<string, HyperliquidAssetMeta>()
+    for (const market of meta?.universe ?? []) {
+      if (!Array.isArray(market?.tokens) || market.tokens.length < 2) {
+        continue
+      }
+
+      const baseToken = tokenMap.get(Number(market.tokens[0]))
+      const quoteToken = tokenMap.get(Number(market.tokens[1]))
+      if (!baseToken || !quoteToken) {
+        continue
+      }
+
+      const spotSymbol = `${baseToken.name}/${quoteToken.name}`
+      nextCache.set(spotSymbol, {
+        assetId: 10000 + Number(market.index),
+        szDecimals: baseToken.szDecimals,
+        marketIndex: Number(market.index),
+      })
+    }
+
+    this.spotAssetMetaCache = nextCache
+    this.spotAssetMetaCacheTime = now
+
+    const assetMeta = nextCache.get(symbol)
+    if (!assetMeta) {
+      throw new ExchangeError(`Asset ${symbol} not found in Hyperliquid spot meta`, 'ASSET_NOT_FOUND')
+    }
+
+    return assetMeta
+  }
+
+  private async getPerpMidPrice(coin: string): Promise<number> {
+    const mids: any = await this.infoClient.allMids()
+    return Number(mids?.[coin] || 0)
+  }
+
+  private async getSpotMidPrice(symbol: string): Promise<number> {
+    const [meta, assetCtxs]: any = await this.infoClient.spotMetaAndAssetCtxs()
+    const assetMeta = await this.getSpotAssetMeta(symbol)
+    const assetCtx = assetCtxs?.[assetMeta.marketIndex ?? -1]
+      ?? assetCtxs?.find((ctx: any) => String(ctx.coin).toUpperCase() === symbol.toUpperCase())
+
+    if (!assetCtx) {
+      throw new ExchangeError(`Ticker not found for ${symbol}`, 'INVALID_SYMBOL')
+    }
+
+    void meta
+    return Number(assetCtx.midPx ?? assetCtx.markPx ?? 0)
+  }
+
+  private async fetchSpotTicker(symbol: string, coin: string): Promise<UnifiedTicker> {
+    const [, assetCtxs]: any = await this.infoClient.spotMetaAndAssetCtxs()
+    const assetMeta = await this.getSpotAssetMeta(coin)
+    const assetCtx = assetCtxs?.[assetMeta.marketIndex ?? -1]
+      ?? assetCtxs?.find((ctx: any) => String(ctx.coin).toUpperCase() === coin.toUpperCase())
+
+    if (!assetCtx) {
+      throw new ExchangeError(`Ticker not found for ${coin}`, 'INVALID_SYMBOL')
+    }
+
+    const last = Number(assetCtx.midPx ?? assetCtx.markPx ?? 0)
+    const spread = last * this.TICKER_SPREAD_PERCENTAGE
+
+    return {
+      symbol,
+      last,
+      bid: Math.max(0, last - spread),
+      ask: last + spread,
+      high: Math.max(last, Number(assetCtx.prevDayPx ?? last)),
+      low: Math.min(last, Number(assetCtx.prevDayPx ?? last)),
+      volume: Number(assetCtx.dayBaseVlm ?? 0),
+      raw: assetCtx,
+    }
   }
 
   /**

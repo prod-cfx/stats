@@ -41,6 +41,32 @@ describe('parseFixedHyperliquidTestnetCliOptions', () => {
     ])
   })
 
+  it('maps open-close-spot-roundtrip preset to spot entry and exit steps', () => {
+    const plan = parseFixedHyperliquidTestnetCliOptions([
+      '--preset',
+      'open-close-spot-roundtrip',
+      '--position-size-quote',
+      '12',
+    ])
+
+    expect(plan.mode).toBe('preset')
+    expect(plan.steps).toEqual([
+      expect.objectContaining({
+        marketType: 'spot',
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        execute: true,
+        positionSizeQuote: '12',
+      }),
+      expect.objectContaining({
+        marketType: 'spot',
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        execute: true,
+      }),
+    ])
+  })
+
   it('returns single-step mode when no preset provided', () => {
     const plan = parseFixedHyperliquidTestnetCliOptions([
       '--market',

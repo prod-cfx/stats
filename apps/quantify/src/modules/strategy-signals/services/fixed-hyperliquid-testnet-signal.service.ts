@@ -1,7 +1,7 @@
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { MarketType } from '@/modules/trading/core/types'
 import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { EnvService } from '@/common/services/env.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { SignalExecutorService } from './signal-executor.service'
@@ -10,6 +10,9 @@ export interface FixedHyperliquidTestnetSignalContext {
   strategyId: string
   userId: string
   strategyAccountId: string
+  spotSymbolId: string
+  spotInstanceId: string
+  spotSymbol: string
   perpSymbolId: string
   perpInstanceId: string
   perpSymbol: string
@@ -39,8 +42,11 @@ const DEFAULT_AGENT_PRIVATE_KEY = '000000000000000000000000000000000000000000000
 @Injectable()
 export class FixedHyperliquidTestnetSignalService {
   constructor(
+    @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(EnvService)
     private readonly env: EnvService,
+    @Inject(SignalExecutorService)
     private readonly signalExecutor: SignalExecutorService,
   ) {}
 
@@ -67,26 +73,32 @@ export class FixedHyperliquidTestnetSignalService {
       throw new Error('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_ENABLED is not enabled')
     }
 
-    const baseAsset = this.getBaseAsset()
+    const spotBaseAsset = this.getSpotBaseAsset()
+    const perpBaseAsset = this.getPerpBaseAsset()
     const quoteAsset = this.getQuoteAsset()
-    const perpSymbolCode = `${baseAsset}${quoteAsset}:PERP`
-    const strategyName = `FIXED-HYPERLIQUID-TESTNET-${baseAsset}${quoteAsset}`
-    const strategySlug = `${baseAsset}${quoteAsset}`.toLowerCase()
+    const spotSymbolCode = `${spotBaseAsset}${quoteAsset}`
+    const perpSymbolCode = `${perpBaseAsset}${quoteAsset}:PERP`
+    const strategyName = `FIXED-HYPERLIQUID-TESTNET-${spotSymbolCode}`
+    const spotStrategySlug = spotSymbolCode.toLowerCase()
+    const perpStrategySlug = `${perpBaseAsset}${quoteAsset}`.toLowerCase()
     const userEmail = this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_USER_EMAIL', DEFAULT_FIXED_USER_EMAIL) ?? DEFAULT_FIXED_USER_EMAIL
 
-    const strategy = await this.prisma.llmStrategy.findUnique({
-      where: { name: strategyName },
-    })
-    const user = await this.prisma.user.findUnique({
-      where: { email: userEmail },
-    })
-    const perpSymbol = await this.prisma.symbol.findFirst({ where: { code: perpSymbolCode } })
+    const [strategy, user, spotSymbol, perpSymbol] = await Promise.all([
+      this.prisma.llmStrategy.findUnique({
+        where: { name: strategyName },
+      }),
+      this.prisma.user.findUnique({
+        where: { email: userEmail },
+      }),
+      this.prisma.symbol.findFirst({ where: { code: spotSymbolCode } }),
+      this.prisma.symbol.findFirst({ where: { code: perpSymbolCode } }),
+    ])
 
-    if (!strategy || !user || !perpSymbol) {
+    if (!strategy || !user || !spotSymbol || !perpSymbol) {
       throw new Error('Fixed Hyperliquid testnet seed context is incomplete')
     }
 
-    const [strategyAccount, perpInstance] = await Promise.all([
+    const [strategyAccount, spotInstance, perpInstance] = await Promise.all([
       this.prisma.userStrategyAccount.findFirst({
         where: {
           userId: user.id,
@@ -96,12 +108,18 @@ export class FixedHyperliquidTestnetSignalService {
       this.prisma.llmStrategyInstance.findFirst({
         where: {
           strategyId: strategy.id,
-          name: `fixed-hyperliquid-${strategySlug}-perp`,
+          name: `fixed-hyperliquid-${spotStrategySlug}-spot`,
+        },
+      }),
+      this.prisma.llmStrategyInstance.findFirst({
+        where: {
+          strategyId: strategy.id,
+          name: `fixed-hyperliquid-${perpStrategySlug}-perp`,
         },
       }),
     ])
 
-    if (!strategyAccount || !perpInstance) {
+    if (!strategyAccount || !spotInstance || !perpInstance) {
       throw new Error('Fixed Hyperliquid testnet subscriptions or strategy account are missing')
     }
 
@@ -109,25 +127,35 @@ export class FixedHyperliquidTestnetSignalService {
       strategyId: strategy.id,
       userId: user.id,
       strategyAccountId: strategyAccount.id,
+      spotSymbolId: spotSymbol.id,
+      spotInstanceId: spotInstance.id,
+      spotSymbol: `${spotBaseAsset}/${quoteAsset}`,
       perpSymbolId: perpSymbol.id,
       perpInstanceId: perpInstance.id,
-      perpSymbol: `${baseAsset}/${quoteAsset}:PERP`,
+      perpSymbol: `${perpBaseAsset}/${quoteAsset}:PERP`,
     }
   }
 
   async createSignal(input: CreateFixedHyperliquidTestnetSignalInput) {
-    if (input.marketType !== 'perp') {
-      throw new Error('Fixed Hyperliquid signal only supports perp markets')
-    }
-
     const context = await this.resolveContext()
-    const entryPrice = input.entryPrice ?? await this.fetchTickerPrice(context.perpSymbol)
+    const target = input.marketType === 'spot'
+      ? {
+          symbolId: context.spotSymbolId,
+          instanceId: context.spotInstanceId,
+          symbol: context.spotSymbol,
+        }
+      : {
+          symbolId: context.perpSymbolId,
+          instanceId: context.perpInstanceId,
+          symbol: context.perpSymbol,
+        }
+    const entryPrice = input.entryPrice ?? await this.fetchTickerPrice(target.symbol)
 
     return this.prisma.tradingSignal.create({
       data: {
         llmStrategyId: context.strategyId,
-        llmStrategyInstanceId: context.perpInstanceId,
-        symbolId: context.perpSymbolId,
+        llmStrategyInstanceId: target.instanceId,
+        symbolId: target.symbolId,
         sourceType: 'AI_GENERATED',
         signalType: input.signalType,
         direction: input.direction,
@@ -153,8 +181,24 @@ export class FixedHyperliquidTestnetSignalService {
     return signal
   }
 
-  private getBaseAsset() {
-    return (this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET', DEFAULT_BASE_ASSET) ?? DEFAULT_BASE_ASSET).toUpperCase()
+  private getSpotBaseAsset() {
+    return (
+      this.env.getString(
+        'QUANTIFY_FIXED_HYPERLIQUID_TESTNET_SPOT_BASE_ASSET',
+        this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET', DEFAULT_BASE_ASSET) ?? DEFAULT_BASE_ASSET,
+      )
+      ?? DEFAULT_BASE_ASSET
+    ).toUpperCase()
+  }
+
+  private getPerpBaseAsset() {
+    return (
+      this.env.getString(
+        'QUANTIFY_FIXED_HYPERLIQUID_TESTNET_PERP_BASE_ASSET',
+        this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_BASE_ASSET', DEFAULT_BASE_ASSET) ?? DEFAULT_BASE_ASSET,
+      )
+      ?? DEFAULT_BASE_ASSET
+    ).toUpperCase()
   }
 
   private getQuoteAsset() {
