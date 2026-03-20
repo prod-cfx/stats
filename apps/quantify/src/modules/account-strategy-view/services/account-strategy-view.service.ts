@@ -1,4 +1,4 @@
-import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto';
+import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
@@ -130,13 +130,15 @@ export class AccountStrategyViewService {
       ? Number(((totalPnl / investedAmount) * 100).toFixed(2))
       : 0
 
+    const lifecycleStartAt = row.startedAt ?? row.createdAt ?? row.updatedAt
+
     const derivedEquitySeries = account
       ? this.buildIndustryEquitySeries({
           initialBalance: Number(account.initialBalance),
           totalRealizedPnl: Number(account.totalRealizedPnl),
           totalUnrealizedPnl: Number(account.totalUnrealizedPnl),
           closedPositionRows,
-          startedAt: row.startedAt ?? row.updatedAt,
+          startedAt: lifecycleStartAt,
           dailyRows: equityRows,
         })
       : []
@@ -411,41 +413,73 @@ export class AccountStrategyViewService {
     dailyRows: Array<{ date: Date; equityStart?: any; equityEnd: any }>
   }): Array<{ ts: string; value: number }> {
     const initial = Number.isFinite(input.initialBalance) ? input.initialBalance : 0
-    const points: Array<{ ts: string; value: number }> = []
-    points.push({
+    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
+    const startedAtMs = input.startedAt.getTime()
+    const now = new Date()
+
+    // 行业通用口径优先使用账户权益时间序列（按时间顺序、峰值到谷值计算最大回撤）
+    const dailyPoints = input.dailyRows
+      .filter(item => item.date.getTime() >= startedAtMs)
+      .map(item => ({
+        ts: item.date.toISOString(),
+        value: Number(item.equityEnd),
+      }))
+      .filter(item => Number.isFinite(item.value))
+
+    if (dailyPoints.length > 0) {
+      dailyPoints.push({
+        ts: now.toISOString(),
+        value: Number(currentEquity.toFixed(8)),
+      })
+      return this.normalizeEquitySeries(dailyPoints)
+    }
+
+    // 没有日度权益时，再按平仓事件累计构造；并过滤策略启动前历史成交，避免跨策略污染
+    const points: Array<{ ts: string; value: number }> = [{
       ts: input.startedAt.toISOString(),
       value: Number(initial.toFixed(8)),
-    })
+    }]
 
     let runningEquity = initial
     for (const row of input.closedPositionRows) {
+      const at = row.closedAt ?? row.openedAt
+      if (at.getTime() < startedAtMs) continue
       runningEquity += Number(row.realizedPnl ?? 0)
       points.push({
-        ts: (row.closedAt ?? row.openedAt).toISOString(),
+        ts: at.toISOString(),
         value: Number(runningEquity.toFixed(8)),
       })
     }
 
-    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
-    const nowTs = new Date().toISOString()
-    const last = points[points.length - 1]
-    if (!last || Math.abs(last.value - currentEquity) > 1e-10) {
-      points.push({
-        ts: nowTs,
-        value: Number(currentEquity.toFixed(8)),
+    points.push({
+      ts: now.toISOString(),
+      value: Number(currentEquity.toFixed(8)),
+    })
+
+    return this.normalizeEquitySeries(points)
+  }
+
+  private normalizeEquitySeries(series: Array<{ ts: string; value: number }>): Array<{ ts: string; value: number }> {
+    if (series.length === 0) return []
+
+    const sorted = [...series]
+      .filter(item => Number.isFinite(item.value))
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+
+    const dedup: Array<{ ts: string; value: number }> = []
+    for (const point of sorted) {
+      const last = dedup[dedup.length - 1]
+      if (last && last.ts === point.ts) {
+        last.value = point.value
+        continue
+      }
+      dedup.push({
+        ts: point.ts,
+        value: Number(point.value.toFixed(8)),
       })
     }
 
-    // 如果仍然点位过少，则回退到日度序列，至少提供可读历史点
-    if (points.length <= 1 && input.dailyRows.length > 0) {
-      const dailyPoints = input.dailyRows.map(item => ({
-        ts: item.date.toISOString(),
-        value: Number(item.equityEnd),
-      }))
-      return dailyPoints.length > 0 ? dailyPoints : points
-    }
-
-    return points
+    return dedup
   }
 
   private computeMaxDrawdownPct(series: Array<{ ts: string; value: number }>): number {

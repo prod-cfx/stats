@@ -188,9 +188,8 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
               }}
             >
               <p className="text-[color:var(--cf-muted)]">{hoverPoint.ts}</p>
-              <p className="mt-1">
-                变化: {adjacentChangePct === null ? '--' : `${formatSignedNumber(adjacentChangePct)}%`}
-              </p>
+              <p className="mt-1">权益: {formatAmount(hoverPoint.value)} USDT</p>
+              <p>变化: {adjacentChangePct === null ? '--' : `${formatSignedNumber(adjacentChangePct)}%`}</p>
             </div>
           )}
         </div>

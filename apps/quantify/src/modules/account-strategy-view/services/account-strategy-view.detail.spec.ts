@@ -186,4 +186,57 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.metrics.tradeCount).toBe(3)
     expect(detail.totalPnl).toBe(100)
   })
+
+  it('ignores pre-start closed positions when computing drawdown', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-dd',
+        name: 'Drawdown guard',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT' },
+        strategyTemplateId: 'tpl-1',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-dd',
+        initialBalance: 10000,
+        equity: 10010,
+        totalRealizedPnl: 10,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([
+        // 启动前的大亏损，不应计入当前策略回撤
+        {
+          openedAt: new Date('2026-03-18T09:00:00.000Z'),
+          closedAt: new Date('2026-03-18T10:00:00.000Z'),
+          realizedPnl: -9994,
+        },
+        {
+          openedAt: new Date('2026-03-20T11:00:00.000Z'),
+          closedAt: new Date('2026-03-20T11:05:00.000Z'),
+          realizedPnl: 10,
+        },
+      ]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-20T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+
+    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const detail = await service.getStrategyDetail('user-1', 'inst-dd')
+
+    expect(detail.metrics.maxDrawdownPct).toBe(0)
+    expect(detail.equitySeries.every(item => item.value > 1000)).toBe(true)
+  })
 })
