@@ -32,6 +32,11 @@ describe('exchangeAccountsService', () => {
     prisma.getClient.mockReturnValue(prisma)
     const crypto = {
       encryptConfig: jest.fn().mockReturnValue('encrypted-config'),
+      decryptConfig: jest.fn().mockReturnValue({
+        apiKey: 'okx-valid-key',
+        secret: 'okx-valid-secret',
+        passphrase: 'okx-valid-passphrase',
+      }),
     }
     const tradingService = {
       validateCexCredentials: jest.fn().mockResolvedValue(true),
@@ -237,5 +242,37 @@ describe('exchangeAccountsService', () => {
     expect(prisma.exchangeAccount.delete).toHaveBeenCalledWith({
       where: { id: 'account-1' },
     })
+  })
+
+  it('keeps the latest record when duplicate exchange data exists', async () => {
+    const { service, prisma } = createService()
+    prisma.exchangeAccount.findMany.mockResolvedValue([
+      {
+        id: 'new-okx',
+        exchangeId: 'okx',
+        name: 'Newest OKX',
+        isTestnet: true,
+        encryptedConfig: 'encrypted-new',
+        lastValidatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      },
+      {
+        id: 'old-okx',
+        exchangeId: 'okx',
+        name: 'Old OKX',
+        isTestnet: false,
+        encryptedConfig: 'encrypted-old',
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        createdAt: new Date('2026-03-19T00:00:00.000Z'),
+      },
+    ])
+
+    await expect(service.list('user-1')).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'new-okx',
+        exchangeId: 'okx',
+        name: 'Newest OKX',
+      }),
+    ]))
   })
 })

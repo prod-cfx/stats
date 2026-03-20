@@ -79,9 +79,14 @@ export class ExchangeAccountsService {
   async list(userId: string): Promise<ExchangeAccountResponseDto[]> {
     const records = await this.prisma.exchangeAccount.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     })
-    const recordMap = new Map(records.map(record => [record.exchangeId as ExchangeId, record]))
+    const recordMap = new Map<ExchangeId, ExchangeAccount>()
+    for (const record of records) {
+      const exchangeId = record.exchangeId as ExchangeId
+      if (!recordMap.has(exchangeId))
+        recordMap.set(exchangeId, record)
+    }
 
     return SUPPORTED_EXCHANGES.map((exchangeId) => {
       const record = recordMap.get(exchangeId)
