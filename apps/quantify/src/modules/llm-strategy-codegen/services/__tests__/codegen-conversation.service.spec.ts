@@ -3,13 +3,12 @@ import type { StartCodegenSessionDto } from '../../dto/start-codegen-session.dto
 import type { CodegenSessionsRepository } from '../../repositories/codegen-sessions.repository'
 import type { RecommendationIndexService } from '../recommendation-index.service'
 import type { AiService } from '@/modules/ai/ai.service'
-import { ChecklistGateService } from '../checklist-gate.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 
-describe('codegenConversationService', () => {
+describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockRepo = {
     createSession: jest.fn(),
     findById: jest.fn(),
@@ -26,7 +25,6 @@ describe('codegenConversationService', () => {
   const service = new CodegenConversationService(
     mockAi as unknown as AiService,
     mockRepo as unknown as CodegenSessionsRepository,
-    new ChecklistGateService(),
     new StaticGuardrailService(),
     new RuntimeGuardrailService(),
     new SpecDescBuilderService(),
@@ -37,93 +35,181 @@ describe('codegenConversationService', () => {
     jest.resetAllMocks()
   })
 
-  it('keeps drafting when checklist incomplete', async () => {
+  it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
+      initialMessage: '帮我做一个均线策略',
     }
-
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '先确认入场条件：例如 5/20 金叉。',
+      }),
+    })
     mockRepo.createSession.mockResolvedValue({ id: 's1' })
 
     const result = await service.startSession(dto)
+
     expect(result.status).toBe('DRAFTING')
-    expect(result.missingFields).toEqual(expect.arrayContaining(['entryRules']))
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({ status: 'DRAFTING' }))
+    expect(result.missingFields).toEqual([])
+    expect(result.assistantPrompt).toContain('先确认入场条件')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'DRAFTING',
+    }))
   })
 
-  it('persists CHECKLIST_GATE when checklist complete at start', async () => {
+  it('starts in checklist gate when llm says logic is ready', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['rsi < 30'],
-      exitRules: ['atr stop'],
-      riskRules: { maxPositionPct: 0.1 },
+      initialMessage: '3分钟跌1%买入，5分钟涨2%卖出',
     }
-
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          entryRules: ['3m 内下跌 1% 买入'],
+          exitRules: ['5m 内上涨 2% 卖出'],
+        },
+      }),
+    })
     mockRepo.createSession.mockResolvedValue({ id: 's2' })
 
     const result = await service.startSession(dto)
+
     expect(result.status).toBe('CHECKLIST_GATE')
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({ status: 'CHECKLIST_GATE' }))
-  })
-
-  it('publishes when all checks pass', async () => {
-    mockRepo.findById.mockResolvedValue({
-      id: 's1',
-      userId: 'u1',
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-      },
-    })
-    mockAi.chat.mockResolvedValue({ content: 'return { direction: "BUY" }' })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
-
-    const dto: ContinueCodegenSessionDto = {
-      userId: 'u1',
-      message: '生成策略',
-      entryRules: ['rsi < 30'],
-      exitRules: ['atr stop'],
-      riskRules: { maxPositionPct: 0.1 },
-    }
-
-    const result = await service.continueSession('s1', dto)
-
-    expect(result.status).toBe('PUBLISHED')
     expect(result.specDesc).toBeTruthy()
-    expect(mockRepo.createVersion).toHaveBeenCalled()
+    expect(result.assistantPrompt).toContain('确认逻辑图')
   })
 
-  it('rejects continuation for terminal sessions', async () => {
+  it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's3',
       userId: 'u1',
-      status: 'PUBLISHED',
+      status: 'DRAFTING',
       checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
     })
 
-    await expect(service.continueSession('s3', { userId: 'u1', message: '继续生成' })).rejects.toThrow('会话已终态')
+    const result = await service.continueSession('s3', {
+      userId: 'u1',
+      message: 'hi',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('无关')
+    expect(mockRepo.updateSession).not.toHaveBeenCalled()
   })
 
-  it('converges session status to REJECTED when generation throws', async () => {
+  it('moves to checklist gate when llm planner marks logic ready', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's4',
       userId: 'u1',
       status: 'DRAFTING',
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
-        riskRules: { maxPositionPct: 0.1 },
-      },
+      checklist: {},
+      constraintPack: {},
     })
-    mockAi.chat.mockRejectedValue(new Error('provider down'))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          entryRules: ['短均线上穿长均线（金叉）入场'],
+          exitRules: ['短均线下穿长均线（死叉）出场'],
+        },
+      }),
+    })
 
-    await expect(service.continueSession('s4', { userId: 'u1', message: '生成策略' })).rejects.toThrow('provider down')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({ status: 'REJECTED' }))
+    const result = await service.continueSession('s4', {
+      userId: 'u1',
+      message: '入场用金叉，出场用死叉',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+    }))
   })
 
+  it('publishes after confirmGenerate with planner+generator pipeline', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's5',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已确认逻辑，开始生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY" }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
+
+    const dto: ContinueCodegenSessionDto = {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+    }
+    const result = await service.continueSession('s5', dto)
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.scriptCode).toContain('return { direction: "BUY" }')
+    expect(mockRepo.createVersion).toHaveBeenCalled()
+  })
+
+  it('auto-fixes script when runtime output is string', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's6',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['rsi < 30'],
+        exitRules: ['atr stop'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '可以生成',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return "BUY"',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v2' })
+
+    const result = await service.continueSession('s6', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.scriptCode).toContain('return { signal: __result };')
+  })
 })

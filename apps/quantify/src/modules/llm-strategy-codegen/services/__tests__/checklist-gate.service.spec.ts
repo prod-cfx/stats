@@ -9,7 +9,10 @@ describe('checklistGateService', () => {
       timeframes: ['1h'],
     })
 
-    expect(missing).toEqual(expect.arrayContaining(['entryRules', 'exitRules', 'riskRules']))
+    expect(missing).toEqual(expect.arrayContaining(['entryRules', 'exitRules']))
+    expect(missing).not.toContain('symbols')
+    expect(missing).not.toContain('timeframes')
+    expect(missing).not.toContain('riskRules')
   })
 
   it('returns empty when checklist complete', () => {

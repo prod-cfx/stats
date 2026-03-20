@@ -47,7 +47,8 @@ export class RuntimeGuardrailService {
       }
     }
 
-    const output = validateScriptOutput(result.value, { allowEmpty: false })
+    const normalizedValue = this.normalizeRuntimeValue(result.value)
+    const output = validateScriptOutput(normalizedValue, { allowEmpty: false })
     if (!output.valid) {
       return {
         runtimePassed: true,
@@ -59,6 +60,27 @@ export class RuntimeGuardrailService {
     return {
       runtimePassed: true,
       outputPassed: true,
+    }
+  }
+
+  private normalizeRuntimeValue(value: unknown): unknown {
+    if (typeof value !== 'string') {
+      return value
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return value
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return value
+      }
+      return parsed
+    } catch {
+      return value
     }
   }
 }

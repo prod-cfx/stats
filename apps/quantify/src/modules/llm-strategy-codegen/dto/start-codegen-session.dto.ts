@@ -5,7 +5,10 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  ValidateNested,
 } from 'class-validator'
+import { Type } from 'class-transformer'
+import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class StartCodegenSessionDto {
   @ApiProperty({ description: '业务用户 ID' })
@@ -46,4 +49,10 @@ export class StartCodegenSessionDto {
   @IsOptional()
   @IsObject()
   riskRules?: Record<string, unknown>
+
+  @ApiPropertyOptional({ description: '会话级引导参数配置', type: CodegenGuideConfigDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CodegenGuideConfigDto)
+  guideConfig?: CodegenGuideConfigDto
 }
