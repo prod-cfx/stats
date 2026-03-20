@@ -876,6 +876,11 @@ describe('ExchangeAccounts (E2E)', () => {
       results.forEach(response => {
         expect(response.status).toBe(201)
       })
+
+      const sameExchangeCount = await prisma.getClient().exchangeAccount.count({
+        where: { userId: testUser.id, exchangeId: 'binance' },
+      })
+      expect(sameExchangeCount).toBe(1)
     })
 
     it('should handle very long account names', async () => {

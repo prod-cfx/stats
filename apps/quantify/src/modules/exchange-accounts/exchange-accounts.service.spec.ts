@@ -1,5 +1,6 @@
 import { ErrorCode } from '@ai/shared'
 import { InvalidCredentialsException } from '@/modules/trading/exceptions/invalid-credentials.exception'
+import { Prisma } from '@/prisma/prisma.types'
 import { ExchangeAccountsService } from './exchange-accounts.service'
 
 describe('exchangeAccountsService', () => {
@@ -107,6 +108,12 @@ describe('exchangeAccountsService', () => {
 
   it('updates an existing exchange binding after validation succeeds', async () => {
     const { service, prisma, tradingService } = createService()
+    prisma.exchangeAccount.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    )
     prisma.exchangeAccount.findFirst.mockResolvedValue({
       id: 'account-1',
       exchangeId: 'binance',
@@ -141,7 +148,7 @@ describe('exchangeAccountsService', () => {
         encryptedConfig: 'encrypted-config',
       }),
     })
-    expect(prisma.exchangeAccount.create).not.toHaveBeenCalled()
+    expect(prisma.exchangeAccount.create).toHaveBeenCalled()
   })
 
   it('keeps existing binding unchanged when revalidation fails during update', async () => {

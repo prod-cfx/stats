@@ -11,11 +11,17 @@ import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { ExchangeOperationFailedException } from '@/modules/trading/exceptions/exchange-operation-failed.exception'
 import { InvalidCredentialsException } from '@/modules/trading/exceptions/invalid-credentials.exception'
 import { TradingService } from '@/modules/trading/trading.service'
+import { Prisma } from '@/prisma/prisma.types'
 import { PrismaService } from '@/prisma/prisma.service'
 
 import { ExchangeAccountNotFoundException, InvalidExchangeAccountConfigException } from './exceptions'
 
 const SUPPORTED_EXCHANGES: ExchangeId[] = ['binance', 'okx', 'hyperliquid']
+
+/* eslint-disable no-redeclare, ts/no-redeclare */
+type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
+const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
+/* eslint-enable no-redeclare, ts/no-redeclare */
 
 @Injectable()
 export class ExchangeAccountsService {
@@ -32,11 +38,31 @@ export class ExchangeAccountsService {
     const config = this.buildConfig(dto)
     const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
     const encryptedConfig = this.crypto.encryptConfig(config)
-    const existing = await this.prisma.exchangeAccount.findFirst({
-      where: { userId, exchangeId: dto.exchangeId },
-    })
+    try {
+      const record = await this.prisma.exchangeAccount.create({
+        data: {
+          userId,
+          exchangeId: dto.exchangeId,
+          name: dto.name,
+          isTestnet: dto.isTestnet ?? false,
+          encryptedConfig,
+          lastValidatedAt,
+        },
+      })
+      return this.toResponse(record, config)
+    }
+    catch (error) {
+      if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error
 
-    if (existing) {
+      const existing = await this.prisma.exchangeAccount.findFirst({
+        where: { userId, exchangeId: dto.exchangeId },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true },
+      })
+      if (!existing)
+        throw error
+
       const record = await this.prisma.exchangeAccount.update({
         where: { id: existing.id },
         data: {
@@ -48,19 +74,6 @@ export class ExchangeAccountsService {
       })
       return this.toResponse(record, config)
     }
-
-    const record = await this.prisma.exchangeAccount.create({
-      data: {
-        userId,
-        exchangeId: dto.exchangeId,
-        name: dto.name,
-        isTestnet: dto.isTestnet ?? false,
-        encryptedConfig,
-        lastValidatedAt,
-      },
-    })
-
-    return this.toResponse(record, config)
   }
 
   async list(userId: string): Promise<ExchangeAccountResponseDto[]> {
