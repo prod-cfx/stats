@@ -3,6 +3,13 @@ import { ErrorCode } from '@ai/shared'
 import { AccountExchangeAccountsService } from './account-exchange-accounts.service'
 
 describe('accountExchangeAccountsService', () => {
+  const authenticatedUser = {
+    id: 'user-1',
+    email: 'user-1@example.com',
+    roles: [],
+    principalType: 'user' as const,
+  }
+
   function createService() {
     const client = {
       list: jest.fn().mockResolvedValue([
@@ -53,7 +60,7 @@ describe('accountExchangeAccountsService', () => {
       },
     })
 
-    await expect(service.upsert('user-1', {
+    await expect(service.upsert(authenticatedUser, {
       exchangeId: 'okx',
       apiKey: 'key',
       apiSecret: 'secret',
@@ -73,5 +80,29 @@ describe('accountExchangeAccountsService', () => {
     await service.delete('user-1', 'binance')
 
     expect(client.delete).toHaveBeenCalledWith('user-1', 'binance')
+  })
+
+  it('maps unexpected quantify failures to a real 500 response shape', async () => {
+    const { service, client } = createService()
+    client.upsert.mockRejectedValue(new TypeError('fetch failed'))
+
+    await expect(service.upsert(authenticatedUser, {
+      exchangeId: 'okx',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      passphrase: 'pass',
+    })).rejects.toMatchObject<Partial<DomainException>>({
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: 'Quantify request failed',
+    })
+
+    await service.upsert(authenticatedUser, {
+      exchangeId: 'okx',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      passphrase: 'pass',
+    }).catch((error: DomainException) => {
+      expect(error.getStatus()).toBe(500)
+    })
   })
 })

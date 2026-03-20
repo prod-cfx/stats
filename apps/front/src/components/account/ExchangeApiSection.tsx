@@ -18,6 +18,7 @@ interface ExchangeApiSectionProps {
 
 interface ExchangeFormState {
   name: string
+  isTestnet: boolean
   apiKey: string
   apiSecret: string
   passphrase: string
@@ -30,6 +31,7 @@ const EXCHANGES: UserExchangeId[] = ['binance', 'okx', 'hyperliquid']
 function createEmptyFormState(): ExchangeFormState {
   return {
     name: '',
+    isTestnet: false,
     apiKey: '',
     apiSecret: '',
     passphrase: '',
@@ -133,8 +135,17 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
   }
 
   function startEditing(exchangeId: UserExchangeId) {
+    const account = accounts[exchangeId]
     setEditing(prev => ({ ...prev, [exchangeId]: true }))
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
+    setForms(prev => ({
+      ...prev,
+      [exchangeId]: {
+        ...prev[exchangeId],
+        name: account.name ?? prev[exchangeId].name,
+        isTestnet: account.isTestnet ?? prev[exchangeId].isTestnet,
+      },
+    }))
   }
 
   function cancelEditing(exchangeId: UserExchangeId) {
@@ -153,6 +164,7 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       return {
         exchangeId,
         name: form.name || undefined,
+        isTestnet: form.isTestnet,
         apiKey: form.apiKey,
         apiSecret: form.apiSecret,
         marketType: 'spot',
@@ -163,6 +175,7 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       return {
         exchangeId,
         name: form.name || undefined,
+        isTestnet: form.isTestnet,
         apiKey: form.apiKey,
         apiSecret: form.apiSecret,
         passphrase: form.passphrase,
@@ -173,6 +186,7 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     return {
       exchangeId,
       name: form.name || undefined,
+      isTestnet: form.isTestnet,
       mainWalletAddress: form.mainWalletAddress,
       agentPrivateKey: form.agentPrivateKey,
     }
@@ -292,6 +306,21 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
                       placeholder={t('aiQuant.accountName')}
                       className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
                     />
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={form.isTestnet}
+                        onChange={event => setForms(prev => ({
+                          ...prev,
+                          [exchangeId]: {
+                            ...prev[exchangeId],
+                            isTestnet: event.target.checked,
+                          },
+                        }))}
+                        className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
+                      />
+                      {t('aiQuant.useTestnet')}
+                    </label>
                     {exchangeId !== 'hyperliquid' && (
                       <>
                         <input

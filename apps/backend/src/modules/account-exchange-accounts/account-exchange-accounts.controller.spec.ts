@@ -33,14 +33,22 @@ describe('accountExchangeAccountsController', () => {
   it('uses authenticated user id when upserting bindings', async () => {
     const { controller, service } = createController()
 
-    await controller.upsert('user-1', {
+    await controller.upsert({
+      id: 'user-1',
+      email: 'user-1@example.com',
+      roles: [],
+      principalType: 'user',
+    }, {
       exchangeId: 'binance',
       apiKey: 'key',
       apiSecret: 'secret',
     })
 
     expect(service.upsert).toHaveBeenCalledWith(
-      'user-1',
+      expect.objectContaining({
+        id: 'user-1',
+        email: 'user-1@example.com',
+      }),
       expect.objectContaining({
         exchangeId: 'binance',
         apiKey: 'key',

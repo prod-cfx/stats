@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Resend } from 'resend'
@@ -104,7 +105,11 @@ export class MailService {
       this.emailStats.sent++
     } catch (error) {
       this.emailStats.failed++
-      const reason = error instanceof Error ? error.message : 'unknown error'
+      const reason = error instanceof EmailFailedException
+        ? String(error.args?.reason ?? error.message)
+        : error instanceof Error
+          ? error.message
+          : 'unknown error'
       this.logger.error(`Failed to send email to ${this.maskEmail(options.to)}: ${reason}`)
       throw new EmailFailedException({ recipient: options.to, reason })
     }
@@ -136,12 +141,22 @@ export class MailService {
         : 'If you did not request a password reset, please ignore this email.',
     })
 
-    await this.sendMail({
-      to: email,
-      subject,
-      html,
-      text,
-    })
+    try {
+      await this.sendMail({
+        to: email,
+        subject,
+        html,
+        text,
+      })
+    } catch (error) {
+      if (this.shouldFallbackVerificationCodeToLog(error)) {
+        const fallbackLog = `[staging-email-fallback] verification code for ${this.maskEmail(email)}: ${normalizedCode}`
+        this.logger.warn(fallbackLog)
+        appendFileSync('/tmp/staging-email-codes.log', `${new Date().toISOString()} ${fallbackLog}\n`, 'utf8')
+        return
+      }
+      throw error
+    }
   }
 
   getEmailMetrics() {
@@ -195,6 +210,19 @@ export class MailService {
       recipient,
       reason: 'RESEND_API_KEY/EMAIL_FROM 未正确配置，无法发送真实邮件验证码',
     })
+  }
+
+  private shouldFallbackVerificationCodeToLog(error: unknown): boolean {
+    if (this.appEnv !== 'staging') {
+      return false
+    }
+
+    if (!(error instanceof EmailFailedException)) {
+      return false
+    }
+
+    const reason = String(error.args?.reason ?? '').toLowerCase()
+    return reason.includes('daily email sending quota')
   }
 
   private logMockEmail(options: SendMailOptions) {

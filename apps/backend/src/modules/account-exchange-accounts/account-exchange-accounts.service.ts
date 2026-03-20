@@ -1,7 +1,8 @@
 import type { AccountExchangeAccountResponseDto } from './dto/account-exchange-account.response.dto'
 import type { CreateAccountExchangeAccountDto } from './dto/create-account-exchange-account.dto'
+import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
-import { Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { QuantifyClientError, QuantifyExchangeAccountsClient } from './clients/quantify-exchange-accounts.client'
 
@@ -17,11 +18,11 @@ export class AccountExchangeAccountsService {
   }
 
   async upsert(
-    userId: string,
+    user: AuthenticatedUser,
     dto: CreateAccountExchangeAccountDto,
   ): Promise<AccountExchangeAccountResponseDto> {
     try {
-      return await this.quantifyClient.upsert(userId, dto)
+      return await this.quantifyClient.upsert(user, dto)
     }
     catch (error) {
       throw this.mapQuantifyError(error)
@@ -57,6 +58,7 @@ export class AccountExchangeAccountsService {
 
     return new DomainException('Quantify request failed', {
       code: ErrorCode.INTERNAL_SERVER_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
     })
   }
 

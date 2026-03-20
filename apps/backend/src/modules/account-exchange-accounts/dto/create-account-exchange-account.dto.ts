@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -14,7 +14,7 @@ const MARKET_TYPES = ['spot', 'perp'] as const
 
 export class CreateAccountExchangeAccountDto {
   @ApiProperty({ enum: EXCHANGE_IDS })
-  @IsEnum(EXCHANGE_IDS)
+  @IsIn(EXCHANGE_IDS)
   exchangeId!: typeof EXCHANGE_IDS[number]
 
   @ApiPropertyOptional({ maxLength: 64 })
@@ -30,7 +30,7 @@ export class CreateAccountExchangeAccountDto {
 
   @ApiPropertyOptional({ enum: MARKET_TYPES, default: 'spot' })
   @IsOptional()
-  @IsEnum(MARKET_TYPES)
+  @IsIn(MARKET_TYPES)
   marketType?: typeof MARKET_TYPES[number]
 
   @ApiPropertyOptional()

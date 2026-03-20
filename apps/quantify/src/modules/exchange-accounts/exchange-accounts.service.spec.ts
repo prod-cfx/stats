@@ -7,6 +7,14 @@ describe('exchangeAccountsService', () => {
   function createService() {
     const prisma = {
       getClient: jest.fn(),
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'user-1',
+          email: 'user-1@example.com',
+        }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
       exchangeAccount: {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
@@ -56,6 +64,7 @@ describe('exchangeAccountsService', () => {
 
     await service.create('user-1', {
       userId: 'user-1',
+      userEmail: 'user-1@example.com',
       exchangeId: 'hyperliquid',
       marketType: 'spot',
       name: 'HL spot',
@@ -131,6 +140,7 @@ describe('exchangeAccountsService', () => {
 
     await service.create('user-1', {
       userId: 'user-1',
+      userEmail: 'user-1@example.com',
       exchangeId: 'binance',
       apiKey: 'new-valid-key',
       apiSecret: 'new-valid-secret',
@@ -176,6 +186,7 @@ describe('exchangeAccountsService', () => {
 
     await expect(service.create('user-1', {
       userId: 'user-1',
+      userEmail: 'user-1@example.com',
       exchangeId: 'binance',
       apiKey: 'bad-key',
       apiSecret: 'bad-secret',
@@ -204,6 +215,7 @@ describe('exchangeAccountsService', () => {
 
     await expect(service.create('user-1', {
       userId: 'user-1',
+      userEmail: 'user-1@example.com',
       exchangeId: 'okx',
       apiKey: 'valid_key',
       apiSecret: 'valid_secret',
@@ -241,6 +253,30 @@ describe('exchangeAccountsService', () => {
     })
     expect(prisma.exchangeAccount.delete).toHaveBeenCalledWith({
       where: { id: 'account-1' },
+    })
+  })
+
+  it('creates a quantify user mirror before first successful binding', async () => {
+    const { service, prisma } = createService()
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+
+    await service.create('user-1', {
+      userId: 'user-1',
+      userEmail: 'user-1@example.com',
+      exchangeId: 'okx',
+      apiKey: 'valid-key',
+      apiSecret: 'valid-secret',
+      passphrase: 'valid-passphrase',
+      marketType: 'spot',
+    })
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: {
+        id: 'user-1',
+        email: 'user-1@example.com',
+      },
     })
   })
 

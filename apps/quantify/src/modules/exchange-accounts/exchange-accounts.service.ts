@@ -35,6 +35,7 @@ export class ExchangeAccountsService {
   ) {}
 
   async create(userId: string, dto: CreateExchangeAccountDto): Promise<ExchangeAccountResponseDto> {
+    await this.ensureUserExists(userId, dto.userEmail)
     const config = this.buildConfig(dto)
     const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
     const encryptedConfig = this.crypto.encryptConfig(config)
@@ -74,6 +75,45 @@ export class ExchangeAccountsService {
       })
       return this.toResponse(record, config)
     }
+  }
+
+  private async ensureUserExists(userId: string, userEmail?: string): Promise<void> {
+    const existingById = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    })
+    if (existingById) {
+      if (userEmail && existingById.email !== userEmail) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { email: userEmail },
+        })
+      }
+      return
+    }
+
+    if (!userEmail) {
+      throw new DomainException('缺少用户邮箱，无法同步 Quantify 用户', {
+        code: ErrorCode.BAD_REQUEST,
+      })
+    }
+
+    const existingByEmail = await this.prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true },
+    })
+    if (existingByEmail && existingByEmail.id !== userId) {
+      throw new DomainException('Quantify 用户身份冲突', {
+        code: ErrorCode.INTERNAL_SERVER_ERROR,
+      })
+    }
+
+    await this.prisma.user.create({
+      data: {
+        id: userId,
+        email: userEmail,
+      },
+    })
   }
 
   async list(userId: string): Promise<ExchangeAccountResponseDto[]> {
