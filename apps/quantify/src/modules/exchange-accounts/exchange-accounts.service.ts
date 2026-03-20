@@ -11,8 +11,8 @@ import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { ExchangeOperationFailedException } from '@/modules/trading/exceptions/exchange-operation-failed.exception'
 import { InvalidCredentialsException } from '@/modules/trading/exceptions/invalid-credentials.exception'
 import { TradingService } from '@/modules/trading/trading.service'
-import { Prisma } from '@/prisma/prisma.types'
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 import { ExchangeAccountNotFoundException, InvalidExchangeAccountConfigException } from './exceptions'
 
