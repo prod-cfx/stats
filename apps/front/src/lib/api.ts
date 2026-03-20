@@ -1224,9 +1224,10 @@ interface AccountAiQuantListQuery {
   status?: AccountAiQuantStrategyStatus
 }
 
-function buildAccountAiQuantHeaders() {
+function buildAccountAiQuantHeaders(userId?: string) {
   return {
     'Content-Type': 'application/json',
+    ...(userId ? { 'x-user-id': userId } : {}),
     ...optionalAuthHeaders(),
   }
 }
@@ -1268,7 +1269,7 @@ export async function fetchAccountAiQuantStrategies(
 
     const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies?${search.toString()}`, {
       method: 'GET',
-      headers: buildAccountAiQuantHeaders(),
+      headers: buildAccountAiQuantHeaders(query.userId.trim()),
     })
     const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略列表失败')
     return unwrapResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>(
@@ -1292,7 +1293,7 @@ export async function fetchAccountAiQuantStrategyDetail(
       `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
       {
         method: 'GET',
-        headers: buildAccountAiQuantHeaders(),
+        headers: buildAccountAiQuantHeaders(userId.trim()),
       },
     )
     const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
@@ -1316,7 +1317,7 @@ export async function performAccountAiQuantStrategyAction(
       `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
       {
         method: 'POST',
-        headers: buildAccountAiQuantHeaders(),
+        headers: buildAccountAiQuantHeaders(payload.userId.trim()),
         body: JSON.stringify({
           userId: payload.userId.trim(),
           action: payload.action,

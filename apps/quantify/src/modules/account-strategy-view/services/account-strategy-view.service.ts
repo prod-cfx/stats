@@ -172,20 +172,24 @@ export class AccountStrategyViewService {
     strategyInstanceId: string,
     dto: AccountStrategyActionDto,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const row = await this.repo.findStrategyForUser(dto.userId, strategyInstanceId)
+    if (!dto.userId) {
+      throw new BadRequestException('Missing user identity')
+    }
+    const userId = dto.userId
+
+    const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
       throw new NotFoundException('Strategy not found')
     }
 
-    const isOwner = row.createdBy === dto.userId
-    const isSubscriber = row.subscriptions.some(sub => sub.userId === dto.userId)
-    if (!isOwner && !isSubscriber) {
-      throw new ForbiddenException('No permission to operate this strategy')
+    const isOwner = row.createdBy === userId
+    if (!isOwner) {
+      throw new ForbiddenException('Only strategy owner can operate instance status')
     }
 
     const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
     if (nextStatus === row.status) {
-      return this.getStrategyDetail(dto.userId, strategyInstanceId)
+      return this.getStrategyDetail(userId, strategyInstanceId)
     }
 
     if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
@@ -196,12 +200,12 @@ export class AccountStrategyViewService {
       strategyInstanceId,
       {
         status: nextStatus as any,
-        updatedBy: dto.userId,
+        updatedBy: userId,
       },
-      dto.userId,
+      userId,
     )
 
-    return this.getStrategyDetail(dto.userId, strategyInstanceId)
+    return this.getStrategyDetail(userId, strategyInstanceId)
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {

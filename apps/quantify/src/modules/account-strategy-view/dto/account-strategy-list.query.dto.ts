@@ -4,9 +4,10 @@ import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.d
 
 export class AccountStrategyListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '业务用户 ID' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  userId!: string
+  userId?: string
 
   @ApiPropertyOptional({ description: '状态筛选', enum: ['running', 'stopped', 'draft'] })
   @IsString()

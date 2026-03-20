@@ -19,11 +19,11 @@ describe('accountStrategyViewDtos', () => {
     expect(errors.length).toBeGreaterThan(0)
   })
 
-  it('requires userId in action dto', () => {
+  it('allows action dto without userId for header-based identity', () => {
     const dto = plainToInstance(AccountStrategyActionDto, {
       action: 'run',
     })
     const errors = validateSync(dto)
-    expect(errors.length).toBeGreaterThan(0)
+    expect(errors.length).toBe(0)
   })
 })

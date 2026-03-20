@@ -51,4 +51,26 @@ describe('accountStrategyViewService.performAction', () => {
       'user-1',
     )
   })
+
+  it('rejects subscriber changing global strategy instance status', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        status: 'running',
+        createdBy: 'owner-1',
+        strategyTemplateId: 'tpl-1',
+        subscriptions: [{ userId: 'user-2', status: 'active' }],
+      }),
+    }
+
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
+    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+
+    await expect(
+      service.performAction('inst-1', { userId: 'user-2', action: AccountStrategyAction.STOP }),
+    ).rejects.toThrow('Only strategy owner can operate instance status')
+
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+  })
 })
