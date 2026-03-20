@@ -2,6 +2,8 @@ import type { OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
+import { setTimeout as sleep } from 'node:timers/promises'
 import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
@@ -11,6 +13,8 @@ import { OnEvent } from '@nestjs/event-emitter'
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from '@/modules/positions/positions.service'
+import { EXECUTION_STAGES } from '@/modules/trading/core/execution-stage'
+import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -44,6 +48,8 @@ interface OrderParams {
 }
 
 const RECOVERY_BATCH_SIZE = 50
+const ORDER_RECONCILE_RETRY_MS = 300
+const ORDER_RECONCILE_RETRY_COUNT = 3
 
 @Injectable()
 export class SignalExecutorService implements OnModuleInit {
@@ -341,7 +347,24 @@ export class SignalExecutorService implements OnModuleInit {
       }
 
       try {
-        const order = await this.tradingService.placeOrder(
+        const orderRequest = {
+          exchangeId: effectiveExchangeId,
+          exchangeAccountId: exchangeAccountId ?? null,
+          symbol: effectiveOrderParams.symbol,
+          marketType: effectiveOrderParams.marketType,
+          side: effectiveOrderParams.side,
+          type: 'market',
+          amount: effectiveOrderParams.amount,
+          price: effectiveOrderParams.price,
+          reduceOnly: effectiveOrderParams.reduceOnly ?? false,
+        } satisfies Prisma.JsonObject
+
+        await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
+          exchangeAccountId: exchangeAccountId ?? null,
+          orderRequest,
+        })
+
+        const initialOrder = await this.tradingService.placeOrder(
           account.userId,
           effectiveExchangeId,
           effectiveOrderParams.marketType,
@@ -357,6 +380,46 @@ export class SignalExecutorService implements OnModuleInit {
           exchangeAccountId,
         )
 
+        let order: UnifiedOrder
+        try {
+          order = await this.resolveFinalOrderState(
+            account.userId,
+            effectiveExchangeId,
+            effectiveOrderParams.marketType,
+            effectiveOrderParams.symbol,
+            initialOrder,
+            exchangeAccountId,
+          )
+        }
+        catch (error) {
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: 'ORDER_RECONCILE_ERROR',
+            error: (error as Error).message,
+            orderResponse: this.buildOrderResponseSnapshot(initialOrder),
+          })
+          await this.executionRepository.markFailed(execution.id, 'ORDER_RECONCILE_ERROR')
+          return 'failed'
+        }
+
+        await this.executionRepository.markStage(execution.id, 'ORDER_ACKED', {
+          orderResponse: this.buildOrderResponseSnapshot(order),
+        })
+
+        const orderStatus = String(order.status).toLowerCase()
+        const unfilledTerminalStatus = orderStatus === 'canceled' || orderStatus === 'rejected' || orderStatus === 'expired'
+        // If we cannot reconcile a market order into a filled state, do not treat it as executed.
+        // Keep the reservation in place and flag for reconciliation.
+        if (order.type === 'market' && (orderStatus === 'open' || (order.filled ?? 0) <= 0 && unfilledTerminalStatus)) {
+          const failureReason = orderStatus === 'open' ? 'ORDER_NOT_FINAL' : 'ORDER_NOT_FILLED'
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: failureReason,
+            orderResponse: this.buildOrderResponseSnapshot(order),
+          })
+          await this.executionRepository.markFailed(execution.id, failureReason)
+          return 'failed'
+        }
         const executedQuantity = order.filled ?? order.amount
         const { amount: executedFee, currency: executedFeeCurrency } = this.extractOrderFee(order)
 
@@ -389,42 +452,29 @@ export class SignalExecutorService implements OnModuleInit {
           )
         }
 
-        await this.executionRepository.markExecuted(execution.id, {
-          executedPrice: order.price,
-          executedQuantity,
-          fee: executedFee,
-          feeCurrency: executedFeeCurrency ?? undefined,
-          tradeId: order.id,
-          executedAt: new Date(order.createdAt),
-          metadata: {
-            providerOrderId: order.id,
-            providerStatus: order.status,
-            // 标记本地账面与实际成交之间的潜在差异，供后续资金对账任务使用
-            executedQuote: executedQuote?.toString(),
-            reservedQuote: reservedQuote.toString(),
-            overBudget: overBudget?.toString() ?? null,
-          },
-        })
+        let ledgerFailed = false
 
         // 记录成交到本地仓位系统，确保本地仓位与交易所同步
         // 注意：必须使用 effectiveExchangeId 和 effectiveOrderParams（实际下单的交易所和参数）
         // 而不是 orderParams.exchangeId（信号中的交易所），否则会出现账面不一致问题
         if (order.price && executedQuantity && executedQuantity > 0) {
           try {
-            const symbolParts = effectiveOrderParams.symbol.split('/')
-            const baseSymbol = symbolParts[0]?.replace(':PERP', '') ?? effectiveOrderParams.symbol
-            const quoteSymbol = symbolParts[1]?.replace(':PERP', '') ?? 'USDT'
+            const ledgerSymbol = normalizeLedgerSymbol(effectiveOrderParams.symbol)
+            const feeCurrency =
+              executedFeeCurrency
+              ?? signal.symbol?.quoteAsset
+              ?? 'USDT'
 
             await this.positionsService.recordTrade({
               userStrategyAccountId: account.id,
-              symbol: `${baseSymbol}${quoteSymbol}`,
+              symbol: ledgerSymbol,
               market: `${effectiveExchangeId}:${orderParams.marketType}`,
               side: tradeSide,
               positionSide,
               price: order.price.toString(),
               quantity: executedQuantity.toString(),
               fee: executedFee > 0 ? executedFee.toString() : '0',
-              feeCurrency: executedFeeCurrency ?? quoteSymbol,
+              feeCurrency,
               orderId: order.id,
               externalTradeId: order.id,
               provider: effectiveExchangeId,
@@ -437,17 +487,50 @@ export class SignalExecutorService implements OnModuleInit {
 
             this.logger.log(
               `Successfully recorded trade to local position for account ${account.id}, ` +
-              `symbol ${baseSymbol}${quoteSymbol}, qty ${executedQuantity}`,
+              `symbol ${ledgerSymbol}, qty ${executedQuantity}`,
             )
+
+            await this.executionRepository.markStage(execution.id, 'LEDGER_APPLIED', {
+              ledgerApplied: true,
+            })
           }
           catch (error) {
+            ledgerFailed = true
             // 记录成交失败不应阻断订单执行流程，仅记录错误日志，等待后续对账任务修复
             this.logger.error(
               `Failed to record trade to local position for account ${account.id}: ${(error as Error).message}`,
               (error as Error).stack,
             )
+
+            await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+              ledgerApplied: false,
+              reconcileRequired: true,
+              ledgerError: (error as Error).message,
+            })
+            await this.executionRepository.markFailed(execution.id, (error as Error).message)
+            return 'failed'
           }
         }
+
+        if (ledgerFailed) {
+          return 'failed'
+        }
+
+        await this.executionRepository.markExecuted(execution.id, {
+          executedPrice: order.price,
+          executedQuantity,
+          fee: executedFee,
+          feeCurrency: executedFeeCurrency ?? undefined,
+          tradeId: order.id,
+          executedAt: new Date(order.createdAt),
+          metadata: {
+            providerOrderId: order.id,
+            providerStatus: order.status,
+            executedQuote: executedQuote?.toString(),
+            reservedQuote: reservedQuote.toString(),
+            overBudget: overBudget?.toString() ?? null,
+          },
+        })
 
         return 'executed'
       }
@@ -508,8 +591,9 @@ export class SignalExecutorService implements OnModuleInit {
       if (isCloseSignal) {
         const symbolCode = signal.symbol?.code
         const positionSideForClose = this.mapPositionSide(signal.direction)
+        const normalizedPositionSymbol = symbolCode ? normalizeLedgerSymbol(symbolCode) : null
 
-        if (!symbolCode || !positionSideForClose) {
+        if (!normalizedPositionSymbol || !positionSideForClose) {
           const reason = 'Cannot close position: missing symbol or position side'
           const execution = await prisma.userSignalExecution.create({
             data: {
@@ -529,7 +613,7 @@ export class SignalExecutorService implements OnModuleInit {
         const openPosition = await prisma.position.findFirst({
           where: {
             userStrategyAccountId: account.id,
-            symbol: symbolCode,
+            symbol: normalizedPositionSymbol,
             status: 'OPEN',
             positionSide: positionSideForClose,
           },
@@ -603,6 +687,10 @@ export class SignalExecutorService implements OnModuleInit {
           orderSide,
           positionSide,
           reservedQuote: reservedQuoteForExecution.gt(0) ? reservedQuoteForExecution : undefined,
+          metadata: this.buildExecutionStageMetadata([
+            EXECUTION_STAGES[0],
+            EXECUTION_STAGES[1],
+          ]),
         },
         select: { id: true },
       })
@@ -813,6 +901,36 @@ export class SignalExecutorService implements OnModuleInit {
     }
   }
 
+  private async resolveFinalOrderState(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol: string,
+    order: UnifiedOrder,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder> {
+    if (order.type !== 'market') return order
+    if (order.status !== 'open') return order
+
+    let currentOrder = order
+    for (let attempt = 0; attempt < ORDER_RECONCILE_RETRY_COUNT; attempt += 1) {
+      await sleep(ORDER_RECONCILE_RETRY_MS)
+      currentOrder = await this.tradingService.getOrder(
+        userId,
+        exchangeId,
+        marketType,
+        currentOrder.id,
+        symbol,
+        exchangeAccountId,
+      )
+      if (currentOrder.status !== 'open') {
+        return currentOrder
+      }
+    }
+
+    return currentOrder
+  }
+
   private mapTradeSide(direction: SignalDirection): TradeSide | null {
     switch (direction) {
       case 'BUY':
@@ -994,5 +1112,28 @@ export class SignalExecutorService implements OnModuleInit {
     }
 
     return { amount: 0, currency: null }
+  }
+
+  private buildOrderResponseSnapshot(order: UnifiedOrder): Prisma.JsonObject {
+    return {
+      id: order.id,
+      status: order.status,
+      amount: order.amount,
+      filled: order.filled ?? null,
+      price: order.price ?? null,
+      createdAt: order.createdAt,
+      raw: typeof order.raw === 'object' && order.raw !== null ? order.raw as Prisma.JsonObject : null,
+    }
+  }
+
+  private buildExecutionStageMetadata(stages: ExecutionStage[]): Prisma.JsonObject {
+    const now = new Date().toISOString()
+    return {
+      stage: stages.at(-1) ?? null,
+      stageHistory: stages.map(stage => ({
+        stage,
+        at: now,
+      })),
+    }
   }
 }

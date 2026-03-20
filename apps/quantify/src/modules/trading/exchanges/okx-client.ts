@@ -17,6 +17,8 @@ type HttpMethod = 'GET' | 'POST' | 'DELETE'
 interface OkxOrderResponse {
   ordId: string
   clOrdId?: string
+  sCode?: string
+  sMsg?: string
   instId: string
   state: string
   side: string
@@ -25,6 +27,7 @@ interface OkxOrderResponse {
   sz: string
   px?: string
   avgPx?: string
+  fillPx?: string
   uTime?: string
   cTime?: string
 }
@@ -58,6 +61,12 @@ interface OkxPositionItem {
   liqPx: string
 }
 
+interface OkxInstrumentSpecItem {
+  instId: string
+  ctVal?: string
+  lotSz?: string
+}
+
 export class OkxClient extends BaseCexClient {
   private readonly apiKey: string
 
@@ -66,6 +75,8 @@ export class OkxClient extends BaseCexClient {
   private readonly passphrase: string
 
   private readonly useUnifiedAccount: boolean
+
+  private readonly instrumentSpecCache = new Map<string, Promise<OkxInstrumentSpecItem | null>>()
 
   constructor(
     marketType: MarketType,
@@ -89,6 +100,7 @@ export class OkxClient extends BaseCexClient {
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(input.symbol, input.marketType)
     const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
+    const instrumentSpec = await this.getInstrumentSpec(instId)
 
     const ordType = this.mapOrderType(input.type)
 
@@ -97,7 +109,7 @@ export class OkxClient extends BaseCexClient {
       instType,
       side: input.side,
       ordType,
-      sz: this.toSize(input.amount),
+      sz: this.toSize(input.amount, instrumentSpec),
     }
 
     if (ordType === 'limit') {
@@ -110,9 +122,16 @@ export class OkxClient extends BaseCexClient {
     // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
     if (this.marketType === 'perp') {
       body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
+      body.posSide = (input.extra?.posSide as string | undefined) ?? this.inferPerpPosSide(input)
+      if (input.reduceOnly) {
+        body.reduceOnly = true
+      }
     }
     else {
       body.tdMode = 'cash'
+      if (ordType === 'market' && input.side === 'buy') {
+        body.tgtCcy = 'base_ccy'
+      }
     }
 
     if (input.clientOrderId) {
@@ -131,6 +150,7 @@ export class OkxClient extends BaseCexClient {
     if (!order) {
       throw new ExchangeError('OKX createOrder returned empty response', undefined, res)
     }
+    this.assertOrderAccepted(order)
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -142,10 +162,11 @@ export class OkxClient extends BaseCexClient {
       side: input.side,
       type: input.type,
       // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
-      price: order.px ? Number.parseFloat(order.px) : input.price,
-      amount: order.sz ? Number.parseFloat(order.sz) : input.amount,
-      filled: Number.parseFloat(order.fillSz ?? '0'),
-      status: this.mapOrderStatus(order.state),
+      price: this.resolveOrderPrice(order, input.price),
+      amount: order.sz ? this.fromExchangeSize(order.sz, instrumentSpec) : input.amount,
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      // OKX create-order ACK 通常不返回完整 state，最终状态由后续 fetchOrder 收敛。
+      status: order.state ? this.mapOrderStatus(order.state) : 'open',
       createdAt,
       updatedAt,
       raw: order,
@@ -154,6 +175,7 @@ export class OkxClient extends BaseCexClient {
 
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(symbol, this.marketType)
+    const instrumentSpec = await this.getInstrumentSpec(instId)
     const body: Record<string, unknown> = { instId, ordId: id }
 
     const res = await this.request<{ data: OkxOrderResponse[] }>(
@@ -175,9 +197,9 @@ export class OkxClient extends BaseCexClient {
       marketType: this.marketType,
       side: order.side === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(order.ordType),
-      price: order.px ? Number.parseFloat(order.px) : undefined,
-      amount: Number.parseFloat(order.sz),
-      filled: Number.parseFloat(order.fillSz ?? '0'),
+      price: this.resolveOrderPrice(order),
+      amount: this.fromExchangeSize(order.sz, instrumentSpec),
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -187,6 +209,7 @@ export class OkxClient extends BaseCexClient {
 
   async fetchOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(symbol, this.marketType)
+    const instrumentSpec = await this.getInstrumentSpec(instId)
     const params: Record<string, unknown> = { instId, ordId: id }
 
     const res = await this.request<{ data: OkxOrderResponse[] }>(
@@ -207,9 +230,9 @@ export class OkxClient extends BaseCexClient {
       marketType: this.marketType,
       side: order.side === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(order.ordType),
-      price: order.px ? Number.parseFloat(order.px) : undefined,
-      amount: Number.parseFloat(order.sz),
-      filled: Number.parseFloat(order.fillSz ?? '0'),
+      price: this.resolveOrderPrice(order),
+      amount: this.fromExchangeSize(order.sz, instrumentSpec),
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -231,7 +254,13 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data.map(order => this.mapOrderFromResponse(order, symbol ?? this.fromInstrumentId(order.instId)))
+    return Promise.all(
+      res.data.map(async (order) => {
+        const resolvedSymbol = symbol ?? this.fromInstrumentId(order.instId)
+        const instrumentSpec = await this.getInstrumentSpec(order.instId)
+        return this.mapOrderFromResponse(order, resolvedSymbol, instrumentSpec)
+      }),
+    )
   }
 
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
@@ -248,9 +277,15 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data
-      .filter(order => order.state !== 'live' && order.state !== 'partially_filled')
-      .map(order => this.mapOrderFromResponse(order, symbol ?? this.fromInstrumentId(order.instId)))
+    const closed = res.data.filter(order => order.state !== 'live' && order.state !== 'partially_filled')
+
+    return Promise.all(
+      closed.map(async (order) => {
+        const resolvedSymbol = symbol ?? this.fromInstrumentId(order.instId)
+        const instrumentSpec = await this.getInstrumentSpec(order.instId)
+        return this.mapOrderFromResponse(order, resolvedSymbol, instrumentSpec)
+      }),
+    )
   }
 
   async fetchPositions(): Promise<UnifiedPosition[]> {
@@ -541,15 +576,73 @@ export class OkxClient extends BaseCexClient {
     }
   }
 
-  private toSize(value: number): string {
-    return Number(value).toString()
+  private assertOrderAccepted(order: OkxOrderResponse): void {
+    if (order.sCode && order.sCode !== '0') {
+      throw new ExchangeError(
+        `OKX error ${order.sCode}: ${order.sMsg ?? 'Unknown error'}`,
+        order.sCode,
+        order,
+      )
+    }
+
+    if (!order.ordId) {
+      throw new ExchangeError('OKX createOrder returned empty ordId', undefined, order)
+    }
+  }
+
+  private resolveOrderPrice(order: OkxOrderResponse, fallback?: number): number | undefined {
+    const candidates = [order.px, order.avgPx, order.fillPx]
+    for (const candidate of candidates) {
+      if (!candidate) continue
+      const parsed = Number.parseFloat(candidate)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed
+      }
+    }
+
+    return fallback
+  }
+
+  private inferPerpPosSide(input: CreateOrderInput): 'long' | 'short' {
+    if (input.side === 'buy') {
+      return input.reduceOnly ? 'short' : 'long'
+    }
+
+    return input.reduceOnly ? 'long' : 'short'
+  }
+
+  private toSize(value: number, instrumentSpec?: OkxInstrumentSpecItem | null): string {
+    if (this.marketType !== 'perp' || !instrumentSpec?.ctVal) {
+      return Number(value).toString()
+    }
+
+    const contractValue = Number.parseFloat(instrumentSpec.ctVal)
+    if (!Number.isFinite(contractValue) || contractValue <= 0) {
+      throw new ExchangeError(`Invalid OKX contract value for ${instrumentSpec.instId}`)
+    }
+
+    const lotSize = Number.parseFloat(instrumentSpec.lotSz ?? '1')
+    const rawContracts = Number(value) / contractValue
+    const steppedContracts = Number.isFinite(lotSize) && lotSize > 0
+      ? Math.floor(rawContracts / lotSize) * lotSize
+      : rawContracts
+
+    if (!Number.isFinite(steppedContracts) || steppedContracts <= 0) {
+      throw new ExchangeError(`Computed OKX contract size is invalid for ${instrumentSpec.instId}`)
+    }
+
+    return this.formatNumber(steppedContracts)
   }
 
   private toPrice(value: number): string {
     return Number(value).toString()
   }
 
-  private mapOrderFromResponse(order: OkxOrderResponse, symbol: string): UnifiedOrder {
+  private mapOrderFromResponse(
+    order: OkxOrderResponse,
+    symbol: string,
+    instrumentSpec?: OkxInstrumentSpecItem | null,
+  ): UnifiedOrder {
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -560,15 +653,57 @@ export class OkxClient extends BaseCexClient {
       marketType: this.marketType,
       side: order.side === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(order.ordType),
-      price: order.px ? Number.parseFloat(order.px) : undefined,
-      amount: Number.parseFloat(order.sz),
-      filled: Number.parseFloat(order.fillSz ?? '0'),
+      price: this.resolveOrderPrice(order),
+      amount: this.fromExchangeSize(order.sz, instrumentSpec),
+      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
       raw: order,
     }
   }
+
+  private fromExchangeSize(size: string, instrumentSpec?: OkxInstrumentSpecItem | null): number {
+    const parsedSize = Number.parseFloat(size)
+    if (this.marketType !== 'perp' || !instrumentSpec?.ctVal) {
+      return parsedSize
+    }
+
+    const contractValue = Number.parseFloat(instrumentSpec.ctVal)
+    if (!Number.isFinite(contractValue) || contractValue <= 0) {
+      throw new ExchangeError(`Invalid OKX contract value for ${instrumentSpec.instId}`)
+    }
+
+    return Number(this.formatNumber(parsedSize * contractValue))
+  }
+
+  private formatNumber(value: number): string {
+    return Number(value.toFixed(12)).toString()
+  }
+
+  private async getInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
+    if (this.marketType !== 'perp') {
+      return null
+    }
+
+    const cached = this.instrumentSpecCache.get(instId)
+    if (cached) {
+      return cached
+    }
+
+    const promise = this.request<{ data: OkxInstrumentSpecItem[] }>(
+      'GET',
+      '/api/v5/public/instruments',
+      { instType: 'SWAP', instId },
+    ).then((res) => {
+      const spec = res.data[0]
+      if (!spec?.ctVal) {
+        throw new ExchangeError(`OKX instrument spec missing contract value for ${instId}`)
+      }
+      return spec
+    })
+
+    this.instrumentSpecCache.set(instId, promise)
+    return promise
+  }
 }
-
-

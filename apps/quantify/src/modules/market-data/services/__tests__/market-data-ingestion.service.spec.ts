@@ -28,14 +28,17 @@ describe('market data ingestion service', () => {
     emitQuote: jest.fn(),
   } as unknown as jest.Mocked<MarketDataStreamService>
 
+  const userStrategySubscriptionFindMany = jest.fn()
+  const userLlmStrategySubscriptionFindMany = jest.fn()
+
   const prismaMock = {
     userStrategySubscription: {
-      findMany: jest.fn(),
+      findMany: userStrategySubscriptionFindMany,
     },
     userLlmStrategySubscription: {
-      findMany: jest.fn(),
+      findMany: userLlmStrategySubscriptionFindMany,
     },
-  } as unknown as jest.Mocked<PrismaService>
+  } as unknown as PrismaService
 
   let service: MarketDataIngestionService
 
@@ -69,8 +72,8 @@ describe('market data ingestion service', () => {
     marketDataServiceMock.upsertSymbolsFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveBarFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveQuoteFromProvider.mockResolvedValue(undefined)
-    prismaMock.userStrategySubscription.findMany.mockResolvedValue([])
-    prismaMock.userLlmStrategySubscription.findMany.mockResolvedValue([])
+    userStrategySubscriptionFindMany.mockResolvedValue([])
+    userLlmStrategySubscriptionFindMany.mockResolvedValue([])
 
     service = new MarketDataIngestionService(
       configServiceMock as never,
@@ -123,7 +126,7 @@ describe('market data ingestion service', () => {
   })
 
   it('merges dynamic symbols from active strategy subscriptions', async () => {
-    prismaMock.userStrategySubscription.findMany.mockResolvedValue([
+    userStrategySubscriptionFindMany.mockResolvedValue([
       {
         strategyInstance: {
           strategyTemplate: {
@@ -148,7 +151,7 @@ describe('market data ingestion service', () => {
     providerMock.subscribe
       .mockResolvedValueOnce(firstUnsubscribe)
       .mockResolvedValueOnce(secondUnsubscribe)
-    prismaMock.userStrategySubscription.findMany
+    userStrategySubscriptionFindMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {

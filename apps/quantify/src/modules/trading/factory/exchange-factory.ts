@@ -1,11 +1,12 @@
 import type { IExchangeClient } from '../core/interface'
 import type { ExchangeId, MarketType } from '../core/types'
-import type { ExchangeAccountConfig } from './account-store'
+import type { ExchangeAccountConfig, HyperliquidConfig } from './account-store'
 import { Injectable } from '@nestjs/common'
 import { UnsupportedExchangeException } from '../exceptions'
 import { BinanceClient } from '../exchanges/binance-client'
-import { HyperliquidClient } from '../exchanges/hyperliquid-client'
 import { OkxClient } from '../exchanges/okx-client'
+
+type HyperliquidClientConstructor = new (config: HyperliquidConfig) => IExchangeClient
 
 @Injectable()
 export class ExchangeFactory {
@@ -29,9 +30,20 @@ export class ExchangeFactory {
         throw new UnsupportedExchangeException({ exchangeId })
       }
       // 返回客户端实例（注意：方法会抛出 ExchangeError）
+      const HyperliquidClient = this.loadHyperliquidClient()
       return new HyperliquidClient(account.config)
     }
 
     throw new UnsupportedExchangeException({ exchangeId })
+  }
+
+  private loadHyperliquidClient(): HyperliquidClientConstructor {
+    // 延迟加载 Hyperliquid 适配器，避免 Binance/OKX 链路在模块初始化阶段
+    // 被其 ESM 依赖牵连，导致与当前执行路径无关的测试或服务启动失败。
+    const hyperliquidModule = require('../exchanges/hyperliquid-client') as {
+      HyperliquidClient: HyperliquidClientConstructor
+    }
+
+    return hyperliquidModule.HyperliquidClient
   }
 }

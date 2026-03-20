@@ -67,8 +67,66 @@ describe('TradingService (E2E, trading module only)', () => {
         })
       }
 
-      // OKX 永续下单
+      // OKX 下单 ACK：真实回包通常只有 ordId/clOrdId/sCode/sMsg，不带完整订单状态
       if (url.hostname === 'www.okx.com' && url.pathname === '/api/v5/trade/order' && method === 'POST') {
+        const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+
+        if (
+          rawBody.instId === 'BTC-USDT'
+          && rawBody.ordType === 'market'
+          && rawBody.side === 'buy'
+          && rawBody.tgtCcy !== 'base_ccy'
+        ) {
+          const body = {
+            data: [
+              {
+                ordId: '',
+                clOrdId: '',
+                sCode: '51020',
+                sMsg: 'Your order should meet or exceed the minimum order amount.',
+              },
+            ],
+          }
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+
+        const body = {
+          data: [
+            {
+              ordId: '987654',
+              clOrdId: 'test-okx-order',
+              sCode: '0',
+              sMsg: '',
+            },
+          ],
+        }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      if (url.hostname === 'www.okx.com' && url.pathname === '/api/v5/public/instruments' && method === 'GET') {
+        const body = {
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      // OKX 查询订单详情
+      if (url.hostname === 'www.okx.com' && url.pathname === '/api/v5/trade/order' && method === 'GET') {
         const body = {
           data: [
             {
@@ -79,7 +137,7 @@ describe('TradingService (E2E, trading module only)', () => {
               side: 'buy',
               ordType: 'limit',
               fillSz: '0',
-              sz: '0.01',
+              sz: '1',
               px: '60000',
               uTime: String(Date.now()),
               cTime: String(Date.now()),
@@ -164,9 +222,49 @@ describe('TradingService (E2E, trading module only)', () => {
     expect(order.marketType).toBe('perp')
     expect(order.side).toBe('buy')
     expect(order.type).toBe('limit')
-    expect(order.amount).toBeCloseTo(0.01) // 来自 OKX mock 响应的 sz
+    expect(order.amount).toBeCloseTo(0.001)
     expect(order.price).toBeCloseTo(60000)
     expect(order.status).toBe('open')
     expect(order.raw).toBeDefined()
+  })
+
+  it('places a spot market buy order on OKX via TradingService with base_ccy sizing', async () => {
+    const userId = 'test-user'
+    const exchangeId: ExchangeId = 'okx'
+    const marketType: MarketType = 'spot'
+
+    const order = await tradingService.placeOrder(userId, exchangeId, marketType, {
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      amount: 0.00134,
+    })
+
+    expect(order.id).toBe('987654')
+    expect(order.symbol).toBe('BTC/USDT')
+    expect(order.marketType).toBe('spot')
+    expect(order.side).toBe('buy')
+    expect(order.type).toBe('market')
+    expect(order.amount).toBeCloseTo(0.00134)
+    expect(order.status).toBe('open')
+  })
+
+  it('fetches OKX order details via TradingService after order acknowledgement', async () => {
+    const userId = 'test-user'
+    const exchangeId: ExchangeId = 'okx'
+    const marketType: MarketType = 'perp'
+
+    const order = await tradingService.getOrder(userId, exchangeId, marketType, '987654', 'BTC/USDT:PERP')
+
+    expect(order.id).toBe('987654')
+    expect(order.clientOrderId).toBe('test-okx-order')
+    expect(order.symbol).toBe('BTC/USDT:PERP')
+    expect(order.marketType).toBe('perp')
+    expect(order.side).toBe('buy')
+    expect(order.type).toBe('limit')
+    expect(order.amount).toBeCloseTo(0.01)
+    expect(order.price).toBeCloseTo(60000)
+    expect(order.status).toBe('open')
   })
 })

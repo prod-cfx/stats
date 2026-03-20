@@ -18,6 +18,7 @@
     "prisma:db:reset": "prisma db push --force-reset",
     "prisma:db:seed": "prisma db seed",
     "prisma:format": "prisma format",
+    "fixed-binance:testnet:signal": "tsx -r tsconfig-paths/register scripts/fixed-binance-testnet-signal.ts",
     "lint": "eslint \"src/**/*.ts\" \"e2e/**/*.ts\" --config ../../eslint.config.js",
     "test": "pnpm run test:unit",
     "test:unit": "jest --config ./jest-unit.json --runInBand",

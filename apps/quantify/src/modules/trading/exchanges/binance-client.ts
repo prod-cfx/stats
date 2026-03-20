@@ -22,6 +22,7 @@ interface BinanceOrderResponse {
   executedQty: string
   origQty: string
   price: string
+  avgPrice?: string
   side: string
   type: string
   symbol: string
@@ -118,6 +119,7 @@ export class BinanceClient extends BaseCexClient {
     const res = await this.request<BinanceOrderResponse>('POST', path, params, true)
 
     const createdAt = res.updateTime ?? Date.now()
+    const resolvedPrice = this.resolveOrderPrice(res, input.price)
 
     return {
       id: String(res.orderId),
@@ -126,7 +128,7 @@ export class BinanceClient extends BaseCexClient {
       marketType: input.marketType,
       side: input.side,
       type: input.type,
-      price: Number.parseFloat(res.price || (input.price ?? 0).toString()),
+      price: resolvedPrice,
       amount: Number.parseFloat(res.origQty),
       filled: Number.parseFloat(res.executedQty),
       status: this.mapOrderStatus(res.status),
@@ -144,6 +146,7 @@ export class BinanceClient extends BaseCexClient {
     const res = await this.request<BinanceOrderResponse>('DELETE', path, params, true)
 
     const createdAt = res.updateTime ?? Date.now()
+    const resolvedPrice = this.resolveOrderPrice(res)
 
     return {
       id: String(res.orderId),
@@ -152,7 +155,7 @@ export class BinanceClient extends BaseCexClient {
       marketType: this.marketType,
       side: res.side?.toLowerCase() === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(res.type as OrderType),
-      price: Number.parseFloat(res.price),
+      price: resolvedPrice,
       amount: Number.parseFloat(res.origQty),
       filled: Number.parseFloat(res.executedQty),
       status: this.mapOrderStatus(res.status),
@@ -170,6 +173,7 @@ export class BinanceClient extends BaseCexClient {
     const res = await this.request<BinanceOrderResponse>('GET', path, params, true)
 
     const createdAt = res.updateTime ?? Date.now()
+    const resolvedPrice = this.resolveOrderPrice(res)
 
     return {
       id: String(res.orderId),
@@ -178,7 +182,7 @@ export class BinanceClient extends BaseCexClient {
       marketType: this.marketType,
       side: res.side?.toLowerCase() === 'sell' ? 'sell' : 'buy',
       type: this.reverseMapOrderType(res.type as OrderType),
-      price: Number.parseFloat(res.price),
+      price: resolvedPrice,
       amount: Number.parseFloat(res.origQty),
       filled: Number.parseFloat(res.executedQty),
       status: this.mapOrderStatus(res.status),
@@ -513,6 +517,7 @@ export class BinanceClient extends BaseCexClient {
   private mapOrderFromResponse(order: BinanceOrderResponse, symbol: string): UnifiedOrder {
     // 优先使用交易所提供的时间戳：time > transactTime > updateTime > Date.now()
     const createdAt = order.time ?? order.transactTime ?? order.updateTime ?? Date.now()
+    const resolvedPrice = this.resolveOrderPrice(order)
 
     return {
       id: order.orderId.toString(),
@@ -522,13 +527,42 @@ export class BinanceClient extends BaseCexClient {
       side: this.mapOrderSide(order.side),
       type: this.reverseMapOrderType(order.type),
       status: this.mapOrderStatus(order.status),
-      price: Number.parseFloat(order.price),
+      price: resolvedPrice,
       amount: Number.parseFloat(order.origQty),
       filled: Number.parseFloat(order.executedQty),
       createdAt,
       updatedAt: order.updateTime ?? createdAt,
       raw: order,
     }
+  }
+
+  private resolveOrderPrice(order: BinanceOrderResponse, fallbackPrice?: number): number {
+    const directPrice = Number.parseFloat(order.price)
+    if (Number.isFinite(directPrice) && directPrice > 0) {
+      return directPrice
+    }
+
+    const avgPrice = Number.parseFloat(order.avgPrice ?? '')
+    if (Number.isFinite(avgPrice) && avgPrice > 0) {
+      return avgPrice
+    }
+
+    const executedQuantity = Number.parseFloat(order.executedQty)
+    const executedQuote = Number.parseFloat(order.cummulativeQuoteQty ?? '')
+    if (
+      Number.isFinite(executedQuantity)
+      && executedQuantity > 0
+      && Number.isFinite(executedQuote)
+      && executedQuote > 0
+    ) {
+      return executedQuote / executedQuantity
+    }
+
+    if (typeof fallbackPrice === 'number' && Number.isFinite(fallbackPrice) && fallbackPrice > 0) {
+      return fallbackPrice
+    }
+
+    return 0
   }
 
   private toFixed(value: number, digits = 8): string {
