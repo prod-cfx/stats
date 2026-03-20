@@ -69,6 +69,8 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
     () => derivePnlMetrics(series, strategy?.initialCapital || 10000),
     [series, strategy?.initialCapital],
   )
+  const displayTotalPnl = strategy?.totalPnl ?? totalAmount
+  const displayTodayPnl = strategy?.todayPnl ?? todayPnlAmount
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
@@ -131,9 +133,9 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
         </article>
         <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">
           <p className="text-xs text-[color:var(--cf-muted)]">总收益额</p>
-          <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{formatAmount(totalAmount)} USDT</p>
-          <p className={`mt-1 text-xs ${todayPnlAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            今日 {formatSignedNumber(todayPnlAmount)} USDT
+          <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{formatAmount(displayTotalPnl)} USDT</p>
+          <p className={`mt-1 text-xs ${displayTodayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            今日 {formatSignedNumber(displayTodayPnl)} USDT
           </p>
         </article>
       </section>

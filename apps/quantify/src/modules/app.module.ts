@@ -18,6 +18,7 @@ import { EnvService } from '../common/services/env.service'
 import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
 import { PrismaModule } from '../prisma/prisma.module'
+import { AccountStrategyViewModule } from './account-strategy-view/account-strategy-view.module'
 import { AccountsModule } from './accounts/accounts.module'
 import { BacktestingModule } from './backtesting/backtesting.module'
 import { ExchangeAccountsModule } from './exchange-accounts/exchange-accounts.module'
@@ -99,6 +100,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     SettingsModule,
     BacktestingModule,
     AccountsModule,
+    AccountStrategyViewModule,
     IndicatorsModule,
     PositionsModule,
     MarketDataModule,

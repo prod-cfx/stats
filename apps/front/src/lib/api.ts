@@ -1165,6 +1165,171 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
+export type AccountAiQuantStrategyStatus = 'running' | 'stopped' | 'draft'
+export type AccountAiQuantStrategyAction = 'run' | 'stop'
+
+export interface AccountAiQuantStrategyMetrics {
+  returnPct: number | null
+  maxDrawdownPct: number | null
+  winRatePct: number | null
+  tradeCount: number | null
+}
+
+export interface AccountAiQuantStrategyListItem {
+  id: string
+  name: string
+  status: AccountAiQuantStrategyStatus
+  exchange: string | null
+  symbol: string | null
+  timeframe: string | null
+  positionPct: number | null
+  isSubscribed: boolean
+  metrics: AccountAiQuantStrategyMetrics
+  updatedAt: string
+}
+
+export interface AccountAiQuantStrategyEquityPoint {
+  ts: string
+  value: number
+}
+
+export interface AccountAiQuantStrategyTimelineEvent {
+  at: string
+  eventType: 'system' | 'trade'
+  event: string
+  note?: string | null
+}
+
+export interface AccountAiQuantStrategySnapshot {
+  exchange: string | null
+  symbol: string | null
+  timeframe: string | null
+  positionPct: number | null
+  deployAccountName?: string | null
+  deployAt?: string | null
+}
+
+export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyListItem {
+  totalPnl: number | null
+  todayPnl: number | null
+  equitySeries: AccountAiQuantStrategyEquityPoint[]
+  snapshot: AccountAiQuantStrategySnapshot
+  timeline: AccountAiQuantStrategyTimelineEvent[]
+}
+
+interface AccountAiQuantListQuery {
+  userId: string
+  page?: number
+  limit?: number
+  status?: AccountAiQuantStrategyStatus
+}
+
+function buildAccountAiQuantHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    ...optionalAuthHeaders(),
+  }
+}
+
+async function parseAccountAiQuantJson(response: Response, fallbackMessage: string) {
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      parseApiErrorMessage(response.status, json, fallbackMessage),
+      'ACCOUNT_AI_QUANT_REQUEST_FAILED',
+      response.status,
+      json,
+    )
+  }
+
+  return json
+}
+
+export async function fetchAccountAiQuantStrategies(
+  query: AccountAiQuantListQuery,
+): Promise<PaginatedResponse<AccountAiQuantStrategyListItem>> {
+  return apiCall(async () => {
+    if (!query.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+
+    const search = new URLSearchParams({
+      userId: query.userId.trim(),
+      page: String(query.page ?? 1),
+      limit: String(query.limit ?? 20),
+    })
+    if (query.status) search.set('status', query.status)
+
+    const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies?${search.toString()}`, {
+      method: 'GET',
+      headers: buildAccountAiQuantHeaders(),
+    })
+    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略列表失败')
+    return unwrapResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>(
+      json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
+    )
+  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
+}
+
+export async function fetchAccountAiQuantStrategyDetail(
+  strategyId: string,
+  userId: string,
+): Promise<AccountAiQuantStrategyDetail> {
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+
+    const search = new URLSearchParams({ userId: userId.trim() })
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+      {
+        method: 'GET',
+        headers: buildAccountAiQuantHeaders(),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
+}
+
+export async function performAccountAiQuantStrategyAction(
+  strategyId: string,
+  payload: { userId: string; action: AccountAiQuantStrategyAction },
+): Promise<AccountAiQuantStrategyDetail> {
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!payload.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
+      {
+        method: 'POST',
+        headers: buildAccountAiQuantHeaders(),
+        body: JSON.stringify({
+          userId: payload.userId.trim(),
+          action: payload.action,
+        }),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+  }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
+}
+
 // ===== 聚合爆仓数据（Liquidation Data）API =====
 
 export interface LiquidationSummaryItem {
