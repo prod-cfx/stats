@@ -1,8 +1,10 @@
 'use client'
 
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
+import DOMPurify from 'dompurify'
 import { ArrowUp, Bot, Check, ChevronsUpDown, Play, Search, Settings2, User } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import showdown from 'showdown'
 import { useTranslation } from 'react-i18next'
 
 export interface QuantMessage {
@@ -33,6 +35,14 @@ const SYMBOLS = [
   { value: 'DOTUSDT', label: 'DOT/USDT' },
   { value: 'MATICUSDT', label: 'MATIC/USDT' },
 ]
+
+const markdownConverter = new showdown.Converter({
+  ghCodeBlocks: true,
+  simpleLineBreaks: true,
+  strikethrough: true,
+  tables: true,
+  tasklists: true,
+})
 
 export function QuantChatPanel({
   messages,
@@ -218,11 +228,19 @@ export function QuantChatPanel({
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
-                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
+                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-[color:var(--cf-border)] [&_pre]:bg-[color:var(--cf-bg)] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0'
                     : 'rounded-tr-none bg-primary text-white'
                 }`}
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(markdownConverter.makeHtml(message.content)),
+                    }}
+                  />
+                ) : (
+                  message.content
+                )}
               </div>
 
               {message.role === 'user' && (
