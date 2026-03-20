@@ -302,6 +302,8 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
                         />
                         <input
                           value={form.apiSecret}
+                          type="password"
+                          autoComplete="off"
                           onChange={event => setFormValue(exchangeId, 'apiSecret', event.target.value)}
                           placeholder={t('aiQuant.secretKey')}
                           className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
@@ -311,6 +313,8 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
                     {exchangeId === 'okx' && (
                       <input
                         value={form.passphrase}
+                        type="password"
+                        autoComplete="off"
                         onChange={event => setFormValue(exchangeId, 'passphrase', event.target.value)}
                         placeholder={t('aiQuant.passphrase')}
                         className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
@@ -326,6 +330,8 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
                         />
                         <input
                           value={form.agentPrivateKey}
+                          type="password"
+                          autoComplete="off"
                           onChange={event => setFormValue(exchangeId, 'agentPrivateKey', event.target.value)}
                           placeholder={t('aiQuant.agentPrivateKey')}
                           className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
