@@ -202,6 +202,47 @@ export class CodegenConversationService {
       }
     }
 
+    const missingFields = this.resolveChecklistMissingFields(mergedChecklist)
+    const canGenerate = session.status === 'CHECKLIST_GATE' && missingFields.length === 0
+    if (!canGenerate) {
+      if (missingFields.length > 0) {
+        await this.sessionsRepo.updateSession(session.id, {
+          status: 'DRAFTING',
+          checklist: mergedChecklist as Prisma.InputJsonValue,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterPlanner,
+          } as unknown as Prisma.InputJsonValue,
+        })
+
+        return {
+          id: session.id,
+          status: 'DRAFTING',
+          missingFields,
+          assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
+        }
+      }
+
+      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'CHECKLIST_GATE',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
+      })
+
+      return {
+        id: session.id,
+        status: 'CHECKLIST_GATE',
+        missingFields: [],
+        specDesc,
+        assistantPrompt: `${plan.assistantPrompt}\n请先确认逻辑图，确认后我再生成策略代码。`,
+      }
+    }
+
     const providerCode = this.resolveProviderCode(dto.providerCode)
     try {
       await this.sessionsRepo.updateSession(session.id, {
@@ -408,6 +449,17 @@ export class CodegenConversationService {
       exitRules: input.exitRules,
       riskRules: input.riskRules,
     }
+  }
+
+  private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
+    const missing: string[] = []
+    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
+      missing.push('entryRules')
+    }
+    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
+      missing.push('exitRules')
+    }
+    return missing
   }
 
   private inferChecklistFromMessage(message?: string): ChecklistPayload {
