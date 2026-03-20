@@ -461,7 +461,12 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
 
     ws.on('error', error => {
       this.stopWatchdog(market)
-      this.logger.error(`Binance WebSocket 错误: ${(error as Error).message} market=${market}`)
+      const message = (error as Error).message
+      if (!this.wsLifecycle.isReconnectEnabled() && this.isBenignShutdownError(message)) {
+        this.logger.warn(`Binance WebSocket 关闭中断开（可忽略）: ${message} market=${market}`)
+        return
+      }
+      this.logger.error(`Binance WebSocket 错误: ${message} market=${market}`)
       this.wsLifecycle.scheduleReconnect(market, () => this.openWebSocket(market, this.streamsByMarket[market]))
     })
   }
@@ -564,5 +569,9 @@ export class BinanceMarketDataProvider implements MarketDataProvider, OnModuleDe
       minQty: filter.minQty,
       maxQty: filter.maxQty,
     }))
+  }
+
+  private isBenignShutdownError(message: string): boolean {
+    return message.includes('WebSocket was closed before the connection was established')
   }
 }

@@ -3,7 +3,8 @@
 import type { AiQuantStrategyRecord, StrategyEquityPoint, StrategyStatus } from './ai-quant-strategy-store'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { deriveAdjacentChangePct, derivePnlMetrics, formatSignedNumber } from './pnl-metrics'
+import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
+import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 
 const STATUS_LABEL: Record<StrategyStatus, string> = {
   running: '运行中',
@@ -65,12 +66,15 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
-  const { totalAmount, todayPnlAmount } = useMemo(
-    () => derivePnlMetrics(series, strategy?.initialCapital || 10000),
-    [series, strategy?.initialCapital],
+  const { displayTotalPnl, displayTodayPnl } = useMemo(
+    () => resolveDisplayMetrics({
+      totalPnl: strategy?.totalPnl,
+      todayPnl: strategy?.todayPnl,
+      series,
+      initialCapital: strategy?.initialCapital || 10000,
+    }),
+    [series, strategy?.initialCapital, strategy?.todayPnl, strategy?.totalPnl],
   )
-  const displayTotalPnl = strategy?.totalPnl ?? totalAmount
-  const displayTodayPnl = strategy?.todayPnl ?? todayPnlAmount
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null

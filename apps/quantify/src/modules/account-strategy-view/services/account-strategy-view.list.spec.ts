@@ -75,11 +75,16 @@ describe('accountStrategyViewService.listStrategies', () => {
         }],
       }),
     }
-    const statsService = { calculateBatchStats: jest.fn().mockResolvedValue(new Map()) }
+    const statsService = {
+      calculateBatchStats: jest.fn().mockResolvedValue(new Map([
+        ['inst-2', { totalPnlRate: 0, maxDrawdown: 0, winRate: 0, totalTradesCount: 0 }],
+      ])),
+    }
 
     const service = new AccountStrategyViewService(repo as any, statsService as any, null as any)
     const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20 })
 
     expect(result.items[0]?.status).toBe('stopped')
+    expect(result.items[0]?.metrics.returnPct).toBe(0)
   })
 })

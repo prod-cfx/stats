@@ -176,37 +176,57 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   private async collectDynamicStrategySymbols(): Promise<string[]> {
     const symbolSet = new Set<string>()
+    let strategySubscriptions: Array<{
+      strategyInstance?: {
+        strategyTemplate?: {
+          legs?: unknown
+        } | null
+      } | null
+    }> = []
+    let llmSubscriptions: Array<{
+      llmStrategyInstance?: {
+        strategy?: {
+          allowedSymbols?: unknown
+        } | null
+      } | null
+    }> = []
 
-    const [strategySubscriptions, llmSubscriptions] = await Promise.all([
-      this.prisma.userStrategySubscription.findMany({
-        where: { status: 'active' },
-        select: {
-          strategyInstance: {
-            select: {
-              strategyTemplate: {
-                select: {
-                  legs: true,
+    try {
+      [strategySubscriptions, llmSubscriptions] = await Promise.all([
+        this.prisma.userStrategySubscription.findMany({
+          where: { status: 'active' },
+          select: {
+            strategyInstance: {
+              select: {
+                strategyTemplate: {
+                  select: {
+                    legs: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-      this.prisma.userLlmStrategySubscription.findMany({
-        where: { status: 'active' },
-        select: {
-          llmStrategyInstance: {
-            select: {
-              strategy: {
-                select: {
-                  allowedSymbols: true,
+        }),
+        this.prisma.userLlmStrategySubscription.findMany({
+          where: { status: 'active' },
+          select: {
+            llmStrategyInstance: {
+              select: {
+                strategy: {
+                  select: {
+                    allowedSymbols: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-    ])
+        }),
+      ])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(`Dynamic strategy subscriptions unavailable; skip dynamic symbol merge: ${message}`)
+      return []
+    }
 
     for (const item of strategySubscriptions) {
       const legs = item.strategyInstance?.strategyTemplate?.legs

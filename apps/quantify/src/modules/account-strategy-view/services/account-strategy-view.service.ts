@@ -1,10 +1,11 @@
 import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto';
 import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
+import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
-import type { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
-import type { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
-import type { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
+import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
+import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
+import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
@@ -38,32 +39,42 @@ export class AccountStrategyViewService {
       }
     }
 
-    const items: AccountStrategyListItemDto[] = rows.items.map(item => {
+    const items = await Promise.all(rows.items.map(async (item) => {
       const stats = statsMap.get(item.id)
       const mergedParams = {
         ...(item.defaultParams ?? {}),
         ...(item.params ?? {}),
         ...(item.customParams ?? {}),
       } as Record<string, unknown>
+      const symbol = this.readString(mergedParams, ['symbol'])
+
+      const fallback = await this.buildAccountFallbackMetrics(
+        query.userId,
+        symbol,
+      )
+
+      const statsReturnPct = this.readStatsNumber(stats, 'totalPnlRate')
+      const statsWinRatePct = this.readStatsNumber(stats, 'winRate')
+      const statsTradeCount = this.readStatsNumber(stats, 'totalTradesCount')
 
       return {
         id: item.id,
         name: item.name,
         status: this.mapUiStatus(item.status),
         exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
-        symbol: this.readString(mergedParams, ['symbol']),
+        symbol,
         timeframe: this.readString(mergedParams, ['timeframe', 'period']),
         positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
         isSubscribed: item.subscribed,
         metrics: {
-          returnPct: this.readStatsNumber(stats, 'totalPnlRate'),
+          returnPct: this.pickStatsOrFallbackMetric(statsReturnPct, fallback?.returnPct),
           maxDrawdownPct: this.readStatsNumber(stats, 'maxDrawdown'),
-          winRatePct: this.readStatsNumber(stats, 'winRate'),
-          tradeCount: this.readStatsNumber(stats, 'totalTradesCount'),
+          winRatePct: this.pickStatsOrFallbackMetric(statsWinRatePct, fallback?.winRatePct),
+          tradeCount: this.pickStatsOrFallbackMetric(statsTradeCount, fallback?.tradeCount),
         },
         updatedAt: item.updatedAt.toISOString(),
       }
-    })
+    }))
 
     return new BasePaginationResponseDto<AccountStrategyListItemDto>(
       rows.total,
@@ -86,9 +97,18 @@ export class AccountStrategyViewService {
       ...(sub?.customParams as Record<string, unknown> ?? {}),
     } as Record<string, unknown>
 
+    const symbol = this.readString(mergedParams, ['symbol'])
+    const normalizedSymbol = symbol?.split(':')[0] ?? null
+
     const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
+      ?? (normalizedSymbol
+        ? await this.repo.findLatestExecutedAccountByUserAndSymbol(userId, normalizedSymbol)
+        : null)
     const equityRows = account
       ? await this.repo.loadEquitySeries(account.id)
+      : []
+    const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
+      ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
       : []
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
@@ -110,25 +130,38 @@ export class AccountStrategyViewService {
       ? Number(((totalPnl / investedAmount) * 100).toFixed(2))
       : 0
 
-    const maxDrawdownPct = equityRows.length > 0
-      ? Math.max(...equityRows.map(row => Number(row.maxDrawdown)))
+    const derivedEquitySeries = account
+      ? this.buildIndustryEquitySeries({
+          initialBalance: Number(account.initialBalance),
+          totalRealizedPnl: Number(account.totalRealizedPnl),
+          totalUnrealizedPnl: Number(account.totalUnrealizedPnl),
+          closedPositionRows,
+          startedAt: row.startedAt ?? row.updatedAt,
+          dailyRows: equityRows,
+        })
+      : []
+
+    const maxDrawdownPct = derivedEquitySeries.length > 0
+      ? this.computeMaxDrawdownPct(derivedEquitySeries)
       : this.readStatsNumber(stats, 'maxDrawdown')
 
     const winRatePct = tradeStats.closedCount > 0
       ? Number(((tradeStats.winningCount / tradeStats.closedCount) * 100).toFixed(2))
       : this.readStatsNumber(stats, 'winRate')
 
-    const todayPnl = equityRows.length > 0
-      ? Number(equityRows[equityRows.length - 1]?.realizedPnl ?? 0)
-        + Number(equityRows[equityRows.length - 1]?.unrealizedPnl ?? 0)
-      : this.readStatsNumber(stats, 'todayPnl')
+    const todayPnl = account
+      ? this.calculateTodayPnl(
+          Number(account.totalUnrealizedPnl),
+          closedPositionRows,
+        )
+      : this.readStatsNumber(stats, 'todayPnl') ?? totalPnl
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
       name: row.name,
       status: this.mapUiStatus(row.status),
       exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
-      symbol: this.readString(mergedParams, ['symbol']),
+      symbol,
       timeframe: this.readString(mergedParams, ['timeframe', 'period']),
       positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
       isSubscribed: !!sub && sub.status === 'active',
@@ -143,13 +176,10 @@ export class AccountStrategyViewService {
       updatedAt: row.updatedAt.toISOString(),
       totalPnl,
       todayPnl,
-      equitySeries: equityRows.map(item => ({
-        ts: item.date.toISOString(),
-        value: Number(item.equityEnd),
-      })),
+      equitySeries: derivedEquitySeries,
       snapshot: {
         exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
-        symbol: this.readString(mergedParams, ['symbol']),
+        symbol,
         timeframe: this.readString(mergedParams, ['timeframe', 'period']),
         positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
         deployAccountName: sub?.exchangeAccount?.name ?? null,
@@ -161,7 +191,7 @@ export class AccountStrategyViewService {
     if (detail.equitySeries.length === 0 && account) {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
-        value: Number(account.equity),
+        value: Number(account.initialBalance) + Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl),
       }]
     }
 
@@ -208,6 +238,25 @@ export class AccountStrategyViewService {
     return this.getStrategyDetail(userId, strategyInstanceId)
   }
 
+  async deployStrategy(dto: AccountStrategyDeployDto): Promise<AccountStrategyDetailResponseDto> {
+    if (!dto.userId) {
+      throw new BadRequestException('Missing user identity')
+    }
+
+    const strategyInstanceId = await this.repo.deployStrategyForUser({
+      userId: dto.userId,
+      name: dto.name,
+      exchange: dto.exchange,
+      symbol: dto.symbol,
+      timeframe: dto.timeframe,
+      positionPct: dto.positionPct,
+      exchangeAccountId: dto.exchangeAccountId,
+      exchangeAccountName: dto.exchangeAccountName,
+    })
+
+    return this.getStrategyDetail(dto.userId, strategyInstanceId)
+  }
+
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {
     if (status === 'running') return 'running'
     if (status === 'draft') return 'draft'
@@ -238,6 +287,47 @@ export class AccountStrategyViewService {
     if (!stats) return null
     const value = stats[key]
     return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private pickStatsOrFallbackMetric(statsValue: number | null, fallbackValue: number | null): number | null {
+    if (statsValue == null) return fallbackValue
+    if (fallbackValue == null) return statsValue
+    if (statsValue === 0 && fallbackValue !== 0) return fallbackValue
+    return statsValue
+  }
+
+  private async buildAccountFallbackMetrics(userId: string, symbol: string | null): Promise<{
+    returnPct: number | null
+    winRatePct: number | null
+    tradeCount: number | null
+  } | null> {
+    if (!symbol) return null
+
+    const normalizedSymbol = symbol.split(':')[0]?.trim().toUpperCase()
+    if (!normalizedSymbol) return null
+
+    const repoAny = this.repo as any
+    const findLatest = repoAny.findLatestExecutedAccountByUserAndSymbol as
+      ((uid: string, s: string) => Promise<any>) | undefined
+    const loadTradeStats = repoAny.loadTradeStats as
+      ((accountId: string) => Promise<{ tradeCount: number; closedCount: number; winningCount: number }>) | undefined
+
+    if (!findLatest || !loadTradeStats) return null
+
+    const account = await findLatest.call(this.repo, userId, normalizedSymbol)
+    if (!account) return null
+
+    const tradeStats = await loadTradeStats.call(this.repo, account.id)
+    const totalPnl = Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
+    const invested = Number(account.initialBalance)
+
+    return {
+      returnPct: invested > 0 ? Number(((totalPnl / invested) * 100).toFixed(2)) : 0,
+      winRatePct: tradeStats.closedCount > 0
+        ? Number(((tradeStats.winningCount / tradeStats.closedCount) * 100).toFixed(2))
+        : 0,
+      tradeCount: tradeStats.tradeCount,
+    }
   }
 
   private buildMixedTimeline(source: {
@@ -310,5 +400,81 @@ export class AccountStrategyViewService {
     return events
       .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
       .slice(0, 30)
+  }
+
+  private buildIndustryEquitySeries(input: {
+    initialBalance: number
+    totalRealizedPnl: number
+    totalUnrealizedPnl: number
+    closedPositionRows: Array<{ openedAt: Date; closedAt: Date | null; realizedPnl: any }>
+    startedAt: Date
+    dailyRows: Array<{ date: Date; equityStart?: any; equityEnd: any }>
+  }): Array<{ ts: string; value: number }> {
+    const initial = Number.isFinite(input.initialBalance) ? input.initialBalance : 0
+    const points: Array<{ ts: string; value: number }> = []
+    points.push({
+      ts: input.startedAt.toISOString(),
+      value: Number(initial.toFixed(8)),
+    })
+
+    let runningEquity = initial
+    for (const row of input.closedPositionRows) {
+      runningEquity += Number(row.realizedPnl ?? 0)
+      points.push({
+        ts: (row.closedAt ?? row.openedAt).toISOString(),
+        value: Number(runningEquity.toFixed(8)),
+      })
+    }
+
+    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
+    const nowTs = new Date().toISOString()
+    const last = points[points.length - 1]
+    if (!last || Math.abs(last.value - currentEquity) > 1e-10) {
+      points.push({
+        ts: nowTs,
+        value: Number(currentEquity.toFixed(8)),
+      })
+    }
+
+    // 如果仍然点位过少，则回退到日度序列，至少提供可读历史点
+    if (points.length <= 1 && input.dailyRows.length > 0) {
+      const dailyPoints = input.dailyRows.map(item => ({
+        ts: item.date.toISOString(),
+        value: Number(item.equityEnd),
+      }))
+      return dailyPoints.length > 0 ? dailyPoints : points
+    }
+
+    return points
+  }
+
+  private computeMaxDrawdownPct(series: Array<{ ts: string; value: number }>): number {
+    if (series.length === 0) return 0
+    let peak = series[0].value
+    let maxDrawdown = 0
+    for (const point of series) {
+      if (point.value > peak) peak = point.value
+      if (peak <= 0) continue
+      const drawdownPct = ((peak - point.value) / peak) * 100
+      if (drawdownPct > maxDrawdown) {
+        maxDrawdown = drawdownPct
+      }
+    }
+    return Number(maxDrawdown.toFixed(2))
+  }
+
+  private calculateTodayPnl(
+    totalUnrealizedPnl: number,
+    closedPositionRows: Array<{ closedAt: Date | null; realizedPnl: any }>,
+  ): number {
+    const startUtcDay = new Date()
+    startUtcDay.setUTCHours(0, 0, 0, 0)
+    const endUtcDay = new Date(startUtcDay.getTime() + 24 * 60 * 60 * 1000)
+
+    const realizedToday = closedPositionRows
+      .filter(row => row.closedAt && row.closedAt >= startUtcDay && row.closedAt < endUtcDay)
+      .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
+
+    return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
   }
 }

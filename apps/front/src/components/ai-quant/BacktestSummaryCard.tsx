@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 interface BacktestSummaryCardProps {
   result: BacktestResult
   canDeploy: boolean
+  drawdownLimited?: boolean
   onOpenFullScreen: () => void
   onOptimize: () => void
   onDeploy: () => void
@@ -21,6 +22,7 @@ export interface BacktestResult {
 export function BacktestSummaryCard({
   result,
   canDeploy,
+  drawdownLimited = true,
   onOpenFullScreen,
   onOptimize,
   onDeploy,
@@ -32,7 +34,9 @@ export function BacktestSummaryCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestResult')}</h2>
-          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.messages.backtestDrawdownLimit')}</p>
+          <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
+            {drawdownLimited ? t('aiQuant.messages.backtestDrawdownLimit') : '当前为模拟部署模式：忽略回撤门槛'}
+          </p>
         </div>
         <button
           type="button"

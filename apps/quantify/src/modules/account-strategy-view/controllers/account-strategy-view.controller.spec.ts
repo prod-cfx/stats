@@ -43,4 +43,29 @@ describe('accountStrategyViewController', () => {
       expect.objectContaining({ userId: 'user-1', action: AccountStrategyAction.RUN }),
     )
   })
+
+  it('injects resolved userId into deploy dto', async () => {
+    const service = {
+      deployStrategy: jest.fn().mockResolvedValue({ id: 'inst-1' }),
+    }
+    const controller = new AccountStrategyViewController(service as any)
+
+    await controller.deploy(
+      {
+        name: '测试策略',
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '5m/15m',
+        positionPct: 10,
+      } as any,
+      'user-1',
+    )
+
+    expect(service.deployStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        exchange: 'binance',
+      }),
+    )
+  })
 })

@@ -272,18 +272,15 @@ export class StrategyInstancesService {
     // 状态转换验证
     if (dto.status && dto.status !== instance.status) {
       this.validateStatusTransition(instance.status, dto.status)
-
-      // 🔴 关键校验：切换到 running 状态时，强制要求 mode 必须为 LIVE
-      // 防止管理员启动 PAPER/TESTNET/BACKTEST 实例导致用户端不可见
-      // （因为 C 端接口已强制过滤 mode !== 'LIVE' 的实例）
+      // 切换到 running 状态时，仅允许 LIVE/TESTNET。
+      // PAPER/BACKTEST 不进入真实运行态，避免语义混乱。
       if (dto.status === 'running') {
         const finalMode = dto.mode ?? instance.mode
-        if (finalMode !== 'LIVE') {
+        if (finalMode !== 'LIVE' && finalMode !== 'TESTNET') {
           throw new InvalidInstanceModeTransitionException({
             from: finalMode,
             to: 'LIVE',
-            reason:
-              '启动实例时必须使用实盘模式（LIVE），以确保用户端可见。请先切换到 LIVE 模式再启动',
+            reason: '启动实例时仅支持 LIVE 或 TESTNET 模式，请先切换模式后再启动',
           })
         }
       }
@@ -748,7 +745,7 @@ export class StrategyInstancesService {
       draft: ['running'],
       running: ['paused', 'stopped'],
       paused: ['running', 'stopped'],
-      stopped: [],
+      stopped: ['running'],
     }
 
     const allowed = validTransitions[currentStatus]

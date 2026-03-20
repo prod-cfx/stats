@@ -52,7 +52,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.id).toBe('inst-1')
     expect(detail.metrics.tradeCount).toBe(74)
     expect(detail.snapshot.deployAccountName).toBe('主账户')
-    expect(detail.equitySeries.length).toBe(1)
+    expect(detail.equitySeries.length).toBe(2)
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
     expect(detail.timeline.some(e => e.eventType === 'trade')).toBe(true)
     expect(detail.timeline[0]?.event).toBe('创建策略')
@@ -102,5 +102,88 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
 
     expect(detail.metrics.tradeCount).toBe(74)
+  })
+
+  it('keeps pnl fields nullable when backend stats are unavailable', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-9',
+        name: 'Null pnl strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: null,
+        strategyTemplateId: 'tpl-1',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [],
+        startedAt: null,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+
+    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const detail = await service.getStrategyDetail('user-1', 'inst-9')
+
+    expect(detail.totalPnl).toBeNull()
+    expect(detail.todayPnl).toBeNull()
+  })
+
+  it('falls back to latest executed account by symbol when template account is missing', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-fallback',
+        name: 'Fallback strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT' },
+        strategyTemplateId: 'tpl-missing',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [],
+        startedAt: null,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue({
+        id: 'acc-from-exec',
+        initialBalance: 10000,
+        equity: 10100,
+        totalRealizedPnl: 80,
+        totalUnrealizedPnl: 20,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 3, closedCount: 2, winningCount: 1 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+
+    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const detail = await service.getStrategyDetail('user-1', 'inst-fallback')
+
+    expect(repo.findLatestExecutedAccountByUserAndSymbol).toHaveBeenCalledWith('user-1', 'BTCUSDT')
+    expect(detail.metrics.tradeCount).toBe(3)
+    expect(detail.totalPnl).toBe(100)
   })
 })

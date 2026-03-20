@@ -1,8 +1,9 @@
-import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
-import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
-import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
-import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
-import type { AccountStrategyViewService } from '../services/account-strategy-view.service'
+import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
+import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
+import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
+import { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
+import { AccountStrategyViewService } from '../services/account-strategy-view.service'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Param, Post, Query } from '@nestjs/common'
 
@@ -40,6 +41,18 @@ export class AccountStrategyViewController {
   ): Promise<AccountStrategyDetailResponseDto> {
     const userId = this.resolveUserId(headerUserId, dto.userId)
     return this.service.performAction(id, {
+      ...dto,
+      userId,
+    })
+  }
+
+  @Post('deploy')
+  async deploy(
+    @Body() dto: AccountStrategyDeployDto,
+    @Headers('x-user-id') headerUserId?: string,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    const userId = this.resolveUserId(headerUserId, dto.userId)
+    return this.service.deployStrategy({
       ...dto,
       userId,
     })

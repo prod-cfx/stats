@@ -1,5 +1,6 @@
-import type { PrismaService } from '@/prisma/prisma.service'
+import { PrismaService } from '@/prisma/prisma.service'
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@/prisma/prisma.types'
 import { SubscriptionStatus } from '@/prisma/prisma.types'
 
 interface ListStrategiesQuery {
@@ -9,9 +10,147 @@ interface ListStrategiesQuery {
   status?: 'running' | 'stopped' | 'draft'
 }
 
+interface DeployStrategyInput {
+  userId: string
+  name: string
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  symbol: string
+  timeframe: string
+  positionPct: number
+  exchangeAccountId?: string
+  exchangeAccountName?: string
+}
+
 @Injectable()
 export class AccountStrategyViewRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async deployStrategyForUser(input: DeployStrategyInput): Promise<string> {
+    const strategyInstanceId = await this.prisma.runInTransaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true },
+      })
+
+      if (!existingUser) {
+        await tx.user.create({
+          data: {
+            id: input.userId,
+            email: `${input.userId}@local.quantify`,
+            nickname: 'AI Quant User',
+            isGuest: true,
+          },
+        })
+      }
+
+      let resolvedExchangeAccountId: string | undefined
+      if (input.exchangeAccountId) {
+        const matchedAccount = await tx.exchangeAccount.findFirst({
+          where: {
+            id: input.exchangeAccountId,
+            userId: input.userId,
+          },
+          select: { id: true },
+        })
+        resolvedExchangeAccountId = matchedAccount?.id
+      }
+
+      if (!resolvedExchangeAccountId) {
+        const accountName = input.exchangeAccountName?.trim() || `${input.exchange.toUpperCase()} Mock Account`
+        const existingAccount = await tx.exchangeAccount.findFirst({
+          where: {
+            userId: input.userId,
+            exchangeId: input.exchange,
+            name: accountName,
+          },
+          select: { id: true },
+        })
+        if (existingAccount) {
+          resolvedExchangeAccountId = existingAccount.id
+        } else {
+          const createdAccount = await tx.exchangeAccount.create({
+            data: {
+              userId: input.userId,
+              exchangeId: input.exchange,
+              name: accountName,
+              isTestnet: true,
+              encryptedConfig: '{}',
+            },
+            select: { id: true },
+          })
+          resolvedExchangeAccountId = createdAccount.id
+        }
+      }
+
+      const templateName = `AI量化快捷模板-${input.userId}`
+      const existingTemplate = await tx.strategyTemplate.findUnique({
+        where: { name: templateName },
+        select: { id: true },
+      })
+      const strategyTemplateId = existingTemplate?.id
+        ?? (await tx.strategyTemplate.create({
+            data: {
+              name: templateName,
+              description: '用于 AI 量化一键部署验证的自动模板',
+              llmModel: 'gpt-4',
+              promptTemplate: 'AUTO_DEPLOY_TEMPLATE',
+              paramsSchema: {},
+              defaultParams: {
+                exchange: input.exchange,
+                symbol: input.symbol,
+                timeframe: input.timeframe,
+                positionPct: input.positionPct,
+              },
+              requiredFields: [],
+              status: 'live',
+              createdBy: input.userId,
+              updatedBy: input.userId,
+              metadata: { source: 'account-ai-quant-deploy' },
+            },
+            select: { id: true },
+          })).id
+
+      const normalizedName = input.name.trim() || 'AI策略'
+      const instanceName = `${normalizedName}-${Date.now()}`
+      const params = {
+        exchange: input.exchange,
+        symbol: input.symbol,
+        timeframe: input.timeframe,
+        positionPct: input.positionPct,
+      }
+
+      const strategyInstance = await tx.strategyInstance.create({
+        data: {
+          strategyTemplateId,
+          name: instanceName,
+          description: `一键部署 - ${input.symbol}`,
+          llmModel: 'gpt-4',
+          params,
+          status: 'running',
+          mode: 'TESTNET',
+          startedAt: new Date(),
+          createdBy: input.userId,
+          updatedBy: input.userId,
+          metadata: { source: 'account-ai-quant-deploy' },
+        },
+        select: { id: true },
+      })
+
+      await tx.userStrategySubscription.create({
+        data: {
+          userId: input.userId,
+          strategyInstanceId: strategyInstance.id,
+          status: 'active',
+          customParams: params,
+          exchangeAccountId: resolvedExchangeAccountId,
+        },
+      })
+
+      return strategyInstance.id
+    })
+
+    return strategyInstanceId
+  }
 
   async listStrategiesForUser(query: ListStrategiesQuery) {
     const client = this.prisma.getClient()
@@ -24,12 +163,12 @@ export class AccountStrategyViewRepository {
       })
     ).map(item => item.strategyInstanceId)
 
-    const where = {
+    const where: Prisma.StrategyInstanceWhereInput = {
       OR: [
         { id: { in: subscribedInstanceIds.length > 0 ? subscribedInstanceIds : ['__none__'] } },
         { createdBy: query.userId },
       ],
-      ...(this.buildStatusWhere(query.status)),
+      ...this.buildStatusWhere(query.status),
     }
 
     const [items, total] = await Promise.all([
@@ -121,6 +260,36 @@ export class AccountStrategyViewRepository {
     })
   }
 
+  async findLatestExecutedAccountByUserAndSymbol(userId: string, symbol: string) {
+    const client = this.prisma.getClient()
+    const normalizedSymbol = symbol.trim().toUpperCase()
+
+    const latestTrade = await client.trade.findFirst({
+      where: {
+        symbol: normalizedSymbol,
+        account: {
+          userId,
+        },
+      },
+      orderBy: {
+        executedAt: 'desc',
+      },
+      select: {
+        account: {
+          select: {
+            id: true,
+            initialBalance: true,
+            equity: true,
+            totalRealizedPnl: true,
+            totalUnrealizedPnl: true,
+          },
+        },
+      },
+    })
+
+    return latestTrade?.account ?? null
+  }
+
   async loadEquitySeries(accountId: string, limit = 120) {
     const client = this.prisma.getClient()
     return client.strategyPnlDaily.findMany({
@@ -151,6 +320,25 @@ export class AccountStrategyViewRepository {
       closedCount,
       winningCount,
     }
+  }
+
+  async loadClosedPositionPnlSeries(accountId: string, limit = 500) {
+    const client = this.prisma.getClient()
+    return client.position.findMany({
+      where: {
+        userStrategyAccountId: accountId,
+        status: 'CLOSED',
+      },
+      orderBy: {
+        closedAt: 'asc',
+      },
+      take: limit,
+      select: {
+        openedAt: true,
+        closedAt: true,
+        realizedPnl: true,
+      },
+    })
   }
 
   async loadTimeline(userId: string, strategyInstanceId: string, accountId?: string) {
@@ -198,10 +386,14 @@ export class AccountStrategyViewRepository {
     }
   }
 
-  private buildStatusWhere(status?: 'running' | 'stopped' | 'draft') {
+  private buildStatusWhere(status?: 'running' | 'stopped' | 'draft'): Prisma.StrategyInstanceWhereInput {
     if (!status) return {}
-    if (status === 'running') return { status: 'running' }
-    if (status === 'draft') return { status: 'draft' }
+    if (status === 'running') {
+      return { status: 'running' }
+    }
+    if (status === 'draft') {
+      return { status: 'draft' }
+    }
     return { status: { in: ['stopped', 'paused'] } }
   }
 }

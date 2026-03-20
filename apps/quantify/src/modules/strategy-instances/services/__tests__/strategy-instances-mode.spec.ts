@@ -210,6 +210,37 @@ describe('strategyInstancesService - mode management', () => {
       )
     })
 
+    it('should allow restarting a stopped TESTNET instance to running', async () => {
+      const stoppedTestnetInstance = {
+        ...mockStrategyInstance,
+        status: 'stopped' as StrategyInstanceStatus,
+        mode: 'TESTNET' as StrategyInstanceMode,
+      }
+
+      mockRepository.findById.mockResolvedValue(stoppedTestnetInstance)
+      mockRepository.existsByTemplateModelName.mockResolvedValue(false)
+      mockRepository.update.mockResolvedValue({
+        ...stoppedTestnetInstance,
+        status: 'running' as StrategyInstanceStatus,
+      })
+      mockRepository.findByIdWithDetails.mockResolvedValue({
+        ...stoppedTestnetInstance,
+        status: 'running' as StrategyInstanceStatus,
+        strategyTemplate: mockStrategyTemplate,
+      })
+
+      await service.updateInstance('instance-123', {
+        status: 'running',
+      })
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        'instance-123',
+        expect.objectContaining({
+          status: 'running',
+        }),
+      )
+    })
+
     it('should reject mode change when instance is running', async () => {
       const runningInstance = {
         ...mockStrategyInstance,
