@@ -131,7 +131,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
     setVerifying(true)
 
     try {
-      await loginWithEmailCode(email, code)
+      await loginWithEmailCode(normalizedEmail, code)
       onSuccess()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('auth.loginFailed'))
