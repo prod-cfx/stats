@@ -80,6 +80,30 @@ export type RealtimeWhaleAlertItem = Infer<typeof schemas.RealtimeWhaleAlertDto>
 export type WhaleTradeDto = Infer<typeof schemas.WhaleTradeDto>
 export type WhaleDiscoverResponse = Infer<typeof schemas.WhaleDiscoverResponseDto>
 export type WhaleDiscoverTraderAiTag = Infer<typeof schemas.WhaleDiscoverTraderAiTagDto>
+export type UserExchangeId = 'binance' | 'okx' | 'hyperliquid'
+
+export interface UserExchangeAccountStatus {
+  id: string | null
+  exchangeId: UserExchangeId
+  isBound: boolean
+  name: string | null
+  maskedCredential: string | null
+  isTestnet: boolean | null
+  lastValidatedAt: string | Date | null
+  createdAt: string | Date | null
+}
+
+export interface UpsertUserExchangeAccountPayload {
+  exchangeId: UserExchangeId
+  name?: string
+  isTestnet?: boolean
+  marketType?: 'spot' | 'perp'
+  apiKey?: string
+  apiSecret?: string
+  passphrase?: string
+  mainWalletAddress?: string
+  agentPrivateKey?: string
+}
 
 interface BaseResponse<T> {
   data?: T
@@ -89,6 +113,83 @@ interface BaseResponse<T> {
 // 使用统一的unwrapApiResponse
 function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapApiResponse(response)
+}
+
+function extractBackendErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== 'object')
+    return fallback
+
+  const candidate = payload as {
+    error?: { args?: { reasonMessage?: unknown } }
+    message?: unknown
+  }
+
+  if (typeof candidate.error?.args?.reasonMessage === 'string' && candidate.error.args.reasonMessage.trim()) {
+    return candidate.error.args.reasonMessage
+  }
+
+  if (typeof candidate.message === 'string' && candidate.message.trim()) {
+    return candidate.message
+  }
+
+  return fallback
+}
+
+async function requestAccountExchangeAccounts<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/account/exchange-accounts${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...requireAuthHeaders(),
+      ...(init?.headers ?? {}),
+    },
+  })
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    const code = payload && typeof payload === 'object' && 'error' in payload && payload.error && typeof payload.error === 'object' && 'code' in payload.error
+      ? String((payload.error as { code?: unknown }).code ?? 'API_ERROR')
+      : 'API_ERROR'
+    const message = extractBackendErrorMessage(payload, response.statusText || '操作失败')
+    throw new ApiError(message, code, response.status, payload)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const payload = await response.json()
+  return unwrapApiResponse(payload) as T
+}
+
+export async function fetchUserExchangeAccountStatuses(): Promise<UserExchangeAccountStatus[]> {
+  return apiCall(
+    () => requestAccountExchangeAccounts<UserExchangeAccountStatus[]>(''),
+    'FETCH_USER_EXCHANGE_ACCOUNT_STATUSES',
+  )
+}
+
+export async function upsertUserExchangeAccount(
+  payload: UpsertUserExchangeAccountPayload,
+): Promise<UserExchangeAccountStatus> {
+  return apiCall(
+    () =>
+      requestAccountExchangeAccounts<UserExchangeAccountStatus>('', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    'UPSERT_USER_EXCHANGE_ACCOUNT',
+  )
+}
+
+export async function deleteUserExchangeAccount(exchangeId: UserExchangeId): Promise<void> {
+  return apiCall(
+    () =>
+      requestAccountExchangeAccounts<void>(`/${exchangeId}`, {
+        method: 'DELETE',
+      }),
+    'DELETE_USER_EXCHANGE_ACCOUNT',
+  )
 }
 
 /**
