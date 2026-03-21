@@ -589,9 +589,16 @@
       }
     },
     "all": {
-      "sequential": true,
-      "commands": ["deploy.backend", "deploy.quantify", "deploy.front", "deploy.admin"],
-      "description": "依次部署所有应用（backend → quantify → front → admin）"
+      "staging": {
+        "sequential": true,
+        "commands": ["deploy.backend", "deploy.quantify", "deploy.front.staging", "deploy.admin.staging"],
+        "description": "依次部署所有应用到预发环境"
+      },
+      "prod": {
+        "sequential": true,
+        "commands": ["deploy.backend", "deploy.quantify", "deploy.front.prod", "deploy.admin.prod"],
+        "description": "依次部署所有应用到生产环境"
+      }
     }
   }
 }
