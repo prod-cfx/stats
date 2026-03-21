@@ -589,7 +589,9 @@
       }
     },
     "all": {
-      "description": "部署所有应用（后端 + 前端）"
+      "sequential": true,
+      "commands": ["deploy.backend", "deploy.quantify", "deploy.front", "deploy.admin"],
+      "description": "依次部署所有应用（backend → quantify → front → admin）"
     }
   }
 }
