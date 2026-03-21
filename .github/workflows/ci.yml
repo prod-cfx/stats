@@ -2,11 +2,11 @@ name: CI
 
 # 说明：
 # - 统一的 CI/CD 脚本，支持 staging 和 production 环境
-# - 通过 workflow_dispatch 的 environment 参数选择部署环境
+# - 通过 workflow_dispatch 的 target 参数选择部署目标
 # - CI/CD 与本地开发统一使用 dx 命令系统
+# - 前端（front / admin）在 GitHub Actions 中构建并部署到 Vercel
+# - 后端（backend / quantify）通过 dx backend-artifact-deploy 制品部署到 AWS 服务器
 # - Node 版本需与仓库要求一致（.nvmrc 指定 22.14.0）
-# - 前端在 GitHub Actions 中构建并部署到 Vercel
-# - 后端通过 SSH 部署到 AWS 服务器
 
 on:
   workflow_dispatch:
@@ -19,32 +19,28 @@ on:
         options:
           - all
           - backend
+          - quantify
           - front
           - admin
 
 env:
   NODE_VERSION: '22.14.0'
-  # PNPM_VERSION: '10.28.2'
   DX_VERSION: '0.1.9'
   VERCEL_VERSION: '50.4.5'
-  # 从 Repository secrets 读取部署环境 (staging 或 prod)
   DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}
 
 jobs:
   # ============================================
-  # Job 1: 在 GitHub Actions 中构建并部署前端到 Vercel
+  # Job 1: 部署 front 到 Vercel
   # ============================================
-  deploy-frontend:
+  deploy-front:
     runs-on: ubuntu-latest
-    if: ${{ inputs.target == 'all' || inputs.target == 'front' || inputs.target == 'admin' }}
+    if: ${{ inputs.target == 'all' || inputs.target == 'front' }}
     env:
       NX_DAEMON: 'false'
       CI: '1'
-      # 根据环境设置相应的环境变量
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
-      # 仅 VERCEL_TOKEN 是敏感信息，从 secrets 读取
-      # VERCEL_ORG_ID 和 VERCEL_PROJECT_ID_* 从对应的 .env 文件加载
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
@@ -53,18 +49,18 @@ jobs:
           echo "=========================================="
           case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
             "prod")
-              echo "🚀 当前部署环境: Production (生产环境)"
+              echo "当前部署环境: Production (生产环境)"
               ;;
             "staging")
-              echo "🚀 当前部署环境: Staging (测试环境)"
+              echo "当前部署环境: Staging (测试环境)"
               ;;
             *)
-              echo "❌ 错误：未配置或配置错误的部署环境"
+              echo "错误：未配置或配置错误的部署环境"
               echo "=========================================="
               echo "请在 Repository Settings 中配置 DEPLOY_ENVIRONMENT"
               echo ""
               echo "配置步骤："
-              echo "1. 进入仓库 Settings → Secrets and variables → Actions"
+              echo "1. 进入仓库 Settings -> Secrets and variables -> Actions"
               echo "2. 点击 'New repository secret'"
               echo "3. Name: DEPLOY_ENVIRONMENT"
               echo "4. Value: staging 或 prod"
@@ -75,40 +71,37 @@ jobs:
           echo "=========================================="
 
       - name: Checkout 代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
-        # with:
-        #   version: ${{ env.PNPM_VERSION }}
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
       - name: 安装 Vercel CLI
-        # 锁定 Vercel CLI 版本以确保 CI 构建可重现
         run: pnpm add -g vercel@${{ env.VERCEL_VERSION }}
 
-      # deploy 命令内部会自动编译 backend 和 sdk
       - name: 部署 front 到 Vercel
-        if: ${{ inputs.target == 'all' || inputs.target == 'front' }}
-        run: npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
-
-      - name: 部署 admin 到 Vercel
-        if: ${{ inputs.target == 'all' || inputs.target == 'admin' }}
-        run: npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+        run: |
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
 
   # ============================================
-  # Job 2: 通过 SSH 部署后端到 AWS 服务器
+  # Job 2: 部署 admin 到 Vercel
   # ============================================
-  deploy-backend:
+  deploy-admin:
     runs-on: ubuntu-latest
-    if: ${{ inputs.target == 'all' || inputs.target == 'backend' }}
+    if: ${{ inputs.target == 'all' || inputs.target == 'admin' }}
     env:
       NX_DAEMON: 'false'
+      CI: '1'
+      APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
       - name: 显示部署环境
@@ -116,257 +109,327 @@ jobs:
           echo "=========================================="
           case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
             "prod")
-              echo "🚀 当前部署环境: Production (生产环境)"
+              echo "当前部署环境: Production (生产环境)"
               ;;
             "staging")
-              echo "🚀 当前部署环境: Staging (测试环境)"
+              echo "当前部署环境: Staging (测试环境)"
               ;;
             *)
-              echo "❌ 错误：未配置或配置错误的部署环境"
+              echo "错误：未配置或配置错误的部署环境"
+              echo "=========================================="
+              echo "请在 Repository Settings 中配置 DEPLOY_ENVIRONMENT"
+              echo ""
+              echo "配置步骤："
+              echo "1. 进入仓库 Settings -> Secrets and variables -> Actions"
+              echo "2. 点击 'New repository secret'"
+              echo "3. Name: DEPLOY_ENVIRONMENT"
+              echo "4. Value: staging 或 prod"
+              echo "=========================================="
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装 Vercel CLI
+        run: pnpm add -g vercel@${{ env.VERCEL_VERSION }}
+
+      - name: 部署 admin 到 Vercel
+        run: |
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+
+  # ============================================
+  # Job 3: 制品部署 backend 到 AWS 服务器
+  # ============================================
+  deploy-backend:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'backend' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
               echo "请配置 DEPLOY_ENVIRONMENT 为 staging 或 prod"
               exit 1
               ;;
           esac
           echo "=========================================="
 
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
       - name: 加载 SSH 私钥
-        uses: webfactory/ssh-agent@v0.8.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
 
-      - name: 部署后端到服务器
-        # 说明：
-        # - 环境变量（如数据库连接、API 密钥等）存储在服务器上的 .env.<environment>.local 文件中
-        # - 敏感配置通过 `git clean -e '.env.<environment>.local'` 保留，不会被清理
-        # - 部署脚本不会动态生成敏感配置，而是依赖服务器上预先配置的环境文件
+      - name: 预热 SSH known_hosts
+        env:
+          AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: 远端环境 preflight（Node/pnpm/pm2）
         env:
           HOST: ${{ secrets.AWS_SSH_HOST }}
           PORT: ${{ secrets.AWS_SSH_PORT }}
           USER: ${{ secrets.AWS_SSH_USER }}
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
-          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
-          DX_VERSION: ${{ env.DX_VERSION }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
-
-          ssh ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '-o ServerAliveInterval=60' || '' }} -p "$PORT" "$USER@$HOST" "export REF_NAME='${REF_NAME}'; export REF_TYPE='${REF_TYPE}'; export DEPLOY_ENV='${DEPLOY_ENV}'; export DX_VERSION='${DX_VERSION}'; bash -s" <<'REMOTE'
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
           set -euo pipefail
 
-          # === 加载 NVM ===
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
           if command -v nvm >/dev/null 2>&1; then
-             nvm use 22 || nvm install 22
-             nvm alias default 22
+            nvm use 22 || nvm install 22
+            nvm alias default 22 || true
           fi
 
-          # 检查必要工具
+          if ! command -v node >/dev/null 2>&1; then
+            echo "[ERROR] 远端缺少 node，请先安装 Node.js 22.x（或启用 nvm）后重试"
+            exit 1
+          fi
+
           command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
           command -v pm2 >/dev/null 2>&1 || npm install -g pm2
 
-          # 检查 Node 版本
-          if [ "$DEPLOY_ENV" = "prod" ]; then
-            echo "[INFO] 检查服务器 Node 版本（Prisma 需要 Node >= 20.19 / 22.12 / 24.x）"
-          else
-            echo "[INFO] 检查服务器 Node 版本"
-          fi
+          echo "[INFO] remote node=$(node -v)"
+          echo "[INFO] remote pnpm=$(pnpm -v)"
+          echo "[INFO] remote pm2=$(pm2 -v | tail -n 1)"
+          REMOTE
 
-          NODE_VERSION_RAW="$(node -v 2>/dev/null || echo "v0.0.0")"
-          echo "[INFO] 当前服务器 Node 版本: ${NODE_VERSION_RAW}"
+      - name: 生成 backend 部署临时 dx 配置
+        env:
+          AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/dx-config
+          cp dx/config/env-layers.json .tmp/dx-config/env-layers.json
+          cp dx/config/env-policy.jsonc .tmp/dx-config/env-policy.jsonc
 
-          NODE_MAJOR="$(echo "$NODE_VERSION_RAW" | sed -E 's/^v([0-9]+).*/\1/')"
-          NODE_MINOR="$(echo "$NODE_VERSION_RAW" | sed -E 's/^v[0-9]+\.([0-9]+).*/\1/')"
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const sourcePath = 'dx/config/commands.json'
+          const targetPath = '.tmp/dx-config/commands.json'
+          const config = JSON.parse(fs.readFileSync(sourcePath, 'utf8'))
 
-          SUPPORTED=0
-          if [ "$NODE_MAJOR" -ge 24 ]; then
-            SUPPORTED=1
-          elif [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -ge 12 ]; then
-            SUPPORTED=1
-          elif [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -ge 19 ]; then
-            SUPPORTED=1
-          fi
-
-          if [ "$SUPPORTED" -ne 1 ]; then
-            if [ "$DEPLOY_ENV" = "prod" ]; then
-              echo "[ERROR] 服务器 Node 版本不在 Prisma 支持范围内: ${NODE_VERSION_RAW}"
-              echo "[ERROR] 要求 Node 版本满足以下其一："
-              echo "[ERROR] - 20.19.x 及以上的 20.x"
-              echo "[ERROR] - 22.12.x 及以上的 22.x（推荐，与 .nvmrc 对齐，如 22.14.0 / 22.15.1）"
-              echo "[ERROR] - 任意 24.x 及以上版本"
-              echo "[ERROR] 请在服务器上将 Node 升级或切换到上述版本之一后重试。"
-            else
-              echo "[ERROR] 服务器 Node 版本不在支持范围内: ${NODE_VERSION_RAW}"
-            fi
-            exit 1
-          fi
-
-          echo "=== 开始部署后端 (${DEPLOY_ENV}) ==="
-          echo "[INFO] REF_TYPE=${REF_TYPE:-<none>}  REF_NAME=${REF_NAME:-<none>}"
-
-          export DEST_PATH="/opt/stats"
-          export PNPM_HOME="/root/.local/share/pnpm"
-          export PATH="$PNPM_HOME:/usr/local/bin:$PATH"
-          export CI=1 NX_DAEMON=false
-
-          cd "$DEST_PATH"
-
-          # 暂存本地改动
-          if ! git diff-index --quiet HEAD --; then git stash || true; fi
-
-          # 同步远端
-          git fetch --tags --prune --force origin
-          git fetch origin --prune
-
-          CURRENT_BRANCH="$(git symbolic-ref -q --short HEAD || true)"
-          echo "[INFO] 当前分支: ${CURRENT_BRANCH:-detached}"
-
-          # 切换版本
-          if [ -n "${REF_NAME:-}" ]; then
-            if [ "${REF_TYPE:-}" = "tag" ]; then
-              echo "[INFO] 切到 TAG: ${REF_NAME}"
-              git checkout -f "refs/tags/${REF_NAME}"
-            elif [ "${REF_TYPE:-}" = "branch" ]; then
-              echo "[INFO] 切到 BRANCH: ${REF_NAME}"
-              if git show-ref --verify --quiet "refs/heads/${REF_NAME}"; then
-                git checkout -f "${REF_NAME}"
-              else
-                git checkout -b "${REF_NAME}" "origin/${REF_NAME}"
-              fi
-              git reset --hard "origin/${REF_NAME}"
-            else
-              echo "[INFO] 视作 COMMIT/SHA: ${REF_NAME}"
-              git fetch origin "${REF_NAME}" || true
-              git checkout -f "${REF_NAME}"
-            fi
-          else
-            if [ -n "$CURRENT_BRANCH" ]; then
-              echo "[INFO] 未指定 ref，pull 当前分支：$CURRENT_BRANCH"
-              git pull --ff-only origin "$CURRENT_BRANCH"
-            else
-              echo "[INFO] 未指定 ref 且当前 detached，切到 main"
-              git checkout -f main || git checkout -b main origin/main
-              git reset --hard origin/main
-            fi
-          fi
-
-          git submodule update --init --recursive || true
-          git clean -fdx -e '.env.local' -e '.env.production' -e '.env.production.local' -e '.env.staging.local' -e 'apps/backend/.env.local' -e 'apps/backend/.env.production.local'
-
-          # 环境名称映射（用于文件名）
-          if [ "$DEPLOY_ENV" = "prod" ]; then
-            ENV_NAME="production"
-          else
-            ENV_NAME="staging"
-          fi
-
-          # 生成根级 .env.<environment>.local（供 backend 运行）
-          ENV_FILE=".env.${ENV_NAME}.local"
-          echo "[$(date)] 写入 ${ENV_FILE} (环境: ${DEPLOY_ENV})"
-          rm -f "./${ENV_FILE}" || true
-          cat > "./${ENV_FILE}" << 'ENV_CONTENT'
-          # 敏感环境变量占位模板
-          # 说明：此文件仅列出 scripts/config/local-env-allowlist.jsonc 中的密钥字段。
-          # 请在对应的 .env.<env>.local（例如 .env.development.local、.env.production.local）中填写真实值。
-          # 非敏感的业务配置请移至 .env.<env> 等非 local 文件。
-          # 占位符固定为 ${{ secrets.AWS_SSH_HOST }}，校验将拒绝其他写法。
-
-          # 数据库配置
-          POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-
-          # Redis 配置
-          REDIS_HOST=${{ secrets.REDIS_HOST }}
-          REDIS_PORT=${{ secrets.REDIS_PORT }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          REDIS_DB=${{ secrets.REDIS_DB }}
-          REDIS_URL=${{ secrets.REDIS_URL }}
-
-          # JWT / 应用密钥
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          APP_SECRET=${{ secrets.APP_SECRET }}
-
-          # 对象存储
-          S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}
-          S3_SECRET_ID=${{ secrets.S3_SECRET_ID }}
-          S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}
-          S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
-          S3_REGION=${{ secrets.S3_REGION }}
-          S3_ENDPOINT=${{ secrets.S3_ENDPOINT }}
-          S3_CDN_DOMAIN=${{ secrets.S3_CDN_DOMAIN }}
-          S3_PRESIGNED_URL_EXPIRATION=${{ secrets.S3_PRESIGNED_URL_EXPIRATION }}
-
-          # OAuth 凭证
-          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-          DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
-          DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}
-
-          # 邮件服务
-          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-
-          #OPENAI
-          OPENAI_COMPATIBLE_API_KEY=${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
-          OPENAI_COMPATIBLE_BASE_URL=${{ secrets.OPENAI_COMPATIBLE_BASE_URL }}
-
-          # Vercel 登录配置
-          VERCEL_TOKEN=${{ secrets.VERCEL_TOKEN }}
-
-          # Telegram 登录配置
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-
-          ENV_CONTENT
-
-          # 安装依赖
-          if [ "$DEPLOY_ENV" = "prod" ]; then
-            pnpm install --frozen-lockfile
-          else
-            pnpm install --no-frozen-lockfile
-          fi
-
-          # dx 通过 --config-dir / DX_CONFIG_DIR / 向上查找 dx/config/commands.json 来定位项目配置。
-          # 远端部署场景更稳妥的方式是显式指定 config-dir，避免因 cwd/目录结构差异导致找不到配置。
-          export DX_CONFIG_DIR="${DEST_PATH}/dx/config"
-          if [ ! -f "${DX_CONFIG_DIR}/commands.json" ]; then
-            echo "[ERROR] 未找到 dx 配置文件: ${DX_CONFIG_DIR}/commands.json"
-            echo "[ERROR] 当前目录: $(pwd)"
-            ls -la "${DEST_PATH}" || true
-            ls -la "${DEST_PATH}/dx" || true
-            ls -la "${DEST_PATH}/dx/config" || true
-            exit 1
-          fi
-
-          dx() {
-            npx -y "@ranger1/dx@${DX_VERSION}" --config-dir "${DX_CONFIG_DIR}" "$@"
+          const backendDeploy = config?.deploy?.backend?.backendDeploy
+          if (!backendDeploy) {
+            throw new Error('缺少 deploy.backend.backendDeploy 配置')
           }
 
-          # 构建参数
-          if [ "$DEPLOY_ENV" = "prod" ]; then
-            BUILD_FLAG="--prod"
-          else
-            BUILD_FLAG="--staging"
+          backendDeploy.remote = {
+            host: process.env.AWS_SSH_HOST,
+            port: Number(process.env.AWS_SSH_PORT || 22),
+            user: process.env.AWS_SSH_USER,
+            baseDir: '/opt/stats',
+          }
+
+          fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
+          NODE
+
+      - name: 使用 dx 执行 backend 制品部署
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_ENV" in
+            "prod")
+              DX_ENV_FLAG="--prod"
+              ;;
+            "staging")
+              DX_ENV_FLAG="--staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy backend "$DX_ENV_FLAG"
+
+  # ============================================
+  # Job 4: 制品部署 quantify 到 AWS 服务器
+  # ============================================
+  deploy-quantify:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'quantify' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
+              echo "请配置 DEPLOY_ENVIRONMENT 为 staging 或 prod"
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 预热 SSH known_hosts
+        env:
+          AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: 远端环境 preflight（Node/pnpm/pm2）
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+          if command -v nvm >/dev/null 2>&1; then
+            nvm use 22 || nvm install 22
+            nvm alias default 22 || true
           fi
 
-          echo "[$(date)] 构建 & 迁移数据库"
-          dx build shared ${BUILD_FLAG}
-          dx db generate ${BUILD_FLAG} -Y
-          dx db deploy ${BUILD_FLAG} -Y
-          dx db seed ${BUILD_FLAG} -Y
-          dx build backend ${BUILD_FLAG}
-
-          echo "[$(date)] 重启后端服务"
-          if [ "$DEPLOY_ENV" = "prod" ]; then
-            pm2 restart backend || pm2 start prod-ecosystem.config.cjs
-          else
-            pm2 restart backend || pm2 start staging-ecosystem.config.cjs
+          if ! command -v node >/dev/null 2>&1; then
+            echo "[ERROR] 远端缺少 node，请先安装 Node.js 22.x（或启用 nvm）后重试"
+            exit 1
           fi
-          pm2 status || true
 
-          echo "=== 后端部署完成 (${DEPLOY_ENV}) ==="
+          command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+
+          echo "[INFO] remote node=$(node -v)"
+          echo "[INFO] remote pnpm=$(pnpm -v)"
+          echo "[INFO] remote pm2=$(pm2 -v | tail -n 1)"
           REMOTE
+
+      - name: 生成 quantify 部署临时 dx 配置
+        env:
+          AWS_SSH_HOST: ${{ secrets.AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/dx-config
+          cp dx/config/env-layers.json .tmp/dx-config/env-layers.json
+          cp dx/config/env-policy.jsonc .tmp/dx-config/env-policy.jsonc
+
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const sourcePath = 'dx/config/commands.json'
+          const targetPath = '.tmp/dx-config/commands.json'
+          const config = JSON.parse(fs.readFileSync(sourcePath, 'utf8'))
+
+          const quantifyDeploy = config?.deploy?.quantify?.backendDeploy
+          if (!quantifyDeploy) {
+            throw new Error('缺少 deploy.quantify.backendDeploy 配置')
+          }
+
+          quantifyDeploy.remote = {
+            host: process.env.AWS_SSH_HOST,
+            port: Number(process.env.AWS_SSH_PORT || 22),
+            user: process.env.AWS_SSH_USER,
+            baseDir: '/opt/stats',
+          }
+
+          fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
+          NODE
+
+      - name: 使用 dx 执行 quantify 制品部署
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_ENV" in
+            "prod")
+              DX_ENV_FLAG="--prod"
+              ;;
+            "staging")
+              DX_ENV_FLAG="--staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"

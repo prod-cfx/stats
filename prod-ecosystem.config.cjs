@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'backend', // AI Backend 主应用
-      cwd: '/opt/ai-monorepo', // 项目根目录
+      cwd: '/opt/stats', // 项目根目录
       script: 'dx', // 使用全局 dx
       args: 'start backend --prod', // 启动参数
       interpreter: 'none', // 不使用特定解释器
