@@ -503,7 +503,7 @@
         "remote": {
           "host": "stats-server",
           "port": 22,
-          "user": "root",
+          "user": "__SSH_CONFIG__",
           "baseDir": "/opt/stats"
         },
         "startup": {
@@ -548,7 +548,7 @@
         "remote": {
           "host": "stats-server",
           "port": 22,
-          "user": "root",
+          "user": "__SSH_CONFIG__",
           "baseDir": "/opt/stats"
         },
         "startup": {
