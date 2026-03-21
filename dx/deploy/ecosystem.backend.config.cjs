@@ -14,8 +14,10 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       max_memory_restart: '1G',
+      max_logs_backup: 7,
       env: {
         NODE_ENV: 'production',
+        PORT: 3000,
       },
     },
   ],
