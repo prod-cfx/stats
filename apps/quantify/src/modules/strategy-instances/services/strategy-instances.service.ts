@@ -8,6 +8,7 @@ import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { EnvService } from '@/common/services/env.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
@@ -89,6 +90,7 @@ export class StrategyInstancesService {
     private readonly statsService: StrategyInstanceStatsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
     private readonly marketDataReadGateway: MarketDataReadGateway,
+    private readonly env: EnvService,
   ) {}
 
   async createInstance(
@@ -842,11 +844,7 @@ export class StrategyInstancesService {
 
     // 在生产环境严格限制，只允许查看运行中的 LIVE 实盘实例
     // 在本地开发环境，则放宽限制，方便调试和演示（只要存在就允许查看）
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       // 只能查看运行中的实例
       if (instance.status !== 'running') {
         throw new StrategyInstanceNotFoundException({ instanceId: id })
@@ -909,12 +907,8 @@ export class StrategyInstancesService {
     // 先校验实例是否存在且对当前环境/用户可见
     await this.getRunningInstanceDetail(id, userId)
 
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
     // 生产环境必须要求用户对该实例拥有有效订阅
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       if (!userId) {
         throw new ForbiddenException('需要登录后才能查看策略信号')
       }

@@ -24,6 +24,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
@@ -93,6 +95,7 @@ export class SignalGeneratorService {
     private readonly eventEmitter: EventEmitter2,
     private readonly telemetry: SignalTelemetryService,
     private readonly marketDataReadGateway: MarketDataReadGateway,
+    private readonly env: EnvService,
   ) {
     this.registerCronJob()
   }
@@ -301,13 +304,12 @@ export class SignalGeneratorService {
    */
   private isDebugEnabled(): boolean {
     const config = this.getConfig()
-    const nodeEnv = process.env.NODE_ENV || 'development'
-    
+
     // 生产环境必须显式启用调试，开发环境默认启用
-    if (nodeEnv === 'production') {
+    if (this.env.isProd()) {
       return config.debug?.enabled === true
     }
-    
+
     return config.debug?.enabled !== false
   }
 

@@ -107,7 +107,7 @@ export class AiService {
   }
 
   private isMockAiEnabled(): boolean {
-    const raw = process.env.QUANTIFY_AI_MOCK_ENABLED
+    const raw = this.configService.get<string>('QUANTIFY_AI_MOCK_ENABLED')
     if (!raw) return false
     return raw === '1' || raw.toLowerCase() === 'true'
   }

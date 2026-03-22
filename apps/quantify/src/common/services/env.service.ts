@@ -28,6 +28,11 @@ export class EnvService {
     return env === 'production' || env === 'staging'
   }
 
+  /**
+   * 判断是否为开发环境。
+   * 优先级：APP_ENV > NODE_ENV，取首个非空值经 normalizeAppEnv 后判断。
+   * dx 工具链保证两者一致；若出现分歧以 APP_ENV 为准。
+   */
   isDev(): boolean {
     const env = this.resolveAppEnv()
     return env === 'development'

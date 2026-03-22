@@ -1,24 +1,29 @@
 import { Test } from '@nestjs/testing'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { EnvService } from '@/common/services/env.service'
 
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
+const TEST_APP_SECRET = 'engine-test-secret'
+
+function createMockEnvService() {
+  return {
+    getString: jest.fn((key: string) => (key === 'APP_SECRET' ? TEST_APP_SECRET : undefined)),
+    isDev: jest.fn().mockReturnValue(false),
+    isProd: jest.fn().mockReturnValue(false),
+    isTest: jest.fn().mockReturnValue(true),
+  }
+}
+
+function buildProviders(service: Record<string, jest.Mock>, envService = createMockEnvService()) {
+  return [
+    { provide: CodegenConversationService, useValue: service },
+    { provide: EnvService, useValue: envService },
+  ]
+}
+
 describe('liveLlmStrategyCodegenController', () => {
-  const originalAppSecret = process.env.APP_SECRET
-
-  beforeEach(() => {
-    process.env.APP_SECRET = 'engine-test-secret'
-  })
-
-  afterAll(() => {
-    if (typeof originalAppSecret === 'undefined') {
-      delete process.env.APP_SECRET
-      return
-    }
-    process.env.APP_SECRET = originalAppSecret
-  })
-
   it('creates session in drafting status', async () => {
     const service = {
       startSession: jest.fn().mockResolvedValue({ id: 's1', status: 'DRAFTING' }),
@@ -28,7 +33,7 @@ describe('liveLlmStrategyCodegenController', () => {
 
     const moduleRef = await Test.createTestingModule({
       controllers: [LiveLlmStrategyCodegenController],
-      providers: [{ provide: CodegenConversationService, useValue: service }],
+      providers: buildProviders(service),
     }).compile()
 
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
@@ -47,7 +52,7 @@ describe('liveLlmStrategyCodegenController', () => {
     }
     const moduleRef = await Test.createTestingModule({
       controllers: [LiveLlmStrategyCodegenController],
-      providers: [{ provide: CodegenConversationService, useValue: service }],
+      providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
@@ -65,12 +70,12 @@ describe('liveLlmStrategyCodegenController', () => {
     }
     const moduleRef = await Test.createTestingModule({
       controllers: [LiveLlmStrategyCodegenController],
-      providers: [{ provide: CodegenConversationService, useValue: service }],
+      providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
     await expect(
-      controller.testEngine('engine-test-secret', undefined, { userId: 'u1', message: 'test' }),
+      controller.testEngine(TEST_APP_SECRET, undefined, { userId: 'u1', message: 'test' }),
     ).rejects.toBeInstanceOf(DomainException)
     expect(service.testEngine).not.toHaveBeenCalled()
   })
@@ -83,12 +88,12 @@ describe('liveLlmStrategyCodegenController', () => {
     }
     const moduleRef = await Test.createTestingModule({
       controllers: [LiveLlmStrategyCodegenController],
-      providers: [{ provide: CodegenConversationService, useValue: service }],
+      providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
     await expect(
-      controller.testEngine('engine-test-secret', 'u2', { userId: 'u1', message: 'test' }),
+      controller.testEngine(TEST_APP_SECRET, 'u2', { userId: 'u1', message: 'test' }),
     ).rejects.toBeInstanceOf(DomainException)
     expect(service.testEngine).not.toHaveBeenCalled()
   })

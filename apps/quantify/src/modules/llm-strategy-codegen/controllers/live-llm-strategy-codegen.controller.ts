@@ -4,6 +4,7 @@ import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { EnvService } from '@/common/services/env.service'
 
 import { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
@@ -15,7 +16,10 @@ import { CodegenConversationService } from '../services/codegen-conversation.ser
 @ApiTags('llm-strategy-codegen')
 @Controller('llm-strategy-codegen')
 export class LiveLlmStrategyCodegenController {
-  constructor(private readonly service: CodegenConversationService) {}
+  constructor(
+    private readonly service: CodegenConversationService,
+    private readonly env: EnvService,
+  ) {}
 
   @Post('sessions')
   @ApiOperation({ summary: '创建策略代码生成会话' })
@@ -43,7 +47,7 @@ export class LiveLlmStrategyCodegenController {
     @Headers('x-user-id') callerUserId: string | undefined,
     @Body() dto: TestLlmCodegenEngineDto,
   ): Promise<LlmCodegenEngineTestResponseDto> {
-    const configuredToken = process.env.APP_SECRET?.trim()
+    const configuredToken = this.env.getString('APP_SECRET')?.trim()
     if (!configuredToken) {
       throw new DomainException('服务端未配置 APP_SECRET，拒绝执行 engine/test', {
         code: ErrorCode.UNAUTHORIZED,

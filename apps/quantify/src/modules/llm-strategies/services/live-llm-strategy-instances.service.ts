@@ -3,6 +3,8 @@ import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-si
 import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import { ForbiddenException, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类
 import { PrismaService } from '@/prisma/prisma.service'
@@ -12,7 +14,10 @@ import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy
 
 @Injectable()
 export class LiveLlmStrategyInstancesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly env: EnvService,
+  ) {}
 
   /**
    * 公开入口：获取运行中的 LLM 策略实例列表
@@ -110,11 +115,7 @@ export class LiveLlmStrategyInstancesService {
       throw new LlmStrategyInstanceNotFoundException({ instanceId: id })
     }
 
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       if (instance.status !== 'running') {
         throw new LlmStrategyInstanceNotFoundException({ instanceId: id })
       }
@@ -164,14 +165,10 @@ export class LiveLlmStrategyInstancesService {
     query: LiveLlmStrategySignalsQueryDto,
     userId: string,
   ): Promise<BasePaginationResponseDto<TradingSignalResponseDto>> {
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
     // 校验实例可见性
     await this.getRunningInstanceDetail(id, userId)
 
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       const client = this.prisma.getClient()
       try {
         const hasSubscription = await client.userLlmStrategySubscription.findFirst({
