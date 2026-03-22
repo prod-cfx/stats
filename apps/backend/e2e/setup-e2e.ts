@@ -198,7 +198,7 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
           `${timestampStr.slice(0, 4)}-${timestampStr.slice(4, 6)}-${timestampStr.slice(6, 8)}T${timestampStr.slice(8, 10)}:${timestampStr.slice(10, 12)}:${timestampStr.slice(12, 14)}Z`,
         )
 
-        if (isNaN(dbTimestamp.getTime())) {
+        if (Number.isNaN(dbTimestamp.getTime())) {
           logVerbose(`[E2E setup] 跳过数据库 ${dbName} (时间戳解析失败)`)
           skippedCount++
           continue
@@ -219,7 +219,7 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
           `SELECT COUNT(*) FROM pg_stat_activity WHERE datname = ${escapeLiteral(dbName)}`,
           true,
         )
-        const activeConns = parseInt(activeConnsResult.trim())
+        const activeConns = Number.parseInt(activeConnsResult.trim())
 
         if (activeConns > 0) {
           logVerbose(
