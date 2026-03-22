@@ -1265,8 +1265,8 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           promise,
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () => {
-              reject(new DomainException('kline.invalid_interval', {
-                code: ErrorCode.KLINE_INVALID_INTERVAL,
+              reject(new DomainException('kline.query_timeout', {
+                code: ErrorCode.INTERNAL_SERVER_ERROR,
                 status: HttpStatus.INTERNAL_SERVER_ERROR,
                 args: { reason: 'Database query timeout' },
               }))
