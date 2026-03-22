@@ -28,11 +28,11 @@ import type {
 import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
 import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports
+import { EnvService } from '@/common/services/env.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports
-import { EnvService } from '@/common/services/env.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HyperliquidApiService } from './services'
 

@@ -1,12 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type {LongShortRatio as LongShortRatioModel} from '@/prisma/prisma.types';
 import { Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import {  Prisma } from '@/prisma/prisma.types'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export type LongShortRatio = LongShortRatioModel
 

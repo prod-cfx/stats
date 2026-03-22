@@ -21,6 +21,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets'
 
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -31,7 +32,6 @@ import { AggregatedOrderbookService } from '../aggregated-orderbook/aggregated-o
 import { MarketsService } from '../markets/markets.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { KlineAggregatorService } from './kline-aggregator.service'
-import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 // 单个客户端最大订阅数限制
 const MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT = 20
