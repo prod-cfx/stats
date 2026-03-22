@@ -78,7 +78,7 @@ export class WhaleTrackingService {
 
     // E2E 环境中可能会有后台任务写入真实数据，discover 返回需保持可预期。
     // 约定：E2E 测试数据写入 source='TEST'。
-    const isE2e = this.envService.isE2E()
+    const isE2e = this.envService.getString('APP_ENV') === 'e2e'
 
     const baseWhere = {
       createTime: {
@@ -939,7 +939,7 @@ export class WhaleTrackingService {
     const client = this.prisma.getClient()
 
     const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
-    const isE2e = this.envService.isE2E()
+    const isE2e = this.envService.getString('APP_ENV') === 'e2e'
 
     const where = {
       userAddress: address,
