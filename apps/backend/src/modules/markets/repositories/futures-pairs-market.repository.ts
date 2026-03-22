@@ -4,6 +4,7 @@ import { PRISMA_TIMEFRAME } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export interface VolumeByExchange {
   exchange: string
@@ -63,7 +64,7 @@ export class FuturesPairsMarketRepository {
     limit: number
     offset: number
   }): Promise<FindVolumesBySymbolResult> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockVolumes(params)
     }
     try {
@@ -146,7 +147,7 @@ export class FuturesPairsMarketRepository {
       openInterestUsd: number
     }>
   > {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockOI()
     }
     try {
@@ -226,7 +227,7 @@ export class FuturesPairsMarketRepository {
     const normalizedSymbol = this.normalizeSymbol(symbol)
     const normalizedExchangeCode = this.normalizeExchangeCode(exchange)
 
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       const currentPrice = new Prisma.Decimal(50000)
       const high24h = currentPrice.mul(1.02)
       const low24h = currentPrice.mul(0.98)
