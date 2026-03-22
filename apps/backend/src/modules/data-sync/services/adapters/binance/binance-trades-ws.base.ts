@@ -293,6 +293,7 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       conn.handleAckError(
         new DomainException(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`, {
           code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
           args: { apiCode: plain.code, apiMsg: message },
         }),
       )
@@ -701,6 +702,7 @@ class BinanceTradesWsConnection {
           this.desired.clear()
           pending.reject(err instanceof Error ? err : new DomainException(reason, {
             code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
             args: { reason },
           }))
           return
@@ -812,6 +814,7 @@ class BinanceTradesWsConnection {
     this.desired.clear()
     pending.reject(error instanceof Error ? error : new DomainException(error, {
       code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
       args: { error },
     }))
   }
