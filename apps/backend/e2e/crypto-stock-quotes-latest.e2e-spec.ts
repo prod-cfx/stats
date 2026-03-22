@@ -6,12 +6,12 @@ import type { AuthenticatedUser } from '../src/common/types/authenticated-user.t
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
-import { ensureE2eEnv } from './helpers/setup-e2e-env'
 import { AppModule } from '../src/modules/app.module'
 import { OptionalJwtAuthGuard } from '../src/modules/auth/guards/optional-jwt-auth.guard'
 import { PermissionService } from '../src/modules/auth/services/permission.service'
 import { AppRole, RBAC_PERMISSIONS } from '../src/modules/auth/rbac/permissions'
 import request from 'supertest'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
   let app: INestApplication
