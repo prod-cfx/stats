@@ -3,8 +3,8 @@ import { resolve } from 'node:path'
 /**
  * 确保 E2E 测试运行在 APP_ENV=e2e 环境下。
  *
- * - 若 APP_ENV 未设置，自动注入 'e2e'
- * - 若 strict=true 且 APP_ENV 不为 'e2e'，抛出错误阻止误连非测试库
+ * - 非 strict 模式：仅在 APP_ENV 未设置时注入 'e2e'，容忍其他值（适用于可选/门控测试）
+ * - strict 模式：注入 'e2e' 后拒绝非 'e2e' 值（适用于涉及真实数据库的测试，fail-fast 优于静默覆盖）
  * - 自动 chdir 到 monorepo 根目录，使 ConfigModule/Prisma 能正确加载 .env.e2e
  */
 export function ensureE2eEnv(
