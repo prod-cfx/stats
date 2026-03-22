@@ -22,7 +22,8 @@ export function ensureE2eEnv(
     )
   }
 
-  process.chdir(resolve(__dirname, '../../..'))
+  // helpers/ 在 apps/backend/e2e/helpers/，需上溯 4 级到 monorepo 根目录
+  process.chdir(resolve(__dirname, '../../../..'))
 }
 
 /**
