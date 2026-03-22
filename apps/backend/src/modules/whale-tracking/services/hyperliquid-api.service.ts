@@ -293,10 +293,10 @@ export class HyperliquidApiService {
                 `Request failed (attempt ${attempt}/${this.maxRetries}): ${errorMessage}`,
               )
               lastError = new DomainException('whale_tracking.api_error', {
-              code: ErrorCode.WHALE_TRACKING_API_ERROR,
-              status: HttpStatus.INTERNAL_SERVER_ERROR,
-              args: { reason: errorMessage },
-            })
+                code: ErrorCode.WHALE_TRACKING_API_ERROR,
+                status: HttpStatus.INTERNAL_SERVER_ERROR,
+                args: { reason: errorMessage },
+              })
               continue
             }
 
