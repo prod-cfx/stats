@@ -5,7 +5,9 @@ import type {
   LiquidationSummaryItemDto,
   LiquidationTimeframe,
 } from './dto/aggregated-liquidation.dto'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -34,7 +36,7 @@ export class AggregatedLiquidationService {
     }
 
     if (items.length === 0) {
-      throw new NotFoundException(`No aggregated liquidation history found for symbol ${symbol}`)
+      throw new DomainException('aggregated_liquidation.not_found', { code: ErrorCode.AGGREGATED_LIQUIDATION_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol } })
     }
 
     return {
@@ -66,9 +68,7 @@ export class AggregatedLiquidationService {
     })
 
     if (!latest) {
-      throw new NotFoundException(
-        `No aggregated liquidation history found for symbol ${symbol} and interval ${timeframe}`,
-      )
+      throw new DomainException('aggregated_liquidation.not_found', { code: ErrorCode.AGGREGATED_LIQUIDATION_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol, timeframe } })
     }
 
     const rows = await client.aggregatedLiquidationHistory.findMany({

@@ -1,5 +1,7 @@
 import type { PipeTransform } from '@nestjs/common'
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 /**
  * 以太坊地址格式验证正则表达式
@@ -24,15 +26,21 @@ const ETHEREUM_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
 export class EthereumAddressPipe implements PipeTransform<string, string> {
   transform(value: string): string {
     if (!value || typeof value !== 'string') {
-      throw new BadRequestException('Address parameter is required')
+      throw new DomainException('validation.invalid_ethereum_address', {
+        code: ErrorCode.INVALID_ETHEREUM_ADDRESS,
+        status: HttpStatus.BAD_REQUEST,
+        args: { reason: 'address parameter is required' },
+      })
     }
 
     const trimmed = value.trim()
 
     if (!ETHEREUM_ADDRESS_REGEX.test(trimmed)) {
-      throw new BadRequestException(
-        `Invalid Ethereum address format: "${trimmed}". Expected format: 0x followed by 40 hexadecimal characters`,
-      )
+      throw new DomainException('validation.invalid_ethereum_address', {
+        code: ErrorCode.INVALID_ETHEREUM_ADDRESS,
+        status: HttpStatus.BAD_REQUEST,
+        args: { address: trimmed },
+      })
     }
 
     // 返回标准化的小写地址（以太坊地址大小写不敏感）

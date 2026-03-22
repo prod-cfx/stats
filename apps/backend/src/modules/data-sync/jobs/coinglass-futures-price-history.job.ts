@@ -1,10 +1,11 @@
 import type { CoinglassContractType, MarketTimeframe } from '@ai/shared'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import { toCoinglassSymbol } from '@ai/shared'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode, toCoinglassSymbol } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { INTERVAL_MS } from '@/modules/kline/utils/kline-time.utils'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -133,7 +134,11 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
 
     if (!apiKey) {
       // 不应"默默成功"，否则后台无法感知配置缺失
-      throw new Error('COINGLASS_API_KEY is not configured')
+      throw new DomainException('data_sync.futures_price_history.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     const interval = cursor.interval ?? this.defaultInterval
@@ -252,9 +257,11 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const json = await this.fetchFuturesPriceJson(url, apiKey)
 
     if (json.code !== '0' || !json.data) {
-      throw new Error(
-        `Coinglass futures price history API returned error: code=${json.code}, msg=${json.msg}`,
-      )
+      throw new DomainException('data_sync.futures_price_history.invalid_response', {
+        code: ErrorCode.DATA_SYNC_INVALID_RESPONSE,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Coinglass futures price history API returned error: code=${json.code}, msg=${json.msg}` },
+      })
     }
 
     if (json.data.length === 0) {
@@ -416,9 +423,11 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
             continue
           }
 
-          throw new Error(
-            `Coinglass futures price history request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('data_sync.futures_price_history.api_error', {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Coinglass futures price history request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as CoinglassFuturesPriceApiResponse
@@ -440,18 +449,22 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
           continue
         }
 
-        throw new Error(
-          `Coinglass futures price history request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('data_sync.futures_price_history.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Coinglass futures price history request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
     // 理论不可达，兜底
-    throw new Error(
-      `Coinglass futures price history request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('data_sync.futures_price_history.api_error', {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Coinglass futures price history request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private isAbortError(error: unknown): boolean {

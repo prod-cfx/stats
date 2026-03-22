@@ -1,5 +1,7 @@
 import type { CryptoStockQuote, Prisma } from '@/prisma/prisma.types'
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { SourceConsistencyException } from '@/common/exceptions/source-consistency.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -192,12 +194,20 @@ export class CryptoStockQuotesRepository {
     inputs: CreateCryptoStockQuoteInput[],
   ): Promise<number> {
     if (inputs.length === 0) {
-      throw new Error('BBX_SCRAPER inputs cannot be empty.')
+      throw new DomainException('crypto_stock_quotes.data_error', {
+        code: ErrorCode.CRYPTO_STOCK_QUOTES_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'BBX_SCRAPER inputs cannot be empty.' },
+      })
     }
 
     const source = inputs[0]?.source
     if (source !== 'BBX_SCRAPER') {
-      throw new Error('BBX_SCRAPER source only.')
+      throw new DomainException('crypto_stock_quotes.data_error', {
+        code: ErrorCode.CRYPTO_STOCK_QUOTES_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'BBX_SCRAPER source only.' },
+      })
     }
 
     const inconsistentSource = inputs.find(input => input.source !== source)
@@ -213,7 +223,11 @@ export class CryptoStockQuotesRepository {
       input => input.quoteTimestamp.getTime() !== quoteTimestamp.getTime(),
     )
     if (inconsistentTimestamp) {
-      throw new Error('BBX_SCRAPER quoteTimestamp must be consistent.')
+      throw new DomainException('crypto_stock_quotes.data_error', {
+        code: ErrorCode.CRYPTO_STOCK_QUOTES_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'BBX_SCRAPER quoteTimestamp must be consistent.' },
+      })
     }
 
     const groupedBySymbol = new Map<string, CreateCryptoStockQuoteInput[]>()

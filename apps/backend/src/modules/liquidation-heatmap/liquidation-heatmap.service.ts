@@ -1,6 +1,8 @@
 import type { HeatmapQueryCriteria, HeatmapSnapshotWithData } from './liquidation-heatmap.repository'
 import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 Repository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { LiquidationHeatmapRepository } from './liquidation-heatmap.repository'
@@ -48,7 +50,7 @@ export class LiquidationHeatmapService {
 
     const result = await this.repo.getLatestSnapshotWithData(criteria)
     if (!result) {
-      throw new NotFoundException('No liquidation heatmap snapshot found for given criteria')
+      throw new DomainException('liquidation_heatmap.not_found', { code: ErrorCode.LIQUIDATION_HEATMAP_NOT_FOUND, status: HttpStatus.NOT_FOUND })
     }
 
     return this.toApiShape(result)

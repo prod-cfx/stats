@@ -1,7 +1,9 @@
 import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
-import { Inject, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { MailService } from '@/common/services/mail.service'
 import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@/prisma/prisma.types'
 import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
@@ -108,7 +110,11 @@ export class WhaleNotificationDispatcherService {
 
       if (!response.ok) {
         const body = await response.text()
-        throw new Error(`Telegram dispatch failed: status=${response.status}, body=${body}`)
+        throw new DomainException('whale_notification.dispatch_error', {
+          code: ErrorCode.WHALE_NOTIFICATION_DISPATCH_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Telegram dispatch failed: status=${response.status}, body=${body}` },
+        })
       }
 
       return {

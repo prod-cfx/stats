@@ -1,10 +1,12 @@
 /* eslint-disable perfectionist/sort-imports */
 
+import { ErrorCode } from '@ai/shared'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from './trades-ws-adapter'
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { createHash } from 'node:crypto'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { TRADES_WS_ADAPTER_REGISTRY } from '../data-sync.tokens'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TradesPairConfigService } from '@/modules/trades-config/services/trades-pair-config.service'
@@ -83,8 +85,9 @@ export class TradesWsSyncManager implements OnModuleInit, OnApplicationShutdown 
     })
 
     if (failed.length) {
-      throw new Error(
-        `Trades WS sync manager shutdown failed for adapters: ${failed.join('; ')}`,
+      throw new DomainException(
+        'data_sync.trades_ws_sync_manager.shutdown_failed',
+        { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: `Trades WS sync manager shutdown failed for adapters: ${failed.join('; ')}` } },
       )
     }
   }

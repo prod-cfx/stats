@@ -9,7 +9,8 @@ import type { TickerSubscriptionDto } from './dto/ticker-subscription.dto'
 import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
 import type { MarketTrade } from '@/prisma/prisma.types'
 
-import { Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { JwtService } from '@nestjs/jwt'
 import { Interval } from '@nestjs/schedule'
@@ -20,8 +21,9 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets'
-
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
+
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -1263,7 +1265,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           promise,
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () => {
-              reject(new Error('Database query timeout'))
+              reject(new DomainException('kline.query_timeout', {
+                code: ErrorCode.INTERNAL_SERVER_ERROR,
+                status: HttpStatus.INTERNAL_SERVER_ERROR,
+                args: { reason: 'Database query timeout' },
+              }))
             })
           }),
         ])
