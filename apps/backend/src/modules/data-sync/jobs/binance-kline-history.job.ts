@@ -7,6 +7,7 @@ import type {
 } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -433,12 +434,8 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   }
 
   private parseBackfillRecheckWindowDays(): number {
-    const rawValue = Number(process.env.BACKFILL_RECHECK_WINDOW_DAYS ?? 90)
-    if (!Number.isFinite(rawValue) || rawValue <= 0) {
-      return 90
-    }
-
-    return Math.floor(rawValue)
+    const value = defaultEnvAccessor.int('BACKFILL_RECHECK_WINDOW_DAYS', 90)
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 90
   }
 
   /**

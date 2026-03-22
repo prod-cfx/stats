@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export interface FindTradesOptions {
   exchange?: string
@@ -27,7 +28,7 @@ export class MarketTradesRepository {
    * 查询交易记录
    */
   async findTrades(options: FindTradesOptions): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockTrades(
         options.exchange || 'Binance',
         options.instrumentType || 'FUTURES',
@@ -109,7 +110,7 @@ export class MarketTradesRepository {
     symbol: string,
     limit = 50,
   ): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockTrades(exchange, instrumentType, symbol, limit)
     }
     try {

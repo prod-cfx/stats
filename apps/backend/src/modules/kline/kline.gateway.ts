@@ -31,6 +31,7 @@ import { AggregatedOrderbookService } from '../aggregated-orderbook/aggregated-o
 import { MarketsService } from '../markets/markets.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { KlineAggregatorService } from './kline-aggregator.service'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 // 单个客户端最大订阅数限制
 const MAX_TOTAL_SUBSCRIPTIONS_PER_CLIENT = 20
@@ -44,7 +45,7 @@ const STALE_CONNECTION_THRESHOLD_MS = 120000
 
 // 允许的 CORS origin 正则模式
 const ALLOWED_ORIGIN_PATTERNS = [
-  ...(process.env.NODE_ENV === 'development'
+  ...(defaultEnvAccessor.nodeEnv() === 'development'
     ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
     : []),
   /^https:\/\/(www|app|admin)\.coinflux\.com$/,
@@ -60,7 +61,7 @@ function isValidOrigin(origin: string | undefined): boolean {
   // 检查是否为有效 URL 格式
   try {
     const url = new URL(origin)
-    if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    if (defaultEnvAccessor.nodeEnv() === 'production' && url.protocol !== 'https:') {
       return false
     }
   } catch {
@@ -74,14 +75,14 @@ function isValidOrigin(origin: string | undefined): boolean {
  */
 function parseAllowedOrigins(): string[] {
   const envOrigins =
-    process.env.ALLOWED_ORIGINS?.split(',')
+    defaultEnvAccessor.str('ALLOWED_ORIGINS')?.split(',')
       .map(o => o.trim())
       .filter(Boolean) || []
   const validOrigins = envOrigins.filter(isValidOrigin)
 
   // 如果没有有效的 origin，使用默认值
   if (validOrigins.length === 0) {
-    if (process.env.NODE_ENV === 'development') {
+    if (defaultEnvAccessor.nodeEnv() === 'development') {
       return ['http://localhost:3001']
     }
     return ['https://app.coinflux.com']

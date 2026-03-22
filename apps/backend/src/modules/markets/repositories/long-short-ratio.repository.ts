@@ -6,6 +6,7 @@ import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 import {  Prisma } from '@/prisma/prisma.types'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export type LongShortRatio = LongShortRatioModel
 
@@ -43,7 +44,7 @@ export class LongShortRatioRepository {
    * 默认按时间倒序返回最新的 limit 条数据
    */
   async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockRatios(query)
     }
     try {
