@@ -3,13 +3,13 @@ import type { TestingModule } from '@nestjs/testing'
 import type { PolymarketGammaMarket } from '../src/clients/polymarket/types'
 import type { DataPullJobContext } from '../src/modules/data-sync/contracts/data-pull-job'
 import type { PolymarketTaskMeta } from '../src/modules/data-sync/jobs/polymarket-markets.job'
-import { resolve } from 'node:path'
 
 import { Test } from '@nestjs/testing'
 import { PolymarketGammaClient } from '../src/clients/polymarket/gamma-client'
 import { AppModule } from '../src/modules/app.module'
 import { PolymarketMarketsJob } from '../src/modules/data-sync/jobs/polymarket-markets.job'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Polymarket markets job (E2E)', () => {
   let app: INestApplication
@@ -19,11 +19,7 @@ describe('Polymarket markets job (E2E)', () => {
   let listMarketsSpy: jest.SpyInstance | undefined
 
   beforeAll(async () => {
-    // 强制使用 e2e 环境，避免误连开发/生产库
-    process.env.APP_ENV = 'e2e'
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv({ strict: true, label: 'PolymarketMarketsJob' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

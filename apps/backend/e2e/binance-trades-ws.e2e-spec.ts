@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 
 import { AppModule } from '../src/modules/app.module'
@@ -8,6 +7,7 @@ import { BinanceCexSpotTradesWsAdapter } from '../src/modules/data-sync/services
 import { MarketTradesRepository } from '../src/modules/markets/repositories/market-trades.repository'
 import { TradesPairConfigService } from '../src/modules/trades-config/services/trades-pair-config.service'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Binance WS，避免在 CI 默认跑外网依赖
 const E2E_ENABLED = process.env.BINANCE_TRADES_E2E === 'true'
@@ -26,13 +26,7 @@ describeIf('Binance trades WS (E2E)', () => {
   const EXCHANGE = 'BINANCE'
 
   beforeAll(async () => {
-    // 确保使用 e2e 环境配置（.env.e2e / .env.e2e.local）
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

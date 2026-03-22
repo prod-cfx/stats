@@ -6,8 +6,8 @@ import type {
   JobRunResult,
 } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 

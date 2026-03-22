@@ -1,11 +1,11 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 
 import { AppModule } from '../src/modules/app.module'
 import { PolymarketService } from '../src/modules/polymarket/polymarket.service'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Polymarket markets service (E2E)', () => {
   let app: INestApplication
@@ -14,12 +14,7 @@ describe('Polymarket markets service (E2E)', () => {
 
   beforeAll(async () => {
     // 强制使用 e2e 环境，避免误连开发/生产库
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

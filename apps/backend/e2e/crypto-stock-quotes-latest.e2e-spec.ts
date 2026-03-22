@@ -3,7 +3,6 @@ import type { ExecutionContext, INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { AuthenticatedUser } from '../src/common/types/authenticated-user.type'
 
-import { resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
@@ -12,6 +11,7 @@ import { OptionalJwtAuthGuard } from '../src/modules/auth/guards/optional-jwt-au
 import { PermissionService } from '../src/modules/auth/services/permission.service'
 import { AppRole, RBAC_PERMISSIONS } from '../src/modules/auth/rbac/permissions'
 import request from 'supertest'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
   let app: INestApplication
@@ -19,12 +19,7 @@ describe('Crypto stock quotes HTTP - /crypto-stock-quotes/latest (E2E)', () => {
   const originalCwd = process.cwd()
 
   beforeAll(async () => {
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

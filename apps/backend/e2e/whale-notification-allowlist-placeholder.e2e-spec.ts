@@ -2,7 +2,6 @@ import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { WhaleAlertService } from '../src/modules/whale-alert/whale-alert.service'
 import type { PrismaService } from '../src/prisma/prisma.service'
-import { resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { AppModule } from '../src/modules/app.module'
@@ -10,6 +9,7 @@ import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
 import { WhaleAlertService as WhaleAlertServiceToken } from '../src/modules/whale-alert/whale-alert.service'
 import { WhaleNotificationDeduplicatorService } from '../src/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Whale notification gray release allowlist placeholder (E2E)', () => {
   let app: INestApplication
@@ -21,12 +21,8 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
   const originalAllowlist = process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
+    ensureE2eEnv()
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = '__SET_IN_env.local__'
-
-    process.chdir(resolve(__dirname, '../../..'))
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

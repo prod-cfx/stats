@@ -1,11 +1,11 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../src/prisma/prisma.service'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 import { AppModule } from '../src/modules/app.module'
 import { WhaleNotificationDeduplicatorService } from '../src/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Whale notification deduplicator (service E2E)', () => {
   let app: INestApplication
@@ -13,11 +13,7 @@ describe('Whale notification deduplicator (service E2E)', () => {
   let deduplicator: WhaleNotificationDeduplicatorService
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

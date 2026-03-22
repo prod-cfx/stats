@@ -1,11 +1,11 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { Socket as ClientSocket } from 'socket.io-client'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 import { io as ioClient } from 'socket.io-client'
 
 import { AppModule } from '../src/modules/app.module'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 const E2E_ENABLED = process.env.KLINE_TICKER_E2E === 'true'
 const describeIf = E2E_ENABLED ? describe : describe.skip
@@ -63,11 +63,7 @@ describeIf('KlineGateway - Ticker WebSocket (E2E)', () => {
   }
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Coinglass，避免在 CI 默认跑外网依赖
 const E2E_ENABLED = process.env.OPEN_INTEREST_E2E === 'true'
@@ -15,17 +15,7 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
 
   beforeAll(async () => {
     // 强制保护：仅允许在 APP_ENV === 'e2e' 环境下运行，防止误删非 e2e 数据库中的真实数据
-    if (process.env.APP_ENV && process.env.APP_ENV !== 'e2e') {
-      throw new Error(
-        `Open interest Coinglass E2E must run with APP_ENV=e2e, current APP_ENV=${process.env.APP_ENV}`,
-      )
-    }
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv({ strict: true, label: 'OpenInterestCoinglass' })
 
     // 确保在设置 APP_ENV / cwd 之后再加载 Nest 应用及 Prisma，防止连接到非 e2e 数据库
     // 通过重置模块缓存并动态导入相关模块，避免 defaultEnvAccessor 在错误环境中初始化

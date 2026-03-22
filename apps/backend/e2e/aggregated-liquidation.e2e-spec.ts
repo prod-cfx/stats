@@ -1,12 +1,12 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 
 import { AggregatedLiquidationService } from '../src/modules/aggregated-liquidation/aggregated-liquidation.service'
 import { AppModule } from '../src/modules/app.module'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 describe('Aggregated liquidation service (E2E)', () => {
   let app: INestApplication
@@ -14,15 +14,8 @@ describe('Aggregated liquidation service (E2E)', () => {
   let service: AggregatedLiquidationService
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-    if (!process.env.JWT_SECRET) {
-      process.env.JWT_SECRET = 'test-jwt-secret'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
+    ensureE2eDefaults({ JWT_SECRET: 'test-jwt-secret' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
