@@ -7,9 +7,6 @@ import { Test } from '@nestjs/testing'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
 
-/**
- * API前缀常量
- */
 export const API_PREFIX = 'api/v1'
 
 type HttpServer = ReturnType<INestApplication['getHttpServer']>
@@ -137,44 +134,31 @@ export function createRawClient(app: INestApplication): ApiClient {
   return buildRawClient(app.getHttpServer())
 }
 
-/**
- * 构建完整API URL
- * @param endpoint API端点路径
- * @returns 添加了API前缀的完整URL
- */
 export function buildApiUrl(endpoint: string): string {
-  // 如果为空直接返回API前缀
   if (!endpoint) {
     return `/${API_PREFIX}`
   }
 
-  // 移除开头的斜杠以便统一处理
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
 
-  // 检查是否已经包含 API 前缀
   if (cleanEndpoint.startsWith(`${API_PREFIX}/`) || cleanEndpoint === API_PREFIX) {
     return `/${cleanEndpoint}`
   }
 
-  // 检查是否已经是完整的 API 路径但没有 API_PREFIX 前导部分
   const apiPattern = /^api\/v\d+\//
   if (apiPattern.test(cleanEndpoint)) {
     return `/${cleanEndpoint}`
   }
 
-  // 添加API前缀
   return `/${API_PREFIX}/${cleanEndpoint}`
 }
 
 /**
- * 创建测试应用
- * @param options 允许通过对象或数组直接传入模块数据
- * @returns 测试应用上下文（包含 app / moduleFixture / prisma）
+ * 创建测试应用，支持通过对象或模块数组两种形式传入选项
  */
 export async function createTestingApp(
   options?: CreateTestingAppOptions | any[],
 ): Promise<TestingAppContext> {
-  // 确保使用测试环境配置
   if (!process.env.APP_ENV || !['test', 'e2e'].includes(process.env.APP_ENV)) {
     console.warn('[E2E] 警告: 测试未在测试环境中运行，可能会影响生产数据库')
   }
@@ -228,11 +212,6 @@ export async function createTestingApp(
   return { app, moduleFixture, prisma }
 }
 
-/**
- * 生成随机字符串
- * @param length 长度
- * @returns 随机字符串
- */
 export function generateRandomString(length: number = 10): string {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   if (length <= 0)

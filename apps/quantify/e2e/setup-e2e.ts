@@ -15,7 +15,6 @@ const logVerbose = (...args: unknown[]) => {
   if (E2E_VERBOSE_LOG) console.log(...args)
 }
 
-// 全局存储当前测试使用的数据库名称
 let currentTestDatabase: string | null = null
 let originalDatabaseUrl: string | null = null
 
@@ -69,12 +68,12 @@ function parseDatabaseUrl(dbUrl: string): {
     const database = url.pathname.slice(1)
     const username = url.username
     const password = url.password
+    const originalUrl = url.toString()
 
-    const baseUrlObj = new URL(dbUrl)
-    baseUrlObj.pathname = '/postgres'
-    const baseUrl = baseUrlObj.toString()
+    url.pathname = '/postgres'
+    const baseUrl = url.toString()
 
-    return { host, port, database, username, password, baseUrl, originalUrl: url.toString() }
+    return { host, port, database, username, password, baseUrl, originalUrl }
   } catch (error) {
     throw new Error(`无效的 DATABASE_URL 格式: ${error instanceof Error ? error.message : error}`)
   }
@@ -402,25 +401,17 @@ function setupTestDatabase(baseUrl: string, dbName: string, originalDbUrl: strin
     logVerbose(`[E2E setup] 使用 DATABASE_URL: ${testDbUrl.replace(/:[^:@]+@/, ':****@')}`)
 
     // 直接同步当前 schema；当前项目不保留历史 migrations，测试库始终按空库初始化。
-    try {
-      execFileSync('npx', ['prisma', 'db', 'push'], {
-        stdio: 'inherit',
-        cwd: quantifyDir,
-        env: {
-          ...process.env,
-          DATABASE_URL: testDbUrl,
-          QUANTIFY_DATABASE_URL: testDbUrl,
-          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
-          APP_ENV: 'e2e',
-        },
-      })
-    } catch (schemaSyncErr) {
-      console.error(
-        '[E2E setup] Schema 同步失败:',
-        schemaSyncErr instanceof Error ? schemaSyncErr.message : schemaSyncErr,
-      )
-      throw schemaSyncErr
-    }
+    execFileSync('npx', ['prisma', 'db', 'push'], {
+      stdio: 'inherit',
+      cwd: quantifyDir,
+      env: {
+        ...process.env,
+        DATABASE_URL: testDbUrl,
+        QUANTIFY_DATABASE_URL: testDbUrl,
+        QUANTIFY_E2E_DATABASE_URL: testDbUrl,
+        APP_ENV: 'e2e',
+      },
+    })
 
     // 运行种子数据
     try {
