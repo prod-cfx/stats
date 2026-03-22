@@ -4,7 +4,9 @@ import type { EnvService } from '@/common/services/env.service'
 import type { MarketType } from '@/modules/trading/core/types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { BinanceClient } from '@/modules/trading/exchanges/binance-client'
 
 export interface FixedBinanceTestnetSignalContext {
@@ -66,7 +68,11 @@ export class FixedBinanceTestnetSignalService {
 
   async resolveContext(): Promise<FixedBinanceTestnetSignalContext> {
     if (!this.isEnabled()) {
-      throw new Error('QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED is not enabled')
+      throw new DomainException('signal.testnet_not_enabled', {
+        code: ErrorCode.STRATEGY_SIGNAL_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED is not enabled' },
+      })
     }
 
     const spotBaseAsset = this.getSpotBaseAsset()
@@ -92,7 +98,11 @@ export class FixedBinanceTestnetSignalService {
     ])
 
     if (!strategy || !user || !spotSymbol || !perpSymbol) {
-      throw new Error('Fixed Binance testnet seed context is incomplete')
+      throw new DomainException('signal.seed_context_incomplete', {
+        code: ErrorCode.STRATEGY_SIGNAL_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Fixed Binance testnet seed context is incomplete' },
+      })
     }
 
     const [strategyAccount, spotInstance, perpInstance] = await Promise.all([
@@ -117,7 +127,11 @@ export class FixedBinanceTestnetSignalService {
     ])
 
     if (!strategyAccount || !spotInstance || !perpInstance) {
-      throw new Error('Fixed Binance testnet subscriptions or strategy account are missing')
+      throw new DomainException('signal.subscriptions_missing', {
+        code: ErrorCode.STRATEGY_SIGNAL_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Fixed Binance testnet subscriptions or strategy account are missing' },
+      })
     }
 
     return {

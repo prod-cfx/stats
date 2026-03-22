@@ -1,8 +1,10 @@
 import type { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals-query.dto'
 import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
-import { ForbiddenException, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
 import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
@@ -180,7 +182,11 @@ export class LiveLlmStrategyInstancesService {
           select: { id: true },
         })
         if (!hasSubscription) {
-          throw new ForbiddenException('仅订阅该策略的用户可以查看详细信号')
+          throw new DomainException('llm_strategy.instance_access_forbidden', {
+            code: ErrorCode.LLM_STRATEGY_INSTANCE_FORBIDDEN,
+            status: HttpStatus.FORBIDDEN,
+            args: { instanceId: id, userId },
+          })
         }
       } catch (error) {
         if (

@@ -1,4 +1,6 @@
 import type { MarketTimeframe } from '@ai/shared'
+import { ErrorCode } from '@ai/shared'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 export const MARKET_TIMEFRAME_MS: Record<MarketTimeframe, number> = {
   '1m': 60_000,
@@ -18,7 +20,7 @@ export const MARKET_TIMEFRAME_MS: Record<MarketTimeframe, number> = {
 export function getMarketTimeframeMs(timeframe: string): number {
   const ms = MARKET_TIMEFRAME_MS[timeframe as MarketTimeframe]
   if (ms == null) {
-    throw new Error(`Unsupported market timeframe: ${timeframe}`)
+    throw new DomainException('market.timeframe_unsupported', { code: ErrorCode.MARKET_INVALID_TIMEFRAME, args: { timeframe } })
   }
   return ms
 }

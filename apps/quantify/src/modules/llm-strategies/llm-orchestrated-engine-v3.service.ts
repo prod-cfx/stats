@@ -4,10 +4,11 @@ import type { LlmToolExecutionContext } from './llm-tools.service'
 import type { AiSignalPayloadWithMeta } from './llm-v3-tools'
 import type { ChatCompletionToolCall, ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { LlmStrategy, LlmStrategyInstance, LlmStrategyRunStatus, Prisma } from '@/prisma/prisma.types'
-import { fillPromptTemplate } from '@ai/shared'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode, fillPromptTemplate } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入 EventEmitter2
 import { EventEmitter2 } from '@nestjs/event-emitter'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 AiService
 import { AiService } from '@/modules/ai/ai.service'
 import { StrategySignalEvents } from '@/modules/strategy-signals/constants/strategy-signal.constants'
@@ -97,7 +98,11 @@ export class LlmOrchestratedEngineV3 {
     const instance = await this.instancesRepo.findByIdWithStrategy(instanceId)
     if (!instance || !instance.strategy) {
       this.logger.warn(`LlmStrategyInstance ${instanceId} not found for user ${createdBy}`)
-      throw new Error('LLM strategy instance not found')
+      throw new DomainException('llm_strategy.instance_not_found', {
+        code: ErrorCode.LLM_STRATEGY_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { instanceId, createdBy },
+      })
     }
 
     const { strategy } = instance
@@ -1062,7 +1067,11 @@ export class LlmOrchestratedEngineV3 {
           })
         }
 
-        throw new Error(errorMsg)
+        throw new DomainException('llm_strategy.symbol_not_found', {
+          code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
+          status: HttpStatus.NOT_FOUND,
+          args: { symbol: signal.symbol, strategyId: strategy.id, instanceId: instance.id },
+        })
       }
 
       // 2. 创建 TradingSignal

@@ -116,14 +116,14 @@ export class CodegenConversationService {
   async continueSession(sessionId: string, dto: ContinueCodegenSessionDto): Promise<CodegenSessionResponseDto> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== dto.userId) {
-      throw new DomainException('会话不存在', {
+      throw new DomainException('codegen.session_not_found', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
         args: { sessionId },
       })
     }
     if (CodegenConversationService.isTerminalStatus(session.status)) {
-      throw new DomainException('会话已终态，不能继续写入', {
+      throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
@@ -399,7 +399,7 @@ export class CodegenConversationService {
       missing.push('exitRules')
     }
     if (missing.length > 0) {
-      throw new DomainException(`缺少必填信息: ${missing.join(', ')}`, {
+      throw new DomainException('codegen.missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { missingFields: missing },
@@ -479,7 +479,7 @@ export class CodegenConversationService {
       }
     }
 
-    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*([mhd天]|min|分钟|小时)/gi))
+    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
     const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
       const normalizedUnit = unit.toLowerCase()
       if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
@@ -677,7 +677,7 @@ export class CodegenConversationService {
 
     const code = this.normalizeGeneratedScript(result.content)
     if (!code) {
-      throw new DomainException('策略脚本生成失败：模型未返回脚本', {
+      throw new DomainException('codegen.script_generation_empty_result', {
         code: ErrorCode.AI_PROVIDER_ERROR,
         status: HttpStatus.BAD_GATEWAY,
       })
@@ -692,7 +692,7 @@ export class CodegenConversationService {
       return ''
     }
 
-    const fencedMatch = raw.match(/```[\w-]*\s*\n([\s\S]*?)\n?```/)
+    const fencedMatch = raw.match(/```[\w-]*[^\S\n]*\n([\s\S]*?)\n?```/)
     if (fencedMatch?.[1]) {
       return fencedMatch[1].trim()
     }
@@ -907,7 +907,7 @@ export class CodegenConversationService {
       if (/均线|金叉|死叉|\bma\b|moving average/i.test(text)) {
         return 'ma'
       }
-      if (/(下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd])/i.test(text)) {
+      if (/下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd]/i.test(text)) {
         return 'drop-rise'
       }
     }

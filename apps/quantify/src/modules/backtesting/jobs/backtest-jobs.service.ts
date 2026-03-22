@@ -1,6 +1,8 @@
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 闇€瑕佽繍琛屾椂寮曠敤
+import { ErrorCode } from '@ai/shared'
+import { Injectable, HttpStatus } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 
 export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
@@ -61,15 +63,15 @@ export class BacktestJobsService {
 
   getJob(id: string): BacktestJobView {
     const job = this.jobs.get(id)
-    if (!job) throw new NotFoundException(`Backtest job not found: ${id}`)
+    if (!job) throw new DomainException('backtest.job_not_found', { code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { id } })
     return this.toView(job)
   }
 
   getJobResult(id: string): BacktestReport {
     const job = this.jobs.get(id)
-    if (!job) throw new NotFoundException(`Backtest job not found: ${id}`)
-    if (job.status === 'failed') throw new ConflictException(job.error || 'Backtest job failed')
-    if (job.status !== 'succeeded' || !job.result) throw new ConflictException('Backtest job is not completed')
+    if (!job) throw new DomainException('backtest.job_not_found', { code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { id } })
+    if (job.status === 'failed') throw new DomainException('backtest.job_failed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, error: job.error } })
+    if (job.status !== 'succeeded' || !job.result) throw new DomainException('backtest.job_not_completed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, status: job.status } })
     return job.result
   }
 
@@ -121,7 +123,7 @@ export class BacktestJobsService {
     const targetSize = BacktestJobsService.MAX_JOBS - 1
     this.evictCompletedJobs(targetSize)
     if (this.jobs.size > targetSize) {
-      throw new ConflictException('Backtest job queue is full, please retry later')
+      throw new DomainException('backtest.job_queue_full', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT })
     }
   }
 

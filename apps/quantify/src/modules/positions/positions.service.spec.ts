@@ -32,7 +32,7 @@ describe('positionsService', () => {
       ]),
     }
 
-    const position = await service.loadAndLockPosition(
+    const position = await (service as any).loadAndLockPosition(
       prisma as any,
       'account-1',
       'BTCUSDT',

@@ -1,7 +1,9 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import type { SubscriptionStatus } from '@/prisma/prisma.types'
-import { BadRequestException, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 import { AccountsService } from '@/modules/accounts/accounts.service'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions/exchange-account-not-found.exception'
@@ -105,7 +107,7 @@ export class LlmStrategySubscriptionsService {
 
     // 订阅 / 重新激活时，必须绑定一个合法的交易所账户
     if (!effectiveExchangeAccountId) {
-      throw new BadRequestException('exchangeAccountId is required to subscribe LLM strategy')
+      throw new DomainException('llm_subscription.exchange_account_required', { code: ErrorCode.LLM_SUBSCRIPTION_INVALID_OPERATION })
     }
     await this.ensureExchangeAccountOwnership(userId, effectiveExchangeAccountId)
 
@@ -191,7 +193,7 @@ export class LlmStrategySubscriptionsService {
           `回滚订阅 ${created.id} 失败: ${deleteError instanceof Error ? deleteError.message : deleteError}`,
         )
       }
-      throw new BadRequestException('订阅失败：创建策略账户失败，请稍后重试')
+      throw new DomainException('llm_subscription.account_creation_failed', { code: ErrorCode.LLM_SUBSCRIPTION_ACCOUNT_FAILED, status: HttpStatus.INTERNAL_SERVER_ERROR })
     }
 
     const detail = await this.repo.findByIdWithDetails(created.id)
@@ -246,13 +248,13 @@ export class LlmStrategySubscriptionsService {
     // 禁止 active 订阅清空 exchangeAccountId —— 执行器需要账户才能下单
     // 用户必须先暂停/取消订阅，或者提供新的账户 ID
     if (effectiveStatus === 'active' && dto.exchangeAccountId === null) {
-      throw new BadRequestException('Cannot remove exchangeAccountId from active subscription. Please pause or cancel first.')
+      throw new DomainException('llm_subscription.cannot_remove_account_from_active', { code: ErrorCode.LLM_SUBSCRIPTION_INVALID_OPERATION })
     }
 
     // 当状态被设置为 active（无论是恢复还是从其它状态切换）时，必须确保订阅绑定了有效账户
     if (dto.status === 'active') {
       if (!nextExchangeAccountId) {
-        throw new BadRequestException('exchangeAccountId is required when activating LLM subscription')
+        throw new DomainException('llm_subscription.exchange_account_required_for_activation', { code: ErrorCode.LLM_SUBSCRIPTION_INVALID_OPERATION })
       }
       await this.ensureExchangeAccountOwnership(userId, nextExchangeAccountId)
     } else if (dto.exchangeAccountId !== undefined && dto.exchangeAccountId !== null) {
@@ -488,7 +490,7 @@ export class LlmStrategySubscriptionsService {
       this.logger.error(
         `为用户 ${userId} 创建 LLM 策略 ${llmStrategyId} 的虚拟账户失败: ${error instanceof Error ? error.message : error}`,
       )
-      throw new BadRequestException('创建策略账户失败，请稍后重试')
+      throw new DomainException('llm_subscription.account_creation_failed', { code: ErrorCode.LLM_SUBSCRIPTION_ACCOUNT_FAILED, status: HttpStatus.INTERNAL_SERVER_ERROR })
     }
   }
 }

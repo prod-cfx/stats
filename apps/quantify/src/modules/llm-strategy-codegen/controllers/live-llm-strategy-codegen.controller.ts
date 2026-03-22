@@ -49,13 +49,13 @@ export class LiveLlmStrategyCodegenController {
   ): Promise<LlmCodegenEngineTestResponseDto> {
     const configuredToken = this.env.getString('APP_SECRET')?.trim()
     if (!configuredToken) {
-      throw new DomainException('服务端未配置 APP_SECRET，拒绝执行 engine/test', {
+      throw new DomainException('codegen.app_secret_not_configured', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
     if (!this.isValidEngineTestToken(engineTestToken, configuredToken)) {
-      throw new DomainException('缺少或无效的 x-engine-test-token 调用凭证', {
+      throw new DomainException('codegen.invalid_engine_test_token', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
@@ -63,13 +63,13 @@ export class LiveLlmStrategyCodegenController {
 
     const normalizedCallerUserId = callerUserId?.trim()
     if (!normalizedCallerUserId) {
-      throw new DomainException('缺少调用者身份，请提供 x-user-id 请求头', {
+      throw new DomainException('codegen.missing_caller_identity', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
     if (normalizedCallerUserId !== dto.userId) {
-      throw new DomainException('调用者身份与请求 userId 不一致', {
+      throw new DomainException('codegen.caller_user_id_mismatch', {
         code: ErrorCode.FORBIDDEN,
         status: HttpStatus.FORBIDDEN,
         args: { callerUserId: normalizedCallerUserId, requestUserId: dto.userId },
