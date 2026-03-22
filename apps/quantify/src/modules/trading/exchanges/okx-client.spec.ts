@@ -1,7 +1,7 @@
-import { ExchangeError } from '../core/errors'
+import type { ExchangeError } from '../core/errors'
 import { OkxClient } from './okx-client'
 
-describe('OkxClient', () => {
+describe('okxClient', () => {
   const originalFetch = globalThis.fetch
 
   afterEach(() => {

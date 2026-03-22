@@ -2,7 +2,7 @@ import { Prisma } from '@/prisma/prisma.types'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { SignalExecutorService } from './signal-executor.service'
 
-describe('SignalExecutorService', () => {
+describe('signalExecutorService', () => {
   function createService() {
     const prisma = {}
     const configService = { get: jest.fn() }

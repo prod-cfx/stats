@@ -1,7 +1,7 @@
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { FixedOkxSimulatedSignalService } from './fixed-okx-simulated-signal.service'
 
-describe('FixedOkxSimulatedSignalService', () => {
+describe('fixedOkxSimulatedSignalService', () => {
   function createService() {
     const prisma = {
       llmStrategy: { findUnique: jest.fn() },

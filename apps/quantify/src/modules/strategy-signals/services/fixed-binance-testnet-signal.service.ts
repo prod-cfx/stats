@@ -1,11 +1,11 @@
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type { SignalExecutorService } from './signal-executor.service'
+import type { EnvService } from '@/common/services/env.service'
 import type { MarketType } from '@/modules/trading/core/types'
+import type { PrismaService } from '@/prisma/prisma.service'
 import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { EnvService } from '@/common/services/env.service'
 import { BinanceClient } from '@/modules/trading/exchanges/binance-client'
-import { PrismaService } from '@/prisma/prisma.service'
-import { SignalExecutorService } from './signal-executor.service'
 
 export interface FixedBinanceTestnetSignalContext {
   strategyId: string

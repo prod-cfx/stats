@@ -1,5 +1,5 @@
-import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 import type { MarketType } from '@/modules/trading/core/types'
+import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 
 export type FixedOkxPreset =
   | 'open-spot'
@@ -24,7 +24,7 @@ export interface FixedOkxCliPlan {
   steps: FixedOkxCliStep[]
 }
 
-type ParsedArgs = {
+interface ParsedArgs {
   marketType: MarketType
   signalType: SignalType
   direction: SignalDirection
