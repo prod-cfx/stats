@@ -435,7 +435,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
 
   private parseBackfillRecheckWindowDays(): number {
     const value = defaultEnvAccessor.int('BACKFILL_RECHECK_WINDOW_DAYS', 90)
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 90
+    return Number.isFinite(value) && value > 0 ? value : 90
   }
 
   /**
