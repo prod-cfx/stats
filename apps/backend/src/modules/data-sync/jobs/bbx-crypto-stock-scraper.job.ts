@@ -7,9 +7,11 @@ import type {
 } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 import { chromium } from 'playwright'
+
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
+import { DataSyncOperationTimeoutException } from '../exceptions/data-sync-operation-timeout.exception'
 
 const SYMBOL_EXTRACT_REGEX = /([A-Z][A-Z0-9.]{1,9})/g
 
@@ -832,7 +834,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
     const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> =>
       new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
-          reject(new Error('timeout'))
+          reject(new DataSyncOperationTimeoutException({ operation: 'bbx-crypto-stock-scraper', timeoutMs }))
         }, timeoutMs)
         promise
           .then(resolve)
