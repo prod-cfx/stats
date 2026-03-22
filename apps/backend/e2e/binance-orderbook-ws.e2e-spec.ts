@@ -1,13 +1,13 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import { resolve } from 'node:path'
 import { toMarketKey } from '@ai/shared'
 import { Test } from '@nestjs/testing'
-
 import { RedisService } from '../src/common/services/redis.service'
+
 import { AppModule } from '../src/modules/app.module'
 import { BinanceCexSpotOrderbookWsAdapter } from '../src/modules/data-sync/services/adapters/binance-cex-spot-orderbook-ws.adapter'
 import { OrderbookPairConfigService } from '../src/modules/orderbook-config/services/orderbook-pair-config.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Binance WS，避免在 CI 默认跑外网依赖
 const E2E_ENABLED = process.env.BINANCE_ORDERBOOK_E2E === 'true'
@@ -25,18 +25,9 @@ describeIf('Binance orderbook WS (E2E)', () => {
   const VENUE = 'BINANCE'
 
   beforeAll(async () => {
-    // 确保使用 e2e 环境配置（.env.e2e / .env.e2e.local）
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
+    ensureE2eEnv()
     // 显式开启 WS 同步
-    if (!process.env.ORDERBOOK_WS_ENABLED) {
-      process.env.ORDERBOOK_WS_ENABLED = 'true'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eDefaults({ ORDERBOOK_WS_ENABLED: 'true' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

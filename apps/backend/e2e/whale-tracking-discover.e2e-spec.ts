@@ -1,8 +1,8 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 
-import { resolve } from 'node:path'
 import request from 'supertest'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 jest.setTimeout(180_000)
 
@@ -11,18 +11,7 @@ describe('Whale tracking discover API (E2E)', () => {
   let prisma: any
 
   beforeAll(async () => {
-    // 仅允许在 e2e 环境下运行，防止误连真实数据库
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-    if (process.env.APP_ENV !== 'e2e') {
-      throw new Error(
-        `Whale tracking discover E2E must run with APP_ENV="e2e", current: ${process.env.APP_ENV}`,
-      )
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv({ strict: true, label: 'WhaleTrackingDiscover' })
 
     // 确保在设置 APP_ENV / cwd 之后再加载 Nest 应用及 Prisma
     jest.resetModules()

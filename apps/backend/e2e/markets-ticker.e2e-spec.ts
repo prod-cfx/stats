@@ -1,7 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 
-import { resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -9,6 +8,7 @@ import request from 'supertest'
 import { AppModule } from '../src/modules/app.module'
 import { ACGuard } from '../src/modules/auth/guards/ac.guard'
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Markets HTTP - ticker (E2E)', () => {
   let app: INestApplication
@@ -16,11 +16,7 @@ describe('Markets HTTP - ticker (E2E)', () => {
   const originalCwd = process.cwd()
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

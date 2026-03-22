@@ -3,7 +3,6 @@ import type { TestingModule } from '@nestjs/testing'
 import type { ExchangeLongShortTimeRange } from '../src/modules/markets/dto/requests/get-exchange-long-short-ratio.request.dto'
 import type { ExchangeLongShortRatioResponseDto } from '../src/modules/markets/dto/responses/exchange-long-short-ratio.response.dto'
 
-import { resolve } from 'node:path'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -11,6 +10,7 @@ import request from 'supertest'
 import { AppModule } from '../src/modules/app.module'
 import { ACGuard } from '../src/modules/auth/guards/ac.guard'
 import { JwtAuthGuard } from '../src/modules/auth/guards/jwt-auth.guard'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Markets HTTP - exchange long/short ratio snapshot (E2E)', () => {
   let app: INestApplication
@@ -19,11 +19,7 @@ describe('Markets HTTP - exchange long/short ratio snapshot (E2E)', () => {
 
   beforeAll(async () => {
     // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

@@ -74,6 +74,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
       if (isPlaceholder) {
         // 非生产环境：允许无数据库启动（自动进入 mock/offline 模式）
         if (!isProd && !isTestOrE2E) {
+          // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
           process.env.USE_MOCK_DATA = 'true'
           connectionString = ''
         } else {
@@ -129,7 +130,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
           `原始错误：${(error as Error)?.message}`,
       )
       if (allowFallback) {
-        // 非生产环境：不阻塞启动，让上层 Repository 自行兜底到 mock
+        // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
         process.env.USE_MOCK_DATA = 'true'
         this.logger.warn('Non-prod DB connection failed; falling back to USE_MOCK_DATA=true for this run.')
       } else {

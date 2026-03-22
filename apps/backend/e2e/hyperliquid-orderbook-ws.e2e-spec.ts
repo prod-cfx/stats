@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import { resolve } from 'node:path'
 import { toMarketKey } from '@ai/shared'
 import { Test } from '@nestjs/testing'
 
@@ -9,6 +8,7 @@ import { AppModule } from '../src/modules/app.module'
 import { HyperliquidDexPerpetualOrderbookWsAdapter } from '../src/modules/data-sync/services/adapters/hyperliquid-dex-perpetual-orderbook-ws.adapter'
 import { HyperliquidDexSpotOrderbookWsAdapter } from '../src/modules/data-sync/services/adapters/hyperliquid-dex-spot-orderbook-ws.adapter'
 import { OrderbookPairConfigService } from '../src/modules/orderbook-config/services/orderbook-pair-config.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Hyperliquid WS，避免在 CI 默认跑外网依赖
 const E2E_ENABLED = process.env.HYPERLIQUID_ORDERBOOK_E2E === 'true'
@@ -25,17 +25,9 @@ describeIf('Hyperliquid orderbook WS (E2E)', () => {
 
   beforeAll(async () => {
     // 确保使用 e2e 环境配置
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
+    ensureE2eEnv()
     // 显式开启 Hyperliquid WS 同步
-    if (!process.env.HYPERLIQUID_ORDERBOOK_WS_ENABLED) {
-      process.env.HYPERLIQUID_ORDERBOOK_WS_ENABLED = 'true'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eDefaults({ HYPERLIQUID_ORDERBOOK_WS_ENABLED: 'true' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

@@ -1,12 +1,12 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { TradesConfig } from '../src/modules/data-sync/services/trades-ws-adapter'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 import { firstValueFrom, take, timeout } from 'rxjs'
 import { AppModule } from '../src/modules/app.module'
 import { HyperliquidDexPerpetualTradesWsAdapter } from '../src/modules/data-sync/services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 const E2E_ENABLED = process.env.HYPERLIQUID_TRADES_E2E === 'true'
 const describeIf = E2E_ENABLED ? describe : describe.skip
@@ -28,14 +28,8 @@ describeIf('Hyperliquid trades WS + SSE (E2E)', () => {
   const createdWhaleAddresses = new Set<string>()
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-    if (!process.env.HYPERLIQUID_TRADES_WS_ENABLED) {
-      process.env.HYPERLIQUID_TRADES_WS_ENABLED = 'true'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
+    ensureE2eDefaults({ HYPERLIQUID_TRADES_WS_ENABLED: 'true' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

@@ -2,12 +2,12 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { WhaleAlertService } from '../src/modules/whale-alert/whale-alert.service'
 import type { PrismaService } from '../src/prisma/prisma.service'
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import { AppModule } from '../src/modules/app.module'
 import { WhaleAlertService as WhaleAlertServiceToken } from '../src/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '../src/prisma/prisma.service'
+import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
 describe('Whale notification orchestrator via whale trade record (service E2E)', () => {
   let app: INestApplication
@@ -20,11 +20,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   const userId = 'e2e-orchestrator-user'
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

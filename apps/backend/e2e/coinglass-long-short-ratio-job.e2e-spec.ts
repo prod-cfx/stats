@@ -2,12 +2,12 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { DataPullJobContext } from '../src/modules/data-sync/contracts/data-pull-job'
 
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 
 import { AppModule } from '../src/modules/app.module'
 import { CoinglassLongShortRatioJob } from '../src/modules/data-sync/jobs/coinglass-long-short-ratio.job'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 describe('Coinglass long/short ratio job (E2E)', () => {
   let app: INestApplication
@@ -18,17 +18,8 @@ describe('Coinglass long/short ratio job (E2E)', () => {
   const originalCwd = process.cwd()
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
-    // 确保 Coinglass API Key 存在（具体值在本测试中不会真正访问外网）
-    if (!process.env.COINGLASS_API_KEY) {
-      process.env.COINGLASS_API_KEY = 'test-coinglass-api-key'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eEnv()
+    ensureE2eDefaults({ COINGLASS_API_KEY: 'test-coinglass-api-key' })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

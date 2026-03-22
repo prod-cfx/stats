@@ -3,13 +3,13 @@ import type { TestingModule } from '@nestjs/testing'
 import type { ClsService } from 'nestjs-cls'
 import type { DataPullJobContext } from '../src/modules/data-sync/contracts/data-pull-job'
 
-import { resolve } from 'node:path'
 import { Test } from '@nestjs/testing'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
-
 import { AppModule } from '../src/modules/app.module'
+
 import { BbxCryptoStockQuotesJob } from '../src/modules/data-sync/jobs/bbx-crypto-stock-quotes.job'
 import { PrismaService } from '../src/prisma/prisma.service'
+import { ensureE2eEnv, ensureE2eDefaults } from './helpers/setup-e2e-env'
 
 describe('BBX crypto stock quotes job (E2E)', () => {
   let app: INestApplication
@@ -20,24 +20,14 @@ describe('BBX crypto stock quotes job (E2E)', () => {
   const originalFetch: typeof fetch | undefined = (globalThis as any).fetch
 
   beforeAll(async () => {
-    if (!process.env.APP_ENV) {
-      process.env.APP_ENV = 'e2e'
-    }
-
+    ensureE2eEnv()
     // 确保 BBX 相关环境变量存在（测试中不会真正访问外网）
-    if (!process.env.BBX_API_KEY) {
-      process.env.BBX_API_KEY = 'test-bbx-api-key'
-    }
-    if (!process.env.BBX_CRYPTO_STOCK_SYMBOLS) {
-      process.env.BBX_CRYPTO_STOCK_SYMBOLS = 'MSTR,COIN'
-    }
-    // JWT 配置在非 development 环境是必需的，这里为 e2e 提供一个固定值
-    if (!process.env.JWT_SECRET) {
-      process.env.JWT_SECRET = 'test-jwt-secret'
-    }
-
-    // 与 main.ts 保持一致，从 monorepo 根目录加载环境
-    process.chdir(resolve(__dirname, '../../..'))
+    ensureE2eDefaults({
+      BBX_API_KEY: 'test-bbx-api-key',
+      BBX_CRYPTO_STOCK_SYMBOLS: 'MSTR,COIN',
+      // JWT 配置在非 development 环境是必需的，这里为 e2e 提供一个固定值
+      JWT_SECRET: 'test-jwt-secret',
+    })
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
