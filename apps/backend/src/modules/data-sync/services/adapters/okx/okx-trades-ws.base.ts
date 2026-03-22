@@ -1,9 +1,11 @@
 /* eslint-disable perfectionist/sort-imports */
 
+import { ErrorCode } from '@ai/shared'
 import WebSocket from 'ws'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 
@@ -143,7 +145,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
       if (hadFlushError) {
         // 让上层管理器感知 flush 失败，从而阻止 configsHash 更新并在下次 tick 继续重试
-        throw new Error('Failed to flush one or more stale trades states when syncing configs')
+        throw new DomainException(
+          'data_sync.okx_trades_ws.flush_stale_states_failed',
+          { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'Failed to flush one or more stale trades states when syncing configs' } },
+        )
       }
     }
 
@@ -207,7 +212,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
     if (hadError) {
       // 通过抛错让调用方感知 shutdown 期间存在未能落库的成交，避免静默丢单
-      throw new Error('One or more trades buffers failed to flush during shutdown')
+      throw new DomainException(
+        'data_sync.okx_trades_ws.shutdown_flush_failed',
+        { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'One or more trades buffers failed to flush during shutdown' } },
+      )
     }
   }
 
@@ -368,7 +376,10 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
 
       if (hadError) {
         // 显式通过 rejected promise 反馈失败，供上层决定是否删除 state
-        throw new Error(`Flush buffer failed for instId=${state.instId}`)
+        throw new DomainException(
+          'data_sync.okx_trades_ws.flush_buffer_failed',
+          { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: `Flush buffer failed for instId=${state.instId}` } },
+        )
       }
 
       this.trimExcessTrades(state)

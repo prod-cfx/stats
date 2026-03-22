@@ -1,9 +1,11 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { LiquidationHeatmapRepository } from '@/modules/liquidation-heatmap/liquidation-heatmap.repository'
 
@@ -52,8 +54,12 @@ export class CoinglassHeatmapJob implements DataPullJob {
       'https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap'
 
     if (!apiKey) {
-      // 不应“默默成功”，否则后台无法感知配置缺失
-      throw new Error('COINGLASS_API_KEY is not configured')
+      // 不应”默默成功”，否则后台无法感知配置缺失
+      throw new DomainException('data_sync.heatmap.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     // 兼容旧版 liquidation-heatmap 路径（通过 model 查询参数区分模型），避免直接拼接 /modelX 导致 404
@@ -94,7 +100,11 @@ export class CoinglassHeatmapJob implements DataPullJob {
     const json = await this.fetchHeatmapJson(url, apiKey)
 
     if (json.code !== '0' || !json.data) {
-      throw new Error(`Coinglass API returned error: code=${json.code}, msg=${json.msg}`)
+      throw new DomainException('data_sync.heatmap.invalid_response', {
+        code: ErrorCode.DATA_SYNC_INVALID_RESPONSE,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Coinglass API returned error: code=${json.code}, msg=${json.msg}` },
+      })
     }
 
     const { y_axis, liquidation_leverage_data, price_candlesticks } = json.data
@@ -172,9 +182,11 @@ export class CoinglassHeatmapJob implements DataPullJob {
             continue
           }
 
-          throw new Error(
-            `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('data_sync.heatmap.api_error', {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as CoinglassHeatmapApiResponse
@@ -196,18 +208,22 @@ export class CoinglassHeatmapJob implements DataPullJob {
           continue
         }
 
-        throw new Error(
-          `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('data_sync.heatmap.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Coinglass heatmap request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
     // 理论不可达，兜底
-    throw new Error(
-      `Coinglass heatmap request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('data_sync.heatmap.api_error', {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Coinglass heatmap request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private isAbortError(error: unknown): boolean {
@@ -242,9 +258,11 @@ export class CoinglassHeatmapJob implements DataPullJob {
         const normalized = String(parsed.modelType).trim().toUpperCase()
         const allowed: LiquidationHeatmapModelType[] = ['MODEL1', 'MODEL2', 'MODEL3']
         if (!allowed.includes(normalized as LiquidationHeatmapModelType)) {
-          throw new Error(
-            `Invalid Coinglass heatmap modelType in cursor: ${String(parsed.modelType)}`,
-          )
+          throw new DomainException('data_sync.heatmap.invalid_model_type', {
+            code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Invalid Coinglass heatmap modelType in cursor: ${String(parsed.modelType)}` },
+          })
         }
         parsed.modelType = normalized as LiquidationHeatmapModelType
       } else {

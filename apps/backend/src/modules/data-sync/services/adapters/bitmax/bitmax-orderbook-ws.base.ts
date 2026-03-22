@@ -1,11 +1,12 @@
 /* eslint-disable perfectionist/sort-imports */
 
 import type { MarketId, VenueOrderBook } from '@ai/shared'
-import { toMarketKey } from '@ai/shared'
+import { ErrorCode, toMarketKey } from '@ai/shared'
 import type { OrderbookPairConfig } from '@/prisma/prisma.types'
 import WebSocket from 'ws'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import type { Redis } from 'ioredis'
 import type { OrderbookAdapterKey, OrderbookWsAdapter } from '../../orderbook-ws-adapter'
 import { RedisService } from '@/common/services/redis.service'
@@ -436,7 +437,10 @@ export abstract class BitmaxOrderbookWsAdapterBase implements OrderbookWsAdapter
       }
     }
 
-    throw lastError ?? new Error('fetchSnapshot failed after retries')
+    throw lastError ?? new DomainException(
+      'data_sync.bitmax_orderbook_ws.fetch_snapshot_failed',
+      { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'fetchSnapshot failed after retries' } },
+    )
   }
 
   private sleep(ms: number): Promise<void> {

@@ -4,10 +4,12 @@ import type {
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
 import type { CreateOpenInterestDto } from '../dto/open-interest.dto'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService 和 OpenInterestService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { OpenInterestService } from '../open-interest.service'
 
@@ -71,7 +73,11 @@ export class OpenInterestSyncJob implements DataPullJob {
       'https://open-api-v4.coinglass.com/api/futures/open-interest/exchange-list'
 
     if (!apiKey) {
-      throw new Error('COINGLASS_API_KEY is not configured')
+      throw new DomainException('open_interest.sync.missing_api_key', {
+        code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     const url = new URL(endpoint)
@@ -91,13 +97,21 @@ export class OpenInterestSyncJob implements DataPullJob {
       if (json.code !== '0') {
         const errorMsg = `Coinglass OI API returned error: code=${json.code}, msg=${json.msg}`
         this.logger.error(errorMsg)
-        throw new Error(errorMsg)
+        throw new DomainException('open_interest.sync.api_error', {
+          code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: errorMsg },
+        })
       }
 
       if (!json.data || json.data.length === 0) {
         const emptyMsg = `Coinglass OI API returned empty data for symbol=${cursor.symbol}, exchange=${cursor.exchange ?? 'All'}`
         this.logger.error(emptyMsg)
-        throw new Error(emptyMsg)
+        throw new DomainException('open_interest.sync.empty_data', {
+          code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: emptyMsg },
+        })
       }
 
       const nowIso = new Date().toISOString()
@@ -190,7 +204,11 @@ export class OpenInterestSyncJob implements DataPullJob {
       if (items.length === 0) {
         const emptyMsg = `Coinglass OI API returned no valid records with both openInterest & openInterestAmount for symbol=${cursor.symbol}, exchange=${cursor.exchange ?? 'All'}`
         this.logger.error(emptyMsg)
-        throw new Error(emptyMsg)
+        throw new DomainException('open_interest.sync.no_valid_records', {
+          code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: emptyMsg },
+        })
       }
 
       const aggregatedAllRecords = this.buildAllExchangeRecords(items, nowIso)
@@ -394,9 +412,11 @@ export class OpenInterestSyncJob implements DataPullJob {
             continue
           }
 
-          throw new Error(
-            `Coinglass OI request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('open_interest.sync.request_failed', {
+            code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Coinglass OI request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as CoinglassOiApiResponse
@@ -418,17 +438,21 @@ export class OpenInterestSyncJob implements DataPullJob {
           continue
         }
 
-        throw new Error(
-          `Coinglass OI request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('open_interest.sync.request_error', {
+          code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Coinglass OI request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
-    throw new Error(
-      `Coinglass OI request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('open_interest.sync.request_exhausted', {
+      code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Coinglass OI request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   /**

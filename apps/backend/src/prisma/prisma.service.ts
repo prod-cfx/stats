@@ -3,11 +3,12 @@ import type { ConfigService } from '@nestjs/config'
 import type { ClsService } from 'nestjs-cls'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
-import { generateShortId } from '@ai/shared'
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { ErrorCode, generateShortId } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaClient as PrismaClientBase } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
@@ -78,9 +79,11 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
           process.env.USE_MOCK_DATA = 'true'
           connectionString = ''
         } else {
-          throw new Error(
-            'DATABASE_URL 未配置或仍为占位符。请在 .env.*.local 中设置有效的数据库连接字符串。',
-          )
+          throw new DomainException('prisma.connection_error', {
+            code: ErrorCode.PRISMA_CONNECTION_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: 'DATABASE_URL is not configured or still a placeholder. Set a valid connection string in .env.*.local.' },
+          })
         }
       } else {
         connectionString = dbUrl

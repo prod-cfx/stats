@@ -5,8 +5,10 @@ import type {
   JobMetaSchema,
   JobRunResult,
 } from '../contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -486,9 +488,11 @@ export class BinanceKlineHistoryJob implements DataPullJob {
             continue
           }
 
-          throw new Error(
-            `Binance kline request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('data_sync.binance_kline_history.api_error', {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Binance kline request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         // 验证响应格式
@@ -516,18 +520,22 @@ export class BinanceKlineHistoryJob implements DataPullJob {
           continue
         }
 
-        throw new Error(
-          `Binance kline request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('data_sync.binance_kline_history.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Binance kline request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
     // 理论不可达，兜底
-    throw new Error(
-      `Binance kline request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('data_sync.binance_kline_history.api_error', {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Binance kline request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private isAbortError(error: unknown): boolean {

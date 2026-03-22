@@ -1,7 +1,9 @@
 import type {MarketTimeframe} from '@ai/shared';
-import { DEFAULT_MARKET_SYMBOLS, MARKET_TIMEFRAMES  } from '@ai/shared'
+import { DEFAULT_MARKET_SYMBOLS, ErrorCode, MARKET_TIMEFRAMES  } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import { registerAs } from '@nestjs/config'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'
+import { DomainException } from '../common/exceptions/domain.exception'
 import { polymarketConfig } from './polymarket.config'
 
 const env = defaultEnvAccessor
@@ -35,7 +37,11 @@ export const jwtConfig = registerAs('jwt', () => {
   const appEnv = env.appEnv()
   const secret = env.str('JWT_SECRET')
   if (!secret && appEnv !== 'development') {
-    throw new Error('JWT_SECRET is required')
+    throw new DomainException('config.validation_error', {
+      code: ErrorCode.CONFIG_VALIDATION_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: 'JWT_SECRET is required' },
+    })
   }
   return {
     secret: (() => {

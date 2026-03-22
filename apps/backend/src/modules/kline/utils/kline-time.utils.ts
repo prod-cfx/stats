@@ -1,3 +1,7 @@
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
+
 /**
  * K线时间粒度到毫秒的映射
  */
@@ -33,7 +37,11 @@ export const INTERVAL_MS: Record<string, number> = {
 export function getKlineStartTime(timestamp: number, interval: string): number {
   const intervalMs = INTERVAL_MS[interval]
   if (!intervalMs) {
-    throw new Error(`Unsupported interval: ${interval}`)
+    throw new DomainException('kline.invalid_interval', {
+      code: ErrorCode.KLINE_INVALID_INTERVAL,
+      status: HttpStatus.BAD_REQUEST,
+      args: { reason: `Unsupported interval: ${interval}` },
+    })
   }
 
   return Math.floor(timestamp / intervalMs) * intervalMs
@@ -61,7 +69,11 @@ export function isSameKlinePeriod(timestamp1: number, timestamp2: number, interv
 export function getNextKlineStartTime(currentStartTime: number, interval: string): number {
   const intervalMs = INTERVAL_MS[interval]
   if (!intervalMs) {
-    throw new Error(`Unsupported interval: ${interval}`)
+    throw new DomainException('kline.invalid_interval', {
+      code: ErrorCode.KLINE_INVALID_INTERVAL,
+      status: HttpStatus.BAD_REQUEST,
+      args: { reason: `Unsupported interval: ${interval}` },
+    })
   }
 
   return currentStartTime + intervalMs
