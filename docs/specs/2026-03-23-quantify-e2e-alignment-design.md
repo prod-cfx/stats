@@ -46,7 +46,7 @@
   - `throttle:*:e2e:{dbName}::*`
 - **清理方式**：使用 SCAN + DEL（避免阻塞 Redis）
 - **历史清理**：启动时可选清理旧 key（`E2E_CLEANUP_OLD_RESOURCES=true`，统一命名，替换当前的 `E2E_CLEANUP_OLD_DB`）
-- **Redis 连接**：读取 `process.env.REDIS_URL`（注意：`QUANTIFY_REDIS_URL` 经 `quantify-env.ts` 映射后解析为 `REDIS_URL`，setup 阶段需在 `applyQuantifyEnvOverrides()` 之后读取，或直接读 `REDIS_URL`）
+- **Redis 连接**：读取 `process.env.REDIS_URL`。注意 `QUANTIFY_REDIS_URL` 经 `quantify-env.ts` 映射为 `REDIS_URL`，但 setup-e2e.ts 不走 app bootstrap，因此需在 `setup-e2e.ts` 顶部（DATABASE_URL 校验之前）显式调用 `applyQuantifyEnvOverrides()` 完成 `QUANTIFY_*` → 通用变量的映射，确保后续读取 `DATABASE_URL` 和 `REDIS_URL` 均为映射后的值
 
 #### 1.4 Teardown
 
@@ -118,20 +118,13 @@ createRawClient(app: INestApplication): ApiClient
 
 经审计，当前 **零个测试文件** 传 token 给 `createApiClient`。所有调用均为 `createApiClient(app)`（无第二参数），因此 API 客户端签名变更 **零迁移工作量**。`createAuthApiClient` 和 `createRawClient` 是为未来测试预备的能力。
 
-完整的 `createApiClient` 调用文件清单（10 个 spec 文件）：
+实际调用 `createApiClient(app)` 的文件（3 个）：
 
-- `ai/ai.e2e-spec.ts`
-- `backtesting/backtesting.e2e-spec.ts`
-- `cache/redis-cache.e2e-spec.ts`
-- `exchange-accounts/exchange-accounts.e2e-spec.ts`
 - `health/health.e2e-spec.ts`
-- `llm-strategy-codegen/llm-strategy-codegen.e2e-spec.ts`
-- `market-data/market-data.e2e-spec.ts`
-- `strategy-signals/strategy-signals.e2e-spec.ts`
+- `exchange-accounts/exchange-accounts.e2e-spec.ts`
 - `strategy-subscriptions/strategy-subscriptions.e2e-spec.ts`
-- `trading/trading.e2e-spec.ts`
 
-所有文件仅需确认 import 路径不变（`createApiClient` 名称和签名兼容）。
+其余 7 个 spec 文件（`ai`、`backtesting`、`cache/redis-cache`、`llm-strategy-codegen`、`market-data`、`strategy-signals`、`trading`）不直接调用 `createApiClient`，仅需确认 fixtures import 不变。
 
 ## 文件变更清单
 
