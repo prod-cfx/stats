@@ -794,7 +794,11 @@ export class SignalGeneratorService {
                 )
                 promptData = indicators
               } else if (resolved.decision) {
-                promptData = strategyDecisionToSignalPayload(resolved.decision, referencePrice || 0) as Record<string, any>
+                promptData = strategyDecisionToSignalPayload(
+                  resolved.decision,
+                  referencePrice || 0,
+                  this.buildDecisionContext(indicators, referencePrice),
+                ) as Record<string, any>
               } else {
                 promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
               }
@@ -1402,7 +1406,12 @@ export class SignalGeneratorService {
       if (resolved.decision) {
         const adapterReferencePrice =
           multiLegData[primaryLeg.id]?.[execution.timeframe]?.currentPrice ?? 0
-        promptData = strategyDecisionToSignalPayload(resolved.decision, adapterReferencePrice) as Record<string, any>
+        const primaryIndicators = multiLegData[primaryLeg.id]?.[execution.timeframe]?.indicators ?? {}
+        promptData = strategyDecisionToSignalPayload(
+          resolved.decision,
+          adapterReferencePrice,
+          this.buildDecisionContext(primaryIndicators, adapterReferencePrice),
+        ) as Record<string, any>
       } else {
         promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
       }
@@ -1681,6 +1690,21 @@ export class SignalGeneratorService {
    * 将任意值转换为 JSON-safe 的值
    * 处理 Date、undefined、NaN、Infinity、循环引用等非 JSON-safe 的值
    */
+  private buildDecisionContext(
+    indicators: Record<string, number>,
+    markPrice: number | undefined,
+  ): { currentQty?: number; equity?: number; markPrice?: number } {
+    return {
+      currentQty: this.readFiniteNumber(indicators.currentQty),
+      equity: this.readFiniteNumber(indicators.equity),
+      markPrice: this.readFiniteNumber(markPrice),
+    }
+  }
+
+  private readFiniteNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  }
+
   private toJsonSafe(value: any): any {
     // 处理基本类型
     if (value === null || value === undefined) {

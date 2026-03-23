@@ -166,11 +166,7 @@ export function strategyDecisionToSignalPayload(
   context?: { currentQty?: number; equity?: number; markPrice?: number },
 ): Record<string, unknown> {
   const safePrice = referencePrice > 0 ? referencePrice : 1
-  const deltaContext = {
-    currentQty: context?.currentQty ?? 0,
-    equity: context?.equity ?? 0,
-    markPrice: context?.markPrice ?? safePrice,
-  }
+  const deltaContext = resolveDeltaContext(decision, context, safePrice)
   const adjustDeltaQty = decision.action === 'ADJUST_POSITION'
     ? strategyDecisionToDeltaQty(decision, deltaContext)
     : 0
@@ -214,6 +210,34 @@ export function strategyDecisionToSignalPayload(
   }
 
   return payload
+}
+
+function resolveDeltaContext(
+  decision: StrategyDecisionV1,
+  context: { currentQty?: number; equity?: number; markPrice?: number } | undefined,
+  safePrice: number,
+): { currentQty: number; equity: number; markPrice: number } {
+  const currentQty = context?.currentQty
+  const equity = context?.equity
+  const markPrice = context?.markPrice
+  if (decision.action === 'ADJUST_POSITION') {
+    if (
+      typeof currentQty !== 'number' || !Number.isFinite(currentQty) ||
+      typeof equity !== 'number' || !Number.isFinite(equity) ||
+      typeof markPrice !== 'number' || !Number.isFinite(markPrice)
+    ) {
+      throw new Error(
+        'ADJUST_POSITION requires explicit context: currentQty/equity/markPrice',
+      )
+    }
+    return { currentQty, equity, markPrice }
+  }
+
+  return {
+    currentQty: typeof currentQty === 'number' && Number.isFinite(currentQty) ? currentQty : 0,
+    equity: typeof equity === 'number' && Number.isFinite(equity) ? equity : 0,
+    markPrice: typeof markPrice === 'number' && Number.isFinite(markPrice) ? markPrice : safePrice,
+  }
 }
 
 export function strategyDecisionToDeltaQty(

@@ -715,7 +715,15 @@ export class StrategyInstancesService {
     }
 
     const scriptResult = resolved.decision
-      ? strategyDecisionToSignalPayload(resolved.decision, dto.currentPrice ?? 0)
+      ? strategyDecisionToSignalPayload(
+          resolved.decision,
+          dto.currentPrice ?? 0,
+          {
+            currentQty: dto.currentQty,
+            equity: dto.equity,
+            markPrice: dto.currentPrice,
+          },
+        )
       : (resolved.passthrough ?? validation.value)
 
     let filledPrompt: string | undefined

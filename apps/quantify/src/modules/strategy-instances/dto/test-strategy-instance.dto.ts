@@ -107,6 +107,22 @@ export class TestStrategyInstanceDto {
   currentPrice?: number
 
   @ApiProperty({
+    description: '（可选）当前持仓数量（用于 ADJUST_POSITION 语义转换）',
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  currentQty?: number
+
+  @ApiProperty({
+    description: '（可选）当前账户权益（用于 RATIO/ADJUST_POSITION 语义转换）',
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  equity?: number
+
+  @ApiProperty({
     description:
       '（可选）多腿多周期模式的数据，key 为 legId，value 为 timeframe -> 数据 的映射。' +
       '例如：{"btc": {"1h": { "bars": [...], "indicators": {...}, "currentPrice": 62000 }}}',
@@ -140,4 +156,3 @@ export class TestStrategyInstanceResultDto {
   @IsString()
   filledPrompt?: string
 }
-
