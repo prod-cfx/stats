@@ -47,13 +47,13 @@ import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
 import {
   mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
-import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
