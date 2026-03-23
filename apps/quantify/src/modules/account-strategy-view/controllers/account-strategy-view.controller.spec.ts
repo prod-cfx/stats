@@ -2,68 +2,83 @@ import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
 import { AccountStrategyViewController } from './account-strategy-view.controller'
 
 describe('accountStrategyViewController', () => {
-  it('uses header user id when query userId is missing', async () => {
+  function createController(service: Record<string, jest.Mock>) {
+    const callerIdentityService = {
+      resolveCallerUserIdFromAuthorization: jest.fn().mockReturnValue('caller-u1'),
+    }
+    return {
+      controller: new AccountStrategyViewController(service as any, callerIdentityService as any),
+      callerIdentityService,
+    }
+  }
+
+  it('uses caller identity from authorization for list request', async () => {
     const service = {
       listStrategies: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }),
     }
-    const controller = new AccountStrategyViewController(service as any)
+    const { controller, callerIdentityService } = createController(service)
 
-    await controller.list({ page: 1, limit: 20, status: 'running' } as any, 'user-1')
+    await controller.list({ page: 1, limit: 20, status: 'running', userId: 'attacker' } as any, 'Bearer token')
 
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
     expect(service.listStrategies).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-1' }),
+      expect.objectContaining({ userId: 'caller-u1' }),
     )
   })
 
-  it('rejects mismatched header user id and requested user id', async () => {
+  it('uses caller identity from authorization for detail request', async () => {
     const service = {
-      getStrategyDetail: jest.fn(),
+      getStrategyDetail: jest.fn().mockResolvedValue({ id: 'inst-1' }),
     }
-    const controller = new AccountStrategyViewController(service as any)
+    const { controller, callerIdentityService } = createController(service)
 
-    await expect(
-      controller.detail('inst-1', 'user-2', 'user-1'),
-    ).rejects.toThrow('userId does not match authenticated principal')
+    await controller.detail('inst-1', 'Bearer token')
+
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(service.getStrategyDetail).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
 
-  it('injects resolved userId into action dto', async () => {
+  it('injects caller userId into action dto', async () => {
     const service = {
       performAction: jest.fn().mockResolvedValue({ id: 'inst-1' }),
     }
-    const controller = new AccountStrategyViewController(service as any)
+    const { controller, callerIdentityService } = createController(service)
 
     await controller.action(
       'inst-1',
-      { action: AccountStrategyAction.RUN } as any,
-      'user-1',
+      { action: AccountStrategyAction.RUN, userId: 'attacker' } as any,
+      'Bearer token',
     )
 
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
     expect(service.performAction).toHaveBeenCalledWith(
       'inst-1',
-      expect.objectContaining({ userId: 'user-1', action: AccountStrategyAction.RUN }),
+      expect.objectContaining({ userId: 'caller-u1', action: AccountStrategyAction.RUN }),
     )
   })
 
-  it('injects resolved userId into deploy dto', async () => {
+  it('injects caller userId into deploy dto', async () => {
     const service = {
       deployStrategy: jest.fn().mockResolvedValue({ id: 'inst-1' }),
     }
-    const controller = new AccountStrategyViewController(service as any)
+    const { controller, callerIdentityService } = createController(service)
 
     await controller.deploy(
       {
+        userId: 'attacker',
         name: '测试策略',
         exchange: 'binance',
         symbol: 'BTCUSDT',
         timeframe: '5m/15m',
         positionPct: 10,
       } as any,
-      'user-1',
+      'Bearer token',
     )
 
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
     expect(service.deployStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: 'user-1',
+        userId: 'caller-u1',
         exchange: 'binance',
       }),
     )
