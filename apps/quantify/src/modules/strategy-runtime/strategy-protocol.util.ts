@@ -189,7 +189,7 @@ export function strategyDecisionToSignalPayload(
     }
   })()
 
-  const signalType = decision.action === 'NOOP' ? 'ALERT' : 'ENTRY'
+  const signalType = mapSignalTypeFromAction(decision.action)
   const payload: Record<string, unknown> = {
     direction,
     signalType,
@@ -210,6 +210,22 @@ export function strategyDecisionToSignalPayload(
   }
 
   return payload
+}
+
+function mapSignalTypeFromAction(action: StrategyAction): 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT' {
+  switch (action) {
+    case 'OPEN_LONG':
+    case 'OPEN_SHORT':
+      return 'ENTRY'
+    case 'CLOSE_LONG':
+    case 'CLOSE_SHORT':
+      return 'EXIT'
+    case 'ADJUST_POSITION':
+      return 'ADJUSTMENT'
+    case 'NOOP':
+    default:
+      return 'ALERT'
+  }
 }
 
 function resolveDeltaContext(
