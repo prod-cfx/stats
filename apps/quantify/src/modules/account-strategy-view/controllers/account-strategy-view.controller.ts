@@ -22,7 +22,7 @@ export class AccountStrategyViewController {
     @Query() query: AccountStrategyListQueryDto,
     @Headers('authorization') authorization?: string,
   ): Promise<BasePaginationResponseDto<AccountStrategyListItemDto>> {
-    const userId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.listStrategies({
       ...query,
       userId,
@@ -34,7 +34,7 @@ export class AccountStrategyViewController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.getStrategyDetail(userId, id)
   }
 
@@ -44,7 +44,7 @@ export class AccountStrategyViewController {
     @Body() dto: AccountStrategyActionDto,
     @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.performAction(id, {
       ...dto,
       userId,
@@ -56,7 +56,7 @@ export class AccountStrategyViewController {
     @Body() dto: AccountStrategyDeployDto,
     @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.deployStrategy({
       ...dto,
       userId,

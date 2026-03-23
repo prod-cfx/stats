@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -9,7 +8,7 @@ import { EnvService } from '@/common/services/env.service'
 export class AccountStrategyCallerIdentityService {
   constructor(private readonly env: EnvService) {}
 
-  resolveCallerUserIdFromAuthorization(authorization: string | undefined): string {
+  async resolveCallerUserIdFromAuthorization(authorization: string | undefined): Promise<string> {
     const normalizedAuth = authorization?.trim()
     if (!normalizedAuth) {
       throw new DomainException('account_strategy.missing_authorization_header', {
@@ -26,70 +25,26 @@ export class AccountStrategyCallerIdentityService {
       })
     }
 
-    const jwtSecret = this.env.getString('JWT_SECRET')?.trim()
-    if (!jwtSecret) {
-      throw new DomainException('account_strategy.jwt_secret_not_configured', {
+    const payload = this.decodeJwtPayload(token)
+    const principalType = payload.principalType
+    if (principalType !== 'user') {
+      throw new DomainException('account_strategy.invalid_jwt_principal_type', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
 
-    const payload = this.verifyHs256Jwt(token, jwtSecret)
-    const subject = this.readJwtUserId(payload)
-    if (!subject) {
+    const callerUserId = await this.verifyTokenByBackendAuth(token)
+    if (!callerUserId) {
       throw new DomainException('account_strategy.jwt_subject_missing', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    return subject
+    return callerUserId
   }
 
-  private verifyHs256Jwt(token: string, secret: string): Record<string, unknown> {
-    const parts = token.split('.')
-    if (parts.length !== 3) {
-      throw new DomainException('account_strategy.invalid_jwt_format', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const [encodedHeader, encodedPayload, signature] = parts
-    const header = this.decodeJwtPart(encodedHeader)
-    if (header.alg !== 'HS256') {
-      throw new DomainException('account_strategy.invalid_jwt_header', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const signingInput = `${encodedHeader}.${encodedPayload}`
-    const expectedSignature = createHmac('sha256', secret)
-      .update(signingInput)
-      .digest('base64url')
-    if (!this.safeEqual(signature, expectedSignature)) {
-      throw new DomainException('account_strategy.invalid_jwt_signature', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const payload = this.decodeJwtPart(encodedPayload)
-    const exp = payload.exp
-    if (typeof exp === 'number' && Number.isFinite(exp)) {
-      const now = Math.floor(Date.now() / 1000)
-      if (exp <= now) {
-        throw new DomainException('account_strategy.jwt_expired', {
-          code: ErrorCode.UNAUTHORIZED,
-          status: HttpStatus.UNAUTHORIZED,
-        })
-      }
-    }
-
-    return payload
-  }
-
-  private decodeJwtPart(part: string): Record<string, unknown> {
+  private decodeJwtPart(part: string, errorCode: string): Record<string, unknown> {
     try {
       const decoded = Buffer.from(part, 'base64url').toString('utf8')
       const parsed = JSON.parse(decoded) as unknown
@@ -99,32 +54,95 @@ export class AccountStrategyCallerIdentityService {
       return parsed as Record<string, unknown>
     }
     catch {
-      throw new DomainException('account_strategy.invalid_jwt_payload', {
+      throw new DomainException(errorCode, {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
   }
 
-  private readJwtUserId(payload: Record<string, unknown>): string | null {
-    const candidates = [payload.sub, payload.userId, payload.id]
-    for (const candidate of candidates) {
-      if (typeof candidate === 'string') {
-        const normalized = candidate.trim()
-        if (normalized) {
-          return normalized
-        }
+  private decodeJwtPayload(token: string): Record<string, unknown> {
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+      throw new DomainException('account_strategy.invalid_jwt_format', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+    return this.decodeJwtPart(parts[1], 'account_strategy.invalid_jwt_payload')
+  }
+
+  private resolveBackendApiBaseUrl(): string {
+    const configured = this.env.getString('BACKEND_API_BASE_URL')?.trim()
+    if (configured) {
+      return configured.replace(/\/$/, '')
+    }
+    return 'http://127.0.0.1:3000/api/v1'
+  }
+
+  private extractUserId(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') {
+      return null
+    }
+    const record = payload as Record<string, unknown>
+    const nestedData = record.data
+    if (nestedData && typeof nestedData === 'object') {
+      const id = (nestedData as Record<string, unknown>).id
+      if (typeof id === 'string' && id.trim()) {
+        return id.trim()
       }
+    }
+    const directId = record.id
+    if (typeof directId === 'string' && directId.trim()) {
+      return directId.trim()
     }
     return null
   }
 
-  private safeEqual(a: string, b: string): boolean {
-    const left = Buffer.from(a)
-    const right = Buffer.from(b)
-    if (left.length !== right.length) {
-      return false
+  private async verifyTokenByBackendAuth(token: string): Promise<string> {
+    const profileUrl = `${this.resolveBackendApiBaseUrl()}/users/me`
+    let response: Response
+    try {
+      response = await fetch(profileUrl, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      })
     }
-    return timingSafeEqual(left, right)
+    catch {
+      throw new DomainException('account_strategy.auth_verification_unreachable', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    if (!response.ok) {
+      throw new DomainException('account_strategy.auth_verification_failed', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    let body: unknown
+    try {
+      body = await response.json()
+    }
+    catch {
+      throw new DomainException('account_strategy.auth_verification_invalid_response', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const userId = this.extractUserId(body)
+    if (!userId) {
+      throw new DomainException('account_strategy.auth_verification_missing_user', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+    return userId
   }
 }
