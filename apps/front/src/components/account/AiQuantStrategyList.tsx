@@ -1,11 +1,13 @@
 'use client'
 
-import type { StrategyStatus } from './ai-quant-strategy-store'
-import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import type { AiQuantStrategyRecord, StrategyStatus } from './ai-quant-strategy-store'
 import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle } from 'lucide-react'
+import Link from 'next/link'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { listStrategies, updateStrategyStatus } from './ai-quant-strategy-store'
+import { useAuth } from '@/hooks/use-auth'
+import { fetchAccountAiQuantStrategies, performAccountAiQuantStrategyAction } from '@/lib/api'
+import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 
 function fmtTime(ts: string, lng: string) {
   const date = new Date(ts)
@@ -19,17 +21,50 @@ function fmtTime(ts: string, lng: string) {
 
 export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const { t } = useTranslation()
-  const [strategies, setStrategies] = useState(() => listStrategies())
+  const { session } = useAuth()
+  const [strategies, setStrategies] = useState<AiQuantStrategyRecord[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null)
 
-  const refreshStrategies = () => {
-    setStrategies(listStrategies())
-  }
+  const loadStrategies = useCallback(async () => {
+    if (!session?.userId) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetchAccountAiQuantStrategies({
+        userId: session.userId,
+        page: 1,
+        limit: 20,
+      })
+      setStrategies(response.items.map(mapAccountStrategyListItemToRecord))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载策略列表失败')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [session?.userId])
 
-  const handleStatusChange = (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
+  useEffect(() => {
+    void loadStrategies()
+  }, [loadStrategies])
+
+  const handleStatusChange = async (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
     e.preventDefault()
     e.stopPropagation()
-    updateStrategyStatus(id, status)
-    refreshStrategies()
+    if (!session?.userId) return
+    setPendingActionId(id)
+    try {
+      await performAccountAiQuantStrategyAction(id, {
+        userId: session.userId,
+        action: status === 'running' ? 'run' : 'stop',
+      })
+      await loadStrategies()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新策略状态失败')
+    } finally {
+      setPendingActionId(null)
+    }
   }
 
   const STATUS_CONFIG: Record<StrategyStatus, { label: string; className: string; icon: React.ElementType }> = {
@@ -51,6 +86,29 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   }
 
   if (strategies.length === 0) {
+    if (isLoading) {
+      return (
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">
+          正在加载策略列表...
+        </section>
+      )
+    }
+
+    if (error) {
+      return (
+        <section className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
+          <p className="text-sm text-red-400">{error}</p>
+          <button
+            type="button"
+            onClick={() => void loadStrategies()}
+            className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold text-red-300"
+          >
+            重试
+          </button>
+        </section>
+      )
+    }
+
     return (
       <section className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] py-12 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[color:var(--cf-surface)]">
@@ -124,7 +182,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 
                 {item.status === 'running' ? (
                   <button
+                    type="button"
                     onClick={(e) => handleStatusChange(e, item.id, 'stopped')}
+                    disabled={pendingActionId === item.id}
                     className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
                   >
                     <Square className="h-3 w-3 fill-current" />
@@ -132,7 +192,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={(e) => handleStatusChange(e, item.id, 'running')}
+                    disabled={pendingActionId === item.id}
                     className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
                   >
                     <Play className="h-3 w-3 fill-current" />

@@ -1,0 +1,514 @@
+import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
+import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
+import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
+import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
+import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
+import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
+import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
+
+@Injectable()
+export class AccountStrategyViewService {
+  constructor(
+    private readonly repo: AccountStrategyViewRepository,
+    private readonly statsService: StrategyInstanceStatsService,
+    private readonly strategyInstancesService: StrategyInstancesService,
+  ) {}
+
+  async listStrategies(
+    query: AccountStrategyListQueryDto,
+  ): Promise<BasePaginationResponseDto<AccountStrategyListItemDto>> {
+    const rows = await this.repo.listStrategiesForUser({
+      userId: query.userId,
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+    })
+
+    const instanceIds = rows.items.map(item => item.id)
+    let statsMap = new Map<string, any>()
+
+    if (instanceIds.length > 0) {
+      try {
+        statsMap = await this.statsService.calculateBatchStats(instanceIds)
+      } catch {
+        statsMap = new Map<string, any>()
+      }
+    }
+
+    const items = await Promise.all(rows.items.map(async (item) => {
+      const stats = statsMap.get(item.id)
+      const mergedParams = {
+        ...(item.defaultParams ?? {}),
+        ...(item.params ?? {}),
+        ...(item.customParams ?? {}),
+      } as Record<string, unknown>
+      const symbol = this.readString(mergedParams, ['symbol'])
+
+      const fallback = await this.buildAccountFallbackMetrics(
+        query.userId,
+        symbol,
+      )
+
+      const statsReturnPct = this.readStatsNumber(stats, 'totalPnlRate')
+      const statsWinRatePct = this.readStatsNumber(stats, 'winRate')
+      const statsTradeCount = this.readStatsNumber(stats, 'totalTradesCount')
+
+      return {
+        id: item.id,
+        name: item.name,
+        status: this.mapUiStatus(item.status),
+        exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
+        symbol,
+        timeframe: this.readString(mergedParams, ['timeframe', 'period']),
+        positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+        isSubscribed: item.subscribed,
+        metrics: {
+          returnPct: this.pickStatsOrFallbackMetric(statsReturnPct, fallback?.returnPct),
+          maxDrawdownPct: this.readStatsNumber(stats, 'maxDrawdown'),
+          winRatePct: this.pickStatsOrFallbackMetric(statsWinRatePct, fallback?.winRatePct),
+          tradeCount: this.pickStatsOrFallbackMetric(statsTradeCount, fallback?.tradeCount),
+        },
+        updatedAt: item.updatedAt.toISOString(),
+      }
+    }))
+
+    return new BasePaginationResponseDto<AccountStrategyListItemDto>(
+      rows.total,
+      rows.page,
+      rows.limit,
+      items,
+    )
+  }
+
+  async getStrategyDetail(userId: string, strategyInstanceId: string): Promise<AccountStrategyDetailResponseDto> {
+    const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
+    if (!row) {
+      throw new NotFoundException('Strategy not found')
+    }
+
+    const sub = row.subscriptions[0]
+    const mergedParams = {
+      ...(row.strategyTemplate?.defaultParams as Record<string, unknown> ?? {}),
+      ...(row.params as Record<string, unknown> ?? {}),
+      ...(sub?.customParams as Record<string, unknown> ?? {}),
+    } as Record<string, unknown>
+
+    const symbol = this.readString(mergedParams, ['symbol'])
+    const normalizedSymbol = symbol?.split(':')[0] ?? null
+
+    const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
+      ?? (normalizedSymbol
+        ? await this.repo.findLatestExecutedAccountByUserAndSymbol(userId, normalizedSymbol)
+        : null)
+    const equityRows = account
+      ? await this.repo.loadEquitySeries(account.id)
+      : []
+    const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
+      ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
+      : []
+    const tradeStats = account
+      ? await this.repo.loadTradeStats(account.id)
+      : { tradeCount: 0, closedCount: 0, winningCount: 0 }
+    const timelineSource = await this.repo.loadTimeline(
+      userId,
+      strategyInstanceId,
+      account?.id,
+    )
+
+    const stats = await this.statsService.calculateStats(strategyInstanceId).catch(() => null)
+    const totalPnl = account
+      ? Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
+      : this.readStatsNumber(stats, 'totalPnl')
+    const investedAmount = account
+      ? Number(account.initialBalance)
+      : this.readStatsNumber(stats, 'investedAmount')
+    const returnPct = investedAmount > 0
+      ? Number(((totalPnl / investedAmount) * 100).toFixed(2))
+      : 0
+
+    const lifecycleStartAt = row.startedAt ?? row.createdAt ?? row.updatedAt
+
+    const derivedEquitySeries = account
+      ? this.buildIndustryEquitySeries({
+          initialBalance: Number(account.initialBalance),
+          totalRealizedPnl: Number(account.totalRealizedPnl),
+          totalUnrealizedPnl: Number(account.totalUnrealizedPnl),
+          closedPositionRows,
+          startedAt: lifecycleStartAt,
+          dailyRows: equityRows,
+        })
+      : []
+
+    const maxDrawdownPct = derivedEquitySeries.length > 0
+      ? this.computeMaxDrawdownPct(derivedEquitySeries)
+      : this.readStatsNumber(stats, 'maxDrawdown')
+
+    const winRatePct = tradeStats.closedCount > 0
+      ? Number(((tradeStats.winningCount / tradeStats.closedCount) * 100).toFixed(2))
+      : this.readStatsNumber(stats, 'winRate')
+
+    const todayPnl = account
+      ? this.calculateTodayPnl(
+          Number(account.totalUnrealizedPnl),
+          closedPositionRows,
+        )
+      : this.readStatsNumber(stats, 'todayPnl') ?? totalPnl
+
+    const detail: AccountStrategyDetailResponseDto = {
+      id: row.id,
+      name: row.name,
+      status: this.mapUiStatus(row.status),
+      exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
+      symbol,
+      timeframe: this.readString(mergedParams, ['timeframe', 'period']),
+      positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+      isSubscribed: !!sub && sub.status === 'active',
+      metrics: {
+        returnPct,
+        maxDrawdownPct,
+        winRatePct,
+        tradeCount: tradeStats.tradeCount > 0
+          ? tradeStats.tradeCount
+          : this.readStatsNumber(stats, 'totalTradesCount'),
+      },
+      updatedAt: row.updatedAt.toISOString(),
+      totalPnl,
+      todayPnl,
+      equitySeries: derivedEquitySeries,
+      snapshot: {
+        exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
+        symbol,
+        timeframe: this.readString(mergedParams, ['timeframe', 'period']),
+        positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+        deployAccountName: sub?.exchangeAccount?.name ?? null,
+        deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
+      },
+      timeline: this.buildMixedTimeline(timelineSource),
+    }
+
+    if (detail.equitySeries.length === 0 && account) {
+      detail.equitySeries = [{
+        ts: new Date().toISOString(),
+        value: Number(account.initialBalance) + Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl),
+      }]
+    }
+
+    return detail
+  }
+
+  async performAction(
+    strategyInstanceId: string,
+    dto: AccountStrategyActionDto,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    if (!dto.userId) {
+      throw new BadRequestException('Missing user identity')
+    }
+    const userId = dto.userId
+
+    const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
+    if (!row) {
+      throw new NotFoundException('Strategy not found')
+    }
+
+    const isOwner = row.createdBy === userId
+    if (!isOwner) {
+      throw new ForbiddenException('Only strategy owner can operate instance status')
+    }
+
+    const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
+    if (nextStatus === row.status) {
+      return this.getStrategyDetail(userId, strategyInstanceId)
+    }
+
+    if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
+      throw new BadRequestException('Invalid action')
+    }
+
+    await this.strategyInstancesService.updateInstance(
+      strategyInstanceId,
+      {
+        status: nextStatus as any,
+        updatedBy: userId,
+      },
+      userId,
+    )
+
+    return this.getStrategyDetail(userId, strategyInstanceId)
+  }
+
+  async deployStrategy(dto: AccountStrategyDeployDto): Promise<AccountStrategyDetailResponseDto> {
+    if (!dto.userId) {
+      throw new BadRequestException('Missing user identity')
+    }
+
+    const strategyInstanceId = await this.repo.deployStrategyForUser({
+      userId: dto.userId,
+      name: dto.name,
+      exchange: dto.exchange,
+      symbol: dto.symbol,
+      timeframe: dto.timeframe,
+      positionPct: dto.positionPct,
+      exchangeAccountId: dto.exchangeAccountId,
+      exchangeAccountName: dto.exchangeAccountName,
+    })
+
+    return this.getStrategyDetail(dto.userId, strategyInstanceId)
+  }
+
+  private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {
+    if (status === 'running') return 'running'
+    if (status === 'draft') return 'draft'
+    return 'stopped'
+  }
+
+  private readString(source: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = source[key]
+      if (typeof value === 'string' && value.trim().length > 0) return value
+    }
+    return null
+  }
+
+  private readNumber(source: Record<string, unknown>, keys: string[]): number | null {
+    for (const key of keys) {
+      const value = source[key]
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+      if (typeof value === 'string') {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed)) return parsed
+      }
+    }
+    return null
+  }
+
+  private readStatsNumber(stats: any, key: string): number | null {
+    if (!stats) return null
+    const value = stats[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private pickStatsOrFallbackMetric(statsValue: number | null, fallbackValue: number | null): number | null {
+    if (statsValue == null) return fallbackValue
+    if (fallbackValue == null) return statsValue
+    if (statsValue === 0 && fallbackValue !== 0) return fallbackValue
+    return statsValue
+  }
+
+  private async buildAccountFallbackMetrics(userId: string, symbol: string | null): Promise<{
+    returnPct: number | null
+    winRatePct: number | null
+    tradeCount: number | null
+  } | null> {
+    if (!symbol) return null
+
+    const normalizedSymbol = symbol.split(':')[0]?.trim().toUpperCase()
+    if (!normalizedSymbol) return null
+
+    const repoAny = this.repo as any
+    const findLatest = repoAny.findLatestExecutedAccountByUserAndSymbol as
+      ((uid: string, s: string) => Promise<any>) | undefined
+    const loadTradeStats = repoAny.loadTradeStats as
+      ((accountId: string) => Promise<{ tradeCount: number; closedCount: number; winningCount: number }>) | undefined
+
+    if (!findLatest || !loadTradeStats) return null
+
+    const account = await findLatest.call(this.repo, userId, normalizedSymbol)
+    if (!account) return null
+
+    const tradeStats = await loadTradeStats.call(this.repo, account.id)
+    const totalPnl = Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
+    const invested = Number(account.initialBalance)
+
+    return {
+      returnPct: invested > 0 ? Number(((totalPnl / invested) * 100).toFixed(2)) : 0,
+      winRatePct: tradeStats.closedCount > 0
+        ? Number(((tradeStats.winningCount / tradeStats.closedCount) * 100).toFixed(2))
+        : 0,
+      tradeCount: tradeStats.tradeCount,
+    }
+  }
+
+  private buildMixedTimeline(source: {
+    instance: any
+    subscription: any
+    signalExecutions: any[]
+    trades: any[]
+  }): AccountStrategyTimelineEventDto[] {
+    const events: AccountStrategyTimelineEventDto[] = []
+
+    if (source.instance?.createdAt) {
+      events.push({
+        at: source.instance.createdAt.toISOString(),
+        eventType: 'system',
+        event: '创建策略',
+        note: null,
+      })
+    }
+    if (source.subscription?.subscribedAt) {
+      events.push({
+        at: source.subscription.subscribedAt.toISOString(),
+        eventType: 'system',
+        event: '订阅策略',
+        note: null,
+      })
+    }
+    if (source.instance?.startedAt) {
+      events.push({
+        at: source.instance.startedAt.toISOString(),
+        eventType: 'system',
+        event: '开始运行',
+        note: null,
+      })
+    }
+    if (source.instance?.stoppedAt) {
+      events.push({
+        at: source.instance.stoppedAt.toISOString(),
+        eventType: 'system',
+        event: '停止运行',
+        note: null,
+      })
+    }
+    if (source.subscription?.unsubscribedAt) {
+      events.push({
+        at: source.subscription.unsubscribedAt.toISOString(),
+        eventType: 'system',
+        event: '取消订阅',
+        note: null,
+      })
+    }
+
+    for (const execution of source.signalExecutions) {
+      events.push({
+        at: execution.createdAt.toISOString(),
+        eventType: 'trade',
+        event: execution.status === 'SUCCESS' ? '信号执行成功' : '信号执行',
+        note: execution.errorMessage ?? null,
+      })
+    }
+
+    for (const trade of source.trades) {
+      events.push({
+        at: trade.executedAt.toISOString(),
+        eventType: 'trade',
+        event: `成交 ${trade.side}`,
+        note: `${trade.symbol} @ ${trade.price}`,
+      })
+    }
+
+    return events
+      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+      .slice(0, 30)
+  }
+
+  private buildIndustryEquitySeries(input: {
+    initialBalance: number
+    totalRealizedPnl: number
+    totalUnrealizedPnl: number
+    closedPositionRows: Array<{ openedAt: Date; closedAt: Date | null; realizedPnl: any }>
+    startedAt: Date
+    dailyRows: Array<{ date: Date; equityStart?: any; equityEnd: any }>
+  }): Array<{ ts: string; value: number }> {
+    const initial = Number.isFinite(input.initialBalance) ? input.initialBalance : 0
+    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
+    const startedAtMs = input.startedAt.getTime()
+    const now = new Date()
+
+    // 行业通用口径优先使用账户权益时间序列（按时间顺序、峰值到谷值计算最大回撤）
+    const dailyPoints = input.dailyRows
+      .filter(item => item.date.getTime() >= startedAtMs)
+      .map(item => ({
+        ts: item.date.toISOString(),
+        value: Number(item.equityEnd),
+      }))
+      .filter(item => Number.isFinite(item.value))
+
+    if (dailyPoints.length > 0) {
+      dailyPoints.push({
+        ts: now.toISOString(),
+        value: Number(currentEquity.toFixed(8)),
+      })
+      return this.normalizeEquitySeries(dailyPoints)
+    }
+
+    // 没有日度权益时，再按平仓事件累计构造；并过滤策略启动前历史成交，避免跨策略污染
+    const points: Array<{ ts: string; value: number }> = [{
+      ts: input.startedAt.toISOString(),
+      value: Number(initial.toFixed(8)),
+    }]
+
+    let runningEquity = initial
+    for (const row of input.closedPositionRows) {
+      const at = row.closedAt ?? row.openedAt
+      if (at.getTime() < startedAtMs) continue
+      runningEquity += Number(row.realizedPnl ?? 0)
+      points.push({
+        ts: at.toISOString(),
+        value: Number(runningEquity.toFixed(8)),
+      })
+    }
+
+    points.push({
+      ts: now.toISOString(),
+      value: Number(currentEquity.toFixed(8)),
+    })
+
+    return this.normalizeEquitySeries(points)
+  }
+
+  private normalizeEquitySeries(series: Array<{ ts: string; value: number }>): Array<{ ts: string; value: number }> {
+    if (series.length === 0) return []
+
+    const sorted = [...series]
+      .filter(item => Number.isFinite(item.value))
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+
+    const dedup: Array<{ ts: string; value: number }> = []
+    for (const point of sorted) {
+      const last = dedup[dedup.length - 1]
+      if (last && last.ts === point.ts) {
+        last.value = point.value
+        continue
+      }
+      dedup.push({
+        ts: point.ts,
+        value: Number(point.value.toFixed(8)),
+      })
+    }
+
+    return dedup
+  }
+
+  private computeMaxDrawdownPct(series: Array<{ ts: string; value: number }>): number {
+    if (series.length === 0) return 0
+    let peak = series[0].value
+    let maxDrawdown = 0
+    for (const point of series) {
+      if (point.value > peak) peak = point.value
+      if (peak <= 0) continue
+      const drawdownPct = ((peak - point.value) / peak) * 100
+      if (drawdownPct > maxDrawdown) {
+        maxDrawdown = drawdownPct
+      }
+    }
+    return Number(maxDrawdown.toFixed(2))
+  }
+
+  private calculateTodayPnl(
+    totalUnrealizedPnl: number,
+    closedPositionRows: Array<{ closedAt: Date | null; realizedPnl: any }>,
+  ): number {
+    const startUtcDay = new Date()
+    startUtcDay.setUTCHours(0, 0, 0, 0)
+    const endUtcDay = new Date(startUtcDay.getTime() + 24 * 60 * 60 * 1000)
+
+    const realizedToday = closedPositionRows
+      .filter(row => row.closedAt && row.closedAt >= startUtcDay && row.closedAt < endUtcDay)
+      .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
+
+    return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
+  }
+}

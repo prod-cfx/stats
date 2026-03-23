@@ -6,6 +6,11 @@ import type {
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
+import {
+  getStrategyById,
+  listStrategies as listMockStrategies,
+  updateStrategyStatus as updateMockStrategyStatus,
+} from '@/components/account/ai-quant-strategy-store'
 import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
@@ -34,6 +39,8 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 
 const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
+const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK =
+  process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK !== 'false'
 
 function getHttpStatusFromError(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined
@@ -51,6 +58,12 @@ function shouldFallbackToMock(error: unknown): boolean {
   // Auth errors should continue to bubble for UI to handle (e.g. show login prompt)
   if (error instanceof AuthenticationError) return false
   return true
+}
+
+function shouldFallbackToAccountAiQuantMock(error: unknown): boolean {
+  if (error instanceof AuthenticationError) return false
+  if (ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) return true
+  return shouldFallbackToMock(error)
 }
 
 function mulberry32(seed: number) {
@@ -497,7 +510,7 @@ export async function fetchWhaleTrackingDiscover(): Promise<WhaleDiscoverRespons
       return unwrapResponse(response) as WhaleDiscoverResponse
     }, 'FETCH_WHALE_TRACKING_DISCOVER')
   } catch (error) {
-    if (!shouldFallbackToMock(error)) throw error
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
     // Mock payload: keep Whale Discover page functional when backend is unavailable.
     const rand = mulberry32(hashStringToSeed('whale-discover'))
 
@@ -1264,6 +1277,329 @@ export interface PaginatedResponse<T> {
   page: number
   limit: number
   items: T[]
+}
+
+export type AccountAiQuantStrategyStatus = 'running' | 'stopped' | 'draft'
+export type AccountAiQuantStrategyAction = 'run' | 'stop'
+
+export interface AccountAiQuantStrategyMetrics {
+  returnPct: number | null
+  maxDrawdownPct: number | null
+  winRatePct: number | null
+  tradeCount: number | null
+}
+
+export interface AccountAiQuantStrategyListItem {
+  id: string
+  name: string
+  status: AccountAiQuantStrategyStatus
+  exchange: string | null
+  symbol: string | null
+  timeframe: string | null
+  positionPct: number | null
+  isSubscribed: boolean
+  metrics: AccountAiQuantStrategyMetrics
+  updatedAt: string
+}
+
+export interface AccountAiQuantStrategyEquityPoint {
+  ts: string
+  value: number
+}
+
+export interface AccountAiQuantStrategyTimelineEvent {
+  at: string
+  eventType: 'system' | 'trade'
+  event: string
+  note?: string | null
+}
+
+export interface AccountAiQuantStrategySnapshot {
+  exchange: string | null
+  symbol: string | null
+  timeframe: string | null
+  positionPct: number | null
+  deployAccountName?: string | null
+  deployAt?: string | null
+}
+
+export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyListItem {
+  totalPnl: number | null
+  todayPnl: number | null
+  equitySeries: AccountAiQuantStrategyEquityPoint[]
+  snapshot: AccountAiQuantStrategySnapshot
+  timeline: AccountAiQuantStrategyTimelineEvent[]
+}
+
+interface AccountAiQuantListQuery {
+  userId: string
+  page?: number
+  limit?: number
+  status?: AccountAiQuantStrategyStatus
+}
+
+export interface AccountAiQuantDeployPayload {
+  userId: string
+  name: string
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  symbol: string
+  timeframe: string
+  positionPct: number
+  exchangeAccountId?: string
+  exchangeAccountName?: string
+}
+
+function buildMockAccountAiQuantListResponse(
+  query: AccountAiQuantListQuery,
+): PaginatedResponse<AccountAiQuantStrategyListItem> {
+  const page = query.page ?? 1
+  const limit = query.limit ?? 20
+  const all = listMockStrategies()
+    .filter(item => !query.status || item.status === query.status)
+    .map(mapMockStrategyToListItem)
+  const start = (page - 1) * limit
+  const items = all.slice(start, start + limit)
+  return {
+    total: all.length,
+    page,
+    limit,
+    items,
+  }
+}
+
+function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[number]): AccountAiQuantStrategyListItem {
+  return {
+    id: item.id,
+    name: item.name,
+    status: item.status,
+    exchange: item.exchange,
+    symbol: item.symbol,
+    timeframe: item.timeframe,
+    positionPct: item.positionPct,
+    isSubscribed: true,
+    metrics: {
+      returnPct: item.metrics.returnPct,
+      maxDrawdownPct: item.metrics.maxDrawdownPct,
+      winRatePct: item.metrics.winRatePct,
+      tradeCount: item.metrics.tradeCount,
+    },
+    updatedAt: item.updatedAt,
+  }
+}
+
+function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): AccountAiQuantStrategyDetail {
+  if (!item) {
+    throw new ApiError('策略不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
+  }
+
+  return {
+    ...mapMockStrategyToListItem(item),
+    totalPnl: item.totalPnl ?? null,
+    todayPnl: item.todayPnl ?? null,
+    equitySeries: item.equitySeries.map(point => ({
+      ts: point.ts,
+      value: point.value,
+    })),
+    snapshot: {
+      exchange: item.exchange,
+      symbol: item.symbol,
+      timeframe: item.timeframe,
+      positionPct: item.positionPct,
+      deployAccountName: item.deploy?.accountName ?? null,
+      deployAt: item.deploy?.at ?? null,
+    },
+    timeline: item.timeline.map(event => ({
+      at: event.at,
+      eventType: 'system',
+      event: event.event,
+      note: event.note ?? null,
+    })),
+  }
+}
+
+function buildAccountAiQuantHeaders(userId?: string) {
+  return {
+    'Content-Type': 'application/json',
+    ...(userId ? { 'x-user-id': userId } : {}),
+    ...optionalAuthHeaders(),
+  }
+}
+
+async function parseAccountAiQuantJson(response: Response, fallbackMessage: string) {
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      parseApiErrorMessage(response.status, json, fallbackMessage),
+      'ACCOUNT_AI_QUANT_REQUEST_FAILED',
+      response.status,
+      json,
+    )
+  }
+
+  return json
+}
+
+export async function fetchAccountAiQuantStrategies(
+  query: AccountAiQuantListQuery,
+): Promise<PaginatedResponse<AccountAiQuantStrategyListItem>> {
+  try {
+    return await apiCall(async () => {
+      if (!query.userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
+
+      const search = new URLSearchParams({
+        userId: query.userId.trim(),
+        page: String(query.page ?? 1),
+        limit: String(query.limit ?? 20),
+      })
+      if (query.status) search.set('status', query.status)
+
+      const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies?${search.toString()}`, {
+        method: 'GET',
+        headers: buildAccountAiQuantHeaders(query.userId.trim()),
+      })
+      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略列表失败')
+      const remote = unwrapResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>(
+        json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
+      )
+
+      if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) {
+        return remote
+      }
+
+      const mock = buildMockAccountAiQuantListResponse(query)
+      if (mock.total === 0) {
+        return remote
+      }
+      if (remote.total === 0) {
+        return mock
+      }
+
+      const mergedById = new Map<string, AccountAiQuantStrategyListItem>()
+      for (const item of remote.items) mergedById.set(item.id, item)
+      for (const item of mock.items) {
+        if (!mergedById.has(item.id)) mergedById.set(item.id, item)
+      }
+      const mergedItems = Array.from(mergedById.values())
+      const mergedTotal = new Set([
+        ...remote.items.map(item => item.id),
+        ...mock.items.map(item => item.id),
+      ]).size
+
+      return {
+        total: mergedTotal,
+        page: remote.page,
+        limit: remote.limit,
+        items: mergedItems.slice(0, remote.limit),
+      }
+    }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    return buildMockAccountAiQuantListResponse(query)
+  }
+}
+
+export async function fetchAccountAiQuantStrategyDetail(
+  strategyId: string,
+  userId: string,
+): Promise<AccountAiQuantStrategyDetail> {
+  try {
+    return await apiCall(async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
+
+      const search = new URLSearchParams({ userId: userId.trim() })
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+        {
+          method: 'GET',
+          headers: buildAccountAiQuantHeaders(userId.trim()),
+        },
+      )
+      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
+      return unwrapResponse<AccountAiQuantStrategyDetail>(
+        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+      )
+    }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    return mapMockStrategyToDetail(getStrategyById(strategyId))
+  }
+}
+
+export async function performAccountAiQuantStrategyAction(
+  strategyId: string,
+  payload: { userId: string; action: AccountAiQuantStrategyAction },
+): Promise<AccountAiQuantStrategyDetail> {
+  try {
+    return await apiCall(async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!payload.userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
+        {
+          method: 'POST',
+          headers: buildAccountAiQuantHeaders(payload.userId.trim()),
+          body: JSON.stringify({
+            userId: payload.userId.trim(),
+            action: payload.action,
+          }),
+        },
+      )
+      const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
+      return unwrapResponse<AccountAiQuantStrategyDetail>(
+        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+      )
+    }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    updateMockStrategyStatus(strategyId, payload.action === 'run' ? 'running' : 'stopped')
+    return mapMockStrategyToDetail(getStrategyById(strategyId))
+  }
+}
+
+export async function deployAccountAiQuantStrategy(
+  payload: AccountAiQuantDeployPayload,
+): Promise<AccountAiQuantStrategyDetail> {
+  return apiCall(async () => {
+    if (!payload.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+    if (!payload.name?.trim()) {
+      throw new ApiError('name is required', 'INVALID_INPUT')
+    }
+
+    const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies/deploy`, {
+      method: 'POST',
+      headers: buildAccountAiQuantHeaders(payload.userId.trim()),
+      body: JSON.stringify({
+        userId: payload.userId.trim(),
+        name: payload.name.trim(),
+        exchange: payload.exchange,
+        symbol: payload.symbol,
+        timeframe: payload.timeframe,
+        positionPct: payload.positionPct,
+        exchangeAccountId: payload.exchangeAccountId,
+        exchangeAccountName: payload.exchangeAccountName,
+      }),
+    })
+    const json = await parseAccountAiQuantJson(response, '部署策略失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+  }, 'DEPLOY_ACCOUNT_AI_QUANT_STRATEGY')
 }
 
 // ===== 聚合爆仓数据（Liquidation Data）API =====

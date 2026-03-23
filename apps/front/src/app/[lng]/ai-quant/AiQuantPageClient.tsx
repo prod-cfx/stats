@@ -21,6 +21,7 @@ import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
+  deployAccountAiQuantStrategy,
   continueLlmCodegenSession,
   startLlmCodegenSession,
 } from '@/lib/api'
@@ -49,6 +50,7 @@ const DEFAULT_PARAMS: QuantParams = {
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
+const DEV_MOCK_EXECUTION_MODE = true
 
 interface ConversationState {
   id: string
@@ -232,11 +234,33 @@ export function AiQuantPageClient() {
   }, [])
 
   const apiConfigured = selectedDeployExchange === 'binance' ? apiReady.binance : apiReady.okx
+  const mockExecutionMode = DEV_MOCK_EXECUTION_MODE
+  const deployAccounts = useMemo(() => {
+    if (exchangeAccounts.length > 0) return exchangeAccounts
+    if (!mockExecutionMode) return exchangeAccounts
+    return [
+      {
+        accountId: 'mock-binance',
+        exchange: 'binance' as const,
+        accountName: 'Mock Binance Account',
+        apiKeyMask: 'MOCK',
+        status: 'available' as const,
+      },
+      {
+        accountId: 'mock-okx',
+        exchange: 'okx' as const,
+        accountName: 'Mock OKX Account',
+        apiKeyMask: 'MOCK',
+        status: 'available' as const,
+      },
+    ]
+  }, [exchangeAccounts, mockExecutionMode])
 
   const canDeploy = useMemo(() => {
     if (!activeConversation?.backtestResult) return false
+    if (mockExecutionMode) return true
     return activeConversation.backtestResult.maxDrawdownPct <= 20
-  }, [activeConversation?.backtestResult])
+  }, [activeConversation?.backtestResult, mockExecutionMode])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
 
   const compactMode = useMemo(() => {
@@ -566,7 +590,7 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
-    if (!graphConfirmed) {
+    if (!graphConfirmed && !mockExecutionMode) {
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -657,6 +681,17 @@ export function AiQuantPageClient() {
     setSelectedDeployExchange(activeConversation.params.exchange)
   }, [activeConversation.params.exchange])
 
+  useEffect(() => {
+    if (!deployOpen) return
+    if (selectedDeployAccountId) return
+    const firstAvailable = deployAccounts.find(
+      item => item.exchange === selectedDeployExchange && item.status === 'available',
+    )
+    if (firstAvailable) {
+      setSelectedDeployAccountId(firstAvailable.accountId)
+    }
+  }, [deployAccounts, deployOpen, selectedDeployAccountId, selectedDeployExchange])
+
   if (isLoading) {
     return <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 py-8 md:px-8" />
   }
@@ -729,7 +764,7 @@ export function AiQuantPageClient() {
             onParamsChange={nextParams => updateActiveConversation(curr => ({ ...curr, params: nextParams, updatedAt: Date.now() }))}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={graphConfirmed}
+            canRunBacktest={graphConfirmed || mockExecutionMode}
           />
 
           {activeConversation.logicGraph && (
@@ -789,6 +824,7 @@ export function AiQuantPageClient() {
             <BacktestSummaryCard
               result={activeConversation.backtestResult}
               canDeploy={canDeploy}
+              drawdownLimited={!mockExecutionMode}
               onOpenFullScreen={() =>
                 router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}`)
               }
@@ -814,47 +850,80 @@ export function AiQuantPageClient() {
         open={deployOpen}
         onClose={() => setDeployOpen(false)}
         canDeploy={canDeploy}
-        apiConfigured={apiConfigured}
+        apiConfigured={apiConfigured || mockExecutionMode}
         exchange={selectedDeployExchange}
-        accounts={exchangeAccounts}
+        accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
         onSelectExchange={(nextExchange) => {
           setSelectedDeployExchange(nextExchange)
           setSelectedDeployAccountId('')
         }}
         onSelectAccount={setSelectedDeployAccountId}
-        onConfirmDeploy={() => {
-          const account = exchangeAccounts.find(item => item.accountId === selectedDeployAccountId)
-          if (!account || !activeConversation.backtestResult) return
-          upsertStrategyDeployment({
-            id: `stg-${activeConversation.id}`,
-            name: activeConversation.title || 'AI策略',
-            exchange: selectedDeployExchange,
-            symbol: activeConversation.params.symbol,
-            timeframe: `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`,
-            positionPct: activeConversation.params.positionPct,
-            accountId: account.accountId,
-            accountName: account.accountName,
-            metrics: {
-              returnPct: activeConversation.backtestResult.totalReturnPct,
-              maxDrawdownPct: activeConversation.backtestResult.maxDrawdownPct,
-              winRatePct: activeConversation.backtestResult.winRatePct,
-              tradeCount: activeConversation.backtestResult.tradeCount,
-            },
-          })
-          setDeployOpen(false)
-          updateActiveConversation(curr => ({
-            ...curr,
-            messages: [
-              ...curr.messages,
-              {
-                id: `deploy-ok-${Date.now()}`,
-                role: 'assistant',
-                content: t('aiQuant.messages.deploySuccess', { exchange: selectedDeployExchange.toUpperCase(), account: account.accountName }),
-              },
-            ],
-            updatedAt: Date.now(),
-          }))
+        onConfirmDeploy={async () => {
+          const account = deployAccounts.find(item => item.accountId === selectedDeployAccountId)
+          if (!account || !activeConversation.backtestResult || !session?.userId) return
+
+          const strategyName = activeConversation.title || 'AI策略'
+          const timeframe = `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`
+
+          try {
+            await deployAccountAiQuantStrategy({
+              userId: session.userId,
+              name: strategyName,
+              exchange: selectedDeployExchange,
+              symbol: activeConversation.params.symbol,
+              timeframe,
+              positionPct: activeConversation.params.positionPct,
+              exchangeAccountId: account.accountId,
+              exchangeAccountName: account.accountName,
+            })
+            setDeployOpen(false)
+            updateActiveConversation(curr => ({
+              ...curr,
+              messages: [
+                ...curr.messages,
+                {
+                  id: `deploy-ok-${Date.now()}`,
+                  role: 'assistant',
+                  content: t('aiQuant.messages.deploySuccess', { exchange: selectedDeployExchange.toUpperCase(), account: account.accountName }),
+                },
+              ],
+              updatedAt: Date.now(),
+            }))
+          } catch {
+            // 后端部署失败时，在本地 mock 模式下保留可演示能力，但明确这是本地模拟
+            if (mockExecutionMode) {
+              upsertStrategyDeployment({
+                id: `stg-${activeConversation.id}`,
+                name: strategyName,
+                exchange: selectedDeployExchange,
+                symbol: activeConversation.params.symbol,
+                timeframe,
+                positionPct: activeConversation.params.positionPct,
+                accountId: account.accountId,
+                accountName: account.accountName,
+                metrics: {
+                  returnPct: activeConversation.backtestResult.totalReturnPct,
+                  maxDrawdownPct: activeConversation.backtestResult.maxDrawdownPct,
+                  winRatePct: activeConversation.backtestResult.winRatePct,
+                  tradeCount: activeConversation.backtestResult.tradeCount,
+                },
+              })
+              setDeployOpen(false)
+              updateActiveConversation(curr => ({
+                ...curr,
+                messages: [
+                  ...curr.messages,
+                  {
+                    id: `deploy-mock-${Date.now()}`,
+                    role: 'assistant',
+                    content: `模拟部署成功（仅本地数据）：${selectedDeployExchange.toUpperCase()} / ${account.accountName}。`,
+                  },
+                ],
+                updatedAt: Date.now(),
+              }))
+            }
+          }
         }}
         lng={lng}
       />

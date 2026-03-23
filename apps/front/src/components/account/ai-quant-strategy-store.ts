@@ -30,6 +30,8 @@ export interface AiQuantStrategyRecord {
   metrics: StrategyMetricSnapshot
   equitySeries: StrategyEquityPoint[]
   timeline: StrategyTimelineEvent[]
+  totalPnl?: number | null
+  todayPnl?: number | null
   deploy?: {
     exchange: 'binance' | 'okx'
     accountId: string

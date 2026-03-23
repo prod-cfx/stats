@@ -51,7 +51,12 @@ export class IndicatorConfigService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.reloadAllRuntimeConfigs()
+    try {
+      await this.reloadAllRuntimeConfigs()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(`Skip indicator runtime preload on module init: ${message}`)
+    }
   }
 
   /**
@@ -63,7 +68,17 @@ export class IndicatorConfigService implements OnModuleInit {
   }
 
   async reloadAllRuntimeConfigs(): Promise<void> {
-    const records = await this.repository.listAllActive()
+    let records: PrismaIndicatorConfig[] = []
+    try {
+      records = await this.repository.listAllActive()
+    } catch (error) {
+      if (!this.isMissingIndicatorConfigTableError(error)) {
+        throw error
+      }
+      this.logger.warn(
+        'indicator_configs table is missing in current database; skip indicator runtime preload',
+      )
+    }
     this.runtimeConfigs.clear()
 
     for (const record of records) {
@@ -83,6 +98,12 @@ export class IndicatorConfigService implements OnModuleInit {
     }
 
     this.logger.log(`Indicator runtime configs loaded: ${this.runtimeConfigs.size} symbol/timeframe groups`)
+  }
+
+  private isMissingIndicatorConfigTableError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const code = (error as { code?: unknown }).code
+    return code === 'P2021'
   }
 
   async listForAdmin(params: {

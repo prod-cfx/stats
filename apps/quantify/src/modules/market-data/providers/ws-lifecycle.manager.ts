@@ -16,6 +16,10 @@ export class WsLifecycleManager<TKey extends string> {
     this.shouldReconnect = shouldReconnect
   }
 
+  isReconnectEnabled(): boolean {
+    return this.shouldReconnect
+  }
+
   registerSocket(key: TKey, ws: WebSocket): void {
     this.wsByKey[key] = ws
   }
