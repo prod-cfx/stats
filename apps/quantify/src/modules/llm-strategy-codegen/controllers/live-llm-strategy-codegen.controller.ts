@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
@@ -11,6 +11,7 @@ import { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import { CallerIdentityService } from '../services/caller-identity.service'
 import { CodegenConversationService } from '../services/codegen-conversation.service'
 
 @ApiTags('llm-strategy-codegen')
@@ -18,6 +19,7 @@ import { CodegenConversationService } from '../services/codegen-conversation.ser
 export class LiveLlmStrategyCodegenController {
   constructor(
     private readonly service: CodegenConversationService,
+    private readonly callerIdentityService: CallerIdentityService,
     private readonly env: EnvService,
   ) {}
 
@@ -28,7 +30,7 @@ export class LiveLlmStrategyCodegenController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: StartCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.startSession(dto, callerUserId)
   }
 
@@ -40,7 +42,7 @@ export class LiveLlmStrategyCodegenController {
     @Param('id') id: string,
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.continueSession(id, dto, callerUserId)
   }
 
@@ -51,7 +53,7 @@ export class LiveLlmStrategyCodegenController {
     @Param('id') id: string,
     @Headers('authorization') authorization: string | undefined,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.getSession(id, callerUserId)
   }
 
@@ -107,115 +109,6 @@ export class LiveLlmStrategyCodegenController {
       return false
     }
     return timingSafeEqual(providedBuffer, configuredBuffer)
-  }
-
-  private resolveCallerUserIdFromAuthorization(authorization: string | undefined): string {
-    const normalizedAuth = authorization?.trim()
-    if (!normalizedAuth) {
-      throw new DomainException('codegen.missing_authorization_header', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const [scheme, token] = normalizedAuth.split(/\s+/, 2)
-    if (scheme?.toLowerCase() !== 'bearer' || !token) {
-      throw new DomainException('codegen.invalid_authorization_header', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const jwtSecret = this.env.getString('JWT_SECRET')?.trim()
-    if (!jwtSecret) {
-      throw new DomainException('codegen.jwt_secret_not_configured', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const payload = this.verifyHs256Jwt(token, jwtSecret)
-    const subject = this.readJwtUserId(payload)
-    if (!subject) {
-      throw new DomainException('codegen.jwt_subject_missing', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-    return subject
-  }
-
-  private verifyHs256Jwt(token: string, secret: string): Record<string, unknown> {
-    const parts = token.split('.')
-    if (parts.length !== 3) {
-      throw new DomainException('codegen.invalid_jwt_format', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const [encodedHeader, encodedPayload, signature] = parts
-    const header = this.decodeJwtPart(encodedHeader)
-    if (header.alg !== 'HS256') {
-      throw new DomainException('codegen.invalid_jwt_header', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const signingInput = `${encodedHeader}.${encodedPayload}`
-    const expectedSignature = createHmac('sha256', secret)
-      .update(signingInput)
-      .digest('base64url')
-    if (!this.safeEqual(signature, expectedSignature)) {
-      throw new DomainException('codegen.invalid_jwt_signature', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-
-    const payload = this.decodeJwtPart(encodedPayload)
-    const exp = payload.exp
-    if (typeof exp === 'number' && Number.isFinite(exp)) {
-      const now = Math.floor(Date.now() / 1000)
-      if (exp <= now) {
-        throw new DomainException('codegen.jwt_expired', {
-          code: ErrorCode.UNAUTHORIZED,
-          status: HttpStatus.UNAUTHORIZED,
-        })
-      }
-    }
-    return payload
-  }
-
-  private decodeJwtPart(part: string): Record<string, unknown> {
-    try {
-      const decoded = Buffer.from(part, 'base64url').toString('utf8')
-      const parsed = JSON.parse(decoded) as unknown
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('invalid_jwt_part')
-      }
-      return parsed as Record<string, unknown>
-    }
-    catch {
-      throw new DomainException('codegen.invalid_jwt_payload', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-  }
-
-  private readJwtUserId(payload: Record<string, unknown>): string | null {
-    const candidates = [payload.sub, payload.userId, payload.id]
-    for (const candidate of candidates) {
-      if (typeof candidate === 'string') {
-        const normalized = candidate.trim()
-        if (normalized) {
-          return normalized
-        }
-      }
-    }
-    return null
   }
 
   private safeEqual(a: string, b: string): boolean {

@@ -4,6 +4,7 @@ import { AiModule } from '@/modules/ai/ai.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
+import { CallerIdentityService } from './services/caller-identity.service'
 import { ChecklistGateService } from './services/checklist-gate.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
@@ -21,6 +22,7 @@ import { StaticGuardrailService } from './services/static-guardrail.service'
     RuntimeGuardrailService,
     SpecDescBuilderService,
     RecommendationIndexService,
+    CallerIdentityService,
     CodegenConversationService,
   ],
   exports: [CodegenConversationService],

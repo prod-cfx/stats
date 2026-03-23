@@ -4,6 +4,7 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
+import { CallerIdentityService } from './services/caller-identity.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
 const TEST_APP_SECRET = 'engine-test-secret'
@@ -34,6 +35,7 @@ function buildProviders(service: Record<string, jest.Mock>, envService = createM
   return [
     { provide: CodegenConversationService, useValue: service },
     { provide: EnvService, useValue: envService },
+    CallerIdentityService,
   ]
 }
 
