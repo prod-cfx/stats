@@ -1,4 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -23,6 +24,7 @@ import { LlmStrategySubscriptionsService } from './llm-strategy-subscriptions.se
 export class LlmStrategySubscriptionsController {
   constructor(private readonly service: LlmStrategySubscriptionsService) {}
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '订阅 LLM 策略实例' })
   @ApiResponse({ status: 201, type: LlmSubscriptionResponseDto })
@@ -63,6 +65,7 @@ export class LlmStrategySubscriptionsController {
     return this.service.getSubscriptionDetail(query.userId, subscriptionId)
   }
 
+  @Transactional()
   @Patch(':subscriptionId')
   @ApiOperation({ summary: '更新 LLM 订阅（参数、状态）' })
   @ApiResponse({ status: 200, type: LlmSubscriptionResponseDto })
@@ -73,6 +76,7 @@ export class LlmStrategySubscriptionsController {
     return this.service.updateSubscription(dto.userId, subscriptionId, dto)
   }
 
+  @Transactional()
   @Delete(':subscriptionId')
   @ApiOperation({ summary: '取消 LLM 订阅' })
   @ApiResponse({ status: 200, description: '取消订阅成功' })

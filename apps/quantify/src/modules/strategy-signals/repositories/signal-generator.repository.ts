@@ -1,16 +1,15 @@
-import type { Prisma } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class SignalGeneratorRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() { return this.prisma.getClient() }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   findRunningInstances() {
-    return this.getClient().strategyInstance.findMany({
+    return this.txHost.tx.strategyInstance.findMany({
       where: {
         status: 'running',
         mode: 'LIVE',
@@ -22,21 +21,21 @@ export class SignalGeneratorRepository {
   }
 
   findStrategyInstance(id: string) {
-    return this.getClient().strategyInstance.findUnique({
+    return this.txHost.tx.strategyInstance.findUnique({
       where: { id },
       include: { strategyTemplate: true },
     })
   }
 
   findEnabledIndicatorConfigs(names: string[]) {
-    return this.getClient().indicatorConfig.findMany({
+    return this.txHost.tx.indicatorConfig.findMany({
       where: { name: { in: names }, isEnabled: true },
       include: { symbol: true },
     })
   }
 
   groupLatestIndicatorValues(indicatorConfigIds: string[]) {
-    return this.getClient().indicatorValue.groupBy({
+    return this.txHost.tx.indicatorValue.groupBy({
       by: ['indicatorConfigId'],
       where: { indicatorConfigId: { in: indicatorConfigIds } },
       _max: { time: true },
@@ -44,7 +43,7 @@ export class SignalGeneratorRepository {
   }
 
   findLatestIndicatorValues(conditions: Array<{ indicatorConfigId: string; time: Date }>) {
-    return this.getClient().indicatorValue.findMany({
+    return this.txHost.tx.indicatorValue.findMany({
       where: {
         OR: conditions,
       },
@@ -53,13 +52,13 @@ export class SignalGeneratorRepository {
   }
 
   findSymbolsByCode(codes: string[]) {
-    return this.getClient().symbol.findMany({
+    return this.txHost.tx.symbol.findMany({
       where: { code: { in: codes } },
     })
   }
 
   findSymbolByCode(code: string) {
-    return this.getClient().symbol.findUnique({ where: { code } })
+    return this.txHost.tx.symbol.findUnique({ where: { code } })
   }
 
   async createSignalWithCooldownLock(params: {
@@ -70,8 +69,9 @@ export class SignalGeneratorRepository {
     skipCooldown: boolean
     data: Prisma.TradingSignalCreateInput
   }): Promise<{ created: boolean; signalId: string | null }> {
-    return this.prisma.$transaction(async (prisma) => {
-      await prisma.$queryRaw`
+    return this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
+      await tx.$queryRaw`
         SELECT "id"
         FROM "strategy_instances"
         WHERE "id" = ${params.instanceId}
@@ -79,7 +79,7 @@ export class SignalGeneratorRepository {
       `
 
       if (!params.skipCooldown) {
-        const existingCount = await prisma.tradingSignal.count({
+        const existingCount = await tx.tradingSignal.count({
           where: {
             strategyId: params.strategyId,
             symbolId: params.symbolId,
@@ -93,23 +93,18 @@ export class SignalGeneratorRepository {
         }
       }
 
-      const signal = await prisma.tradingSignal.create({ data: params.data })
+      const signal = await tx.tradingSignal.create({ data: params.data })
       return { created: true as const, signalId: signal.id }
     })
   }
 
   countRecentSignals(strategyId: string, symbolId: string, since: Date) {
-    return this.getClient().tradingSignal.count({
+    return this.txHost.tx.tradingSignal.count({
       where: {
         strategyId,
         symbolId,
         createdAt: { gte: since },
       },
     })
-  }
-
-  /** @internal 仅供 Service 层事务编排使用 */
-  runInTransaction<T>(fn: (client: Prisma.TransactionClient) => Promise<T>) {
-    return this.prisma.$transaction(fn)
   }
 }

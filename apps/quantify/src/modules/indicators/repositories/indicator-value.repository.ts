@@ -1,6 +1,8 @@
-import type { IndicatorValue, MarketBar, MarketTimeframe, Prisma, PrismaClient, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, IndicatorValue, MarketBar, MarketTimeframe, Prisma, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export interface IndicatorSeriesQuery {
   symbolId: string
@@ -31,46 +33,37 @@ export interface IndicatorValueUpsertInput {
 
 @Injectable()
 export class IndicatorValueRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async upsertMany(values: IndicatorValueUpsertInput[]): Promise<void> {
     if (!values.length) return
 
-    const client = this.prisma.getClient() as PrismaClient
+    const client = this.txHost.tx
 
-    await client.$transaction(
-      values.map(value =>
-        client.indicatorValue.upsert({
-          where: {
-            indicatorConfigId_time: {
-              indicatorConfigId: value.indicatorConfigId,
-              time: value.time,
-            },
-          },
-          create: {
-            config: { connect: { id: value.indicatorConfigId } },
-            symbol: { connect: { id: value.symbolId } },
-            timeframe: value.timeframe,
-            type: value.type,
+    for (const value of values) {
+      await client.indicatorValue.upsert({
+        where: {
+          indicatorConfigId_time: {
+            indicatorConfigId: value.indicatorConfigId,
             time: value.time,
-            valueNumeric: value.valueNumeric,
-            valueJson: value.valueJson,
-            createdAt: value.createdAt,
           },
-          update: {
-            valueNumeric: value.valueNumeric,
-            valueJson: value.valueJson,
-          },
-        }),
-      ),
-    )
+        },
+        create: {
+          config: { connect: { id: value.indicatorConfigId } },
+          symbol: { connect: { id: value.symbolId } },
+          timeframe: value.timeframe,
+          type: value.type,
+          time: value.time,
+          valueNumeric: value.valueNumeric,
+          valueJson: value.valueJson,
+          createdAt: value.createdAt,
+        },
+        update: {
+          valueNumeric: value.valueNumeric,
+          valueJson: value.valueJson,
+        },
+      })
+    }
   }
 
   async getSeries(query: IndicatorSeriesQuery): Promise<IndicatorValue[]> {
@@ -93,7 +86,7 @@ export class IndicatorValueRepository {
 
     const take = query.limit && query.limit > 0 ? query.limit : 500
 
-    return this.client.indicatorValue.findMany({
+    return this.txHost.tx.indicatorValue.findMany({
       where,
       orderBy: { time: 'asc' },
       take,
@@ -119,7 +112,7 @@ export class IndicatorValueRepository {
     }
 
     // 为每个 indicatorConfigId 只取一条最新记录（time 最大且 <= at）
-    const groups = await this.client.indicatorValue.groupBy({
+    const groups = await this.txHost.tx.indicatorValue.groupBy({
       by: ['indicatorConfigId'],
       where,
       _max: {
@@ -138,7 +131,7 @@ export class IndicatorValueRepository {
 
     if (!conditions.length) return []
 
-    return this.client.indicatorValue.findMany({
+    return this.txHost.tx.indicatorValue.findMany({
       where: {
         OR: conditions,
       },
@@ -147,7 +140,7 @@ export class IndicatorValueRepository {
   }
 
   async findRecentBars(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
-    return this.client.marketBar.findMany({
+    return this.txHost.tx.marketBar.findMany({
       where: { symbolId, timeframe },
       orderBy: { time: 'desc' },
       take: limit,

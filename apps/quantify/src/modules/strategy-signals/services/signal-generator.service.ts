@@ -3,6 +3,7 @@ import type {
   LegTimeframeData,
   MultiLegStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
@@ -18,7 +19,7 @@ import type {
   SignalStatus,
   StrategyInstance,
   StrategyTemplate,
-  Symbol,
+  Symbol, PrismaClient 
 } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
@@ -26,6 +27,8 @@ import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
@@ -107,6 +110,7 @@ export class SignalGeneratorService {
     private readonly telemetry: SignalTelemetryService,
     private readonly marketDataReadGateway: MarketDataReadGateway,
     private readonly env: EnvService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {
     this.registerCronJob()
   }
@@ -612,9 +616,10 @@ export class SignalGeneratorService {
   ) {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
-    const result = await this.generatorRepository.runInTransaction(async prisma => {
+    const result = await this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
       // 对当前策略实例行加锁，避免同一实例并发通过冷却检查后重复创建信号
-      await prisma.$queryRaw`
+      await tx.$queryRaw`
         SELECT "id"
         FROM "strategy_instances"
         WHERE "id" = ${instance.id}
@@ -623,7 +628,7 @@ export class SignalGeneratorService {
 
       // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
-        const existingCount = await prisma.tradingSignal.count({
+        const existingCount = await tx.tradingSignal.count({
           where: {
             strategyId: strategy.id,
             symbolId: group.symbol.id,
@@ -668,7 +673,7 @@ export class SignalGeneratorService {
         },
       }
 
-      const signal = await prisma.tradingSignal.create({
+      const signal = await tx.tradingSignal.create({
         data,
       })
 
@@ -1546,8 +1551,9 @@ export class SignalGeneratorService {
     const cooldownMinutes = Math.max(configuredCooldown, minimumCooldown)
     const cooldownSince = new Date(Date.now() - cooldownMinutes * 60 * 1000)
 
-    const result = await this.generatorRepository.runInTransaction(async prisma => {
-      await prisma.$queryRaw`
+    const result = await this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
+      await tx.$queryRaw`
         SELECT "id"
         FROM "strategy_instances"
         WHERE "id" = ${instance.id}
@@ -1556,7 +1562,7 @@ export class SignalGeneratorService {
 
       // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
-        const recentSignal = await prisma.tradingSignal.findFirst({
+        const recentSignal = await tx.tradingSignal.findFirst({
           where: {
             strategyId: strategy.id,
             symbolId: primarySymbol.id,
@@ -1600,7 +1606,7 @@ export class SignalGeneratorService {
         },
       }
 
-      const newSignal = await prisma.tradingSignal.create({
+      const newSignal = await tx.tradingSignal.create({
         data,
       })
 

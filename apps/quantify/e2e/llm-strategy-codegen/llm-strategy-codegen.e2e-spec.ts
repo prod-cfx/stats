@@ -76,9 +76,8 @@ describe('llm strategy codegen (E2E)', () => {
   })
 
   afterEach(async () => {
-    const client = prisma.getClient()
-    await client.llmStrategyCodeVersion.deleteMany()
-    await client.llmStrategyCodegenSession.deleteMany()
+    await prisma.llmStrategyCodeVersion.deleteMany()
+    await prisma.llmStrategyCodegenSession.deleteMany()
     jest.restoreAllMocks()
   })
 
@@ -124,8 +123,7 @@ describe('llm strategy codegen (E2E)', () => {
     expect(systemPrompt).toContain('helpers.finance')
     expect(systemPrompt).not.toContain('helpers.math')
 
-    const client = prisma.getClient()
-    const versions = await client.llmStrategyCodeVersion.findMany({ where: { sessionId } })
+    const versions = await prisma.llmStrategyCodeVersion.findMany({ where: { sessionId } })
     expect(versions.length).toBe(1)
     expect(versions[0]?.staticPassed).toBe(true)
     expect(versions[0]?.runtimePassed).toBe(true)

@@ -1,16 +1,17 @@
-import type { SubscriptionStatus } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, SubscriptionStatus } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类型
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class LlmSubscriptionsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findByUserAndInstance(userId: string, llmStrategyInstanceId: string) {
     try {
-      return await this.prisma.getClient().userLlmStrategySubscription.findFirst({
+      return await this.txHost.tx.userLlmStrategySubscription.findFirst({
         where: { userId, llmStrategyInstanceId },
       })
     } catch (error) {
@@ -28,7 +29,7 @@ export class LlmSubscriptionsRepository {
 
   async findById(id: string) {
     try {
-      return await this.prisma.getClient().userLlmStrategySubscription.findUnique({
+      return await this.txHost.tx.userLlmStrategySubscription.findUnique({
         where: { id },
       })
     } catch (error) {
@@ -45,7 +46,7 @@ export class LlmSubscriptionsRepository {
 
   async findByIdWithDetails(id: string) {
     try {
-      return await this.prisma.getClient().userLlmStrategySubscription.findUnique({
+      return await this.txHost.tx.userLlmStrategySubscription.findUnique({
         where: { id },
         include: {
           llmStrategyInstance: {
@@ -72,8 +73,6 @@ export class LlmSubscriptionsRepository {
     userId: string,
     params: { status?: SubscriptionStatus; skip: number; take: number },
   ) {
-    const client = this.prisma.getClient()
-
     const where: Prisma.UserLlmStrategySubscriptionWhereInput = {
       userId,
       ...(params.status ? { status: params.status } : {}),
@@ -81,7 +80,7 @@ export class LlmSubscriptionsRepository {
 
     try {
       const [items, total] = await Promise.all([
-        client.userLlmStrategySubscription.findMany({
+        this.txHost.tx.userLlmStrategySubscription.findMany({
           where,
           include: {
             llmStrategyInstance: {
@@ -95,7 +94,7 @@ export class LlmSubscriptionsRepository {
           skip: params.skip,
           take: params.take,
         }),
-        client.userLlmStrategySubscription.count({ where }),
+        this.txHost.tx.userLlmStrategySubscription.count({ where }),
       ])
 
       return { items, total }
@@ -127,7 +126,7 @@ export class LlmSubscriptionsRepository {
       exchangeAccountId: data.exchangeAccountId,
     }
 
-    return this.prisma.getClient().userLlmStrategySubscription.create({ data: payload })
+    return this.txHost.tx.userLlmStrategySubscription.create({ data: payload })
   }
 
   async update(id: string, data: {
@@ -143,21 +142,21 @@ export class LlmSubscriptionsRepository {
     if (data.exchangeAccountId !== undefined) payload.exchangeAccountId = data.exchangeAccountId
     if (data.unsubscribedAt !== undefined) payload.unsubscribedAt = data.unsubscribedAt
 
-    return this.prisma.getClient().userLlmStrategySubscription.update({
+    return this.txHost.tx.userLlmStrategySubscription.update({
       where: { id },
       data: payload,
     })
   }
 
   async delete(id: string) {
-    return this.prisma.getClient().userLlmStrategySubscription.delete({
+    return this.txHost.tx.userLlmStrategySubscription.delete({
       where: { id },
     })
   }
 
   async findLlmStrategyInstance(instanceId: string) {
     try {
-      return await this.prisma.getClient().llmStrategyInstance.findUnique({
+      return await this.txHost.tx.llmStrategyInstance.findUnique({
         where: { id: instanceId },
         include: {
           strategy: { select: { id: true, name: true, description: true, status: true } },
@@ -175,14 +174,14 @@ export class LlmSubscriptionsRepository {
   }
 
   async findExchangeAccountByOwner(accountId: string, userId: string): Promise<{ id: string } | null> {
-    return this.prisma.getClient().exchangeAccount.findFirst({
+    return this.txHost.tx.exchangeAccount.findFirst({
       where: { id: accountId, userId },
       select: { id: true },
     })
   }
 
   async findUserStrategyAccount(userId: string, strategyId: string): Promise<{ id: string } | null> {
-    return this.prisma.getClient().userStrategyAccount.findUnique({
+    return this.txHost.tx.userStrategyAccount.findUnique({
       where: { userId_strategyId: { userId, strategyId } },
       select: { id: true },
     })
@@ -196,7 +195,7 @@ export class LlmSubscriptionsRepository {
     instanceIds: string[],
   ): Promise<Array<{ llmStrategyInstanceId: string }>> {
     try {
-      return await this.prisma.getClient().userLlmStrategySubscription.findMany({
+      return await this.txHost.tx.userLlmStrategySubscription.findMany({
         where: { userId, llmStrategyInstanceId: { in: instanceIds }, status: 'active' },
         select: { llmStrategyInstanceId: true },
       })
@@ -220,7 +219,7 @@ export class LlmSubscriptionsRepository {
     instanceId: string,
   ): Promise<{ id: string } | null> {
     try {
-      return await this.prisma.getClient().userLlmStrategySubscription.findFirst({
+      return await this.txHost.tx.userLlmStrategySubscription.findFirst({
         where: { userId, llmStrategyInstanceId: instanceId, status: 'active' },
         select: { id: true },
       })
@@ -245,14 +244,14 @@ export class LlmSubscriptionsRepository {
   ) {
     const where = { llmStrategyInstanceId: instanceId }
     const [items, total] = await Promise.all([
-      this.prisma.getClient().tradingSignal.findMany({
+      this.txHost.tx.tradingSignal.findMany({
         where,
         include: { symbol: { select: { code: true } } },
         orderBy: { createdAt: 'desc' },
         skip: params.skip,
         take: params.take,
       }),
-      this.prisma.getClient().tradingSignal.count({ where }),
+      this.txHost.tx.tradingSignal.count({ where }),
     ])
     return { items, total }
   }

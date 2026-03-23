@@ -2,6 +2,7 @@ import type { TriggerPositionSyncDto } from './dto/position-sync.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import {
   Body,
   Controller,
@@ -43,6 +44,7 @@ export class PositionsController {
     private readonly positionSyncService: PositionSyncService,
   ) {}
 
+  @Transactional()
   @Post('fills')
   @ApiOperation({ summary: '记录成交（内部使用）' })
   @ApiOkResponse({ type: TradeResponseDto })
@@ -50,6 +52,7 @@ export class PositionsController {
     return this.positionsService.recordTrade(dto)
   }
 
+  @Transactional()
   @Post('quotes')
   @ApiOperation({ summary: '推送行情快照并更新未实现盈亏（内部使用）' })
   async applyQuotes(@Body() dto: QuotesUpdateDto) {
@@ -104,6 +107,7 @@ export class PositionsController {
     )
   }
 
+  @Transactional()
   @Post('sync')
   @ApiOperation({
     summary: '手动触发仓位同步',
@@ -129,6 +133,7 @@ export class PositionsController {
     )
   }
 
+  @Transactional()
   @Post('sync/all')
   @ApiOperation({ summary: '同步所有活跃账户的仓位' })
   @ApiOkResponse({ type: [PositionSyncResultDto] })
@@ -136,6 +141,7 @@ export class PositionsController {
     return this.positionSyncService.syncAllActivePositions()
   }
 
+  @Transactional()
   @Post('close')
   @ApiOperation({
     summary: '用户主动平仓',

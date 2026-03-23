@@ -245,7 +245,7 @@ describe('ExchangeAccounts (E2E)', () => {
     prisma = result.prisma
 
     // 创建测试用户
-    testUser = await prisma.getClient().user.create({
+    testUser = await prisma.user.create({
       data: {
         email: `test-${Date.now()}@example.com`,
       }
@@ -255,10 +255,10 @@ describe('ExchangeAccounts (E2E)', () => {
   afterAll(async () => {
     // 清理测试数据
     if (testUser) {
-      await prisma.getClient().exchangeAccount.deleteMany({
+      await prisma.exchangeAccount.deleteMany({
         where: { userId: testUser.id }
       })
-      await prisma.getClient().user.delete({
+      await prisma.user.delete({
         where: { id: testUser.id }
       })
     }
@@ -562,7 +562,7 @@ describe('ExchangeAccounts (E2E)', () => {
 
   describe('GET /exchange-accounts', () => {
     it('returns fixed exchange status items for binance okx hyperliquid', async () => {
-      const anotherUser = await prisma.getClient().user.create({
+      const anotherUser = await prisma.user.create({
         data: {
           email: `empty-${Date.now()}@example.com`,
         },
@@ -609,10 +609,10 @@ describe('ExchangeAccounts (E2E)', () => {
         ])
       }
       finally {
-        await prisma.getClient().exchangeAccount.deleteMany({
+        await prisma.exchangeAccount.deleteMany({
           where: { userId: anotherUser.id }
         })
-        await prisma.getClient().user.delete({
+        await prisma.user.delete({
           where: { id: anotherUser.id }
         })
       }
@@ -748,7 +748,7 @@ describe('ExchangeAccounts (E2E)', () => {
 
     it('should not allow deleting other user\'s account', async () => {
       // 创建另一个用户
-      const otherUser = await prisma.getClient().user.create({
+      const otherUser = await prisma.user.create({
         data: {
           email: `other-${Date.now()}@example.com`,
         }
@@ -760,7 +760,7 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(404) // 应该返回404，因为找不到属于该用户的账户
 
       // 清理
-      await prisma.getClient().user.delete({
+      await prisma.user.delete({
         where: { id: otherUser.id }
       })
     })
@@ -877,7 +877,7 @@ describe('ExchangeAccounts (E2E)', () => {
         expect(response.status).toBe(201)
       })
 
-      const sameExchangeCount = await prisma.getClient().exchangeAccount.count({
+      const sameExchangeCount = await prisma.exchangeAccount.count({
         where: { userId: testUser.id, exchangeId: 'binance' },
       })
       expect(sameExchangeCount).toBe(1)

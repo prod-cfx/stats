@@ -1,19 +1,15 @@
-/* eslint-disable ts/consistent-type-imports -- PrismaService 需要运行时导入以供 Nest 注入 */
-import type { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class SubscriptionsRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findByUserAndStrategy(userId: string, strategyInstanceId: string) {
-    return this.client.userStrategySubscription.findFirst({
+    return this.txHost.tx.userStrategySubscription.findFirst({
       where: {
         userId,
         strategyInstanceId,
@@ -22,13 +18,13 @@ export class SubscriptionsRepository {
   }
 
   async findById(id: string) {
-    return this.client.userStrategySubscription.findUnique({
+    return this.txHost.tx.userStrategySubscription.findUnique({
       where: { id },
     })
   }
 
   async findByIdWithDetails(id: string) {
-    return this.client.userStrategySubscription.findUnique({
+    return this.txHost.tx.userStrategySubscription.findUnique({
       where: { id },
       include: {
         strategyInstance: {
@@ -62,7 +58,7 @@ export class SubscriptionsRepository {
    * 查询订阅及其校验所需的数据（用于参数校验场景）
    */
   async findByIdWithValidationData(id: string) {
-    return this.client.userStrategySubscription.findUnique({
+    return this.txHost.tx.userStrategySubscription.findUnique({
       where: { id },
       include: {
         strategyInstance: {
@@ -101,7 +97,7 @@ export class SubscriptionsRepository {
     }
 
     const [items, total] = await Promise.all([
-      this.client.userStrategySubscription.findMany({
+      this.txHost.tx.userStrategySubscription.findMany({
         where,
         include: {
           strategyInstance: {
@@ -134,7 +130,7 @@ export class SubscriptionsRepository {
         skip: options.skip,
         take: options.take,
       }),
-      this.client.userStrategySubscription.count({ where }),
+      this.txHost.tx.userStrategySubscription.count({ where }),
     ])
 
     return { items, total }
@@ -155,7 +151,7 @@ export class SubscriptionsRepository {
       exchangeAccountId: data.exchangeAccountId,
     }
 
-    return this.client.userStrategySubscription.create({
+    return this.txHost.tx.userStrategySubscription.create({
       data: payload,
     })
   }
@@ -184,14 +180,14 @@ export class SubscriptionsRepository {
       payload.unsubscribedAt = data.unsubscribedAt
     }
 
-    return this.client.userStrategySubscription.update({
+    return this.txHost.tx.userStrategySubscription.update({
       where: { id },
       data: payload,
     })
   }
 
   async findStrategyInstanceForSubscribe(strategyInstanceId: string) {
-    return this.client.strategyInstance.findUnique({
+    return this.txHost.tx.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: {
         id: true,
@@ -213,7 +209,7 @@ export class SubscriptionsRepository {
   }
 
   async findExchangeAccountOwnership(exchangeAccountId: string, userId: string) {
-    return this.client.exchangeAccount.findFirst({
+    return this.txHost.tx.exchangeAccount.findFirst({
       where: { id: exchangeAccountId, userId },
       select: { id: true },
     })

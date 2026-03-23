@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Param, Post, Put } from '@nestjs/common'
 import {
   ApiBody,
@@ -21,6 +22,7 @@ import { MarketDataService } from '../services/market-data.service'
 export class OpsMarketSymbolsController {
   constructor(private readonly marketDataService: MarketDataService) {}
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建交易对（运营接口）' })
   @ApiBody({ type: CreateMarketSymbolDto })
@@ -42,6 +44,7 @@ export class OpsMarketSymbolsController {
     return this.marketDataService.createSymbol(dto)
   }
 
+  @Transactional()
   @Put(':code')
   @ApiOperation({ summary: '更新交易对（运营接口）' })
   @ApiBody({ type: UpdateMarketSymbolDto })

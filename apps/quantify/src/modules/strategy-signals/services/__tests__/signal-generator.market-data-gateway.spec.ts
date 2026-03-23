@@ -31,9 +31,7 @@ describe('signal generator market-data gateway smoke', () => {
     },
   }
 
-  const mockPrisma = {
-    getClient: jest.fn(),
-  }
+  const mockPrisma = {}
   const mockConfigService = {
     get: jest.fn().mockReturnValue(config),
   }
@@ -66,6 +64,7 @@ describe('signal generator market-data gateway smoke', () => {
       mockEventEmitter as any,
       mockTelemetry as any,
       mockGateway as any,
+      {} as any,
       {} as any,
     )
   })

@@ -1,25 +1,19 @@
-import type { LlmStrategyRun, Prisma, TradingSignal } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, LlmStrategyRun, Prisma, TradingSignal } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class LlmStrategyRunsRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(data: Prisma.LlmStrategyRunCreateInput): Promise<LlmStrategyRun> {
-    return this.client.llmStrategyRun.create({ data })
+    return this.txHost.tx.llmStrategyRun.create({ data })
   }
 
   async findById(id: string): Promise<LlmStrategyRun | null> {
-    return this.client.llmStrategyRun.findUnique({
+    return this.txHost.tx.llmStrategyRun.findUnique({
       where: { id },
       include: {
         generatedSignal: {
@@ -37,7 +31,7 @@ export class LlmStrategyRunsRepository {
   ): Promise<LlmStrategyRun[]> {
     const validatedLimit = Math.max(1, Math.min(limit, 100))
 
-    return this.client.llmStrategyRun.findMany({
+    return this.txHost.tx.llmStrategyRun.findMany({
       where: {
         strategyInstanceId: instanceId,
       },
@@ -54,14 +48,14 @@ export class LlmStrategyRunsRepository {
   }
 
   /**
-   * 统计指定实例在给定时间点之后的“有效运行”次数。
+   * 统计指定实例在给定时间点之后的"有效运行"次数。
    * 有效运行指 status !== 'skipped' 的 run，用于 maxRunsPerHour 节流逻辑。
    */
   async countEffectiveRunsSince(
     instanceId: string,
     since: Date,
   ): Promise<number> {
-    return this.client.llmStrategyRun.count({
+    return this.txHost.tx.llmStrategyRun.count({
       where: {
         strategyInstanceId: instanceId,
         startedAt: {
@@ -83,7 +77,8 @@ export class LlmStrategyRunsRepository {
     signalData: (symbolId: string) => Prisma.TradingSignalCreateInput,
     runId: string,
   ): Promise<{ tradingSignal: TradingSignal; symbolFound: true } | { symbolFound: false }> {
-    return this.prisma.getClient().$transaction(async (tx) => {
+    return this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
       const symbolRecord = await tx.symbol.findUnique({ where: { code: symbolCode } })
       if (!symbolRecord) {
         return { symbolFound: false } as const
@@ -101,7 +96,7 @@ export class LlmStrategyRunsRepository {
     id: string,
     data: Prisma.LlmStrategyRunUpdateInput,
   ): Promise<LlmStrategyRun | null> {
-    const run = await this.client.llmStrategyRun.findUnique({
+    const run = await this.txHost.tx.llmStrategyRun.findUnique({
       where: { id },
       include: {
         generatedSignal: {
@@ -116,7 +111,7 @@ export class LlmStrategyRunsRepository {
       return null
     }
 
-    return this.client.llmStrategyRun.update({
+    return this.txHost.tx.llmStrategyRun.update({
       where: { id },
       data,
     })

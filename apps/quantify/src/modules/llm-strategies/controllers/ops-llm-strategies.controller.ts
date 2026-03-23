@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBody,
@@ -102,6 +103,7 @@ export class OpsLlmStrategiesController {
     return new LlmStrategyResponseDto(strategy)
   }
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建LLM策略' })
   @ApiBody({ description: '创建LLM策略请求体', type: CreateLlmStrategyDto })
@@ -113,6 +115,7 @@ export class OpsLlmStrategiesController {
     return new LlmStrategyResponseDto(strategy)
   }
 
+  @Transactional()
   @Put(':id')
   @ApiOperation({ summary: '更新LLM策略' })
   @ApiBody({ description: '更新LLM策略请求体', type: UpdateLlmStrategyDto })
@@ -125,6 +128,7 @@ export class OpsLlmStrategiesController {
     return new LlmStrategyResponseDto(strategy)
   }
 
+  @Transactional()
   @Delete(':id')
   @ApiOperation({ summary: '删除LLM策略' })
   async delete(

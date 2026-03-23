@@ -1,6 +1,5 @@
 import type { INestApplication, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { ConfigService } from '@nestjs/config'
-import type { ClsService } from 'nestjs-cls'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
 import type { Prisma } from '@/prisma/prisma.types'
@@ -8,14 +7,11 @@ import { ErrorCode, generateShortId } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { ClsService as ClsServiceToken } from 'nestjs-cls'
 import { PrismaClient } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { DomainException } from '../common/exceptions/domain.exception'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
 import { PRISMA_OPTIONS } from './prisma.constants'
-
-const TRANSACTION_KEY = 'PRISMA_TRANSACTION'
 
 type ExtendedPrismaClient = PrismaClient
 
@@ -28,7 +24,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private static readonly MODEL_DELEGATES = [] as const
 
   constructor(
-    @Inject(ClsServiceToken) private readonly cls: ClsService,
     @Inject(ConfigServiceToken) private readonly configService: ConfigService,
     @Inject(EnvServiceToken) private readonly envService: EnvService,
     @Optional() @Inject(PRISMA_OPTIONS) private readonly options?: PrismaModuleOptions,
@@ -253,57 +248,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     ;(this as PrismaClient).$on('beforeExit' as never, async () => {
       await app.close()
     })
-  }
-
-  getClient(): ExtendedPrismaClient | Prisma.TransactionClient {
-    const tx = this.cls.get(TRANSACTION_KEY) as Prisma.TransactionClient | undefined
-    return tx || this.extendedClient || (this as unknown as ExtendedPrismaClient)
-  }
-
-  async runInTransaction<T>(
-    fn: (prisma: Prisma.TransactionClient) => Promise<T>,
-    options?: {
-      maxWait?: number
-      timeout?: number
-      isolationLevel?: 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Serializable'
-    },
-  ): Promise<T> {
-    const txId = Math.random().toString(36).substring(2, 8)
-    const existingTx = this.cls.get(TRANSACTION_KEY) as Prisma.TransactionClient | undefined
-
-    if (existingTx) {
-      try {
-        return await fn(existingTx)
-      } catch (error) {
-        this.logger.error(`[TX:${txId}] 在现有事务中执行失败: ${(error as Error).message}`)
-        throw error
-      }
-    }
-
-    const baseClient = (this.extendedClient || this) as ExtendedPrismaClient
-    const defaultTestOptions =
-      this.envService.isTest() || this.envService.isE2E()
-        ? { maxWait: 10_000, timeout: 20_000 }
-        : undefined
-    const txOptions = { ...(defaultTestOptions || {}), ...(options || {}) }
-
-    const runTransaction = () => baseClient.$transaction(async tx => {
-      this.cls.set(TRANSACTION_KEY, tx)
-      try {
-        return await fn(tx)
-      } catch (error) {
-        this.logger.error(`[TX:${txId}] 新事务执行失败: ${(error as Error).message}`)
-        throw error
-      } finally {
-        this.cls.set(TRANSACTION_KEY, null)
-      }
-    }, txOptions)
-
-    if (!this.cls.isActive()) {
-      return this.cls.run(() => runTransaction())
-    }
-
-    return runTransaction()
   }
 
   async getPaginatedList<

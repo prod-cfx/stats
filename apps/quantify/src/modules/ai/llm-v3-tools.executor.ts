@@ -5,6 +5,7 @@
  */
 
 import type { MarketBarPayload, MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common'
 import type {
   ComputeFinancialMetricsParams,
@@ -17,7 +18,7 @@ import type {
   GetSymbolUniverseResult,
   LlmV3ToolName,
 } from './llm-v3-tools.schemas'
-import type { Prisma } from '@/prisma/prisma.types'
+import type { Prisma, PrismaClient  } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import {
   annualizedReturn,
@@ -26,6 +27,7 @@ import {
   sharpeRatio,
   winRate,
 } from '@ai/shared/script-engine/helpers/finance-helpers'
+
 import {
   atr,
   ema,
@@ -34,13 +36,12 @@ import {
   sma,
   stochastic,
 } from '@ai/shared/script-engine/helpers/technical-indicators'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
-
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 MarketDataReadGateway
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
-import { PrismaService } from '@/prisma/prisma.service'
 
 /**
  * 工具执行上下文（用于存储中间数据）
@@ -117,7 +118,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
   private cacheCleanupInterval?: NodeJS.Timeout
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly marketDataReadGateway: MarketDataReadGateway,
   ) {
     // 启动定时清理任务
@@ -393,7 +394,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
     params: GetSymbolUniverseParams,
     context: ToolExecutionContext,
   ): Promise<GetSymbolUniverseResult> {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     // 构建查询条件
     const where: Prisma.SymbolWhereInput = {
@@ -477,7 +478,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
     params: GetMarketDataRawParams,
     context: ToolExecutionContext,
   ): Promise<GetMarketDataRawResult> {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     // 规范化 symbol（去空格 + 大写），与白名单及数据库保持一致
     if (typeof params.symbol !== 'string' || params.symbol.trim().length === 0) {
@@ -961,7 +962,7 @@ export class LlmV3ToolsExecutor implements OnModuleDestroy, OnApplicationShutdow
    * @returns 执行上下文
    */
   async createContext(strategyInstanceId: string, sessionId?: string): Promise<ToolExecutionContext> {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     // 尝试从新的 LLM 策略系统加载实例
     const llmInstance = await client.llmStrategyInstance.findUnique({

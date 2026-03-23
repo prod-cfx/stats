@@ -1,11 +1,10 @@
-import type { StrategyPnlDaily, UserStrategyAccount, LedgerEntryType, Prisma  } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
- 
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, StrategyPnlDaily, UserStrategyAccount, LedgerEntryType, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
- 
 type Decimal = Prisma.Decimal
- 
 
 export interface LedgerGroupResult {
   userStrategyAccountId: string
@@ -15,17 +14,10 @@ export interface LedgerGroupResult {
 
 @Injectable()
 export class StrategyPnlReportRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async groupLedgerByAccountAndType(dayStart: Date, dayEnd: Date): Promise<LedgerGroupResult[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     const result = await client.pnlLedger.groupBy({
       by: ['userStrategyAccountId', 'type'],
       where: {
@@ -40,17 +32,17 @@ export class StrategyPnlReportRepository {
   }
 
   async findDailyStatsByDate(date: Date): Promise<StrategyPnlDaily[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany({ where: { date } })
   }
 
   async countAccounts(): Promise<number> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.count()
   }
 
   async findAccountsBatch(skip: number, take: number): Promise<UserStrategyAccount[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findMany({ skip, take })
   }
 
@@ -65,7 +57,7 @@ export class StrategyPnlReportRepository {
     withdrawals: Decimal
     maxDrawdown: Decimal
   }): Promise<void> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     const { userStrategyAccountId, date, ...rest } = params
     await client.strategyPnlDaily.upsert({
       where: {

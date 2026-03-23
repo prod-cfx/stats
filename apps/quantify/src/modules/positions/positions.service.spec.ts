@@ -3,7 +3,7 @@ import { PositionsService } from './positions.service'
 
 describe('positionsService', () => {
   function createService() {
-    return new PositionsService({} as any, {} as any, {} as any)
+    return new PositionsService({} as any, {} as any, {} as any, {} as any)
   }
 
   it('maps locked position rows to Prisma field names', async () => {

@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBody,
@@ -62,6 +63,7 @@ export class OpsSettingsController {
     )
   }
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建配置（运营接口）' })
   @ApiBody({ type: CreateSettingDto })
@@ -92,6 +94,7 @@ export class OpsSettingsController {
     })
   }
 
+  @Transactional()
   @Put(':key')
   @ApiOperation({ summary: '更新配置（运营接口）' })
   @ApiBody({ type: UpdateSettingDto })
@@ -125,6 +128,7 @@ export class OpsSettingsController {
     })
   }
 
+  @Transactional()
   @Patch('reload')
   @ApiOperation({ summary: '重新加载所有配置（运营接口）' })
   @ApiResponse({

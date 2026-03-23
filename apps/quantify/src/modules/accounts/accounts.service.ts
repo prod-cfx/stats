@@ -314,22 +314,6 @@ export class AccountsService {
   }
 
   async applyLedgerDelta(params: ApplyLedgerDeltaParams): Promise<UserStrategyAccount> {
-    return this.accountsRepository.runInTransaction(prisma =>
-      this.applyLedgerDeltaInternal(prisma, params),
-    )
-  }
-
-  async applyLedgerDeltaWithClient(
-    prisma: Prisma.TransactionClient,
-    params: ApplyLedgerDeltaParams,
-  ): Promise<UserStrategyAccount> {
-    return this.applyLedgerDeltaInternal(prisma, params)
-  }
-
-  private async applyLedgerDeltaInternal(
-    prisma: Prisma.TransactionClient,
-    params: ApplyLedgerDeltaParams,
-  ): Promise<UserStrategyAccount> {
     const {
       accountId,
       delta,
@@ -341,13 +325,13 @@ export class AccountsService {
       occurredAt,
     } = params
 
-    const account = await this.accountsRepository.findAccountInTx(prisma, accountId)
+    const account = await this.accountsRepository.findAccount(accountId)
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId })
     }
 
     if (referenceId) {
-      const existing = await this.accountsRepository.findLedgerFirstInTx(prisma, {
+      const existing = await this.accountsRepository.findLedgerFirst({
         userStrategyAccountId: accountId,
         referenceId,
       })
@@ -357,7 +341,7 @@ export class AccountsService {
     }
 
     // 使用原子递增避免 lost update，并在更新后检查余额是否为负，依赖事务回滚保证资金安全
-    const updatedAccount = await this.accountsRepository.updateAccountInTx(prisma, accountId, {
+    const updatedAccount = await this.accountsRepository.updateAccount(accountId, {
       balance: { increment: delta },
       equity: { increment: delta },
       ...(ledgerType === LedgerEntryType.REALIZED_PNL
@@ -374,7 +358,7 @@ export class AccountsService {
       })
     }
 
-    await this.accountsRepository.createLedgerInTx(prisma, {
+    await this.accountsRepository.createLedger({
       userStrategyAccountId: accountId,
       positionId,
       type: ledgerType,

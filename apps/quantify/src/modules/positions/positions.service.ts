@@ -1,11 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
-import type { Position, Trade } from '@/prisma/prisma.types'
+import type { Position, Trade, PrismaClient  } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -33,6 +36,7 @@ export class PositionsService {
     private readonly positionsRepository: PositionsRepository,
     private readonly accountsService: AccountsService,
     private readonly tradingService: TradingService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {}
 
   async recordTrade(dto: RecordTradeDto): Promise<TradeResponseDto> {
@@ -43,13 +47,13 @@ export class PositionsService {
     const leverage = dto.leverage ? new Decimal(dto.leverage) : null
     const executedAt = new Date(dto.executedAt)
 
-    const trade = await this.positionsRepository.runInTransaction(async prisma => {
+    const trade = await this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
       // 1. 校验账户与成交幂等
-      await this.ensureAccountAndNoDuplicateTrade(prisma, dto)
+      await this.ensureAccountAndNoDuplicateTrade(dto)
 
       // 2. 加锁加载当前仓位
       const lockedPosition = await this.loadAndLockPosition(
-        prisma,
         dto.userStrategyAccountId,
         normalizedSymbol,
         dto.positionSide,
@@ -61,7 +65,7 @@ export class PositionsService {
         position,
         realizedPnlDelta,
       } = isIncrease
-        ? await this.applyIncrease(prisma, {
+        ? await this.applyIncrease({
             dto,
             normalizedSymbol,
             price,
@@ -70,7 +74,7 @@ export class PositionsService {
             executedAt,
             existingPosition: lockedPosition,
           })
-        : await this.applyDecrease(prisma, {
+        : await this.applyDecrease({
             dto,
             normalizedSymbol,
             price,
@@ -79,7 +83,7 @@ export class PositionsService {
             existingPosition: lockedPosition,
           })
 
-      const tradeRecord = await prisma.trade.create({
+      const tradeRecord = await tx.trade.create({
         data: {
           userStrategyAccountId: dto.userStrategyAccountId,
           positionId: position!.id,
@@ -100,7 +104,7 @@ export class PositionsService {
       })
 
       if (!realizedPnlDelta.isZero()) {
-        await this.accountsService.applyLedgerDeltaWithClient(prisma, {
+        await this.accountsService.applyLedgerDelta({
           accountId: dto.userStrategyAccountId,
           delta: realizedPnlDelta,
           ledgerType: LedgerEntryType.REALIZED_PNL,
@@ -112,7 +116,7 @@ export class PositionsService {
       }
 
       if (fee.gt(0)) {
-        await this.accountsService.applyLedgerDeltaWithClient(prisma, {
+        await this.accountsService.applyLedgerDelta({
           accountId: dto.userStrategyAccountId,
           delta: fee.neg(),
           ledgerType: LedgerEntryType.FEE,
@@ -129,7 +133,8 @@ export class PositionsService {
     return this.toTradeResponse(trade)
   }
 
-  private async ensureAccountAndNoDuplicateTrade(prisma: Prisma.TransactionClient, dto: RecordTradeDto) {
+  private async ensureAccountAndNoDuplicateTrade(dto: RecordTradeDto) {
+    const prisma = this.txHost.tx
     const account = await prisma.userStrategyAccount.findUnique({
       where: { id: dto.userStrategyAccountId },
     })
@@ -151,12 +156,11 @@ export class PositionsService {
   }
 
   private async loadAndLockPosition(
-    prisma: Prisma.TransactionClient,
     accountId: string,
     normalizedSymbol: string,
     positionSide: PositionSide,
   ): Promise<Position | null> {
-    const lockedPositions = await prisma.$queryRaw<Position[]>`
+    const lockedPositions = await this.txHost.tx.$queryRaw<Position[]>`
       SELECT
         "id",
         "user_strategy_account_id" AS "userStrategyAccountId",
@@ -186,7 +190,6 @@ export class PositionsService {
   }
 
   private async applyIncrease(
-    prisma: Prisma.TransactionClient,
     params: {
       dto: RecordTradeDto
       normalizedSymbol: string
@@ -212,7 +215,7 @@ export class PositionsService {
       }
 
       try {
-        const created = await prisma.position.create({
+        const created = await this.txHost.tx.position.create({
           data: {
             userStrategyAccountId: dto.userStrategyAccountId,
             symbol: normalizedSymbol,
@@ -235,7 +238,6 @@ export class PositionsService {
         }
         // 重新加锁加载
         existingPosition = await this.loadAndLockPosition(
-          prisma,
           dto.userStrategyAccountId,
           normalizedSymbol,
           dto.positionSide,
@@ -261,7 +263,7 @@ export class PositionsService {
       marketType = marketType || mType || null
     }
     
-    const updated = await prisma.position.update({
+    const updated = await this.txHost.tx.position.update({
       where: { id: existingPosition.id },
       data: {
         quantity: newQty,
@@ -278,7 +280,6 @@ export class PositionsService {
   }
 
   private async applyDecrease(
-    prisma: Prisma.TransactionClient,
     params: {
       dto: RecordTradeDto
       normalizedSymbol: string
@@ -314,7 +315,7 @@ export class PositionsService {
     )
 
     const isFullClose = remainingQty.isZero()
-    const updated = await prisma.position.update({
+    const updated = await this.txHost.tx.position.update({
       where: { id: existingPosition.id },
       data: {
         quantity: remainingQty,
@@ -326,14 +327,15 @@ export class PositionsService {
       },
     })
 
-    await this.recalculateUnrealizedAndEquity(prisma, dto.userStrategyAccountId)
+    await this.recalculateUnrealizedAndEquity(dto.userStrategyAccountId)
 
     return { position: updated, realizedPnlDelta }
   }
 
-  private async recalculateUnrealizedAndEquity(prisma: Prisma.TransactionClient, accountId: string): Promise<void> {
+  private async recalculateUnrealizedAndEquity(accountId: string): Promise<void> {
+    const tx = this.txHost.tx
     // 重新聚合该账户的未实现盈亏，确保 equity = balance + totalUnrealizedPnl 不依赖后续行情推送
-    const aggregate = await prisma.position.aggregate({
+    const aggregate = await tx.position.aggregate({
       where: { userStrategyAccountId: accountId, status: PositionStatus.OPEN },
       _sum: { unrealizedPnl: true },
     })
@@ -341,7 +343,7 @@ export class PositionsService {
 
     // 🔒 并发安全：用数据库最新余额 + 聚合浮盈，避免覆盖其它事务（入金/出金/手续费）对 balance 的修改
     // 使用 $queryRaw 原子读 + 写，不依赖事务开头的快照 account.balance
-    await prisma.$executeRaw`
+    await tx.$executeRaw`
       UPDATE "user_strategy_accounts"
       SET "total_unrealized_pnl" = ${totalUnrealized},
           "equity" = "balance" + ${totalUnrealized},

@@ -1,11 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { InstrumentType, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, InstrumentType, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 PrismaService
-import { PrismaService } from '@/prisma/prisma.service'
 import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
 
@@ -16,13 +17,11 @@ interface IndicatorSnapshotRecord {
 
 @Injectable()
 export class MarketDataRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() { return this.prisma.getClient() }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findSymbolOrThrow(symbol: string): Promise<{ id: string; code: string }> {
     const normalized = symbol.trim().toUpperCase()
-    const found = await this.getClient().symbol.findUnique({
+    const found = await this.txHost.tx.symbol.findUnique({
       where: { code: normalized },
       select: { id: true, code: true },
     })
@@ -42,7 +41,7 @@ export class MarketDataRepository {
   async findRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
-    const bars = await this.getClient().marketBar.findMany({
+    const bars = await this.txHost.tx.marketBar.findMany({
       where: {
         symbolId,
         timeframe: prismaTimeframe,
@@ -61,7 +60,7 @@ export class MarketDataRepository {
 
   async findLatestBarBySymbolId(symbolId: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
-    return this.getClient().marketBar.findFirst({
+    return this.txHost.tx.marketBar.findFirst({
       where: {
         symbolId,
         timeframe: prismaTimeframe,
@@ -72,7 +71,7 @@ export class MarketDataRepository {
 
   async findLatestQuote(symbol: string): Promise<MarketQuote | null> {
     const target = await this.findSymbolOrThrow(symbol)
-    return this.getClient().marketQuote.findFirst({
+    return this.txHost.tx.marketQuote.findFirst({
       where: { symbolId: target.id },
       orderBy: { eventTime: 'desc' },
     })
@@ -88,7 +87,7 @@ export class MarketDataRepository {
     const target = await this.findSymbolOrThrow(symbol)
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
-    const configs = await this.prisma.indicatorConfig.findMany({
+    const configs = await this.txHost.tx.indicatorConfig.findMany({
       where: {
         symbolId: target.id,
         timeframe: prismaTimeframe,
@@ -100,7 +99,7 @@ export class MarketDataRepository {
 
     if (configs.length === 0) return []
 
-    const grouped = await this.prisma.indicatorValue.groupBy({
+    const grouped = await this.txHost.tx.indicatorValue.groupBy({
       by: ['indicatorConfigId'],
       where: {
         indicatorConfigId: { in: configs.map(config => config.id) },
@@ -117,7 +116,7 @@ export class MarketDataRepository {
 
     if (latestPairs.length === 0) return []
 
-    const values = await this.prisma.indicatorValue.findMany({
+    const values = await this.txHost.tx.indicatorValue.findMany({
       where: {
         OR: latestPairs,
       },
@@ -153,37 +152,37 @@ export class MarketDataRepository {
 
   async listSymbols(where: Prisma.SymbolWhereInput, orderBy: Prisma.SymbolOrderByWithRelationInput, skip: number, take: number) {
     const [items, total] = await Promise.all([
-      this.getClient().symbol.findMany({ where, orderBy, skip, take }),
-      this.getClient().symbol.count({ where }),
+      this.txHost.tx.symbol.findMany({ where, orderBy, skip, take }),
+      this.txHost.tx.symbol.count({ where }),
     ])
     return { items, total }
   }
 
   async createSymbol(data: Prisma.SymbolCreateInput): Promise<PrismaSymbol> {
-    return this.getClient().symbol.create({ data })
+    return this.txHost.tx.symbol.create({ data })
   }
 
   async findSymbolByCode(code: string): Promise<PrismaSymbol | null> {
-    return this.getClient().symbol.findUnique({ where: { code } })
+    return this.txHost.tx.symbol.findUnique({ where: { code } })
   }
 
   async updateSymbol(code: string, data: Prisma.SymbolUpdateInput): Promise<PrismaSymbol> {
-    return this.getClient().symbol.update({ where: { code }, data })
+    return this.txHost.tx.symbol.update({ where: { code }, data })
   }
 
   async upsertSymbol(code: string, create: Prisma.SymbolCreateInput, update: Prisma.SymbolUpdateInput): Promise<void> {
-    await this.getClient().symbol.upsert({ where: { code }, create, update })
+    await this.txHost.tx.symbol.upsert({ where: { code }, create, update })
   }
 
   async findSymbolsByCodeIn(codes: string[]): Promise<Array<{ id: string; code: string }>> {
-    return this.getClient().symbol.findMany({
+    return this.txHost.tx.symbol.findMany({
       where: { code: { in: codes } },
       select: { id: true, code: true },
     })
   }
 
   async findBars(where: Prisma.MarketBarWhereInput, orderBy: Prisma.MarketBarOrderByWithRelationInput, take: number) {
-    return this.getClient().marketBar.findMany({ where, orderBy, take })
+    return this.txHost.tx.marketBar.findMany({ where, orderBy, take })
   }
 
   async upsertBar(
@@ -191,18 +190,18 @@ export class MarketDataRepository {
     create: Prisma.MarketBarCreateInput,
     update: Prisma.MarketBarUpdateInput,
   ): Promise<void> {
-    await this.getClient().marketBar.upsert({ where, create, update })
+    await this.txHost.tx.marketBar.upsert({ where, create, update })
   }
 
   async findLatestQuoteBySymbolId(symbolId: string): Promise<MarketQuote | null> {
-    return this.getClient().marketQuote.findFirst({
+    return this.txHost.tx.marketQuote.findFirst({
       where: { symbolId },
       orderBy: { eventTime: 'desc' },
     })
   }
 
   async createQuote(data: Prisma.MarketQuoteCreateInput): Promise<void> {
-    await this.getClient().marketQuote.create({ data })
+    await this.txHost.tx.marketQuote.create({ data })
   }
 
   /**
@@ -214,7 +213,7 @@ export class MarketDataRepository {
     } | null
   }>> {
     try {
-      return await this.getClient().userStrategySubscription.findMany({
+      return await this.txHost.tx.userStrategySubscription.findMany({
         where: { status: 'active' },
         select: {
           strategyInstance: {
@@ -238,7 +237,7 @@ export class MarketDataRepository {
     } | null
   }>> {
     try {
-      return await this.getClient().userLlmStrategySubscription.findMany({
+      return await this.txHost.tx.userLlmStrategySubscription.findMany({
         where: { status: 'active' },
         select: {
           llmStrategyInstance: {
