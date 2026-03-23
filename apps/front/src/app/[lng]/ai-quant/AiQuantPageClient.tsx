@@ -31,6 +31,7 @@ import {
   getLlmCodegenSession,
   startLlmCodegenSession,
 } from '@/lib/api'
+import type { LlmCodegenSessionResponse } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
 export interface QuantParams {
@@ -68,6 +69,61 @@ interface ConversationState {
   llmCodegenSessionId: string | null
   latestSignalMessage: string | null
   updatedAt: number
+}
+
+const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
+const CODEGEN_PROCESSING_STATUSES = new Set([
+  'GENERATING',
+  'VALIDATING_STATIC',
+  'VALIDATING_RUNTIME',
+  'VALIDATING_OUTPUT',
+])
+const CODEGEN_RECOVERABLE_STATUSES = new Set([
+  ...CODEGEN_TERMINAL_STATUSES,
+  ...CODEGEN_PROCESSING_STATUSES,
+  'CHECKLIST_GATE',
+])
+
+function isCodegenTerminalStatus(status: string): boolean {
+  return CODEGEN_TERMINAL_STATUSES.has(status)
+}
+
+function isCodegenProcessingStatus(status: string): boolean {
+  return CODEGEN_PROCESSING_STATUSES.has(status)
+}
+
+function isRecoverableCodegenStatus(status: string): boolean {
+  return CODEGEN_RECOVERABLE_STATUSES.has(status)
+}
+
+function buildCodegenReplyContent(args: {
+  response: LlmCodegenSessionResponse
+  confirmGenerate: boolean
+  publishedReply: string
+  graphGeneratedMessage: string
+  graphReviseMessage: string
+}): string {
+  const { response, confirmGenerate, publishedReply, graphGeneratedMessage, graphReviseMessage } = args
+  if (response.assistantPrompt) {
+    return response.assistantPrompt
+  }
+  if (response.status === 'PUBLISHED') {
+    return publishedReply
+  }
+  if (response.status === 'CHECKLIST_GATE') {
+    return confirmGenerate
+      ? '已基于当前逻辑图继续生成，请查看最新结果。'
+      : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
+  }
+  if (isCodegenProcessingStatus(response.status)) {
+    return `策略代码仍在生成中（${response.status}），请稍候。`
+  }
+  if (response.status === 'REJECTED') {
+    return response.rejectReason
+      ? `基于当前逻辑图生成失败：${response.rejectReason}`
+      : '基于当前逻辑图生成失败：后端未返回详细原因，请查看服务日志。'
+  }
+  return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
 }
 
 function extractCodegenErrorMessage(error: unknown, fallback: string): string {
@@ -331,12 +387,7 @@ export function AiQuantPageClient() {
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
         const nextVersion = (conv.logicGraph?.version || 0) + 1
-        const isTerminal = response.status === 'PUBLISHED' || response.status === 'REJECTED'
-        const isProcessing = response.status === 'GENERATING'
-          || response.status === 'VALIDATING_STATIC'
-          || response.status === 'VALIDATING_RUNTIME'
-          || response.status === 'VALIDATING_OUTPUT'
-        const shouldReuseCodegenSession = !isTerminal
+        const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
         const shouldUpdateGraph = (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
           && Boolean(response.specDesc)
         const nextGraph = shouldUpdateGraph
@@ -353,20 +404,13 @@ export function AiQuantPageClient() {
         const publishedReply = response.scriptCode
           ? `${t('aiQuant.messages.graphGenerated')}\n\n已生成策略代码：\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
           : t('aiQuant.messages.graphGenerated')
-        const replyContent = response.assistantPrompt
-          || (response.status === 'PUBLISHED'
-            ? publishedReply
-            : response.status === 'CHECKLIST_GATE'
-              ? (confirmGenerate
-                ? '已基于当前逻辑图继续生成，请查看最新结果。'
-                : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。')
-            : isProcessing
-              ? `策略代码仍在生成中（${response.status}），请稍候。`
-            : response.status === 'REJECTED'
-              ? (response.rejectReason
-                  ? `基于当前逻辑图生成失败：${response.rejectReason}`
-                  : '基于当前逻辑图生成失败：后端未返回详细原因，请查看服务日志。')
-              : t('aiQuant.messages.graphRevise'))
+        const replyContent = buildCodegenReplyContent({
+          response,
+          confirmGenerate,
+          publishedReply,
+          graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
+          graphReviseMessage: t('aiQuant.messages.graphRevise'),
+        })
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
@@ -476,15 +520,7 @@ export function AiQuantPageClient() {
       if (activeSessionId && error instanceof ApiError && (error.statusCode ?? 0) >= 500) {
         try {
           const recovered = await getLlmCodegenSession(activeSessionId, session.userId)
-          if (
-            recovered.status === 'PUBLISHED'
-            || recovered.status === 'REJECTED'
-            || recovered.status === 'CHECKLIST_GATE'
-            || recovered.status === 'GENERATING'
-            || recovered.status === 'VALIDATING_STATIC'
-            || recovered.status === 'VALIDATING_RUNTIME'
-            || recovered.status === 'VALIDATING_OUTPUT'
-          ) {
+          if (isRecoverableCodegenStatus(recovered.status)) {
             applyCodegenResponseToConversation(recovered)
             return
           }

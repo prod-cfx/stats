@@ -11,6 +11,7 @@ import { StaticGuardrailService } from '../static-guardrail.service'
 describe('codegenConversationService (llm orchestrated flow)', () => {
   const originalStrictEnabled = process.env.LLM_CODEGEN_STRICT_ENABLED
   const originalStrictFallback = process.env.LLM_CODEGEN_STRICT_FALLBACK
+  const originalStrictUnsupportedTtl = process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS
 
   const mockRepo = {
     createSession: jest.fn(),
@@ -50,6 +51,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       delete process.env.LLM_CODEGEN_STRICT_FALLBACK
     } else {
       process.env.LLM_CODEGEN_STRICT_FALLBACK = originalStrictFallback
+    }
+    if (originalStrictUnsupportedTtl === undefined) {
+      delete process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS
+    } else {
+      process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = originalStrictUnsupportedTtl
     }
   })
 
@@ -612,5 +618,73 @@ const strategy: StrategyAdapterV1 = {
     expect(result.status).toBe('PUBLISHED')
     const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
     expect(codegenCall.responseFormat).toBeUndefined()
+  })
+
+  it('does not disable strict for other models after one model is marked unsupported', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = '600000'
+
+    mockRepo.findById
+      .mockResolvedValueOnce({
+        id: 's15',
+        userId: 'u1',
+        status: 'CHECKLIST_GATE',
+        checklist: {
+          entryRules: ['价格突破阻力位入场'],
+          exitRules: ['跌破支撑位出场'],
+        },
+        constraintPack: {},
+      })
+      .mockResolvedValueOnce({
+        id: 's16',
+        userId: 'u1',
+        status: 'CHECKLIST_GATE',
+        checklist: {
+          entryRules: ['价格突破阻力位入场'],
+          exitRules: ['跌破支撑位出场'],
+        },
+        constraintPack: {},
+      })
+
+    const plannerPayload = {
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已确认，可以生成。',
+      }),
+    }
+
+    mockAi.chat
+      .mockResolvedValueOnce(plannerPayload)
+      .mockRejectedValueOnce(new Error('This response_format type is unavailable now'))
+      .mockResolvedValueOnce(plannerPayload)
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          code: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar(): StrategyDecisionV1 { return { action: "NOOP" } } }\nstrategy',
+        }),
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v9' })
+
+    const first = await service.continueSession('s15', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'uniapi',
+      model: 'gpt-4',
+    })
+    expect(first.status).toBe('REJECTED')
+
+    const second = await service.continueSession('s16', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'uniapi',
+      model: 'gpt-4o',
+    })
+    expect(second.status).toBe('PUBLISHED')
+
+    const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
+    expect(secondCodegenCall.responseFormat).toBeDefined()
   })
 })

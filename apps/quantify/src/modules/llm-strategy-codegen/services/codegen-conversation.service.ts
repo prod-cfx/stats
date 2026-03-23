@@ -70,6 +70,7 @@ const DEFAULT_MODEL = 'gpt-4'
 const MAX_CODEGEN_AUTO_REPAIR_RETRIES = 2
 const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
+const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   type: 'object',
@@ -85,7 +86,7 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 
 @Injectable()
 export class CodegenConversationService {
-  private readonly strictUnsupportedTargets = new Set<string>()
+  private readonly strictUnsupportedTargets = new Map<string, number>()
 
   constructor(
     private readonly aiService: AiService,
@@ -803,24 +804,40 @@ export class CodegenConversationService {
   }
 
   private markStrictUnsupported(options?: GenerationOptions): void {
-    this.strictUnsupportedTargets.add(this.buildStrictTargetKey(options))
-    this.strictUnsupportedTargets.add(this.buildStrictProviderKey(options))
+    const key = this.buildStrictTargetKey(options)
+    if (!key) return
+    const ttlMs = this.readPositiveIntEnv(
+      'LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS',
+      DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS,
+    )
+    this.strictUnsupportedTargets.set(key, Date.now() + ttlMs)
   }
 
   private isStrictUnsupportedCached(options?: GenerationOptions): boolean {
-    return this.strictUnsupportedTargets.has(this.buildStrictTargetKey(options))
-      || this.strictUnsupportedTargets.has(this.buildStrictProviderKey(options))
+    const key = this.buildStrictTargetKey(options)
+    if (!key) return false
+    const expiresAt = this.strictUnsupportedTargets.get(key)
+    if (!expiresAt) return false
+    if (expiresAt <= Date.now()) {
+      this.strictUnsupportedTargets.delete(key)
+      return false
+    }
+    return true
   }
 
-  private buildStrictTargetKey(options?: GenerationOptions): string {
+  private buildStrictTargetKey(options?: GenerationOptions): string | null {
     const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
-    const model = (options?.model ?? '*').trim().toLowerCase()
+    const model = options?.model?.trim().toLowerCase()
+    if (!model) return null
     return `${providerCode}::${model}`
   }
 
-  private buildStrictProviderKey(options?: GenerationOptions): string {
-    const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
-    return `${providerCode}::*`
+  private readPositiveIntEnv(key: string, defaultValue: number): number {
+    const raw = process.env[key]
+    if (!raw) return defaultValue
+    const value = Number.parseInt(raw, 10)
+    if (!Number.isFinite(value) || value <= 0) return defaultValue
+    return value
   }
 
   private isStrictUnsupportedError(error: unknown): boolean {
