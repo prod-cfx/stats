@@ -7,6 +7,7 @@ import type { ProviderSymbol } from '../interfaces/market-data-provider.interfac
 import type { InstrumentType, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { 
   mapSymbolStatus, 
@@ -68,12 +69,7 @@ export class MarketDataService {
       this.prisma.symbol.count({ where }),
     ])
 
-    return {
-      items: items.map(symbol => this.toMarketSymbolResponse(symbol)),
-      total,
-      page,
-      limit,
-    }
+    return new BasePaginationResponseDto(total, page, limit, items.map(symbol => this.toMarketSymbolResponse(symbol)))
   }
 
   async createSymbol(payload: CreateMarketSymbolDto) {

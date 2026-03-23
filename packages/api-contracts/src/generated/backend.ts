@@ -1239,12 +1239,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1).optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100).optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'key',
@@ -1437,12 +1437,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'code',
@@ -2934,6 +2934,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(2000).optional().default(500),
+      },
+      {
         name: 'tradingPairId',
         type: 'Query',
         schema: z.string(),
@@ -2952,16 +2962,6 @@ const endpoints = makeApi([
         name: 'to',
         type: 'Query',
         schema: z.string().optional(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(2000).optional(),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3047,12 +3047,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'exchange',
@@ -3109,6 +3109,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'exchange',
         type: 'Query',
         schema: z.string(),
@@ -3122,16 +3132,6 @@ const endpoints = makeApi([
         name: 'symbol',
         type: 'Query',
         schema: z.string(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(200).optional().default(50),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().optional(),
       },
       {
         name: 'minValue',
@@ -3148,6 +3148,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'exchange',
         type: 'Query',
         schema: z.string(),
@@ -3161,16 +3171,6 @@ const endpoints = makeApi([
         name: 'symbol',
         type: 'Query',
         schema: z.string(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(200).optional().default(50),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3189,12 +3189,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'symbol',
@@ -3244,12 +3244,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1).optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100).optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'exchange',
@@ -3421,12 +3421,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'category',
@@ -3460,6 +3460,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
@@ -3470,19 +3480,9 @@ const endpoints = makeApi([
         schema: z.number().optional(),
       },
       {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
         name: 'since',
         type: 'Query',
         schema: z.string().optional(),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3506,6 +3506,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
@@ -3516,19 +3526,9 @@ const endpoints = makeApi([
         schema: z.number().optional(),
       },
       {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
         name: 'since',
         type: 'Query',
         schema: z.string().optional(),
-      },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3546,24 +3546,24 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(500).optional().default(100),
+      },
+      {
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
       },
       {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional(),
-      },
-      {
         name: 'minPositionValueUsd',
         type: 'Query',
         schema: z.number().optional(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(500).optional(),
       },
     ],
     response: BasePaginationResponseDto.and(
@@ -3754,6 +3754,16 @@ const endpoints = makeApi([
         schema: z.string(),
       },
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(500).optional().default(200),
+      },
+      {
         name: 'timeRangeDays',
         type: 'Query',
         schema: z.number().gte(1).lte(365).optional(),
@@ -3762,11 +3772,6 @@ const endpoints = makeApi([
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(500).optional(),
       },
     ],
     response: WhaleAddressPerformanceResponseDto,

@@ -1284,8 +1284,8 @@ export class StrategyInstancesService {
       totalOpenPositions,
       subscribers,
       totalSubscribersCount: totalCount,
-      currentPage: page,
-      pageSize: limit,
+      page,
+      limit,
       lastUpdatedAt: new Date(),
     }
   }

@@ -1,7 +1,9 @@
 import type { MarketTimeframe } from '@ai/shared'
 import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsArray, IsDateString, IsIn, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator'
+import { Type } from 'class-transformer'
+import { IsArray, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class IndicatorSnapshotQueryDto {
   @ApiProperty({ description: 'Symbol 代码，例如 BTCUSDT' })
@@ -29,7 +31,7 @@ export class IndicatorSnapshotQueryDto {
   configIds?: string[]
 }
 
-export class IndicatorSeriesQueryDto {
+export class IndicatorSeriesQueryDto extends BasePaginationRequestDto {
   @ApiProperty({ description: 'Symbol 代码，例如 BTCUSDT' })
   @IsString()
   @IsNotEmpty()
@@ -56,11 +58,13 @@ export class IndicatorSeriesQueryDto {
   @IsString({ each: true })
   configIds?: string[]
 
-  @ApiPropertyOptional({ description: '最多返回多少条，默认 500，最大 5000' })
+  @ApiPropertyOptional({ description: '最多返回多少条，默认 500，最大 5000', maximum: 5000, default: 500 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   @Min(1)
   @Max(5000)
-  limit?: number
+  override limit: number = 500
 }
 
 

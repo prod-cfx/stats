@@ -1,9 +1,9 @@
 import type { QueryWhaleHoldingsDto, WhaleHoldingDto } from './dto/whale-holdings.dto'
 import { Injectable, Logger } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 
 @Injectable()
 export class WhaleHoldingsService {

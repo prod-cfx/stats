@@ -1,16 +1,16 @@
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { MarketType } from '@/modules/trading/core/types'
 import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { SignalExecutorService } from './signal-executor.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { EnvService } from '@/common/services/env.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 import { BinanceClient } from '@/modules/trading/exchanges/binance-client'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { SignalExecutorService } from './signal-executor.service'
 
 export interface FixedBinanceTestnetSignalContext {
   strategyId: string

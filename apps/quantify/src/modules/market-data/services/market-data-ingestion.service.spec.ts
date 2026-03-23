@@ -1,6 +1,6 @@
 import { MarketDataIngestionService } from './market-data-ingestion.service'
 
-describe('MarketDataIngestionService', () => {
+describe('marketDataIngestionService', () => {
   function createServiceWithMissingSubscriptionTables() {
     const prisma = {
       userStrategySubscription: {

@@ -81,7 +81,7 @@ export class GetMarketTradesRequestDto extends BasePaginationRequestDto {
   toTimestamp?: number
 }
 
-export class GetLatestTradesRequestDto {
+export class GetLatestTradesRequestDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '交易所代码',
     example: 'OKX',
@@ -107,30 +107,19 @@ export class GetLatestTradesRequestDto {
   @IsString()
   symbol!: string
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '返回记录数量',
     example: 50,
     default: 50,
     minimum: 1,
     maximum: 200,
-    required: false,
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(200)
-  limit?: number
-
-  @ApiPropertyOptional({
-    description: '页码（从 1 开始）',
-    example: 1,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number
+  override limit: number = 50
 }
 
 export class GetLargeTradesRequestDto extends GetLatestTradesRequestDto {

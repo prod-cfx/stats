@@ -3,9 +3,9 @@ import type {
   RealtimeWhaleAlertDto,
 } from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 import { Inject, Injectable, Logger } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

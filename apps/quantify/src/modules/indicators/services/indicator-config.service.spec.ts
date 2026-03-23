@@ -1,6 +1,6 @@
 import { IndicatorConfigService } from './indicator-config.service'
 
-describe('IndicatorConfigService', () => {
+describe('indicatorConfigService', () => {
   it('does not throw when indicator_configs table is missing (P2021)', async () => {
     const repository = {
       listAllActive: jest.fn().mockRejectedValue({
