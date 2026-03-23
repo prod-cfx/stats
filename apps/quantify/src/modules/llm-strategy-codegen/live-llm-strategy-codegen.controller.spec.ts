@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { Test } from '@nestjs/testing'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -6,10 +7,23 @@ import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strateg
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
 const TEST_APP_SECRET = 'engine-test-secret'
+const TEST_JWT_SECRET = 'quantify-jwt-secret'
+
+function createBearerToken(payload: Record<string, unknown>, secret = TEST_JWT_SECRET): string {
+  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signingInput = `${encodedHeader}.${encodedPayload}`
+  const signature = createHmac('sha256', secret).update(signingInput).digest('base64url')
+  return `Bearer ${signingInput}.${signature}`
+}
 
 function createMockEnvService() {
   return {
-    getString: jest.fn((key: string) => (key === 'APP_SECRET' ? TEST_APP_SECRET : undefined)),
+    getString: jest.fn((key: string) => {
+      if (key === 'APP_SECRET') return TEST_APP_SECRET
+      if (key === 'JWT_SECRET') return TEST_JWT_SECRET
+      return undefined
+    }),
     isDev: jest.fn().mockReturnValue(false),
     isProd: jest.fn().mockReturnValue(false),
     isTest: jest.fn().mockReturnValue(true),
@@ -111,17 +125,17 @@ describe('liveLlmStrategyCodegenController', () => {
     }
     const moduleRef = await Test.createTestingModule({
       controllers: [LiveLlmStrategyCodegenController],
-      providers: [{ provide: CodegenConversationService, useValue: service }],
+      providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    const result = await controller.getSession('s1', 'u1')
+    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', exp: 4_102_444_800 }))
 
     expect(result.status).toBe('PUBLISHED')
     expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
   })
 
-  it('rejects getSession when caller identity header is missing', async () => {
+  it('rejects getSession when authorization header is missing', async () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
@@ -135,6 +149,44 @@ describe('liveLlmStrategyCodegenController', () => {
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
     await expect(controller.getSession('s1', undefined)).rejects.toBeInstanceOf(DomainException)
+    expect(service.getSession).not.toHaveBeenCalled()
+  })
+
+  it('rejects getSession when token signature is invalid', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn(),
+      getSession: jest.fn(),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: buildProviders(service),
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1' }, 'wrong-secret'))).rejects.toBeInstanceOf(
+      DomainException,
+    )
+    expect(service.getSession).not.toHaveBeenCalled()
+  })
+
+  it('rejects getSession when jwt subject is missing', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn(),
+      getSession: jest.fn(),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: buildProviders(service),
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    await expect(
+      controller.getSession('s1', createBearerToken({ exp: Math.floor(Date.now() / 1000) + 3600 })),
+    ).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 })

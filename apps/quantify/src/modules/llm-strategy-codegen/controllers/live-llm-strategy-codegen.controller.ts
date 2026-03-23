@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
@@ -43,16 +43,10 @@ export class LiveLlmStrategyCodegenController {
   @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
   async getSession(
     @Param('id') id: string,
-    @Headers('x-user-id') callerUserId: string | undefined,
+    @Headers('authorization') authorization: string | undefined,
   ): Promise<CodegenSessionResponseDto> {
-    const normalizedCallerUserId = callerUserId?.trim()
-    if (!normalizedCallerUserId) {
-      throw new DomainException('codegen.missing_caller_identity', {
-        code: ErrorCode.UNAUTHORIZED,
-        status: HttpStatus.UNAUTHORIZED,
-      })
-    }
-    return this.service.getSession(id, normalizedCallerUserId)
+    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.getSession(id, callerUserId)
   }
 
   @Post('engine/test')
@@ -107,5 +101,123 @@ export class LiveLlmStrategyCodegenController {
       return false
     }
     return timingSafeEqual(providedBuffer, configuredBuffer)
+  }
+
+  private resolveCallerUserIdFromAuthorization(authorization: string | undefined): string {
+    const normalizedAuth = authorization?.trim()
+    if (!normalizedAuth) {
+      throw new DomainException('codegen.missing_authorization_header', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const [scheme, token] = normalizedAuth.split(/\s+/, 2)
+    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+      throw new DomainException('codegen.invalid_authorization_header', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const jwtSecret = this.env.getString('JWT_SECRET')?.trim()
+    if (!jwtSecret) {
+      throw new DomainException('codegen.jwt_secret_not_configured', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const payload = this.verifyHs256Jwt(token, jwtSecret)
+    const subject = this.readJwtUserId(payload)
+    if (!subject) {
+      throw new DomainException('codegen.jwt_subject_missing', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+    return subject
+  }
+
+  private verifyHs256Jwt(token: string, secret: string): Record<string, unknown> {
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+      throw new DomainException('codegen.invalid_jwt_format', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const [encodedHeader, encodedPayload, signature] = parts
+    const header = this.decodeJwtPart(encodedHeader)
+    if (header.alg !== 'HS256') {
+      throw new DomainException('codegen.invalid_jwt_header', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const signingInput = `${encodedHeader}.${encodedPayload}`
+    const expectedSignature = createHmac('sha256', secret)
+      .update(signingInput)
+      .digest('base64url')
+    if (!this.safeEqual(signature, expectedSignature)) {
+      throw new DomainException('codegen.invalid_jwt_signature', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const payload = this.decodeJwtPart(encodedPayload)
+    const exp = payload.exp
+    if (typeof exp === 'number' && Number.isFinite(exp)) {
+      const now = Math.floor(Date.now() / 1000)
+      if (exp <= now) {
+        throw new DomainException('codegen.jwt_expired', {
+          code: ErrorCode.UNAUTHORIZED,
+          status: HttpStatus.UNAUTHORIZED,
+        })
+      }
+    }
+    return payload
+  }
+
+  private decodeJwtPart(part: string): Record<string, unknown> {
+    try {
+      const decoded = Buffer.from(part, 'base64url').toString('utf8')
+      const parsed = JSON.parse(decoded) as unknown
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('invalid_jwt_part')
+      }
+      return parsed as Record<string, unknown>
+    }
+    catch {
+      throw new DomainException('codegen.invalid_jwt_payload', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+  }
+
+  private readJwtUserId(payload: Record<string, unknown>): string | null {
+    const candidates = [payload.sub, payload.userId, payload.id]
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string') {
+        const normalized = candidate.trim()
+        if (normalized) {
+          return normalized
+        }
+      }
+    }
+    return null
+  }
+
+  private safeEqual(a: string, b: string): boolean {
+    const left = Buffer.from(a)
+    const right = Buffer.from(b)
+    if (left.length !== right.length) {
+      return false
+    }
+    return timingSafeEqual(left, right)
   }
 }
