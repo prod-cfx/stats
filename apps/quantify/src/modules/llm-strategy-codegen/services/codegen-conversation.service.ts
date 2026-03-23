@@ -828,7 +828,7 @@ export class CodegenConversationService {
   private buildStrictTargetKey(options?: GenerationOptions): string | null {
     const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
     const model = options?.model?.trim().toLowerCase()
-    if (!model) return null
+    if (!model) return `${providerCode}::__provider__`
     return `${providerCode}::${model}`
   }
 

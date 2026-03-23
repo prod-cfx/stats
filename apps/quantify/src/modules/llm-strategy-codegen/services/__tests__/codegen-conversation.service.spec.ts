@@ -687,4 +687,68 @@ const strategy: StrategyAdapterV1 = {
     const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
     expect(secondCodegenCall.responseFormat).toBeDefined()
   })
+
+  it('caches strict unsupported at provider level when model is omitted', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = '600000'
+
+    mockRepo.findById
+      .mockResolvedValueOnce({
+        id: 's17',
+        userId: 'u1',
+        status: 'CHECKLIST_GATE',
+        checklist: {
+          entryRules: ['价格突破阻力位入场'],
+          exitRules: ['跌破支撑位出场'],
+        },
+        constraintPack: {},
+      })
+      .mockResolvedValueOnce({
+        id: 's18',
+        userId: 'u1',
+        status: 'CHECKLIST_GATE',
+        checklist: {
+          entryRules: ['价格突破阻力位入场'],
+          exitRules: ['跌破支撑位出场'],
+        },
+        constraintPack: {},
+      })
+
+    const plannerPayload = {
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已确认，可以生成。',
+      }),
+    }
+
+    mockAi.chat
+      .mockResolvedValueOnce(plannerPayload)
+      .mockRejectedValueOnce(new Error('This response_format type is unavailable now'))
+      .mockResolvedValueOnce(plannerPayload)
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v10' })
+
+    const first = await service.continueSession('s17', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'unit-no-model-provider',
+    })
+    expect(first.status).toBe('REJECTED')
+
+    const second = await service.continueSession('s18', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'unit-no-model-provider',
+    })
+    expect(second.status).toBe('PUBLISHED')
+
+    const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
+    expect(secondCodegenCall.responseFormat).toBeUndefined()
+  })
 })
