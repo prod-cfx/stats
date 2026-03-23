@@ -1,7 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -43,9 +43,16 @@ export class LiveLlmStrategyCodegenController {
   @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
   async getSession(
     @Param('id') id: string,
-    @Query('userId') userId: string,
+    @Headers('x-user-id') callerUserId: string | undefined,
   ): Promise<CodegenSessionResponseDto> {
-    return this.service.getSession(id, userId)
+    const normalizedCallerUserId = callerUserId?.trim()
+    if (!normalizedCallerUserId) {
+      throw new DomainException('codegen.missing_caller_identity', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+    return this.service.getSession(id, normalizedCallerUserId)
   }
 
   @Post('engine/test')

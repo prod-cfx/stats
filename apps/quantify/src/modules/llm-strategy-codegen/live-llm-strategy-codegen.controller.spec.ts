@@ -120,4 +120,21 @@ describe('liveLlmStrategyCodegenController', () => {
     expect(result.status).toBe('PUBLISHED')
     expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
   })
+
+  it('rejects getSession when caller identity header is missing', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn(),
+      getSession: jest.fn(),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: buildProviders(service),
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    await expect(controller.getSession('s1', undefined)).rejects.toBeInstanceOf(DomainException)
+    expect(service.getSession).not.toHaveBeenCalled()
+  })
 })
