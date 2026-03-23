@@ -170,6 +170,18 @@ export function strategyDecisionToSignalPayload(
   const adjustDeltaQty = decision.action === 'ADJUST_POSITION'
     ? strategyDecisionToDeltaQty(decision, deltaContext)
     : 0
+  const isAdjustNoop = decision.action === 'ADJUST_POSITION' && adjustDeltaQty === 0
+
+  if (isAdjustNoop) {
+    return {
+      signalType: 'ALERT',
+      confidence: decision.confidence ?? 80,
+      entryPrice: safePrice,
+      stopLoss: decision.risk?.stopLoss ?? Math.max(0.00000001, safePrice * 0.98),
+      takeProfit: decision.risk?.takeProfit ?? safePrice * 1.02,
+      reasoning: decision.reason ?? 'ADJUST_POSITION resolved to no-op',
+    }
+  }
 
   const direction = (() => {
     switch (decision.action) {

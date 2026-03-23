@@ -49,4 +49,25 @@ describe('strategyProtocolUtil', () => {
     expect(closePayload.signalType).toBe('EXIT')
     expect(noopPayload.signalType).toBe('ALERT')
   })
+
+  it('maps ADJUST_POSITION zero-delta to no-op payload', () => {
+    const payload = strategyDecisionToSignalPayload(
+      {
+        action: 'ADJUST_POSITION',
+        adjustMode: 'TARGET',
+        size: { mode: 'QTY', value: 2 },
+      },
+      100,
+      {
+        currentQty: 2,
+        equity: 1000,
+        markPrice: 100,
+      },
+    )
+
+    expect(payload.signalType).toBe('ALERT')
+    expect(payload.direction).toBeUndefined()
+    expect(payload.positionSizeQuote).toBeUndefined()
+    expect(payload.positionSizeRatio).toBeUndefined()
+  })
 })
