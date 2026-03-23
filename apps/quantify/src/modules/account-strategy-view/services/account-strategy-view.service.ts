@@ -1,14 +1,18 @@
 import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
-import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
-import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
-import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
-import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
+import { InvalidStrategyActionException, MissingUserIdentityException, StrategyNotFoundException, StrategyOwnerOnlyException } from '../exceptions'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
 
 @Injectable()
 export class AccountStrategyViewService {
@@ -48,10 +52,15 @@ export class AccountStrategyViewService {
       } as Record<string, unknown>
       const symbol = this.readString(mergedParams, ['symbol'])
 
-      const fallback = await this.buildAccountFallbackMetrics(
-        query.userId,
-        symbol,
-      )
+      let fallback = null as Awaited<ReturnType<typeof this.buildAccountFallbackMetrics>> | null
+      try {
+        fallback = await this.buildAccountFallbackMetrics(
+          query.userId,
+          symbol,
+        )
+      } catch {
+        fallback = null
+      }
 
       const statsReturnPct = this.readStatsNumber(stats, 'totalPnlRate')
       const statsWinRatePct = this.readStatsNumber(stats, 'winRate')
@@ -87,7 +96,7 @@ export class AccountStrategyViewService {
   async getStrategyDetail(userId: string, strategyInstanceId: string): Promise<AccountStrategyDetailResponseDto> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
-      throw new NotFoundException('Strategy not found')
+      throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
     const sub = row.subscriptions[0]
@@ -205,18 +214,18 @@ export class AccountStrategyViewService {
     dto: AccountStrategyActionDto,
   ): Promise<AccountStrategyDetailResponseDto> {
     if (!dto.userId) {
-      throw new BadRequestException('Missing user identity')
+      throw new MissingUserIdentityException()
     }
     const userId = dto.userId
 
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
-      throw new NotFoundException('Strategy not found')
+      throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
-      throw new ForbiddenException('Only strategy owner can operate instance status')
+      throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
 
     const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
@@ -225,7 +234,7 @@ export class AccountStrategyViewService {
     }
 
     if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
-      throw new BadRequestException('Invalid action')
+      throw new InvalidStrategyActionException({ action: dto.action })
     }
 
     await this.strategyInstancesService.updateInstance(
@@ -242,7 +251,7 @@ export class AccountStrategyViewService {
 
   async deployStrategy(dto: AccountStrategyDeployDto): Promise<AccountStrategyDetailResponseDto> {
     if (!dto.userId) {
-      throw new BadRequestException('Missing user identity')
+      throw new MissingUserIdentityException()
     }
 
     const strategyInstanceId = await this.repo.deployStrategyForUser({

@@ -1,6 +1,7 @@
-import { PrismaService } from '@/prisma/prisma.service'
+import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
-import { Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PrismaService } from '@/prisma/prisma.service'
 import { SubscriptionStatus } from '@/prisma/prisma.types'
 
 interface ListStrategiesQuery {
@@ -154,7 +155,9 @@ export class AccountStrategyViewRepository {
 
   async listStrategiesForUser(query: ListStrategiesQuery) {
     const client = this.prisma.getClient()
-    const skip = (query.page - 1) * query.limit
+    const page = Number(query.page)
+    const limit = Number(query.limit)
+    const skip = (page - 1) * limit
 
     const subscribedInstanceIds = (
       await client.userStrategySubscription.findMany({
@@ -191,15 +194,15 @@ export class AccountStrategyViewRepository {
         },
         orderBy: { updatedAt: 'desc' },
         skip,
-        take: query.limit,
+        take: limit,
       }),
       client.strategyInstance.count({ where }),
     ])
 
     return {
       total,
-      page: query.page,
-      limit: query.limit,
+      page,
+      limit,
       items: items.map(item => {
         const userSub = item.subscriptions[0]
         const isSubscribed = !!userSub && userSub.status === SubscriptionStatus.active

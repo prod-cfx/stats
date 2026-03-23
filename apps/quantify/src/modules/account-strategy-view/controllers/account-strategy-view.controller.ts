@@ -1,11 +1,13 @@
-import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
-import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
-import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
-import { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
-import { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
-import { AccountStrategyViewService } from '../services/account-strategy-view.service'
+import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
+import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
+import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
+import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import { MissingUserIdentityException, UserIdMismatchException } from '../exceptions'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { AccountStrategyViewService } from '../services/account-strategy-view.service'
 
 @Controller('account/ai-quant/strategies')
 export class AccountStrategyViewController {
@@ -63,11 +65,11 @@ export class AccountStrategyViewController {
     const inputUserId = this.normalizeUserId(requestedUserId)
 
     if (!authUserId && !inputUserId) {
-      throw new BadRequestException('Missing user identity')
+      throw new MissingUserIdentityException()
     }
 
     if (authUserId && inputUserId && authUserId !== inputUserId) {
-      throw new ForbiddenException('userId does not match authenticated principal')
+      throw new UserIdMismatchException({ authUserId, inputUserId })
     }
 
     return authUserId ?? inputUserId!

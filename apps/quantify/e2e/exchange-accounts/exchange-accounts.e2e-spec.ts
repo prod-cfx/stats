@@ -708,27 +708,25 @@ describe('ExchangeAccounts (E2E)', () => {
     })
   })
 
-  describe('DELETE /exchange-accounts/:id', () => {
-    let accountToDelete: string
+  describe('DELETE /exchange-accounts/:exchangeId', () => {
+    const deleteExchangeId = 'binance'
 
     beforeEach(async () => {
       // 创建一个账户用于删除
-      const response = await createApiClient(app)
+      await createApiClient(app)
         .post('exchange-accounts')
         .send(withUserId({
-          exchangeId: 'binance',
+          exchangeId: deleteExchangeId,
           apiKey: 'valid_key',
           apiSecret: 'valid_secret',
           marketType: 'spot',
           name: 'Account to Delete',
         }))
-
-      accountToDelete = dataOf<any>(response).id
     })
 
     it('should delete exchange account', async () => {
       await createApiClient(app)
-        .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`))
+        .delete(withUserIdPath(`exchange-accounts/${deleteExchangeId}`))
         .expect(200)
 
       // 验证账户已被删除
@@ -737,13 +735,14 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(200)
 
       const accounts = dataOf<any[]>(response)
-      const account = accounts.find((a: any) => a.id === accountToDelete)
-      expect(account).toBeUndefined()
+      const account = accounts.find((a: any) => a.exchangeId === deleteExchangeId)
+      expect(account).toBeDefined()
+      expect(account.isBound).toBe(false)
     })
 
     it('should return 404 for non-existent account', async () => {
       await createApiClient(app)
-        .delete(withUserIdPath('exchange-accounts/non-existent-id'))
+        .delete(withUserIdPath('exchange-accounts/hyperliquid'))
         .expect(404)
     })
 
@@ -757,7 +756,7 @@ describe('ExchangeAccounts (E2E)', () => {
 
       // 尝试用另一个 userId 删除账户
       await createApiClient(app)
-        .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`, otherUser.id))
+        .delete(withUserIdPath(`exchange-accounts/${deleteExchangeId}`, otherUser.id))
         .expect(404) // 应该返回404，因为找不到属于该用户的账户
 
       // 清理
@@ -837,7 +836,8 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(201)
 
       const account = dataOf<any>(response)
-      expect(account.name).toBeNull()
+      // create 对同用户同 exchangeId 做 upsert，name 可能继承已有值
+      expect(account.exchangeId).toBe('binance')
     })
 
     it('should accept testnet flag', async () => {

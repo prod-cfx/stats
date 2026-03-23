@@ -93,8 +93,9 @@ export class ExchangeAccountsService {
     }
 
     if (!userEmail) {
-      throw new DomainException('缺少用户邮箱，无法同步 Quantify 用户', {
-        code: ErrorCode.BAD_REQUEST,
+      throw new DomainException('exchange_account.missing_email', {
+        code: ErrorCode.EXCHANGE_ACCOUNT_MISSING_EMAIL,
+        args: { userId },
       })
     }
 
@@ -103,8 +104,9 @@ export class ExchangeAccountsService {
       select: { id: true },
     })
     if (existingByEmail && existingByEmail.id !== userId) {
-      throw new DomainException('Quantify 用户身份冲突', {
-        code: ErrorCode.INTERNAL_SERVER_ERROR,
+      throw new DomainException('exchange_account.user_conflict', {
+        code: ErrorCode.EXCHANGE_ACCOUNT_USER_CONFLICT,
+        args: { userId, existingUserId: existingByEmail.id },
       })
     }
 
@@ -251,12 +253,12 @@ export class ExchangeAccountsService {
       }
 
       if (error instanceof ExchangeOperationFailedException) {
-        throw new DomainException('交易所服务暂时不可用，请稍后重试', {
-          code: ErrorCode.TRADING_EXCHANGE_OPERATION_FAILED,
+        throw new DomainException('exchange_account.exchange_unavailable', {
+          code: ErrorCode.EXCHANGE_ACCOUNT_EXCHANGE_UNAVAILABLE,
           args: {
             exchangeId,
             reasonCode: 'EXCHANGE_UNAVAILABLE',
-            reasonMessage: '交易所服务暂时不可用，请稍后重试',
+            reasonMessage: 'Exchange service temporarily unavailable, please retry later',
             retryable: true,
           },
         })

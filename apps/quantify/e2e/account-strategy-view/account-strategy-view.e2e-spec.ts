@@ -62,6 +62,7 @@ describe('account-strategy-view (E2E)', () => {
         llmModel: 'gpt-4',
         status: 'running',
         mode: 'LIVE',
+        startedAt: new Date('2026-03-18T00:00:00.000Z'),
         createdBy: owner.id,
         updatedBy: owner.id,
       },
@@ -76,6 +77,7 @@ describe('account-strategy-view (E2E)', () => {
         llmModel: 'gpt-4',
         status: 'paused',
         mode: 'LIVE',
+        startedAt: new Date('2026-03-18T00:00:00.000Z'),
         createdBy: owner.id,
         updatedBy: owner.id,
       },
@@ -103,16 +105,27 @@ describe('account-strategy-view (E2E)', () => {
       },
     })
 
-    await prisma.strategyPnlDaily.create({
-      data: {
-        userStrategyAccountId: account.id,
-        date: new Date('2026-03-20T00:00:00.000Z'),
-        equityStart: 10000,
-        equityEnd: 10320.12,
-        realizedPnl: 10,
-        unrealizedPnl: 8.34,
-        maxDrawdown: 5.5,
-      },
+    await prisma.strategyPnlDaily.createMany({
+      data: [
+        {
+          userStrategyAccountId: account.id,
+          date: new Date('2026-03-19T00:00:00.000Z'),
+          equityStart: 10000,
+          equityEnd: 10000,
+          realizedPnl: 0,
+          unrealizedPnl: 0,
+          maxDrawdown: 0,
+        },
+        {
+          userStrategyAccountId: account.id,
+          date: new Date('2026-03-20T00:00:00.000Z'),
+          equityStart: 10000,
+          equityEnd: 9450,
+          realizedPnl: 0,
+          unrealizedPnl: -550,
+          maxDrawdown: 5.5,
+        },
+      ],
     })
   })
 
@@ -185,7 +198,8 @@ describe('account-strategy-view (E2E)', () => {
     const payload = response.body?.data
     expect(payload.id).toBe(strategyRunningId)
     expect(payload.totalPnl).toBe(320.12)
-    expect(payload.todayPnl).toBe(18.34)
+    // todayPnl = realizedToday(no closed positions today) + totalUnrealizedPnl(20.12)
+    expect(payload.todayPnl).toBe(20.12)
     expect(payload.metrics.maxDrawdownPct).toBe(5.5)
   })
 

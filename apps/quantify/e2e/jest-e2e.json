@@ -4,13 +4,7 @@
   "testEnvironment": "node",
   "testRegex": ".*\\.(e2e-spec|spec)\\.ts$",
   "transform": {
-    "^.+\\.[tj]sx?$": "ts-jest"
-  },
-  "globals": {
-    "ts-jest": {
-      "diagnostics": false,
-      "isolatedModules": true
-    }
+    "^.+\\.[tj]sx?$": ["ts-jest", { "diagnostics": false, "isolatedModules": true }]
   },
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1",
@@ -22,6 +16,7 @@
     "^@nktkas/hyperliquid$": "<rootDir>/../node_modules/@nktkas/hyperliquid/script/src/mod.js"
   },
   "transformIgnorePatterns": [
+    "/generated/prisma/",
     "/node_modules/(?!(?:\\.pnpm/(?:@nktkas\\+hyperliquid|@noble\\+hashes|@noble\\+secp256k1)@|@nktkas/hyperliquid|@noble/hashes|@noble/secp256k1)/)"
   ],
   "setupFilesAfterEnv": ["./setup-e2e.ts"],
