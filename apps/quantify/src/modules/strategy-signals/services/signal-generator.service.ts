@@ -3,6 +3,7 @@ import type {
   LegTimeframeData,
   MultiLegStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
+import type { StrategyDecisionV1 } from '@ai/shared'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
@@ -794,10 +795,20 @@ export class SignalGeneratorService {
                 )
                 promptData = indicators
               } else if (resolved.decision) {
+                const decisionContext = this.buildDecisionContext(indicators, referencePrice)
+                if (
+                  this.requiresExplicitDecisionContext(resolved.decision) &&
+                  !this.hasExplicitDecisionContext(decisionContext)
+                ) {
+                  this.logger.error(
+                    `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+                  )
+                  return null
+                }
                 promptData = strategyDecisionToSignalPayload(
                   resolved.decision,
                   referencePrice || 0,
-                  this.buildDecisionContext(indicators, referencePrice),
+                  decisionContext,
                 ) as Record<string, any>
               } else {
                 promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
@@ -1407,10 +1418,27 @@ export class SignalGeneratorService {
         const adapterReferencePrice =
           multiLegData[primaryLeg.id]?.[execution.timeframe]?.currentPrice ?? 0
         const primaryIndicators = multiLegData[primaryLeg.id]?.[execution.timeframe]?.indicators ?? {}
+        const decisionContext = this.buildDecisionContext(primaryIndicators, adapterReferencePrice)
+        if (
+          this.requiresExplicitDecisionContext(resolved.decision) &&
+          !this.hasExplicitDecisionContext(decisionContext)
+        ) {
+          this.logger.error(
+            `Multi-leg strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+          )
+          await this.handleStrategyFailure(instance.id, config)
+          this.telemetry.recordGeneration({
+            strategyId: strategy.id,
+            symbolCode: primaryLeg.symbol,
+            success: false,
+            reason: 'ADJUST_POSITION_CONTEXT_REQUIRED',
+          })
+          return
+        }
         promptData = strategyDecisionToSignalPayload(
           resolved.decision,
           adapterReferencePrice,
-          this.buildDecisionContext(primaryIndicators, adapterReferencePrice),
+          decisionContext,
         ) as Record<string, any>
       } else {
         promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
@@ -1691,7 +1719,7 @@ export class SignalGeneratorService {
    * 处理 Date、undefined、NaN、Infinity、循环引用等非 JSON-safe 的值
    */
   private buildDecisionContext(
-    indicators: Record<string, number>,
+    indicators: Record<string, unknown>,
     markPrice: number | undefined,
   ): { currentQty?: number; equity?: number; markPrice?: number } {
     return {
@@ -1699,6 +1727,25 @@ export class SignalGeneratorService {
       equity: this.readFiniteNumber(indicators.equity),
       markPrice: this.readFiniteNumber(markPrice),
     }
+  }
+
+  private requiresExplicitDecisionContext(decision: StrategyDecisionV1): boolean {
+    return decision.action === 'ADJUST_POSITION'
+  }
+
+  private hasExplicitDecisionContext(context: {
+    currentQty?: number
+    equity?: number
+    markPrice?: number
+  }): context is { currentQty: number; equity: number; markPrice: number } {
+    return (
+      typeof context.currentQty === 'number' &&
+      Number.isFinite(context.currentQty) &&
+      typeof context.equity === 'number' &&
+      Number.isFinite(context.equity) &&
+      typeof context.markPrice === 'number' &&
+      Number.isFinite(context.markPrice)
+    )
   }
 
   private readFiniteNumber(value: unknown): number | undefined {
