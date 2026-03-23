@@ -111,10 +111,7 @@ export class PositionsController {
   })
   @ApiOkResponse({ type: PositionSyncResultDto })
   async triggerPositionSync(@Body() dto: TriggerPositionSyncDto) {
-    const account = await this.positionsService.prisma.userStrategyAccount.findUnique({
-      where: { id: dto.userStrategyAccountId },
-      select: { userId: true, id: true },
-    })
+    const account = await this.positionsService.findUserStrategyAccountById(dto.userStrategyAccountId)
 
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId: dto.userStrategyAccountId })
@@ -147,10 +144,7 @@ export class PositionsController {
   @ApiBody({ type: ClosePositionDto })
   @ApiOkResponse({ type: ClosePositionResponseDto })
   async closePosition(@Body() dto: ClosePositionDto) {
-    const account = await this.positionsService.prisma.userStrategyAccount.findUnique({
-      where: { id: dto.userStrategyAccountId },
-      select: { userId: true, id: true },
-    })
+    const account = await this.positionsService.findUserStrategyAccountById(dto.userStrategyAccountId)
 
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId: dto.userStrategyAccountId })

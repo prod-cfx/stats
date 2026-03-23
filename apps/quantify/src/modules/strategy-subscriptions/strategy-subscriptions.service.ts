@@ -4,7 +4,6 @@ import { Injectable, Logger } from '@nestjs/common'
 import Ajv from 'ajv'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions/exchange-account-not-found.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { CreateSubscriptionDto } from './dto/create-subscription.dto'
 import { SubscriptionListQueryDto } from './dto/subscription-list-query.dto'
@@ -60,33 +59,12 @@ export class StrategySubscriptionsService {
   private readonly ajv = new Ajv({ allErrors: true, strict: false })
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly subscriptionsRepo: SubscriptionsRepository,
   ) {}
 
   async subscribe(userId: string, dto: CreateSubscriptionDto): Promise<SubscriptionResponseDto> {
-    const client = this.prisma.getClient()
-    
     // 查询策略实例及其关联的模板信息
-    const strategyInstance = await client.strategyInstance.findUnique({
-      where: { id: dto.strategyInstanceId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        status: true,
-        mode: true, // 🔴 新增：选出 mode 字段用于校验
-        strategyTemplate: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            requiredFields: true,
-            paramsSchema: true,
-          },
-        },
-      },
-    })
+    const strategyInstance = await this.subscriptionsRepo.findStrategyInstanceForSubscribe(dto.strategyInstanceId)
 
     if (!strategyInstance) {
       throw new StrategyNotAvailableException({ strategyInstanceId: dto.strategyInstanceId, status: 'not_found' })
@@ -423,13 +401,7 @@ export class StrategySubscriptionsService {
   }
 
   private async ensureExchangeAccountOwnership(userId: string, exchangeAccountId: string) {
-    const account = await this.prisma.getClient().exchangeAccount.findFirst({
-      where: {
-        id: exchangeAccountId,
-        userId,
-      },
-      select: { id: true },
-    })
+    const account = await this.subscriptionsRepo.findExchangeAccountOwnership(exchangeAccountId, userId)
 
     if (!account) {
       throw new ExchangeAccountNotFoundException({ accountId: exchangeAccountId })

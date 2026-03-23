@@ -13,8 +13,6 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { AiService } from '@/modules/ai/ai.service'
 import { StrategySignalEvents } from '@/modules/strategy-signals/constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '@/modules/strategy-signals/events/strategy-signal.events'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
-import { PrismaService } from '@/prisma/prisma.service'
 import { LLM_OPS_TEST_LOG_EVENT } from './llm-ops-test-log.events'
 import { LLM_RUN_REASONS } from './llm-run-reasons'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 LlmToolsService
@@ -62,7 +60,6 @@ export class LlmOrchestratedEngineV3 {
     private readonly runsRepo: LlmStrategyRunsRepository,
     private readonly toolsService: LlmToolsService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly prisma: PrismaService,
   ) {}
 
   private emitOpsTestLog(payload: Omit<LlmOpsTestLogEvent, 'timestamp'>) {
@@ -1040,46 +1037,12 @@ export class LlmOrchestratedEngineV3 {
     createdBy?: string,
   ): Promise<string> {
     // 🔧 使用事务确保原子性
-    const result = await this.prisma.$transaction(async (tx) => {
-      // 1. 查找 symbol
-      const symbolRecord = await tx.symbol.findUnique({
-        where: { code: signal.symbol },
-      })
-
-      if (!symbolRecord) {
-        const errorMsg = `Symbol ${signal.symbol} not found in database. Please ensure the symbol exists in the symbols table.`
-        this.logger.error(errorMsg, {
-          signal: signal.symbol,
-          strategyId: strategy.id,
-          instanceId: instance.id,
-          runId,
-        })
-
-        // 🔧 管理员测试模式下发出友好提示
-        if (isOpsTest && createdBy) {
-          this.emitOpsTestLog({
-            instanceId: instance.id,
-            operatorId: createdBy,
-            runId,
-            level: 'error',
-            message: `[SIGNAL_ERROR] ${errorMsg}`,
-            meta: { symbol: signal.symbol, phase: 'signal_creation' },
-          })
-        }
-
-        throw new DomainException('llm_strategy.symbol_not_found', {
-          code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
-          status: HttpStatus.NOT_FOUND,
-          args: { symbol: signal.symbol, strategyId: strategy.id, instanceId: instance.id },
-        })
-      }
-
-      // 2. 创建 TradingSignal
-      const data: Prisma.TradingSignalCreateInput = {
-        // 关联到 LLM 策略（使用新增的字段）
+    const txResult = await this.runsRepo.createTradingSignalAndLinkRun(
+      signal.symbol,
+      (symbolId) => ({
         llmStrategy: { connect: { id: strategy.id } },
         llmStrategyInstance: { connect: { id: instance.id } },
-        symbol: { connect: { id: symbolRecord.id } },
+        symbol: { connect: { id: symbolId } },
         sourceType: 'AI_GENERATED',
         signalType: signal.signalType,
         direction: signal.direction,
@@ -1103,20 +1066,39 @@ export class LlmOrchestratedEngineV3 {
           generatorVersion: 'v3',
           llmStrategyRunId: runId,
         },
-      }
+      }),
+      runId,
+    )
 
-      const tradingSignal = await tx.tradingSignal.create({ data })
-
-      // 3. 更新运行记录（在事务中）
-      await tx.llmStrategyRun.update({
-        where: { id: runId },
-        data: {
-          generatedSignal: { connect: { id: tradingSignal.id } },
-        },
+    if (!txResult.symbolFound) {
+      const errorMsg = `Symbol ${signal.symbol} not found in database. Please ensure the symbol exists in the symbols table.`
+      this.logger.error(errorMsg, {
+        signal: signal.symbol,
+        strategyId: strategy.id,
+        instanceId: instance.id,
+        runId,
       })
 
-      return tradingSignal
-    })
+      // 🔧 管理员测试模式下发出友好提示
+      if (isOpsTest && createdBy) {
+        this.emitOpsTestLog({
+          instanceId: instance.id,
+          operatorId: createdBy,
+          runId,
+          level: 'error',
+          message: `[SIGNAL_ERROR] ${errorMsg}`,
+          meta: { symbol: signal.symbol, phase: 'signal_creation' },
+        })
+      }
+
+      throw new DomainException('llm_strategy.symbol_not_found', {
+        code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { symbol: signal.symbol, strategyId: strategy.id, instanceId: instance.id },
+      })
+    }
+
+    const result = txResult.tradingSignal
 
     // 🔧 结构化日志
     this.logger.log(`Created TradingSignal ${result.id}`, {

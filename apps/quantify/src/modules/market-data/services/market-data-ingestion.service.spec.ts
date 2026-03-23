@@ -2,16 +2,12 @@ import { MarketDataIngestionService } from './market-data-ingestion.service'
 
 describe('marketDataIngestionService', () => {
   function createServiceWithMissingSubscriptionTables() {
-    const prisma = {
-      userStrategySubscription: {
-        findMany: jest.fn().mockRejectedValue({
-          code: 'P2021',
-          message: 'table does not exist',
-        }),
-      },
-      userLlmStrategySubscription: {
-        findMany: jest.fn().mockResolvedValue([]),
-      },
+    const marketDataRepository = {
+      findActiveStrategySubscriptionsForSymbols: jest.fn().mockRejectedValue({
+        code: 'P2021',
+        message: 'table does not exist',
+      }),
+      findActiveLlmSubscriptionsForSymbols: jest.fn().mockResolvedValue([]),
     }
 
     const configService = {
@@ -23,7 +19,7 @@ describe('marketDataIngestionService', () => {
         perpRestBaseUrl: 'https://fapi.binance.com',
         spotWsBaseUrl: 'wss://stream.binance.com:9443',
         perpWsBaseUrl: 'wss://fstream.binance.com',
-        symbols: ['BTCUSDT'],
+        symbols: ['BTCUSDT:SPOT'],
         timeframes: ['1m'],
         historicalLookbackMinutes: 60,
         restBatchSize: 50,
@@ -34,27 +30,28 @@ describe('marketDataIngestionService', () => {
 
     const provider = {
       name: 'binance',
-      syncSymbols: jest.fn().mockResolvedValue(undefined),
-      syncHistoricalBars: jest.fn().mockResolvedValue(undefined),
-      subscribeRealtime: jest.fn().mockResolvedValue(async () => undefined),
+      fetchSymbols: jest.fn().mockResolvedValue([]),
+      fetchHistoricalBars: jest.fn().mockResolvedValue([]),
+      subscribe: jest.fn().mockResolvedValue(async () => undefined),
       disconnect: jest.fn().mockResolvedValue(undefined),
     }
 
     const marketDataService = {
-      upsertSymbols: jest.fn().mockResolvedValue(undefined),
-      upsertBars: jest.fn().mockResolvedValue(undefined),
+      upsertSymbolsFromProvider: jest.fn().mockResolvedValue(undefined),
+      saveBarFromProvider: jest.fn().mockResolvedValue(undefined),
+      saveQuoteFromProvider: jest.fn().mockResolvedValue(undefined),
     }
 
     const streamService = {
-      emitQuote: jest.fn().mockResolvedValue(undefined),
+      emitQuote: jest.fn(),
     }
 
     return new MarketDataIngestionService(
-      configService as any,
-      prisma as any,
-      marketDataService as any,
-      provider as any,
-      streamService as any,
+      configService as never,
+      marketDataService as never,
+      provider as never,
+      streamService as never,
+      marketDataRepository as never,
     )
   }
 

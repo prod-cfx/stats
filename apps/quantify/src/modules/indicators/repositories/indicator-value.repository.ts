@@ -1,4 +1,4 @@
-import type { IndicatorValue, MarketTimeframe, Prisma, PrismaClient, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
+import type { IndicatorValue, MarketBar, MarketTimeframe, Prisma, PrismaClient, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -143,6 +143,14 @@ export class IndicatorValueRepository {
         OR: conditions,
       },
       orderBy: { time: 'asc' },
+    })
+  }
+
+  async findRecentBars(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
+    return this.client.marketBar.findMany({
+      where: { symbolId, timeframe },
+      orderBy: { time: 'desc' },
+      take: limit,
     })
   }
 }

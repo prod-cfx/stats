@@ -20,9 +20,6 @@ import type {
 import { TRADING_PAIRS } from '@ai/shared'
 import type { MarketTrade, Prisma } from '@/prisma/prisma.types'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 import type { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
 import type { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 import type { ExchangeLongShortTimeRange } from './dto/requests/get-exchange-long-short-ratio.request.dto'
@@ -75,7 +72,6 @@ export class MarketsService {
   private readonly pairs: TradingPairConfig[]
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly longShortRatioRepository: LongShortRatioRepository,
     private readonly marketTradesRepository: MarketTradesRepository,
     private readonly futuresPairsMarketRepository: FuturesPairsMarketRepository,

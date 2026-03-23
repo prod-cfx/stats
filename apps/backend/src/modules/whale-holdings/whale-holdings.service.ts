@@ -1,19 +1,14 @@
 import type { QueryWhaleHoldingsDto, WhaleHoldingDto } from './dto/whale-holdings.dto'
 import { Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { WhaleHoldingsRepository } from './whale-holdings.repository'
 
 @Injectable()
 export class WhaleHoldingsService {
   private readonly logger = new Logger(WhaleHoldingsService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly whaleHoldingsRepository: WhaleHoldingsRepository) {}
 
   /**
    * 基于 HyperliquidWhalePosition 数据获取当前鲸鱼持仓列表：
@@ -32,8 +27,6 @@ export class WhaleHoldingsService {
       }, minValueUsd=${minPositionValueUsd}, limit=${limit}, page=${page}`,
     )
 
-    const client = this.getClient()
-
     const where = {
       positionValueUsd: {
         gte: minPositionValueUsd,
@@ -44,13 +37,8 @@ export class WhaleHoldingsService {
     const orderBy = { positionValueUsd: 'desc' as const }
 
     const [rows, total] = await Promise.all([
-      client.hyperliquidWhalePosition.findMany({
-        where,
-        orderBy,
-        take: limit,
-        skip,
-      }),
-      client.hyperliquidWhalePosition.count({ where }),
+      this.whaleHoldingsRepository.findManyPositions(where, orderBy, limit, skip),
+      this.whaleHoldingsRepository.countPositions(where),
     ])
 
     const items = rows.map(row => {

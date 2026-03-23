@@ -17,12 +17,12 @@ import { EXECUTION_STAGES } from '@/modules/trading/core/execution-stage'
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalExecutionRepository } from '../repositories/signal-execution.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { SignalExecutorRepository } from '../repositories/signal-executor.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
@@ -56,7 +56,7 @@ export class SignalExecutorService implements OnModuleInit {
   private readonly logger = new Logger(SignalExecutorService.name)
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly executorRepository: SignalExecutorRepository,
     private readonly configService: ConfigService,
     private readonly tradingService: TradingService,
     private readonly accountsService: AccountsService,
@@ -101,18 +101,7 @@ export class SignalExecutorService implements OnModuleInit {
    * 避免依赖进程内事件导致服务重启时信号彻底丢失
    */
   private async recoverPendingSignals(config: StrategySignalsRuntimeConfig) {
-    const now = new Date()
-    const signals = await this.prisma.tradingSignal.findMany({
-      where: {
-        status: { in: ['PENDING', 'FAILED'] satisfies SignalStatus[] },
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: now } },
-        ],
-      },
-      orderBy: { createdAt: 'asc' },
-      take: RECOVERY_BATCH_SIZE,
-    })
+    const signals = await this.executorRepository.findPendingOrFailedSignals(RECOVERY_BATCH_SIZE)
 
     if (!signals.length) return
 
@@ -189,11 +178,7 @@ export class SignalExecutorService implements OnModuleInit {
       }
     }
 
-    const accounts = await this.prisma.userStrategyAccount.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
-      take: config.execution.maxAccountsPerSignal,
-    })
+    const accounts = await this.executorRepository.findSubscribedAccounts(where, config.execution.maxAccountsPerSignal)
 
     if (!accounts.length) {
       this.logger.debug(`No subscribed accounts for signal ${signal.id}`)
@@ -266,17 +251,10 @@ export class SignalExecutorService implements OnModuleInit {
       let effectiveOrderParams = orderParams
 
       if (resolvedSignal.llmStrategyInstanceId) {
-        const subscription = await this.prisma.userLlmStrategySubscription.findFirst({
-          where: {
-            userId: account.userId,
-            llmStrategyInstanceId: resolvedSignal.llmStrategyInstanceId,
-            status: 'active',
-          },
-          select: {
-            exchangeAccountId: true,
-            exchangeAccount: { select: { exchangeId: true } },
-          },
-        })
+        const subscription = await this.executorRepository.findActiveLlmSubscription(
+          account.userId,
+          resolvedSignal.llmStrategyInstanceId,
+        )
         if (subscription?.exchangeAccountId) {
           exchangeAccountId = subscription.exchangeAccountId
           // 使用用户订阅时选择的账户的 exchangeId，而不是信号中 symbol.exchange
@@ -294,14 +272,11 @@ export class SignalExecutorService implements OnModuleInit {
             // 注意：market_symbols.exchange 存储的是大写（如 BINANCE/OKX），
             // exchangeAccount.exchangeId 可能是小写，需要统一转为大写进行查询
             const targetExchangeForQuery = (subscription.exchangeAccount?.exchangeId ?? '').toUpperCase()
-            const targetSymbolMeta = await this.prisma.symbol.findFirst({
-              where: {
-                exchange: targetExchangeForQuery,
-                baseAsset: resolvedSignal.symbol.baseAsset,
-                quoteAsset: resolvedSignal.symbol.quoteAsset,
-                instrumentType: resolvedSignal.symbol.instrumentType,
-                status: 'ACTIVE',
-              },
+            const targetSymbolMeta = await this.executorRepository.findSymbolForCrossExchange({
+              exchange: targetExchangeForQuery,
+              baseAsset: resolvedSignal.symbol.baseAsset,
+              quoteAsset: resolvedSignal.symbol.quoteAsset,
+              instrumentType: resolvedSignal.symbol.instrumentType,
             })
 
             if (!targetSymbolMeta) {
@@ -562,7 +537,7 @@ export class SignalExecutorService implements OnModuleInit {
     | { type: 'skip'; reason: string; executionId?: string }
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
-    return this.prisma.$transaction(async prisma => {
+    return this.executorRepository.runInTransaction(async prisma => {
       const existing = await prisma.userSignalExecution.findUnique({
         where: {
           signalId_userStrategyAccountId: {

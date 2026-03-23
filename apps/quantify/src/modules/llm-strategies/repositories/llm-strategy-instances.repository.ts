@@ -1,5 +1,6 @@
 import type {
   LlmStrategyInstance,
+  LlmStrategyInstanceMode,
   LlmStrategyInstanceStatus,
   Prisma,
 } from '@/prisma/prisma.types'
@@ -108,6 +109,57 @@ export class LlmStrategyInstancesRepository {
   async delete(id: string): Promise<void> {
     await this.client.llmStrategyInstance.delete({
       where: { id },
+    })
+  }
+
+  async findRunningLiveInstances(params: {
+    llmModel?: string
+    strategyId?: string
+    skip: number
+    take: number
+  }) {
+    const where: Prisma.LlmStrategyInstanceWhereInput = {
+      status: 'running' as LlmStrategyInstanceStatus,
+      mode: 'LIVE' as LlmStrategyInstanceMode,
+      strategy: { status: 'live' as const },
+      ...(params.llmModel ? { llmModel: params.llmModel } : {}),
+      ...(params.strategyId ? { strategyId: params.strategyId } : {}),
+    }
+
+    const [items, total] = await Promise.all([
+      this.client.llmStrategyInstance.findMany({
+        where,
+        include: { strategy: { select: { name: true, description: true } } },
+        orderBy: { updatedAt: 'desc' },
+        skip: params.skip,
+        take: params.take,
+      }),
+      this.client.llmStrategyInstance.count({ where }),
+    ])
+
+    return { items, total }
+  }
+
+  async findByIdWithStrategyDetail(id: string) {
+    return this.client.llmStrategyInstance.findUnique({
+      where: { id },
+      include: {
+        strategy: { select: { name: true, description: true, status: true } },
+      },
+    })
+  }
+
+  async findRunningWithSchedule() {
+    return this.client.llmStrategyInstance.findMany({
+      where: {
+        status: 'running',
+        scheduleCron: { not: null },
+      },
+      include: {
+        strategy: {
+          select: { id: true, name: true, status: true },
+        },
+      },
     })
   }
 }

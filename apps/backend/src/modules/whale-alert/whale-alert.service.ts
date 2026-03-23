@@ -7,19 +7,18 @@ import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notif
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
 import { TradeSide } from './dto/whale-trade.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { WhaleAlertRepository } from './whale-alert.repository'
 
 @Injectable()
 export class WhaleAlertService {
   private readonly logger = new Logger(WhaleAlertService.name)
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly whaleAlertRepository: WhaleAlertRepository,
     @Inject(WhaleNotificationOrchestratorServiceToken)
     private readonly whaleNotificationOrchestrator: WhaleNotificationOrchestratorService,
   ) {}
@@ -74,15 +73,8 @@ export class WhaleAlertService {
     )
 
     const [rows, total] = await Promise.all([
-      this.prisma.hyperliquidWhaleAlert.findMany({
-        where,
-        orderBy: {
-          createTime: 'desc',
-        },
-        take: limit,
-        skip,
-      }),
-      this.prisma.hyperliquidWhaleAlert.count({ where }),
+      this.whaleAlertRepository.findManyAlerts(where, limit, skip),
+      this.whaleAlertRepository.countAlerts(where),
     ])
 
     const items = rows.map(row => {
@@ -163,15 +155,8 @@ export class WhaleAlertService {
     )
 
     const [rows, total] = await Promise.all([
-      this.prisma.hyperliquidWhaleTrade.findMany({
-        where,
-        orderBy: {
-          tradeTime: 'desc',
-        },
-        take: limit,
-        skip,
-      }),
-      this.prisma.hyperliquidWhaleTrade.count({ where }),
+      this.whaleAlertRepository.findManyTrades(where, limit, skip),
+      this.whaleAlertRepository.countTrades(where),
     ])
 
     const items = rows.map(row => {
@@ -203,10 +188,7 @@ export class WhaleAlertService {
    * 获取所有活跃鲸鱼地址(用于 Adapter 订阅)
    */
   async getActiveWhaleAddresses(): Promise<string[]> {
-    const rows = await this.prisma.hyperliquidWhaleAlert.findMany({
-      select: { userAddress: true },
-      distinct: ['userAddress'],
-    })
+    const rows = await this.whaleAlertRepository.findDistinctWhaleAddresses()
 
     const addresses: string[] = []
     for (const row of rows) {
@@ -232,18 +214,15 @@ export class WhaleAlertService {
   }): Promise<void> {
     const { whaleAddress, coin, side, tradeSize, price, tradeValueUsd, tradeTime } = data
 
-    const insertResult = await this.prisma.hyperliquidWhaleTrade.createMany({
-      data: [{
-        userAddress: whaleAddress,
-        symbol: coin,
-        side,
-        tradeSize,
-        price,
-        tradeValueUsd,
-        tradeTime,
-      }],
-      skipDuplicates: true,
-    })
+    const insertResult = await this.whaleAlertRepository.createManyTrades([{
+      userAddress: whaleAddress,
+      symbol: coin,
+      side,
+      tradeSize,
+      price,
+      tradeValueUsd,
+      tradeTime,
+    }])
 
     if (insertResult.count === 0) {
       return

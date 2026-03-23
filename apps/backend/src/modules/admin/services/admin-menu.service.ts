@@ -2,10 +2,11 @@ import type { CreateAdminMenuDto, UpdateAdminMenuDto } from '../dto/admin-menu.d
 import type { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 import type { AdminMenu } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { AdminMenuType, PrincipalType } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AdminMenuRepository } from '../repositories/admin-menu.repository'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'
 
 interface AdminMenuTreeNode extends AdminMenu {
@@ -14,17 +15,10 @@ interface AdminMenuTreeNode extends AdminMenu {
 
 @Injectable()
 export class AdminMenuService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly adminMenuRepository: AdminMenuRepository) {}
 
   async findMenuTree(): Promise<AdminMenuTreeNode[]> {
-    const client = this.getClient()
-    const menus = await client.adminMenu.findMany({
-      orderBy: { sort: 'asc' },
-    })
+    const menus = await this.adminMenuRepository.findMany()
 
     const map = new Map<string, AdminMenuTreeNode>()
     const roots: AdminMenuTreeNode[] = []
@@ -50,40 +44,24 @@ export class AdminMenuService {
   }
 
   async findFlat(): Promise<AdminMenu[]> {
-    const client = this.getClient()
-    return client.adminMenu.findMany({
-      orderBy: { sort: 'asc' },
-    })
+    return this.adminMenuRepository.findMany()
   }
 
   async findPermissionMenus(adminId: string): Promise<AdminUserInfoDto['menus']> {
-    const client = this.getClient()
-
-    const assignments = await client.roleAssignment.findMany({
-      where: {
-        principalId: adminId,
-        principalType: PrincipalType.ADMIN,
-      },
-      select: {
-        role: { select: { menuPermissions: true } },
-      },
-    })
+    const assignments = await this.adminMenuRepository.findRoleAssignmentsByAdmin(adminId, PrincipalType.ADMIN)
 
     const permissionCodes = new Set<string>()
     assignments.forEach(({ role }) => {
       role.menuPermissions.forEach(code => permissionCodes.add(code))
     })
 
-    const menus = await client.adminMenu.findMany({
-      orderBy: { sort: 'asc' },
-    })
+    const menus = await this.adminMenuRepository.findMany()
 
     return buildAuthorizedMenuTree(menus, permissionCodes)
   }
 
   async findById(id: string): Promise<AdminMenu> {
-    const client = this.getClient()
-    const menu = await client.adminMenu.findUnique({ where: { id } })
+    const menu = await this.adminMenuRepository.findById(id)
     if (!menu) {
       throw new DomainException('Menu not found', {
         code: ErrorCode.NOT_FOUND,
@@ -94,33 +72,27 @@ export class AdminMenuService {
   }
 
   async create(dto: CreateAdminMenuDto): Promise<AdminMenu> {
-    const client = this.getClient()
-
     const parentIdForCreate = dto.parentId?.trim()
     if (parentIdForCreate) {
-      await this.ensureParentMenu(parentIdForCreate, client)
+      await this.ensureParentMenu(parentIdForCreate)
     }
 
-    return client.adminMenu.create({
-      data: {
-        parentId: parentIdForCreate ?? null,
-        type: dto.type,
-        title: dto.title,
-        icon: dto.icon,
-        code: dto.code,
-        path: dto.path,
-        description: dto.description,
-        i18nKey: dto.i18nKey,
-        sort: dto.sort ?? 0,
-        isShow: dto.isShow ?? true,
-      },
+    return this.adminMenuRepository.create({
+      parentId: parentIdForCreate ?? null,
+      type: dto.type,
+      title: dto.title,
+      icon: dto.icon,
+      code: dto.code,
+      path: dto.path,
+      description: dto.description,
+      i18nKey: dto.i18nKey,
+      sort: dto.sort ?? 0,
+      isShow: dto.isShow ?? true,
     })
   }
 
   async update(id: string, dto: UpdateAdminMenuDto): Promise<AdminMenu> {
-    const client = this.getClient()
-
-    const menu = await client.adminMenu.findUnique({ where: { id } })
+    const menu = await this.adminMenuRepository.findById(id)
     if (!menu) {
       throw new DomainException('Menu not found', {
         code: ErrorCode.NOT_FOUND,
@@ -140,8 +112,8 @@ export class AdminMenuService {
     }
 
     if (normalizedParentId) {
-      await this.ensureParentMenu(normalizedParentId, client)
-      const subtreeIds = await this.collectSubtreeIds(id, client)
+      await this.ensureParentMenu(normalizedParentId)
+      const subtreeIds = await this.collectSubtreeIds(id)
       if (subtreeIds.includes(normalizedParentId)) {
         throw new DomainException('Menu cannot be moved under its own descendants', {
           code: ErrorCode.BAD_REQUEST,
@@ -168,59 +140,47 @@ export class AdminMenuService {
       }
     }
 
-    return client.adminMenu.update({
-      where: { id },
-      data: {
-        parentId: parentIdToApply,
-        type: dto.type ?? menu.type,
-        title: dto.title ?? menu.title,
-        icon: dto.icon ?? menu.icon,
-        code: nextType === AdminMenuType.DIRECTORY ? null : nextCode,
-        path: dto.path ?? menu.path,
-        description: dto.description ?? menu.description,
-        i18nKey: dto.i18nKey ?? menu.i18nKey,
-        sort: dto.sort ?? menu.sort,
-        isShow: dto.isShow ?? menu.isShow,
-      },
+    return this.adminMenuRepository.update(id, {
+      parentId: parentIdToApply,
+      type: dto.type ?? menu.type,
+      title: dto.title ?? menu.title,
+      icon: dto.icon ?? menu.icon,
+      code: nextType === AdminMenuType.DIRECTORY ? null : nextCode,
+      path: dto.path ?? menu.path,
+      description: dto.description ?? menu.description,
+      i18nKey: dto.i18nKey ?? menu.i18nKey,
+      sort: dto.sort ?? menu.sort,
+      isShow: dto.isShow ?? menu.isShow,
     })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    const idsToDelete = await this.collectSubtreeIds(id, client)
+    const idsToDelete = await this.collectSubtreeIds(id)
     if (!idsToDelete.length) {
       throw new DomainException('Menu not found', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
       })
     }
-    await client.adminMenu.deleteMany({
-      where: { id: { in: idsToDelete } },
-    })
+    await this.adminMenuRepository.deleteMany(idsToDelete)
   }
 
-  private async collectSubtreeIds(rootId: string, client: ReturnType<typeof this.getClient>) {
+  private async collectSubtreeIds(rootId: string): Promise<string[]> {
     const queue = [rootId]
     const collected: string[] = []
     while (queue.length) {
       const current = queue.pop()!
-      const menu = await client.adminMenu.findUnique({
-        where: { id: current },
-        select: { id: true },
-      })
+      const menu = await this.adminMenuRepository.findByIdSelect(current)
       if (!menu) continue
       collected.push(current)
-      const children = await client.adminMenu.findMany({
-        where: { parentId: current },
-        select: { id: true },
-      })
+      const children = await this.adminMenuRepository.findChildrenIds(current)
       children.forEach(child => queue.push(child.id))
     }
     return collected
   }
 
-  private async ensureParentMenu(parentId: string, client: ReturnType<typeof this.getClient>) {
-    const parent = await client.adminMenu.findUnique({ where: { id: parentId } })
+  private async ensureParentMenu(parentId: string): Promise<AdminMenu> {
+    const parent = await this.adminMenuRepository.findById(parentId)
     if (!parent) {
       throw new DomainException('Parent menu not found', {
         code: ErrorCode.NOT_FOUND,
@@ -236,5 +196,3 @@ export class AdminMenuService {
     return parent
   }
 }
-
-

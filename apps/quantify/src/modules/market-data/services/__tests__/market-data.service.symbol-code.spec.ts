@@ -1,19 +1,13 @@
 import { MarketDataService } from '../market-data.service'
 
 describe('marketDataService symbol code compatibility', () => {
-  const prismaMock = {
-    symbol: {
-      findMany: jest.fn(),
-      upsert: jest.fn(),
-    },
-    marketBar: {
-      upsert: jest.fn(),
-      findMany: jest.fn(),
-    },
-    marketQuote: {
-      create: jest.fn(),
-      findFirst: jest.fn(),
-    },
+  const repoMock = {
+    findSymbolsByCodeIn: jest.fn(),
+    upsertSymbol: jest.fn(),
+    findBars: jest.fn(),
+    upsertBar: jest.fn(),
+    findLatestQuoteBySymbolId: jest.fn(),
+    createQuote: jest.fn(),
   }
 
   const indicatorEngineMock = {
@@ -24,36 +18,36 @@ describe('marketDataService symbol code compatibility', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    service = new MarketDataService(prismaMock as never, indicatorEngineMock as never)
+    service = new MarketDataService(repoMock as never, indicatorEngineMock as never)
   })
 
   it('falls back unsuffixed symbol to :SPOT', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
 
     await expect(service.getSymbolOrThrow('BTCUSDT')).resolves.toEqual({ id: 'spot-id', code: 'BTCUSDT:SPOT' })
   })
 
   it('prefers exact suffixed symbol', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
 
     await expect(service.getSymbolOrThrow('BTCUSDT:PERP')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
   })
 
   it('falls back to legacy unsuffixed symbol when spot code is missing', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'legacy-id', code: 'BTCUSDT' }])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'legacy-id', code: 'BTCUSDT' }])
 
     await expect(service.getSymbolOrThrow('BTCUSDT')).resolves.toEqual({ id: 'legacy-id', code: 'BTCUSDT' })
   })
 
   it('falls back unsuffixed symbol to :PERP when :SPOT is missing', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
 
     await expect(service.getSymbolOrThrow('BTCUSDT')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
   })
 
   it('warns when both spot and perp exist for unsuffixed input', async () => {
     const warnSpy = jest.spyOn((service as any).logger, 'warn')
-    prismaMock.symbol.findMany.mockResolvedValue([
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([
       { id: 'spot-id', code: 'BTCUSDT:SPOT' },
       { id: 'perp-id', code: 'BTCUSDT:PERP' },
     ])
@@ -64,6 +58,8 @@ describe('marketDataService symbol code compatibility', () => {
   })
 
   it('normalizes provider symbol code using instrumentType', async () => {
+    repoMock.upsertSymbol.mockResolvedValue(undefined)
+
     await service.upsertSymbolsFromProvider(
       [
         {
@@ -77,18 +73,16 @@ describe('marketDataService symbol code compatibility', () => {
       'BINANCE',
     )
 
-    expect(prismaMock.symbol.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { code: 'BTCUSDT:PERP' },
-        create: expect.objectContaining({ code: 'BTCUSDT:PERP', instrumentType: 'PERPETUAL' }),
-        update: expect.objectContaining({ instrumentType: 'PERPETUAL' }),
-      }),
+    expect(repoMock.upsertSymbol).toHaveBeenCalledWith(
+      'BTCUSDT:PERP',
+      expect.objectContaining({ code: 'BTCUSDT:PERP', instrumentType: 'PERPETUAL' }),
+      expect.objectContaining({ instrumentType: 'PERPETUAL' }),
     )
   })
 
   it('filters bars by provider prefix when provider query is provided', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
-    prismaMock.marketBar.findMany.mockResolvedValue([])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repoMock.findBars.mockResolvedValue([])
 
     await service.getBars({
       symbol: 'BTCUSDT:SPOT',
@@ -97,18 +91,19 @@ describe('marketDataService symbol code compatibility', () => {
       provider: 'OKX',
     } as any)
 
-    expect(prismaMock.marketBar.findMany).toHaveBeenCalledWith(
+    expect(repoMock.findBars).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          symbolId: 'spot-id',
-          source: { startsWith: 'OKX' },
-        }),
+        symbolId: 'spot-id',
+        source: { startsWith: 'OKX' },
       }),
+      expect.anything(),
+      expect.anything(),
     )
   })
 
   it('keeps recent bar snapshot in ascending timestamp order when gapfill arrives after realtime bars', async () => {
-    prismaMock.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repoMock.upsertBar.mockResolvedValue(undefined)
 
     await service.saveBarFromProvider({
       symbol: 'BTCUSDT',

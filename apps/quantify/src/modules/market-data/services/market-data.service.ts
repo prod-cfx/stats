@@ -9,13 +9,12 @@ import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { 
-  mapSymbolStatus, 
+import {
+  mapSymbolStatus,
   mapTimeframe,
-  reverseMapTimeframe 
+  reverseMapTimeframe,
 } from '@/common/utils/prisma-enum-mappers'
 import { IndicatorEngineService } from '@/modules/indicators/services/indicator-engine.service'
-import { PrismaService } from '@/prisma/prisma.service'
 import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
 import {
@@ -24,6 +23,8 @@ import {
   normalizeRequestedCode,
   toSymbolCode,
 } from '../utils/market-symbol-code.util'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MarketDataRepository } from './market-data.repository'
 
 @Injectable()
 export class MarketDataService {
@@ -36,8 +37,7 @@ export class MarketDataService {
   private static readonly MAX_BAR_CACHE_PER_STREAM = 500
 
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    private readonly repo: MarketDataRepository,
     @Inject(IndicatorEngineService)
     private readonly indicatorEngine: IndicatorEngineService,
   ) {}
@@ -58,16 +58,8 @@ export class MarketDataService {
     const page = this.normalizePositiveInt(query.page, 1)
     const limit = this.normalizePositiveInt(query.limit, 20)
     const skip = (page - 1) * limit
-    
-    const [items, total] = await Promise.all([
-      this.prisma.symbol.findMany({
-        where,
-        orderBy: { code: 'asc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.symbol.count({ where }),
-    ])
+
+    const { items, total } = await this.repo.listSymbols(where, { code: 'asc' }, skip, limit)
 
     return new BasePaginationResponseDto(total, page, limit, items.map(symbol => this.toMarketSymbolResponse(symbol)))
   }
@@ -86,21 +78,19 @@ export class MarketDataService {
       return value ?? undefined
     }
 
-    const symbol = await this.prisma.symbol.create({
-      data: {
-        code,
-        baseAsset,
-        quoteAsset,
-        exchange,
-        type: payload.type as SymbolType,
-        instrumentType: payload.instrumentType as InstrumentType,
-        status: mapSymbolStatus(payload.status),
-        precisionPrice: payload.precisionPrice,
-        precisionQuantity: payload.precisionQuantity,
-        tickSize: normalizeDecimal(payload.tickSize),
-        lotSize: normalizeDecimal(payload.lotSize),
-        isMarginEnabled: payload.isMarginEnabled,
-      },
+    const symbol = await this.repo.createSymbol({
+      code,
+      baseAsset,
+      quoteAsset,
+      exchange,
+      type: payload.type as SymbolType,
+      instrumentType: payload.instrumentType as InstrumentType,
+      status: mapSymbolStatus(payload.status),
+      precisionPrice: payload.precisionPrice,
+      precisionQuantity: payload.precisionQuantity,
+      tickSize: normalizeDecimal(payload.tickSize),
+      lotSize: normalizeDecimal(payload.lotSize),
+      isMarginEnabled: payload.isMarginEnabled,
     })
 
     this.symbolIdCache.set(symbol.code, symbol.id)
@@ -112,9 +102,7 @@ export class MarketDataService {
   async updateSymbol(codeOrSymbol: string, payload: UpdateMarketSymbolDto) {
     const code = this.normalizeSymbol(codeOrSymbol)
 
-    const existing = await this.prisma.symbol.findUnique({
-      where: { code },
-    })
+    const existing = await this.repo.findSymbolByCode(code)
 
     if (!existing) {
       throw new MarketSymbolNotFoundException({ symbol: codeOrSymbol })
@@ -170,10 +158,7 @@ export class MarketDataService {
       throw new DomainException('market.symbol_update_no_fields', { code: ErrorCode.BAD_REQUEST })
     }
 
-    const symbol = await this.prisma.symbol.update({
-      where: { code },
-      data,
-    })
+    const symbol = await this.repo.updateSymbol(code, data)
 
     this.symbolIdCache.set(symbol.code, symbol.id)
     this.symbolCodeCache.set(symbol.id, symbol.code)
@@ -206,11 +191,7 @@ export class MarketDataService {
 
     const limit = this.normalizePositiveInt(query.limit, 500, 1000)
 
-    const bars = await this.prisma.marketBar.findMany({
-      where,
-      orderBy,
-      take: limit,
-    })
+    const bars = await this.repo.findBars(where, orderBy, limit)
 
     // 如果是降序查询（默认最新数据），需要反转结果以保持时间升序
     const orderedBars = hasTimeFilter ? bars : bars.reverse()
@@ -242,10 +223,7 @@ export class MarketDataService {
 
   async getLatestQuote(query: MarketQuoteQueryDto) {
     const symbol = await this.getSymbolOrThrow(query.symbol)
-    const latest = await this.prisma.marketQuote.findFirst({
-      where: { symbolId: symbol.id },
-      orderBy: { eventTime: 'desc' },
-    })
+    const latest = await this.repo.findLatestQuoteBySymbolId(symbol.id)
     if (!latest) {
       throw new DomainException('No market data available', {
         code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
@@ -276,9 +254,9 @@ export class MarketDataService {
     for (const symbol of symbols) {
       const exchange = symbol.exchange?.toUpperCase() ?? exchangeFallback
       const code = normalizeProviderCode(symbol.symbol, symbol.instrumentType)
-      await this.prisma.symbol.upsert({
-        where: { code },
-        create: {
+      await this.repo.upsertSymbol(
+        code,
+        {
           code,
           baseAsset: symbol.baseAsset.toUpperCase(),
           quoteAsset: symbol.quoteAsset.toUpperCase(),
@@ -292,7 +270,7 @@ export class MarketDataService {
           lotSize: this.extractFilterValue(symbol.filters, 'stepSize'),
           isMarginEnabled: Boolean(symbol.isMarginTradingAllowed),
         },
-        update: {
+        {
           baseAsset: symbol.baseAsset.toUpperCase(),
           quoteAsset: symbol.quoteAsset.toUpperCase(),
           exchange,
@@ -304,24 +282,24 @@ export class MarketDataService {
           lotSize: this.extractFilterValue(symbol.filters, 'stepSize'),
           isMarginEnabled: Boolean(symbol.isMarginTradingAllowed),
         },
-      })
+      )
     }
   }
 
   async saveBarFromProvider(payload: MarketBarPayload) {
     const symbol = await this.getSymbolOrThrow(payload.symbol)
     const prismaTimeframe = mapTimeframe(payload.timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
-    
-    await this.prisma.marketBar.upsert({
-      where: {
+
+    await this.repo.upsertBar(
+      {
         symbolId_timeframe_time: {
           symbolId: symbol.id,
           timeframe: prismaTimeframe,
           time: new Date(payload.timestamp),
         },
       },
-      create: {
-        symbolId: symbol.id,
+      {
+        symbol: { connect: { id: symbol.id } },
         timeframe: prismaTimeframe,
         time: new Date(payload.timestamp),
         open: payload.open,
@@ -334,7 +312,7 @@ export class MarketDataService {
         source: payload.source,
         isFinal: payload.isFinal ?? true,
       },
-      update: {
+      {
         open: payload.open,
         high: payload.high,
         low: payload.low,
@@ -345,7 +323,7 @@ export class MarketDataService {
         source: payload.source,
         isFinal: payload.isFinal ?? true,
       },
-    })
+    )
 
     // 保存 K 线后触发指标计算（若存在相关配置）
     await this.indicatorEngine.handleNewBar({
@@ -360,24 +338,22 @@ export class MarketDataService {
 
   async saveQuoteFromProvider(payload: MarketQuotePayload) {
     const symbol = await this.getSymbolOrThrow(payload.symbol)
-    await this.prisma.marketQuote.create({
-      data: {
-        symbolId: symbol.id,
-        lastPrice: payload.lastPrice,
-        priceChange: payload.priceChange,
-        priceChangePercent: payload.priceChangePercent,
-        openPrice: payload.openPrice,
-        highPrice: payload.highPrice,
-        lowPrice: payload.lowPrice,
-        volume: payload.volume,
-        quoteVolume: payload.quoteVolume,
-        bidPrice: payload.bidPrice,
-        bidQty: payload.bidQty,
-        askPrice: payload.askPrice,
-        askQty: payload.askQty,
-        eventTime: new Date(payload.eventTime),
-        source: payload.source,
-      },
+    await this.repo.createQuote({
+      symbol: { connect: { id: symbol.id } },
+      lastPrice: payload.lastPrice,
+      priceChange: payload.priceChange,
+      priceChangePercent: payload.priceChangePercent,
+      openPrice: payload.openPrice,
+      highPrice: payload.highPrice,
+      lowPrice: payload.lowPrice,
+      volume: payload.volume,
+      quoteVolume: payload.quoteVolume,
+      bidPrice: payload.bidPrice,
+      bidQty: payload.bidQty,
+      askPrice: payload.askPrice,
+      askQty: payload.askQty,
+      eventTime: new Date(payload.eventTime),
+      source: payload.source,
     })
 
     // 保存最新报价快照，供低延迟读取路径优先消费
@@ -434,10 +410,7 @@ export class MarketDataService {
       codeCandidates.push(exact.slice(0, -':SPOT'.length))
     }
 
-    const symbols = await this.prisma.symbol.findMany({
-      where: { code: { in: codeCandidates } },
-      select: { id: true, code: true },
-    })
+    const symbols = await this.repo.findSymbolsByCodeIn(codeCandidates)
 
     const symbolMap = new Map(symbols.map(item => [item.code, item]))
     const hasSpot = symbolMap.has(toSymbolCode(exact, 'SPOT'))

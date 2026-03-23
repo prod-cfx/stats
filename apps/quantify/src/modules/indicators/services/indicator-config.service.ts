@@ -1,5 +1,6 @@
 import type { IndicatorParamsByType, IndicatorType } from '@ai/shared'
 import type { OnModuleInit } from '@nestjs/common'
+import type { IndicatorSeriesQuery, IndicatorSnapshotQuery } from '../repositories/indicator-value.repository'
 import type {
   MarketTimeframe,
   Prisma,
@@ -11,6 +12,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { IndicatorConfigRepository } from '../repositories/indicator-config.repository'
+ 
+import { IndicatorValueRepository } from '../repositories/indicator-value.repository'
 
 export interface IndicatorConfigCreateInput {
   symbolId: string
@@ -48,6 +51,8 @@ export class IndicatorConfigService implements OnModuleInit {
   constructor(
     @Inject(IndicatorConfigRepository)
     private readonly repository: IndicatorConfigRepository,
+    @Inject(IndicatorValueRepository)
+    private readonly indicatorValueRepository: IndicatorValueRepository,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -168,6 +173,18 @@ export class IndicatorConfigService implements OnModuleInit {
     return updated
   }
 
+  async getSymbolByCode(code: string): Promise<{ id: string; code: string }> {
+    const symbol = await this.repository.findSymbolByCode(code.trim().toUpperCase())
+    if (!symbol) {
+      throw new DomainException('Symbol not found', {
+        code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
+        args: { symbol: code },
+        status: 404,
+      })
+    }
+    return symbol
+  }
+
   async delete(id: string) {
     const existing = await this.repository.findById(id)
     if (!existing) {
@@ -209,5 +226,13 @@ export class IndicatorConfigService implements OnModuleInit {
 
   private buildKey(symbolId: string, timeframe: MarketTimeframe): string {
     return `${symbolId}:${timeframe}`
+  }
+
+  async getIndicatorSnapshot(query: IndicatorSnapshotQuery) {
+    return this.indicatorValueRepository.getSnapshot(query)
+  }
+
+  async getIndicatorSeries(query: IndicatorSeriesQuery) {
+    return this.indicatorValueRepository.getSeries(query)
   }
 }

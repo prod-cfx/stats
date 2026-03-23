@@ -8,6 +8,7 @@ import { EnvModule } from '@/common/modules/env.module'
 import { EnvService } from '@/common/services/env.service'
 import { AiService } from '@/modules/ai/ai.service'
 import { LlmStrategyCodegenModule } from '@/modules/llm-strategy-codegen/llm-strategy-codegen.module'
+import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -50,6 +51,8 @@ describe('llm strategy codegen (E2E)', () => {
         LlmStrategyCodegenModule,
       ],
     })
+      .overrideProvider(MarketDataIngestionService)
+      .useValue({ onModuleInit: () => {}, onModuleDestroy: () => {}, handleGapFill: () => {}, handleDynamicSymbolRefresh: () => {} })
       .overrideProvider(EnvService)
       .useValue({
         getString: (key: string) => (key === 'APP_SECRET' ? TEST_ENGINE_SECRET : undefined),

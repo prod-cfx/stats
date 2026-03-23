@@ -30,11 +30,10 @@ import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { EnvService } from '@/common/services/env.service'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HyperliquidApiService } from './services'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { WhaleTrackingRepository } from './whale-tracking.repository'
 
 interface AggregatedWhaleStats {
   address: string
@@ -66,14 +65,12 @@ export class WhaleTrackingService {
   ]
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly whaleTrackingRepository: WhaleTrackingRepository,
     private readonly hyperliquidApi: HyperliquidApiService,
     private readonly envService: EnvService,
   ) {}
 
   async getDiscoverWhales(): Promise<WhaleDiscoverResponseDto> {
-    const client = this.prisma.getClient()
-
     const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
 
     // E2E 环境中可能会有后台任务写入真实数据，discover 返回需保持可预期。
@@ -88,24 +85,10 @@ export class WhaleTrackingService {
     }
 
     // 1. 先按 address 聚合出近 lookbackDays 内总持仓价值最高的一批鲸鱼
-    const grouped = await client.hyperliquidWhaleAlert.groupBy({
-      by: ['userAddress'],
-      where: {
-        ...baseWhere,
-      },
-      _sum: {
-        positionValueUsd: true,
-      },
-      _count: {
-        _all: true,
-      },
-      orderBy: {
-        _sum: {
-          positionValueUsd: 'desc',
-        },
-      },
-      take: this.maxWhales,
-    })
+    const grouped = await this.whaleTrackingRepository.groupWhaleAlertsByAddress(
+      baseWhere,
+      this.maxWhales,
+    )
 
     if (!grouped.length) {
       // E2E 要求确定性：无数据就返回空
@@ -126,12 +109,10 @@ export class WhaleTrackingService {
     const addresses = grouped.map((g: (typeof grouped)[number]) => g.userAddress)
 
     // 2. 拉取这些 address 在时间窗口内的所有预警，用于计算更丰富的统计（positions / 多空分布等）
-    const alerts: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
-      where: {
-        ...baseWhere,
-        userAddress: {
-          in: addresses,
-        },
+    const alerts: HyperliquidWhaleAlert[] = await this.whaleTrackingRepository.findManyAlerts({
+      ...baseWhere,
+      userAddress: {
+        in: addresses,
       },
     })
 
@@ -325,8 +306,6 @@ export class WhaleTrackingService {
     address: string,
     query: QueryWhaleAddressPerformanceDto,
   ): Promise<WhaleAddressPerformanceResponseDto> {
-    const client = this.prisma.getClient()
-
     const lookbackDays = typeof query.timeRangeDays === 'number' ? query.timeRangeDays : 30
     const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)
 
@@ -339,16 +318,7 @@ export class WhaleTrackingService {
     }
 
     // 1）使用数据库端聚合计算 summary 级统计信息，避免在 Node 层对大量记录做手工聚合
-    const summaryAgg = await client.hyperliquidWhaleAlert.groupBy({
-      by: ['userAddress'],
-      where,
-      _sum: {
-        positionValueUsd: true,
-      },
-      _count: {
-        _all: true,
-      },
-    })
+    const summaryAgg = await this.whaleTrackingRepository.groupAlertsByAddressForSummary(where)
 
     let totalValueUsd = 0
     let tradesCount = 0
@@ -361,44 +331,19 @@ export class WhaleTrackingService {
     }
 
     // 2）按 symbol 维度在数据库端聚合，以获取 byAsset 统计
-    const byAssetAgg = await client.hyperliquidWhaleAlert.groupBy({
-      by: ['symbol'],
-      where,
-      _sum: {
-        positionValueUsd: true,
-      },
-      _count: {
-        _all: true,
-      },
-    })
+    const byAssetAgg = await this.whaleTrackingRepository.groupAlertsBySymbol(where)
 
     // 批量查询 long 和 short 方向的计数，避免 N+1 查询问题
     const [longAgg, shortAgg] = await Promise.all([
       // 查询所有 long 持仓（positionSize > 0）按 symbol 分组的计数
-      client.hyperliquidWhaleAlert.groupBy({
-        by: ['symbol'],
-        where: {
-          ...where,
-          positionSize: {
-            gt: 0,
-          },
-        },
-        _count: {
-          _all: true,
-        },
+      this.whaleTrackingRepository.groupAlertsBySymbolWithPositionFilter({
+        ...where,
+        positionSize: { gt: 0 },
       }),
       // 查询所有 short 持仓（positionSize < 0）按 symbol 分组的计数
-      client.hyperliquidWhaleAlert.groupBy({
-        by: ['symbol'],
-        where: {
-          ...where,
-          positionSize: {
-            lt: 0,
-          },
-        },
-        _count: {
-          _all: true,
-        },
+      this.whaleTrackingRepository.groupAlertsBySymbolWithPositionFilter({
+        ...where,
+        positionSize: { lt: 0 },
       }),
     ])
 
@@ -480,13 +425,7 @@ export class WhaleTrackingService {
       typeof query.limit === 'number' && query.limit > 0 ? Math.min(query.limit, 500) : 200
 
     // 3）针对交易明细，仅拉取有限条数到 Node 层，避免一次性加载过多记录
-    const tradesSource: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
-      where,
-      orderBy: {
-        createTime: 'desc',
-      },
-      take: limit,
-    })
+    const tradesSource: HyperliquidWhaleAlert[] = await this.whaleTrackingRepository.findManyAlertsWithLimit(where, limit)
 
     const trades: WhaleTradeHistoryItemDto[] = tradesSource.map(a => {
       const positionSize = Number(a.positionSize ?? 0)
@@ -936,8 +875,6 @@ export class WhaleTrackingService {
     tag: string | null
     aiTags: WhaleDiscoverTraderAiTagDto[]
   }> {
-    const client = this.prisma.getClient()
-
     const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
     const isE2e = this.envService.getString('APP_ENV') === 'e2e'
 
@@ -949,9 +886,7 @@ export class WhaleTrackingService {
       ...(isE2e ? { source: 'TEST' as const } : {}),
     }
 
-    const alerts: HyperliquidWhaleAlert[] = await client.hyperliquidWhaleAlert.findMany({
-      where,
-    })
+    const alerts: HyperliquidWhaleAlert[] = await this.whaleTrackingRepository.findManyAlerts(where)
 
     if (!alerts.length) {
       return {

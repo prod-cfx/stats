@@ -30,7 +30,6 @@ import {
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 import { CreateStrategyInstanceDto } from '../dto/create-strategy-instance.dto'
 import { LiveStrategyInstanceListQueryDto } from '../dto/live-strategy-instance-list-query.dto'
@@ -104,7 +103,6 @@ export class StrategyInstancesService {
   private static readonly DEBUG_BAR_LIMIT = 100
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly instancesRepo: StrategyInstancesRepository,
     private readonly statsService: StrategyInstanceStatsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
@@ -116,13 +114,8 @@ export class StrategyInstancesService {
     dto: CreateStrategyInstanceDto,
     createdBy?: string,
   ): Promise<StrategyInstanceResponseDto> {
-    const client = this.prisma.getClient()
-
     // 验证策略模板是否存在
-    const template = await client.strategyTemplate.findUnique({
-      where: { id: dto.strategyTemplateId },
-      select: { id: true, name: true },
-    })
+    const template = await this.instancesRepo.findTemplateById(dto.strategyTemplateId)
 
     if (!template) {
       throw new StrategyTemplateNotFoundException({ templateId: dto.strategyTemplateId })
@@ -392,14 +385,7 @@ export class StrategyInstancesService {
    * 不会生成任何信号，仅用于调用方快速构造调试参数。
    */
   async buildTestPayload(id: string): Promise<TestStrategyInstanceDto> {
-    const client = this.prisma.getClient()
-
-    const instance = await client.strategyInstance.findUnique({
-      where: { id },
-      include: {
-        strategyTemplate: true,
-      },
-    })
+    const instance = await this.instancesRepo.findInstanceWithStrategyTemplate(id)
 
     if (!instance || !instance.strategyTemplate) {
       throw new StrategyInstanceNotFoundException({ instanceId: id })
@@ -423,9 +409,7 @@ export class StrategyInstancesService {
 
     // 1. 批量加载所有 symbols
     const symbolCodes = legs!.map(leg => leg.symbol)
-    const symbols = await client.symbol.findMany({
-      where: { code: { in: symbolCodes } },
-    })
+    const symbols = await this.instancesRepo.findSymbolsByCodes(symbolCodes)
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
 
     // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
@@ -502,14 +486,7 @@ export class StrategyInstancesService {
     id: string,
     dto: TestStrategyInstanceDto,
   ): Promise<TestStrategyInstanceResultDto> {
-    const client = this.prisma.getClient()
-
-    const instance = await client.strategyInstance.findUnique({
-      where: { id },
-      include: {
-        strategyTemplate: true,
-      },
-    })
+    const instance = await this.instancesRepo.findInstanceWithStrategyTemplate(id)
 
     if (!instance || !instance.strategyTemplate) {
       throw new StrategyInstanceNotFoundException({ instanceId: id })
@@ -839,19 +816,9 @@ export class StrategyInstancesService {
     // 如果用户已登录，查询订阅状态
     const subscriptionMap = new Map<string, boolean>()
     if (userId) {
-      const client = this.prisma.getClient()
       const instanceIds = items.map(item => item.id)
       if (instanceIds.length > 0) {
-        const subscriptions = await client.userStrategySubscription.findMany({
-          where: {
-            userId,
-            strategyInstanceId: { in: instanceIds },
-            status: 'active',
-          },
-          select: {
-            strategyInstanceId: true,
-          },
-        })
+        const subscriptions = await this.instancesRepo.findUserSubscriptionsByInstanceIds(userId, instanceIds, 'active')
         subscriptions.forEach(sub => {
           subscriptionMap.set(sub.strategyInstanceId, true)
         })
@@ -923,16 +890,7 @@ export class StrategyInstancesService {
     // 如果用户已登录，查询订阅状态
     const subscriptionMap = new Map<string, boolean>()
     if (userId) {
-      const client = this.prisma.getClient()
-      const subscription = await client.userStrategySubscription.findFirst({
-        where: {
-          userId,
-          strategyInstanceId: id,
-          status: 'active',
-        },
-        select: { id: true },
-      })
-
+      const subscription = await this.instancesRepo.findActiveUserSubscription(userId, id, 'active')
       if (subscription) {
         subscriptionMap.set(id, true)
       }
@@ -975,15 +933,7 @@ export class StrategyInstancesService {
         })
       }
 
-      const client = this.prisma.getClient()
-      const hasSubscription = await client.userStrategySubscription.findFirst({
-        where: {
-          userId,
-          strategyInstanceId: id,
-          status: SubscriptionStatus.active,
-        },
-        select: { id: true },
-      })
+      const hasSubscription = await this.instancesRepo.findActiveUserSubscription(userId, id, SubscriptionStatus.active)
 
       if (!hasSubscription) {
         throw new DomainException('strategy_instance.subscription_required_for_signals', {
@@ -1106,20 +1056,10 @@ export class StrategyInstancesService {
       throw new StrategyInstanceNotFoundException({ instanceId: id })
     }
 
-    const client = this.prisma.getClient()
-
     // 1. 使用数据库聚合获取订阅统计（避免加载全部记录）
     const [totalCount, statusStats] = await Promise.all([
-      // 总订阅数
-      client.userStrategySubscription.count({
-        where: { strategyInstanceId: id },
-      }),
-      // 按状态分组统计
-      client.userStrategySubscription.groupBy({
-        by: ['status'],
-        where: { strategyInstanceId: id },
-        _count: true,
-      }),
+      this.instancesRepo.countSubscriptionsByInstance(id),
+      this.instancesRepo.groupSubscriptionsByStatus(id),
     ])
 
     // 统计订阅数量
@@ -1129,32 +1069,7 @@ export class StrategyInstancesService {
 
     // 分页获取订阅详情
     const skip = (page - 1) * limit
-    const subscriptions = await client.userStrategySubscription.findMany({
-      where: {
-        strategyInstanceId: id,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            nickname: true,
-            email: true,
-          },
-        },
-        exchangeAccount: {
-          select: {
-            id: true,
-            exchangeId: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: {
-        subscribedAt: 'desc',
-      },
-      skip,
-      take: limit,
-    })
+    const subscriptions = await this.instancesRepo.findSubscriptionsWithUsers(id, skip, limit)
 
     // 2. 使用数据库端聚合计算总体金额和持仓（仅统计 active/paused 状态）
     // 只有 active 和 paused 状态的订阅才占用额度，cancelled 的不应计入当前指标
@@ -1169,43 +1084,11 @@ export class StrategyInstancesService {
 
     // 使用数据库端 aggregate，避免传输全部用户ID到应用层
     // 聚合账户总余额（仅 active/paused 状态的订阅用户）
-    const accountAggregate = await client.userStrategyAccount.aggregate({
-      where: {
-        strategyId: instance.strategyTemplateId,
-        user: {
-          strategySubscriptions: {
-            some: {
-              strategyInstanceId: id,
-              status: { in: activeStatuses },
-            },
-          },
-        },
-      },
-      _sum: {
-        initialBalance: true,
-      },
-    })
+    const accountAggregate = await this.instancesRepo.aggregateAccountBalance(id, instance.strategyTemplateId, activeStatuses)
     totalSubscriptionAmount = new Decimal(accountAggregate._sum.initialBalance ?? 0)
 
     // 聚合持仓数量和市值（通过 account 关联到订阅状态）
-    // 使用原始 SQL 一次性完成 JOIN 和聚合
-    const positionAggregateResult = await client.$queryRaw<
-      Array<{
-        totalPositions: bigint
-        totalValue: any
-      }>
-    >`
-      SELECT 
-        COALESCE(COUNT(*), 0) as "totalPositions",
-        COALESCE(SUM(p.quantity * p.avg_entry_price), 0) as "totalValue"
-      FROM positions p
-      INNER JOIN user_strategy_accounts usa ON p.user_strategy_account_id = usa.id
-      INNER JOIN user_strategy_subscriptions uss ON usa.user_id = uss.user_id
-      WHERE usa.strategy_id = ${instance.strategyTemplateId}
-        AND uss.strategy_instance_id = ${id}
-        AND uss.status = ANY(ARRAY['active', 'paused']::"SubscriptionStatus"[])
-        AND p.status = 'OPEN'
-    `
+    const positionAggregateResult = await this.instancesRepo.queryPositionAggregateRaw(instance.strategyTemplateId, id)
 
     if (positionAggregateResult.length > 0) {
       totalOpenPositions = Number(positionAggregateResult[0].totalPositions)
@@ -1216,34 +1099,14 @@ export class StrategyInstancesService {
 
     // 4. 为当前页用户获取详细数据（仅当前页）
     const pageUserIds = subscriptions.map(s => s.userId)
-    const pageAccounts = await client.userStrategyAccount.findMany({
-      where: {
-        userId: { in: pageUserIds },
-        strategyId: instance.strategyTemplateId,
-      },
-      select: {
-        id: true,
-        userId: true,
-        initialBalance: true,
-      },
-    })
+    const pageAccounts = await this.instancesRepo.findPageAccountsByUserIds(pageUserIds, instance.strategyTemplateId)
 
     // 创建用户ID到账户的映射
     const accountMap = new Map(pageAccounts.map(a => [a.userId, a]))
     const pageAccountIds = pageAccounts.map(a => a.id)
 
     // 获取当前页用户的持仓信息
-    const pagePositions = await client.position.findMany({
-      where: {
-        userStrategyAccountId: { in: pageAccountIds },
-        status: 'OPEN',
-      },
-      select: {
-        userStrategyAccountId: true,
-        quantity: true,
-        avgEntryPrice: true,
-      },
-    })
+    const pagePositions = await this.instancesRepo.findOpenPositionsByAccountIds(pageAccountIds)
 
     // 按账户分组持仓
     const positionsByAccountId = new Map<string, (typeof pagePositions)[0][]>()

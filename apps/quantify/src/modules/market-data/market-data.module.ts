@@ -1,7 +1,6 @@
 import { HttpModule } from '@nestjs/axios'
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
-import { EventEmitterModule } from '@nestjs/event-emitter'
 import { marketDataConfig } from '@/config'
 import { IndicatorsModule } from '@/modules/indicators/indicators.module'
 import { MARKET_DATA_PROVIDER } from './constants/market-data.constants'
@@ -18,7 +17,7 @@ import { MarketDataRepository } from './services/market-data.repository'
 import { MarketDataService } from './services/market-data.service'
 
 @Module({
-  imports: [ConfigModule.forFeature(marketDataConfig), HttpModule, IndicatorsModule, EventEmitterModule],
+  imports: [ConfigModule.forFeature(marketDataConfig), HttpModule, IndicatorsModule],
   controllers: [MarketDataController, OpsMarketSymbolsController],
   providers: [
     MarketDataService,

@@ -10,8 +10,9 @@ import { ErrorCode } from '@ai/shared'
 import { compare, hash } from 'bcrypt'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AdminUserRepository } from '../repositories/admin-user.repository'
 
 interface AdminJwtPayload {
   sub: string
@@ -25,7 +26,7 @@ export class AdminUserService {
   private readonly passwordSaltRounds: number
 
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly adminUserRepository: AdminUserRepository,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(ConfigService) private readonly configService: ConfigService,
   ) {
@@ -34,10 +35,6 @@ export class AdminUserService {
       this.configService.get<number>('BCRYPT_SALT_ROUNDS')
     const parsed = Number(roundsFromConfig)
     this.passwordSaltRounds = Number.isFinite(parsed) && parsed > 0 ? parsed : 12
-  }
-
-  private getClient() {
-    return this.prisma.getClient()
   }
 
   private async hashPassword(plain: string): Promise<string> {
@@ -50,24 +47,7 @@ export class AdminUserService {
   }
 
   private async getUserRoleDetails(adminUserId: string): Promise<AdminAssignedRoleDto[]> {
-    const client = this.getClient()
-    const assignments = await client.roleAssignment.findMany({
-      where: {
-        principalId: adminUserId,
-        principalType: PrincipalType.ADMIN,
-      },
-      select: {
-        role: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-            description: true,
-          },
-        },
-      },
-    })
-
+    const assignments = await this.adminUserRepository.findRoleAssignments(adminUserId, PrincipalType.ADMIN)
     return assignments.map(({ role }) => ({
       id: role.id,
       code: role.code,
@@ -97,33 +77,16 @@ export class AdminUserService {
   }
 
   async findByUsername(username: string): Promise<AdminUser | null> {
-    const client = this.getClient()
-    return client.adminUser.findUnique({
-      where: { username },
-    })
+    return this.adminUserRepository.findByUsername(username)
   }
 
   async getUserRoles(adminUserId: string): Promise<string[]> {
-    const client = this.getClient()
-    const assignments = await client.roleAssignment.findMany({
-      where: {
-        principalId: adminUserId,
-        principalType: PrincipalType.ADMIN,
-      },
-      select: {
-        role: {
-          select: { code: true },
-        },
-      },
-    })
+    const assignments = await this.adminUserRepository.findRoleCodesByAdmin(adminUserId, PrincipalType.ADMIN)
     return assignments.map(a => a.role.code)
   }
 
   async login(username: string, password: string) {
-    const client = this.getClient()
-    const user = await client.adminUser.findUnique({
-      where: { username },
-    })
+    const user = await this.adminUserRepository.findByUsername(username)
 
     if (!user) {
       throw this.buildInvalidCredentialException()
@@ -182,7 +145,6 @@ export class AdminUserService {
   }
 
   async list(params: { page: number; limit: number; keyword?: string }) {
-    const client = this.getClient()
     const { page, limit, keyword } = params
     const where =
       keyword && keyword.trim().length > 0
@@ -195,8 +157,8 @@ export class AdminUserService {
           }
         : {}
 
-    const total = await client.adminUser.count({ where })
-    const items = await client.adminUser.findMany({
+    const total = await this.adminUserRepository.count(where)
+    const items = await this.adminUserRepository.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
@@ -207,23 +169,7 @@ export class AdminUserService {
     const assignments =
       userIds.length === 0
         ? []
-        : await client.roleAssignment.findMany({
-            where: {
-              principalId: { in: userIds },
-              principalType: PrincipalType.ADMIN,
-            },
-            select: {
-              principalId: true,
-              role: {
-                select: {
-                  id: true,
-                  code: true,
-                  name: true,
-                  description: true,
-                },
-              },
-            },
-          })
+        : await this.adminUserRepository.findRoleAssignmentsByAdminsBulk(userIds, PrincipalType.ADMIN)
 
     const roleMap = new Map<string, AdminAssignedRoleDto[]>()
     assignments.forEach(({ principalId, role }) => {
@@ -241,10 +187,7 @@ export class AdminUserService {
   }
 
   async findById(id: string): Promise<AdminUserDto> {
-    const client = this.getClient()
-    const user = await client.adminUser.findUnique({
-      where: { id },
-    })
+    const user = await this.adminUserRepository.findById(id)
     if (!user) {
       throw new DomainException('Admin user not found', {
         code: ErrorCode.USER_NOT_FOUND,
@@ -256,10 +199,7 @@ export class AdminUserService {
   }
 
   async getAdminInfo(id: string): Promise<AdminUserInfoDto> {
-    const client = this.getClient()
-    const user = await client.adminUser.findUnique({
-      where: { id },
-    })
+    const user = await this.adminUserRepository.findById(id)
     if (!user) {
       throw new DomainException('Admin user not found', {
         code: ErrorCode.USER_NOT_FOUND,
@@ -270,9 +210,7 @@ export class AdminUserService {
     const roleCodes = await this.getUserRoles(user.id)
     const roles =
       roleCodes.length > 0
-        ? await client.role.findMany({
-            where: { code: { in: roleCodes } },
-          })
+        ? await this.adminUserRepository.findRolesByCode(roleCodes)
         : []
 
     const menuPermissionSet = new Set<string>()
@@ -285,9 +223,7 @@ export class AdminUserService {
       role.apiPermissions.forEach(code => apiPermissions.add(code))
     })
 
-    const menus = await client.adminMenu.findMany({
-      orderBy: { sort: 'asc' },
-    })
+    const menus = await this.adminUserRepository.findMenusByOrderBy()
 
     const filteredMenus = buildAuthorizedMenuTree(menus, menuPermissionSet)
 
@@ -321,10 +257,7 @@ export class AdminUserService {
       })
     }
 
-    const client = this.getClient()
-    const user = await client.adminUser.findUnique({
-      where: { id: payload.sub },
-    })
+    const user = await this.adminUserRepository.findById(payload.sub)
     if (!user || user.isFrozen) {
       throw new DomainException('Admin user not found or frozen', {
         code: ErrorCode.AUTH_FORBIDDEN,
@@ -380,8 +313,7 @@ export class AdminUserService {
     phone?: string
     roleCodes?: string[]
   }): Promise<AdminUserDto> {
-    const client = this.getClient()
-    const adminCount = await client.adminUser.count()
+    const adminCount = await this.adminUserRepository.count()
     if (adminCount > 0) {
       throw new DomainException('Initial admin already registered', {
         code: ErrorCode.CONFLICT,
@@ -390,10 +322,7 @@ export class AdminUserService {
     }
 
     const roleCodes = data.roleCodes && data.roleCodes.length > 0 ? data.roleCodes : ['SUPER_ADMIN']
-    const roles = await client.role.findMany({
-      where: { code: { in: roleCodes } },
-      select: { id: true },
-    })
+    const roles = await this.adminUserRepository.findRolesByIdSelect(roleCodes)
 
     if (roles.length !== roleCodes.length) {
       throw new DomainException('Default roles not found', {
@@ -422,11 +351,7 @@ export class AdminUserService {
     phone?: string
     roleIds?: string[]
   }): Promise<AdminUserDto> {
-    const client = this.getClient()
-
-    const existing = await client.adminUser.findUnique({
-      where: { username: data.username },
-    })
+    const existing = await this.adminUserRepository.findByUsername(data.username)
     if (existing) {
       throw new DomainException('Admin account already exists', {
         code: ErrorCode.CONFLICT,
@@ -437,15 +362,13 @@ export class AdminUserService {
 
     const hashedPassword = await this.hashPassword(data.password)
 
-    const user = await client.adminUser.create({
-      data: {
-        username: data.username,
-        password: hashedPassword,
-        nickName: data.nickName,
-        email: data.email,
-        avatarUrl: data.avatarUrl,
-        phone: data.phone,
-      },
+    const user = await this.adminUserRepository.create({
+      username: data.username,
+      password: hashedPassword,
+      nickName: data.nickName,
+      email: data.email,
+      avatarUrl: data.avatarUrl,
+      phone: data.phone,
     })
 
     const roleIds = data.roleIds ?? []
@@ -468,11 +391,7 @@ export class AdminUserService {
       roleIds?: string[]
     },
   ): Promise<AdminUserDto> {
-    const client = this.getClient()
-
-    const user = await client.adminUser.findUnique({
-      where: { id },
-    })
+    const user = await this.adminUserRepository.findById(id)
     if (!user) {
       throw new DomainException('Admin user not found', {
         code: ErrorCode.USER_NOT_FOUND,
@@ -480,22 +399,19 @@ export class AdminUserService {
       })
     }
 
-    await client.adminUser.update({
-      where: { id },
-      data: {
-        nickName: data.nickName,
-        email: data.email,
-        avatarUrl: data.avatarUrl,
-        phone: data.phone,
-        isFrozen: data.isFrozen,
-      },
+    await this.adminUserRepository.update(id, {
+      nickName: data.nickName,
+      email: data.email,
+      avatarUrl: data.avatarUrl,
+      phone: data.phone,
+      isFrozen: data.isFrozen,
     })
 
     if (data.roleIds) {
       await this.replaceRoles(id, data.roleIds)
     }
 
-    const updated = await client.adminUser.findUnique({ where: { id } })
+    const updated = await this.adminUserRepository.findById(id)
     if (!updated) {
       throw new DomainException('Admin user not found', {
         code: ErrorCode.USER_NOT_FOUND,
@@ -508,9 +424,7 @@ export class AdminUserService {
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-
-    const user = await client.adminUser.findUnique({ where: { id } })
+    const user = await this.adminUserRepository.findById(id)
     if (!user) {
       throw new DomainException('Admin user not found', {
         code: ErrorCode.USER_NOT_FOUND,
@@ -518,24 +432,13 @@ export class AdminUserService {
       })
     }
 
-    await client.roleAssignment.deleteMany({
-      where: {
-        principalId: id,
-        principalType: PrincipalType.ADMIN,
-      },
-    })
-    await client.adminUser.delete({
-      where: { id },
-    })
+    await this.adminUserRepository.deleteRoleAssignments(id, PrincipalType.ADMIN)
+    await this.adminUserRepository.delete(id)
   }
 
   private async assignRoles(userId: string, roleIds: string[]) {
-    const client = this.getClient()
     if (!roleIds.length) return
-    const roles = await client.role.findMany({
-      where: { id: { in: roleIds } },
-      select: { id: true },
-    })
+    const roles = await this.adminUserRepository.findRolesByIdSelect(roleIds)
 
     if (roles.length !== roleIds.length) {
       throw new DomainException('Some roles do not exist', {
@@ -544,24 +447,17 @@ export class AdminUserService {
       })
     }
 
-    await client.roleAssignment.createMany({
-      data: roles.map(role => ({
+    await this.adminUserRepository.createRoleAssignments(
+      roles.map(role => ({
         principalId: userId,
         principalType: PrincipalType.ADMIN,
         roleId: role.id,
       })),
-    })
+    )
   }
 
   private async replaceRoles(userId: string, roleIds: string[]) {
-    const client = this.getClient()
-    await client.roleAssignment.deleteMany({
-      where: {
-        principalId: userId,
-        principalType: PrincipalType.ADMIN,
-      },
-    })
-
+    await this.adminUserRepository.deleteRoleAssignments(userId, PrincipalType.ADMIN)
     if (roleIds.length > 0) {
       await this.assignRoles(userId, roleIds)
     }
