@@ -158,11 +158,11 @@ function checkDatabasePermissions(baseUrl: string): boolean {
 
 /**
  * 清理超过指定时间的历史数据库
- * 仅在 E2E_CLEANUP_OLD_RESOURCES=true 时启用
+ * 默认启用，设置 E2E_CLEANUP_OLD_RESOURCES=false 可禁用
  */
 function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
-  if (process.env.E2E_CLEANUP_OLD_RESOURCES !== 'true') {
-    logVerbose('[E2E setup] 历史数据库清理已禁用 (E2E_CLEANUP_OLD_RESOURCES != true)')
+  if (process.env.E2E_CLEANUP_OLD_RESOURCES === 'false') {
+    logVerbose('[E2E setup] 历史数据库清理已禁用 (E2E_CLEANUP_OLD_RESOURCES=false)')
     return
   }
 
@@ -316,10 +316,10 @@ function cleanupRedisKeys(dbName: string): void {
 
 /**
  * 启动时清理历史残留的 E2E Redis keys
- * 仅在 E2E_CLEANUP_OLD_RESOURCES=true 且 REDIS_URL 已配置时执行
+ * 默认启用，设置 E2E_CLEANUP_OLD_RESOURCES=false 可禁用
  */
 function cleanupOldRedisKeys(maxAgeHours = 24): void {
-  if (process.env.E2E_CLEANUP_OLD_RESOURCES !== 'true') {
+  if (process.env.E2E_CLEANUP_OLD_RESOURCES === 'false') {
     return
   }
 
