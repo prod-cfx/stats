@@ -10,7 +10,6 @@ import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response
 
 import { AiService } from '@/modules/ai/ai.service'
 import { AiProviderErrorException } from '@/modules/ai/exceptions/ai-provider-error.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
 
 import { InvalidDataRequirementsException } from '../exceptions/invalid-data-requirements.exception'
@@ -38,8 +37,6 @@ export class StrategyTemplatesService {
 
   constructor(
     private readonly repository: StrategyTemplatesRepository,
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
     @Inject(AiService)
     private readonly aiService: AiService,
   ) {}
@@ -890,10 +887,7 @@ const trend = (ma20_15m > ma20_1h && ma20_1h > ma20_4h) ? 'UP' :
     const symbolCodes = legs.map(leg => leg.symbol)
     
     // 批量查询所有 symbols
-    const symbols = await this.prisma.getClient().symbol.findMany({
-      where: { code: { in: symbolCodes } },
-      select: { code: true, status: true },
-    })
+    const symbols = await this.repository.findSymbolsByCodes(symbolCodes)
     
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
     

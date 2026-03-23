@@ -5,39 +5,36 @@ import { ExchangeAccountsService } from './exchange-accounts.service'
 
 describe('exchangeAccountsService', () => {
   function createService() {
-    const prisma = {
-      getClient: jest.fn(),
-      user: {
-        findUnique: jest.fn().mockResolvedValue({
-          id: 'user-1',
-          email: 'user-1@example.com',
-        }),
-        update: jest.fn(),
-        create: jest.fn(),
-      },
-      exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue(null),
-        findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockResolvedValue({
-          id: 'account-1',
-          exchangeId: 'hyperliquid',
-          name: 'HL',
-          isTestnet: true,
-          lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
-          createdAt: new Date('2026-03-19T00:00:00.000Z'),
-        }),
-        update: jest.fn().mockResolvedValue({
-          id: 'account-1',
-          exchangeId: 'binance',
-          name: 'Updated Binance',
-          isTestnet: false,
-          lastValidatedAt: new Date('2026-03-20T00:00:00.000Z'),
-          createdAt: new Date('2026-03-19T00:00:00.000Z'),
-        }),
-        delete: jest.fn().mockResolvedValue(undefined),
-      },
+    const repo = {
+      findUserById: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'user-1@example.com',
+      }),
+      findUserByEmail: jest.fn().mockResolvedValue(null),
+      updateUserEmail: jest.fn().mockResolvedValue(undefined),
+      createUser: jest.fn().mockResolvedValue(undefined),
+      findExchangeAccountFirst: jest.fn().mockResolvedValue(null),
+      findExchangeAccountsByUser: jest.fn().mockResolvedValue([]),
+      createExchangeAccount: jest.fn().mockResolvedValue({
+        id: 'account-1',
+        exchangeId: 'hyperliquid',
+        name: 'HL',
+        isTestnet: true,
+        lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+        createdAt: new Date('2026-03-19T00:00:00.000Z'),
+      }),
+      updateExchangeAccount: jest.fn().mockResolvedValue({
+        id: 'account-1',
+        exchangeId: 'binance',
+        name: 'Updated Binance',
+        isTestnet: false,
+        lastValidatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        createdAt: new Date('2026-03-19T00:00:00.000Z'),
+      }),
+      deleteExchangeAccount: jest.fn().mockResolvedValue(undefined),
+      pauseActiveLlmSubscriptions: jest.fn().mockResolvedValue({ count: 0 }),
     }
-    prisma.getClient.mockReturnValue(prisma)
+
     const crypto = {
       encryptConfig: jest.fn().mockReturnValue('encrypted-config'),
       decryptConfig: jest.fn().mockReturnValue({
@@ -51,12 +48,12 @@ describe('exchangeAccountsService', () => {
     }
 
     const service = new ExchangeAccountsService(
-      prisma as any,
+      repo as any,
       crypto as any,
       tradingService as any,
     )
 
-    return { service, prisma, crypto, tradingService }
+    return { service, repo, crypto, tradingService }
   }
 
   it('validates hyperliquid credentials with the requested spot market type', async () => {
@@ -121,14 +118,14 @@ describe('exchangeAccountsService', () => {
   })
 
   it('updates an existing exchange binding after validation succeeds', async () => {
-    const { service, prisma, tradingService } = createService()
-    prisma.exchangeAccount.create.mockRejectedValue(
+    const { service, repo, tradingService } = createService()
+    repo.createExchangeAccount.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
         code: 'P2002',
-        clientVersion: 'test',
+        clientVersion: '7.4.2',
       }),
     )
-    prisma.exchangeAccount.findFirst.mockResolvedValue({
+    repo.findExchangeAccountFirst.mockResolvedValue({
       id: 'account-1',
       exchangeId: 'binance',
       encryptedConfig: 'old-encrypted-config',
@@ -156,19 +153,19 @@ describe('exchangeAccountsService', () => {
         secret: 'new-valid-secret',
       }),
     )
-    expect(prisma.exchangeAccount.update).toHaveBeenCalledWith({
-      where: { id: 'account-1' },
-      data: expect.objectContaining({
+    expect(repo.updateExchangeAccount).toHaveBeenCalledWith(
+      'account-1',
+      expect.objectContaining({
         name: 'Updated Binance',
         encryptedConfig: 'encrypted-config',
       }),
-    })
-    expect(prisma.exchangeAccount.create).toHaveBeenCalled()
+    )
+    expect(repo.createExchangeAccount).toHaveBeenCalled()
   })
 
   it('keeps existing binding unchanged when revalidation fails during update', async () => {
-    const { service, prisma, tradingService } = createService()
-    prisma.exchangeAccount.findFirst.mockResolvedValue({
+    const { service, repo, tradingService } = createService()
+    repo.findExchangeAccountFirst.mockResolvedValue({
       id: 'account-1',
       exchangeId: 'binance',
       encryptedConfig: 'old-encrypted-config',
@@ -200,8 +197,8 @@ describe('exchangeAccountsService', () => {
       }),
     })
 
-    expect(prisma.exchangeAccount.update).not.toHaveBeenCalled()
-    expect(prisma.exchangeAccount.create).not.toHaveBeenCalled()
+    expect(repo.updateExchangeAccount).not.toHaveBeenCalled()
+    expect(repo.createExchangeAccount).not.toHaveBeenCalled()
   })
 
   it('normalizes credential validation failures into machine-readable args', async () => {
@@ -232,35 +229,28 @@ describe('exchangeAccountsService', () => {
   })
 
   it('deletes the current user binding by exchangeId', async () => {
-    const { service, prisma } = createService()
-    prisma.exchangeAccount.findFirst.mockResolvedValue({
+    const { service, repo } = createService()
+    repo.findExchangeAccountFirst.mockResolvedValue({
       id: 'account-1',
       exchangeId: 'binance',
-    })
-    const updateMany = jest.fn().mockResolvedValue({ count: 0 })
-    prisma.getClient.mockReturnValue({
-      exchangeAccount: prisma.exchangeAccount,
-      userLlmStrategySubscription: {
-        updateMany,
-      },
     })
 
     await service.delete('user-1', 'binance')
 
-    expect(prisma.exchangeAccount.findFirst).toHaveBeenCalledWith({
-      where: { userId: 'user-1', exchangeId: 'binance' },
-      select: { id: true },
-    })
-    expect(prisma.exchangeAccount.delete).toHaveBeenCalledWith({
-      where: { id: 'account-1' },
-    })
+    expect(repo.findExchangeAccountFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-1', exchangeId: 'binance' },
+      }),
+    )
+    expect(repo.deleteExchangeAccount).toHaveBeenCalledWith('account-1')
   })
 
   it('creates a quantify user mirror before first successful binding', async () => {
-    const { service, prisma } = createService()
-    prisma.user.findUnique
+    const { service, repo } = createService()
+    repo.findUserById
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
+    repo.findUserByEmail.mockResolvedValue(null)
 
     await service.create('user-1', {
       userId: 'user-1',
@@ -272,17 +262,15 @@ describe('exchangeAccountsService', () => {
       marketType: 'spot',
     })
 
-    expect(prisma.user.create).toHaveBeenCalledWith({
-      data: {
-        id: 'user-1',
-        email: 'user-1@example.com',
-      },
+    expect(repo.createUser).toHaveBeenCalledWith({
+      id: 'user-1',
+      email: 'user-1@example.com',
     })
   })
 
   it('keeps the latest record when duplicate exchange data exists', async () => {
-    const { service, prisma } = createService()
-    prisma.exchangeAccount.findMany.mockResolvedValue([
+    const { service, repo } = createService()
+    repo.findExchangeAccountsByUser.mockResolvedValue([
       {
         id: 'new-okx',
         exchangeId: 'okx',

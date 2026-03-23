@@ -26,11 +26,7 @@ describe('positionsController', () => {
     listPositions: jest.fn(),
     recordTrade: jest.fn(),
     closePosition: jest.fn(),
-    prisma: {
-      userStrategyAccount: {
-        findUnique: jest.fn(),
-      },
-    },
+    findUserStrategyAccountById: jest.fn(),
   }
 
   const valuationService = {
@@ -112,7 +108,7 @@ describe('positionsController', () => {
   })
 
   it('accepts explicit userId when triggering manual sync', async () => {
-    positionsService.prisma.userStrategyAccount.findUnique.mockResolvedValue({
+    positionsService.findUserStrategyAccountById.mockResolvedValue({
       id: 'account-1',
       userId: 'user-3',
     })
@@ -139,7 +135,7 @@ describe('positionsController', () => {
   })
 
   it('accepts explicit userId when closing position', async () => {
-    positionsService.prisma.userStrategyAccount.findUnique.mockResolvedValue({
+    positionsService.findUserStrategyAccountById.mockResolvedValue({
       id: 'account-2',
       userId: 'user-4',
     })

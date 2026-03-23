@@ -2,15 +2,14 @@ import type {
   CreateOpenInterestDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
-import { Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { OpenInterestRepository } from './open-interest.repository'
 
 /**
  * 持仓量数据服务
@@ -20,7 +19,7 @@ export class OpenInterestService {
   private readonly logger = new Logger(OpenInterestService.name)
   private static readonly MAX_STATS_RANGE_MS = 31 * 24 * 60 * 60 * 1000
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly openInterestRepository: OpenInterestRepository) {}
 
   /**
    * 创建或更新持仓量数据
@@ -28,47 +27,7 @@ export class OpenInterestService {
    */
   async upsert(data: CreateOpenInterestDto) {
     try {
-      const result = await this.prisma.openInterest.upsert({
-        where: {
-          open_interest_exchange_symbol_data_timestamp_key: {
-            exchange: data.exchange,
-            symbol: data.symbol,
-            dataTimestamp: new Date(data.data_timestamp),
-          },
-        },
-        update: {
-          openInterestUsd: data.open_interest_usd,
-          openInterestQuantity: data.open_interest_quantity,
-          openInterestByStableCoinMargin: data.open_interest_by_stable_coin_margin,
-          openInterestByCoinMargin: data.open_interest_by_coin_margin,
-          openInterestQuantityByCoinMargin: data.open_interest_quantity_by_coin_margin,
-          openInterestQuantityByStableCoinMargin: data.open_interest_quantity_by_stable_coin_margin,
-          openInterestChangePercent5m: data.open_interest_change_percent_5m,
-          openInterestChangePercent15m: data.open_interest_change_percent_15m,
-          openInterestChangePercent30m: data.open_interest_change_percent_30m,
-          openInterestChangePercent1h: data.open_interest_change_percent_1h,
-          openInterestChangePercent4h: data.open_interest_change_percent_4h,
-          openInterestChangePercent24h: data.open_interest_change_percent_24h,
-        },
-        create: {
-          exchange: data.exchange,
-          symbol: data.symbol,
-          openInterestUsd: data.open_interest_usd,
-          openInterestQuantity: data.open_interest_quantity,
-          openInterestByStableCoinMargin: data.open_interest_by_stable_coin_margin,
-          openInterestByCoinMargin: data.open_interest_by_coin_margin,
-          openInterestQuantityByCoinMargin: data.open_interest_quantity_by_coin_margin,
-          openInterestQuantityByStableCoinMargin: data.open_interest_quantity_by_stable_coin_margin,
-          openInterestChangePercent5m: data.open_interest_change_percent_5m,
-          openInterestChangePercent15m: data.open_interest_change_percent_15m,
-          openInterestChangePercent30m: data.open_interest_change_percent_30m,
-          openInterestChangePercent1h: data.open_interest_change_percent_1h,
-          openInterestChangePercent4h: data.open_interest_change_percent_4h,
-          openInterestChangePercent24h: data.open_interest_change_percent_24h,
-          dataTimestamp: new Date(data.data_timestamp),
-        },
-      })
-      
+      const result = await this.openInterestRepository.upsert(data)
       this.logger.log(`Upserted open interest data for ${data.exchange}:${data.symbol}`)
       return result
     } catch (error) {
@@ -144,13 +103,8 @@ export class OpenInterestService {
     const offset = (page - 1) * limit
 
     const [data, total] = await Promise.all([
-      this.prisma.openInterest.findMany({
-        where,
-        orderBy: { dataTimestamp: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      this.prisma.openInterest.count({ where }),
+      this.openInterestRepository.findMany(where, limit, offset),
+      this.openInterestRepository.count(where),
     ])
 
     return new BasePaginationResponseDto(total, page, limit, data)
@@ -162,10 +116,7 @@ export class OpenInterestService {
    * @param symbol 币种
    */
   async getLatest(exchange: string, symbol: string) {
-    return this.prisma.openInterest.findFirst({
-      where: { exchange, symbol },
-      orderBy: { dataTimestamp: 'desc' },
-    })
+    return this.openInterestRepository.findLatest(exchange, symbol)
   }
 
   /**
@@ -188,41 +139,7 @@ export class OpenInterestService {
       throw new DomainException('open_interest.range_exceeded', { code: ErrorCode.OPEN_INTEREST_RANGE_EXCEEDED, status: HttpStatus.BAD_REQUEST, args: { maxDays: 31 } })
     }
 
-    interface StatsRow {
-      min: Prisma.Decimal | null
-      max: Prisma.Decimal | null
-      avg: Prisma.Decimal | null
-      data_points: bigint | null
-      earliest: Prisma.Decimal | null
-      latest: Prisma.Decimal | null
-    }
-
-    const statsRows = (await this.prisma.$queryRaw(
-      Prisma.sql`
-      WITH aggregated AS (
-        SELECT
-          data_timestamp,
-          CASE
-            WHEN BOOL_OR(exchange = 'All') THEN
-              SUM(CASE WHEN exchange = 'All' THEN open_interest_usd ELSE 0 END)
-            ELSE
-              SUM(open_interest_usd)
-          END::numeric AS total_value
-        FROM open_interest
-        WHERE symbol = ${symbol}
-          AND data_timestamp BETWEEN ${startTime} AND ${endTime}
-        GROUP BY data_timestamp
-      )
-      SELECT
-        MIN(total_value) AS min,
-        MAX(total_value) AS max,
-        AVG(total_value) AS avg,
-        COUNT(*) AS data_points,
-        (ARRAY_AGG(total_value ORDER BY data_timestamp ASC))[1] AS earliest,
-        (ARRAY_AGG(total_value ORDER BY data_timestamp DESC))[1] AS latest
-      FROM aggregated;
-    `,
-    )) as StatsRow[]
+    const statsRows = await this.openInterestRepository.queryRawStats(symbol, startTime, endTime)
 
     const stats = statsRows[0]
     if (!stats || !stats.data_points || Number(stats.data_points) === 0) {

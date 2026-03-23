@@ -107,4 +107,11 @@ export class IndicatorConfigRepository {
       where: { id },
     })
   }
+
+  async findSymbolByCode(code: string): Promise<{ id: string; code: string } | null> {
+    return this.client.symbol.findUnique({
+      where: { code },
+      select: { id: true, code: true },
+    })
+  }
 }

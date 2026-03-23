@@ -3,13 +3,14 @@ import { FixedHyperliquidTestnetSignalService } from './fixed-hyperliquid-testne
 
 describe('fixedHyperliquidTestnetSignalService', () => {
   function createService() {
-    const prisma = {
-      llmStrategy: { findUnique: jest.fn() },
-      user: { findUnique: jest.fn() },
-      symbol: { findFirst: jest.fn() },
-      userStrategyAccount: { findFirst: jest.fn() },
-      llmStrategyInstance: { findFirst: jest.fn() },
-      tradingSignal: { create: jest.fn() },
+    const contextRepo = {
+      findLlmStrategyByName: jest.fn(),
+      findUserByEmail: jest.fn(),
+      findSymbolByCode: jest.fn(),
+      findSymbolsByCodes: jest.fn(),
+      findUserStrategyAccount: jest.fn(),
+      findLlmStrategyInstance: jest.fn(),
+      createTradingSignal: jest.fn(),
     }
 
     const env = {
@@ -29,23 +30,23 @@ describe('fixedHyperliquidTestnetSignalService', () => {
     }
 
     const service = new FixedHyperliquidTestnetSignalService(
-      prisma as any,
+      contextRepo as any,
       env as any,
       signalExecutor as any,
     )
 
-    return { service, prisma, env, signalExecutor }
+    return { service, contextRepo, env, signalExecutor }
   }
 
   it('creates a perp signal and fetches ticker when entry price is missing', async () => {
-    const { service, prisma } = createService()
+    const { service, contextRepo } = createService()
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst.mockResolvedValue({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst.mockResolvedValue({ id: 'perp-instance-1' })
-    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-1' })
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode.mockResolvedValue({ id: 'perp-symbol-1' })
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance.mockResolvedValue({ id: 'perp-instance-1' })
+    contextRepo.createTradingSignal.mockResolvedValue({ id: 'signal-1' })
 
     jest.spyOn(service, 'fetchTickerPrice').mockResolvedValue('13000')
 
@@ -58,8 +59,8 @@ describe('fixedHyperliquidTestnetSignalService', () => {
     })
 
     expect(signal).toEqual({ id: 'signal-1' })
-    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(contextRepo.createTradingSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
         llmStrategyId: 'strategy-1',
         llmStrategyInstanceId: 'perp-instance-1',
         symbolId: 'perp-symbol-1',
@@ -69,22 +70,22 @@ describe('fixedHyperliquidTestnetSignalService', () => {
         positionSizeQuote: '5',
         aiReasoning: 'unit-test-open',
       }),
-    })
+    )
   })
 
   it('creates a spot signal with the spot symbol and instance context', async () => {
-    const { service, prisma } = createService()
+    const { service, contextRepo } = createService()
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode
       .mockResolvedValueOnce({ id: 'spot-symbol-1' })
       .mockResolvedValueOnce({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance
       .mockResolvedValueOnce({ id: 'spot-instance-1' })
       .mockResolvedValueOnce({ id: 'perp-instance-1' })
-    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-spot-1' })
+    contextRepo.createTradingSignal.mockResolvedValue({ id: 'signal-spot-1' })
 
     jest.spyOn(service, 'fetchTickerPrice').mockResolvedValue('0.42')
 
@@ -97,26 +98,26 @@ describe('fixedHyperliquidTestnetSignalService', () => {
     })
 
     expect(signal).toEqual({ id: 'signal-spot-1' })
-    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(contextRepo.createTradingSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
         llmStrategyInstanceId: 'spot-instance-1',
         symbolId: 'spot-symbol-1',
         signalType: 'ENTRY',
         direction: 'BUY',
         entryPrice: '0.42',
       }),
-    })
+    )
   })
 
   it('executes a perp signal when config overrides are provided', async () => {
-    const { service, prisma, signalExecutor } = createService()
+    const { service, contextRepo, signalExecutor } = createService()
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst.mockResolvedValue({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst.mockResolvedValue({ id: 'perp-instance-1' })
-    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-2' })
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode.mockResolvedValue({ id: 'perp-symbol-1' })
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance.mockResolvedValue({ id: 'perp-instance-1' })
+    contextRepo.createTradingSignal.mockResolvedValue({ id: 'signal-2' })
 
     const executionConfig = {
       ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
@@ -137,20 +138,20 @@ describe('fixedHyperliquidTestnetSignalService', () => {
     })
 
     expect(signal).toEqual({ id: 'signal-2' })
-    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(contextRepo.createTradingSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
         llmStrategyInstanceId: 'perp-instance-1',
         symbolId: 'perp-symbol-1',
         signalType: 'EXIT',
         direction: 'CLOSE_LONG',
         entryPrice: '12950',
       }),
-    })
+    )
     expect(signalExecutor.executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-2', executionConfig)
   })
 
   it('resolves the perp strategy context from env values', async () => {
-    const { service, prisma, env } = createService()
+    const { service, contextRepo, env } = createService()
 
     env.getString = jest.fn((key: string, defaultValue?: string) => {
       const values: Record<string, string> = {
@@ -162,29 +163,22 @@ describe('fixedHyperliquidTestnetSignalService', () => {
       return values[key] ?? defaultValue
     })
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode
       .mockResolvedValueOnce({ id: 'spot-symbol-1' })
       .mockResolvedValueOnce({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance
       .mockResolvedValueOnce({ id: 'spot-instance-1' })
       .mockResolvedValueOnce({ id: 'perp-instance-1' })
 
     const context = await service.resolveContext()
 
-    expect(prisma.llmStrategy.findUnique).toHaveBeenCalledWith({
-      where: { name: 'FIXED-HYPERLIQUID-TESTNET-ETHUSDT' },
-    })
-    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(1, { where: { code: 'ETHUSDT' } })
-    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(2, { where: { code: 'ETHUSDT:PERP' } })
-    expect(prisma.llmStrategyInstance.findFirst).toHaveBeenCalledWith({
-      where: {
-        strategyId: 'strategy-1',
-        name: 'fixed-hyperliquid-ethusdt-perp',
-      },
-    })
+    expect(contextRepo.findLlmStrategyByName).toHaveBeenCalledWith('FIXED-HYPERLIQUID-TESTNET-ETHUSDT')
+    expect(contextRepo.findSymbolByCode).toHaveBeenNthCalledWith(1, 'ETHUSDT')
+    expect(contextRepo.findSymbolByCode).toHaveBeenNthCalledWith(2, 'ETHUSDT:PERP')
+    expect(contextRepo.findLlmStrategyInstance).toHaveBeenCalledWith('strategy-1', 'fixed-hyperliquid-ethusdt-perp')
     expect(context.spotSymbolId).toBe('spot-symbol-1')
     expect(context.spotInstanceId).toBe('spot-instance-1')
     expect(context.spotSymbol).toBe('ETH/USDT')

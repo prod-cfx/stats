@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 
 import { AiModule } from '@/modules/ai/ai.module'
+import { LlmSubscriptionsRepository } from '@/modules/llm-strategy-subscriptions/repositories/llm-subscriptions.repository'
 import { PrismaModule } from '@/prisma/prisma.module'
 
 import { LiveLlmStrategyInstancesController } from './controllers/live-llm-strategy-instances.controller'
@@ -30,6 +31,7 @@ import { LlmStrategyRunsService } from './services/llm-strategy-runs.service'
     LlmStrategiesRepository,
     LlmStrategyInstancesRepository,
     LlmStrategyRunsRepository,
+    LlmSubscriptionsRepository,
     LlmStrategiesService,
     LlmStrategyInstancesService,
     LlmStrategyInstanceSchedulerService,

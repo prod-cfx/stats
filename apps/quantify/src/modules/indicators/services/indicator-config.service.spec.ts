@@ -9,7 +9,7 @@ describe('indicatorConfigService', () => {
       }),
     }
 
-    const service = new IndicatorConfigService(repository as any)
+    const service = new IndicatorConfigService(repository as any, {} as any)
     const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined)
     const logSpy = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined)
 
@@ -24,7 +24,7 @@ describe('indicatorConfigService', () => {
       listAllActive: jest.fn().mockRejectedValue(new Error('db unavailable')),
     }
 
-    const service = new IndicatorConfigService(repository as any)
+    const service = new IndicatorConfigService(repository as any, {} as any)
     const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined)
 
     await expect(service.onModuleInit()).resolves.toBeUndefined()

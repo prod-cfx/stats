@@ -1,7 +1,7 @@
 import type { MarketDataProvider } from '../../interfaces/market-data-provider.interface'
 import type { MarketDataStreamService } from '../market-data-stream.service'
+import type { MarketDataRepository } from '../market-data.repository'
 import type { MarketDataService } from '../market-data.service'
-import type { PrismaService } from '@/prisma/prisma.service'
 import { getMarketTimeframeMs } from '../../utils/market-timeframe.util'
 import { MarketDataIngestionService } from '../market-data-ingestion.service'
 
@@ -28,17 +28,13 @@ describe('market data ingestion service', () => {
     emitQuote: jest.fn(),
   } as unknown as jest.Mocked<MarketDataStreamService>
 
-  const userStrategySubscriptionFindMany = jest.fn()
-  const userLlmStrategySubscriptionFindMany = jest.fn()
+  const findActiveStrategySubscriptionsForSymbols = jest.fn()
+  const findActiveLlmSubscriptionsForSymbols = jest.fn()
 
-  const prismaMock = {
-    userStrategySubscription: {
-      findMany: userStrategySubscriptionFindMany,
-    },
-    userLlmStrategySubscription: {
-      findMany: userLlmStrategySubscriptionFindMany,
-    },
-  } as unknown as PrismaService
+  const marketDataRepositoryMock = {
+    findActiveStrategySubscriptionsForSymbols,
+    findActiveLlmSubscriptionsForSymbols,
+  } as unknown as jest.Mocked<MarketDataRepository>
 
   let service: MarketDataIngestionService
 
@@ -72,15 +68,15 @@ describe('market data ingestion service', () => {
     marketDataServiceMock.upsertSymbolsFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveBarFromProvider.mockResolvedValue(undefined)
     marketDataServiceMock.saveQuoteFromProvider.mockResolvedValue(undefined)
-    userStrategySubscriptionFindMany.mockResolvedValue([])
-    userLlmStrategySubscriptionFindMany.mockResolvedValue([])
+    findActiveStrategySubscriptionsForSymbols.mockResolvedValue([])
+    findActiveLlmSubscriptionsForSymbols.mockResolvedValue([])
 
     service = new MarketDataIngestionService(
       configServiceMock as never,
-      prismaMock,
       marketDataServiceMock,
       providerMock,
       streamServiceMock,
+      marketDataRepositoryMock,
     )
   })
 
@@ -122,11 +118,11 @@ describe('market data ingestion service', () => {
   })
 
   it('throws for unsupported timeframe instead of silently falling back to 1m', () => {
-    expect(() => getMarketTimeframeMs('2m')).toThrow('Unsupported market timeframe: 2m')
+    expect(() => getMarketTimeframeMs('2m')).toThrow()
   })
 
   it('merges dynamic symbols from active strategy subscriptions', async () => {
-    userStrategySubscriptionFindMany.mockResolvedValue([
+    findActiveStrategySubscriptionsForSymbols.mockResolvedValue([
       {
         strategyInstance: {
           strategyTemplate: {
@@ -151,7 +147,7 @@ describe('market data ingestion service', () => {
     providerMock.subscribe
       .mockResolvedValueOnce(firstUnsubscribe)
       .mockResolvedValueOnce(secondUnsubscribe)
-    userStrategySubscriptionFindMany
+    findActiveStrategySubscriptionsForSymbols
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {

@@ -1,11 +1,11 @@
-import type { TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing'
 import { ErrorCode } from '@ai/shared'
 import { Test } from '@nestjs/testing'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 
 import { Prisma } from '@/prisma/prisma.types'
 
+import { StrategyInstancesRepository } from '../../repositories/strategy-instances.repository'
 import { StrategyInstanceStatsService } from '../strategy-instance-stats.service'
 
 // Prisma 7: 从 Prisma namespace 导出 Decimal
@@ -13,43 +13,56 @@ const Decimal = Prisma.Decimal
 
 describe('strategyInstanceStatsService - Review Fixes', () => {
   let service: StrategyInstanceStatsService
-  let prisma: PrismaService
+  let instancesRepo: jest.Mocked<StrategyInstancesRepository>
 
   beforeEach(async () => {
+    const repoMock = {
+      findByIdWithTemplate: jest.fn().mockResolvedValue(null),
+      findActiveSubscriptionsByInstanceId: jest.fn().mockResolvedValue([]),
+      findAccountsByUserIdsAndTemplate: jest.fn().mockResolvedValue([]),
+      findManyWithTemplate: jest.fn().mockResolvedValue([]),
+      findActiveSubscriptionsByInstanceIds: jest.fn().mockResolvedValue([]),
+      findAccountsByUserIdsAndTemplates: jest.fn().mockResolvedValue([]),
+      findPositionsByAccountIds: jest.fn().mockResolvedValue([]),
+      findClosedPositionsWithPnlByAccountIds: jest.fn().mockResolvedValue([]),
+      countPositionsByAccountIds: jest.fn().mockResolvedValue(0),
+      findClosedPositionsByAccountIds: jest.fn().mockResolvedValue([]),
+      findTodayPnlMetrics: jest.fn().mockResolvedValue([]),
+      findTodayPnlMetricsBatch: jest.fn().mockResolvedValue([]),
+    }
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StrategyInstanceStatsService,
         {
-          provide: PrismaService,
-          useValue: {
-            getClient: jest.fn()
-          }
-        }
-      ]
+          provide: StrategyInstancesRepository,
+          useValue: repoMock,
+        },
+      ],
     }).compile()
 
     service = module.get<StrategyInstanceStatsService>(StrategyInstanceStatsService)
-    prisma = module.get<PrismaService>(PrismaService)
+    instancesRepo = module.get(StrategyInstancesRepository)
   })
 
   describe('输入验证测试', () => {
     it('应该拒绝无效的 CUID 格式', async () => {
       await expect(
-        service.calculateStats('invalid-id')
+        service.calculateStats('invalid-id'),
       ).rejects.toThrow(DomainException)
     })
 
     it('应该拒绝非数组参数', async () => {
       await expect(
-        service.calculateBatchStats('not-an-array' as any)
+        service.calculateBatchStats('not-an-array' as any),
       ).rejects.toMatchObject({ code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT })
     })
 
     it('应该拒绝超大批量请求', async () => {
-      const largeArray: string[] = Array.from({length: 101}, () => 'c123456789012345678901234')
+      const largeArray: string[] = Array.from({ length: 101 }, () => 'c123456789012345678901234')
 
       await expect(
-        service.calculateBatchStats(largeArray)
+        service.calculateBatchStats(largeArray),
       ).rejects.toMatchObject({ code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT })
     })
 
@@ -60,13 +73,13 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
     it('应该拒绝包含无效 ID 的批量请求', async () => {
       const mixedArray = [
-        'c123456789012345678901234',  // 有效
-        'invalid-id',                 // 无效
-        'c987654321098765432109876'   // 有效
+        'c123456789012345678901234', // 有效
+        'invalid-id', // 无效
+        'c987654321098765432109876', // 有效
       ]
 
       await expect(
-        service.calculateBatchStats(mixedArray)
+        service.calculateBatchStats(mixedArray),
       ).rejects.toThrow(DomainException)
     })
   })
@@ -76,7 +89,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const tradeStats = {
         totalCount: 10,
         winCount: 10,
-        lossCount: 0
+        lossCount: 0,
       }
 
       const winRate = tradeStats.totalCount > 0
@@ -90,7 +103,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const tradeStats = {
         totalCount: 10,
         winCount: 0,
-        lossCount: 10
+        lossCount: 10,
       }
 
       const winRate = tradeStats.totalCount > 0
@@ -104,7 +117,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const tradeStats = {
         totalCount: 0,
         winCount: 0,
-        lossCount: 0
+        lossCount: 0,
       }
 
       const winRate = tradeStats.totalCount > 0
@@ -118,7 +131,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const tradeStats = {
         totalCount: 20,
         winCount: 15,
-        lossCount: 5
+        lossCount: 5,
       }
 
       const winRate = tradeStats.totalCount > 0
@@ -191,7 +204,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       expect(emptyStats.closedPositionsCount).toBe(0)
       expect(emptyStats.totalTradesCount).toBe(0)
       expect(emptyStats.winningTradesCount).toBe(0)
-      expect(emptyStats.winRate).toBeUndefined()  // 关键：应该是 undefined
+      expect(emptyStats.winRate).toBeUndefined() // 关键：应该是 undefined
       expect(emptyStats.maxDrawdown).toBeUndefined()
       expect(emptyStats.sharpeRatio).toBeUndefined()
       expect(emptyStats.lastUpdatedAt).toBeInstanceOf(Date)
@@ -201,11 +214,11 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
   describe('时区处理测试', () => {
     it('应该支持不同时区', () => {
       const timezones = ['UTC', 'Asia/Shanghai', 'America/New_York']
-      
-      timezones.forEach(timezone => {
+
+      timezones.forEach((timezone) => {
         const today = new Date()
         const todayStart = new Date(today.toLocaleDateString('en-US', { timeZone: timezone }))
-        
+
         expect(todayStart).toBeInstanceOf(Date)
         expect(todayStart.getHours()).toBe(0)
       })
@@ -216,7 +229,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
         timeZone: 'UTC',
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
       })
       const today = new Date('2025-11-28T15:30:00Z')
       const parts = formatter.formatToParts(today)
@@ -224,7 +237,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
       const month = Number(parts.find(p => p.type === 'month')!.value)
       const day = Number(parts.find(p => p.type === 'day')!.value)
       const todayStart = new Date(Date.UTC(year, month - 1, day))
-      
+
       expect(todayStart.toISOString().slice(0, 10)).toBe('2025-11-28')
     })
   })
@@ -238,12 +251,12 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
     it('应该拒绝无效的 CUID', () => {
       const invalidIds = [
         'invalid',
-        'c123',  // 太短
-        '123456789012345678901234',  // 不以 c 开头
-        'c12345678901234567890123@',  // 包含特殊字符
+        'c123', // 太短
+        '123456789012345678901234', // 不以 c 开头
+        'c12345678901234567890123@', // 包含特殊字符
       ]
 
-      invalidIds.forEach(id => {
+      invalidIds.forEach((id) => {
         const isValid = (service as any).isValidCuid(id)
         expect(isValid).toBe(false)
       })
@@ -277,53 +290,38 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
   describe('错误处理测试', () => {
     it('应该抛出 DomainException 对于无效输入', async () => {
       await expect(
-        service.calculateStats('')
+        service.calculateStats(''),
       ).rejects.toThrow(DomainException)
     })
 
     it('数据库错误应该被正确包装', async () => {
-      const mockClient = {
-        strategyInstance: {
-          findUnique: jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('Database connection failed', {
-            code: 'P2000',
-            clientVersion: '7.4.2',
-          }))
-        }
-      }
-
-      jest.spyOn(prisma, 'getClient').mockReturnValue(mockClient as any)
+      instancesRepo.findByIdWithTemplate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Database connection failed', {
+          code: 'P2000',
+          clientVersion: '7.4.2',
+        }),
+      )
 
       await expect(
-        service.calculateStats('c123456789012345678901234')
+        service.calculateStats('c123456789012345678901234'),
       ).rejects.toThrow(DomainException)
     })
   })
 
   describe('批量查询性能测试', () => {
     it('批量查询应该比单个查询更少的数据库调用', async () => {
-      const mockClient = {
-        strategyInstance: {
-          findMany: jest.fn().mockResolvedValue([]),
-          findUnique: jest.fn().mockResolvedValue(null)
-        },
-        userStrategySubscription: {
-          findMany: jest.fn().mockResolvedValue([])
-        }
-      }
-
-      jest.spyOn(prisma, 'getClient').mockReturnValue(mockClient as any)
+      instancesRepo.findManyWithTemplate.mockResolvedValue([])
+      instancesRepo.findActiveSubscriptionsByInstanceIds.mockResolvedValue([])
 
       // 批量查询 10 个实例
-      const instanceIds: string[] = Array.from({length: 10}, (_, i) => 
-        `c1234567890123456789012${i}0`
+      const instanceIds: string[] = Array.from({ length: 10 }, (_, i) =>
+        `c1234567890123456789012${i}0`,
       )
 
       await service.calculateBatchStats(instanceIds)
 
-      // 验证只调用了一次 findMany（批量查询）
-      expect(mockClient.strategyInstance.findMany).toHaveBeenCalledTimes(1)
-      // 而不是 10 次 findUnique
-      expect(mockClient.strategyInstance.findUnique).not.toHaveBeenCalled()
+      // 验证只调用了一次 findManyWithTemplate（批量查询）
+      expect(instancesRepo.findManyWithTemplate).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -6,7 +6,6 @@ import { Test } from '@nestjs/testing'
 import { EnvService } from '@/common/services/env.service'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
-import { PrismaService } from '@/prisma/prisma.service'
 import { InvalidInstanceModeTransitionException } from '../../exceptions'
 import { StrategyInstancesRepository } from '../../repositories/strategy-instances.repository'
 import { StrategyInstanceStatsService } from '../strategy-instance-stats.service'
@@ -14,10 +13,6 @@ import { StrategyInstancesService } from '../strategy-instances.service'
 
 describe('strategyInstancesService - mode management', () => {
   let service: StrategyInstancesService
-
-  const mockPrismaService = {
-    getClient: jest.fn(),
-  }
 
   const mockStatsService = {
     calculateStats: jest.fn(),
@@ -31,6 +26,9 @@ describe('strategyInstancesService - mode management', () => {
     findMany: jest.fn(),
     update: jest.fn(),
     existsByTemplateModelName: jest.fn(),
+    findTemplateById: jest.fn(),
+    findInstanceWithStrategyTemplate: jest.fn(),
+    findSymbolsByCodes: jest.fn(),
   }
 
   const mockTradingSignalRepository = {}
@@ -68,10 +66,6 @@ describe('strategyInstancesService - mode management', () => {
       providers: [
         StrategyInstancesService,
         {
-          provide: PrismaService,
-          useValue: mockPrismaService,
-        },
-        {
           provide: StrategyInstancesRepository,
           useValue: mockRepository,
         },
@@ -102,11 +96,7 @@ describe('strategyInstancesService - mode management', () => {
 
   describe('createInstance', () => {
     beforeEach(() => {
-      mockPrismaService.getClient.mockReturnValue({
-        strategyTemplate: {
-          findUnique: jest.fn().mockResolvedValue(mockStrategyTemplate),
-        },
-      })
+      mockRepository.findTemplateById.mockResolvedValue(mockStrategyTemplate)
       mockRepository.existsByTemplateModelName.mockResolvedValue(false)
       mockRepository.create.mockResolvedValue(mockStrategyInstance)
       mockRepository.findByIdWithDetails.mockResolvedValue({
@@ -419,21 +409,15 @@ describe('strategyInstancesService - mode management', () => {
 
   describe('buildTestPayload', () => {
     it('loads bars via gateway and keeps timestamps ascending in multiLegData', async () => {
-      mockPrismaService.getClient.mockReturnValue({
-        strategyInstance: {
-          findUnique: jest.fn().mockResolvedValue({
-            id: 'instance-123',
-            strategyTemplate: {
-              execution: { mode: 'MULTI_LEG' },
-              dataRequirements: { leg1: ['1h'] },
-              legs: [{ id: 'leg1', symbol: 'BTCUSDT' }],
-            },
-          }),
-        },
-        symbol: {
-          findMany: jest.fn().mockResolvedValue([{ id: 'symbol-1', code: 'BTCUSDT' }]),
+      mockRepository.findInstanceWithStrategyTemplate.mockResolvedValue({
+        id: 'instance-123',
+        strategyTemplate: {
+          execution: { mode: 'MULTI_LEG' },
+          dataRequirements: { leg1: ['1h'] },
+          legs: [{ id: 'leg1', symbol: 'BTCUSDT' }],
         },
       })
+      mockRepository.findSymbolsByCodes.mockResolvedValue([{ id: 'symbol-1', code: 'BTCUSDT' }])
       mockMarketDataReadGateway.getRecentBarsBySymbolId.mockResolvedValue([
         { open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, timestamp: 1000 },
         { open: 1.5, high: 2.5, low: 1, close: 2, volume: 12, timestamp: 2000 },

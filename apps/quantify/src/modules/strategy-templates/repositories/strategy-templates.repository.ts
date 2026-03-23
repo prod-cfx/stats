@@ -61,4 +61,11 @@ export class StrategyTemplatesRepository {
       where: { id },
     })
   }
+
+  async findSymbolsByCodes(codes: string[]) {
+    return this.client.symbol.findMany({
+      where: { code: { in: codes } },
+      select: { code: true, status: true },
+    })
+  }
 }

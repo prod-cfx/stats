@@ -154,4 +154,106 @@ export class LlmSubscriptionsRepository {
       where: { id },
     })
   }
+
+  async findLlmStrategyInstance(instanceId: string) {
+    try {
+      return await this.prisma.getClient().llmStrategyInstance.findUnique({
+        where: { id: instanceId },
+        include: {
+          strategy: { select: { id: true, name: true, description: true, status: true } },
+        },
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2021'
+      ) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  async findExchangeAccountByOwner(accountId: string, userId: string): Promise<{ id: string } | null> {
+    return this.prisma.getClient().exchangeAccount.findFirst({
+      where: { id: accountId, userId },
+      select: { id: true },
+    })
+  }
+
+  async findUserStrategyAccount(userId: string, strategyId: string): Promise<{ id: string } | null> {
+    return this.prisma.getClient().userStrategyAccount.findUnique({
+      where: { userId_strategyId: { userId, strategyId } },
+      select: { id: true },
+    })
+  }
+
+  /**
+   * 批量查找指定用户对一批实例的有效订阅（status=active）
+   */
+  async findActiveByUserAndInstanceIds(
+    userId: string,
+    instanceIds: string[],
+  ): Promise<Array<{ llmStrategyInstanceId: string }>> {
+    try {
+      return await this.prisma.getClient().userLlmStrategySubscription.findMany({
+        where: { userId, llmStrategyInstanceId: { in: instanceIds }, status: 'active' },
+        select: { llmStrategyInstanceId: true },
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2021' &&
+        String(error.message).includes('user_llm_strategy_subscriptions')
+      ) {
+        return []
+      }
+      throw error
+    }
+  }
+
+  /**
+   * 查找指定用户对单个实例的有效订阅（status=active）
+   */
+  async findActiveByUserAndInstance(
+    userId: string,
+    instanceId: string,
+  ): Promise<{ id: string } | null> {
+    try {
+      return await this.prisma.getClient().userLlmStrategySubscription.findFirst({
+        where: { userId, llmStrategyInstanceId: instanceId, status: 'active' },
+        select: { id: true },
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2021' &&
+        String(error.message).includes('user_llm_strategy_subscriptions')
+      ) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  /**
+   * 查询指定实例的交易信号列表（分页）
+   */
+  async findTradingSignalsByInstance(
+    instanceId: string,
+    params: { skip: number; take: number },
+  ) {
+    const where = { llmStrategyInstanceId: instanceId }
+    const [items, total] = await Promise.all([
+      this.prisma.getClient().tradingSignal.findMany({
+        where,
+        include: { symbol: { select: { code: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: params.skip,
+        take: params.take,
+      }),
+      this.prisma.getClient().tradingSignal.count({ where }),
+    ])
+    return { items, total }
+  }
 }

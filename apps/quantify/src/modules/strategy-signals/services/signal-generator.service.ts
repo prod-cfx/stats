@@ -48,10 +48,10 @@ import {
   mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { SignalGeneratorRepository } from '../repositories/signal-generator.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -97,7 +97,7 @@ export class SignalGeneratorService {
   private readonly lastGroupIndexByInstance = new Map<string, number>()
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly generatorRepository: SignalGeneratorRepository,
     private readonly configService: ConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly aiService: AiService,
@@ -163,20 +163,7 @@ export class SignalGeneratorService {
     // 以“策略实例”为单位生成信号：
     // - 只处理 status='running' 且 mode='LIVE' 的实例
     // - 底层模板必须为 status='live'
-    const instances = await this.prisma.strategyInstance.findMany({
-      where: {
-        status: 'running',
-        mode: 'LIVE',
-        strategyTemplate: {
-          status: 'live',
-        },
-      },
-      // 使用稳定的排序（按 id），配合 lastStrategyIndex 实现轮询，而非永远只处理最新的一批
-      orderBy: { id: 'asc' },
-      include: {
-        strategyTemplate: true,
-      },
-    })
+    const instances = await this.generatorRepository.findRunningInstances()
 
     const total = instances.length
     if (!total) {
@@ -231,12 +218,7 @@ export class SignalGeneratorService {
     }
 
     // 查询指定的策略实例
-    const instance = await this.prisma.strategyInstance.findUnique({
-      where: { id: instanceId },
-      include: {
-        strategyTemplate: true,
-      },
-    })
+    const instance = await this.generatorRepository.findStrategyInstance(instanceId)
 
     if (!instance) {
       throw new DomainException('signal.instance_not_found', {
@@ -298,12 +280,7 @@ export class SignalGeneratorService {
     }
 
     // 查询指定的策略实例
-    const instance = await this.prisma.strategyInstance.findUnique({
-      where: { id: instanceId },
-      include: {
-        strategyTemplate: true,
-      },
-    })
+    const instance = await this.generatorRepository.findStrategyInstance(instanceId)
 
     if (!instance) {
       throw new DomainException('signal.instance_not_found', {
@@ -635,7 +612,7 @@ export class SignalGeneratorService {
   ) {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
-    const result = await this.prisma.$transaction(async prisma => {
+    const result = await this.generatorRepository.runInTransaction(async prisma => {
       // 对当前策略实例行加锁，避免同一实例并发通过冷却检查后重复创建信号
       await prisma.$queryRaw`
         SELECT "id"
@@ -889,15 +866,7 @@ export class SignalGeneratorService {
   private async findCandidateGroups(strategy: StrategyTemplate, requiredFields: string[]) {
     if (!requiredFields.length) return []
 
-    const configs = await this.prisma.indicatorConfig.findMany({
-      where: {
-        name: { in: requiredFields },
-        isEnabled: true,
-      },
-      include: {
-        symbol: true,
-      },
-    })
+    const configs = await this.generatorRepository.findEnabledIndicatorConfigs(requiredFields)
 
     const groups = new Map<string, IndicatorGroup>()
 
@@ -930,27 +899,18 @@ export class SignalGeneratorService {
       return null
     }
 
-    const grouped = await this.prisma.indicatorValue.groupBy({
-      by: ['indicatorConfigId'],
-      where: {
-        indicatorConfigId: { in: configIds },
-      },
-      _max: { time: true },
-    })
+    const grouped = await this.generatorRepository.groupLatestIndicatorValues(configIds)
 
     if (!grouped.length) return null
 
-    const latestRecords = await this.prisma.indicatorValue.findMany({
-      where: {
-        OR: grouped
-          .filter(item => item._max.time)
-          .map(item => ({
-            indicatorConfigId: item.indicatorConfigId,
-            time: item._max.time as Date,
-          })),
-      },
-      orderBy: { time: 'desc' },
-    })
+    const latestRecords = await this.generatorRepository.findLatestIndicatorValues(
+      grouped
+        .filter(item => item._max.time)
+        .map(item => ({
+          indicatorConfigId: item.indicatorConfigId,
+          time: item._max.time as Date,
+        })),
+    )
 
     const result: IndicatorSnapshot[] = []
     for (const field of requiredFields) {
@@ -1105,9 +1065,7 @@ export class SignalGeneratorService {
   ): Promise<Record<string, Record<string, LegTimeframeData>>> {
     // 1. 批量加载所有 symbols
     const symbolCodes = legs.map(leg => leg.symbol)
-    const symbols = await this.prisma.symbol.findMany({
-      where: { code: { in: symbolCodes } },
-    })
+    const symbols = await this.generatorRepository.findSymbolsByCode(symbolCodes)
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
 
     // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
@@ -1189,9 +1147,7 @@ export class SignalGeneratorService {
     options: { skipCooldown?: boolean } = {},
   ) {
     // 1. 查找 primary leg 的 symbol
-    const primarySymbol = await this.prisma.symbol.findUnique({
-      where: { code: primaryLeg.symbol },
-    })
+    const primarySymbol = await this.generatorRepository.findSymbolByCode(primaryLeg.symbol)
 
     if (!primarySymbol) {
       this.logger.warn(`Symbol ${primaryLeg.symbol} not found for strategy ${strategy.id}`)
@@ -1590,7 +1546,7 @@ export class SignalGeneratorService {
     const cooldownMinutes = Math.max(configuredCooldown, minimumCooldown)
     const cooldownSince = new Date(Date.now() - cooldownMinutes * 60 * 1000)
 
-    const result = await this.prisma.$transaction(async prisma => {
+    const result = await this.generatorRepository.runInTransaction(async prisma => {
       await prisma.$queryRaw`
         SELECT "id"
         FROM "strategy_instances"

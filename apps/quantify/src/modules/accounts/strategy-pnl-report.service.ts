@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyPnlReportRepository } from './repositories/strategy-pnl-report.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -16,23 +16,14 @@ export class StrategyPnlReportService {
   private readonly logger = new Logger(StrategyPnlReportService.name)
   private readonly batchSize = 100
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly reportRepository: StrategyPnlReportRepository) {}
 
   async generateDailyReport(targetDate?: Date) {
     const dayStart = this.startOfUtcDay(targetDate ?? new Date())
     const dayEnd = new Date(dayStart.getTime() + DAY_MS)
     const prevDay = new Date(dayStart.getTime() - DAY_MS)
 
-    const ledgerGroups = await this.prisma.pnlLedger.groupBy({
-      by: ['userStrategyAccountId', 'type'],
-      where: {
-        occurredAt: {
-          gte: dayStart,
-          lt: dayEnd,
-        },
-      },
-      _sum: { amount: true },
-    })
+    const ledgerGroups = await this.reportRepository.groupLedgerByAccountAndType(dayStart, dayEnd)
     const ledgerMap = new Map<
       string,
       Partial<Record<LedgerEntryType, Decimal>>
@@ -44,18 +35,13 @@ export class StrategyPnlReportService {
       ledgerMap.set(group.userStrategyAccountId, perAccount)
     }
 
-    const prevReports = await this.prisma.strategyPnlDaily.findMany({
-      where: { date: prevDay },
-    })
+    const prevReports = await this.reportRepository.findDailyStatsByDate(prevDay)
     const prevMap = new Map(prevReports.map(report => [report.userStrategyAccountId, report]))
 
-    const totalAccounts = await this.prisma.userStrategyAccount.count()
+    const totalAccounts = await this.reportRepository.countAccounts()
     let processed = 0
     for (let skip = 0; skip < totalAccounts; skip += this.batchSize) {
-      const accounts = await this.prisma.userStrategyAccount.findMany({
-        skip,
-        take: this.batchSize,
-      })
+      const accounts = await this.reportRepository.findAccountsBatch(skip, this.batchSize)
       for (const account of accounts) {
         const ledger = ledgerMap.get(account.id) ?? {}
         const realizedPnl = ledger[LedgerEntryType.REALIZED_PNL] ?? new Decimal(0)
@@ -70,33 +56,16 @@ export class StrategyPnlReportService {
           ? equityStart.sub(equityEnd)
           : new Decimal(0)
 
-        await this.prisma.strategyPnlDaily.upsert({
-          where: {
-            userStrategyAccountId_date: {
-              userStrategyAccountId: account.id,
-              date: dayStart,
-            },
-          },
-          create: {
-            userStrategyAccountId: account.id,
-            date: dayStart,
-            equityStart,
-            equityEnd,
-            realizedPnl,
-            unrealizedPnl: unrealized,
-            deposits,
-            withdrawals,
-            maxDrawdown,
-          },
-          update: {
-            equityStart,
-            equityEnd,
-            realizedPnl,
-            unrealizedPnl: unrealized,
-            deposits,
-            withdrawals,
-            maxDrawdown,
-          },
+        await this.reportRepository.upsertDailyStat({
+          userStrategyAccountId: account.id,
+          date: dayStart,
+          equityStart,
+          equityEnd,
+          realizedPnl,
+          unrealizedPnl: unrealized,
+          deposits,
+          withdrawals,
+          maxDrawdown,
         })
         processed += 1
       }

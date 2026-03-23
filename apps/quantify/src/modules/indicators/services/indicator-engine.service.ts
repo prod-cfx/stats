@@ -10,8 +10,9 @@ import {
 
   reverseMapTimeframe
 } from '@/common/utils/prisma-enum-mappers'
-import { PrismaService } from '@/prisma/prisma.service'
+ 
 import { IndicatorValueRepository } from '../repositories/indicator-value.repository'
+ 
 import { IndicatorConfigService } from './indicator-config.service'
 
 interface NewBarContext {
@@ -29,8 +30,6 @@ export class IndicatorEngineService {
     private readonly configService: IndicatorConfigService,
     @Inject(IndicatorValueRepository)
     private readonly valueRepository: IndicatorValueRepository,
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -79,15 +78,7 @@ export class IndicatorEngineService {
   }
 
   private async loadRecentBars(symbolId: string, timeframe: PrismaMarketTimeframe, window: number) {
-    const client = this.prisma.getClient()
-    const bars = await client.marketBar.findMany({
-      where: {
-        symbolId,
-        timeframe,
-      },
-      orderBy: { time: 'desc' },
-      take: window + 1,
-    })
+    const bars = await this.valueRepository.findRecentBars(symbolId, timeframe, window + 1)
 
     return bars
       .map(bar => ({

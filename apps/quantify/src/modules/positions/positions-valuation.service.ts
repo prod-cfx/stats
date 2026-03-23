@@ -1,8 +1,8 @@
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { PositionSide, PositionStatus, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PositionsRepository } from './repositories/positions.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -14,7 +14,7 @@ const Decimal = Prisma.Decimal
 export class PositionsValuationService {
   private readonly logger = new Logger(PositionsValuationService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly positionsRepository: PositionsRepository) {}
 
   async applyQuotes({ quotes }: QuotesUpdateDto) {
     if (!quotes.length) {
@@ -30,7 +30,7 @@ export class PositionsValuationService {
       return { updatedPositions: 0, updatedAccounts: 0 }
     }
 
-    return this.prisma.runInTransaction(async prisma => {
+    return this.positionsRepository.runInTransaction(async prisma => {
       const symbols = Array.from(symbolMap.keys())
       const positions = await prisma.position.findMany({
         where: {

@@ -2,11 +2,11 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 
 import { Prisma } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsDto } from '../dto/strategy-instance-stats.dto'
+import { StrategyInstancesRepository } from '../repositories/strategy-instances.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -45,7 +45,7 @@ interface AccountStats {
 export class StrategyInstanceStatsService {
   private readonly logger = new Logger(StrategyInstanceStatsService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly instancesRepo: StrategyInstancesRepository) {}
 
   /**
    * 计算策略实例的统计数据
@@ -73,17 +73,8 @@ export class StrategyInstanceStatsService {
     }
 
     try {
-      const client = this.prisma.getClient()
-
       // 获取策略实例信息
-      const instance = await client.strategyInstance.findUnique({
-        where: { id: strategyInstanceId },
-        include: {
-          strategyTemplate: {
-            select: { id: true }
-          }
-        }
-      })
+      const instance = await this.instancesRepo.findByIdWithTemplate(strategyInstanceId)
 
       if (!instance) {
         this.logger.debug(`Strategy instance not found: ${strategyInstanceId}`)
@@ -91,15 +82,7 @@ export class StrategyInstanceStatsService {
       }
 
       // 通过订阅关系获取关联的账户（更精确的关联）
-      const subscriptions = await client.userStrategySubscription.findMany({
-        where: {
-          strategyInstanceId,
-          status: 'active'
-        },
-        select: {
-          userId: true
-        }
-      })
+      const subscriptions = await this.instancesRepo.findActiveSubscriptionsByInstanceId(strategyInstanceId)
 
       if (subscriptions.length === 0) {
         // 没有活跃订阅，返回空统计
@@ -110,20 +93,7 @@ export class StrategyInstanceStatsService {
       const userIds = subscriptions.map(s => s.userId)
 
       // 查询订阅用户的策略账户
-      const accounts = await client.userStrategyAccount.findMany({
-        where: {
-          userId: { in: userIds },
-          strategyId: instance.strategyTemplateId
-        },
-        select: {
-          id: true,
-          initialBalance: true,
-          balance: true,
-          equity: true,
-          totalRealizedPnl: true,
-          totalUnrealizedPnl: true
-        }
-      })
+      const accounts = await this.instancesRepo.findAccountsByUserIdsAndTemplate(userIds, instance.strategyTemplateId)
 
       if (accounts.length === 0) {
         return this.createEmptyStats()
@@ -215,17 +185,8 @@ export class StrategyInstanceStatsService {
     }
 
     try {
-      const client = this.prisma.getClient()
-
       // 1. 批量查询所有策略实例
-      const instances = await client.strategyInstance.findMany({
-        where: { id: { in: strategyInstanceIds } },
-        include: {
-          strategyTemplate: {
-            select: { id: true }
-          }
-        }
-      })
+      const instances = await this.instancesRepo.findManyWithTemplate(strategyInstanceIds)
 
       if (instances.length === 0) {
         this.logger.debug('No instances found for provided IDs')
@@ -236,16 +197,7 @@ export class StrategyInstanceStatsService {
       const templateIds = [...new Set(instances.map(i => i.strategyTemplateId))]
 
       // 2. 批量查询活跃订阅
-      const subscriptions = await client.userStrategySubscription.findMany({
-        where: {
-          strategyInstanceId: { in: strategyInstanceIds },
-          status: 'active'
-        },
-        select: {
-          strategyInstanceId: true,
-          userId: true
-        }
-      })
+      const subscriptions = await this.instancesRepo.findActiveSubscriptionsByInstanceIds(strategyInstanceIds)
 
       // 按实例分组订阅
       const subscriptionsByInstance = this.groupBy(subscriptions, 'strategyInstanceId')
@@ -261,22 +213,7 @@ export class StrategyInstanceStatsService {
       }
 
       // 3. 批量查询所有相关账户
-      const accounts = await client.userStrategyAccount.findMany({
-        where: {
-          userId: { in: allUserIds },
-          strategyId: { in: templateIds }
-        },
-        select: {
-          id: true,
-          userId: true,
-          strategyId: true,
-          initialBalance: true,
-          balance: true,
-          equity: true,
-          totalRealizedPnl: true,
-          totalUnrealizedPnl: true
-        }
-      })
+      const accounts = await this.instancesRepo.findAccountsByUserIdsAndTemplates(allUserIds, templateIds)
 
       const allAccountIds = accounts.map(a => a.id)
 
@@ -288,23 +225,8 @@ export class StrategyInstanceStatsService {
 
       // 4. 批量查询持仓和今日统计
       const [positions, closedPositionsForWinRate, todayMetrics] = await Promise.all([
-        client.position.findMany({
-          where: { userStrategyAccountId: { in: allAccountIds } },
-          select: {
-            userStrategyAccountId: true,
-            status: true
-          }
-        }),
-        client.position.findMany({
-          where: {
-            userStrategyAccountId: { in: allAccountIds },
-            status: 'CLOSED'
-          },
-          select: {
-            userStrategyAccountId: true,
-            realizedPnl: true
-          }
-        }),
+        this.instancesRepo.findPositionsByAccountIds(allAccountIds),
+        this.instancesRepo.findClosedPositionsWithPnlByAccountIds(allAccountIds),
         this.getTodayMetricsBatch(allAccountIds, timezone)
       ])
 
@@ -419,21 +341,9 @@ export class StrategyInstanceStatsService {
    * 获取持仓统计
    */
   private async getPositionStats(accountIds: string[]): Promise<PositionStats> {
-    const client = this.prisma.getClient()
-
     const [openPositions, closedPositions] = await Promise.all([
-      client.position.count({
-        where: {
-          userStrategyAccountId: { in: accountIds },
-          status: 'OPEN'
-        }
-      }),
-      client.position.count({
-        where: {
-          userStrategyAccountId: { in: accountIds },
-          status: 'CLOSED'
-        }
-      })
+      this.instancesRepo.countPositionsByAccountIds(accountIds, 'OPEN'),
+      this.instancesRepo.countPositionsByAccountIds(accountIds, 'CLOSED'),
     ])
 
     return {
@@ -451,18 +361,7 @@ export class StrategyInstanceStatsService {
    * @returns TradeStats 包含平仓位数、盈利数、亏损数
    */
   private async getTradeStats(accountIds: string[]): Promise<TradeStats> {
-    const client = this.prisma.getClient()
-
-    // 获取所有已平仓位来计算胜率
-    const closedPositions = await client.position.findMany({
-      where: {
-        userStrategyAccountId: { in: accountIds },
-        status: 'CLOSED'
-      },
-      select: {
-        realizedPnl: true
-      }
-    })
+    const closedPositions = await this.instancesRepo.findClosedPositionsByAccountIds(accountIds)
 
     let winCount = 0
     let lossCount = 0
@@ -475,7 +374,6 @@ export class StrategyInstanceStatsService {
       }
     }
 
-    // 总数使用已平仓位数量，保持量纲一致
     const totalCount = closedPositions.length
 
     return {
@@ -495,27 +393,12 @@ export class StrategyInstanceStatsService {
     accountIds: string[],
     timezone: string = 'UTC'
   ): Promise<{ todayPnl: Decimal }> {
-    const client = this.prisma.getClient()
-
-    // 计算今日开始时间（正确处理时区）
     const todayStart = this.getTodayStartInTimezone(timezone)
 
-    const todayMetrics = await client.strategyPnlDaily.findMany({
-      where: {
-        userStrategyAccountId: { in: accountIds },
-        date: {
-          gte: todayStart
-        }
-      },
-      select: {
-        realizedPnl: true,
-        unrealizedPnl: true
-      }
-    })
+    const todayMetrics = await this.instancesRepo.findTodayPnlMetrics(accountIds, todayStart)
 
     let todayPnl = new Decimal(0)
     for (const metric of todayMetrics) {
-      // 今日盈亏 = 已实现盈亏 + 未实现盈亏
       todayPnl = todayPnl.plus(metric.realizedPnl).plus(metric.unrealizedPnl)
     }
 
@@ -529,29 +412,13 @@ export class StrategyInstanceStatsService {
     accountIds: string[],
     timezone: string = 'UTC'
   ): Promise<Map<string, Decimal>> {
-    const client = this.prisma.getClient()
-
-    // 计算今日开始时间（正确处理时区）
     const todayStart = this.getTodayStartInTimezone(timezone)
 
-    const todayMetrics = await client.strategyPnlDaily.findMany({
-      where: {
-        userStrategyAccountId: { in: accountIds },
-        date: {
-          gte: todayStart
-        }
-      },
-      select: {
-        userStrategyAccountId: true,
-        realizedPnl: true,
-        unrealizedPnl: true
-      }
-    })
+    const todayMetrics = await this.instancesRepo.findTodayPnlMetricsBatch(accountIds, todayStart)
 
     const metricsMap = new Map<string, Decimal>()
     for (const metric of todayMetrics) {
       const current = metricsMap.get(metric.userStrategyAccountId) || new Decimal(0)
-      // 今日盈亏 = 已实现盈亏 + 未实现盈亏
       const dailyPnl = metric.realizedPnl.plus(metric.unrealizedPnl)
       metricsMap.set(
         metric.userStrategyAccountId,

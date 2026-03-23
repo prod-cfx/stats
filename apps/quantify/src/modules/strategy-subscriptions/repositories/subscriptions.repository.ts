@@ -189,4 +189,33 @@ export class SubscriptionsRepository {
       data: payload,
     })
   }
+
+  async findStrategyInstanceForSubscribe(strategyInstanceId: string) {
+    return this.client.strategyInstance.findUnique({
+      where: { id: strategyInstanceId },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        status: true,
+        mode: true,
+        strategyTemplate: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            requiredFields: true,
+            paramsSchema: true,
+          },
+        },
+      },
+    })
+  }
+
+  async findExchangeAccountOwnership(exchangeAccountId: string, userId: string) {
+    return this.client.exchangeAccount.findFirst({
+      where: { id: exchangeAccountId, userId },
+      select: { id: true },
+    })
+  }
 }

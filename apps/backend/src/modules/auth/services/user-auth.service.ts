@@ -29,7 +29,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { MailService } from '@/common/services/mail.service'
 import { CacheService } from '@/common/services/cache.service'
-import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { UserAuthRepository } from '../repositories/user-auth.repository'
 import {
   EmailAlreadyTakenException,
   InvalidCredentialsException,
@@ -77,7 +78,7 @@ export class UserAuthService {
   private readonly tokenExpiresInSeconds: number
 
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly userAuthRepository: UserAuthRepository,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(MailService) private readonly mailService: MailService,
@@ -91,14 +92,13 @@ export class UserAuthService {
 
   async register(dto: RegisterRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
-    const existingUser = await prismaClient.user.findUnique({ where: { email } })
+    const existingUser = await this.userAuthRepository.findUserByEmail(email)
     if (existingUser) {
       throw new EmailAlreadyTakenException({ email })
     }
 
     try {
-      return await this.prisma.runInTransaction(async tx => {
+      return await this.userAuthRepository.runInTransaction(async tx => {
         const passwordHash = await hash(dto.password, PASSWORD_SALT_ROUNDS)
         const now = new Date()
         const user = await tx.user.create({
@@ -134,8 +134,7 @@ export class UserAuthService {
 
   async login(dto: LoginRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
-    const user = await prismaClient.user.findUnique({ where: { email } })
+    const user = await this.userAuthRepository.findUserByEmail(email)
     if (!user) {
       throw new InvalidCredentialsException()
     }
@@ -155,20 +154,17 @@ export class UserAuthService {
 
   async requestPasswordReset(dto: PasswordResetRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
-    const user = await prismaClient.user.findUnique({ where: { email } })
+    const user = await this.userAuthRepository.findUserByEmail(email)
     if (!user) {
       // 防止邮箱枚举攻击：静默返回，不记录任何日志
       return
     }
     const code = this.generateVerificationCode()
-    await prismaClient.verificationCode.create({
-      data: {
-        email,
-        code,
-        purpose: VerificationCodePurpose.PASSWORD_RESET,
-        expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-      },
+    await this.userAuthRepository.createVerificationCode({
+      email,
+      code,
+      purpose: VerificationCodePurpose.PASSWORD_RESET,
+      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
     // 发送验证码邮件
@@ -178,7 +174,7 @@ export class UserAuthService {
 
   async verifyPasswordReset(dto: VerifyPasswordResetRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    await this.prisma.runInTransaction(async tx => {
+    await this.userAuthRepository.runInTransaction(async tx => {
       await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.PASSWORD_RESET)
       const user = await tx.user.findUnique({ where: { email } })
       if (!user) {
@@ -197,7 +193,7 @@ export class UserAuthService {
 
   async verifyEmail(dto: VerifyEmailRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    await this.prisma.runInTransaction(async tx => {
+    await this.userAuthRepository.runInTransaction(async tx => {
       await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
       await tx.user.updateMany({
         where: { email },
@@ -211,11 +207,10 @@ export class UserAuthService {
 
   async sendVerificationCode(dto: SendVerificationCodeRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
 
     // 针对注册场景：检查邮箱是否已注册
     if (dto.purpose === VerificationCodePurpose.EMAIL_VERIFICATION) {
-      const existingUser = await prismaClient.user.findUnique({ where: { email } })
+      const existingUser = await this.userAuthRepository.findUserByEmail(email)
       if (existingUser) {
         throw new EmailAlreadyTakenException({ email })
       }
@@ -223,7 +218,7 @@ export class UserAuthService {
 
     // 针对密码重置场景：检查用户是否存在
     if (dto.purpose === VerificationCodePurpose.PASSWORD_RESET) {
-      const user = await prismaClient.user.findUnique({ where: { email } })
+      const user = await this.userAuthRepository.findUserByEmail(email)
       if (!user) {
         // 防止邮箱枚举攻击：静默返回，不记录任何日志
         return
@@ -231,13 +226,11 @@ export class UserAuthService {
     }
 
     const code = this.generateVerificationCode()
-    await prismaClient.verificationCode.create({
-      data: {
-        email,
-        code,
-        purpose: dto.purpose,
-        expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-      },
+    await this.userAuthRepository.createVerificationCode({
+      email,
+      code,
+      purpose: dto.purpose,
+      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
     // 发送验证码邮件
@@ -248,16 +241,13 @@ export class UserAuthService {
 
   async sendEmailLoginCode(dto: SendEmailLoginCodeRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
     const code = this.generateVerificationCode()
 
-    await prismaClient.verificationCode.create({
-      data: {
-        email,
-        code,
-        purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
-        expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-      },
+    await this.userAuthRepository.createVerificationCode({
+      email,
+      code,
+      purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
+      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
     await this.mailService.sendVerificationCode(email, code, 'registration')
@@ -358,7 +348,7 @@ export class UserAuthService {
     const telegramId = payload.telegramId!
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       const credential = await tx.userCredential.findFirst({
         where: { value: credentialValue },
         include: { user: true },
@@ -396,7 +386,7 @@ export class UserAuthService {
     const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'bind')
     const credentialValue = this.buildTelegramCredentialValue(payload.telegramId!)
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       const existing = await tx.userCredential.findFirst({
         where: {
           value: credentialValue,
@@ -492,7 +482,7 @@ export class UserAuthService {
   async verifyEmailLoginCode(dto: VerifyEmailLoginCodeRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
 
       let user = await tx.user.findUnique({ where: { email } })
@@ -520,7 +510,7 @@ export class UserAuthService {
     this.verifyTelegramLoginPayload(dto)
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       const credential = await tx.userCredential.findFirst({
         where: {
           value: credentialValue,
@@ -561,7 +551,7 @@ export class UserAuthService {
   async bindEmail(userId: string, dto: BindEmailRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
 
       const existing = await tx.user.findUnique({ where: { email } })
@@ -615,7 +605,7 @@ export class UserAuthService {
 
     const credentialValue = this.buildTelegramCredentialValue(dto.telegramId.trim())
 
-    return this.prisma.runInTransaction(async tx => {
+    return this.userAuthRepository.runInTransaction(async tx => {
       const existing = await tx.userCredential.findFirst({
         where: {
           value: credentialValue,
@@ -647,20 +637,17 @@ export class UserAuthService {
 
   async resendVerification(dto: ResendVerificationRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    const prismaClient = this.prisma.getClient()
-    const user = await prismaClient.user.findUnique({ where: { email } })
+    const user = await this.userAuthRepository.findUserByEmail(email)
     if (!user || user.emailVerified) {
       // 静默返回，不记录任何日志（避免泄露用户状态）
       return
     }
     const code = this.generateVerificationCode()
-    await prismaClient.verificationCode.create({
-      data: {
-        email,
-        code,
-        purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
-        expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
-      },
+    await this.userAuthRepository.createVerificationCode({
+      email,
+      code,
+      purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
+      expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
     // 发送验证码邮件
     await this.mailService.sendVerificationCode(email, code, 'registration')
@@ -689,14 +676,7 @@ export class UserAuthService {
   }
 
   private async getUserRoles(userId: string): Promise<string[]> {
-    const prismaClient = this.prisma.getClient()
-    const assignments = await prismaClient.roleAssignment.findMany({
-      where: {
-        principalId: userId,
-        principalType: PrincipalType.USER,
-      },
-      include: { role: { select: { code: true } } },
-    })
+    const assignments = await this.userAuthRepository.findRoleAssignments(userId)
     return assignments.map(item => item.role.code)
   }
 

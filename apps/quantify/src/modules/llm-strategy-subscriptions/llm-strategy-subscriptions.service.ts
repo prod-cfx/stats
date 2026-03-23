@@ -7,7 +7,6 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 
 import { AccountsService } from '@/modules/accounts/accounts.service'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions/exchange-account-not-found.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 import { CreateLlmSubscriptionDto } from './dto/create-llm-subscription.dto'
@@ -55,20 +54,12 @@ export class LlmStrategySubscriptionsService {
   private readonly logger = new Logger(LlmStrategySubscriptionsService.name)
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly repo: LlmSubscriptionsRepository,
     private readonly accountsService: AccountsService,
   ) {}
 
   async subscribe(userId: string, dto: CreateLlmSubscriptionDto): Promise<LlmSubscriptionResponseDto> {
-    const client = this.prisma.getClient()
-
-    const instance = await client.llmStrategyInstance.findUnique({
-      where: { id: dto.llmStrategyInstanceId },
-      include: {
-        strategy: { select: { id: true, name: true, description: true, status: true } },
-      },
-    })
+    const instance = await this.repo.findLlmStrategyInstance(dto.llmStrategyInstanceId)
 
     if (!instance) {
       throw new LlmStrategyNotAvailableException({ llmStrategyInstanceId: dto.llmStrategyInstanceId, status: 'not_found' })
@@ -343,14 +334,7 @@ export class LlmStrategySubscriptionsService {
   }
 
   private async ensureExchangeAccountOwnership(userId: string, exchangeAccountId: string) {
-    const account = await this.prisma.getClient().exchangeAccount.findFirst({
-      where: {
-        id: exchangeAccountId,
-        userId,
-      },
-      select: { id: true },
-    })
-
+    const account = await this.repo.findExchangeAccountByOwner(exchangeAccountId, userId)
     if (!account) {
       throw new ExchangeAccountNotFoundException({ accountId: exchangeAccountId })
     }
@@ -421,19 +405,10 @@ export class LlmStrategySubscriptionsService {
     strategyName: string | null,
     amount?: number,
   ): Promise<void> {
-    const client = this.prisma.getClient()
     const fundingAmount = amount && amount > 0 ? String(amount) : '0'
 
     // 检查是否已存在该用户 + LLM 策略的虚拟账户
-    const existing = await client.userStrategyAccount.findUnique({
-      where: {
-        userId_strategyId: {
-          userId,
-          strategyId: llmStrategyId,
-        },
-      },
-      select: { id: true },
-    })
+    const existing = await this.repo.findUserStrategyAccount(userId, llmStrategyId)
 
     if (existing) {
       this.logger.debug(`用户 ${userId} 已有 LLM 策略 ${llmStrategyId} 的虚拟账户 ${existing.id}`)
@@ -468,10 +443,7 @@ export class LlmStrategySubscriptionsService {
         this.logger.debug(`用户 ${userId} 的 LLM 策略 ${llmStrategyId} 虚拟账户已被并发创建`)
         // 并发创建后仍需入金
         if (amount && amount > 0) {
-          const account = await client.userStrategyAccount.findUnique({
-            where: { userId_strategyId: { userId, strategyId: llmStrategyId } },
-            select: { id: true },
-          })
+          const account = await this.repo.findUserStrategyAccount(userId, llmStrategyId)
           if (account) {
             // 入金失败必须抛出异常，与 existing 分支保持一致
             // 否则会出现"订阅 active + 虚拟账户余额为 0"的脏状态

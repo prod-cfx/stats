@@ -3,6 +3,7 @@ import type { TestingModule } from '@nestjs/testing'
 import type { CreateOrderInput, ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { ExchangeAccountConfig, ExchangeAccountStore } from '@/modules/trading/factory/account-store'
 import { ConfigModule } from '@nestjs/config'
+import { EventEmitterModule } from '@nestjs/event-emitter'
 import { Test } from '@nestjs/testing'
 import { EnvModule } from '@/common/modules/env.module'
 import { TradingModule } from '@/modules/trading/trading.module'
@@ -187,7 +188,7 @@ describe('TradingService (E2E, trading module only)', () => {
     }) as typeof fetch
 
     moduleFixture = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true }), EnvModule, TradingModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), EventEmitterModule.forRoot(), EnvModule, TradingModule],
     })
       .overrideProvider(PrismaService)
       .useValue({})

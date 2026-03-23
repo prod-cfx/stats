@@ -8,7 +8,7 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { OkxClient } from '@/modules/trading/exchanges/okx-client'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
+import { FixedSignalContextRepository } from '../repositories/fixed-signal-context.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalExecutorService } from './signal-executor.service'
 
@@ -47,7 +47,7 @@ const DEFAULT_AI_MODEL = 'gpt-4.1-mini'
 @Injectable()
 export class FixedOkxSimulatedSignalService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly contextRepository: FixedSignalContextRepository,
     private readonly env: EnvService,
     private readonly signalExecutor: SignalExecutorService,
   ) {}
@@ -93,15 +93,11 @@ export class FixedOkxSimulatedSignalService {
       = this.env.getString('QUANTIFY_FIXED_OKX_USER_EMAIL', DEFAULT_FIXED_USER_EMAIL)
         ?? DEFAULT_FIXED_USER_EMAIL
 
-    const strategy = await this.prisma.llmStrategy.findUnique({
-      where: { name: strategyName },
-    })
-    const user = await this.prisma.user.findUnique({
-      where: { email: userEmail },
-    })
+    const strategy = await this.contextRepository.findLlmStrategyByName(strategyName)
+    const user = await this.contextRepository.findUserByEmail(userEmail)
     const [spotSymbol, perpSymbol] = await Promise.all([
-      this.prisma.symbol.findFirst({ where: { code: spotSymbolCode } }),
-      this.prisma.symbol.findFirst({ where: { code: perpSymbolCode } }),
+      this.contextRepository.findSymbolByCode(spotSymbolCode),
+      this.contextRepository.findSymbolByCode(perpSymbolCode),
     ])
 
     if (!strategy || !user || !spotSymbol || !perpSymbol) {
@@ -113,24 +109,9 @@ export class FixedOkxSimulatedSignalService {
     }
 
     const [strategyAccount, spotInstance, perpInstance] = await Promise.all([
-      this.prisma.userStrategyAccount.findFirst({
-        where: {
-          userId: user.id,
-          strategyId: strategy.id,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-okx-${spotStrategySlug}-spot`,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-okx-${perpStrategySlug}-perp`,
-        },
-      }),
+      this.contextRepository.findUserStrategyAccount(user.id, strategy.id),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-okx-${spotStrategySlug}-spot`),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-okx-${perpStrategySlug}-perp`),
     ])
 
     if (!strategyAccount || !spotInstance || !perpInstance) {
@@ -159,23 +140,21 @@ export class FixedOkxSimulatedSignalService {
     const executionSymbol = input.marketType === 'spot' ? context.spotSymbol : context.perpSymbol
     const entryPrice = input.entryPrice ?? await this.fetchTickerPrice(executionSymbol, input.marketType)
 
-    return this.prisma.tradingSignal.create({
-      data: {
-        llmStrategyId: context.strategyId,
-        llmStrategyInstanceId: input.marketType === 'spot' ? context.spotInstanceId : context.perpInstanceId,
-        symbolId: input.marketType === 'spot' ? context.spotSymbolId : context.perpSymbolId,
-        sourceType: 'AI_GENERATED',
-        signalType: input.signalType,
-        direction: input.direction,
-        status: 'PENDING',
-        confidence: input.confidence ?? DEFAULT_CONFIDENCE,
-        entryPrice,
-        positionSizeQuote: input.positionSizeQuote,
-        aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
-        aiReasoning: input.reason,
-        marketContext: input.marketContext,
-        metadata: input.metadata,
-      },
+    return this.contextRepository.createTradingSignal({
+      llmStrategyId: context.strategyId,
+      llmStrategyInstanceId: input.marketType === 'spot' ? context.spotInstanceId : context.perpInstanceId,
+      symbolId: input.marketType === 'spot' ? context.spotSymbolId : context.perpSymbolId,
+      sourceType: 'AI_GENERATED',
+      signalType: input.signalType,
+      direction: input.direction,
+      status: 'PENDING',
+      confidence: input.confidence ?? DEFAULT_CONFIDENCE,
+      entryPrice,
+      positionSizeQuote: input.positionSizeQuote,
+      aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
+      aiReasoning: input.reason,
+      marketContext: input.marketContext,
+      metadata: input.metadata,
     })
   }
 
