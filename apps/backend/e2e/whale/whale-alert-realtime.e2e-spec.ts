@@ -186,7 +186,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     expect(result.items[0].position_value_usd).toBeGreaterThanOrEqual(4_000_000)
   })
 
-  it('应返回分页结构包含 total/page/limit/items', async () => {
+  it('should return paginated structure with total/page/limit/items', async () => {
     const client = prisma.getClient()
     await client.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
@@ -218,7 +218,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     expect(result.items.length).toBe(2)
   })
 
-  it('应支持 page 参数翻页', async () => {
+  it('should support page parameter for pagination', async () => {
     const page2 = await whaleAlertService.getRealtimeAlerts({
       symbol: 'PAG',
       limit: 2,
@@ -240,7 +240,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     expect(page3.items.length).toBe(1) // Only 1 remaining
   })
 
-  it('超出范围的 page 应返回空 items', async () => {
+  it('should return empty items when page is out of range', async () => {
     // 独立 seed，不依赖前序测试数据
     const client = prisma.getClient()
     await client.hyperliquidWhaleAlert.deleteMany({})

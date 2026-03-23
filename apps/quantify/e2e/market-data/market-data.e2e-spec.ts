@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import { AppModule } from '@/modules/app.module'
 import { MARKET_DATA_PROVIDER } from '@/modules/market-data/constants/market-data.constants'
 import { PrismaService } from '@/prisma/prisma.service'
+import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
 
 describe('market-data (e2e)', () => {
@@ -20,6 +21,45 @@ describe('market-data (e2e)', () => {
     fetchHistoricalBars: jest.fn().mockResolvedValue([]),
     subscribe: jest.fn().mockResolvedValue(async () => {}),
     disconnect: jest.fn().mockResolvedValue(undefined),
+  }
+
+  async function upsertTestSymbol(
+    prisma: PrismaService,
+    params: { code: string; instrumentType?: string },
+  ): Promise<string> {
+    const result = await prisma.symbol.upsert({
+      where: { code: params.code },
+      create: {
+        code: params.code,
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        exchange: 'BINANCE',
+        type: 'CRYPTO',
+        instrumentType: params.instrumentType ?? 'SPOT',
+        status: 'ACTIVE',
+        precisionPrice: 2,
+        precisionQuantity: 6,
+      },
+      update: { status: 'ACTIVE' },
+      select: { id: true },
+    })
+    return result.id
+  }
+
+  function createTestMarketQuote(
+    prisma: PrismaService,
+    symbolId: string,
+    data: { lastPrice: string; eventTime: Date },
+  ) {
+    return prisma.marketQuote.create({ data: { symbolId, source: 'TEST', ...data } })
+  }
+
+  function createTestMarketBars(
+    prisma: PrismaService,
+    symbolId: string,
+    bars: Array<{ timeframe: string; time: Date; open: string; high: string; low: string; close: string }>,
+  ) {
+    return prisma.marketBar.createMany({ data: bars.map(b => ({ symbolId, source: 'TEST', ...b })) })
   }
 
   beforeEach(async () => {
@@ -42,45 +82,8 @@ describe('market-data (e2e)', () => {
 
     prisma = moduleFixture.get(PrismaService)
 
-    const symbol = await prisma.symbol.upsert({
-      where: { code: 'BTCUSDT' },
-      create: {
-        code: 'BTCUSDT',
-        baseAsset: 'BTC',
-        quoteAsset: 'USDT',
-        exchange: 'BINANCE',
-        type: 'CRYPTO',
-        instrumentType: 'SPOT',
-        status: 'ACTIVE',
-        precisionPrice: 2,
-        precisionQuantity: 6,
-      },
-      update: {
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    })
-    symbolId = symbol.id
-
-    const perpSymbol = await prisma.symbol.upsert({
-      where: { code: 'BTCUSDT:PERP' },
-      create: {
-        code: 'BTCUSDT:PERP',
-        baseAsset: 'BTC',
-        quoteAsset: 'USDT',
-        exchange: 'BINANCE',
-        type: 'CRYPTO',
-        instrumentType: 'PERPETUAL',
-        status: 'ACTIVE',
-        precisionPrice: 2,
-        precisionQuantity: 6,
-      },
-      update: {
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    })
-    perpSymbolId = perpSymbol.id
+    symbolId = await upsertTestSymbol(prisma, { code: 'BTCUSDT:SPOT', instrumentType: 'SPOT' })
+    perpSymbolId = await upsertTestSymbol(prisma, { code: 'BTCUSDT:PERP', instrumentType: 'PERPETUAL' })
   })
 
   afterEach(async () => {
@@ -96,29 +99,25 @@ describe('market-data (e2e)', () => {
   })
 
   it('GET /api/v1/market/quote should return latest quote', async () => {
-    await prisma.marketQuote.create({
-      data: {
-        symbolId,
-        lastPrice: '65000.12',
-        eventTime: new Date('2026-03-17T10:00:00.000Z'),
-        source: 'TEST',
-      },
+    await createTestMarketQuote(prisma, symbolId, {
+      lastPrice: '65000.12',
+      eventTime: new Date('2026-03-17T10:00:00.000Z'),
     })
 
     await supertestRequest(app.getHttpServer())
-      .get('/api/v1/market/quote')
+      .get(buildApiUrl('market/quote'))
       .query({ symbol: 'BTCUSDT' })
       .expect(200)
       .expect((res) => {
         const payload = res.body.data ?? res.body
-        expect(payload.symbol).toBe('BTCUSDT')
+        expect(payload.symbol).toBe('BTCUSDT:SPOT')
         expect(payload.lastPrice).toBe('65000.12')
       })
   })
 
   it('GET /api/v1/market/quote should keep query symbol in error args when symbol is missing', async () => {
     await supertestRequest(app.getHttpServer())
-      .get('/api/v1/market/quote')
+      .get(buildApiUrl('market/quote'))
       .query({ symbol: 'NOTEXIST' })
       .expect(400)
       .expect((res) => {
@@ -128,33 +127,27 @@ describe('market-data (e2e)', () => {
   })
 
   it('GET /api/v1/market/bars should return bars in ascending time order', async () => {
-    await prisma.marketBar.createMany({
-      data: [
-        {
-          symbolId,
-          timeframe: 'h1',
-          time: new Date('2026-03-17T08:00:00.000Z'),
-          open: '64000',
-          high: '64500',
-          low: '63800',
-          close: '64300',
-          source: 'TEST',
-        },
-        {
-          symbolId,
-          timeframe: 'h1',
-          time: new Date('2026-03-17T09:00:00.000Z'),
-          open: '64300',
-          high: '64600',
-          low: '64200',
-          close: '64500',
-          source: 'TEST',
-        },
-      ],
-    })
+    await createTestMarketBars(prisma, symbolId, [
+      {
+        timeframe: 'h1',
+        time: new Date('2026-03-17T08:00:00.000Z'),
+        open: '64000',
+        high: '64500',
+        low: '63800',
+        close: '64300',
+      },
+      {
+        timeframe: 'h1',
+        time: new Date('2026-03-17T09:00:00.000Z'),
+        open: '64300',
+        high: '64600',
+        low: '64200',
+        close: '64500',
+      },
+    ])
 
     await supertestRequest(app.getHttpServer())
-      .get('/api/v1/market/bars')
+      .get(buildApiUrl('market/bars'))
       .query({ symbol: 'BTCUSDT', timeframe: '1h', limit: 10 })
       .expect(200)
       .expect((res) => {
@@ -167,7 +160,7 @@ describe('market-data (e2e)', () => {
 
   it('GET /api/v1/market/bars should reject invalid limit through validation pipe', async () => {
     await supertestRequest(app.getHttpServer())
-      .get('/api/v1/market/bars')
+      .get(buildApiUrl('market/bars'))
       .query({ symbol: 'BTCUSDT', timeframe: '1h', limit: 'abc' })
       .expect(400)
       .expect((res) => {
@@ -178,21 +171,19 @@ describe('market-data (e2e)', () => {
   })
 
   it('GET /api/v1/market/bars supports :PERP symbol', async () => {
-    await prisma.marketBar.create({
-      data: {
-        symbolId: perpSymbolId,
+    await createTestMarketBars(prisma, perpSymbolId, [
+      {
         timeframe: 'm1',
         time: new Date('2026-03-17T10:00:00.000Z'),
         open: '64000',
         high: '64500',
         low: '63800',
         close: '64300',
-        source: 'TEST',
       },
-    })
+    ])
 
     await supertestRequest(app.getHttpServer())
-      .get('/api/v1/market/bars')
+      .get(buildApiUrl('market/bars'))
       .query({ symbol: 'BTCUSDT:PERP', timeframe: '1m', limit: 10 })
       .expect(200)
       .expect((res) => {

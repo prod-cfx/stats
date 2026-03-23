@@ -24,6 +24,22 @@ describeIf('Hyperliquid trades WS + SSE (E2E)', () => {
   let tradesAdapter: HyperliquidDexPerpetualTradesWsAdapter
   const createdWhaleAddresses = new Set<string>()
 
+  function createWhaleAlertRecord(prisma: PrismaService, address: string) {
+    return prisma.hyperliquidWhaleAlert.create({
+      data: {
+        userAddress: address,
+        symbol: 'BTC',
+        positionSize: '1',
+        entryPrice: '50000',
+        liquidationPrice: '40000',
+        positionValueUsd: '50000',
+        positionAction: 1,
+        createTime: new Date(),
+        source: 'E2E',
+      },
+    })
+  }
+
   beforeAll(async () => {
     const ctx = await createTestingApp({
       envDefaults: { HYPERLIQUID_TRADES_WS_ENABLED: 'true' },
@@ -70,19 +86,7 @@ describeIf('Hyperliquid trades WS + SSE (E2E)', () => {
   it('should filter whale trades and emit stream event', async () => {
     const whaleAddress = '0xwhalee2e00000000000000000000000000000001'
 
-    await prisma.hyperliquidWhaleAlert.create({
-      data: {
-        userAddress: whaleAddress,
-        symbol: 'BTC',
-        positionSize: '1',
-        entryPrice: '50000',
-        liquidationPrice: '40000',
-        positionValueUsd: '50000',
-        positionAction: 1,
-        createTime: new Date(),
-        source: 'E2E',
-      },
-    })
+    await createWhaleAlertRecord(prisma, whaleAddress)
     createdWhaleAddresses.add(whaleAddress)
 
     await tradesAdapter.refreshWhaleList()
@@ -126,19 +130,7 @@ describeIf('Hyperliquid trades WS + SSE (E2E)', () => {
   it('should push SSE events for whale trades', async () => {
     const whaleAddress = '0xwhalee2e00000000000000000000000000000002'
 
-    await prisma.hyperliquidWhaleAlert.create({
-      data: {
-        userAddress: whaleAddress,
-        symbol: 'BTC',
-        positionSize: '1',
-        entryPrice: '50000',
-        liquidationPrice: '40000',
-        positionValueUsd: '50000',
-        positionAction: 1,
-        createTime: new Date(),
-        source: 'E2E',
-      },
-    })
+    await createWhaleAlertRecord(prisma, whaleAddress)
     createdWhaleAddresses.add(whaleAddress)
 
     await tradesAdapter.refreshWhaleList()
