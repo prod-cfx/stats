@@ -352,7 +352,7 @@ function cleanupOldRedisKeys(maxAgeHours = 24): void {
               ts.slice(0,4)+'-'+ts.slice(4,6)+'-'+ts.slice(6,8)+
               'T'+ts.slice(8,10)+':'+ts.slice(10,12)+':'+ts.slice(12,14)+'Z'
             )
-            if (isNaN(d.getTime())) return false
+            if (Number.isNaN(d.getTime())) return false
             return (Date.now() - d.getTime()) / 3600000 > maxAge
           })
           if (expiredKeys.length > 0) {
