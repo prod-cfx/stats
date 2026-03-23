@@ -163,8 +163,17 @@ export async function resolveStrategyOutput(
 export function strategyDecisionToSignalPayload(
   decision: StrategyDecisionV1,
   referencePrice: number,
+  context?: { currentQty?: number; equity?: number; markPrice?: number },
 ): Record<string, unknown> {
   const safePrice = referencePrice > 0 ? referencePrice : 1
+  const deltaContext = {
+    currentQty: context?.currentQty ?? 0,
+    equity: context?.equity ?? 0,
+    markPrice: context?.markPrice ?? safePrice,
+  }
+  const adjustDeltaQty = decision.action === 'ADJUST_POSITION'
+    ? strategyDecisionToDeltaQty(decision, deltaContext)
+    : 0
 
   const direction = (() => {
     switch (decision.action) {
@@ -172,7 +181,13 @@ export function strategyDecisionToSignalPayload(
       case 'OPEN_SHORT': return 'SELL'
       case 'CLOSE_LONG': return 'CLOSE_LONG'
       case 'CLOSE_SHORT': return 'CLOSE_SHORT'
-      case 'ADJUST_POSITION': return 'BUY'
+      case 'ADJUST_POSITION': {
+        if (adjustDeltaQty > 0) return 'BUY'
+        if (adjustDeltaQty < 0) return 'SELL'
+        if (deltaContext.currentQty > 0) return 'CLOSE_LONG'
+        if (deltaContext.currentQty < 0) return 'CLOSE_SHORT'
+        return 'BUY'
+      }
       case 'NOOP':
       default: return 'BUY'
     }
@@ -192,7 +207,10 @@ export function strategyDecisionToSignalPayload(
   if (decision.size) {
     if (decision.size.mode === 'QUOTE') payload.positionSizeQuote = Math.abs(decision.size.value)
     if (decision.size.mode === 'RATIO') payload.positionSizeRatio = Math.abs(decision.size.value)
-    if (decision.size.mode === 'QTY') payload.positionSizeQuote = Math.abs(decision.size.value) * safePrice
+    if (decision.size.mode === 'QTY') {
+      const qty = decision.action === 'ADJUST_POSITION' ? Math.abs(adjustDeltaQty) : Math.abs(decision.size.value)
+      payload.positionSizeQuote = qty * safePrice
+    }
   }
 
   return payload
