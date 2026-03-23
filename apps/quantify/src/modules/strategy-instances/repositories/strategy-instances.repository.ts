@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import type { Prisma, StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
+import type { Prisma, PositionStatus, StrategyInstanceMode, StrategyInstanceStatus, SubscriptionStatus } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'
@@ -203,5 +203,293 @@ export class StrategyInstancesRepository {
 
     const count = await client.strategyInstance.count({ where })
     return count > 0
+  }
+
+  async findTemplateById(id: string) {
+    const client = this.prisma.getClient()
+    return client.strategyTemplate.findUnique({
+      where: { id },
+      select: { id: true, name: true },
+    })
+  }
+
+  // ── Stats queries ────────────────────────────────────────────────────────────
+
+  async findByIdWithTemplate(id: string) {
+    const client = this.prisma.getClient()
+    return client.strategyInstance.findUnique({
+      where: { id },
+      include: {
+        strategyTemplate: {
+          select: { id: true },
+        },
+      },
+    })
+  }
+
+  async findManyWithTemplate(ids: string[]) {
+    const client = this.prisma.getClient()
+    return client.strategyInstance.findMany({
+      where: { id: { in: ids } },
+      include: {
+        strategyTemplate: {
+          select: { id: true },
+        },
+      },
+    })
+  }
+
+  async findActiveSubscriptionsByInstanceId(strategyInstanceId: string) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findMany({
+      where: { strategyInstanceId, status: 'active' },
+      select: { userId: true },
+    })
+  }
+
+  async findActiveSubscriptionsByInstanceIds(instanceIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findMany({
+      where: { strategyInstanceId: { in: instanceIds }, status: 'active' },
+      select: { strategyInstanceId: true, userId: true },
+    })
+  }
+
+  async findAccountsByUserIdsAndTemplates(userIds: string[], templateIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.userStrategyAccount.findMany({
+      where: {
+        userId: { in: userIds },
+        strategyId: { in: templateIds },
+      },
+      select: {
+        id: true,
+        userId: true,
+        strategyId: true,
+        initialBalance: true,
+        balance: true,
+        equity: true,
+        totalRealizedPnl: true,
+        totalUnrealizedPnl: true,
+      },
+    })
+  }
+
+  async findAccountsByUserIdsAndTemplate(userIds: string[], strategyTemplateId: string) {
+    const client = this.prisma.getClient()
+    return client.userStrategyAccount.findMany({
+      where: {
+        userId: { in: userIds },
+        strategyId: strategyTemplateId,
+      },
+      select: {
+        id: true,
+        initialBalance: true,
+        balance: true,
+        equity: true,
+        totalRealizedPnl: true,
+        totalUnrealizedPnl: true,
+      },
+    })
+  }
+
+  async countPositionsByAccountIds(accountIds: string[], status: PositionStatus) {
+    const client = this.prisma.getClient()
+    return client.position.count({
+      where: { userStrategyAccountId: { in: accountIds }, status },
+    })
+  }
+
+  async findClosedPositionsByAccountIds(accountIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.position.findMany({
+      where: { userStrategyAccountId: { in: accountIds }, status: 'CLOSED' },
+      select: { realizedPnl: true },
+    })
+  }
+
+  async findTodayPnlMetrics(accountIds: string[], todayStart: Date) {
+    const client = this.prisma.getClient()
+    return client.strategyPnlDaily.findMany({
+      where: {
+        userStrategyAccountId: { in: accountIds },
+        date: { gte: todayStart },
+      },
+      select: { realizedPnl: true, unrealizedPnl: true },
+    })
+  }
+
+  async findTodayPnlMetricsBatch(accountIds: string[], todayStart: Date) {
+    const client = this.prisma.getClient()
+    return client.strategyPnlDaily.findMany({
+      where: {
+        userStrategyAccountId: { in: accountIds },
+        date: { gte: todayStart },
+      },
+      select: { userStrategyAccountId: true, realizedPnl: true, unrealizedPnl: true },
+    })
+  }
+
+  async findPositionsByAccountIds(accountIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.position.findMany({
+      where: { userStrategyAccountId: { in: accountIds } },
+      select: { userStrategyAccountId: true, status: true },
+    })
+  }
+
+  async findClosedPositionsWithPnlByAccountIds(accountIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.position.findMany({
+      where: { userStrategyAccountId: { in: accountIds }, status: 'CLOSED' },
+      select: { userStrategyAccountId: true, realizedPnl: true },
+    })
+  }
+
+  // ── Subscription details queries ─────────────────────────────────────────────
+
+  async findInstanceWithTemplateFull(id: string) {
+    const client = this.prisma.getClient()
+    return client.strategyInstance.findUnique({
+      where: { id },
+      include: {
+        strategyTemplate: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            status: true,
+          },
+        },
+      },
+    })
+  }
+
+  async countSubscriptionsByInstance(strategyInstanceId: string) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.count({ where: { strategyInstanceId } })
+  }
+
+  async groupSubscriptionsByStatus(strategyInstanceId: string) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.groupBy({
+      by: ['status'],
+      where: { strategyInstanceId },
+      _count: true,
+    })
+  }
+
+  async findSubscriptionsWithUsers(strategyInstanceId: string, skip: number, take: number) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findMany({
+      where: { strategyInstanceId },
+      include: {
+        user: {
+          select: { id: true, nickname: true, email: true },
+        },
+        exchangeAccount: {
+          select: { id: true, exchangeId: true, name: true },
+        },
+      },
+      orderBy: { subscribedAt: 'desc' },
+      skip,
+      take,
+    })
+  }
+
+  async aggregateAccountBalance(strategyInstanceId: string, strategyTemplateId: string, activeStatuses: SubscriptionStatus[]) {
+    const client = this.prisma.getClient()
+    return client.userStrategyAccount.aggregate({
+      where: {
+        strategyId: strategyTemplateId,
+        user: {
+          strategySubscriptions: {
+            some: {
+              strategyInstanceId,
+              status: { in: activeStatuses },
+            },
+          },
+        },
+      },
+      _sum: { initialBalance: true },
+    })
+  }
+
+  async queryPositionAggregateRaw(strategyTemplateId: string, strategyInstanceId: string) {
+    const client = this.prisma.getClient()
+    return client.$queryRaw<Array<{ totalPositions: bigint; totalValue: any }>>`
+      SELECT
+        COALESCE(COUNT(*), 0) as "totalPositions",
+        COALESCE(SUM(p.quantity * p.avg_entry_price), 0) as "totalValue"
+      FROM positions p
+      INNER JOIN user_strategy_accounts usa ON p.user_strategy_account_id = usa.id
+      INNER JOIN user_strategy_subscriptions uss ON usa.user_id = uss.user_id
+      WHERE usa.strategy_id = ${strategyTemplateId}
+        AND uss.strategy_instance_id = ${strategyInstanceId}
+        AND uss.status = ANY(ARRAY['active', 'paused']::"SubscriptionStatus"[])
+        AND p.status = 'OPEN'
+    `
+  }
+
+  async findPageAccountsByUserIds(userIds: string[], strategyTemplateId: string) {
+    const client = this.prisma.getClient()
+    return client.userStrategyAccount.findMany({
+      where: {
+        userId: { in: userIds },
+        strategyId: strategyTemplateId,
+      },
+      select: { id: true, userId: true, initialBalance: true },
+    })
+  }
+
+  async findOpenPositionsByAccountIds(accountIds: string[]) {
+    const client = this.prisma.getClient()
+    return client.position.findMany({
+      where: { userStrategyAccountId: { in: accountIds }, status: 'OPEN' },
+      select: { userStrategyAccountId: true, quantity: true, avgEntryPrice: true },
+    })
+  }
+
+  async findInstanceWithStrategyTemplate(id: string) {
+    const client = this.prisma.getClient()
+    return client.strategyInstance.findUnique({
+      where: { id },
+      include: { strategyTemplate: true },
+    })
+  }
+
+  async findSymbolsByCodes(codes: string[]) {
+    const client = this.prisma.getClient()
+    return client.symbol.findMany({
+      where: { code: { in: codes } },
+    })
+  }
+
+  async findActiveUserSubscription(userId: string, strategyInstanceId: string, status: SubscriptionStatus) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findFirst({
+      where: { userId, strategyInstanceId, status },
+      select: { id: true },
+    })
+  }
+
+  async findActiveUserSubscriptionFull(userId: string, strategyInstanceId: string, status: SubscriptionStatus) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findMany({
+      where: {
+        userId,
+        strategyInstanceId: { in: [strategyInstanceId] },
+        status,
+      },
+      select: { strategyInstanceId: true },
+    })
+  }
+
+  async findUserSubscriptionsByInstanceIds(userId: string, instanceIds: string[], status: SubscriptionStatus) {
+    const client = this.prisma.getClient()
+    return client.userStrategySubscription.findMany({
+      where: { userId, strategyInstanceId: { in: instanceIds }, status },
+      select: { strategyInstanceId: true },
+    })
   }
 }

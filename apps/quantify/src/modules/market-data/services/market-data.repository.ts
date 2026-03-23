@@ -1,11 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { MarketBar, MarketQuote } from '@/prisma/prisma.types'
+import type { InstrumentType, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 PrismaService
 import { PrismaService } from '@/prisma/prisma.service'
+import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
 
 interface IndicatorSnapshotRecord {
@@ -17,9 +18,11 @@ interface IndicatorSnapshotRecord {
 export class MarketDataRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  private getClient() { return this.prisma.getClient() }
+
   async findSymbolOrThrow(symbol: string): Promise<{ id: string; code: string }> {
     const normalized = symbol.trim().toUpperCase()
-    const found = await this.prisma.symbol.findUnique({
+    const found = await this.getClient().symbol.findUnique({
       where: { code: normalized },
       select: { id: true, code: true },
     })
@@ -39,7 +42,7 @@ export class MarketDataRepository {
   async findRecentBarsBySymbolId(symbolId: string, timeframe: MarketTimeframe, limit: number): Promise<MarketBar[]> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
-    const bars = await this.prisma.marketBar.findMany({
+    const bars = await this.getClient().marketBar.findMany({
       where: {
         symbolId,
         timeframe: prismaTimeframe,
@@ -58,7 +61,7 @@ export class MarketDataRepository {
 
   async findLatestBarBySymbolId(symbolId: string, timeframe: MarketTimeframe): Promise<MarketBar | null> {
     const prismaTimeframe = mapTimeframe(timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
-    return this.prisma.marketBar.findFirst({
+    return this.getClient().marketBar.findFirst({
       where: {
         symbolId,
         timeframe: prismaTimeframe,
@@ -69,7 +72,7 @@ export class MarketDataRepository {
 
   async findLatestQuote(symbol: string): Promise<MarketQuote | null> {
     const target = await this.findSymbolOrThrow(symbol)
-    return this.prisma.marketQuote.findFirst({
+    return this.getClient().marketQuote.findFirst({
       where: { symbolId: target.id },
       orderBy: { eventTime: 'desc' },
     })
@@ -146,5 +149,107 @@ export class MarketDataRepository {
       code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
       args: { symbol, timeframe, limit },
     })
+  }
+
+  async listSymbols(where: Prisma.SymbolWhereInput, orderBy: Prisma.SymbolOrderByWithRelationInput, skip: number, take: number) {
+    const [items, total] = await Promise.all([
+      this.getClient().symbol.findMany({ where, orderBy, skip, take }),
+      this.getClient().symbol.count({ where }),
+    ])
+    return { items, total }
+  }
+
+  async createSymbol(data: Prisma.SymbolCreateInput): Promise<PrismaSymbol> {
+    return this.getClient().symbol.create({ data })
+  }
+
+  async findSymbolByCode(code: string): Promise<PrismaSymbol | null> {
+    return this.getClient().symbol.findUnique({ where: { code } })
+  }
+
+  async updateSymbol(code: string, data: Prisma.SymbolUpdateInput): Promise<PrismaSymbol> {
+    return this.getClient().symbol.update({ where: { code }, data })
+  }
+
+  async upsertSymbol(code: string, create: Prisma.SymbolCreateInput, update: Prisma.SymbolUpdateInput): Promise<void> {
+    await this.getClient().symbol.upsert({ where: { code }, create, update })
+  }
+
+  async findSymbolsByCodeIn(codes: string[]): Promise<Array<{ id: string; code: string }>> {
+    return this.getClient().symbol.findMany({
+      where: { code: { in: codes } },
+      select: { id: true, code: true },
+    })
+  }
+
+  async findBars(where: Prisma.MarketBarWhereInput, orderBy: Prisma.MarketBarOrderByWithRelationInput, take: number) {
+    return this.getClient().marketBar.findMany({ where, orderBy, take })
+  }
+
+  async upsertBar(
+    where: Prisma.MarketBarWhereUniqueInput,
+    create: Prisma.MarketBarCreateInput,
+    update: Prisma.MarketBarUpdateInput,
+  ): Promise<void> {
+    await this.getClient().marketBar.upsert({ where, create, update })
+  }
+
+  async findLatestQuoteBySymbolId(symbolId: string): Promise<MarketQuote | null> {
+    return this.getClient().marketQuote.findFirst({
+      where: { symbolId },
+      orderBy: { eventTime: 'desc' },
+    })
+  }
+
+  async createQuote(data: Prisma.MarketQuoteCreateInput): Promise<void> {
+    await this.getClient().marketQuote.create({ data })
+  }
+
+  /**
+   * 查询活跃普通策略订阅（用于动态 symbol 采集）
+   */
+  async findActiveStrategySubscriptionsForSymbols(): Promise<Array<{
+    strategyInstance?: {
+      strategyTemplate?: { legs?: unknown } | null
+    } | null
+  }>> {
+    try {
+      return await this.getClient().userStrategySubscription.findMany({
+        where: { status: 'active' },
+        select: {
+          strategyInstance: {
+            select: {
+              strategyTemplate: { select: { legs: true } },
+            },
+          },
+        },
+      })
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * 查询活跃 LLM 策略订阅（用于动态 symbol 采集）
+   */
+  async findActiveLlmSubscriptionsForSymbols(): Promise<Array<{
+    llmStrategyInstance?: {
+      strategy?: { allowedSymbols?: unknown } | null
+    } | null
+  }>> {
+    try {
+      return await this.getClient().userLlmStrategySubscription.findMany({
+        where: { status: 'active' },
+        select: {
+          llmStrategyInstance: {
+            select: {
+              strategy: { select: { allowedSymbols: true } },
+            },
+          },
+        },
+      })
+    } catch {
+      return []
+    }
   }
 }

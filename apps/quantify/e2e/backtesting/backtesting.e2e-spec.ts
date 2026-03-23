@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { BacktestingModule } from '@/modules/backtesting/backtesting.module'
 import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runner.service'
+import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
 
 describe('backtestingController (e2e)', () => {
@@ -97,7 +98,7 @@ describe('backtestingController (e2e)', () => {
     }
 
     await supertestRequest(app.getHttpServer())
-      .post('/api/v1/backtesting/run')
+      .post(buildApiUrl('backtesting/run'))
       .send(payload)
       .expect(201)
       .expect((res) => {
@@ -139,7 +140,7 @@ describe('backtestingController (e2e)', () => {
     }
 
     await supertestRequest(app.getHttpServer())
-      .post('/api/v1/backtesting/run')
+      .post(buildApiUrl('backtesting/run'))
       .send(payload)
       .expect(400)
 

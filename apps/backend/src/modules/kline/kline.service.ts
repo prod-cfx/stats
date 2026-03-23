@@ -1,5 +1,5 @@
 import type { KlineBarDto } from './dto/kline-bar.dto'
-import type { MarketTimeframe } from '@/prisma/prisma.types'
+import type { MarketTimeframe, Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -7,10 +7,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
-import { Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { KlineRepository } from './repositories/kline.repository'
 
 @Injectable()
 export class KlineService {
@@ -25,7 +23,7 @@ export class KlineService {
   private readonly MAX_QUERY_LIMIT = 500 // 最大返回数量
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly klineRepository: KlineRepository,
     private readonly redisService: RedisService,
   ) {}
 
@@ -161,15 +159,13 @@ export class KlineService {
       ...(!shouldAggregate && { exchangeCode: normalizedExchange?.toUpperCase() }),
     }
 
-    const client = this.prisma.getClient()
-
     // P2-4: 添加 try-catch 包裹聚合调用
     let result: KlineBarDto[]
     try {
       if (shouldAggregate) {
-        result = await this.aggregateKlineData(client, where, timeframe, queryLimit)
+        result = await this.aggregateKlineData(where, timeframe, queryLimit)
       } else {
-        const records = await client.futuresPriceHistory.findMany({
+        const records = await this.klineRepository.findMany({
           where,
           orderBy: { timestamp: 'desc' },
           take: queryLimit,
@@ -230,17 +226,12 @@ export class KlineService {
    * - volume: 求和所有交易所的成交量
    */
   private async aggregateKlineData(
-    client: ReturnType<typeof this.prisma.getClient>,
     where: Prisma.FuturesPriceHistoryWhereInput,
     timeframe: MarketTimeframe,
     queryLimit: number,
   ): Promise<KlineBarDto[]> {
-    const aggregatedData = await client.futuresPriceHistory.groupBy({
-      by: ['timestamp'],
+    const aggregatedData = await this.klineRepository.groupByTimestamp({
       where,
-      _max: { high: true },
-      _min: { low: true, open: true },
-      _sum: { volumeUsd: true },
       orderBy: { timestamp: 'desc' },
       take: queryLimit,
     })
@@ -253,31 +244,7 @@ export class KlineService {
     const symbol = String(where.symbol).toUpperCase()
     const timestamps = aggregatedData.map(row => row.timestamp)
 
-    const openCloseData = (await client.$queryRaw(Prisma.sql`
-      WITH ranked AS (
-        SELECT
-          timestamp,
-          open,
-          close,
-          ROW_NUMBER() OVER (PARTITION BY timestamp ORDER BY exchange_code ASC) as rn_first,
-          ROW_NUMBER() OVER (PARTITION BY timestamp ORDER BY exchange_code DESC) as rn_last
-        FROM futures_price_history
-        WHERE symbol = ${symbol}
-          AND interval = ${dbInterval}
-          AND timestamp IN (${Prisma.join(timestamps)})
-      )
-      SELECT
-        timestamp,
-        MAX(CASE WHEN rn_first = 1 THEN open END) as open,
-        MAX(CASE WHEN rn_last = 1 THEN close END) as close
-      FROM ranked
-      GROUP BY timestamp
-      ORDER BY timestamp ASC
-    `)) as Array<{
-      timestamp: Date
-      open: number
-      close: number
-    }>
+    const openCloseData = await this.klineRepository.queryRawOpenClose(symbol, dbInterval, timestamps)
 
     // 构建 timestamp -> open/close 映射
     const openCloseMap = new Map<number, { open: number; close: number }>()

@@ -1,6 +1,7 @@
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PrismaService } from '@/prisma/prisma.service'
 import { SubscriptionStatus } from '@/prisma/prisma.types'
@@ -193,25 +194,20 @@ export class AccountStrategyViewRepository {
       client.strategyInstance.count({ where }),
     ])
 
-    return {
-      total,
-      page,
-      limit,
-      items: items.map(item => {
-        const userSub = item.subscriptions[0]
-        const isSubscribed = !!userSub && userSub.status === SubscriptionStatus.active
-        return {
-          id: item.id,
-          name: item.name,
-          status: item.status,
-          params: item.params as Record<string, unknown> | null,
-          defaultParams: item.strategyTemplate?.defaultParams as Record<string, unknown> | null,
-          customParams: userSub?.customParams as Record<string, unknown> | null,
-          updatedAt: item.updatedAt,
-          subscribed: isSubscribed,
-        }
-      }),
-    }
+    return new BasePaginationResponseDto(total, page, limit, items.map(item => {
+      const userSub = item.subscriptions[0]
+      const isSubscribed = !!userSub && userSub.status === SubscriptionStatus.active
+      return {
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        params: item.params as Record<string, unknown> | null,
+        defaultParams: item.strategyTemplate?.defaultParams as Record<string, unknown> | null,
+        customParams: userSub?.customParams as Record<string, unknown> | null,
+        updatedAt: item.updatedAt,
+        subscribed: isSubscribed,
+      }
+    }))
   }
 
   async findStrategyForUser(userId: string, strategyInstanceId: string) {

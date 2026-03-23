@@ -1,16 +1,16 @@
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { MarketType } from '@/modules/trading/core/types'
 import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { SignalExecutorService } from './signal-executor.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { EnvService } from '@/common/services/env.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 import { BinanceClient } from '@/modules/trading/exchanges/binance-client'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { FixedSignalContextRepository } from '../repositories/fixed-signal-context.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { SignalExecutorService } from './signal-executor.service'
 
 export interface FixedBinanceTestnetSignalContext {
   strategyId: string
@@ -47,7 +47,7 @@ const DEFAULT_AI_MODEL = 'gpt-4.1-mini'
 @Injectable()
 export class FixedBinanceTestnetSignalService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly contextRepository: FixedSignalContextRepository,
     private readonly env: EnvService,
     private readonly signalExecutor: SignalExecutorService,
   ) {}
@@ -89,15 +89,11 @@ export class FixedBinanceTestnetSignalService {
     const perpStrategySlug = perpBaseCode.toLowerCase()
     const userEmail = this.env.getString('QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL', DEFAULT_FIXED_USER_EMAIL) ?? DEFAULT_FIXED_USER_EMAIL
 
-    const strategy = await this.prisma.llmStrategy.findUnique({
-      where: { name: strategyName },
-    })
-    const user = await this.prisma.user.findUnique({
-      where: { email: userEmail },
-    })
+    const strategy = await this.contextRepository.findLlmStrategyByName(strategyName)
+    const user = await this.contextRepository.findUserByEmail(userEmail)
     const [spotSymbol, perpSymbol] = await Promise.all([
-      this.prisma.symbol.findFirst({ where: { code: spotSymbolCode } }),
-      this.prisma.symbol.findFirst({ where: { code: perpSymbolCode } }),
+      this.contextRepository.findSymbolByCode(spotSymbolCode),
+      this.contextRepository.findSymbolByCode(perpSymbolCode),
     ])
 
     if (!strategy || !user || !spotSymbol || !perpSymbol) {
@@ -109,24 +105,9 @@ export class FixedBinanceTestnetSignalService {
     }
 
     const [strategyAccount, spotInstance, perpInstance] = await Promise.all([
-      this.prisma.userStrategyAccount.findFirst({
-        where: {
-          userId: user.id,
-          strategyId: strategy.id,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-binance-${spotStrategySlug}-spot`,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-binance-${perpStrategySlug}-perp`,
-        },
-      }),
+      this.contextRepository.findUserStrategyAccount(user.id, strategy.id),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-binance-${spotStrategySlug}-spot`),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-binance-${perpStrategySlug}-perp`),
     ])
 
     if (!strategyAccount || !spotInstance || !perpInstance) {
@@ -157,23 +138,21 @@ export class FixedBinanceTestnetSignalService {
       input.marketType,
     )
 
-    return this.prisma.tradingSignal.create({
-      data: {
-        llmStrategyId: context.strategyId,
-        llmStrategyInstanceId: input.marketType === 'spot' ? context.spotInstanceId : context.perpInstanceId,
-        symbolId: input.marketType === 'spot' ? context.spotSymbolId : context.perpSymbolId,
-        sourceType: 'AI_GENERATED',
-        signalType: input.signalType,
-        direction: input.direction,
-        status: 'PENDING',
-        confidence: input.confidence ?? DEFAULT_CONFIDENCE,
-        entryPrice,
-        positionSizeQuote: input.positionSizeQuote,
-        aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
-        aiReasoning: input.reason,
-        marketContext: input.marketContext,
-        metadata: input.metadata,
-      },
+    return this.contextRepository.createTradingSignal({
+      llmStrategyId: context.strategyId,
+      llmStrategyInstanceId: input.marketType === 'spot' ? context.spotInstanceId : context.perpInstanceId,
+      symbolId: input.marketType === 'spot' ? context.spotSymbolId : context.perpSymbolId,
+      sourceType: 'AI_GENERATED',
+      signalType: input.signalType,
+      direction: input.direction,
+      status: 'PENDING',
+      confidence: input.confidence ?? DEFAULT_CONFIDENCE,
+      entryPrice,
+      positionSizeQuote: input.positionSizeQuote,
+      aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
+      aiReasoning: input.reason,
+      marketContext: input.marketContext,
+      metadata: input.metadata,
     })
   }
 

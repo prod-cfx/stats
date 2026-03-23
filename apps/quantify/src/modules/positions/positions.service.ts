@@ -14,12 +14,12 @@ import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { LedgerEntryType, PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
 import { TradeConflictException } from './exceptions/trade-conflict.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PositionsRepository } from './repositories/positions.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -30,7 +30,7 @@ const Decimal = Prisma.Decimal
 @Injectable()
 export class PositionsService {
   constructor(
-    public readonly prisma: PrismaService,
+    private readonly positionsRepository: PositionsRepository,
     private readonly accountsService: AccountsService,
     private readonly tradingService: TradingService,
   ) {}
@@ -43,7 +43,7 @@ export class PositionsService {
     const leverage = dto.leverage ? new Decimal(dto.leverage) : null
     const executedAt = new Date(dto.executedAt)
 
-    const trade = await this.prisma.runInTransaction(async prisma => {
+    const trade = await this.positionsRepository.runInTransaction(async prisma => {
       // 1. 校验账户与成交幂等
       await this.ensureAccountAndNoDuplicateTrade(prisma, dto)
 
@@ -371,15 +371,7 @@ export class PositionsService {
     const limit = query.limit || 20
     const skip = (page - 1) * limit
     
-    const [items, total] = await Promise.all([
-      this.prisma.position.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.position.count({ where }),
-    ])
+    const [items, total] = await this.positionsRepository.findManyPaginated(where, skip, limit)
 
     const data = items.map(item => this.toPositionResponse(item))
     return new BasePaginationResponseDto<PositionResponseDto>(total, page, limit, data)
@@ -434,17 +426,7 @@ export class PositionsService {
    */
   async closePosition(dto: ClosePositionDto): Promise<ClosePositionResponseDto> {
     // 1. 验证仓位并获取相关账户信息（一次查询优化性能）
-    const position = await this.prisma.position.findUnique({
-      where: { id: dto.positionId },
-      include: {
-        account: {
-          select: {
-            id: true,
-            userId: true,
-          },
-        },
-      },
-    })
+    const position = await this.positionsRepository.findUniqueWithAccount(dto.positionId)
 
     if (!position) {
       throw new PositionNotFoundException({ 
@@ -611,5 +593,9 @@ export class PositionsService {
     }
 
     return { amount: 0, currency: null }
+  }
+
+  async findUserStrategyAccountById(accountId: string) {
+    return this.positionsRepository.findUserStrategyAccountById(accountId)
   }
 }

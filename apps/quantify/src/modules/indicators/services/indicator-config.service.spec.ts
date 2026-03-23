@@ -1,6 +1,6 @@
 import { IndicatorConfigService } from './indicator-config.service'
 
-describe('IndicatorConfigService', () => {
+describe('indicatorConfigService', () => {
   it('does not throw when indicator_configs table is missing (P2021)', async () => {
     const repository = {
       listAllActive: jest.fn().mockRejectedValue({
@@ -9,7 +9,7 @@ describe('IndicatorConfigService', () => {
       }),
     }
 
-    const service = new IndicatorConfigService(repository as any)
+    const service = new IndicatorConfigService(repository as any, {} as any)
     const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined)
     const logSpy = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined)
 
@@ -24,7 +24,7 @@ describe('IndicatorConfigService', () => {
       listAllActive: jest.fn().mockRejectedValue(new Error('db unavailable')),
     }
 
-    const service = new IndicatorConfigService(repository as any)
+    const service = new IndicatorConfigService(repository as any, {} as any)
     const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined)
 
     await expect(service.onModuleInit()).resolves.toBeUndefined()

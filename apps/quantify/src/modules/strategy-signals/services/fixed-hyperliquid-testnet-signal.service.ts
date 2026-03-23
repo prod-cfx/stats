@@ -5,7 +5,8 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
-import { PrismaService } from '@/prisma/prisma.service'
+ 
+import { FixedSignalContextRepository } from '../repositories/fixed-signal-context.repository'
 import { SignalExecutorService } from './signal-executor.service'
 
 export interface FixedHyperliquidTestnetSignalContext {
@@ -44,8 +45,8 @@ const DEFAULT_AGENT_PRIVATE_KEY = '000000000000000000000000000000000000000000000
 @Injectable()
 export class FixedHyperliquidTestnetSignalService {
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    @Inject(FixedSignalContextRepository)
+    private readonly contextRepository: FixedSignalContextRepository,
     @Inject(EnvService)
     private readonly env: EnvService,
     @Inject(SignalExecutorService)
@@ -90,14 +91,10 @@ export class FixedHyperliquidTestnetSignalService {
     const userEmail = this.env.getString('QUANTIFY_FIXED_HYPERLIQUID_TESTNET_USER_EMAIL', DEFAULT_FIXED_USER_EMAIL) ?? DEFAULT_FIXED_USER_EMAIL
 
     const [strategy, user, spotSymbol, perpSymbol] = await Promise.all([
-      this.prisma.llmStrategy.findUnique({
-        where: { name: strategyName },
-      }),
-      this.prisma.user.findUnique({
-        where: { email: userEmail },
-      }),
-      this.prisma.symbol.findFirst({ where: { code: spotSymbolCode } }),
-      this.prisma.symbol.findFirst({ where: { code: perpSymbolCode } }),
+      this.contextRepository.findLlmStrategyByName(strategyName),
+      this.contextRepository.findUserByEmail(userEmail),
+      this.contextRepository.findSymbolByCode(spotSymbolCode),
+      this.contextRepository.findSymbolByCode(perpSymbolCode),
     ])
 
     if (!strategy || !user || !spotSymbol || !perpSymbol) {
@@ -109,24 +106,9 @@ export class FixedHyperliquidTestnetSignalService {
     }
 
     const [strategyAccount, spotInstance, perpInstance] = await Promise.all([
-      this.prisma.userStrategyAccount.findFirst({
-        where: {
-          userId: user.id,
-          strategyId: strategy.id,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-hyperliquid-${spotStrategySlug}-spot`,
-        },
-      }),
-      this.prisma.llmStrategyInstance.findFirst({
-        where: {
-          strategyId: strategy.id,
-          name: `fixed-hyperliquid-${perpStrategySlug}-perp`,
-        },
-      }),
+      this.contextRepository.findUserStrategyAccount(user.id, strategy.id),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-hyperliquid-${spotStrategySlug}-spot`),
+      this.contextRepository.findLlmStrategyInstance(strategy.id, `fixed-hyperliquid-${perpStrategySlug}-perp`),
     ])
 
     if (!strategyAccount || !spotInstance || !perpInstance) {
@@ -165,23 +147,21 @@ export class FixedHyperliquidTestnetSignalService {
         }
     const entryPrice = input.entryPrice ?? await this.fetchTickerPrice(target.symbol)
 
-    return this.prisma.tradingSignal.create({
-      data: {
-        llmStrategyId: context.strategyId,
-        llmStrategyInstanceId: target.instanceId,
-        symbolId: target.symbolId,
-        sourceType: 'AI_GENERATED',
-        signalType: input.signalType,
-        direction: input.direction,
-        status: 'PENDING',
-        confidence: input.confidence ?? DEFAULT_CONFIDENCE,
-        entryPrice,
-        positionSizeQuote: input.positionSizeQuote,
-        aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
-        aiReasoning: input.reason,
-        marketContext: input.marketContext,
-        metadata: input.metadata,
-      },
+    return this.contextRepository.createTradingSignal({
+      llmStrategyId: context.strategyId,
+      llmStrategyInstanceId: target.instanceId,
+      symbolId: target.symbolId,
+      sourceType: 'AI_GENERATED',
+      signalType: input.signalType,
+      direction: input.direction,
+      status: 'PENDING',
+      confidence: input.confidence ?? DEFAULT_CONFIDENCE,
+      entryPrice,
+      positionSizeQuote: input.positionSizeQuote,
+      aiModel: input.aiModel ?? DEFAULT_AI_MODEL,
+      aiReasoning: input.reason,
+      marketContext: input.marketContext,
+      metadata: input.metadata,
     })
   }
 

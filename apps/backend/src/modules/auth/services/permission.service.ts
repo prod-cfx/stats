@@ -1,14 +1,13 @@
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
- 
+
 import { ConfigService } from '@nestjs/config'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
- 
-import { PrismaService } from '@/prisma/prisma.service'
 import { AppResource, AppRole, RBAC_PERMISSIONS } from '../rbac/permissions'
 // Nest 注入需要运行时引用 PermissionCacheService，保留值导入
- 
+
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { RoleAssignmentRepository } from '../repositories/role-assignment.repository'
 import { PermissionCacheService } from './permission-cache.service'
 
 type PermissionAction = 'read' | 'create' | 'update' | 'delete'
@@ -47,7 +46,7 @@ export class PermissionService {
   private readonly wildcardCustomRoles = new Set<string>()
 
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly roleAssignmentRepository: RoleAssignmentRepository,
     @Inject(ConfigService) private readonly configService: ConfigService,
     @Inject(PermissionCacheService) private readonly cache: PermissionCacheService,
   ) {
@@ -111,25 +110,11 @@ export class PermissionService {
 
     // 不信任 JWT payload 中的角色，仅从数据库查询（单一真实来源）
     const collected = new Set<string>()
-    const prisma = this.prisma.getClient()
 
     type PrincipalTypeValue = 'USER' | 'ADMIN'
     const principalType: PrincipalTypeValue = user.principalType === 'admin' ? 'ADMIN' : 'USER'
 
-    const assignments = await prisma.roleAssignment.findMany({
-      where: {
-        principalId: user.id,
-        principalType,
-      },
-      select: {
-        role: {
-          select: {
-            code: true,
-            apiPermissions: true,
-          },
-        },
-      },
-    })
+    const assignments = await this.roleAssignmentRepository.findRolesByPrincipal(user.id, principalType)
 
     assignments.forEach(({ role }: { role: { code: string | null; apiPermissions: string[] | null } }) => {
       if (!role?.code) return
@@ -291,4 +276,3 @@ interface ParsedPermission {
   resource: AppResource
   actions: Set<PermissionAction>
 }
-

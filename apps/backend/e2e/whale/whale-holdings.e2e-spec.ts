@@ -113,7 +113,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     ])
   })
 
-  it('应返回分页结构包含 total/page/limit/items', async () => {
+  it('should return paginated structure with total/page/limit/items', async () => {
     const client = prisma.getClient()
     await client.hyperliquidWhalePosition.deleteMany({})
     const now = new Date()
@@ -150,7 +150,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     expect(result.items[1].positionValueUsd).toBe(4_000_000)
   })
 
-  it('应支持 page 参数翻页', async () => {
+  it('should support page parameter for pagination', async () => {
     const page2 = await whaleHoldingsService.getCurrentHoldings({
       minPositionValueUsd: 500_000,
       limit: 2,
@@ -173,7 +173,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     expect(page3.items[0].positionValueUsd).toBe(1_000_000)
   })
 
-  it('超出范围的 page 应返回空 items', async () => {
+  it('should return empty items when page is out of range', async () => {
     const result = await whaleHoldingsService.getCurrentHoldings({
       minPositionValueUsd: 500_000,
       limit: 2,

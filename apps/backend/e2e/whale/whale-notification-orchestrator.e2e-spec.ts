@@ -3,7 +3,7 @@ import type { WhaleAlertService } from '@/modules/whale-alert/whale-alert.servic
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createRawClient, createTestingApp } from '../fixtures/fixtures'
+import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 describe('Whale notification orchestrator via whale trade record (service E2E)', () => {
   let app: INestApplication
@@ -229,8 +229,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       tradeTime: now,
     })
 
-    const rawClient = createRawClient(app)
-    const res = await rawClient.get('/whale-notification/metrics').expect(200)
+    const apiClient = createApiClient(app)
+    const res = await apiClient.get('/whale-notification/metrics').expect(200)
     const metrics = (res.body?.data?.data ?? res.body?.data ?? res.body) as Record<string, unknown>
 
     expect(typeof metrics.eventsReceived).toBe('number')

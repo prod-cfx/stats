@@ -6,11 +6,12 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { MARKET_DATA_LOG_CONTEXT, MARKET_DATA_PROVIDER } from '../constants/market-data.constants'
 import { normalizeExactCode, toSymbolCode } from '../utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '../utils/market-timeframe.util'
 import { MarketDataStreamService } from './market-data-stream.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MarketDataRepository } from './market-data.repository'
 import { MarketDataService } from './market-data.service'
 
 interface MarketDataRuntimeConfig {
@@ -39,14 +40,13 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   constructor(
     @Inject(ConfigService)
     private readonly configService: ConfigService,
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
     @Inject(MarketDataService)
     private readonly marketDataService: MarketDataService,
     @Inject(MARKET_DATA_PROVIDER)
     private readonly provider: MarketDataProvider,
     @Inject(MarketDataStreamService)
     private readonly streamService: MarketDataStreamService,
+    private readonly marketDataRepository: MarketDataRepository,
   ) {}
 
   async onModuleInit() {
@@ -176,51 +176,14 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   private async collectDynamicStrategySymbols(): Promise<string[]> {
     const symbolSet = new Set<string>()
-    let strategySubscriptions: Array<{
-      strategyInstance?: {
-        strategyTemplate?: {
-          legs?: unknown
-        } | null
-      } | null
-    }> = []
-    let llmSubscriptions: Array<{
-      llmStrategyInstance?: {
-        strategy?: {
-          allowedSymbols?: unknown
-        } | null
-      } | null
-    }> = []
+
+    let strategySubscriptions: Awaited<ReturnType<typeof this.marketDataRepository.findActiveStrategySubscriptionsForSymbols>>
+    let llmSubscriptions: Awaited<ReturnType<typeof this.marketDataRepository.findActiveLlmSubscriptionsForSymbols>>
 
     try {
-      [strategySubscriptions, llmSubscriptions] = await Promise.all([
-        this.prisma.userStrategySubscription.findMany({
-          where: { status: 'active' },
-          select: {
-            strategyInstance: {
-              select: {
-                strategyTemplate: {
-                  select: {
-                    legs: true,
-                  },
-                },
-              },
-            },
-          },
-        }),
-        this.prisma.userLlmStrategySubscription.findMany({
-          where: { status: 'active' },
-          select: {
-            llmStrategyInstance: {
-              select: {
-                strategy: {
-                  select: {
-                    allowedSymbols: true,
-                  },
-                },
-              },
-            },
-          },
-        }),
+      ;[strategySubscriptions, llmSubscriptions] = await Promise.all([
+        this.marketDataRepository.findActiveStrategySubscriptionsForSymbols(),
+        this.marketDataRepository.findActiveLlmSubscriptionsForSymbols(),
       ])
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

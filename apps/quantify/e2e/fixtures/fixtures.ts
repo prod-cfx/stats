@@ -4,6 +4,7 @@ import type { SuperTest, Test as SupertestTest } from 'supertest'
 import { randomBytes } from 'node:crypto'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
 
@@ -166,7 +167,10 @@ export async function createTestingApp(
   const normalizedOptions = await resolveCreateTestingAppOptions(options)
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: normalizedOptions.imports,
-  }).compile()
+  })
+    .overrideProvider(MarketDataIngestionService)
+    .useValue({ onModuleInit: () => {}, onModuleDestroy: () => {}, handleGapFill: () => {}, handleDynamicSymbolRefresh: () => {} })
+    .compile()
 
   const app = moduleFixture.createNestApplication()
 

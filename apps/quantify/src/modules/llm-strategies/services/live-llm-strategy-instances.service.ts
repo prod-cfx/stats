@@ -1,23 +1,24 @@
 import type { LiveLlmStrategyInstanceListQueryDto } from '../dto/live-llm-strategy-instance-list-query.dto'
 import type { LiveLlmStrategySignalsQueryDto } from '../dto/live-llm-strategy-signals-query.dto'
-import type { LlmStrategyInstanceMode, LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { LlmSubscriptionsRepository } from '@/modules/llm-strategy-subscriptions/repositories/llm-subscriptions.repository'
 import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest 注入需要运行时类
-import { PrismaService } from '@/prisma/prisma.service'
-import { Prisma } from '@/prisma/prisma.types'
 import { LlmStrategyInstancePublicResponseDto } from '../dto/live-llm-strategy-instance-response.dto'
 import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy-instance-not-found.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { LlmStrategyInstancesRepository } from '../repositories'
 
 @Injectable()
 export class LiveLlmStrategyInstancesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly instancesRepo: LlmStrategyInstancesRepository,
+    private readonly subscriptionsRepo: LlmSubscriptionsRepository,
     private readonly env: EnvService,
   ) {}
 
@@ -34,59 +35,19 @@ export class LiveLlmStrategyInstancesService {
     const limit = query.limit
     const skip = (page - 1) * limit
 
-    const client = this.prisma.getClient()
-
-    // 为了与产品预期一致：无论环境都只返回“运行中”的实例
-    // - status 必须为 running
-    // - mode 必须为 LIVE
-    // - 所属策略必须为 live
-    const where = {
-      status: 'running' as LlmStrategyInstanceStatus,
-      mode: 'LIVE' as LlmStrategyInstanceMode,
-      strategy: { status: 'live' as const },
-      ...(query.llmModel ? { llmModel: query.llmModel } : {}),
-      ...(query.strategyId ? { strategyId: query.strategyId } : {}),
-    }
-
-    const [items, total] = await Promise.all([
-      client.llmStrategyInstance.findMany({
-        where,
-        include: {
-          strategy: { select: { name: true, description: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      client.llmStrategyInstance.count({ where }),
-    ])
+    const { items, total } = await this.instancesRepo.findRunningLiveInstances({
+      llmModel: query.llmModel,
+      strategyId: query.strategyId,
+      skip,
+      take: limit,
+    })
 
     const subscriptionMap = new Map<string, boolean>()
     if (userId) {
       const instanceIds = items.map(item => item.id)
       if (instanceIds.length > 0) {
-        try {
-          const subs = await client.userLlmStrategySubscription.findMany({
-            where: {
-              userId,
-              llmStrategyInstanceId: { in: instanceIds },
-              status: 'active',
-            },
-            select: { llmStrategyInstanceId: true },
-          })
-          subs.forEach(sub => subscriptionMap.set(sub.llmStrategyInstanceId, true))
-        } catch (error) {
-          // 本地开发环境可能尚未执行 LLM 订阅相关迁移，表不存在时降级为未订阅状态
-          if (
-            error instanceof Prisma.PrismaClientKnownRequestError &&
-            error.code === 'P2021' &&
-            String(error.message).includes('user_llm_strategy_subscriptions')
-          ) {
-            // ignore and treat all as not subscribed
-          } else {
-            throw error
-          }
-        }
+        const subs = await this.subscriptionsRepo.findActiveByUserAndInstanceIds(userId, instanceIds)
+        subs.forEach(sub => subscriptionMap.set(sub.llmStrategyInstanceId, true))
       }
     }
 
@@ -104,14 +65,7 @@ export class LiveLlmStrategyInstancesService {
     id: string,
     userId?: string,
   ): Promise<LlmStrategyInstancePublicResponseDto> {
-    const client = this.prisma.getClient()
-
-    const instance = await client.llmStrategyInstance.findUnique({
-      where: { id },
-      include: {
-        strategy: { select: { name: true, description: true, status: true } },
-      },
-    })
+    const instance = await this.instancesRepo.findByIdWithStrategyDetail(id)
 
     if (!instance) {
       throw new LlmStrategyInstanceNotFoundException({ instanceId: id })
@@ -131,28 +85,8 @@ export class LiveLlmStrategyInstancesService {
 
     let isSubscribed = false
     if (userId) {
-      try {
-        const sub = await client.userLlmStrategySubscription.findFirst({
-          where: {
-            userId,
-            llmStrategyInstanceId: id,
-            status: 'active',
-          },
-          select: { id: true },
-        })
-        isSubscribed = !!sub
-      } catch (error) {
-        // 表不存在时在本地开发环境降级为未订阅状态，避免整个详情接口 500
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2021' &&
-          String(error.message).includes('user_llm_strategy_subscriptions')
-        ) {
-          isSubscribed = false
-        } else {
-          throw error
-        }
-      }
+      const sub = await this.subscriptionsRepo.findActiveByUserAndInstance(userId, id)
+      isSubscribed = !!sub
     }
 
     return new LlmStrategyInstancePublicResponseDto(instance, { isSubscribed })
@@ -171,60 +105,21 @@ export class LiveLlmStrategyInstancesService {
     await this.getRunningInstanceDetail(id, userId)
 
     if (!this.env.isDev()) {
-      const client = this.prisma.getClient()
-      try {
-        const hasSubscription = await client.userLlmStrategySubscription.findFirst({
-          where: {
-            userId,
-            llmStrategyInstanceId: id,
-            status: 'active',
-          },
-          select: { id: true },
+      const hasSubscription = await this.subscriptionsRepo.findActiveByUserAndInstance(userId, id)
+      if (!hasSubscription) {
+        throw new DomainException('llm_strategy.instance_access_forbidden', {
+          code: ErrorCode.LLM_STRATEGY_INSTANCE_FORBIDDEN,
+          status: HttpStatus.FORBIDDEN,
+          args: { instanceId: id, userId },
         })
-        if (!hasSubscription) {
-          throw new DomainException('llm_strategy.instance_access_forbidden', {
-            code: ErrorCode.LLM_STRATEGY_INSTANCE_FORBIDDEN,
-            status: HttpStatus.FORBIDDEN,
-            args: { instanceId: id, userId },
-          })
-        }
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2021' &&
-          String(error.message).includes('user_llm_strategy_subscriptions')
-        ) {
-          // 生产环境表不存在属于配置错误，这里仍然抛出 500 以便告警
-          throw error
-        }
-        throw error
       }
     }
 
     const skip = (query.page - 1) * query.limit
-    const client = this.prisma.getClient()
-    const [items, total] = await Promise.all([
-      client.tradingSignal.findMany({
-        where: {
-          llmStrategyInstanceId: id,
-        },
-        include: {
-          symbol: {
-            select: {
-              code: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: query.limit,
-      }),
-      client.tradingSignal.count({
-        where: {
-          llmStrategyInstanceId: id,
-        },
-      }),
-    ])
+    const { items, total } = await this.subscriptionsRepo.findTradingSignalsByInstance(id, {
+      skip,
+      take: query.limit,
+    })
 
     return new BasePaginationResponseDto(
       total,

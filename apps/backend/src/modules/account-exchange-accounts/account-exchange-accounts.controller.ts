@@ -1,12 +1,13 @@
-// ValidationPipe(transform: true) 需要运行时可用的 DTO 类，不能使用 type-only import
-import { CreateAccountExchangeAccountDto } from './dto/create-account-exchange-account.dto'
+import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { Body, Controller, Delete, Get, Inject, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
-import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { AccountExchangeAccountsService } from './account-exchange-accounts.service'
 import { AccountExchangeAccountResponseDto } from './dto/account-exchange-account.response.dto'
+// ValidationPipe(transform: true) 需要运行时可用的 DTO 类，不能使用 type-only import
+// eslint-disable-next-line ts/consistent-type-imports
+import { CreateAccountExchangeAccountDto } from './dto/create-account-exchange-account.dto'
 
 @ApiTags('account-exchange-accounts')
 @ApiBearerAuth('bearer')

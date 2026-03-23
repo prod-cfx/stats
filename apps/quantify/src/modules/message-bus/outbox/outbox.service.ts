@@ -3,8 +3,6 @@ import type { MessageEnvelope } from '../message-bus.types'
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { OutboxRepository } from './outbox.repository'
 
 export interface OutboxRecordOptions {
@@ -25,7 +23,6 @@ export class OutboxService implements OnModuleInit {
   }
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly repo: OutboxRepository,
   ) {}
 
@@ -41,8 +38,6 @@ export class OutboxService implements OnModuleInit {
     options?: OutboxRecordOptions,
     tx?: Prisma.TransactionClient,
   ) {
-    const client = (tx as any) || this.prisma.getClient()
-
     const row = await this.repo.create(
       {
         topic: envelope.topic,
@@ -54,7 +49,7 @@ export class OutboxService implements OnModuleInit {
         priority: options?.priority ?? undefined,
         deliverAt: options?.deliverAt ?? undefined,
       },
-      client,
+      tx,
     )
 
     this.logger.debug(

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export enum TradeSide {
   Long = 'Long',
@@ -37,7 +38,7 @@ export class WhaleTradeDto {
   trade_time: string
 }
 
-export class QueryWhaleTradeDto {
+export class QueryWhaleTradeDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '币种符号过滤', example: 'BTC' })
   @IsString()
   @IsOptional()
@@ -49,22 +50,16 @@ export class QueryWhaleTradeDto {
   @Min(0)
   min_trade_value_usd?: number
 
-  @ApiPropertyOptional({ description: '返回记录上限，默认 50，最大 200', example: 50 })
+  @ApiPropertyOptional({ description: '返回记录上限，默认 50，最大 200', example: 50, default: 50, maximum: 200 })
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
-  @IsPositive()
+  @Min(1)
   @Max(200)
-  limit?: number
+  override limit: number = 50
 
   @ApiPropertyOptional({ description: '起始时间', example: '2025-01-22T00:00:00.000Z' })
   @IsDateString()
   @IsOptional()
   since?: string
-
-  @ApiPropertyOptional({ description: '页码（从 1 开始）', example: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number
 }

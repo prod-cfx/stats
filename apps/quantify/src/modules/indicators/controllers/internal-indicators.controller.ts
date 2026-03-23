@@ -1,13 +1,7 @@
 import type { IndicatorSeriesQueryDto, IndicatorSnapshotQueryDto } from '../dto/internal-indicator-query.dto'
-import { ErrorCode } from '@ai/shared'
-import { Controller, Get, HttpStatus, Query } from '@nestjs/common'
+import { Controller, Get, Query } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 PrismaService
-import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 IndicatorValueRepository
-import { IndicatorValueRepository } from '../repositories/indicator-value.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 IndicatorConfigService
 import { IndicatorConfigService } from '../services/indicator-config.service'
 
@@ -16,15 +10,13 @@ import { IndicatorConfigService } from '../services/indicator-config.service'
 export class InternalIndicatorsController {
   constructor(
     private readonly indicatorConfigService: IndicatorConfigService,
-    private readonly indicatorValueRepository: IndicatorValueRepository,
-    private readonly prisma: PrismaService,
   ) {}
 
   @Get('snapshot')
   @ApiOperation({ summary: '获取指定时刻的指标快照（供 AI 使用）' })
   @ApiOkResponse({ description: '指标快照' })
   async getSnapshot(@Query() query: IndicatorSnapshotQueryDto) {
-    const symbol = await this.getSymbol(query.symbol)
+    const symbol = await this.indicatorConfigService.getSymbolByCode(query.symbol)
     const timeframe = mapTimeframe(query.timeframe)
 
     const runtimeConfigs = this.indicatorConfigService.getRuntimeConfigs(symbol.id, timeframe)
@@ -44,7 +36,7 @@ export class InternalIndicatorsController {
 
     const at = query.at ? new Date(query.at) : undefined
 
-    const records = await this.indicatorValueRepository.getSnapshot({
+    const records = await this.indicatorConfigService.getIndicatorSnapshot({
       symbolId: symbol.id,
       timeframe,
       indicatorConfigIds: configIds,
@@ -71,7 +63,7 @@ export class InternalIndicatorsController {
   @ApiOperation({ summary: '获取指标时间序列（供 AI 使用）' })
   @ApiOkResponse({ description: '指标时间序列' })
   async getSeries(@Query() query: IndicatorSeriesQueryDto) {
-    const symbol = await this.getSymbol(query.symbol)
+    const symbol = await this.indicatorConfigService.getSymbolByCode(query.symbol)
     const timeframe = mapTimeframe(query.timeframe)
 
     const runtimeConfigs = this.indicatorConfigService.getRuntimeConfigs(symbol.id, timeframe)
@@ -91,7 +83,7 @@ export class InternalIndicatorsController {
     const start = query.start ? new Date(query.start) : undefined
     const end = query.end ? new Date(query.end) : undefined
 
-    const records = await this.indicatorValueRepository.getSeries({
+    const records = await this.indicatorConfigService.getIndicatorSeries({
       symbolId: symbol.id,
       timeframe,
       indicatorConfigIds: configIds,
@@ -123,21 +115,4 @@ export class InternalIndicatorsController {
       points,
     }
   }
-
-  private async getSymbol(code: string) {
-    const client = this.prisma.getClient()
-    const symbol = await client.symbol.findUnique({
-      where: { code: code.trim().toUpperCase() },
-      select: { id: true, code: true },
-    })
-    if (!symbol) {
-      throw new DomainException('Symbol not found', {
-        code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
-        args: { symbol: code },
-        status: HttpStatus.NOT_FOUND,
-      })
-    }
-    return symbol
-  }
 }
-

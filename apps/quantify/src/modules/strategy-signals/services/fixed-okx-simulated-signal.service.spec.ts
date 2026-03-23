@@ -3,13 +3,14 @@ import { FixedOkxSimulatedSignalService } from './fixed-okx-simulated-signal.ser
 
 describe('fixedOkxSimulatedSignalService', () => {
   function createService() {
-    const prisma = {
-      llmStrategy: { findUnique: jest.fn() },
-      user: { findUnique: jest.fn() },
-      symbol: { findFirst: jest.fn() },
-      userStrategyAccount: { findFirst: jest.fn() },
-      llmStrategyInstance: { findFirst: jest.fn() },
-      tradingSignal: { create: jest.fn() },
+    const contextRepo = {
+      findLlmStrategyByName: jest.fn(),
+      findUserByEmail: jest.fn(),
+      findSymbolByCode: jest.fn(),
+      findSymbolsByCodes: jest.fn(),
+      findUserStrategyAccount: jest.fn(),
+      findLlmStrategyInstance: jest.fn(),
+      createTradingSignal: jest.fn(),
     }
 
     const env = {
@@ -30,27 +31,27 @@ describe('fixedOkxSimulatedSignalService', () => {
     }
 
     const service = new FixedOkxSimulatedSignalService(
-      prisma as any,
+      contextRepo as any,
       env as any,
       signalExecutor as any,
     )
 
-    return { service, prisma, env, signalExecutor }
+    return { service, contextRepo, env, signalExecutor }
   }
 
   it('creates a spot fixed-okx signal with resolved context and fetched ticker price', async () => {
-    const { service, prisma } = createService()
+    const { service, contextRepo } = createService()
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode
       .mockResolvedValueOnce({ id: 'spot-symbol-1' })
       .mockResolvedValueOnce({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance
       .mockResolvedValueOnce({ id: 'spot-instance-1' })
       .mockResolvedValueOnce({ id: 'perp-instance-1' })
-    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-1' })
+    contextRepo.createTradingSignal.mockResolvedValue({ id: 'signal-1' })
 
     jest.spyOn(service, 'fetchTickerPrice').mockResolvedValue('61000')
 
@@ -63,8 +64,8 @@ describe('fixedOkxSimulatedSignalService', () => {
     })
 
     expect(signal).toEqual({ id: 'signal-1' })
-    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(contextRepo.createTradingSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
         llmStrategyId: 'strategy-1',
         llmStrategyInstanceId: 'spot-instance-1',
         symbolId: 'spot-symbol-1',
@@ -74,22 +75,22 @@ describe('fixedOkxSimulatedSignalService', () => {
         positionSizeQuote: '10',
         aiReasoning: 'unit-test-open',
       }),
-    })
+    )
   })
 
   it('can create and execute a perp fixed-okx signal with override config', async () => {
-    const { service, prisma, signalExecutor } = createService()
+    const { service, contextRepo, signalExecutor } = createService()
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode
       .mockResolvedValueOnce({ id: 'spot-symbol-1' })
       .mockResolvedValueOnce({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance
       .mockResolvedValueOnce({ id: 'spot-instance-1' })
       .mockResolvedValueOnce({ id: 'perp-instance-1' })
-    prisma.tradingSignal.create.mockResolvedValue({ id: 'signal-2' })
+    contextRepo.createTradingSignal.mockResolvedValue({ id: 'signal-2' })
 
     const executionConfig = {
       ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
@@ -110,20 +111,20 @@ describe('fixedOkxSimulatedSignalService', () => {
     })
 
     expect(signal).toEqual({ id: 'signal-2' })
-    expect(prisma.tradingSignal.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(contextRepo.createTradingSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
         llmStrategyInstanceId: 'perp-instance-1',
         symbolId: 'perp-symbol-1',
         signalType: 'EXIT',
         direction: 'CLOSE_LONG',
         entryPrice: '60500',
       }),
-    })
+    )
     expect(signalExecutor.executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-2', executionConfig)
   })
 
   it('resolves separate spot/perp symbols from env when perp uses a different base asset', async () => {
-    const { service, prisma, env } = createService()
+    const { service, contextRepo, env } = createService()
 
     env.getString = jest.fn((key: string, defaultValue?: string) => {
       const values: Record<string, string> = {
@@ -136,32 +137,22 @@ describe('fixedOkxSimulatedSignalService', () => {
       return values[key] ?? defaultValue
     })
 
-    prisma.llmStrategy.findUnique.mockResolvedValue({ id: 'strategy-1' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'user-1' })
-    prisma.symbol.findFirst
+    contextRepo.findLlmStrategyByName.mockResolvedValue({ id: 'strategy-1' })
+    contextRepo.findUserByEmail.mockResolvedValue({ id: 'user-1' })
+    contextRepo.findSymbolByCode
       .mockResolvedValueOnce({ id: 'spot-symbol-1' })
       .mockResolvedValueOnce({ id: 'perp-symbol-1' })
-    prisma.userStrategyAccount.findFirst.mockResolvedValue({ id: 'account-1' })
-    prisma.llmStrategyInstance.findFirst
+    contextRepo.findUserStrategyAccount.mockResolvedValue({ id: 'account-1' })
+    contextRepo.findLlmStrategyInstance
       .mockResolvedValueOnce({ id: 'spot-instance-1' })
       .mockResolvedValueOnce({ id: 'perp-instance-1' })
 
     const context = await service.resolveContext()
 
-    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(1, { where: { code: 'BTCUSDT' } })
-    expect(prisma.symbol.findFirst).toHaveBeenNthCalledWith(2, { where: { code: 'ETHUSDT:PERP' } })
-    expect(prisma.llmStrategyInstance.findFirst).toHaveBeenNthCalledWith(1, {
-      where: {
-        strategyId: 'strategy-1',
-        name: 'fixed-okx-btcusdt-spot',
-      },
-    })
-    expect(prisma.llmStrategyInstance.findFirst).toHaveBeenNthCalledWith(2, {
-      where: {
-        strategyId: 'strategy-1',
-        name: 'fixed-okx-ethusdt-perp',
-      },
-    })
+    expect(contextRepo.findSymbolByCode).toHaveBeenNthCalledWith(1, 'BTCUSDT')
+    expect(contextRepo.findSymbolByCode).toHaveBeenNthCalledWith(2, 'ETHUSDT:PERP')
+    expect(contextRepo.findLlmStrategyInstance).toHaveBeenNthCalledWith(1, 'strategy-1', 'fixed-okx-btcusdt-spot')
+    expect(contextRepo.findLlmStrategyInstance).toHaveBeenNthCalledWith(2, 'strategy-1', 'fixed-okx-ethusdt-perp')
     expect(context.spotSymbol).toBe('BTC/USDT')
     expect(context.perpSymbol).toBe('ETH/USDT:PERP')
   })

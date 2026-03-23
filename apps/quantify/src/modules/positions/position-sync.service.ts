@@ -2,11 +2,11 @@ import type { ExchangeId, MarketType, UnifiedPosition } from '@/modules/trading/
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PositionsRepository } from './repositories/positions.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -44,7 +44,7 @@ export class PositionSyncService {
   private readonly logger = new Logger(PositionSyncService.name)
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly positionsRepository: PositionsRepository,
     private readonly tradingService: TradingService,
     private readonly positionsService: PositionsService,
   ) {}
@@ -70,12 +70,7 @@ export class PositionSyncService {
       const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType)
 
       // 2. 获取本地记录的开放仓位
-      const localPositions = await this.prisma.position.findMany({
-        where: {
-          userStrategyAccountId: accountId,
-          status: PositionStatus.OPEN,
-        },
-      })
+      const localPositions = await this.positionsRepository.findOpenByAccount(accountId)
 
       this.logger.log(
         `Syncing positions for user ${userId}, account ${accountId}: ` +
@@ -238,15 +233,7 @@ export class PositionSyncService {
 
     for (const task of tasks) {
       try {
-        const account = await this.prisma.userStrategyAccount.findUnique({
-          where: {
-            userId_strategyId: {
-              userId: task.userId,
-              strategyId: task.strategyId,
-            },
-          },
-          select: { id: true },
-        })
+        const account = await this.positionsRepository.findUserStrategyAccount(task.userId, task.strategyId)
 
         if (!account) {
           this.logger.warn(
@@ -286,48 +273,7 @@ export class PositionSyncService {
   }
 
   private async collectBatchSyncTasks(): Promise<Array<{ userId: string; strategyId: string; exchangeId: ExchangeId }>> {
-    const [strategySubs, llmSubs] = await Promise.all([
-      this.prisma.userStrategySubscription.findMany({
-        where: {
-          status: 'active',
-          exchangeAccountId: { not: null },
-        },
-        select: {
-          userId: true,
-          strategyInstance: {
-            select: {
-              strategyTemplateId: true,
-            },
-          },
-          exchangeAccount: {
-            select: {
-              exchangeId: true,
-            },
-          },
-        },
-        take: 200,
-      }),
-      this.prisma.userLlmStrategySubscription.findMany({
-        where: {
-          status: 'active',
-          exchangeAccountId: { not: null },
-        },
-        select: {
-          userId: true,
-          llmStrategyInstance: {
-            select: {
-              strategyId: true,
-            },
-          },
-          exchangeAccount: {
-            select: {
-              exchangeId: true,
-            },
-          },
-        },
-        take: 200,
-      }),
-    ])
+    const [strategySubs, llmSubs] = await this.positionsRepository.findActiveSubscriptionsForBatchSync(200)
 
     const taskMap = new Map<string, { userId: string; strategyId: string; exchangeId: ExchangeId }>()
 
@@ -361,19 +307,7 @@ export class PositionSyncService {
   }
 
   private async inferMarketType(accountId: string, exchangeId: ExchangeId): Promise<MarketType> {
-    const latestPosition = await this.prisma.position.findFirst({
-      where: {
-        userStrategyAccountId: accountId,
-        exchangeId,
-        marketType: {
-          in: ['spot', 'perp'],
-        },
-      },
-      select: {
-        marketType: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    })
+    const latestPosition = await this.positionsRepository.findFirstPositionByAccount(accountId, exchangeId)
 
     if (latestPosition?.marketType === 'spot' || latestPosition?.marketType === 'perp') {
       return latestPosition.marketType
@@ -507,22 +441,20 @@ export class PositionSyncService {
     durationMs: number,
   ): Promise<void> {
     try {
-      await this.prisma.positionSyncLog.create({
-        data: {
-          userId: result.userId,
-          userStrategyAccountId: accountId,
-          exchangeId: result.exchangeId,
-          marketType: result.marketType,
-          syncType,
-          success: result.success,
-          exchangePositions: result.exchangePositions,
-          localPositions: result.localPositions,
-          differencesCount: result.differences.length,
-          differences: result.differences.length > 0 ? (result.differences as any) : null,
-          errors: result.errors && result.errors.length > 0 ? (result.errors as any) : null,
-          durationMs,
-          triggeredBy,
-        },
+      await this.positionsRepository.saveSyncLog({
+        userId: result.userId,
+        userStrategyAccountId: accountId,
+        exchangeId: result.exchangeId,
+        marketType: result.marketType,
+        syncType,
+        success: result.success,
+        exchangePositions: result.exchangePositions,
+        localPositions: result.localPositions,
+        differencesCount: result.differences.length,
+        differences: result.differences.length > 0 ? (result.differences as any) : null,
+        errors: result.errors && result.errors.length > 0 ? (result.errors as any) : null,
+        durationMs,
+        triggeredBy,
       })
 
       this.logger.debug(

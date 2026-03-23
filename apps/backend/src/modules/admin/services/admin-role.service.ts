@@ -1,22 +1,18 @@
 import type { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.dto'
 import type { Role } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { AppRole } from '@/modules/auth/rbac/permissions'
-import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AdminRoleRepository } from '../repositories/admin-role.repository'
 
 @Injectable()
 export class AdminRoleService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly adminRoleRepository: AdminRoleRepository) {}
 
   async list(params: { page: number; limit: number; name?: string; code?: string }) {
-    const client = this.getClient()
     const { page, limit, name, code } = params
 
     const where =
@@ -33,8 +29,8 @@ export class AdminRoleService {
           }
         : {}
 
-    const total = await client.role.count({ where })
-    const items = await client.role.findMany({
+    const total = await this.adminRoleRepository.count(where)
+    const items = await this.adminRoleRepository.findMany({
       where,
       orderBy: { createdAt: 'asc' },
       skip: (page - 1) * limit,
@@ -45,10 +41,7 @@ export class AdminRoleService {
   }
 
   async findById(id: string): Promise<Role> {
-    const client = this.getClient()
-    const role = await client.role.findUnique({
-      where: { id },
-    })
+    const role = await this.adminRoleRepository.findById(id)
     if (!role) {
       throw new DomainException('Role not found', {
         code: ErrorCode.NOT_FOUND,
@@ -59,12 +52,8 @@ export class AdminRoleService {
   }
 
   async create(dto: CreateAdminRoleDto): Promise<Role> {
-    const client = this.getClient()
-
-    const existing = await client.role.findFirst({
-      where: {
-        OR: [{ code: dto.code }, { name: dto.name }],
-      },
+    const existing = await this.adminRoleRepository.findFirst({
+      OR: [{ code: dto.code }, { name: dto.name }],
     })
     if (existing) {
       throw new DomainException('Role already exists', {
@@ -73,22 +62,18 @@ export class AdminRoleService {
       })
     }
 
-    return client.role.create({
-      data: {
-        code: dto.code,
-        name: dto.name,
-        description: dto.description,
-        menuPermissions: dto.menuPermissions ?? [],
-        featurePermissions: dto.featurePermissions ?? [],
-        apiPermissions: dto.apiPermissions ?? [],
-      },
+    return this.adminRoleRepository.create({
+      code: dto.code,
+      name: dto.name,
+      description: dto.description,
+      menuPermissions: dto.menuPermissions ?? [],
+      featurePermissions: dto.featurePermissions ?? [],
+      apiPermissions: dto.apiPermissions ?? [],
     })
   }
 
   async update(id: string, dto: UpdateAdminRoleDto): Promise<Role> {
-    const client = this.getClient()
-
-    const role = await client.role.findUnique({ where: { id } })
+    const role = await this.adminRoleRepository.findById(id)
     if (!role) {
       throw new DomainException('Role not found', {
         code: ErrorCode.NOT_FOUND,
@@ -96,21 +81,17 @@ export class AdminRoleService {
       })
     }
 
-    return client.role.update({
-      where: { id },
-      data: {
-        name: dto.name ?? role.name,
-        description: dto.description ?? role.description,
-        menuPermissions: dto.menuPermissions ?? role.menuPermissions,
-        featurePermissions: dto.featurePermissions ?? role.featurePermissions,
-        apiPermissions: dto.apiPermissions ?? role.apiPermissions,
-      },
+    return this.adminRoleRepository.update(id, {
+      name: dto.name ?? role.name,
+      description: dto.description ?? role.description,
+      menuPermissions: dto.menuPermissions ?? role.menuPermissions,
+      featurePermissions: dto.featurePermissions ?? role.featurePermissions,
+      apiPermissions: dto.apiPermissions ?? role.apiPermissions,
     })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    const role = await client.role.findUnique({ where: { id } })
+    const role = await this.adminRoleRepository.findById(id)
     if (!role) {
       throw new DomainException('Role not found', {
         code: ErrorCode.NOT_FOUND,
@@ -131,13 +112,7 @@ export class AdminRoleService {
       })
     }
 
-    await client.roleAssignment.deleteMany({
-      where: { roleId: id },
-    })
-    await client.role.delete({
-      where: { id },
-    })
+    await this.adminRoleRepository.deleteAssignmentsByRole(id)
+    await this.adminRoleRepository.delete(id)
   }
 }
-
-

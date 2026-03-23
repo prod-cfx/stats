@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsArray,
@@ -11,6 +11,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class WhaleTradeHistoryItemDto {
   @ApiProperty({ description: '鲸鱼地址（用户地址）', example: '0xWhaleAddress1' })
@@ -217,7 +218,7 @@ export class WhaleAddressPerformanceResponseDto {
   trades!: WhaleTradeHistoryItemDto[]
 }
 
-export class QueryWhaleAddressPerformanceDto {
+export class QueryWhaleAddressPerformanceDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '回溯时间范围（天），默认 30 天，最大 365 天',
     required: false,
@@ -241,18 +242,12 @@ export class QueryWhaleAddressPerformanceDto {
   @IsOptional()
   symbol?: string
 
-  @ApiProperty({
-    description: '返回的最大明细记录数，默认 200，最大 500',
-    required: false,
-    example: 200,
-    minimum: 1,
-    maximum: 500,
-  })
+  @ApiPropertyOptional({ description: '返回的最大明细记录数，默认 200，最大 500', maximum: 500, default: 200 })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @IsOptional()
   @Min(1)
   @Max(500)
-  limit?: number
+  override limit: number = 200
 }
 

@@ -7,9 +7,9 @@ import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { LlmOrchestratedEngineV3 } from '../llm-orchestrated-engine-v3.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { LlmStrategyInstancesRepository } from '../repositories'
 
 /**
  * LLM策略实例级别的调度服务
@@ -32,7 +32,7 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
   private readonly executionLocks = new Map<string, Promise<void>>()
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly instancesRepo: LlmStrategyInstancesRepository,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly engine: LlmOrchestratedEngineV3,
   ) {}
@@ -69,24 +69,7 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
    */
   private async recoverRunningInstances() {
     try {
-      const runningInstances = await this.prisma.llmStrategyInstance.findMany({
-        where: {
-          status: 'running',
-          // 🔧 只恢复已配置 scheduleCron 的实例，跳过显式停用调度的实例
-          scheduleCron: {
-            not: null,
-          },
-        },
-        include: {
-          strategy: {
-            select: {
-              id: true,
-              name: true,
-              status: true,
-            },
-          },
-        },
-      })
+      const runningInstances = await this.instancesRepo.findRunningWithSchedule()
 
       this.logger.log(
         `发现 ${runningInstances.length} 个 running 状态的LLM实例，正在恢复调度...`
@@ -115,10 +98,7 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
    */
   async startInstance(instance: LlmStrategyInstance | string): Promise<void> {
     const instanceData = typeof instance === 'string'
-      ? await this.prisma.llmStrategyInstance.findUnique({ 
-          where: { id: instance },
-          include: { strategy: true }
-        })
+      ? await this.instancesRepo.findByIdWithStrategy(instance)
       : instance
 
     if (!instanceData) {

@@ -11,13 +11,13 @@ import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { LedgerEntryType, PositionStatus, Prisma } from '@/prisma/prisma.types'
 import { InsufficientBalanceException } from './exceptions/insufficient-balance.exception'
 import { LedgerEntryConflictException } from './exceptions/ledger-entry-conflict.exception'
 import { StrategyAccountConflictException } from './exceptions/strategy-account-conflict.exception'
 import { StrategyAccountNotFoundException } from './exceptions/strategy-account-not-found.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AccountsRepository } from './repositories/accounts.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -48,22 +48,20 @@ interface ApplyLedgerDeltaParams {
 
 @Injectable()
 export class AccountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly accountsRepository: AccountsRepository) {}
 
   async createUserStrategyAccount(userId: string, dto: CreateStrategyAccountDto) {
     const initialBalance = new Decimal(dto.initialBalance)
     try {
-      const account = await this.prisma.userStrategyAccount.create({
-        data: {
-          userId,
-          strategyId: dto.strategyId,
-          strategyName: dto.strategyName,
-          strategyVersion: dto.strategyVersion,
-          baseCurrency: dto.baseCurrency,
-          initialBalance,
-          balance: initialBalance,
-          equity: initialBalance,
-        },
+      const account = await this.accountsRepository.create({
+        userId,
+        strategyId: dto.strategyId,
+        strategyName: dto.strategyName,
+        strategyVersion: dto.strategyVersion,
+        baseCurrency: dto.baseCurrency,
+        initialBalance,
+        balance: initialBalance,
+        equity: initialBalance,
       })
       return this.toAccountResponse(account)
     } catch (error) {
@@ -96,13 +94,13 @@ export class AccountsService {
 
     const skip = (page - 1) * limit
     const [items, total] = await Promise.all([
-      this.prisma.userStrategyAccount.findMany({
+      this.accountsRepository.findMany({
         where,
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.userStrategyAccount.count({ where }),
+      this.accountsRepository.count(where),
     ])
 
     let latestStatMap: Map<string, StrategyPnlDaily> | undefined
@@ -118,14 +116,11 @@ export class AccountsService {
   }
 
   async getAccountDetail(id: string, options?: { includeLatestDaily?: boolean }) {
-    const account = await this.prisma.userStrategyAccount.findUnique({ where: { id } })
+    const account = await this.accountsRepository.findById(id)
     if (!account) throw new StrategyAccountNotFoundException({ accountId: id })
     let latestDaily: StrategyPnlDaily | undefined
     if (options?.includeLatestDaily) {
-      latestDaily = await this.prisma.strategyPnlDaily.findFirst({
-        where: { userStrategyAccountId: id },
-        orderBy: { date: 'desc' },
-      })
+      latestDaily = (await this.accountsRepository.findLatestDailyStatForAccount(id)) ?? undefined
     }
     return this.toAccountResponse(account, latestDaily)
   }
@@ -161,13 +156,13 @@ export class AccountsService {
     const skip = (page - 1) * limit
 
     const [items, total] = await Promise.all([
-      this.prisma.pnlLedger.findMany({
+      this.accountsRepository.findLedgerMany({
         where,
         orderBy: { occurredAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.pnlLedger.count({ where }),
+      this.accountsRepository.countLedger(where),
     ])
 
     const data: LedgerEntryResponseDto[] = items.map(entry => ({
@@ -200,13 +195,13 @@ export class AccountsService {
     const skip = (page - 1) * limit
 
     const [items, total] = await Promise.all([
-      this.prisma.strategyPnlDaily.findMany({
+      this.accountsRepository.findManyDailyStats({
         where,
         orderBy: { date: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.strategyPnlDaily.count({ where }),
+      this.accountsRepository.countDailyStats(where),
     ])
 
     const data: StrategyPnlDailyResponseDto[] = items.map(item => ({
@@ -231,19 +226,16 @@ export class AccountsService {
   }
 
   private async ensureAccountExists(accountId: string) {
-    const exists = await this.prisma.userStrategyAccount.findUnique({
-      where: { id: accountId },
-      select: { id: true },
-    })
+    const exists = await this.accountsRepository.findByIdSelect(accountId, { id: true })
     if (!exists) {
       throw new StrategyAccountNotFoundException({ accountId })
     }
   }
 
   async getAccountOwner(accountId: string) {
-    const account = await this.prisma.userStrategyAccount.findUnique({
-      where: { id: accountId },
-      select: { id: true, userId: true },
+    const account = await this.accountsRepository.findByIdSelect(accountId, {
+      id: true,
+      userId: true,
     })
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId })
@@ -309,11 +301,7 @@ export class AccountsService {
 
   private async loadLatestDailyStats(accountIds: string[]) {
     if (!accountIds.length) return new Map<string, StrategyPnlDaily>()
-    const grouped = await this.prisma.strategyPnlDaily.groupBy({
-      by: ['userStrategyAccountId'],
-      _max: { date: true },
-      where: { userStrategyAccountId: { in: accountIds } },
-    })
+    const grouped = await this.accountsRepository.groupLatestDailyStats(accountIds)
     const conditions = grouped
       .filter(item => item._max.date)
       .map(item => ({
@@ -321,14 +309,14 @@ export class AccountsService {
         date: item._max.date!,
       }))
     if (!conditions.length) return new Map<string, StrategyPnlDaily>()
-    const latest = await this.prisma.strategyPnlDaily.findMany({
-      where: { OR: conditions },
-    })
+    const latest = await this.accountsRepository.findDailyStatsByConditions(conditions)
     return new Map(latest.map(item => [item.userStrategyAccountId, item]))
   }
 
   async applyLedgerDelta(params: ApplyLedgerDeltaParams): Promise<UserStrategyAccount> {
-    return this.prisma.runInTransaction(prisma => this.applyLedgerDeltaInternal(prisma, params))
+    return this.accountsRepository.runInTransaction(prisma =>
+      this.applyLedgerDeltaInternal(prisma, params),
+    )
   }
 
   async applyLedgerDeltaWithClient(
@@ -353,17 +341,15 @@ export class AccountsService {
       occurredAt,
     } = params
 
-    const account = await prisma.userStrategyAccount.findUnique({ where: { id: accountId } })
+    const account = await this.accountsRepository.findAccountInTx(prisma, accountId)
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId })
     }
 
     if (referenceId) {
-      const existing = await prisma.pnlLedger.findFirst({
-        where: {
-          userStrategyAccountId: accountId,
-          referenceId,
-        },
+      const existing = await this.accountsRepository.findLedgerFirstInTx(prisma, {
+        userStrategyAccountId: accountId,
+        referenceId,
       })
       if (existing) {
         throw new LedgerEntryConflictException({ referenceId })
@@ -371,15 +357,12 @@ export class AccountsService {
     }
 
     // 使用原子递增避免 lost update，并在更新后检查余额是否为负，依赖事务回滚保证资金安全
-    const updatedAccount = await prisma.userStrategyAccount.update({
-      where: { id: accountId },
-      data: {
-        balance: { increment: delta },
-        equity: { increment: delta },
-        ...(ledgerType === LedgerEntryType.REALIZED_PNL
-          ? { totalRealizedPnl: { increment: delta } }
-          : {}),
-      },
+    const updatedAccount = await this.accountsRepository.updateAccountInTx(prisma, accountId, {
+      balance: { increment: delta },
+      equity: { increment: delta },
+      ...(ledgerType === LedgerEntryType.REALIZED_PNL
+        ? { totalRealizedPnl: { increment: delta } }
+        : {}),
     })
 
     if (requireSufficientBalance && updatedAccount.balance.lt(0)) {
@@ -391,17 +374,15 @@ export class AccountsService {
       })
     }
 
-    await prisma.pnlLedger.create({
-      data: {
-        userStrategyAccountId: accountId,
-        positionId,
-        type: ledgerType,
-        amount: delta,
-        balanceAfter: updatedAccount.balance,
-        referenceId,
-        description,
-        occurredAt: occurredAt ?? new Date(),
-      },
+    await this.accountsRepository.createLedgerInTx(prisma, {
+      userStrategyAccountId: accountId,
+      positionId,
+      type: ledgerType,
+      amount: delta,
+      balanceAfter: updatedAccount.balance,
+      referenceId,
+      description,
+      occurredAt: occurredAt ?? new Date(),
     })
 
     return updatedAccount

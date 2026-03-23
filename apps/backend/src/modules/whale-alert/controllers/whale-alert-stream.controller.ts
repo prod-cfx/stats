@@ -31,6 +31,7 @@ export class WhaleAlertStreamController {
           const result = await this.whaleAlertService.getWhaleTrades({
             since: lastQueryTime,
             limit: 50,
+            page: 1,
           })
           lastQueryTime = new Date().toISOString()
           return result.items

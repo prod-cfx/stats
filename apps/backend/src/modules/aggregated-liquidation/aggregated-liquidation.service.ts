@@ -8,15 +8,15 @@ import type {
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AggregatedLiquidationRepository } from './aggregated-liquidation.repository'
 import { LIQUIDATION_TIMEFRAMES } from './dto/aggregated-liquidation.dto'
+
 @Injectable()
 export class AggregatedLiquidationService {
   private static readonly AGGREGATED_EXCHANGE_CODE = 'AGGREGATED'
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly aggregatedLiquidationRepository: AggregatedLiquidationRepository) {}
 
   /**
    * 获取指定 symbol 的多时间框爆仓汇总（用于前端顶部 summary 卡片）
@@ -55,32 +55,18 @@ export class AggregatedLiquidationService {
     symbol: string,
     timeframe: LiquidationTimeframe,
   ): Promise<ExchangeLiquidResponse> {
-    const client = this.prisma.getClient()
-
-    const latest = await client.aggregatedLiquidationHistory.findFirst({
-      where: {
-        symbol,
-        interval: timeframe,
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-    })
+    const latest = await this.aggregatedLiquidationRepository.findLatestBySymbolAndInterval(symbol, timeframe)
 
     if (!latest) {
       throw new DomainException('aggregated_liquidation.not_found', { code: ErrorCode.AGGREGATED_LIQUIDATION_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol, timeframe } })
     }
 
-    const rows = await client.aggregatedLiquidationHistory.findMany({
-      where: {
-        symbol,
-        interval: timeframe,
-        timestamp: latest.timestamp,
-      },
-      orderBy: {
-        exchangeCode: 'asc',
-      },
-    })
+    const rows = await this.aggregatedLiquidationRepository.findManyBySymbolIntervalAndTimestamp(
+      symbol,
+      timeframe,
+      latest.timestamp,
+      { exchangeCode: 'asc' },
+    )
 
     const detailRows = rows.filter(
       row => row.exchangeCode !== AggregatedLiquidationService.AGGREGATED_EXCHANGE_CODE,
@@ -151,30 +137,18 @@ export class AggregatedLiquidationService {
     symbol: string,
     timeframe: LiquidationTimeframe,
   ): Promise<LiquidationSummaryItemDto | null> {
-    const client = this.prisma.getClient()
-
     try {
-      const latest = await client.aggregatedLiquidationHistory.findFirst({
-        where: {
-          symbol,
-          interval: timeframe,
-        },
-        orderBy: {
-          timestamp: 'desc',
-        },
-      })
+      const latest = await this.aggregatedLiquidationRepository.findLatestBySymbolAndInterval(symbol, timeframe)
 
       if (!latest) {
         return null
       }
 
-      const rows = await client.aggregatedLiquidationHistory.findMany({
-        where: {
-          symbol,
-          interval: timeframe,
-          timestamp: latest.timestamp,
-        },
-      })
+      const rows = await this.aggregatedLiquidationRepository.findManyBySymbolIntervalAndTimestamp(
+        symbol,
+        timeframe,
+        latest.timestamp,
+      )
 
       if (!rows.length) {
         return null
@@ -232,10 +206,3 @@ export class AggregatedLiquidationService {
 }
 
 type ExchangeLiquidResponse = ExchangeLiquidationResponseDto
-
-
-
-
-
-
-

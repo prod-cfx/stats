@@ -2,10 +2,11 @@ import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 const MARKET_BAR_PROVIDERS = ['BINANCE', 'OKX', 'HYPERLIQUID'] as const
 
-export class MarketBarsQueryDto {
+export class MarketBarsQueryDto extends BasePaginationRequestDto {
   @ApiProperty({ description: '交易对代码（如 BTCUSDT）' })
   @IsString()
   symbol!: string
@@ -24,13 +25,13 @@ export class MarketBarsQueryDto {
   @IsDateString()
   end?: string
 
-  @ApiPropertyOptional({ description: '返回数量，最大 1000', default: 500 })
+  @ApiPropertyOptional({ description: '返回数量，最大 1000', default: 500, maximum: 1000 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(1000)
-  limit: number = 500
+  override limit: number = 500
 
   @ApiPropertyOptional({
     description: '可选 provider 过滤（仅返回该来源的 K 线）',

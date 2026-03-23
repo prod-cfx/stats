@@ -16,27 +16,17 @@ describe('account-strategy-view (E2E)', () => {
   let strategyRunningId: string
   let strategyPausedId: string
 
-  beforeAll(async () => {
-    const testing = await createTestingApp()
-    app = testing.app
-    _moduleFixture = testing.moduleFixture
-    prismaService = testing.prisma
-    prisma = prismaService.getClient() as PrismaClient
-
-    owner = await prisma.user.create({
+  function createTestUser(prisma: PrismaClient, emailPrefix: string, nickname: string) {
+    return prisma.user.create({
       data: {
-        email: `account-strategy-owner-${Date.now()}@e2e.test`,
-        nickname: 'owner',
+        email: `${emailPrefix}-${Date.now()}@e2e.test`,
+        nickname,
       },
     })
-    subscriber = await prisma.user.create({
-      data: {
-        email: `account-strategy-subscriber-${Date.now()}@e2e.test`,
-        nickname: 'subscriber',
-      },
-    })
+  }
 
-    const template = await prisma.strategyTemplate.create({
+  function createTestStrategyTemplate(prisma: PrismaClient) {
+    return prisma.strategyTemplate.create({
       data: {
         name: `E2E-Account-Strategy-Template-${Date.now()}`,
         description: 'Account strategy view e2e template',
@@ -52,49 +42,35 @@ describe('account-strategy-view (E2E)', () => {
         status: 'live',
       },
     })
-    templateId = template.id
+  }
 
-    const running = await prisma.strategyInstance.create({
+  function createTestStrategyInstance(
+    prisma: PrismaClient,
+    params: { templateId: string; name: string; status: string; ownerId: string },
+  ) {
+    return prisma.strategyInstance.create({
       data: {
-        strategyTemplateId: templateId,
-        name: `E2E-Account-Strategy-Running-${Date.now()}`,
-        description: 'running strategy',
+        strategyTemplateId: params.templateId,
+        name: `${params.name}-${Date.now()}`,
+        description: `${params.status} strategy`,
         llmModel: 'gpt-4',
-        status: 'running',
+        status: params.status,
         mode: 'LIVE',
         startedAt: new Date('2026-03-18T00:00:00.000Z'),
-        createdBy: owner.id,
-        updatedBy: owner.id,
+        createdBy: params.ownerId,
+        updatedBy: params.ownerId,
       },
     })
-    strategyRunningId = running.id
+  }
 
-    const paused = await prisma.strategyInstance.create({
+  function createTestUserStrategyAccount(
+    prisma: PrismaClient,
+    params: { userId: string; strategyId: string },
+  ) {
+    return prisma.userStrategyAccount.create({
       data: {
-        strategyTemplateId: templateId,
-        name: `E2E-Account-Strategy-Paused-${Date.now()}`,
-        description: 'paused strategy',
-        llmModel: 'gpt-4',
-        status: 'paused',
-        mode: 'LIVE',
-        startedAt: new Date('2026-03-18T00:00:00.000Z'),
-        createdBy: owner.id,
-        updatedBy: owner.id,
-      },
-    })
-    strategyPausedId = paused.id
-
-    await prisma.userStrategySubscription.createMany({
-      data: [
-        { userId: owner.id, strategyInstanceId: strategyRunningId, status: 'active' },
-        { userId: owner.id, strategyInstanceId: strategyPausedId, status: 'active' },
-      ],
-    })
-
-    const account = await prisma.userStrategyAccount.create({
-      data: {
-        userId: owner.id,
-        strategyId: templateId,
+        userId: params.userId,
+        strategyId: params.strategyId,
         strategyName: 'account view strategy',
         baseCurrency: 'USDT',
         initialBalance: 10000,
@@ -104,29 +80,74 @@ describe('account-strategy-view (E2E)', () => {
         totalUnrealizedPnl: 20.12,
       },
     })
+  }
 
-    await prisma.strategyPnlDaily.createMany({
-      data: [
-        {
-          userStrategyAccountId: account.id,
-          date: new Date('2026-03-19T00:00:00.000Z'),
-          equityStart: 10000,
-          equityEnd: 10000,
-          realizedPnl: 0,
-          unrealizedPnl: 0,
-          maxDrawdown: 0,
-        },
-        {
-          userStrategyAccountId: account.id,
-          date: new Date('2026-03-20T00:00:00.000Z'),
-          equityStart: 10000,
-          equityEnd: 9450,
-          realizedPnl: 0,
-          unrealizedPnl: -550,
-          maxDrawdown: 5.5,
-        },
-      ],
+  function createTestSubscriptions(
+    prisma: PrismaClient,
+    params: { userId: string; instanceIds: string[] },
+  ) {
+    return prisma.userStrategySubscription.createMany({
+      data: params.instanceIds.map(id => ({
+        userId: params.userId,
+        strategyInstanceId: id,
+        status: 'active',
+      })),
     })
+  }
+
+  function seedTestPnlDaily(
+    prisma: PrismaClient,
+    accountId: string,
+    entries: Array<{ date: Date; equityStart: number; equityEnd: number; realizedPnl: number; unrealizedPnl: number; maxDrawdown: number }>,
+  ) {
+    return prisma.strategyPnlDaily.createMany({
+      data: entries.map(e => ({ userStrategyAccountId: accountId, ...e })),
+    })
+  }
+
+  beforeAll(async () => {
+    const testing = await createTestingApp()
+    app = testing.app
+    _moduleFixture = testing.moduleFixture
+    prismaService = testing.prisma
+    prisma = prismaService.getClient() as PrismaClient
+
+    owner = await createTestUser(prisma, 'account-strategy-owner', 'owner')
+    subscriber = await createTestUser(prisma, 'account-strategy-subscriber', 'subscriber')
+
+    const template = await createTestStrategyTemplate(prisma)
+    templateId = template.id
+
+    const running = await createTestStrategyInstance(prisma, {
+      templateId,
+      name: 'E2E-Account-Strategy-Running',
+      status: 'running',
+      ownerId: owner.id,
+    })
+    strategyRunningId = running.id
+
+    const paused = await createTestStrategyInstance(prisma, {
+      templateId,
+      name: 'E2E-Account-Strategy-Paused',
+      status: 'paused',
+      ownerId: owner.id,
+    })
+    strategyPausedId = paused.id
+
+    await createTestSubscriptions(prisma, {
+      userId: owner.id,
+      instanceIds: [strategyRunningId, strategyPausedId],
+    })
+
+    const account = await createTestUserStrategyAccount(prisma, {
+      userId: owner.id,
+      strategyId: templateId,
+    })
+
+    await seedTestPnlDaily(prisma, account.id, [
+      { date: new Date('2026-03-19T00:00:00.000Z'), equityStart: 10000, equityEnd: 10000, realizedPnl: 0, unrealizedPnl: 0, maxDrawdown: 0 },
+      { date: new Date('2026-03-20T00:00:00.000Z'), equityStart: 10000, equityEnd: 9450, realizedPnl: 0, unrealizedPnl: -550, maxDrawdown: 5.5 },
+    ])
   })
 
   afterAll(async () => {

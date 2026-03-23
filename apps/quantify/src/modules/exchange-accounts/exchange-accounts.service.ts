@@ -11,10 +11,11 @@ import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { ExchangeOperationFailedException } from '@/modules/trading/exceptions/exchange-operation-failed.exception'
 import { InvalidCredentialsException } from '@/modules/trading/exceptions/invalid-credentials.exception'
 import { TradingService } from '@/modules/trading/trading.service'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 import { ExchangeAccountNotFoundException, InvalidExchangeAccountConfigException } from './exceptions'
+ 
+import { ExchangeAccountRepository } from './repositories/exchange-account.repository'
 
 const SUPPORTED_EXCHANGES: ExchangeId[] = ['binance', 'okx', 'hyperliquid']
 
@@ -26,8 +27,8 @@ const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 @Injectable()
 export class ExchangeAccountsService {
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    @Inject(ExchangeAccountRepository)
+    private readonly exchangeAccountRepository: ExchangeAccountRepository,
     @Inject(ConfigCryptoService)
     private readonly crypto: ConfigCryptoService,
     @Inject(TradingService)
@@ -40,15 +41,13 @@ export class ExchangeAccountsService {
     const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
     const encryptedConfig = this.crypto.encryptConfig(config)
     try {
-      const record = await this.prisma.exchangeAccount.create({
-        data: {
-          userId,
-          exchangeId: dto.exchangeId,
-          name: dto.name,
-          isTestnet: dto.isTestnet ?? false,
-          encryptedConfig,
-          lastValidatedAt,
-        },
+      const record = await this.exchangeAccountRepository.createExchangeAccount({
+        userId,
+        exchangeId: dto.exchangeId,
+        name: dto.name,
+        isTestnet: dto.isTestnet ?? false,
+        encryptedConfig,
+        lastValidatedAt,
       })
       return this.toResponse(record, config)
     }
@@ -56,7 +55,7 @@ export class ExchangeAccountsService {
       if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002')
         throw error
 
-      const existing = await this.prisma.exchangeAccount.findFirst({
+      const existing = await this.exchangeAccountRepository.findExchangeAccountFirst({
         where: { userId, exchangeId: dto.exchangeId },
         orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
         select: { id: true },
@@ -64,30 +63,21 @@ export class ExchangeAccountsService {
       if (!existing)
         throw error
 
-      const record = await this.prisma.exchangeAccount.update({
-        where: { id: existing.id },
-        data: {
-          name: dto.name,
-          isTestnet: dto.isTestnet ?? false,
-          encryptedConfig,
-          lastValidatedAt,
-        },
+      const record = await this.exchangeAccountRepository.updateExchangeAccount(existing.id, {
+        name: dto.name,
+        isTestnet: dto.isTestnet ?? false,
+        encryptedConfig,
+        lastValidatedAt,
       })
       return this.toResponse(record, config)
     }
   }
 
   private async ensureUserExists(userId: string, userEmail?: string): Promise<void> {
-    const existingById = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true },
-    })
+    const existingById = await this.exchangeAccountRepository.findUserById(userId)
     if (existingById) {
       if (userEmail && existingById.email !== userEmail) {
-        await this.prisma.user.update({
-          where: { id: userId },
-          data: { email: userEmail },
-        })
+        await this.exchangeAccountRepository.updateUserEmail(userId, userEmail)
       }
       return
     }
@@ -99,10 +89,7 @@ export class ExchangeAccountsService {
       })
     }
 
-    const existingByEmail = await this.prisma.user.findUnique({
-      where: { email: userEmail },
-      select: { id: true },
-    })
+    const existingByEmail = await this.exchangeAccountRepository.findUserByEmail(userEmail)
     if (existingByEmail && existingByEmail.id !== userId) {
       throw new DomainException('exchange_account.user_conflict', {
         code: ErrorCode.EXCHANGE_ACCOUNT_USER_CONFLICT,
@@ -110,19 +97,17 @@ export class ExchangeAccountsService {
       })
     }
 
-    await this.prisma.user.create({
-      data: {
-        id: userId,
-        email: userEmail,
-      },
+    await this.exchangeAccountRepository.createUser({
+      id: userId,
+      email: userEmail,
     })
   }
 
   async list(userId: string): Promise<ExchangeAccountResponseDto[]> {
-    const records = await this.prisma.exchangeAccount.findMany({
-      where: { userId },
-      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-    })
+    const records = await this.exchangeAccountRepository.findExchangeAccountsByUser(userId, [
+      { updatedAt: 'desc' },
+      { createdAt: 'desc' },
+    ])
     const recordMap = new Map<ExchangeId, ExchangeAccount>()
     for (const record of records) {
       const exchangeId = record.exchangeId as ExchangeId
@@ -150,10 +135,8 @@ export class ExchangeAccountsService {
   }
 
   async delete(userId: string, exchangeId: string): Promise<void> {
-    const client = this.prisma.getClient()
-
     // 先验证账户归属，防止越权操作
-    const account = await client.exchangeAccount.findFirst({
+    const account = await this.exchangeAccountRepository.findExchangeAccountFirst({
       where: { exchangeId: exchangeId as PrismaExchangeId, userId },
       select: { id: true },
     })
@@ -164,15 +147,9 @@ export class ExchangeAccountsService {
     // 删除账户前，必须先暂停该用户使用该账户的所有 active LLM 订阅
     // 注意：必须同时过滤 userId，防止越权暂停他人订阅
     // 否则外键 onDelete:SetNull 会让订阅变成 active 且 exchangeAccountId=null 的脏状态
-    const pausedCount = await client.userLlmStrategySubscription.updateMany({
-      where: {
-        userId,
-        exchangeAccountId: account.id,
-        status: 'active',
-      },
-      data: {
-        status: 'paused',
-      },
+    const pausedCount = await this.exchangeAccountRepository.pauseActiveLlmSubscriptions({
+      userId,
+      exchangeAccountId: account.id,
     })
 
     if (pausedCount.count > 0) {
@@ -181,9 +158,7 @@ export class ExchangeAccountsService {
       )
     }
 
-    await client.exchangeAccount.delete({
-      where: { id: account.id },
-    })
+    await this.exchangeAccountRepository.deleteExchangeAccount(account.id)
   }
 
   private resolveMarketType(marketType?: MarketType): MarketType {

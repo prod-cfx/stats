@@ -1,4 +1,4 @@
-import type { LlmStrategyRun, Prisma } from '@/prisma/prisma.types'
+import type { LlmStrategyRun, Prisma, TradingSignal } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 
 import { PrismaService } from '@/prisma/prisma.service'
@@ -71,6 +71,29 @@ export class LlmStrategyRunsRepository {
           status: 'skipped',
         },
       },
+    })
+  }
+
+  /**
+   * 原子操作：在事务中查找 symbol、创建 TradingSignal 并将其关联到指定 Run 记录。
+   * 若 symbol 不存在返回 null（由调用方抛出业务异常）。
+   */
+  async createTradingSignalAndLinkRun(
+    symbolCode: string,
+    signalData: (symbolId: string) => Prisma.TradingSignalCreateInput,
+    runId: string,
+  ): Promise<{ tradingSignal: TradingSignal; symbolFound: true } | { symbolFound: false }> {
+    return this.prisma.getClient().$transaction(async (tx) => {
+      const symbolRecord = await tx.symbol.findUnique({ where: { code: symbolCode } })
+      if (!symbolRecord) {
+        return { symbolFound: false } as const
+      }
+      const tradingSignal = await tx.tradingSignal.create({ data: signalData(symbolRecord.id) })
+      await tx.llmStrategyRun.update({
+        where: { id: runId },
+        data: { generatedSignal: { connect: { id: tradingSignal.id } } },
+      })
+      return { tradingSignal, symbolFound: true } as const
     })
   }
 

@@ -1,23 +1,22 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 瑁呴グ鍣ㄩ渶瑕佽繍琛屾椂瀵煎叆浠ヤ繚鐣欑被鍨嬪厓鏁版嵁 */
-import { Controller, Get, Inject, Query } from '@nestjs/common'
+import type { TradingSignalListQueryDto } from '../dto/trading-signal-list-query.dto'
+import { Controller, Get, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 
-import { TradingSignalListQueryDto } from '../dto/trading-signal-list-query.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { TradingSignalResponseDto } from '../dto/trading-signal-response.dto'
-import { TradingSignalRepository } from '../repositories/trading-signal.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
+import { OpsTradingSignalsService } from '../services/ops-trading-signals.service'
 
 @ApiTags('ops/trading-signals')
 @ApiExtraModels(BasePaginationResponseDto, TradingSignalResponseDto)
 @Controller('ops/trading-signals')
 export class OpsTradingSignalsController {
   constructor(
-    @Inject(TradingSignalRepository)
-    private readonly signalRepository: TradingSignalRepository,
+    private readonly opsTradingSignalsService: OpsTradingSignalsService,
   ) {}
 
   @Get()
-  @ApiOperation({ summary: '鑾峰彇淇″彿璁板綍鍒楄〃' })
+  @ApiOperation({ summary: '获取信号记录列表' })
   @ApiOkResponse({
     schema: {
       allOf: [
@@ -36,7 +35,7 @@ export class OpsTradingSignalsController {
   async list(
     @Query() query: TradingSignalListQueryDto,
   ): Promise<BasePaginationResponseDto<TradingSignalResponseDto>> {
-    const result = await this.signalRepository.findMany({
+    const result = await this.opsTradingSignalsService.findMany({
       strategyInstanceId: query.strategyInstanceId,
       strategyId: query.strategyId,
       llmStrategyId: query.llmStrategyId,
