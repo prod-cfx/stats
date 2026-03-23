@@ -4,13 +4,14 @@ import type { ClsService } from 'nestjs-cls'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
 import type { Prisma } from '@/prisma/prisma.types'
-import { generateShortId } from '@ai/shared'
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { ErrorCode, generateShortId } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
 import { PrismaClient } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
+import { DomainException } from '../common/exceptions/domain.exception'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
 import { PRISMA_OPTIONS } from './prisma.constants'
 
@@ -61,9 +62,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (!skipConnect) {
       const dbUrl = defaultEnvAccessor.str('DATABASE_URL')
       if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
-        throw new Error(
-          'DATABASE_URL 未配置或仍为占位符。请在 .env.*.local 中设置有效的数据库连接字符串。',
-        )
+        throw new DomainException('prisma.missing_database_url', {
+          code: ErrorCode.PRISMA_CONNECTION_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { key: 'DATABASE_URL' },
+        })
       }
       connectionString = dbUrl
     }

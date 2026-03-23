@@ -1,6 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Resend } from 'resend'
+
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { EmailFailedException } from '@/common/exceptions/email-failed.exception'
 
 const MOCK_ENVIRONMENTS = new Set(['development', 'staging', 'test', 'e2e'])
@@ -48,7 +51,11 @@ export class MailService {
 
     const apiKey = this.configService.get<string>('RESEND_API_KEY')?.trim()
     if (!apiKey && !this.isMockEnvironment) {
-      throw new Error('RESEND_API_KEY is required outside mock environments')
+      throw new DomainException('mail.missing_api_key', {
+        code: ErrorCode.MAIL_SERVICE_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { key: 'RESEND_API_KEY' },
+      })
     }
 
     if (!apiKey) {
@@ -150,28 +157,44 @@ export class MailService {
 
   getTestEmails(): StoredEmailRecord[] {
     if (!this.storeTestEmails) {
-      throw new Error('getTestEmails 仅可在测试环境下使用')
+      throw new DomainException('mail.test_only_operation', {
+        code: ErrorCode.MAIL_SERVICE_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { method: 'getTestEmails' },
+      })
     }
     return [...this.testEmailStorage]
   }
 
   clearTestEmails(): void {
     if (!this.storeTestEmails) {
-      throw new Error('clearTestEmails 仅可在测试环境下使用')
+      throw new DomainException('mail.test_only_operation', {
+        code: ErrorCode.MAIL_SERVICE_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { method: 'clearTestEmails' },
+      })
     }
     this.testEmailStorage.length = 0
   }
 
   findTestEmailByRecipient(email: string): StoredEmailRecord[] {
     if (!this.storeTestEmails) {
-      throw new Error('findTestEmailByRecipient 仅可在测试环境下使用')
+      throw new DomainException('mail.test_only_operation', {
+        code: ErrorCode.MAIL_SERVICE_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { method: 'findTestEmailByRecipient' },
+      })
     }
     return this.testEmailStorage.filter(record => record.to === email)
   }
 
   extractVerificationCodeFromEmail(emailHtml: string): string | null {
     if (!this.storeTestEmails) {
-      throw new Error('extractVerificationCodeFromEmail 仅可在测试环境下使用')
+      throw new DomainException('mail.test_only_operation', {
+        code: ErrorCode.MAIL_SERVICE_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { method: 'extractVerificationCodeFromEmail' },
+      })
     }
     const match = emailHtml.match(/>(\d{6})</)
     return match ? match[1] : null

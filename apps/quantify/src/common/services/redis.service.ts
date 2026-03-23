@@ -1,9 +1,12 @@
 import type { LoggerService, OnApplicationShutdown } from '@nestjs/common'
-import { Inject, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import Redis from 'ioredis'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+
 import { defaultEnvAccessor } from '../env/env.accessor'
+import { DomainException } from '../exceptions/domain.exception'
 
 @Injectable()
 export class RedisService implements OnApplicationShutdown {
@@ -45,7 +48,11 @@ export class RedisService implements OnApplicationShutdown {
       })
     }
 
-    throw new Error('Redis configuration is incomplete. Please set REDIS_URL.')
+    throw new DomainException('redis.missing_config', {
+      code: ErrorCode.REDIS_CONNECTION_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { key: 'REDIS_URL' },
+    })
   }
 
   private registerEvents(): void {

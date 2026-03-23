@@ -1,11 +1,14 @@
+import { ErrorCode } from '@ai/shared'
 import { BullModule } from '@nestjs/bull'
-import { Module } from '@nestjs/common'
+import { HttpStatus, Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { ScheduleModule } from '@nestjs/schedule'
 import { WinstonModule } from 'nest-winston'
+
 import { defaultEnvAccessor } from '../common/env/env.accessor'
+import { DomainException } from '../common/exceptions/domain.exception'
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter'
 import { LoggerInterceptor } from '../common/interceptors/logger.interceptor'
 import { RequestContextInterceptor } from '../common/interceptors/request-context.interceptor'
@@ -47,7 +50,11 @@ const bullImports = isMessageBusRuntimeEnabled()
         useFactory: (env: EnvService) => {
           const url = env.getString('REDIS_URL')
           if (!url) {
-            throw new Error('REDIS_URL is required for Bull queue initialization')
+            throw new DomainException('redis.missing_url_for_bull', {
+              code: ErrorCode.REDIS_CONNECTION_ERROR,
+              status: HttpStatus.INTERNAL_SERVER_ERROR,
+              args: { key: 'REDIS_URL' },
+            })
           }
 
           return { url }
