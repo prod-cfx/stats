@@ -1,9 +1,12 @@
-import type { AiSignalPayload, MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
+import type {
+  AiSignalPayload,
+  MarketTimeframe as AppMarketTimeframe,
+  StrategyDecisionV1,
+} from '@ai/shared'
 import type {
   LegTimeframeData,
   MultiLegStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
-import type { StrategyDecisionV1 } from '@ai/shared'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
@@ -49,8 +52,8 @@ import {
   mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
