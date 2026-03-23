@@ -1,6 +1,7 @@
 'use client'
 
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
+import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
@@ -8,8 +9,6 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
-import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
@@ -23,12 +22,13 @@ import { useAuth } from '@/hooks/use-auth'
 import {
   deployAccountAiQuantStrategy,
   continueLlmCodegenSession,
+  fetchUserExchangeAccountStatuses,
   startLlmCodegenSession,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
 export interface QuantParams {
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   buyWindowMin: number
   buyDropPct: number
@@ -47,10 +47,8 @@ const DEFAULT_PARAMS: QuantParams = {
   positionPct: 10,
 }
 
-const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
-const DEV_MOCK_EXECUTION_MODE = true
 
 interface ConversationState {
   id: string
@@ -60,7 +58,6 @@ interface ConversationState {
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
-  latestSignalMessage: string | null
   updatedAt: number
 }
 
@@ -141,7 +138,6 @@ export function AiQuantPageClient() {
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
-      latestSignalMessage: null,
       updatedAt: now,
     }
   }
@@ -152,10 +148,9 @@ export function AiQuantPageClient() {
   const [conversations, setConversations] = useState<ConversationState[]>(() => [createConversation()])
   const [activeConversationId, setActiveConversationId] = useState<string>('')
   const [deployOpen, setDeployOpen] = useState(false)
-  const [apiReady, setApiReady] = useState({ binance: false, okx: false })
-  const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
+  const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx' | 'hyperliquid'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
-  const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -182,7 +177,6 @@ export function AiQuantPageClient() {
       const normalized = parsed.map(item => ({
         ...item,
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
-        latestSignalMessage: item.latestSignalMessage ?? null,
       }))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
@@ -201,66 +195,51 @@ export function AiQuantPageClient() {
   }, [conversations])
 
   useEffect(() => {
-    const syncApiReady = () => {
-      const raw = localStorage.getItem(API_STORAGE_KEY)
-      if (!raw) {
-        setApiReady({ binance: false, okx: false })
-        return
-      }
+    if (!session) {
+      setExchangeAccounts([])
+      return
+    }
+
+    let cancelled = false
+    const loadExchangeAccounts = async () => {
       try {
-        const parsed = JSON.parse(raw) as {
-          binanceApiKey?: string
-          binanceSecretKey?: string
-          okxApiKey?: string
-          okxSecretKey?: string
-          okxPassphrase?: string
-        }
-        setApiReady({
-          binance: Boolean(parsed.binanceApiKey && parsed.binanceSecretKey),
-          okx: Boolean(parsed.okxApiKey && parsed.okxSecretKey && parsed.okxPassphrase),
-        })
+        const statuses = await fetchUserExchangeAccountStatuses()
+        if (cancelled) return
+        setExchangeAccounts(
+          statuses
+            .filter(item => item.isBound && item.id)
+            .map(item => ({
+              accountId: item.id!,
+              exchange: item.exchangeId,
+              accountName: item.name?.trim() || `${item.exchangeId} testnet account`,
+              apiKeyMask: item.maskedCredential?.trim() || '已绑定',
+              status: 'available' as const,
+            })),
+        )
       } catch {
-        // ignore invalid local data
+        if (!cancelled) {
+          setExchangeAccounts([])
+        }
       }
     }
 
-    syncApiReady()
-    window.addEventListener('focus', syncApiReady)
-    window.addEventListener('storage', syncApiReady)
+    void loadExchangeAccounts()
+    window.addEventListener('focus', loadExchangeAccounts)
     return () => {
-      window.removeEventListener('focus', syncApiReady)
-      window.removeEventListener('storage', syncApiReady)
+      cancelled = true
+      window.removeEventListener('focus', loadExchangeAccounts)
     }
-  }, [])
+  }, [session])
 
-  const apiConfigured = selectedDeployExchange === 'binance' ? apiReady.binance : apiReady.okx
-  const mockExecutionMode = DEV_MOCK_EXECUTION_MODE
-  const deployAccounts = useMemo(() => {
-    if (exchangeAccounts.length > 0) return exchangeAccounts
-    if (!mockExecutionMode) return exchangeAccounts
-    return [
-      {
-        accountId: 'mock-binance',
-        exchange: 'binance' as const,
-        accountName: 'Mock Binance Account',
-        apiKeyMask: 'MOCK',
-        status: 'available' as const,
-      },
-      {
-        accountId: 'mock-okx',
-        exchange: 'okx' as const,
-        accountName: 'Mock OKX Account',
-        apiKeyMask: 'MOCK',
-        status: 'available' as const,
-      },
-    ]
-  }, [exchangeAccounts, mockExecutionMode])
+  const apiConfigured = useMemo(
+    () => exchangeAccounts.some(item => item.exchange === selectedDeployExchange && item.status === 'available'),
+    [exchangeAccounts, selectedDeployExchange],
+  )
+  const deployAccounts = exchangeAccounts
 
   const canDeploy = useMemo(() => {
-    if (!activeConversation?.backtestResult) return false
-    if (mockExecutionMode) return true
-    return activeConversation.backtestResult.maxDrawdownPct <= 20
-  }, [activeConversation?.backtestResult, mockExecutionMode])
+    return Boolean(activeConversation?.backtestResult)
+  }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
 
   const compactMode = useMemo(() => {
@@ -339,16 +318,14 @@ export function AiQuantPageClient() {
           }
         : (shouldReuseGraphChecklist ? graphChecklist : {})
 
-      const startNewSession = async () =>
+    const startNewSession = async () =>
         startLlmCodegenSession({
-          userId: session.userId,
           initialMessage: trimmedMessage,
           ...checklistPayload,
         })
 
       const continueSession = async (id: string) =>
         continueLlmCodegenSession(id, {
-          userId: session.userId,
           message: trimmedMessage,
           confirmGenerate,
           ...checklistPayload,
@@ -411,7 +388,6 @@ export function AiQuantPageClient() {
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
           logicGraph: nextGraph,
           backtestResult: null,
-          latestSignalMessage: null,
           messages: [
             ...conv.messages.map(msg =>
               msg.id === loadingMessageId
@@ -427,7 +403,6 @@ export function AiQuantPageClient() {
         if (conv.id !== conversationId) return conv
         return {
           ...conv,
-          latestSignalMessage: null,
           messages: [
             ...conv.messages.map(msg =>
               msg.id === loadingMessageId
@@ -465,7 +440,6 @@ export function AiQuantPageClient() {
         title: derivedTitle,
         messages: nextMessages,
         backtestResult: null,
-        latestSignalMessage: null,
         updatedAt: Date.now(),
       }
     })
@@ -522,7 +496,6 @@ export function AiQuantPageClient() {
       ...curr,
       params: nextParams,
       backtestResult: null,
-      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -566,7 +539,6 @@ export function AiQuantPageClient() {
       ...curr,
       params: nextParams,
       backtestResult: null,
-      latestSignalMessage: null,
       messages: [
         ...curr.messages,
         {
@@ -590,7 +562,7 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
-    if (!graphConfirmed && !mockExecutionMode) {
+    if (!graphConfirmed) {
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -665,17 +637,6 @@ export function AiQuantPageClient() {
     onRunStrategy(preset.id, preset.params, t(`aiQuant.strategies.${preset.id}.name`, { defaultValue: preset.name }), true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversation, session])
-
-  useEffect(() => {
-    const syncAccounts = () => setExchangeAccounts(listExchangeAccounts())
-    syncAccounts()
-    window.addEventListener('focus', syncAccounts)
-    window.addEventListener('storage', syncAccounts)
-    return () => {
-      window.removeEventListener('focus', syncAccounts)
-      window.removeEventListener('storage', syncAccounts)
-    }
-  }, [])
 
   useEffect(() => {
     setSelectedDeployExchange(activeConversation.params.exchange)
@@ -764,7 +725,7 @@ export function AiQuantPageClient() {
             onParamsChange={nextParams => updateActiveConversation(curr => ({ ...curr, params: nextParams, updatedAt: Date.now() }))}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={graphConfirmed || mockExecutionMode}
+            canRunBacktest={graphConfirmed}
           />
 
           {activeConversation.logicGraph && (
@@ -813,18 +774,11 @@ export function AiQuantPageClient() {
             />
           )}
 
-          {activeConversation.latestSignalMessage && (
-            <section className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
-              <p className="text-xs font-semibold text-emerald-300">MOCK SIGNAL</p>
-              <p className="mt-2 text-sm text-emerald-100">{activeConversation.latestSignalMessage}</p>
-            </section>
-          )}
-
           {activeConversation.backtestResult && (
             <BacktestSummaryCard
               result={activeConversation.backtestResult}
               canDeploy={canDeploy}
-              drawdownLimited={!mockExecutionMode}
+              drawdownLimited={false}
               onOpenFullScreen={() =>
                 router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}`)
               }
@@ -850,7 +804,7 @@ export function AiQuantPageClient() {
         open={deployOpen}
         onClose={() => setDeployOpen(false)}
         canDeploy={canDeploy}
-        apiConfigured={apiConfigured || mockExecutionMode}
+        apiConfigured={apiConfigured}
         exchange={selectedDeployExchange}
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
@@ -861,14 +815,13 @@ export function AiQuantPageClient() {
         onSelectAccount={setSelectedDeployAccountId}
         onConfirmDeploy={async () => {
           const account = deployAccounts.find(item => item.accountId === selectedDeployAccountId)
-          if (!account || !activeConversation.backtestResult || !session?.userId) return
+          if (!account || !activeConversation.backtestResult || !session) return
 
           const strategyName = activeConversation.title || 'AI策略'
           const timeframe = `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`
 
           try {
             await deployAccountAiQuantStrategy({
-              userId: session.userId,
               name: strategyName,
               exchange: selectedDeployExchange,
               symbol: activeConversation.params.symbol,
@@ -890,39 +843,20 @@ export function AiQuantPageClient() {
               ],
               updatedAt: Date.now(),
             }))
-          } catch {
-            // 后端部署失败时，在本地 mock 模式下保留可演示能力，但明确这是本地模拟
-            if (mockExecutionMode) {
-              upsertStrategyDeployment({
-                id: `stg-${activeConversation.id}`,
-                name: strategyName,
-                exchange: selectedDeployExchange,
-                symbol: activeConversation.params.symbol,
-                timeframe,
-                positionPct: activeConversation.params.positionPct,
-                accountId: account.accountId,
-                accountName: account.accountName,
-                metrics: {
-                  returnPct: activeConversation.backtestResult.totalReturnPct,
-                  maxDrawdownPct: activeConversation.backtestResult.maxDrawdownPct,
-                  winRatePct: activeConversation.backtestResult.winRatePct,
-                  tradeCount: activeConversation.backtestResult.tradeCount,
+          } catch (error) {
+            const message = error instanceof ApiError ? error.message : '部署失败，请检查账户绑定与后端执行链路'
+            updateActiveConversation(curr => ({
+              ...curr,
+              messages: [
+                ...curr.messages,
+                {
+                  id: `deploy-failed-${Date.now()}`,
+                  role: 'assistant',
+                  content: message,
                 },
-              })
-              setDeployOpen(false)
-              updateActiveConversation(curr => ({
-                ...curr,
-                messages: [
-                  ...curr.messages,
-                  {
-                    id: `deploy-mock-${Date.now()}`,
-                    role: 'assistant',
-                    content: `模拟部署成功（仅本地数据）：${selectedDeployExchange.toUpperCase()} / ${account.accountName}。`,
-                  },
-                ],
-                updatedAt: Date.now(),
-              }))
-            }
+              ],
+              updatedAt: Date.now(),
+            }))
           }
         }}
         lng={lng}

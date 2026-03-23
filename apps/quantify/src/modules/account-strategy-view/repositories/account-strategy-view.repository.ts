@@ -1,5 +1,6 @@
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
+import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PrismaService } from '@/prisma/prisma.service'
 import { SubscriptionStatus } from '@/prisma/prisma.types'
@@ -53,34 +54,27 @@ export class AccountStrategyViewRepository {
           },
           select: { id: true },
         })
-        resolvedExchangeAccountId = matchedAccount?.id
+        if (!matchedAccount) {
+          throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
+        }
+        resolvedExchangeAccountId = matchedAccount.id
       }
 
       if (!resolvedExchangeAccountId) {
-        const accountName = input.exchangeAccountName?.trim() || `${input.exchange.toUpperCase()} Mock Account`
         const existingAccount = await tx.exchangeAccount.findFirst({
           where: {
             userId: input.userId,
             exchangeId: input.exchange,
-            name: accountName,
           },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
           select: { id: true },
         })
-        if (existingAccount) {
-          resolvedExchangeAccountId = existingAccount.id
-        } else {
-          const createdAccount = await tx.exchangeAccount.create({
-            data: {
-              userId: input.userId,
-              exchangeId: input.exchange,
-              name: accountName,
-              isTestnet: true,
-              encryptedConfig: '{}',
-            },
-            select: { id: true },
+        if (!existingAccount) {
+          throw new ExchangeAccountNotFoundException({
+            accountId: input.exchangeAccountId ?? `${input.exchange}-account`,
           })
-          resolvedExchangeAccountId = createdAccount.id
         }
+        resolvedExchangeAccountId = existingAccount.id
       }
 
       const templateName = `AI量化快捷模板-${input.userId}`

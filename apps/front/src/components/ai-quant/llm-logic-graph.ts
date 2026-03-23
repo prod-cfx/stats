@@ -13,7 +13,7 @@ interface CodegenSpec {
 }
 
 interface GraphFallbackMeta {
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   positionPct: number
 }

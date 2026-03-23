@@ -24,11 +24,11 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
   }, [id, isLoading, lng, session])
 
   useEffect(() => {
-    if (isLoading || !session?.userId) return
+    if (isLoading || !session) return
     let cancelled = false
     setIsDetailLoading(true)
 
-    void fetchAccountAiQuantStrategyDetail(id, session.userId)
+    void fetchAccountAiQuantStrategyDetail(id)
       .then((detail) => {
         if (cancelled) return
         setStrategy(mapAccountStrategyDetailToRecord(detail))
@@ -44,7 +44,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     return () => {
       cancelled = true
     }
-  }, [id, isLoading, session?.userId])
+  }, [id, isLoading, session])
 
   if (isLoading || !session || isDetailLoading) {
     return <main className="mx-auto w-full max-w-[920px] flex-1 px-4 py-8 md:px-8" />

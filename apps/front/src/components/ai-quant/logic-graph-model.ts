@@ -22,10 +22,9 @@ export interface StrategyLogicGraph {
   actions: LogicActionNode[]
   risk: string[]
   meta: {
-    exchange: 'binance' | 'okx'
+    exchange: 'binance' | 'okx' | 'hyperliquid'
     symbol: string
     timeframe: string
     positionPct: number
   }
 }
-
