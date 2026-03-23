@@ -57,6 +57,8 @@ Thumbs.db
 dist/
 node_modules/
 logs
+.omc/
+.dist/
 .next/
 *.log
 .nx/
@@ -64,4 +66,4 @@ apps/backend/generated/
 apps/quantify/generated/
 /docs/plans/
 /docs/superpowers/
-/.omc/
+

@@ -1,7 +1,7 @@
 import { ExchangeOperationFailedException } from './exceptions'
 import { TradingService } from './trading.service'
 
-describe('TradingService', () => {
+describe('tradingService', () => {
   function createService() {
     const client = {
       createOrder: jest.fn(),

@@ -2,7 +2,7 @@ import type { CallHandler, ExecutionContext } from '@nestjs/common'
 import { throwError } from 'rxjs'
 import { LoggerInterceptor } from './logger.interceptor'
 
-describe('LoggerInterceptor', () => {
+describe('loggerInterceptor', () => {
   const createContext = (): ExecutionContext => {
     const req = {
       method: 'POST',

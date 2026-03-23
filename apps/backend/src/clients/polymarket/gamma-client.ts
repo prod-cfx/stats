@@ -1,9 +1,11 @@
 import type { GammaMarketsResponse, PolymarketGammaMarket } from './types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import * as path from 'node:path'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 export interface ListMarketsParams {
   limit?: number
@@ -100,7 +102,11 @@ export class PolymarketGammaClient {
     } else {
       // 非预期格式，视为错误而非空数据
       this.logger.error(`Unexpected Gamma API response format: ${JSON.stringify(json).substring(0, 500)}`)
-      throw new Error(`Gamma API returned unexpected response format. Expected array or object with 'markets' field, got: ${typeof json}`)
+      throw new DomainException('polymarket.client_error', {
+        code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Gamma API returned unexpected response format. Expected array or object with 'markets' field, got: ${typeof json}` },
+      })
     }
 
     return {
@@ -128,14 +134,20 @@ export class PolymarketGammaClient {
 
       if (!response.ok) {
         const body = await response.text().catch(() => '')
-        throw new Error(
-          `Gamma API request failed: status=${response.status} ${response.statusText} url=${url.toString()} body=${body.slice(0, 200)}`,
-        )
+        throw new DomainException('polymarket.client_error', {
+          code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Gamma API request failed: status=${response.status} ${response.statusText} url=${url.toString()} body=${body.slice(0, 200)}` },
+        })
       }
 
       const json = (await response.json()) as GammaMarketsResponse | PolymarketGammaMarket[]
       if (!json || (typeof json !== 'object' && !Array.isArray(json))) {
-        throw new Error('Gamma API response is invalid')
+        throw new DomainException('polymarket.client_error', {
+          code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: 'Gamma API response is invalid' },
+        })
       }
       return json
     } catch (error) {

@@ -1,6 +1,7 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type {LongShortRatio as LongShortRatioModel} from '@/prisma/prisma.types';
 import { Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -43,7 +44,7 @@ export class LongShortRatioRepository {
    * 默认按时间倒序返回最新的 limit 条数据
    */
   async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockRatios(query)
     }
     try {

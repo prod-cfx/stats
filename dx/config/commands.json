@@ -474,17 +474,131 @@
 
   "demo": {},
   "deploy": {
+    "backend": {
+      "internal": "backend-artifact-deploy",
+      "description": "构建、上传并部署 backend 制品到远端主机",
+      "backendDeploy": {
+        "build": {
+          "app": "backend",
+          "distDir": "dist/backend",
+          "versionFile": "apps/backend/package.json",
+          "commands": {
+            "development": "npx nx build backend --configuration=development",
+            "staging": "npx nx build backend --configuration=production",
+            "production": "npx nx build backend --configuration=production"
+          }
+        },
+        "runtime": {
+          "appPackage": "dist/backend/package.json",
+          "rootPackage": "package.json",
+          "lockfile": "pnpm-lock.yaml",
+          "prismaSchemaDir": "apps/backend/prisma/schema",
+          "prismaConfig": "apps/backend/prisma.config.ts",
+          "ecosystemConfig": "dx/deploy/ecosystem.backend.config.cjs"
+        },
+        "artifact": {
+          "outputDir": "release/backend",
+          "bundleName": "backend-bundle"
+        },
+        "remote": {
+          "host": "stats-server",
+          "port": 22,
+          "user": "__SSH_CONFIG__",
+          "baseDir": "/opt/stats"
+        },
+        "startup": {
+          "mode": "pm2",
+          "serviceName": "backend"
+        },
+        "deploy": {
+          "keepReleases": 5,
+          "installCommand": "CI=true pnpm install --prod --no-frozen-lockfile --ignore-workspace",
+          "prismaGenerate": true,
+          "prismaMigrateDeploy": true,
+          "prismaSeed": true
+        }
+      }
+    },
+    "quantify": {
+      "internal": "backend-artifact-deploy",
+      "description": "构建、上传并部署 quantify 制品到远端主机",
+      "backendDeploy": {
+        "build": {
+          "app": "quantify",
+          "distDir": "dist/quantify",
+          "versionFile": "apps/quantify/package.json",
+          "commands": {
+            "development": "npx nx build quantify --configuration=development",
+            "staging": "npx nx build quantify --configuration=production",
+            "production": "npx nx build quantify --configuration=production"
+          }
+        },
+        "runtime": {
+          "appPackage": "dist/quantify/package.json",
+          "rootPackage": "package.json",
+          "lockfile": "pnpm-lock.yaml",
+          "prismaSchemaDir": "apps/quantify/prisma/schema",
+          "prismaConfig": "apps/quantify/prisma.config.ts",
+          "ecosystemConfig": "dx/deploy/ecosystem.quantify.config.cjs"
+        },
+        "artifact": {
+          "outputDir": "release/quantify",
+          "bundleName": "quantify-bundle"
+        },
+        "remote": {
+          "host": "stats-server",
+          "port": 22,
+          "user": "__SSH_CONFIG__",
+          "baseDir": "/opt/stats"
+        },
+        "startup": {
+          "mode": "pm2",
+          "serviceName": "quantify"
+        },
+        "deploy": {
+          "keepReleases": 5,
+          "installCommand": "CI=true pnpm install --prod --no-frozen-lockfile --ignore-workspace",
+          "prismaGenerate": true,
+          "prismaMigrateDeploy": true,
+          "prismaSeed": false
+        }
+      }
+    },
     "front": {
-      "description": "部署前端到 Vercel"
+      "staging": {
+        "command": "vercel deploy --yes --local-config vercel.front.json",
+        "app": "front",
+        "description": "部署 front 到 Vercel（预发环境）"
+      },
+      "prod": {
+        "command": "vercel deploy --yes --prod --local-config vercel.front.json",
+        "app": "front",
+        "description": "部署 front 到 Vercel（生产环境）"
+      }
     },
     "admin": {
-      "description": "部署管理后台到 Vercel"
-    },
-    "telegram-bot": {
-      "description": "部署 Telegram 机器人"
+      "staging": {
+        "command": "vercel deploy --yes --local-config vercel.admin.json",
+        "app": "admin-front",
+        "description": "部署 admin 到 Vercel（预发环境）"
+      },
+      "prod": {
+        "command": "vercel deploy --yes --prod --local-config vercel.admin.json",
+        "app": "admin-front",
+        "description": "部署 admin 到 Vercel（生产环境）"
+      }
     },
     "all": {
-      "description": "部署所有应用"
+      "staging": {
+        "sequential": true,
+        "commands": ["deploy.backend --staging", "deploy.quantify --staging", "deploy.front.staging", "deploy.admin.staging"],
+        "description": "依次部署所有应用到预发环境"
+      },
+      "prod": {
+        "sequential": true,
+        "commands": ["deploy.backend --prod", "deploy.quantify --prod", "deploy.front.prod", "deploy.admin.prod"],
+        "description": "依次部署所有应用到生产环境"
+      }
     }
   }
 }

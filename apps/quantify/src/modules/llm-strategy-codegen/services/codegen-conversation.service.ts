@@ -1,9 +1,10 @@
+import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
-import type { CodegenChecklist } from './checklist-gate.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
 
@@ -16,8 +17,6 @@ import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { ChecklistGateService } from './checklist-gate.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -35,6 +34,13 @@ interface ChecklistPayload {
   riskRules?: Record<string, unknown>
 }
 
+interface ConversationPlan {
+  related: boolean
+  logicReady: boolean
+  assistantPrompt: string
+  logic?: ChecklistPayload
+}
+
 interface GenerationOptions {
   providerCode?: string
   model?: string
@@ -42,8 +48,12 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
+type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
+type RecommendationStyle = 'ma' | 'drop-rise'
+
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
+const MAX_PLANNER_HISTORY_LINES = 12
 const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
 const DEFAULT_MODEL = 'gpt-4'
 
@@ -52,7 +62,6 @@ export class CodegenConversationService {
   constructor(
     private readonly aiService: AiService,
     private readonly sessionsRepo: CodegenSessionsRepository,
-    private readonly checklistGate: ChecklistGateService,
     private readonly staticGuardrail: StaticGuardrailService,
     private readonly runtimeGuardrail: RuntimeGuardrailService,
     private readonly specDescBuilder: SpecDescBuilderService,
@@ -60,70 +69,177 @@ export class CodegenConversationService {
   ) {}
 
   async startSession(dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
-    const checklist = this.normalizeChecklist(this.checklistGate.mergeChecklist(
-      this.extractChecklist(dto),
-      this.inferChecklistFromMessage(dto.initialMessage),
-    ))
-    const missing = this.checklistGate.getMissingFields(checklist)
-    const status: LlmCodegenSessionStatus = missing.length > 0 ? 'DRAFTING' : 'CHECKLIST_GATE'
+    const seedChecklist = this.normalizeChecklist({
+      ...this.extractChecklist(dto),
+      ...this.inferChecklistFromMessage(dto.initialMessage),
+    })
+    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
+      providerCode: this.resolveProviderCode(undefined),
+      model: undefined,
+    })
+    const checklist = this.mergeChecklistSnapshots(seedChecklist, plan.logic ?? {})
+    const recommendationStyle = this.inferRecommendationStyleFromContext(
+      dto.initialMessage,
+      checklist,
+      undefined,
+    )
+    const status: LlmCodegenSessionStatus = plan.logicReady ? 'CHECKLIST_GATE' : 'DRAFTING'
 
+    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
+    const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
+    const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: dto.userId,
       status,
       checklist: checklist as Prisma.InputJsonValue,
-      constraintPack: createDefaultConstraintPack() as unknown as Prisma.InputJsonValue,
+      constraintPack: {
+        ...createDefaultConstraintPack(guidePrompt),
+        recommendationStyle,
+        conversationHistory: initialHistory,
+      } as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
-      latestSpecDesc: null,
+      latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
       rejectReason: null,
     })
 
     return {
       id: session.id,
       status,
-      missingFields: missing,
-      assistantPrompt: this.buildGuidePrompt(missing, dto.initialMessage),
+      missingFields: [],
+      specDesc: initialSpecDesc,
+      assistantPrompt: plan.logicReady
+        ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
+        : plan.assistantPrompt,
     }
   }
 
   async continueSession(sessionId: string, dto: ContinueCodegenSessionDto): Promise<CodegenSessionResponseDto> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== dto.userId) {
-      throw new DomainException('会话不存在', {
+      throw new DomainException('codegen.session_not_found', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
         args: { sessionId },
       })
     }
     if (CodegenConversationService.isTerminalStatus(session.status)) {
-      throw new DomainException('会话已终态，不能继续写入', {
+      throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
       })
     }
 
-    const mergedChecklist = this.normalizeChecklist(
-      this.checklistGate.mergeChecklist(
-        this.checklistGate.mergeChecklist(
-          this.readChecklist(session.checklist),
-          this.inferChecklistFromMessage(dto.message),
-        ),
-        this.extractChecklist(dto),
-      ),
+    const baseChecklist = this.readChecklist(session.checklist)
+    const messageChecklist = this.normalizeChecklist({
+      ...this.inferChecklistFromMessage(dto.message),
+      ...this.extractChecklist(dto),
+    })
+    const preMergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
+    const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
+      providerCode: this.resolveProviderCode(dto.providerCode),
+      model: dto.model,
+    }, constraintPack.conversationHistory ?? [])
+    if (!plan.related && dto.confirmGenerate !== true) {
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }
+    }
+    const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
+    const recommendationStyle = this.inferRecommendationStyleFromContext(
+      dto.message,
+      mergedChecklist,
+      constraintPack.recommendationStyle,
+    )
+    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const historyAfterPlanner = this.appendConversationHistory(
+      constraintPack.conversationHistory ?? [],
+      dto.message,
+      plan.assistantPrompt,
     )
 
-    const missing = this.checklistGate.getMissingFields(mergedChecklist)
-    if (missing.length > 0) {
+    if (dto.confirmGenerate !== true) {
+      if (!plan.logicReady) {
+        await this.sessionsRepo.updateSession(session.id, {
+          status: 'DRAFTING',
+          checklist: mergedChecklist as Prisma.InputJsonValue,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterPlanner,
+          } as unknown as Prisma.InputJsonValue,
+        })
+
+        return {
+          id: session.id,
+          status: 'DRAFTING',
+          missingFields: [],
+          assistantPrompt: plan.assistantPrompt,
+        }
+      }
+
+      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
       await this.sessionsRepo.updateSession(session.id, {
-        status: 'DRAFTING',
+        status: 'CHECKLIST_GATE',
         checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
-        status: 'DRAFTING',
-        missingFields: missing,
-        assistantPrompt: this.buildGuidePrompt(missing, dto.message),
+        status: 'CHECKLIST_GATE',
+        missingFields: [],
+        specDesc,
+        assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+      }
+    }
+
+    const missingFields = this.resolveChecklistMissingFields(mergedChecklist)
+    const canGenerate = session.status === 'CHECKLIST_GATE' && missingFields.length === 0
+    if (!canGenerate) {
+      if (missingFields.length > 0) {
+        await this.sessionsRepo.updateSession(session.id, {
+          status: 'DRAFTING',
+          checklist: mergedChecklist as Prisma.InputJsonValue,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterPlanner,
+          } as unknown as Prisma.InputJsonValue,
+        })
+
+        return {
+          id: session.id,
+          status: 'DRAFTING',
+          missingFields,
+          assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
+        }
+      }
+
+      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'CHECKLIST_GATE',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
+      })
+
+      return {
+        id: session.id,
+        status: 'CHECKLIST_GATE',
+        missingFields: [],
+        specDesc,
+        assistantPrompt: `${plan.assistantPrompt}\n请先确认逻辑图，确认后我再生成策略代码。`,
       }
     }
 
@@ -132,6 +248,13 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(session.id, {
         status: 'GENERATING',
         checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: this.appendConversationHistory(
+            constraintPack.conversationHistory ?? [],
+            dto.message,
+          ),
+        } as unknown as Prisma.InputJsonValue,
         rejectReason: null,
       })
 
@@ -175,11 +298,25 @@ export class CodegenConversationService {
         status: 'VALIDATING_RUNTIME',
       })
 
-      const runtimeResult = await this.runtimeGuardrail.validate(scriptCode)
+      let finalScriptCode = scriptCode
+      let runtimeResult = await this.runtimeGuardrail.validate(finalScriptCode)
+      if (!runtimeResult.runtimePassed || !runtimeResult.outputPassed) {
+        const autoFixedScript = this.tryAutoFixStringOutputScript(finalScriptCode, runtimeResult.reason)
+        if (autoFixedScript) {
+          const autoFixedStatic = this.staticGuardrail.validate(autoFixedScript)
+          if (autoFixedStatic.passed) {
+            const autoFixedRuntime = await this.runtimeGuardrail.validate(autoFixedScript)
+            if (autoFixedRuntime.runtimePassed && autoFixedRuntime.outputPassed) {
+              finalScriptCode = autoFixedScript
+              runtimeResult = autoFixedRuntime
+            }
+          }
+        }
+      }
       if (!runtimeResult.runtimePassed || !runtimeResult.outputPassed) {
         await this.sessionsRepo.createVersion({
           session: { connect: { id: session.id } },
-          scriptCode,
+          scriptCode: finalScriptCode,
           specDesc: {} as Prisma.InputJsonValue,
           staticPassed: true,
           runtimePassed: runtimeResult.runtimePassed,
@@ -194,7 +331,7 @@ export class CodegenConversationService {
         return {
           id: session.id,
           status: 'REJECTED',
-          scriptCode,
+          scriptCode: finalScriptCode,
           rejectReason: runtimeResult.reason,
         }
       }
@@ -203,11 +340,11 @@ export class CodegenConversationService {
         status: 'VALIDATING_OUTPUT',
       })
 
-      const specDesc = this.specDescBuilder.build(mergedChecklist, scriptCode)
+      const specDesc = this.specDescBuilder.build(mergedChecklist, finalScriptCode)
 
       const version = await this.sessionsRepo.createVersion({
         session: { connect: { id: session.id } },
-        scriptCode,
+        scriptCode: finalScriptCode,
         specDesc: specDesc as Prisma.InputJsonValue,
         staticPassed: true,
         runtimePassed: true,
@@ -222,14 +359,14 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(session.id, {
         status: 'PUBLISHED',
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
-        latestDraftCode: scriptCode,
+        latestDraftCode: finalScriptCode,
         rejectReason: null,
       })
 
       return {
         id: session.id,
         status: 'PUBLISHED',
-        scriptCode,
+        scriptCode: finalScriptCode,
         specDesc,
         missingFields: [],
       }
@@ -254,9 +391,15 @@ export class CodegenConversationService {
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
     const checklist = this.extractChecklist(dto)
-    const missing = this.checklistGate.getMissingFields(checklist)
+    const missing: string[] = []
+    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
+      missing.push('entryRules')
+    }
+    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
+      missing.push('exitRules')
+    }
     if (missing.length > 0) {
-      throw new DomainException(`缺少必填信息: ${missing.join(', ')}`, {
+      throw new DomainException('codegen.missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { missingFields: missing },
@@ -308,6 +451,17 @@ export class CodegenConversationService {
     }
   }
 
+  private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
+    const missing: string[] = []
+    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
+      missing.push('entryRules')
+    }
+    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
+      missing.push('exitRules')
+    }
+    return missing
+  }
+
   private inferChecklistFromMessage(message?: string): ChecklistPayload {
     if (!message || !message.trim()) {
       return {}
@@ -325,7 +479,7 @@ export class CodegenConversationService {
       }
     }
 
-    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/gi))
+    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
     const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
       const normalizedUnit = unit.toLowerCase()
       if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
@@ -335,10 +489,33 @@ export class CodegenConversationService {
 
     const entryRules: string[] = []
     const exitRules: string[] = []
-    if (/金叉|上穿|突破|入场|开仓|买入/.test(text)) {
+
+    const normalizeTimeframe = (value: string, unit: string) => {
+      const normalizedUnit = unit.toLowerCase()
+      if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
+      if (normalizedUnit === 'h' || normalizedUnit === '小时') return `${value}h`
+      return `${value}d`
+    }
+
+    const buyDropPattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:跌|下跌|回撤)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:买入|开仓|入场)/i
+    const sellRisePattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:涨|上涨|反弹)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:卖出|平仓|离场|出场)/i
+
+    const buyDropMatch = text.match(buyDropPattern)
+    if (buyDropMatch?.[1] && buyDropMatch[2] && buyDropMatch[3]) {
+      const frame = normalizeTimeframe(buyDropMatch[1], buyDropMatch[2])
+      entryRules.push(`${frame} 内下跌 ${buyDropMatch[3]}% 买入`)
+    }
+
+    const sellRiseMatch = text.match(sellRisePattern)
+    if (sellRiseMatch?.[1] && sellRiseMatch[2] && sellRiseMatch[3]) {
+      const frame = normalizeTimeframe(sellRiseMatch[1], sellRiseMatch[2])
+      exitRules.push(`${frame} 内上涨 ${sellRiseMatch[3]}% 卖出`)
+    }
+
+    if (entryRules.length === 0 && /金叉|上穿|突破|入场|开仓|买入/.test(text)) {
       entryRules.push('短均线上穿长均线（金叉）入场')
     }
-    if (/死叉|跌破|止盈|止损|回撤|平仓|离场|出场|卖出/.test(text)) {
+    if (exitRules.length === 0 && /死叉|跌破|止盈|止损|回撤|平仓|离场|出场|卖出/.test(text)) {
       if (/死叉/.test(text)) {
         exitRules.push('短均线下穿长均线（死叉）出场')
       } else if (/跌破/.test(text)) {
@@ -351,15 +528,15 @@ export class CodegenConversationService {
     }
 
     const riskRules: Record<string, unknown> = {}
-    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/i)
+    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/)
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/i)
+    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/)
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
     }
-    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/i)
+    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/)
     if (drawdownMatch?.[1]) {
       riskRules.maxDrawdownPct = Number(drawdownMatch[1])
     }
@@ -384,17 +561,25 @@ export class CodegenConversationService {
     return normalized
   }
 
-  private normalizeChecklist(payload: CodegenChecklist | Record<string, unknown>): ChecklistPayload {
+  private normalizeChecklist(payload: ChecklistPayload | Record<string, unknown>): ChecklistPayload {
     const normalizeStringArray = (value: unknown): string[] | undefined => {
       if (!Array.isArray(value)) return undefined
-      return value.filter(item => typeof item === 'string') as string[]
+      const normalized = value
+        .filter(item => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(Boolean) as string[]
+      return normalized.length > 0 ? normalized : undefined
     }
 
     const normalizeObject = (value: unknown): Record<string, unknown> | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
       }
-      return value as Record<string, unknown>
+      const normalized = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      )
+      return Object.keys(normalized).length > 0 ? normalized : undefined
     }
 
     return {
@@ -406,40 +591,55 @@ export class CodegenConversationService {
     }
   }
 
-  private buildGuidePrompt(missing: string[], userMessage?: string): string {
-    if (missing.length === 0) {
-      return '信息已齐全，将开始生成并校验策略脚本。'
-    }
-    const text = (userMessage ?? '').trim()
-    const isMovingAverageIntent = /均线|ma|moving average/i.test(text)
-    const opener = isMovingAverageIntent
-      ? '明白了，你想做一个均线策略。为了直接给你可运行版本，我先确认这几项：'
-      : '收到，我先把关键信息确认一下，这样下一步可以直接生成策略：'
-
-    const questionBodies: string[] = []
-    if (missing.includes('symbols')) {
-      questionBodies.push('做哪个交易标的？例如 BTCUSDT 或 ETHUSDT。')
-    }
-    if (missing.includes('timeframes')) {
-      questionBodies.push('你想用什么周期？例如 5m 做信号、1h 做趋势过滤。')
-    }
-    if (missing.includes('entryRules')) {
-      questionBodies.push(isMovingAverageIntent
-        ? '入场规则想用哪组均线？例如 5/20 金叉入场。'
-        : '入场条件是什么？例如 “15m 内回撤 1% 后买入”。')
-    }
-    if (missing.includes('exitRules')) {
-      questionBodies.push(isMovingAverageIntent
-        ? '出场规则怎么定？例如 5/20 死叉或跌破 20MA 出场。'
-        : '出场条件是什么？例如 “上涨 2% 止盈或回撤 1.5% 止损”。')
-    }
-    if (missing.includes('riskRules')) {
-      questionBodies.push('风控偏好是什么？例如 仓位 10%、止损 2%、最大回撤 15%。')
+  private readConstraintPack(payload: Prisma.JsonValue | null): ConstraintPackSnapshot {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return createDefaultConstraintPack()
     }
 
-    const questions = questionBodies.map((q, idx) => `${idx + 1}) ${q}`)
-    const compactReplyTemplate = '你可以直接回：标的=BTCUSDT；周期=5m/15m；入场=5/20金叉；出场=5/20死叉；风控=仓位10% 止损2% 最大回撤15%。'
-    return `${opener}\n${questions.join('\n')}\n${compactReplyTemplate}`
+    const raw = payload as Record<string, unknown>
+    const guidePrompt = this.mergeGuidePromptConfig(undefined, raw.guidePrompt as CodegenGuideConfigDto | undefined)
+    const conversationHistory = Array.isArray(raw.conversationHistory)
+      ? raw.conversationHistory.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : []
+    return {
+      ...createDefaultConstraintPack(),
+      ...raw,
+      guidePrompt,
+      conversationHistory,
+    } as ConstraintPackSnapshot
+  }
+
+  private withGuidePrompt(
+    pack: ConstraintPackSnapshot,
+    guidePrompt?: GuidePromptConfig,
+    recommendationStyle?: RecommendationStyle,
+  ): ConstraintPackSnapshot {
+    return {
+      ...pack,
+      guidePrompt,
+      recommendationStyle,
+    }
+  }
+
+  private mergeGuidePromptConfig(
+    base?: GuidePromptConfig,
+    patch?: CodegenGuideConfigDto,
+  ): GuidePromptConfig | undefined {
+    const merge = {
+      symbolExample: patch?.symbolExample ?? base?.symbolExample,
+      timeframeExample: patch?.timeframeExample ?? base?.timeframeExample,
+      entryRuleExample: patch?.entryRuleExample ?? base?.entryRuleExample,
+      exitRuleExample: patch?.exitRuleExample ?? base?.exitRuleExample,
+      riskRuleExample: patch?.riskRuleExample ?? base?.riskRuleExample,
+    }
+
+    const normalized = Object.fromEntries(
+      Object.entries(merge)
+        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
+        .filter(([, value]) => typeof value === 'string' && value.length > 0),
+    ) as GuidePromptConfig
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined
   }
 
   private async generateScript(
@@ -475,15 +675,251 @@ export class CodegenConversationService {
       maxTokens: options?.maxTokens ?? 1000,
     })
 
-    const code = result.content?.trim()
+    const code = this.normalizeGeneratedScript(result.content)
     if (!code) {
-      throw new DomainException('策略脚本生成失败：模型未返回脚本', {
+      throw new DomainException('codegen.script_generation_empty_result', {
         code: ErrorCode.AI_PROVIDER_ERROR,
         status: HttpStatus.BAD_GATEWAY,
       })
     }
 
     return code
+  }
+
+  private normalizeGeneratedScript(content?: string): string {
+    const raw = content?.trim() ?? ''
+    if (!raw) {
+      return ''
+    }
+
+    const fencedMatch = raw.match(/```[\w-]*[^\S\n]*\n([\s\S]*?)\n?```/)
+    if (fencedMatch?.[1]) {
+      return fencedMatch[1].trim()
+    }
+
+    try {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed === 'string') {
+        return parsed.trim()
+      }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const candidate = (parsed as Record<string, unknown>).code
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim()
+        }
+      }
+    } catch {
+      // keep raw when content is not JSON
+    }
+
+    return raw
+  }
+
+  private tryAutoFixStringOutputScript(scriptCode: string, reason?: string): string | null {
+    const normalizedReason = (reason ?? '').toLowerCase()
+    const isStringReturnError = normalizedReason.includes('invalid return type')
+      && normalizedReason.includes('got string')
+    if (!isStringReturnError) {
+      return null
+    }
+
+    return [
+      'const __result = (() => {',
+      scriptCode,
+      '})();',
+      'if (__result && typeof __result === "object" && !Array.isArray(__result)) return __result;',
+      'if (typeof __result === "string") {',
+      '  try {',
+      '    const __parsed = JSON.parse(__result);',
+      '    if (__parsed && typeof __parsed === "object" && !Array.isArray(__parsed)) return __parsed;',
+      '  } catch {}',
+      '  return { signal: __result };',
+      '}',
+      'return { value: __result ?? "EMPTY_RESULT" };',
+    ].join('\n')
+  }
+
+  private async planConversationByLlm(
+    message: string,
+    currentLogic: ChecklistPayload,
+    options?: { providerCode?: string, model?: string },
+    history: string[] = [],
+  ): Promise<ConversationPlan> {
+    const text = message.trim()
+    if (!text) {
+      return {
+        related: false,
+        logicReady: false,
+        assistantPrompt: '请先描述你的交易逻辑，我会继续帮你完善。',
+      }
+    }
+
+    const classifyOnce = async () => {
+      const result = await this.aiService.chat({
+        providerCode: options?.providerCode ?? DEFAULT_PROVIDER_CODE,
+        model: options?.model,
+        temperature: 0,
+        maxTokens: 400,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是交易策略对话编排器。任务：根据当前上下文，决定下一轮对话，而不是固定问卷。',
+              '你必须维持上下文一致，不能把已有策略重置为默认模板。',
+              '标的/周期/风控可后续配置，不应强制先问这些。',
+              '只输出 JSON，不要 markdown。',
+              'JSON 结构：',
+              '{',
+              '  "related": boolean,',
+              '  "logicReady": boolean,',
+              '  "assistantPrompt": string,',
+              '  "logic": {',
+              '    "entryRules"?: string[],',
+              '    "exitRules"?: string[],',
+              '    "symbols"?: string[],',
+              '    "timeframes"?: string[],',
+              '    "riskRules"?: object',
+              '  }',
+              '}',
+              '规则：',
+              '1) 如果消息与策略无关：related=false，assistantPrompt 提醒回到策略主题。',
+              '2) 如果策略逻辑还不完整：logicReady=false，assistantPrompt 只问一个最关键问题。',
+              '3) 如果策略逻辑已完整可画流程图：logicReady=true，assistantPrompt 用一句话总结策略逻辑并请求确认。',
+              '4) 若用户是在修改已有逻辑，应在 currentLogic 基础上增量修改，而非重置。',
+              '5) 若用户明确表达“推荐/默认/你来定/不要再问”，必须直接给出完整入场+出场规则草案，logicReady=true，不再继续追问。',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              message: text,
+              currentLogic,
+              history: history.slice(-MAX_PLANNER_HISTORY_LINES),
+            }),
+          },
+        ],
+      })
+
+      const content = result.content?.trim() ?? ''
+      if (!content) {
+        return {
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。',
+        } satisfies ConversationPlan
+      }
+
+      try {
+        const parsed = JSON.parse(content) as {
+          related?: unknown
+          logicReady?: unknown
+          assistantPrompt?: unknown
+          logic?: unknown
+        }
+        const related = typeof parsed.related === 'boolean' ? parsed.related : true
+        const logicReady = typeof parsed.logicReady === 'boolean' ? parsed.logicReady : false
+        const assistantPrompt = typeof parsed.assistantPrompt === 'string' && parsed.assistantPrompt.trim()
+          ? parsed.assistantPrompt.trim()
+          : (logicReady
+              ? '我已整理出策略逻辑，请确认逻辑图。'
+              : '我先继续完善策略逻辑，请补充一个关键条件。')
+        const logic = this.normalizeChecklist((parsed.logic ?? {}) as Record<string, unknown>)
+        return {
+          related,
+          logicReady,
+          assistantPrompt,
+          logic,
+        } satisfies ConversationPlan
+      } catch {
+        return {
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+          logic: this.inferChecklistFromMessage(text),
+        } satisfies ConversationPlan
+      }
+    }
+
+    try {
+      return await classifyOnce()
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error)
+      const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
+      if (nonRetryableModelError) {
+        return {
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+          logic: this.inferChecklistFromMessage(text),
+        }
+      }
+      try {
+        return await classifyOnce()
+      } catch {
+        return {
+          related: true,
+          logicReady: false,
+          assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+          logic: this.inferChecklistFromMessage(text),
+        }
+      }
+    }
+  }
+
+  private mergeChecklistSnapshots(base: ChecklistPayload, patch: ChecklistPayload): ChecklistPayload {
+    const merged = {
+      symbols: patch.symbols && patch.symbols.length > 0 ? patch.symbols : base.symbols,
+      timeframes: patch.timeframes && patch.timeframes.length > 0 ? patch.timeframes : base.timeframes,
+      entryRules: patch.entryRules && patch.entryRules.length > 0 ? patch.entryRules : base.entryRules,
+      exitRules: patch.exitRules && patch.exitRules.length > 0 ? patch.exitRules : base.exitRules,
+      riskRules: patch.riskRules && Object.keys(patch.riskRules).length > 0 ? patch.riskRules : base.riskRules,
+    }
+    return this.normalizeChecklist(merged)
+  }
+
+  private appendConversationHistory(
+    current: string[],
+    userMessage?: string,
+    assistantMessage?: string,
+  ): string[] {
+    const next = [...current]
+    const push = (prefix: 'U' | 'A', value?: string) => {
+      const normalized = value?.trim()
+      if (!normalized) return
+      next.push(`${prefix}: ${normalized}`)
+    }
+    push('U', userMessage)
+    push('A', assistantMessage)
+    return next.slice(-MAX_PLANNER_HISTORY_LINES)
+  }
+
+  private inferRecommendationStyleFromContext(
+    message: string | undefined,
+    checklist: ChecklistPayload,
+    currentStyle?: RecommendationStyle,
+  ): RecommendationStyle | undefined {
+    const fromChecklist = this.detectRecommendationStyleFromChecklist(checklist)
+    if (fromChecklist) {
+      return fromChecklist
+    }
+    const text = (message ?? '').trim()
+    if (text) {
+      if (/均线|金叉|死叉|\bma\b|moving average/i.test(text)) {
+        return 'ma'
+      }
+      if (/下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd]/i.test(text)) {
+        return 'drop-rise'
+      }
+    }
+    return currentStyle
+  }
+
+  private detectRecommendationStyleFromChecklist(checklist: ChecklistPayload): RecommendationStyle | undefined {
+    const rules = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    if (!rules.trim()) return undefined
+    if (/金叉|死叉|均线|ma|moving average/i.test(rules)) return 'ma'
+    if (/下跌|上涨|回撤|[跌涨%]|\d+\s*[mhd]/i.test(rules)) return 'drop-rise'
+    return undefined
   }
 
   private buildHelperSignaturesPrompt(): string {

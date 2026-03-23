@@ -1,25 +1,27 @@
 {
-  "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": "..",
+  "rootDir": ".",
   "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
+  "testRegex": ".*\\.(e2e-spec|spec)\\.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
-  },
-  "globals": {
-    "ts-jest": {
-      "tsconfig": "<rootDir>/tsconfig.json",
-      "diagnostics": false
-    }
+    "^.+\\.[tj]sx?$": ["ts-jest", { "diagnostics": false, "isolatedModules": true }]
   },
   "moduleNameMapper": {
-    "^@/(.*)$": "<rootDir>/src/$1",
-    "^@ai/shared$": "<rootDir>/../../packages/shared/src/index.ts",
-    "^@ai/shared/(.*)$": "<rootDir>/../../packages/shared/src/$1",
-    "^@net/config$": "<rootDir>/../../packages/config/src/index.ts",
-    "^@net/config/(.*)$": "<rootDir>/../../packages/config/src/$1"
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^@ai/shared$": "<rootDir>/../../../packages/shared/src/index.ts",
+    "^@ai/shared/(.*)$": "<rootDir>/../../../packages/shared/src/$1",
+    "^@net/config$": "<rootDir>/../../../packages/config/src/index.ts",
+    "^@net/config/(.*)$": "<rootDir>/../../../packages/config/src/$1",
+    "^@nktkas/hyperliquid$": "<rootDir>/../node_modules/@nktkas/hyperliquid/script/src/mod.js"
   },
+  "transformIgnorePatterns": [
+    "/generated/prisma/",
+    "/node_modules/(?!(?:\\.pnpm/(?:@nktkas\\+hyperliquid|@noble\\+hashes|@noble\\+secp256k1)@|@nktkas/hyperliquid|@noble/hashes|@noble/secp256k1)/)"
+  ],
+  "setupFilesAfterEnv": ["./setup-e2e.ts"],
+  "maxWorkers": 8,
+  "workerIdleMemoryLimit": "512MB",
+  "testRunner": "jest-circus/runner",
   "testTimeout": 60000,
   "verbose": false
 }
-

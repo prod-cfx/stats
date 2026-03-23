@@ -16,7 +16,6 @@ import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
-import { buildLogicGraphFromPrompt } from '@/components/ai-quant/logic-graph-generator'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
@@ -61,6 +60,44 @@ interface ConversationState {
   llmCodegenSessionId: string | null
   latestSignalMessage: string | null
   updatedAt: number
+}
+
+function inferChecklistFromGraph(
+  graph: StrategyLogicGraph | null | undefined,
+): {
+  entryRules?: string[]
+  exitRules?: string[]
+} {
+  if (!graph) return {}
+
+  const entryRules: string[] = []
+  const exitRules: string[] = []
+
+  for (const node of graph.trigger) {
+    const id = node.id.toLowerCase()
+    if (id.includes('entry') || id.includes('buy')) {
+      entryRules.push(node.operator)
+      continue
+    }
+    if (id.includes('exit') || id.includes('sell')) {
+      exitRules.push(node.operator)
+    }
+  }
+
+  const dedupe = (items: string[]) => Array.from(new Set(items.map(x => x.trim()).filter(Boolean)))
+  const normalizedEntry = dedupe(entryRules)
+  const normalizedExit = dedupe(exitRules)
+
+  return {
+    entryRules: normalizedEntry.length > 0 ? normalizedEntry : undefined,
+    exitRules: normalizedExit.length > 0 ? normalizedExit : undefined,
+  }
+}
+
+function isStrategyModificationIntent(message: string): boolean {
+  const text = message.trim().toLowerCase()
+  if (!text) return false
+  return /改|修改|调整|替换|变更|优化|调参|把.+改为|update|change|revise/i.test(text)
 }
 
 function getMockBacktest(params: QuantParams): BacktestResult {
@@ -220,13 +257,51 @@ export function AiQuantPageClient() {
     params: QuantParams
     sessionId: string | null
     usePresetRules?: boolean
+    confirmGenerate?: boolean
   }) => {
-    const { conversationId, message, params: targetParams, sessionId, usePresetRules = false } = args
+    const { conversationId, message, params: targetParams, sessionId, usePresetRules = false, confirmGenerate = false } = args
     if (!session?.userId) return
     const trimmedMessage = message.trim()
     if (!trimmedMessage) return
+    const loadingMessageId = `a-loading-${Date.now()}`
+    const startedAt = Date.now()
+
+    setConversations(prev => prev.map((conv) => {
+      if (conv.id !== conversationId) return conv
+      return {
+        ...conv,
+        messages: [
+          ...conv.messages,
+          {
+            id: loadingMessageId,
+            role: 'assistant',
+            content: '正在调用中（0s）',
+          },
+        ],
+        updatedAt: Date.now(),
+      }
+    }))
+
+    const loadingTimer = window.setInterval(() => {
+      const elapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+      setConversations(prev => prev.map((conv) => {
+        if (conv.id !== conversationId) return conv
+        return {
+          ...conv,
+          messages: conv.messages.map(msg =>
+            msg.id === loadingMessageId
+              ? { ...msg, content: `正在调用中（${elapsedSec}s）` }
+              : msg,
+          ),
+        }
+      }))
+    }, 1000)
 
     try {
+      const graphChecklist = inferChecklistFromGraph(
+        conversations.find(conv => conv.id === conversationId)?.logicGraph,
+      )
+      const shouldReuseGraphChecklist = Boolean(sessionId) || isStrategyModificationIntent(trimmedMessage)
       const checklistPayload = usePresetRules
         ? {
             symbols: [targetParams.symbol],
@@ -238,7 +313,7 @@ export function AiQuantPageClient() {
               maxDrawdownPct: 20,
             },
           }
-        : {}
+        : (shouldReuseGraphChecklist ? graphChecklist : {})
 
       const startNewSession = async () =>
         startLlmCodegenSession({
@@ -251,47 +326,62 @@ export function AiQuantPageClient() {
         continueLlmCodegenSession(id, {
           userId: session.userId,
           message: trimmedMessage,
+          confirmGenerate,
           ...checklistPayload,
         })
 
       let activeSessionId = sessionId
+      let continued
       if (!activeSessionId) {
         const created = await startNewSession()
         activeSessionId = created.id
-      }
-
-      let continued
-      try {
-        continued = await continueSession(activeSessionId)
-      } catch (error) {
-        const isTerminalSessionError = error instanceof ApiError
-          && error.statusCode === 409
-          && error.message.includes('会话已终态')
-        if (!isTerminalSessionError) {
-          throw error
+        continued = created
+      } else {
+        try {
+          continued = await continueSession(activeSessionId)
+        } catch (error) {
+          const isTerminalSessionError = error instanceof ApiError
+            && error.statusCode === 409
+            && error.message.includes('会话已终态')
+          if (!isTerminalSessionError) {
+            throw error
+          }
+          const recreated = await startNewSession()
+          activeSessionId = recreated.id
+          continued = recreated
         }
-        const recreated = await startNewSession()
-        activeSessionId = recreated.id
-        continued = await continueSession(activeSessionId)
       }
 
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
         const nextVersion = (conv.logicGraph?.version || 0) + 1
         const shouldReuseCodegenSession = continued.status !== 'PUBLISHED' && continued.status !== 'REJECTED'
-        const nextGraph = buildLogicGraphFromCodegenSpec(
-          continued.specDesc ?? {},
-          {
-            exchange: targetParams.exchange,
-            symbol: targetParams.symbol,
-            positionPct: targetParams.positionPct,
-          },
-          nextVersion,
-        )
+        const shouldUpdateGraph = (continued.status === 'CHECKLIST_GATE' || continued.status === 'PUBLISHED')
+          && Boolean(continued.specDesc)
+        const nextGraph = shouldUpdateGraph
+          ? buildLogicGraphFromCodegenSpec(
+              continued.specDesc,
+              {
+                exchange: targetParams.exchange,
+                symbol: targetParams.symbol,
+                positionPct: targetParams.positionPct,
+              },
+              nextVersion,
+            )
+          : conv.logicGraph
+        const publishedReply = continued.scriptCode
+          ? `${t('aiQuant.messages.graphGenerated')}\n\n已生成策略代码：\n\`\`\`javascript\n${continued.scriptCode}\n\`\`\``
+          : t('aiQuant.messages.graphGenerated')
         const replyContent = continued.assistantPrompt
           || (continued.status === 'PUBLISHED'
-            ? t('aiQuant.messages.graphGenerated')
-            : t('aiQuant.messages.graphRevise'))
+            ? publishedReply
+            : continued.status === 'CHECKLIST_GATE'
+              ? '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
+            : continued.status === 'REJECTED'
+              ? (continued.rejectReason
+                  ? `生成失败：${continued.rejectReason}`
+                  : t('common.error'))
+              : t('aiQuant.messages.graphRevise'))
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
@@ -299,12 +389,11 @@ export function AiQuantPageClient() {
           backtestResult: null,
           latestSignalMessage: null,
           messages: [
-            ...conv.messages,
-            {
-              id: `a-${Date.now()}`,
-              role: 'assistant',
-              content: replyContent,
-            },
+            ...conv.messages.map(msg =>
+              msg.id === loadingMessageId
+                ? { ...msg, content: replyContent }
+                : msg,
+            ),
           ],
           updatedAt: Date.now(),
         }
@@ -312,76 +401,21 @@ export function AiQuantPageClient() {
     } catch {
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
-        const nextVersion = (conv.logicGraph?.version || 0) + 1
-        const fallbackGraph = buildLogicGraphFromPrompt(trimmedMessage, targetParams, nextVersion, t)
         return {
           ...conv,
-          logicGraph: fallbackGraph,
           latestSignalMessage: null,
           messages: [
-            ...conv.messages,
-            {
-              id: `a-err-${Date.now()}`,
-              role: 'assistant',
-              content: t('common.error'),
-            },
+            ...conv.messages.map(msg =>
+              msg.id === loadingMessageId
+                ? { ...msg, content: t('common.error') }
+                : msg,
+            ),
           ],
           updatedAt: Date.now(),
         }
       }))
-    }
-  }
-
-  const getQuoteSymbol = (symbol: string) => (symbol.includes(':') ? symbol : `${symbol}:SPOT`)
-
-  const emitMockSignalPreview = async (targetParams: QuantParams) => {
-    const symbol = getQuoteSymbol(targetParams.symbol)
-    const fallback = `已生成模拟信号：BUY ${targetParams.symbol}。可继续点击“开始回测”验证策略表现。`
-
-    try {
-      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1').replace(/\/$/, '')
-      const resp = await fetch(`${apiBaseUrl}/market/quote?symbol=${encodeURIComponent(symbol)}`)
-      if (!resp.ok) throw new Error(`http_${resp.status}`)
-
-      const payload = await resp.json() as {
-        data?: {
-          lastPrice?: string
-          source?: string
-        }
-      }
-      const price = payload?.data?.lastPrice
-      const source = payload?.data?.source
-      const message = price
-        ? `已生成模拟信号：BUY ${targetParams.symbol}（当前价 ${price}${source ? `，数据源 ${source}` : ''}）。可继续点击“开始回测”验证策略表现。`
-        : fallback
-
-      updateActiveConversation(curr => ({
-        ...curr,
-        latestSignalMessage: message,
-        messages: [
-          ...curr.messages,
-          {
-            id: `signal-preview-${Date.now()}`,
-            role: 'assistant',
-            content: message,
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
-    } catch {
-      updateActiveConversation(curr => ({
-        ...curr,
-        latestSignalMessage: fallback,
-        messages: [
-          ...curr.messages,
-          {
-            id: `signal-preview-fallback-${Date.now()}`,
-            role: 'assistant',
-            content: fallback,
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
+    } finally {
+      window.clearInterval(loadingTimer)
     }
   }
 
@@ -391,6 +425,7 @@ export function AiQuantPageClient() {
     const currentConversationId = activeConversation.id
     const currentParams = activeConversation.params
     const currentSessionId = activeConversation.llmCodegenSessionId
+    const currentGraphStatus = activeConversation.logicGraph?.status
 
     updateActiveConversation(curr => {
       const nextMessages: QuantMessage[] = [
@@ -410,12 +445,40 @@ export function AiQuantPageClient() {
         updatedAt: Date.now(),
       }
     })
+
+    const confirmPattern = /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
+    if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
+      updateActiveConversation(curr => ({
+        ...curr,
+        logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
+        messages: [
+          ...curr.messages,
+          {
+            id: `graph-confirm-by-chat-${Date.now()}`,
+            role: 'assistant',
+            content: t('aiQuant.messages.graphConfirmed'),
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      await requestBackendGraphGeneration({
+        conversationId: currentConversationId,
+        message: trimmedInput,
+        params: currentParams,
+        sessionId: currentSessionId,
+        usePresetRules: false,
+        confirmGenerate: true,
+      })
+      return
+    }
+
     await requestBackendGraphGeneration({
       conversationId: currentConversationId,
       message: trimmedInput,
       params: currentParams,
       sessionId: currentSessionId,
       usePresetRules: false,
+      confirmGenerate: false,
     })
   }
 
@@ -673,6 +736,9 @@ export function AiQuantPageClient() {
             <LogicGraphPreview
               graph={activeConversation.logicGraph}
               onConfirm={() => {
+                const currentConversationId = activeConversation.id
+                const currentParams = activeConversation.params
+                const currentSessionId = activeConversation.llmCodegenSessionId
                 updateActiveConversation(curr => ({
                   ...curr,
                   logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
@@ -686,7 +752,14 @@ export function AiQuantPageClient() {
                   ],
                   updatedAt: Date.now(),
                 }))
-                void emitMockSignalPreview(activeConversation.params)
+                void requestBackendGraphGeneration({
+                  conversationId: currentConversationId,
+                  message: '确认生成代码',
+                  params: currentParams,
+                  sessionId: currentSessionId,
+                  usePresetRules: false,
+                  confirmGenerate: true,
+                })
               }}
               onRevise={() => {
                 updateActiveConversation(curr => ({

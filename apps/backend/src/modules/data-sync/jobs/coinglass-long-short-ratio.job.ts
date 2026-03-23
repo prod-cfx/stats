@@ -1,9 +1,11 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -86,8 +88,12 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       'https://open-api-v4.coinglass.com/api/futures/global-long-short-account-ratio/history'
 
     if (!apiKey) {
-      // 不应“默默成功”，否则后台无法感知配置缺失
-      throw new Error('COINGLASS_API_KEY is not configured')
+      // 不应”默默成功”，否则后台无法感知配置缺失
+      throw new DomainException('data_sync.long_short_ratio.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     const interval = cursor.interval ?? this.defaultInterval
@@ -109,9 +115,11 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
     const json = await this.fetchLongShortJson(url, apiKey)
 
     if (json.code !== '0' || !json.data) {
-      throw new Error(
-        `Coinglass long/short ratio API returned error: code=${json.code}, msg=${json.msg}`,
-      )
+      throw new DomainException('data_sync.long_short_ratio.invalid_response', {
+        code: ErrorCode.DATA_SYNC_INVALID_RESPONSE,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Coinglass long/short ratio API returned error: code=${json.code}, msg=${json.msg}` },
+      })
     }
 
     if (json.data.length === 0) {
@@ -253,9 +261,11 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
             continue
           }
 
-          throw new Error(
-            `Coinglass long/short ratio request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('data_sync.long_short_ratio.api_error', {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Coinglass long/short ratio request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as CoinglassLongShortRatioApiResponse
@@ -277,18 +287,22 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
           continue
         }
 
-        throw new Error(
-          `Coinglass long/short ratio request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('data_sync.long_short_ratio.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Coinglass long/short ratio request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
     // 理论不可达，兜底
-    throw new Error(
-      `Coinglass long/short ratio request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('data_sync.long_short_ratio.api_error', {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Coinglass long/short ratio request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private isAbortError(error: unknown): boolean {

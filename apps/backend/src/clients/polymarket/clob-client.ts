@@ -5,10 +5,12 @@ import type {
 } from './types'
 import type { PolymarketConfig } from '@/config/polymarket.config'
 import * as path from 'node:path'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import WebSocket from 'ws'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 export interface FetchOrderbookParams {
   tokenId: string
@@ -43,7 +45,11 @@ export class PolymarketClobClient {
 
   async fetchOrderbook(params: FetchOrderbookParams): Promise<PolymarketRestBook> {
     if (!params.tokenId) {
-      throw new Error('tokenId is required for fetchOrderbook')
+      throw new DomainException('polymarket.client_error', {
+        code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'tokenId is required for fetchOrderbook' },
+      })
     }
     // 安全拼接路径，保留 restBaseUrl 中的路径段
     const url = new URL(this.restBaseUrl)
@@ -57,7 +63,11 @@ export class PolymarketClobClient {
 
   createMarketChannel(options: OrderbookSubscriptionOptions): OrderbookSubscription {
     if (!options.assetIds.length) {
-      throw new Error('assetIds is required for Polymarket market channel subscription')
+      throw new DomainException('polymarket.client_error', {
+        code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'assetIds is required for Polymarket market channel subscription' },
+      })
     }
 
     const headers: Record<string, string> = {}
@@ -148,9 +158,11 @@ export class PolymarketClobClient {
       })
       if (!response.ok) {
         const body = await response.text().catch(() => '')
-        throw new Error(
-          `Polymarket CLOB request failed: status=${response.status} ${response.statusText} body=${body.slice(0, 200)}`,
-        )
+        throw new DomainException('polymarket.client_error', {
+          code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Polymarket CLOB request failed: status=${response.status} ${response.statusText} body=${body.slice(0, 200)}` },
+        })
       }
       const json = await response.json()
       return json

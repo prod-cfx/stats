@@ -9,7 +9,8 @@ import type { TickerSubscriptionDto } from './dto/ticker-subscription.dto'
 import type { TradesSubscriptionDto } from './dto/trades-subscription.dto'
 import type { MarketTrade } from '@/prisma/prisma.types'
 
-import { Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { JwtService } from '@nestjs/jwt'
 import { Interval } from '@nestjs/schedule'
@@ -20,7 +21,9 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -44,7 +47,7 @@ const STALE_CONNECTION_THRESHOLD_MS = 120000
 
 // 允许的 CORS origin 正则模式
 const ALLOWED_ORIGIN_PATTERNS = [
-  ...(process.env.NODE_ENV === 'development'
+  ...(defaultEnvAccessor.nodeEnv() === 'development'
     ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
     : []),
   /^https:\/\/(www|app|admin)\.coinflux\.com$/,
@@ -60,7 +63,7 @@ function isValidOrigin(origin: string | undefined): boolean {
   // 检查是否为有效 URL 格式
   try {
     const url = new URL(origin)
-    if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+    if (defaultEnvAccessor.nodeEnv() === 'production' && url.protocol !== 'https:') {
       return false
     }
   } catch {
@@ -74,14 +77,14 @@ function isValidOrigin(origin: string | undefined): boolean {
  */
 function parseAllowedOrigins(): string[] {
   const envOrigins =
-    process.env.ALLOWED_ORIGINS?.split(',')
+    defaultEnvAccessor.str('ALLOWED_ORIGINS')?.split(',')
       .map(o => o.trim())
       .filter(Boolean) || []
   const validOrigins = envOrigins.filter(isValidOrigin)
 
   // 如果没有有效的 origin，使用默认值
   if (validOrigins.length === 0) {
-    if (process.env.NODE_ENV === 'development') {
+    if (defaultEnvAccessor.nodeEnv() === 'development') {
       return ['http://localhost:3001']
     }
     return ['https://app.coinflux.com']
@@ -1262,7 +1265,11 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
           promise,
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () => {
-              reject(new Error('Database query timeout'))
+              reject(new DomainException('kline.query_timeout', {
+                code: ErrorCode.KLINE_QUERY_TIMEOUT,
+                status: HttpStatus.INTERNAL_SERVER_ERROR,
+                args: { reason: 'Database query timeout' },
+              }))
             })
           }),
         ])

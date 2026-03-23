@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
 import {
+  IsBoolean,
   IsArray,
   IsInt,
   IsNotEmpty,
@@ -9,7 +11,9 @@ import {
   IsString,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator'
+import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class ContinueCodegenSessionDto {
   @ApiProperty({ description: '业务用户 ID' })
@@ -50,6 +54,17 @@ export class ContinueCodegenSessionDto {
   @IsOptional()
   @IsObject()
   riskRules?: Record<string, unknown>
+
+  @ApiPropertyOptional({ description: '增量更新会话引导参数配置', type: CodegenGuideConfigDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CodegenGuideConfigDto)
+  guideConfig?: CodegenGuideConfigDto
+
+  @ApiPropertyOptional({ description: '是否确认并触发代码生成（默认 false）' })
+  @IsOptional()
+  @IsBoolean()
+  confirmGenerate?: boolean
 
   @ApiPropertyOptional({ description: 'LLM 提供商编码（本轮覆盖）' })
   @IsOptional()

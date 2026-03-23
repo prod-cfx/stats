@@ -1,7 +1,7 @@
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { FixedBinanceTestnetSignalService } from './fixed-binance-testnet-signal.service'
 
-describe('FixedBinanceTestnetSignalService', () => {
+describe('fixedBinanceTestnetSignalService', () => {
   function createService() {
     const prisma = {
       llmStrategy: { findUnique: jest.fn() },

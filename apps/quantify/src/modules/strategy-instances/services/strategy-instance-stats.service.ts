@@ -1,5 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 
 import { Prisma } from '@/prisma/prisma.types'
@@ -56,7 +58,7 @@ export class StrategyInstanceStatsService {
    * @param strategyInstanceId 策略实例 ID
    * @param timezone 时区 (默认 UTC)
    * @returns 统计数据或 null
-   * @throws InternalServerErrorException 计算失败时抛出
+   * @throws DomainException 计算失败时抛出
    */
   async calculateStats(
     strategyInstanceId: string,
@@ -64,7 +66,10 @@ export class StrategyInstanceStatsService {
   ): Promise<StrategyInstanceStatsDto | null> {
     // 输入验证
     if (!strategyInstanceId || !this.isValidCuid(strategyInstanceId)) {
-      throw new BadRequestException('Invalid strategy instance ID format')
+      throw new DomainException('strategy_instance.invalid_id_format', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     try {
@@ -148,19 +153,20 @@ export class StrategyInstanceStatsService {
       )
 
       if (error instanceof PrismaClientKnownRequestError) {
-        throw new InternalServerErrorException(
-          'Database error while calculating statistics'
-        )
+        throw new DomainException('strategy_instance.stats_database_error', {
+          code: ErrorCode.STRATEGY_INSTANCE_STATS_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+        })
       }
 
-      if (error instanceof BadRequestException) {
+      if (error instanceof DomainException) {
         throw error
       }
 
-      throw new InternalServerErrorException(
-        'Failed to calculate statistics',
-        error.message
-      )
+      throw new DomainException('strategy_instance.stats_calculation_failed', {
+        code: ErrorCode.STRATEGY_INSTANCE_STATS_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+      })
     }
   }
 
@@ -179,7 +185,10 @@ export class StrategyInstanceStatsService {
   ): Promise<Map<string, StrategyInstanceStatsDto | null>> {
     // 输入验证
     if (!Array.isArray(strategyInstanceIds)) {
-      throw new BadRequestException('strategyInstanceIds must be an array')
+      throw new DomainException('strategy_instance.ids_must_be_array', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     if (strategyInstanceIds.length === 0) {
@@ -188,17 +197,21 @@ export class StrategyInstanceStatsService {
 
     // 防止 DOS 攻击
     if (strategyInstanceIds.length > MAX_BATCH_SIZE) {
-      throw new BadRequestException(
-        `Batch size exceeds maximum of ${MAX_BATCH_SIZE}`
-      )
+      throw new DomainException('strategy_instance.batch_size_exceeded', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+        args: { max: MAX_BATCH_SIZE },
+      })
     }
 
     // 验证所有实例 ID 格式
     const invalidIds = strategyInstanceIds.filter(id => !this.isValidCuid(id))
     if (invalidIds.length > 0) {
-      throw new BadRequestException(
-        `Invalid instance IDs: ${invalidIds.slice(0, 5).join(', ')}${invalidIds.length > 5 ? '...' : ''}`
-      )
+      throw new DomainException('strategy_instance.invalid_instance_ids', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+        args: { invalidIds: invalidIds.slice(0, 5) },
+      })
     }
 
     try {
@@ -356,14 +369,14 @@ export class StrategyInstanceStatsService {
     } catch (error) {
       this.logger.error('Batch stats calculation failed', error.stack)
 
-      if (error instanceof BadRequestException) {
+      if (error instanceof DomainException) {
         throw error
       }
 
-      throw new InternalServerErrorException(
-        'Failed to calculate batch statistics',
-        error.message
-      )
+      throw new DomainException('strategy_instance.batch_stats_calculation_failed', {
+        code: ErrorCode.STRATEGY_INSTANCE_STATS_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+      })
     }
   }
 

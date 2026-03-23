@@ -1,5 +1,6 @@
 import type { MarketTrade } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -27,7 +28,7 @@ export class MarketTradesRepository {
    * 查询交易记录
    */
   async findTrades(options: FindTradesOptions): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockTrades(
         options.exchange || 'Binance',
         options.instrumentType || 'FUTURES',
@@ -109,7 +110,7 @@ export class MarketTradesRepository {
     symbol: string,
     limit = 50,
   ): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockTrades(exchange, instrumentType, symbol, limit)
     }
     try {

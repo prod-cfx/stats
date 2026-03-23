@@ -17,11 +17,8 @@ export const ALLOWED_HELPER_PREFIXES = [
 ] as const
 
 export const REQUIRED_CHECKLIST_FIELDS = [
-  'symbols',
-  'timeframes',
   'entryRules',
   'exitRules',
-  'riskRules',
 ] as const
 
 export type ChecklistField = typeof REQUIRED_CHECKLIST_FIELDS[number]
@@ -31,13 +28,28 @@ export interface ConstraintPackSnapshot {
   forbiddenTokens: readonly string[]
   runtime: 'current_script_engine'
   allowHelpersOnly: boolean
+  guidePrompt?: CodegenGuidePromptConfigSnapshot
+  recommendationStyle?: 'ma' | 'drop-rise'
+  conversationHistory?: string[]
 }
 
-export function createDefaultConstraintPack(): ConstraintPackSnapshot {
+export interface CodegenGuidePromptConfigSnapshot {
+  symbolExample?: string
+  timeframeExample?: string
+  entryRuleExample?: string
+  exitRuleExample?: string
+  riskRuleExample?: string
+}
+
+export function createDefaultConstraintPack(
+  guidePrompt?: CodegenGuidePromptConfigSnapshot,
+): ConstraintPackSnapshot {
   return {
     allowedHelperPrefixes: ALLOWED_HELPER_PREFIXES,
     forbiddenTokens: FORBIDDEN_TOKENS,
     runtime: 'current_script_engine',
     allowHelpersOnly: true,
+    guidePrompt,
+    conversationHistory: [],
   }
 }

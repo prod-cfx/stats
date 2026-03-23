@@ -1,9 +1,11 @@
 import type { LoggerService, OnApplicationShutdown } from '@nestjs/common'
 import type { RedisOptions } from 'ioredis'
-import { Inject, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import Redis from 'ioredis'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 @Injectable()
 export class RedisService implements OnApplicationShutdown {
@@ -61,7 +63,11 @@ export class RedisService implements OnApplicationShutdown {
     )
 
     if (!host || !port)
-      throw new Error('Redis configuration is incomplete. Please set REDIS_URL or host/port.')
+      throw new DomainException('redis.connection_error', {
+        code: ErrorCode.REDIS_CONNECTION_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Redis configuration is incomplete. Please set REDIS_URL or host/port.' },
+      })
 
     const options: RedisOptions = {
       host,

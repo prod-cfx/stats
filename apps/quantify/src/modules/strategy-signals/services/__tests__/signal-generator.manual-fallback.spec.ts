@@ -46,6 +46,7 @@ describe('signal generator manual fallback', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     )
   })
 

@@ -1,7 +1,7 @@
 import { PositionSide } from '@/prisma/prisma.types'
 import { PositionsService } from './positions.service'
 
-describe('PositionsService', () => {
+describe('positionsService', () => {
   function createService() {
     return new PositionsService({} as any, {} as any, {} as any)
   }
@@ -32,7 +32,7 @@ describe('PositionsService', () => {
       ]),
     }
 
-    const position = await service['loadAndLockPosition'](
+    const position = await (service as any).loadAndLockPosition(
       prisma as any,
       'account-1',
       'BTCUSDT',

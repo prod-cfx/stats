@@ -7,9 +7,6 @@ import { Test } from '@nestjs/testing'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
 
-/**
- * API前缀常量
- */
 export const API_PREFIX = 'api/v1'
 
 type HttpServer = ReturnType<INestApplication['getHttpServer']>
@@ -76,8 +73,12 @@ async function resolveCreateTestingAppOptions(
   }
 }
 
-function buildApiClient(server: HttpServer, token?: string): ApiClient {
-  const applyAuth = (req: SupertestAgent): SupertestAgent => {
+// ---------------------------------------------------------------------------
+// HTTP client factories
+// ---------------------------------------------------------------------------
+
+function buildPrefixedClient(server: HttpServer, token?: string): ApiClient {
+  const applyAuth = (req: any): any => {
     if (token)
       req.set('Authorization', `Bearer ${token}`)
     return req
@@ -98,48 +99,66 @@ function buildApiClient(server: HttpServer, token?: string): ApiClient {
   }
 }
 
-export function createApiClient(app: INestApplication, token?: string): ApiClient {
-  return buildApiClient(app.getHttpServer(), token)
+function buildRawClient(server: HttpServer): ApiClient {
+  const createMethod = (method: HttpMethod) => (path: string) => {
+    return supertestRequest(server)[method](path) as SupertestAgent
+  }
+
+  return {
+    get: createMethod('get'),
+    post: createMethod('post'),
+    put: createMethod('put'),
+    patch: createMethod('patch'),
+    delete: createMethod('delete'),
+  }
 }
 
 /**
- * 构建完整API URL
- * @param endpoint API端点路径
- * @returns 添加了API前缀的完整URL
+ * 创建公开请求客户端（自动添加 API 前缀）
  */
+export function createApiClient(app: INestApplication): ApiClient {
+  return buildPrefixedClient(app.getHttpServer())
+}
+
+/**
+ * 创建带认证的请求客户端（自动添加 API 前缀 + Bearer token）
+ */
+export function createAuthApiClient(app: INestApplication, token: string): ApiClient {
+  return buildPrefixedClient(app.getHttpServer(), token)
+}
+
+/**
+ * 创建原始请求客户端（不添加 API 前缀，用于 /health、/metrics 等路由）
+ */
+export function createRawClient(app: INestApplication): ApiClient {
+  return buildRawClient(app.getHttpServer())
+}
+
 export function buildApiUrl(endpoint: string): string {
-  // 如果为空直接返回API前缀
   if (!endpoint) {
     return `/${API_PREFIX}`
   }
 
-  // 移除开头的斜杠以便统一处理
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint
 
-  // 检查是否已经包含 API 前缀
   if (cleanEndpoint.startsWith(`${API_PREFIX}/`) || cleanEndpoint === API_PREFIX) {
     return `/${cleanEndpoint}`
   }
 
-  // 检查是否已经是完整的 API 路径但没有 API_PREFIX 前导部分
   const apiPattern = /^api\/v\d+\//
   if (apiPattern.test(cleanEndpoint)) {
     return `/${cleanEndpoint}`
   }
 
-  // 添加API前缀
   return `/${API_PREFIX}/${cleanEndpoint}`
 }
 
 /**
- * 创建测试应用
- * @param options 允许通过对象或数组直接传入模块数据
- * @returns 测试应用上下文（包含 app / moduleFixture / prisma）
+ * 创建测试应用，支持通过对象或模块数组两种形式传入选项
  */
 export async function createTestingApp(
   options?: CreateTestingAppOptions | any[],
 ): Promise<TestingAppContext> {
-  // 确保使用测试环境配置
   if (!process.env.APP_ENV || !['test', 'e2e'].includes(process.env.APP_ENV)) {
     console.warn('[E2E] 警告: 测试未在测试环境中运行，可能会影响生产数据库')
   }
@@ -193,11 +212,6 @@ export async function createTestingApp(
   return { app, moduleFixture, prisma }
 }
 
-/**
- * 生成随机字符串
- * @param length 长度
- * @returns 随机字符串
- */
 export function generateRandomString(length: number = 10): string {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   if (length <= 0)
@@ -212,62 +226,4 @@ export function generateRandomString(length: number = 10): string {
   }
 
   return result
-}
-
-/**
- * 清理测试数据
- * @param prisma Prisma service
- */
-export async function cleanupTestData(prisma: PrismaService) {
-  try {
-    // 安全检查：确保只在测试数据库中清理数据
-    if (!['test', 'e2e', 'development', 'dev'].includes(process.env.APP_ENV || '')) {
-      console.warn('[E2E] 警告: 不在测试环境中，跳过数据清理')
-      return
-    }
-
-    // 按照依赖关系顺序删除数据，避免外键约束冲突
-    const _client = prisma.getClient()
-    const deleteOperations = [
-      // 根据当前项目的实际表结构删除数据
-      // 示例：先删除依赖表，再删除主表
-      // client.comments.deleteMany(),
-      // client.posts.deleteMany(),
-      // client.users.deleteMany(),
-    ]
-
-    // 逐个执行删除操作
-    for (const operation of deleteOperations) {
-      try {
-        await operation
-      }
-      catch (e) {
-        // 忽略单个删除失败，继续处理下一项
-        console.warn('[E2E] 清理操作失败:', e)
-      }
-    }
-  }
-  catch (error) {
-    console.error('[E2E] 清理测试数据失败:', error)
-  }
-}
-
-/**
- * 确保所有 Prisma 数据库表存在
- * 解决测试环境中可能遇到的表不存在问题
- * @param prisma PrismaService 实例
- */
-export async function ensurePrismaTablesExist(prisma: PrismaService): Promise<void> {
-  // 尝试简单查询各个表以确保它们存在
-  // 如果表不存在会抛出异常
-  try {
-    const _client = prisma.getClient()
-    // 当有表时添加检查
-    // await client.user.findFirst({ take: 1 })
-    // await client.post.findFirst({ take: 1 })
-  }
-  catch (error) {
-    console.error('[E2E] 检查数据库表失败:', error)
-    throw error
-  }
 }

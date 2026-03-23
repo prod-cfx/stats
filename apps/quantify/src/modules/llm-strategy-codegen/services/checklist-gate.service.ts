@@ -23,9 +23,11 @@ export class ChecklistGateService {
   mergeChecklist(base: CodegenChecklist, patch: CodegenChecklist): CodegenChecklist {
     const merged: CodegenChecklist = { ...base }
     for (const [key, value] of Object.entries(patch)) {
-      if (value !== undefined) {
-        merged[key as ChecklistField] = value
-      }
+      if (value === undefined) continue
+      if (Array.isArray(value) && value.length === 0) continue
+      if (typeof value === 'string' && value.trim() === '') continue
+      if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) continue
+      merged[key as ChecklistField] = value
     }
     return merged
   }

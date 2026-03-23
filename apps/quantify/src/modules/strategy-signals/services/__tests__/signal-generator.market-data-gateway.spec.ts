@@ -66,6 +66,7 @@ describe('signal generator market-data gateway smoke', () => {
       mockEventEmitter as any,
       mockTelemetry as any,
       mockGateway as any,
+      {} as any,
     )
   })
 

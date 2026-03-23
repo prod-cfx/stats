@@ -1,6 +1,6 @@
 import { PrismaService } from './prisma.service'
 
-describe('PrismaService.runInTransaction', () => {
+describe('prismaService.runInTransaction', () => {
   function createService(options?: {
     existingTx?: unknown
     isActive?: boolean

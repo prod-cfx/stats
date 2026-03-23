@@ -2,10 +2,10 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
-import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
 import type { FixedBinanceTestnetSignalContext } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
-import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
 import { FixedBinanceTestnetSignalService } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
+import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
 import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
@@ -14,10 +14,10 @@ import { createTestingApp } from '../fixtures/fixtures'
 const FIXED_BINANCE_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_BASE_ASSET ?? 'BTC').toUpperCase()
 const FIXED_BINANCE_PERP_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_PERP_TESTNET_BASE_ASSET ?? 'XRP').toUpperCase()
 const FIXED_BINANCE_QUOTE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_QUOTE_ASSET ?? 'USDT').toUpperCase()
-const FIXED_BINANCE_USER_EMAIL = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL ?? 'binance-testnet-fixed@local.dev'
+const _FIXED_BINANCE_USER_EMAIL = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL ?? 'binance-testnet-fixed@local.dev'
 const FIXED_BINANCE_SYMBOL_CODE = `${FIXED_BINANCE_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
 const FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE = `${FIXED_BINANCE_PERP_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
-const FIXED_BINANCE_PERP_SYMBOL_CODE = `${FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE}:PERP`
+const _FIXED_BINANCE_PERP_SYMBOL_CODE = `${FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE}:PERP`
 const FIXED_BINANCE_OPEN_QUOTE = resolveFixedBinanceSmokeQuote({ signalType: 'ENTRY' }) ?? '8.50'
 const LIVE_SIGNAL_REASON_PREFIX = 'TC-SIGNAL-LIVE'
 

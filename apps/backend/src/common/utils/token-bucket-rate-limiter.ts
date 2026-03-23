@@ -1,3 +1,7 @@
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
+
 /**
  * Token Bucket 频率限制器
  * 用于控制外部 API 调用频率，避免触发服务商限流
@@ -39,7 +43,11 @@ export class TokenBucketRateLimiter {
       const waitMs = Math.min(this.refillIntervalMs, 100)
 
       if (Date.now() - startTime + waitMs > timeoutMs) {
-        throw new Error(`Rate limiter timeout after ${timeoutMs}ms`)
+        throw new DomainException('rate_limiter.exceeded', {
+          code: ErrorCode.RATE_LIMIT_EXCEEDED,
+          status: HttpStatus.TOO_MANY_REQUESTS,
+          args: { reason: `Rate limiter timeout after ${timeoutMs}ms` },
+        })
       }
 
       await this.sleep(waitMs)

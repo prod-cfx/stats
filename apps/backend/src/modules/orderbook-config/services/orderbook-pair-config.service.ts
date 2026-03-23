@@ -40,13 +40,11 @@ export class OrderbookPairConfigService {
     // 验证 pairId 与其他字段的一致性
     const expectedPairId = `${dto.symbol.toUpperCase()}.${dto.venue.toUpperCase()}.${dto.instrumentType}`
     if (dto.pairId !== expectedPairId) {
-      throw new DomainException(
-        `pairId 必须与 symbol/venue/instrumentType 一致。期望: ${expectedPairId}，实际: ${dto.pairId}`,
-        {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-        },
-      )
+      throw new DomainException('orderbook_config.pair_id_mismatch', {
+        code: ErrorCode.ORDERBOOK_CONFIG_PAIR_ID_MISMATCH,
+        status: HttpStatus.BAD_REQUEST,
+        args: { expected: expectedPairId, actual: dto.pairId },
+      })
     }
 
     // 检查 pairId 是否已存在
@@ -68,13 +66,11 @@ export class OrderbookPairConfigService {
         if (knownError.code === 'P2002') {
           const target = (knownError.meta as { target?: unknown })?.target
           if (Array.isArray(target) && target.includes('symbol')) {
-            throw new DomainException(
-              `该市场配置已存在：${dto.symbol} @ ${dto.venue} (${dto.instrumentType})`,
-              {
-                code: ErrorCode.CONFLICT,
-                status: HttpStatus.CONFLICT,
-              },
-            )
+            throw new DomainException('orderbook_config.pair_already_exists', {
+              code: ErrorCode.ORDERBOOK_CONFIG_PAIR_ALREADY_EXISTS,
+              status: HttpStatus.CONFLICT,
+              args: { symbol: dto.symbol, venue: dto.venue, instrumentType: dto.instrumentType },
+            })
           }
           throw new DomainException('Pair ID already exists', {
             code: ErrorCode.CONFLICT,
@@ -125,9 +121,10 @@ export class OrderbookPairConfigService {
     const config = await this.findById(id)
 
     if (!config.enabled) {
-      throw new DomainException('当前没有该交易对的订单薄数据，请确认数据同步任务是否已开启', {
-        code: ErrorCode.NOT_FOUND,
+      throw new DomainException('orderbook_config.data_not_available', {
+        code: ErrorCode.ORDERBOOK_CONFIG_DATA_NOT_AVAILABLE,
         status: HttpStatus.NOT_FOUND,
+        args: { configId: id },
       })
     }
 
@@ -138,9 +135,10 @@ export class OrderbookPairConfigService {
     const raw = await client.get(redisKey)
 
     if (!raw) {
-      throw new DomainException('订单薄数据已过期或不存在', {
-        code: ErrorCode.NOT_FOUND,
+      throw new DomainException('orderbook_config.data_expired', {
+        code: ErrorCode.ORDERBOOK_CONFIG_DATA_EXPIRED,
         status: HttpStatus.NOT_FOUND,
+        args: { redisKey },
       })
     }
 
@@ -149,9 +147,9 @@ export class OrderbookPairConfigService {
       book = JSON.parse(raw) as VenueOrderBook
     }
     catch {
-      throw new DomainException('订单薄数据格式不正确', {
-        code: ErrorCode.NOT_FOUND,
-        status: HttpStatus.NOT_FOUND,
+      throw new DomainException('orderbook_config.data_invalid', {
+        code: ErrorCode.ORDERBOOK_CONFIG_DATA_INVALID,
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
       })
     }
 

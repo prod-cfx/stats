@@ -1,5 +1,7 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { HyperliquidApiService } from '@/modules/whale-tracking/services/hyperliquid-api.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -46,7 +48,11 @@ export class HyperliquidUserOrdersSyncJob implements DataPullJob {
     const cursor = this.parseCursor(ctx.cursor)
 
     if (!cursor.userAddress) {
-      throw new Error('userAddress is required in cursor')
+      throw new DomainException('data_sync.user_orders_sync.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'userAddress is required in cursor' },
+      })
     }
 
     const now = Date.now()

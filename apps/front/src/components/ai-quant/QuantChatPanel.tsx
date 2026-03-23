@@ -1,8 +1,10 @@
 'use client'
 
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
+import DOMPurify from 'dompurify'
 import { ArrowUp, Bot, Check, ChevronsUpDown, Play, Search, Settings2, User } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import showdown from 'showdown'
 import { useTranslation } from 'react-i18next'
 
 export interface QuantMessage {
@@ -34,6 +36,14 @@ const SYMBOLS = [
   { value: 'MATICUSDT', label: 'MATIC/USDT' },
 ]
 
+const markdownConverter = new showdown.Converter({
+  ghCodeBlocks: true,
+  simpleLineBreaks: true,
+  strikethrough: true,
+  tables: true,
+  tasklists: true,
+})
+
 export function QuantChatPanel({
   messages,
   params,
@@ -50,15 +60,12 @@ export function QuantChatPanel({
   const [openCombobox, setOpenCombobox] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const comboboxRef = useRef<HTMLDivElement>(null)
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    scrollToBottom()
+    const el = chatScrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   // Click outside handler for combobox
@@ -141,7 +148,7 @@ export function QuantChatPanel({
               >
                 {params.symbol
                   ? SYMBOLS.find((symbol) => symbol.value === params.symbol)?.label || params.symbol
-                  : t('aiQuant.symbol') + "..."}
+                  : `${t('aiQuant.symbol')}...`}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </button>
               
@@ -151,7 +158,7 @@ export function QuantChatPanel({
                     <Search className="mr-2 h-4 w-4 opacity-50" />
                     <input
                       className="flex h-8 w-full rounded-md bg-transparent text-sm outline-none placeholder:text-[color:var(--cf-muted)]"
-                      placeholder={t('nav.search') + "..."}
+                      placeholder={`${t('nav.search')}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       autoFocus
@@ -205,7 +212,7 @@ export function QuantChatPanel({
       )}
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
         <div className="space-y-6">
           {messages.map(message => (
             <div
@@ -221,11 +228,19 @@ export function QuantChatPanel({
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
-                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)]'
+                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-[color:var(--cf-border)] [&_pre]:bg-[color:var(--cf-bg)] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0'
                     : 'rounded-tr-none bg-primary text-white'
                 }`}
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(markdownConverter.makeHtml(message.content)),
+                    }}
+                  />
+                ) : (
+                  message.content
+                )}
               </div>
 
               {message.role === 'user' && (
@@ -235,7 +250,6 @@ export function QuantChatPanel({
               )}
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 

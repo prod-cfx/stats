@@ -4,9 +4,11 @@ import type {
   JobMetaSchema,
   JobRunResult,
 } from '../contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TakerBuySellVolumeRepository } from '@/modules/markets/repositories/taker-buy-sell-volume.repository'
 
@@ -81,7 +83,11 @@ export class CoinglassTakerVolumeJob implements DataPullJob<TakerVolumeMeta> {
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
 
     if (!apiKey) {
-      throw new Error('COINGLASS_API_KEY is not configured')
+      throw new DomainException('data_sync.taker_volume.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     const url = new URL(
@@ -95,9 +101,11 @@ export class CoinglassTakerVolumeJob implements DataPullJob<TakerVolumeMeta> {
     const json = await this.fetchTakerVolumeJson(url, apiKey)
 
     if (json.code !== '0' || !json.data || !json.data.exchange_list) {
-      throw new Error(
-        `Coinglass taker volume API returned error: code=${json.code}, msg=${json.msg}`,
-      )
+      throw new DomainException('data_sync.taker_volume.invalid_response', {
+        code: ErrorCode.DATA_SYNC_INVALID_RESPONSE,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Coinglass taker volume API returned error: code=${json.code}, msg=${json.msg}` },
+      })
     }
 
     if (json.data.exchange_list.length === 0) {
@@ -193,7 +201,11 @@ export class CoinglassTakerVolumeJob implements DataPullJob<TakerVolumeMeta> {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        throw new DomainException('data_sync.taker_volume.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `HTTP ${response.status}: ${response.statusText}` },
+        })
       }
 
       return await response.json()
@@ -204,11 +216,19 @@ export class CoinglassTakerVolumeJob implements DataPullJob<TakerVolumeMeta> {
 
   private parseMeta(meta: TakerVolumeMeta | null): TakerVolumeMeta {
     if (!meta || !meta.symbol || !meta.range) {
-      throw new Error('meta.symbol and meta.range are required')
+      throw new DomainException('data_sync.taker_volume.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'meta.symbol and meta.range are required' },
+      })
     }
 
     if (!SUPPORTED_RANGES.includes(meta.range)) {
-      throw new Error(`Invalid range: ${meta.range}. Supported: ${SUPPORTED_RANGES.join(', ')}`)
+      throw new DomainException('data_sync.taker_volume.invalid_range', {
+        code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Invalid range: ${meta.range}. Supported: ${SUPPORTED_RANGES.join(', ')}` },
+      })
     }
 
     return {
