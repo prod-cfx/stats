@@ -1,4 +1,5 @@
 import type { AdminUserDto } from '../dto/admin-user.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -41,6 +42,7 @@ export class AdminAuthController {
   }
 
   @Post('register')
+  @Transactional()
   @ApiOperation({ summary: '注册首个管理员账号' })
   @ApiBody({ type: AdminRegisterDto })
   @ApiOkResponse({ description: '注册成功', type: AdminAuthResponseDto })

@@ -31,8 +31,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     cls = app.get(ClsServiceToken)
 
     // 清理测试相关数据，避免受历史数据影响
-    const client = prisma.getClient()
-    await client.cryptoStockQuote.deleteMany({
+    await prisma.cryptoStockQuote.deleteMany({
       where: {
         symbol: { in: ['MSTR'] },
       },
@@ -49,7 +48,6 @@ describe('BBX crypto stock quotes job (E2E)', () => {
   })
 
   it('should insert crypto stock quotes and update cursor', async () => {
-    const client = prisma.getClient()
 
     const quoteTime = 1_700_000_000_000
 
@@ -124,7 +122,7 @@ describe('BBX crypto stock quotes job (E2E)', () => {
     }
     expect(typeof cursor.lastFetchTime).toBe('string')
 
-    const rows = await client.cryptoStockQuote.findMany({
+    const rows = await prisma.cryptoStockQuote.findMany({
       where: {
         symbol: { in: ['MSTR', 'COIN'] },
       },

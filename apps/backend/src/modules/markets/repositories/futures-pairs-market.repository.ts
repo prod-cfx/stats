@@ -1,9 +1,10 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { FuturesPairsMarket } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { PRISMA_TIMEFRAME } from '@/common/utils/prisma-enum-mappers'
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 export interface VolumeByExchange {
@@ -32,7 +33,7 @@ interface GroupByOpenInterestItem {
 
 @Injectable()
 export class FuturesPairsMarketRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
 
   private normalizeSymbol(value: string): string {
     return value.trim().toUpperCase()
@@ -69,7 +70,6 @@ export class FuturesPairsMarketRepository {
     }
     try {
       const { symbol, limit, offset } = params
-      const client = this.prisma.getClient()
 
       // 构建 where 条件
       const where: Prisma.FuturesPairsMarketWhereInput = {
@@ -80,13 +80,13 @@ export class FuturesPairsMarketRepository {
       }
 
       // 先获取总数（所有交易所数量）
-      const totalCount = await client.futuresPairsMarket.groupBy({
+      const totalCount = await this.txHost.tx.futuresPairsMarket.groupBy({
         by: ['exchangeName'],
         where,
       })
 
       // 按交易所分组，聚合交易量（带分页）
-      const groupedData = await client.futuresPairsMarket.groupBy({
+      const groupedData = await this.txHost.tx.futuresPairsMarket.groupBy({
         by: ['exchangeName'],
         where,
         _sum: {
@@ -152,7 +152,6 @@ export class FuturesPairsMarketRepository {
     }
     try {
       const { symbol } = params
-      const client = this.prisma.getClient()
 
       const where: Prisma.FuturesPairsMarketWhereInput = {
         symbol: {
@@ -161,7 +160,7 @@ export class FuturesPairsMarketRepository {
         },
       }
 
-      const groupedData = await client.futuresPairsMarket.groupBy({
+      const groupedData = await this.txHost.tx.futuresPairsMarket.groupBy({
         by: ['exchangeName'],
         where,
         _sum: {
@@ -222,7 +221,6 @@ export class FuturesPairsMarketRepository {
     low24h?: Prisma.Decimal
   } | null> {
     const { symbol, exchange } = params
-    const client = this.prisma.getClient()
 
     const normalizedSymbol = this.normalizeSymbol(symbol)
     const normalizedExchangeCode = this.normalizeExchangeCode(exchange)
@@ -253,7 +251,7 @@ export class FuturesPairsMarketRepository {
     let high24h: Prisma.Decimal | undefined
     let low24h: Prisma.Decimal | undefined
     try {
-      const klineHighLow = await client.futuresPriceHistory.aggregate({
+      const klineHighLow = await this.txHost.tx.futuresPriceHistory.aggregate({
         where: {
           symbol: { startsWith: normalizedSymbol, mode: 'insensitive' },
           interval: PRISMA_TIMEFRAME.D1,
@@ -289,7 +287,7 @@ export class FuturesPairsMarketRepository {
         mode: 'insensitive',
       }
 
-      const record = await client.futuresPairsMarket.findFirst({
+      const record = await this.txHost.tx.futuresPairsMarket.findFirst({
         where,
         orderBy: {
           updatedAt: 'desc',
@@ -313,7 +311,7 @@ export class FuturesPairsMarketRepository {
       }
     } else {
       // 聚合所有交易所的数据（限制最多 100 条防止内存溢出）
-      const records = await client.futuresPairsMarket.findMany({
+      const records = await this.txHost.tx.futuresPairsMarket.findMany({
         where,
         take: 100,
       })

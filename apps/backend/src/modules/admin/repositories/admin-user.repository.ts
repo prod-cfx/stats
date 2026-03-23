@@ -1,19 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { AdminUser, Prisma, PrincipalType, Role } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class AdminUserRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async count(where?: Prisma.AdminUserWhereInput): Promise<number> {
-    const client = this.getClient()
-    return client.adminUser.count({ where })
+    return this.txHost.tx.adminUser.count({ where })
   }
 
   async findMany(params: {
@@ -22,41 +17,34 @@ export class AdminUserRepository {
     skip: number
     take: number
   }): Promise<AdminUser[]> {
-    const client = this.getClient()
-    return client.adminUser.findMany(params)
+    return this.txHost.tx.adminUser.findMany(params)
   }
 
   async findById(id: string): Promise<AdminUser | null> {
-    const client = this.getClient()
-    return client.adminUser.findUnique({ where: { id } })
+    return this.txHost.tx.adminUser.findUnique({ where: { id } })
   }
 
   async findByUsername(username: string): Promise<AdminUser | null> {
-    const client = this.getClient()
-    return client.adminUser.findUnique({ where: { username } })
+    return this.txHost.tx.adminUser.findUnique({ where: { username } })
   }
 
   async create(data: Prisma.AdminUserCreateInput): Promise<AdminUser> {
-    const client = this.getClient()
-    return client.adminUser.create({ data })
+    return this.txHost.tx.adminUser.create({ data })
   }
 
   async update(id: string, data: Prisma.AdminUserUpdateInput): Promise<AdminUser> {
-    const client = this.getClient()
-    return client.adminUser.update({ where: { id }, data })
+    return this.txHost.tx.adminUser.update({ where: { id }, data })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    await client.adminUser.delete({ where: { id } })
+    await this.txHost.tx.adminUser.delete({ where: { id } })
   }
 
   async findRoleAssignments(
     adminUserId: string,
     principalType: PrincipalType,
   ): Promise<{ role: { id: string; code: string; name: string; description: string | null } }[]> {
-    const client = this.getClient()
-    return client.roleAssignment.findMany({
+    return this.txHost.tx.roleAssignment.findMany({
       where: { principalId: adminUserId, principalType },
       select: {
         role: {
@@ -70,8 +58,7 @@ export class AdminUserRepository {
     adminUserId: string,
     principalType: PrincipalType,
   ): Promise<{ role: { code: string } }[]> {
-    const client = this.getClient()
-    return client.roleAssignment.findMany({
+    return this.txHost.tx.roleAssignment.findMany({
       where: { principalId: adminUserId, principalType },
       select: { role: { select: { code: true } } },
     })
@@ -81,8 +68,7 @@ export class AdminUserRepository {
     userIds: string[],
     principalType: PrincipalType,
   ): Promise<{ principalId: string; role: { id: string; code: string; name: string; description: string | null } }[]> {
-    const client = this.getClient()
-    return client.roleAssignment.findMany({
+    return this.txHost.tx.roleAssignment.findMany({
       where: { principalId: { in: userIds }, principalType },
       select: {
         principalId: true,
@@ -94,29 +80,24 @@ export class AdminUserRepository {
   }
 
   async findRolesByCode(codes: string[]): Promise<Role[]> {
-    const client = this.getClient()
-    return client.role.findMany({ where: { code: { in: codes } } })
+    return this.txHost.tx.role.findMany({ where: { code: { in: codes } } })
   }
 
   async findRolesByIdSelect(ids: string[]): Promise<{ id: string }[]> {
-    const client = this.getClient()
-    return client.role.findMany({ where: { id: { in: ids } }, select: { id: true } })
+    return this.txHost.tx.role.findMany({ where: { id: { in: ids } }, select: { id: true } })
   }
 
   async createRoleAssignments(
     data: { principalId: string; principalType: PrincipalType; roleId: string }[],
   ): Promise<void> {
-    const client = this.getClient()
-    await client.roleAssignment.createMany({ data: data as never })
+    await this.txHost.tx.roleAssignment.createMany({ data: data as never })
   }
 
   async deleteRoleAssignments(adminUserId: string, principalType: PrincipalType): Promise<void> {
-    const client = this.getClient()
-    await client.roleAssignment.deleteMany({ where: { principalId: adminUserId, principalType } })
+    await this.txHost.tx.roleAssignment.deleteMany({ where: { principalId: adminUserId, principalType } })
   }
 
   async findMenusByOrderBy(): Promise<import('@/prisma/prisma.types').AdminMenu[]> {
-    const client = this.getClient()
-    return client.adminMenu.findMany({ orderBy: { sort: 'asc' } })
+    return this.txHost.tx.adminMenu.findMany({ orderBy: { sort: 'asc' } })
   }
 }

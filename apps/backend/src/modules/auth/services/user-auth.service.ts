@@ -29,6 +29,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { MailService } from '@/common/services/mail.service'
 import { CacheService } from '@/common/services/cache.service'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { UserAuthRepository } from '../repositories/user-auth.repository'
 import {
@@ -84,6 +86,7 @@ export class UserAuthService {
     @Inject(MailService) private readonly mailService: MailService,
     @Inject(EnvService) private readonly envService: EnvService,
     @Inject(CacheService) private readonly cacheService: CacheService,
+    private readonly txEvents: TransactionEventsService,
   ) {
     this.tokenExpiresInSeconds = this.resolveExpiresInSeconds(
       this.configService.get<string | number>('jwt.expiresIn'),
@@ -98,32 +101,26 @@ export class UserAuthService {
     }
 
     try {
-      return await this.userAuthRepository.runInTransaction(async tx => {
-        const passwordHash = await hash(dto.password, PASSWORD_SALT_ROUNDS)
-        const now = new Date()
-        const user = await tx.user.create({
-          data: {
-            email,
-            passwordHash,
-            nickname: dto.nickname?.trim() || null,
-            emailVerified: true,
-            emailVerifiedAt: now,
-            isGuest: false,
-          },
-        })
-
-        await tx.userCredential.create({
-          data: {
-            userId: user.id,
-            type: UserCredentialType.email,
-            value: email,
-          },
-        })
-
-        await this.ensureDefaultRoleAssignment(tx, user.id)
-
-        return this.buildAuthResponse(user, [AppRole.USER])
+      const passwordHash = await hash(dto.password, PASSWORD_SALT_ROUNDS)
+      const now = new Date()
+      const user = await this.userAuthRepository.createUser({
+        email,
+        passwordHash,
+        nickname: dto.nickname?.trim() || null,
+        emailVerified: true,
+        emailVerifiedAt: now,
+        isGuest: false,
       })
+
+      await this.userAuthRepository.createUserCredential({
+        userId: user.id,
+        type: UserCredentialType.email,
+        value: email,
+      })
+
+      await this.ensureDefaultRoleAssignment(user.id)
+
+      return await this.buildAuthResponse(user, [AppRole.USER])
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new EmailAlreadyTakenException({ email })
@@ -174,34 +171,24 @@ export class UserAuthService {
 
   async verifyPasswordReset(dto: VerifyPasswordResetRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    await this.userAuthRepository.runInTransaction(async tx => {
-      await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.PASSWORD_RESET)
-      const user = await tx.user.findUnique({ where: { email } })
-      if (!user) {
-        throw new PasswordResetInvalidException({ email })
-      }
-      const passwordHash = await hash(dto.newPassword, PASSWORD_SALT_ROUNDS)
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          tokenVersion: { increment: 1 },
-        },
-      })
+    await this.verifyAndConsumeCode(email, dto.code, VerificationCodePurpose.PASSWORD_RESET)
+    const user = await this.userAuthRepository.findUserByEmail(email)
+    if (!user) {
+      throw new PasswordResetInvalidException({ email })
+    }
+    const passwordHash = await hash(dto.newPassword, PASSWORD_SALT_ROUNDS)
+    await this.userAuthRepository.updateUser(user.id, {
+      passwordHash,
+      tokenVersion: { increment: 1 },
     })
   }
 
   async verifyEmail(dto: VerifyEmailRequestDto): Promise<void> {
     const email = this.normalizeEmail(dto.email)
-    await this.userAuthRepository.runInTransaction(async tx => {
-      await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
-      await tx.user.updateMany({
-        where: { email },
-        data: {
-          emailVerified: dto.updateUserStatus ?? true,
-          emailVerifiedAt: new Date(),
-        },
-      })
+    await this.verifyAndConsumeCode(email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
+    await this.userAuthRepository.updateUsersByEmail(email, {
+      emailVerified: dto.updateUserStatus ?? true,
+      emailVerifiedAt: new Date(),
     })
   }
 
@@ -233,10 +220,13 @@ export class UserAuthService {
       expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
-    // 发送验证码邮件
+    // 邮件发送属于外部 I/O，移到事务提交后执行，避免长时间持锁
     const purpose = dto.purpose === VerificationCodePurpose.EMAIL_VERIFICATION ? 'registration' : 'password_reset'
-    await this.mailService.sendVerificationCode(email, code, purpose)
-    this.logger.log(`Sent ${dto.purpose} code to ${this.maskEmail(email)}`)
+    const maskedEmail = this.maskEmail(email)
+    this.txEvents.afterCommit(async () => {
+      await this.mailService.sendVerificationCode(email, code, purpose)
+      this.logger.log(`Sent ${dto.purpose} code to ${maskedEmail}`)
+    })
   }
 
   async sendEmailLoginCode(dto: SendEmailLoginCodeRequestDto): Promise<void> {
@@ -250,8 +240,11 @@ export class UserAuthService {
       expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
-    await this.mailService.sendVerificationCode(email, code, 'registration')
-    this.logger.log(`Sent EMAIL_LOGIN code to ${this.maskEmail(email)}`)
+    const maskedEmail = this.maskEmail(email)
+    this.txEvents.afterCommit(async () => {
+      await this.mailService.sendVerificationCode(email, code, 'registration')
+      this.logger.log(`Sent EMAIL_LOGIN code to ${maskedEmail}`)
+    })
   }
 
   async getTelegramLoginConfig(): Promise<{ botName: string | null }> {
@@ -348,72 +341,57 @@ export class UserAuthService {
     const telegramId = payload.telegramId!
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      const credential = await tx.userCredential.findFirst({
-        where: { value: credentialValue },
-        include: { user: true },
-      })
+    const credential = await this.userAuthRepository.findUserCredential(credentialValue)
 
-      if (credential?.user) {
-        const roles = await this.getUserRoles(credential.user.id)
-        if (roles.length > 0) {
-          return this.buildAuthResponse(credential.user, roles)
-        }
-        await this.ensureDefaultRoleAssignment(tx, credential.user.id)
-        const latestRoles = await this.getUserRoles(credential.user.id)
-        return this.buildAuthResponse(credential.user, latestRoles)
+    if (credential?.user) {
+      const roles = await this.getUserRoles(credential.user.id)
+      if (roles.length > 0) {
+        return this.buildAuthResponse(credential.user, roles)
       }
+      await this.ensureDefaultRoleAssignment(credential.user.id)
+      const latestRoles = await this.getUserRoles(credential.user.id)
+      return this.buildAuthResponse(credential.user, latestRoles)
+    }
 
-      const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
-      const user = await this.createUserWithEmail(tx, placeholderEmail, {
-        nickname: payload.username || payload.firstName || `tg_${telegramId.slice(0, 6)}`,
-      })
-
-      await tx.userCredential.create({
-        data: {
-          userId: user.id,
-          type: UserCredentialType.email,
-          value: credentialValue,
-        },
-      })
-
-      const roles = await this.getUserRoles(user.id)
-      return this.buildAuthResponse(user, roles)
+    const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
+    const user = await this.createUserWithEmail(placeholderEmail, {
+      nickname: payload.username || payload.firstName || `tg_${telegramId.slice(0, 6)}`,
     })
+
+    await this.userAuthRepository.createUserCredential({
+      userId: user.id,
+      type: UserCredentialType.email,
+      value: credentialValue,
+    })
+
+    const roles = await this.getUserRoles(user.id)
+    return this.buildAuthResponse(user, roles)
   }
 
   async bindTelegramByDesktopIntent(userId: string, dto: TelegramDesktopExchangeRequestDto): Promise<AuthResponseDto> {
     const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'bind')
     const credentialValue = this.buildTelegramCredentialValue(payload.telegramId!)
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      const existing = await tx.userCredential.findFirst({
-        where: {
-          value: credentialValue,
-        },
+    const existing = await this.userAuthRepository.findUserCredential(credentialValue)
+
+    if (existing && existing.userId !== userId) {
+      throw new DomainException('Telegram account already bound', {
+        code: ErrorCode.AUTH_FORBIDDEN,
+        status: HttpStatus.CONFLICT,
       })
+    }
 
-      if (existing && existing.userId !== userId) {
-        throw new DomainException('Telegram account already bound', {
-          code: ErrorCode.AUTH_FORBIDDEN,
-          status: HttpStatus.CONFLICT,
-        })
-      }
+    if (!existing) {
+      await this.userAuthRepository.createUserCredential({
+        userId,
+        type: UserCredentialType.email,
+        value: credentialValue,
+      })
+    }
 
-      if (!existing) {
-        await tx.userCredential.create({
-          data: {
-            userId,
-            type: UserCredentialType.email,
-            value: credentialValue,
-          },
-        })
-      }
-
-      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
-      const roles = await this.getUserRoles(userId)
-      return this.buildAuthResponse(user, roles)
-    })
+    const user = await this.userAuthRepository.findUserByIdOrThrow(userId)
+    const roles = await this.getUserRoles(userId)
+    return this.buildAuthResponse(user, roles)
   }
 
   async handleTelegramBotWebhook(dto: TelegramBotWebhookRequestDto, secretToken?: string): Promise<void> {
@@ -482,27 +460,25 @@ export class UserAuthService {
   async verifyEmailLoginCode(dto: VerifyEmailLoginCodeRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
+    await this.verifyAndConsumeCode(email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
 
-      let user = await tx.user.findUnique({ where: { email } })
-      if (!user) {
-        user = await this.createUserWithEmail(tx, email)
-      } else if (!user.emailVerified) {
-        user = await tx.user.update({
-          where: { id: user.id },
-          data: { emailVerified: true, emailVerifiedAt: new Date() },
-        })
-      }
+    let user = await this.userAuthRepository.findUserByEmail(email)
+    if (!user) {
+      user = await this.createUserWithEmail(email)
+    } else if (!user.emailVerified) {
+      user = await this.userAuthRepository.updateUser(user.id, {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+      })
+    }
 
-      const roles = await this.getUserRoles(user.id)
-      if (roles.length === 0) {
-        await this.ensureDefaultRoleAssignment(tx, user.id)
-      }
-      const latestRoles = roles.length > 0 ? roles : await this.getUserRoles(user.id)
+    const roles = await this.getUserRoles(user.id)
+    if (roles.length === 0) {
+      await this.ensureDefaultRoleAssignment(user.id)
+    }
+    const latestRoles = roles.length > 0 ? roles : await this.getUserRoles(user.id)
 
-      return this.buildAuthResponse(user, latestRoles)
-    })
+    return this.buildAuthResponse(user, latestRoles)
   }
 
   async telegramExchange(dto: TelegramExchangeRequestDto): Promise<AuthResponseDto> {
@@ -510,85 +486,62 @@ export class UserAuthService {
     this.verifyTelegramLoginPayload(dto)
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      const credential = await tx.userCredential.findFirst({
-        where: {
-          value: credentialValue,
-        },
-        include: {
-          user: true,
-        },
-      })
+    const credential = await this.userAuthRepository.findUserCredential(credentialValue)
 
-      if (credential?.user) {
-        const roles = await this.getUserRoles(credential.user.id)
-        if (roles.length > 0) {
-          return this.buildAuthResponse(credential.user, roles)
-        }
-        await this.ensureDefaultRoleAssignment(tx, credential.user.id)
-        const latestRoles = await this.getUserRoles(credential.user.id)
-        return this.buildAuthResponse(credential.user, latestRoles)
+    if (credential?.user) {
+      const roles = await this.getUserRoles(credential.user.id)
+      if (roles.length > 0) {
+        return this.buildAuthResponse(credential.user, roles)
       }
+      await this.ensureDefaultRoleAssignment(credential.user.id)
+      const latestRoles = await this.getUserRoles(credential.user.id)
+      return this.buildAuthResponse(credential.user, latestRoles)
+    }
 
-      const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
-      const user = await this.createUserWithEmail(tx, placeholderEmail, {
-        nickname: `tg_${telegramId.slice(0, 6)}`,
-      })
-
-      await tx.userCredential.create({
-        data: {
-          userId: user.id,
-          type: UserCredentialType.email,
-          value: credentialValue,
-        },
-      })
-
-      const roles = await this.getUserRoles(user.id)
-      return this.buildAuthResponse(user, roles)
+    const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
+    const user = await this.createUserWithEmail(placeholderEmail, {
+      nickname: `tg_${telegramId.slice(0, 6)}`,
     })
+
+    await this.userAuthRepository.createUserCredential({
+      userId: user.id,
+      type: UserCredentialType.email,
+      value: credentialValue,
+    })
+
+    const roles = await this.getUserRoles(user.id)
+    return this.buildAuthResponse(user, roles)
   }
 
   async bindEmail(userId: string, dto: BindEmailRequestDto): Promise<AuthResponseDto> {
     const email = this.normalizeEmail(dto.email)
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      await this.verifyAndConsumeCode(tx, email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
+    await this.verifyAndConsumeCode(email, dto.code, VerificationCodePurpose.EMAIL_VERIFICATION)
 
-      const existing = await tx.user.findUnique({ where: { email } })
-      if (existing && existing.id !== userId) {
-        throw new EmailAlreadyTakenException({ email })
-      }
+    const existing = await this.userAuthRepository.findUserByEmail(email)
+    if (existing && existing.id !== userId) {
+      throw new EmailAlreadyTakenException({ email })
+    }
 
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          email,
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-        },
-      })
-
-      const existingEmailCredential = await tx.userCredential.findFirst({
-        where: {
-          userId,
-          value: email,
-        },
-      })
-
-      if (!existingEmailCredential) {
-        await tx.userCredential.create({
-          data: {
-            userId,
-            type: UserCredentialType.email,
-            value: email,
-          },
-        })
-      }
-
-      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
-      const roles = await this.getUserRoles(userId)
-      return this.buildAuthResponse(user, roles)
+    await this.userAuthRepository.updateUser(userId, {
+      email,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
     })
+
+    const existingEmailCredential = await this.userAuthRepository.findUserCredentialByUserAndValue(userId, email)
+
+    if (!existingEmailCredential) {
+      await this.userAuthRepository.createUserCredential({
+        userId,
+        type: UserCredentialType.email,
+        value: email,
+      })
+    }
+
+    const user = await this.userAuthRepository.findUserByIdOrThrow(userId)
+    const roles = await this.getUserRoles(userId)
+    return this.buildAuthResponse(user, roles)
   }
 
   async bindTelegram(userId: string, dto: BindTelegramRequestDto): Promise<AuthResponseDto> {
@@ -605,34 +558,26 @@ export class UserAuthService {
 
     const credentialValue = this.buildTelegramCredentialValue(dto.telegramId.trim())
 
-    return this.userAuthRepository.runInTransaction(async tx => {
-      const existing = await tx.userCredential.findFirst({
-        where: {
-          value: credentialValue,
-        },
+    const existing = await this.userAuthRepository.findUserCredential(credentialValue)
+
+    if (existing && existing.userId !== userId) {
+      throw new DomainException('Telegram account already bound', {
+        code: ErrorCode.AUTH_FORBIDDEN,
+        status: HttpStatus.CONFLICT,
       })
+    }
 
-      if (existing && existing.userId !== userId) {
-        throw new DomainException('Telegram account already bound', {
-          code: ErrorCode.AUTH_FORBIDDEN,
-          status: HttpStatus.CONFLICT,
-        })
-      }
+    if (!existing) {
+      await this.userAuthRepository.createUserCredential({
+        userId,
+        type: UserCredentialType.email,
+        value: credentialValue,
+      })
+    }
 
-      if (!existing) {
-        await tx.userCredential.create({
-          data: {
-            userId,
-            type: UserCredentialType.email,
-            value: credentialValue,
-          },
-        })
-      }
-
-      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } })
-      const roles = await this.getUserRoles(userId)
-      return this.buildAuthResponse(user, roles)
-    })
+    const user = await this.userAuthRepository.findUserByIdOrThrow(userId)
+    const roles = await this.getUserRoles(userId)
+    return this.buildAuthResponse(user, roles)
   }
 
   async resendVerification(dto: ResendVerificationRequestDto): Promise<void> {
@@ -649,16 +594,16 @@ export class UserAuthService {
       purpose: VerificationCodePurpose.EMAIL_VERIFICATION,
       expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
-    // 发送验证码邮件
-    await this.mailService.sendVerificationCode(email, code, 'registration')
-    this.logger.log(`Sent verification code to ${this.maskEmail(email)}`)
+    // 邮件发送属于外部 I/O，移到事务提交后执行
+    const maskedEmail = this.maskEmail(email)
+    this.txEvents.afterCommit(async () => {
+      await this.mailService.sendVerificationCode(email, code, 'registration')
+      this.logger.log(`Sent verification code to ${maskedEmail}`)
+    })
   }
 
-  private async ensureDefaultRoleAssignment(tx: Prisma.TransactionClient, userId: string) {
-    const userRole = await tx.role.findUnique({
-      where: { code: AppRole.USER },
-      select: { id: true },
-    })
+  private async ensureDefaultRoleAssignment(userId: string) {
+    const userRole = await this.userAuthRepository.findRoleByCode(AppRole.USER)
     if (!userRole) {
       throw new DomainException('Default user role is missing', {
         code: ErrorCode.INTERNAL_SERVER_ERROR,
@@ -666,12 +611,10 @@ export class UserAuthService {
       })
     }
 
-    await tx.roleAssignment.create({
-      data: {
-        principalId: userId,
-        principalType: PrincipalType.USER,
-        roleId: userRole.id,
-      },
+    await this.userAuthRepository.createRoleAssignment({
+      principalId: userId,
+      principalType: PrincipalType.USER,
+      roleId: userRole.id,
     })
   }
 
@@ -681,21 +624,12 @@ export class UserAuthService {
   }
 
   private async verifyAndConsumeCode(
-    tx: Prisma.TransactionClient,
     email: string,
     code: string,
     purpose: VerificationCodePurpose,
   ) {
     // 先查找验证码记录（不加锁，仅用于验证过期时间）
-    const record = await tx.verificationCode.findFirst({
-      where: {
-        email,
-        code,
-        purpose,
-        consumedAt: null, // 只查找未消费的记录
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+    const record = await this.userAuthRepository.findVerificationCode({ email, code, purpose })
     if (!record) {
       throw new VerificationCodeInvalidException({ email })
     }
@@ -704,17 +638,10 @@ export class UserAuthService {
     }
 
     // 使用 updateMany + consumedAt: null 条件确保原子性，防止并发重复消费
-    const now = new Date()
-    const updateResult = await tx.verificationCode.updateMany({
-      where: {
-        id: record.id,
-        consumedAt: null, // 关键条件：只更新未消费的记录
-      },
-      data: { consumedAt: now },
-    })
+    const updateCount = await this.userAuthRepository.consumeVerificationCode(record.id)
 
     // 如果更新条数为 0，说明验证码已被其他并发请求消费
-    if (updateResult.count === 0) {
+    if (updateCount === 0) {
       throw new VerificationCodeInvalidException({ email })
     }
 
@@ -967,7 +894,6 @@ export class UserAuthService {
   }
 
   private async createUserWithEmail(
-    tx: Prisma.TransactionClient,
     email: string,
     options?: {
       nickname?: string | null
@@ -976,26 +902,22 @@ export class UserAuthService {
     const passwordHash = await hash(`${email}:${Date.now()}`, PASSWORD_SALT_ROUNDS)
     const now = new Date()
 
-    const user = await tx.user.create({
-      data: {
-        email,
-        passwordHash,
-        nickname: options?.nickname?.trim() || null,
-        emailVerified: true,
-        emailVerifiedAt: now,
-        isGuest: false,
-      },
+    const user = await this.userAuthRepository.createUser({
+      email,
+      passwordHash,
+      nickname: options?.nickname?.trim() || null,
+      emailVerified: true,
+      emailVerifiedAt: now,
+      isGuest: false,
     })
 
-    await tx.userCredential.create({
-      data: {
-        userId: user.id,
-        type: UserCredentialType.email,
-        value: email,
-      },
+    await this.userAuthRepository.createUserCredential({
+      userId: user.id,
+      type: UserCredentialType.email,
+      value: email,
     })
 
-    await this.ensureDefaultRoleAssignment(tx, user.id)
+    await this.ensureDefaultRoleAssignment(user.id)
     return user
   }
 

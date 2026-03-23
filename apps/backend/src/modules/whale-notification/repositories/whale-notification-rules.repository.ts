@@ -1,4 +1,4 @@
-import type { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   Prisma as PrismaTypes,
   WhaleNotificationChannel,
@@ -6,8 +6,9 @@ import type {
   WhaleNotificationRuleType,
 } from '@/prisma/prisma.types'
 import { randomUUID } from 'node:crypto'
-import { Inject, Injectable } from '@nestjs/common'
-import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 
 interface CreateRuleParams {
@@ -53,21 +54,16 @@ interface CreateDeliveryParams {
 
 @Injectable()
 export class WhaleNotificationRulesRepository {
-  constructor(@Inject(PrismaServiceToken) private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async listByUser(userId: string) {
-    return this.getClient().whaleNotificationRule.findMany({
+    return this.txHost.tx.whaleNotificationRule.findMany({
       where: { userId },
       orderBy: [{ createdAt: 'desc' }],
     })
   }
 
   async listActiveRulesForMatching(whaleAddress: string, symbol: string) {
-    return this.getClient().whaleNotificationRule.findMany({
+    return this.txHost.tx.whaleNotificationRule.findMany({
       where: {
         isActive: true,
         OR: [
@@ -86,7 +82,7 @@ export class WhaleNotificationRulesRepository {
 
   async findRecentSentDeliveries(dedupKeys: string[], since: Date) {
     if (!dedupKeys.length) return []
-    return this.getClient().whaleNotificationDelivery.findMany({
+    return this.txHost.tx.whaleNotificationDelivery.findMany({
       where: {
         dedupKey: { in: dedupKeys },
         status: 'SENT',
@@ -107,7 +103,7 @@ export class WhaleNotificationRulesRepository {
     const id = randomUUID()
     const now = new Date()
     const expiresAt = new Date(now.getTime() + params.cooldownSeconds * 1000)
-    const result = await this.getClient().$queryRaw<Array<{ id: string }>>`
+    const result = await this.txHost.tx.$queryRaw<Array<{ id: string }>>`
       INSERT INTO "whale_notification_cooldown_guards" (
         "id",
         "dedup_key",
@@ -134,7 +130,7 @@ export class WhaleNotificationRulesRepository {
     dedupKey: string
     channel: WhaleNotificationChannel
   }): Promise<void> {
-    await this.getClient().$executeRaw`
+    await this.txHost.tx.$executeRaw`
       DELETE FROM "whale_notification_cooldown_guards"
       WHERE "dedup_key" = ${params.dedupKey}
         AND "channel" = ${params.channel}
@@ -142,7 +138,7 @@ export class WhaleNotificationRulesRepository {
   }
 
   async createDelivery(params: CreateDeliveryParams) {
-    return this.getClient().whaleNotificationDelivery.create({
+    return this.txHost.tx.whaleNotificationDelivery.create({
       data: {
         userId: params.userId,
         ruleId: params.ruleId,
@@ -162,7 +158,7 @@ export class WhaleNotificationRulesRepository {
   }
 
   async findById(id: string) {
-    return this.getClient().whaleNotificationRule.findUnique({ where: { id } })
+    return this.txHost.tx.whaleNotificationRule.findUnique({ where: { id } })
   }
 
   async create(params: CreateRuleParams) {
@@ -179,7 +175,7 @@ export class WhaleNotificationRulesRepository {
       isActive: true,
     }
 
-    return this.getClient().whaleNotificationRule.create({ data })
+    return this.txHost.tx.whaleNotificationRule.create({ data })
   }
 
   async update(id: string, params: UpdateRuleParams) {
@@ -200,13 +196,13 @@ export class WhaleNotificationRulesRepository {
       data.channelTelegram = params.channels.telegram
     }
 
-    return this.getClient().whaleNotificationRule.update({
+    return this.txHost.tx.whaleNotificationRule.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string) {
-    await this.getClient().whaleNotificationRule.delete({ where: { id } })
+    await this.txHost.tx.whaleNotificationRule.delete({ where: { id } })
   }
 }

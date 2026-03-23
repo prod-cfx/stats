@@ -1,13 +1,16 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 
 /**
  * 任务配置参数（存放在 data_pull_tasks.meta 中，创建后不变）
@@ -114,10 +117,15 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext<AggregatedLiquidationMeta>): Promise<JobRunResult> {
     // 先解析 cursor（可能包含历史格式中的 symbol/exchange/interval）
     const cursor = this.parseCursor(ctx.cursor)
     // 再从 meta 读取任务配置（不会被运行时修改），meta 为空时兼容从旧 cursor 中读取配置
@@ -183,7 +191,7 @@ export class CoinglassAggregatedLiquidationJob implements DataPullJob<Aggregated
       }
     }
 
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     // 将返回的时间戳转换为毫秒，并以字符串形式存储 Decimal 字段
 

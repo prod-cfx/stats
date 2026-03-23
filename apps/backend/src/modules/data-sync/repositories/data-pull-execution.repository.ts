@@ -1,9 +1,9 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { JobRunResult } from '../contracts/data-pull-job'
 import type { DataPullExecution as DataPullExecutionModel } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export type DataPullExecutionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
@@ -11,15 +11,9 @@ export type DataPullExecution = DataPullExecutionModel
 
 @Injectable()
 export class DataPullExecutionRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async createStart(taskId: number, startedAt: Date): Promise<DataPullExecution> {
-    const client = this.getClient()
-    return client.dataPullExecution.create({
+    return this.txHost.tx.dataPullExecution.create({
       data: {
         taskId,
         startedAt,
@@ -33,8 +27,7 @@ export class DataPullExecutionRepository {
     finishedAt: Date,
     result: JobRunResult,
   ): Promise<void> {
-    const client = this.getClient()
-    await client.dataPullExecution.update({
+    await this.txHost.tx.dataPullExecution.update({
       where: { id: executionId },
       data: {
         finishedAt,
@@ -47,9 +40,8 @@ export class DataPullExecutionRepository {
   }
 
   async markFailed(executionId: number, finishedAt: Date, error: any): Promise<void> {
-    const client = this.getClient()
     const message = this.truncateError(error)
-    await client.dataPullExecution.update({
+    await this.txHost.tx.dataPullExecution.update({
       where: { id: executionId },
       data: {
         finishedAt,
@@ -66,12 +58,11 @@ export class DataPullExecutionRepository {
     total: number
     items: DataPullExecution[]
   }> {
-    const client = this.getClient()
-    const [total, items] = await client.$transaction([
-      client.dataPullExecution.count({
+    const [total, items] = await Promise.all([
+      this.txHost.tx.dataPullExecution.count({
         where: { taskId },
       }),
-      client.dataPullExecution.findMany({
+      this.txHost.tx.dataPullExecution.findMany({
         where: { taskId },
         orderBy: { id: 'desc' },
         skip: (page - 1) * limit,

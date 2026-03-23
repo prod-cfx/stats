@@ -22,8 +22,7 @@ describe('Coinglass long/short ratio job (E2E)', () => {
     job = app.get(CoinglassLongShortRatioJob)
 
     // 清理测试相关数据，避免受历史数据影响
-    const client = prisma.getClient()
-    await client.longShortRatio.deleteMany({
+    await prisma.longShortRatio.deleteMany({
       where: {
         tradingPairId: 'BTCUSDT.BINANCE.PERP',
       },
@@ -40,7 +39,6 @@ describe('Coinglass long/short ratio job (E2E)', () => {
   })
 
   it('should insert long/short ratios and update cursor incrementally', async () => {
-    const client = prisma.getClient()
 
     // 模拟 Coinglass 全局多空账户比返回的两条数据（时间戳单位毫秒）
     const firstPointTime = 1_700_000_000_000
@@ -106,7 +104,7 @@ describe('Coinglass long/short ratio job (E2E)', () => {
     expect(cursor1.interval).toBe('4h')
     expect(cursor1.lastTimestamp).toBe(secondPointTime)
 
-    const rowsAfterFirstRun = await client.longShortRatio.findMany({
+    const rowsAfterFirstRun = await prisma.longShortRatio.findMany({
       where: {
         tradingPairId: 'BTCUSDT.BINANCE.PERP',
       },
@@ -144,7 +142,7 @@ describe('Coinglass long/short ratio job (E2E)', () => {
     expect(fetchCallCount).toBe(2)
     expect(result2.fetchedCount).toBe(0)
 
-    const rowsAfterSecondRun = await client.longShortRatio.findMany({
+    const rowsAfterSecondRun = await prisma.longShortRatio.findMany({
       where: {
         tradingPairId: 'BTCUSDT.BINANCE.PERP',
       },

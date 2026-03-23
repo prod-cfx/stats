@@ -1,12 +1,15 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 
 interface WhalePositionCursor {
   /**
@@ -68,10 +71,15 @@ export class CoinglassWhalePositionJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(_ctx: DataPullJobContext): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(_ctx))
+  }
+
+  private async execute(_ctx: DataPullJobContext): Promise<JobRunResult> {
     // 快照模式：不使用游标做增量过滤，每次全量 upsert
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
@@ -115,12 +123,12 @@ export class CoinglassWhalePositionJob implements DataPullJob {
       }
     }
 
-    const client = this.prisma.getClient()
     const now = new Date()
 
     // 使用 upsert 模式：同一用户+币种的持仓会被更新
-    // 分批执行事务，避免大数据量时事务超时（Prisma P2028）
-    const operations = json.data.flatMap(point => {
+    // 分批执行，避免大数据量时超时
+    let upsertedCount = 0
+    for (const point of json.data) {
       // 空值保护：外部 API 可能返回意外的 null/undefined
       const hasValidMarginBalance =
         Number.isFinite(point.margin_balance) && point.margin_balance !== 0
@@ -134,7 +142,7 @@ export class CoinglassWhalePositionJob implements DataPullJob {
         this.logger.warn(
           `Skip invalid whale position payload: user=${point.user}, symbol=${point.symbol}`,
         )
-        return []
+        continue
       }
 
       const commonData = {
@@ -167,30 +175,22 @@ export class CoinglassWhalePositionJob implements DataPullJob {
         source: 'COINGLASS' as const,
       }
 
-      return [
-        client.hyperliquidWhalePosition.upsert({
-          where: {
-            userAddress_symbol: {
-              userAddress: point.user,
-              symbol: point.symbol,
-            },
-          },
-          update: commonData,
-          create: {
+      await this.txHost.tx.hyperliquidWhalePosition.upsert({
+        where: {
+          userAddress_symbol: {
             userAddress: point.user,
             symbol: point.symbol,
-            ...commonData,
           },
-        }),
-      ]
-    })
-
-    // 分批提交事务
-    for (let i = 0; i < operations.length; i += this.batchSize) {
-      const batch = operations.slice(i, i + this.batchSize)
-      await client.$transaction(batch)
+        },
+        update: commonData,
+        create: {
+          userAddress: point.user,
+          symbol: point.symbol,
+          ...commonData,
+        },
+      })
+      upsertedCount++
     }
-    const upsertedCount = operations.length
 
     const newCursor: WhalePositionCursor = {
       lastSyncTime: now.getTime(),

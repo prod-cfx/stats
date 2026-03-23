@@ -1,4 +1,7 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ClsService } from 'nestjs-cls'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
 
@@ -10,11 +13,15 @@ type Task = () => void | Promise<void>
 export class TransactionEventsService {
   private readonly logger = new Logger(TransactionEventsService.name)
 
-  constructor(@Inject(ClsServiceToken) private readonly cls: ClsService) {}
+  constructor(
+    @Inject(ClsServiceToken) private readonly cls: ClsService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+  ) {}
 
   afterCommit(task: Task): void {
     try {
-      const inTx = Boolean(this.cls.get('PRISMA_TRANSACTION'))
+      const inTx = this.txHost.isTransactionActive()
+
       if (!inTx) {
         Promise.resolve()
           .then(() => task())
@@ -29,7 +36,6 @@ export class TransactionEventsService {
       list.push(task)
       this.cls.set(AFTER_COMMIT_TASKS_KEY, list)
     } catch (error) {
-      // 当 CLS 上下文不存在时，直接以非事务方式执行任务，避免抛出异常导致请求失败
       this.logger.warn(
         `afterCommit called without CLS context, executing task immediately: ${(error as Error)?.message}`,
       )
@@ -48,7 +54,6 @@ export class TransactionEventsService {
       this.cls.set(AFTER_COMMIT_TASKS_KEY, [])
       return list
     } catch {
-      // 无 CLS 上下文时直接返回空任务列表
       return []
     }
   }
@@ -76,5 +81,23 @@ export class TransactionEventsService {
       // 无 CLS 上下文时跳过重置
     }
   }
-}
 
+  /**
+   * 非 HTTP 场景（Bull Job / Subscriber / Scheduler）的便捷方法。
+   * 自动创建 CLS 上下文 + 开启事务 + drain afterCommit。
+   */
+  async withAfterCommit<T>(fn: () => Promise<T>): Promise<T> {
+    const execute = async (): Promise<T> => {
+      this.reset()
+      const result = await this.txHost.withTransaction(fn)
+      const tasks = this.drainAfterCommitTasks()
+      await this.runTasks(tasks)
+      return result
+    }
+
+    if (this.cls.isActive()) {
+      return execute()
+    }
+    return this.cls.run(execute)
+  }
+}

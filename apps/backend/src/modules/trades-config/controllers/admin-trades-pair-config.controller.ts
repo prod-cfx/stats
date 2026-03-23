@@ -1,4 +1,5 @@
 import type { TradesPairConfig } from '@/prisma/prisma.types'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -89,6 +90,7 @@ export class AdminTradesPairConfigController {
   }
 
   @Post()
+  @Transactional()
   @CreateAny(AppResource.TRADES_CONFIG)
   @Throttle({ default: { ttl: 60000, limit: 10 } }) // 每分钟最多10次
   @HttpCode(200)
@@ -116,6 +118,7 @@ export class AdminTradesPairConfigController {
   }
 
   @Put(':id')
+  @Transactional()
   @UpdateAny(AppResource.TRADES_CONFIG)
   @Throttle({ default: { ttl: 60000, limit: 20 } }) // 每分钟最多20次
   @ApiOperation({ summary: '更新交易记录订阅配置' })
@@ -143,6 +146,7 @@ export class AdminTradesPairConfigController {
   }
 
   @Delete(':id')
+  @Transactional()
   @DeleteAny(AppResource.TRADES_CONFIG)
   @Throttle({ default: { ttl: 60000, limit: 10 } }) // 每分钟最多10次
   @HttpCode(204)

@@ -31,16 +31,15 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
   })
 
   it('should fetch futures open interest from Coinglass and persist BTC/All record', async () => {
-    const client = prisma.getClient()
 
     // 清理 BTC 相关的历史持仓量数据，确保本次拉取效果可观测
-    await client.openInterest.deleteMany({
+    await prisma.openInterest.deleteMany({
       where: {
         symbol: 'BTC',
       },
     })
 
-    const beforeCount = await client.openInterest.count({
+    const beforeCount = await prisma.openInterest.count({
       where: {
         symbol: 'BTC',
       },
@@ -55,7 +54,7 @@ describeIf('Open interest sync via Coinglass (E2E)', () => {
       now: new Date(),
     })
 
-    const afterCount = await client.openInterest.count({
+    const afterCount = await prisma.openInterest.count({
       where: {
         symbol: 'BTC',
       },

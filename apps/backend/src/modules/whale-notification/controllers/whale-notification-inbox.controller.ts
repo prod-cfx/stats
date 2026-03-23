@@ -1,4 +1,5 @@
 import type { WhaleNotificationInboxService } from '../services/whale-notification-inbox.service'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Controller, Get, HttpCode, Inject, Patch, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
@@ -24,6 +25,7 @@ export class WhaleNotificationInboxController {
   }
 
   @Patch(':id/read')
+  @Transactional()
   @ApiOperation({ summary: '标记单条通知已读' })
   @ApiOkResponse({
     schema: {
@@ -43,6 +45,7 @@ export class WhaleNotificationInboxController {
   }
 
   @Post('read-all')
+  @Transactional()
   @HttpCode(200)
   @ApiOperation({ summary: '标记当前用户全部通知已读' })
   @ApiOkResponse({

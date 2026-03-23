@@ -1,4 +1,5 @@
 import type { ExchangeConfig } from '@/prisma/prisma.types'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -87,6 +88,7 @@ export class AdminExchangeConfigController {
   }
 
   @Post()
+  @Transactional()
   @CreateAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '创建交易所配置' })
   @ApiBody({ type: CreateExchangeConfigDto })
@@ -106,6 +108,7 @@ export class AdminExchangeConfigController {
   }
 
   @Put(':id')
+  @Transactional()
   @UpdateAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '更新交易所配置' })
   @ApiBody({ type: UpdateExchangeConfigDto })
@@ -128,6 +131,7 @@ export class AdminExchangeConfigController {
   }
 
   @Delete(':id')
+  @Transactional()
   @DeleteAny(AppResource.EXCHANGE_CONFIG)
   @ApiOperation({ summary: '删除交易所配置' })
   @ApiOkResponse({

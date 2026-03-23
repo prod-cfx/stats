@@ -1,5 +1,6 @@
 import type { WhaleNotificationRulesService } from '../services/whale-notification-rules.service'
 import type { WhaleNotificationRule } from '@/prisma/prisma.types'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Inject, Param, Post, Put } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
@@ -32,6 +33,7 @@ export class WhaleNotificationRulesController {
   }
 
   @Post()
+  @Transactional()
   @ApiOperation({ summary: '创建巨鲸通知规则' })
   @ApiOkResponse({ type: WhaleNotificationRuleResponseDto })
   async create(
@@ -43,6 +45,7 @@ export class WhaleNotificationRulesController {
   }
 
   @Put(':id')
+  @Transactional()
   @ApiOperation({ summary: '更新巨鲸通知规则' })
   @ApiOkResponse({ type: WhaleNotificationRuleResponseDto })
   async update(
@@ -55,6 +58,7 @@ export class WhaleNotificationRulesController {
   }
 
   @Delete(':id')
+  @Transactional()
   @ApiOperation({ summary: '删除巨鲸通知规则' })
   @ApiOkResponse({
     schema: {

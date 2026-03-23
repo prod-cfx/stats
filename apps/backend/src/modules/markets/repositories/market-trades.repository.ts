@@ -1,9 +1,9 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { MarketTrade } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 export interface FindTradesOptions {
@@ -22,7 +22,7 @@ export interface FindTradesOptions {
 
 @Injectable()
 export class MarketTradesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
 
   /**
    * 查询交易记录
@@ -73,7 +73,7 @@ export class MarketTradesRepository {
         }
       }
 
-      const trades = await this.prisma.marketTrade.findMany({
+      const trades = await this.txHost.tx.marketTrade.findMany({
         where,
         // 增加确定性的二级排序，避免同毫秒成交导致分页 skip/take 不稳定
         orderBy: [{ tradeTimestamp: options.orderBy ?? 'desc' }, { id: options.orderBy ?? 'desc' }],
@@ -118,7 +118,7 @@ export class MarketTradesRepository {
     try {
       const where = { exchange, instrumentType, symbol }
       const [trades, total] = await Promise.all([
-        this.prisma.marketTrade.findMany({
+        this.txHost.tx.marketTrade.findMany({
           where,
           orderBy: [
             { tradeTimestamp: 'desc' },
@@ -127,7 +127,7 @@ export class MarketTradesRepository {
           take: limit,
           skip: (page - 1) * limit,
         }),
-        this.prisma.marketTrade.count({ where }),
+        this.txHost.tx.marketTrade.count({ where }),
       ])
       if (trades.length === 0 && total === 0) {
         const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
@@ -184,7 +184,7 @@ export class MarketTradesRepository {
     // 下推到数据库：筛选满足 minValue 的成交，并按时间倒序返回最近的 N 条
     const minValueDecimal = new Prisma.Decimal(minValue)
 
-    const rows = await this.prisma.$queryRaw(Prisma.sql`
+    const rows = await this.txHost.tx.$queryRaw(Prisma.sql`
       SELECT
         "id",
         "exchange",
@@ -253,14 +253,14 @@ export class MarketTradesRepository {
       }
     }
 
-    return this.prisma.marketTrade.count({ where })
+    return this.txHost.tx.marketTrade.count({ where })
   }
 
   /**
    * 删除过期的交易记录
    */
   async deleteOldTrades(beforeTimestamp: bigint): Promise<number> {
-    const result = await this.prisma.marketTrade.deleteMany({
+    const result = await this.txHost.tx.marketTrade.deleteMany({
       where: {
         tradeTimestamp: {
           lt: beforeTimestamp,
@@ -275,14 +275,14 @@ export class MarketTradesRepository {
    * 获取交易记录总数
    */
   async getTradeCount(): Promise<number> {
-    return this.prisma.marketTrade.count()
+    return this.txHost.tx.marketTrade.count()
   }
 
   /**
    * 获取最旧的交易记录时间戳
    */
   async getOldestTradeTimestamp(): Promise<bigint | null> {
-    const oldest = await this.prisma.marketTrade.findFirst({
+    const oldest = await this.txHost.tx.marketTrade.findFirst({
       orderBy: {
         tradeTimestamp: 'asc',
       },
@@ -299,7 +299,7 @@ export class MarketTradesRepository {
   async getDistinctSymbolGroups(): Promise<
     Array<{ exchange: string; instrumentType: string; symbol: string }>
   > {
-    const groups = await this.prisma.marketTrade.findMany({
+    const groups = await this.txHost.tx.marketTrade.findMany({
       distinct: ['exchange', 'instrumentType', 'symbol'],
       select: {
         exchange: true,
@@ -318,7 +318,7 @@ export class MarketTradesRepository {
     instrumentType: string,
     symbol: string,
   ): Promise<number> {
-    return this.prisma.marketTrade.count({
+    return this.txHost.tx.marketTrade.count({
       where: { exchange, instrumentType, symbol },
     })
   }
@@ -337,7 +337,7 @@ export class MarketTradesRepository {
       return 0
     }
 
-    const result = await this.prisma.$executeRaw`
+    const result = await this.txHost.tx.$executeRaw`
       WITH to_keep AS (
         SELECT "id"
         FROM "market_trades"

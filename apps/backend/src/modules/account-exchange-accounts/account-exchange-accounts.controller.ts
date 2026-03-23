@@ -1,4 +1,5 @@
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Inject, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
@@ -27,6 +28,7 @@ export class AccountExchangeAccountsController {
   }
 
   @Post()
+  @Transactional()
   @ApiOperation({ summary: '绑定或更新当前登录用户的交易所账户' })
   @ApiOkResponse({ type: AccountExchangeAccountResponseDto })
   async upsert(
@@ -37,6 +39,7 @@ export class AccountExchangeAccountsController {
   }
 
   @Delete(':exchangeId')
+  @Transactional()
   @ApiOperation({ summary: '解绑当前登录用户的交易所账户' })
   @ApiOkResponse({
     schema: {

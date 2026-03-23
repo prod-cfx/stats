@@ -1,8 +1,8 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullTask as DataPullTaskModel } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export type DataPullTaskStatus = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
 
@@ -10,12 +10,7 @@ export type DataPullTask = DataPullTaskModel
 
 @Injectable()
 export class DataPullTaskRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   /**
    * 查找「当前时刻应该被调度」的任务列表。
    *
@@ -25,9 +20,8 @@ export class DataPullTaskRepository {
    * - 否则，要求 lastRunAt 为空或 lastRunAt 距离当前时间已超过 intervalSeconds
    */
   async findDueTasks(_now: Date): Promise<DataPullTask[]> {
-    const client = this.getClient()
 
-    const allEnabled = await client.dataPullTask.findMany({
+    const allEnabled = await this.txHost.tx.dataPullTask.findMany({
       where: {
         enabled: true,
       },
@@ -54,8 +48,7 @@ export class DataPullTaskRepository {
   }
 
   async findByKey(key: string): Promise<DataPullTask | null> {
-    const client = this.getClient()
-    return client.dataPullTask.findUnique({
+    return this.txHost.tx.dataPullTask.findUnique({
       where: { key },
     })
   }
@@ -69,7 +62,6 @@ export class DataPullTaskRepository {
    * - 只有 count === 1 的更新才视为当前实例成功 claim
    */
   async claimDueTasks(now: Date, maxTasks = 10): Promise<DataPullTask[]> {
-    const client = this.getClient()
     const candidates = await this.findDueTasks(now)
 
     const claimed: DataPullTask[] = []
@@ -77,7 +69,7 @@ export class DataPullTaskRepository {
     for (const task of candidates) {
       if (claimed.length >= maxTasks) break
 
-      const result = await client.dataPullTask.updateMany({
+      const result = await this.txHost.tx.dataPullTask.updateMany({
         where: {
           id: task.id,
           // 显式处理 null：lastStatus 为 null 或不等于 'RUNNING'
@@ -107,8 +99,7 @@ export class DataPullTaskRepository {
   }
 
   async markRunning(taskId: number, startedAt: Date): Promise<void> {
-    const client = this.getClient()
-    await client.dataPullTask.update({
+    await this.txHost.tx.dataPullTask.update({
       where: { id: taskId },
       data: {
         lastStatus: 'RUNNING',
@@ -126,8 +117,7 @@ export class DataPullTaskRepository {
    * - 返回 false 表示任务已在运行中，或被其他实例/请求抢占
    */
   async tryMarkRunningOnce(taskId: number, startedAt: Date): Promise<boolean> {
-    const client = this.getClient()
-    const result = await client.dataPullTask.updateMany({
+    const result = await this.txHost.tx.dataPullTask.updateMany({
       where: {
         id: taskId,
         OR: [
@@ -151,8 +141,7 @@ export class DataPullTaskRepository {
     newCursor: string | null,
     _resultMeta: Record<string, any> | undefined,
   ): Promise<void> {
-    const client = this.getClient()
-    await client.dataPullTask.update({
+    await this.txHost.tx.dataPullTask.update({
       where: { id: taskId },
       data: {
         lastStatus: 'SUCCESS',
@@ -165,9 +154,8 @@ export class DataPullTaskRepository {
   }
 
   async markFailed(taskId: number, finishedAt: Date, error: any): Promise<void> {
-    const client = this.getClient()
     const message = this.truncateError(error)
-    await client.dataPullTask.update({
+    await this.txHost.tx.dataPullTask.update({
       where: { id: taskId },
       data: {
         lastStatus: 'FAILED',
@@ -183,8 +171,7 @@ export class DataPullTaskRepository {
    * @returns true 表示成功重置，false 表示任务不在 RUNNING 状态
    */
   async forceResetStatus(taskId: number): Promise<boolean> {
-    const client = this.getClient()
-    const result = await client.dataPullTask.updateMany({
+    const result = await this.txHost.tx.dataPullTask.updateMany({
       where: {
         id: taskId,
         lastStatus: 'RUNNING',
@@ -235,8 +222,7 @@ export class DataPullTaskRepository {
   // ===== 管理后台使用的通用 CRUD 能力 =====
 
   async findById(id: number): Promise<DataPullTask | null> {
-    const client = this.getClient()
-    return client.dataPullTask.findUnique({
+    return this.txHost.tx.dataPullTask.findUnique({
       where: { id },
     })
   }
@@ -248,7 +234,6 @@ export class DataPullTaskRepository {
     name?: string
     enabled?: boolean
   }): Promise<{ total: number; items: DataPullTask[] }> {
-    const client = this.getClient()
     const { page, limit, key, name, enabled } = params
     const where: Record<string, any> = {}
 
@@ -270,9 +255,9 @@ export class DataPullTaskRepository {
       where.enabled = enabled
     }
 
-    const [total, items] = await client.$transaction([
-      client.dataPullTask.count({ where }),
-      client.dataPullTask.findMany({
+    const [total, items] = await Promise.all([
+      this.txHost.tx.dataPullTask.count({ where }),
+      this.txHost.tx.dataPullTask.findMany({
         where,
         orderBy: {
           id: 'asc',
@@ -299,8 +284,7 @@ export class DataPullTaskRepository {
      */
     meta?: Record<string, any> | null
   }): Promise<DataPullTask> {
-    const client = this.getClient()
-    return client.dataPullTask.create({
+    return this.txHost.tx.dataPullTask.create({
       data: {
         key: payload.key,
         name: payload.name,
@@ -331,8 +315,7 @@ export class DataPullTaskRepository {
       meta?: Record<string, any> | null
     },
   ): Promise<DataPullTask> {
-    const client = this.getClient()
-    return client.dataPullTask.update({
+    return this.txHost.tx.dataPullTask.update({
       where: { id },
       data: {
         ...payload,
@@ -341,15 +324,12 @@ export class DataPullTaskRepository {
   }
 
   async deleteTask(id: number): Promise<void> {
-    const client = this.getClient()
-    // 使用事务级联删除，先删除执行记录再删除任务
-    await client.$transaction([
-      client.dataPullExecution.deleteMany({
-        where: { taskId: id },
-      }),
-      client.dataPullTask.delete({
-        where: { id },
-      }),
-    ])
+    // 级联删除：先删除执行记录再删除任务（事务由上层 @Transactional 保证）
+    await this.txHost.tx.dataPullExecution.deleteMany({
+      where: { taskId: id },
+    })
+    await this.txHost.tx.dataPullTask.delete({
+      where: { id },
+    })
   }
 }

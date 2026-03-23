@@ -24,6 +24,8 @@
   },
   "dependencies": {
     "@ai/shared": "workspace:*",
+    "@nestjs-cls/transactional": "^3.2.0",
+    "@nestjs-cls/transactional-adapter-prisma": "^1.3.4",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.16",
     "@nestjs/config": "^4.0.3",
@@ -55,7 +57,7 @@
     "lru-cache": "^11.2.4",
     "nest-access-control": "^2.2.0",
     "nest-winston": "^1.10.2",
-    "nestjs-cls": "^5.4.3",
+    "nestjs-cls": "^6.2.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",

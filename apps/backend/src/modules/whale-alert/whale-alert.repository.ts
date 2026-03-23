@@ -1,22 +1,18 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { Prisma } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class WhaleAlertRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findManyAlerts(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
     take: number,
     skip: number,
   ) {
-    return this.getClient().hyperliquidWhaleAlert.findMany({
+    return this.txHost.tx.hyperliquidWhaleAlert.findMany({
       where,
       orderBy: { createTime: 'desc' },
       take,
@@ -25,7 +21,7 @@ export class WhaleAlertRepository {
   }
 
   async countAlerts(where: Prisma.HyperliquidWhaleAlertWhereInput) {
-    return this.getClient().hyperliquidWhaleAlert.count({ where })
+    return this.txHost.tx.hyperliquidWhaleAlert.count({ where })
   }
 
   async findManyTrades(
@@ -33,7 +29,7 @@ export class WhaleAlertRepository {
     take: number,
     skip: number,
   ) {
-    return this.getClient().hyperliquidWhaleTrade.findMany({
+    return this.txHost.tx.hyperliquidWhaleTrade.findMany({
       where,
       orderBy: { tradeTime: 'desc' },
       take,
@@ -42,11 +38,11 @@ export class WhaleAlertRepository {
   }
 
   async countTrades(where: Prisma.HyperliquidWhaleTradeWhereInput) {
-    return this.getClient().hyperliquidWhaleTrade.count({ where })
+    return this.txHost.tx.hyperliquidWhaleTrade.count({ where })
   }
 
   async findDistinctWhaleAddresses() {
-    return this.getClient().hyperliquidWhaleAlert.findMany({
+    return this.txHost.tx.hyperliquidWhaleAlert.findMany({
       select: { userAddress: true },
       distinct: ['userAddress'],
     })
@@ -63,7 +59,7 @@ export class WhaleAlertRepository {
       tradeTime: Date
     }[],
   ) {
-    return this.getClient().hyperliquidWhaleTrade.createMany({
+    return this.txHost.tx.hyperliquidWhaleTrade.createMany({
       data,
       skipDuplicates: true,
     })
