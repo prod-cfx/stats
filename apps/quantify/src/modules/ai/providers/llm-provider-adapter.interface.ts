@@ -58,6 +58,14 @@ export interface ChatCompletionOptions {
   stream?: boolean
   tools?: ChatCompletionTool[]
   toolChoice?: ToolChoice
+  responseFormat?: {
+    type: 'json_schema'
+    jsonSchema: {
+      name: string
+      strict?: boolean
+      schema: Record<string, unknown>
+    }
+  }
 }
 
 export interface ChatCompletionResult {

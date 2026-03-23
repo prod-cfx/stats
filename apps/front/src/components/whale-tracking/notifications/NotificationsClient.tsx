@@ -54,7 +54,9 @@ export function NotificationsClient() {
         rules={addressRules}
         loading={loading}
         onCreate={() => openCreateModal('ADDRESS')}
-        onUpdate={(id, input) => updateRule(id, input)}
+        onUpdate={async (id, input) => {
+          await updateRule(id, input)
+        }}
         onDelete={(id) => {
           void deleteRule(id)
         }}

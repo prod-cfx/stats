@@ -23,6 +23,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const service = {
       startSession: jest.fn().mockResolvedValue({ id: 's1', status: 'DRAFTING' }),
       continueSession: jest.fn(),
+      getSession: jest.fn(),
       testEngine: jest.fn(),
     }
 
@@ -43,6 +44,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
+      getSession: jest.fn(),
       testEngine: jest.fn(),
     }
     const moduleRef = await Test.createTestingModule({
@@ -61,6 +63,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
+      getSession: jest.fn(),
       testEngine: jest.fn(),
     }
     const moduleRef = await Test.createTestingModule({
@@ -79,6 +82,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
+      getSession: jest.fn(),
       testEngine: jest.fn(),
     }
     const moduleRef = await Test.createTestingModule({
@@ -91,5 +95,24 @@ describe('liveLlmStrategyCodegenController', () => {
       controller.testEngine('engine-test-secret', 'u2', { userId: 'u1', message: 'test' }),
     ).rejects.toBeInstanceOf(DomainException)
     expect(service.testEngine).not.toHaveBeenCalled()
+  })
+
+  it('loads session snapshot by id', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn(),
+      getSession: jest.fn().mockResolvedValue({ id: 's1', status: 'PUBLISHED', scriptCode: 'strategy' }),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: [{ provide: CodegenConversationService, useValue: service }],
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    const result = await controller.getSession('s1', 'u1')
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
   })
 })

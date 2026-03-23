@@ -18,10 +18,16 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import {
+  buildAutoAdvanceMessage,
+  shouldAutoAdvanceOnConfirmation,
+  resolveChecklistPayload,
+} from '@/components/ai-quant/session-loop'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
   continueLlmCodegenSession,
+  getLlmCodegenSession,
   startLlmCodegenSession,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -62,42 +68,41 @@ interface ConversationState {
   updatedAt: number
 }
 
-function inferChecklistFromGraph(
-  graph: StrategyLogicGraph | null | undefined,
-): {
-  entryRules?: string[]
-  exitRules?: string[]
-} {
-  if (!graph) return {}
+function extractCodegenErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) {
+    return fallback
+  }
 
-  const entryRules: string[] = []
-  const exitRules: string[] = []
-
-  for (const node of graph.trigger) {
-    const id = node.id.toLowerCase()
-    if (id.includes('entry') || id.includes('buy')) {
-      entryRules.push(node.operator)
-      continue
+  const details = error.details
+  if (details && typeof details === 'object') {
+    const record = details as Record<string, unknown>
+    const directRejectReason = record.rejectReason
+    if (typeof directRejectReason === 'string' && directRejectReason.trim()) {
+      return directRejectReason.trim()
     }
-    if (id.includes('exit') || id.includes('sell')) {
-      exitRules.push(node.operator)
+
+    const data = record.data
+    if (data && typeof data === 'object') {
+      const nestedRejectReason = (data as Record<string, unknown>).rejectReason
+      if (typeof nestedRejectReason === 'string' && nestedRejectReason.trim()) {
+        return nestedRejectReason.trim()
+      }
+      const nestedMessage = (data as Record<string, unknown>).message
+      if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
+        return nestedMessage.trim()
+      }
+    }
+
+    const detailMessage = record.message
+    if (typeof detailMessage === 'string' && detailMessage.trim()) {
+      return detailMessage.trim()
     }
   }
 
-  const dedupe = (items: string[]) => Array.from(new Set(items.map(x => x.trim()).filter(Boolean)))
-  const normalizedEntry = dedupe(entryRules)
-  const normalizedExit = dedupe(exitRules)
-
-  return {
-    entryRules: normalizedEntry.length > 0 ? normalizedEntry : undefined,
-    exitRules: normalizedExit.length > 0 ? normalizedExit : undefined,
+  if (error.message?.trim()) {
+    return error.message.trim()
   }
-}
-
-function isStrategyModificationIntent(message: string): boolean {
-  const text = message.trim().toLowerCase()
-  if (!text) return false
-  return /改|修改|调整|替换|变更|优化|调参|把.+改为|update|change|revise/i.test(text)
+  return fallback
 }
 
 function getMockBacktest(params: QuantParams): BacktestResult {
@@ -261,6 +266,7 @@ export function AiQuantPageClient() {
   }) => {
     const { conversationId, message, params: targetParams, sessionId, usePresetRules = false, confirmGenerate = false } = args
     if (!session?.userId) return
+    let activeSessionId = sessionId
     const trimmedMessage = message.trim()
     if (!trimmedMessage) return
     const loadingMessageId = `a-loading-${Date.now()}`
@@ -297,70 +303,21 @@ export function AiQuantPageClient() {
       }))
     }, 1000)
 
-    try {
-      const graphChecklist = inferChecklistFromGraph(
-        conversations.find(conv => conv.id === conversationId)?.logicGraph,
-      )
-      const shouldReuseGraphChecklist = Boolean(sessionId) || isStrategyModificationIntent(trimmedMessage)
-      const checklistPayload = usePresetRules
-        ? {
-            symbols: [targetParams.symbol],
-            timeframes: [`${targetParams.buyWindowMin}m`, `${targetParams.sellWindowMin}m`],
-            entryRules: [`${targetParams.buyWindowMin}m 内下跌 ${targetParams.buyDropPct}%`],
-            exitRules: [`${targetParams.sellWindowMin}m 内上涨 ${targetParams.sellRisePct}%`],
-            riskRules: {
-              positionPct: targetParams.positionPct,
-              maxDrawdownPct: 20,
-            },
-          }
-        : (shouldReuseGraphChecklist ? graphChecklist : {})
-
-      const startNewSession = async () =>
-        startLlmCodegenSession({
-          userId: session.userId,
-          initialMessage: trimmedMessage,
-          ...checklistPayload,
-        })
-
-      const continueSession = async (id: string) =>
-        continueLlmCodegenSession(id, {
-          userId: session.userId,
-          message: trimmedMessage,
-          confirmGenerate,
-          ...checklistPayload,
-        })
-
-      let activeSessionId = sessionId
-      let continued
-      if (!activeSessionId) {
-        const created = await startNewSession()
-        activeSessionId = created.id
-        continued = created
-      } else {
-        try {
-          continued = await continueSession(activeSessionId)
-        } catch (error) {
-          const isTerminalSessionError = error instanceof ApiError
-            && error.statusCode === 409
-            && error.message.includes('会话已终态')
-          if (!isTerminalSessionError) {
-            throw error
-          }
-          const recreated = await startNewSession()
-          activeSessionId = recreated.id
-          continued = recreated
-        }
-      }
-
+    const applyCodegenResponseToConversation = (response: Awaited<ReturnType<typeof continueLlmCodegenSession>>) => {
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
         const nextVersion = (conv.logicGraph?.version || 0) + 1
-        const shouldReuseCodegenSession = continued.status !== 'PUBLISHED' && continued.status !== 'REJECTED'
-        const shouldUpdateGraph = (continued.status === 'CHECKLIST_GATE' || continued.status === 'PUBLISHED')
-          && Boolean(continued.specDesc)
+        const isTerminal = response.status === 'PUBLISHED' || response.status === 'REJECTED'
+        const isProcessing = response.status === 'GENERATING'
+          || response.status === 'VALIDATING_STATIC'
+          || response.status === 'VALIDATING_RUNTIME'
+          || response.status === 'VALIDATING_OUTPUT'
+        const shouldReuseCodegenSession = !isTerminal
+        const shouldUpdateGraph = (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
+          && Boolean(response.specDesc)
         const nextGraph = shouldUpdateGraph
           ? buildLogicGraphFromCodegenSpec(
-              continued.specDesc,
+              response.specDesc,
               {
                 exchange: targetParams.exchange,
                 symbol: targetParams.symbol,
@@ -369,18 +326,22 @@ export function AiQuantPageClient() {
               nextVersion,
             )
           : conv.logicGraph
-        const publishedReply = continued.scriptCode
-          ? `${t('aiQuant.messages.graphGenerated')}\n\n已生成策略代码：\n\`\`\`javascript\n${continued.scriptCode}\n\`\`\``
+        const publishedReply = response.scriptCode
+          ? `${t('aiQuant.messages.graphGenerated')}\n\n已生成策略代码：\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
           : t('aiQuant.messages.graphGenerated')
-        const replyContent = continued.assistantPrompt
-          || (continued.status === 'PUBLISHED'
+        const replyContent = response.assistantPrompt
+          || (response.status === 'PUBLISHED'
             ? publishedReply
-            : continued.status === 'CHECKLIST_GATE'
-              ? '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
-            : continued.status === 'REJECTED'
-              ? (continued.rejectReason
-                  ? `生成失败：${continued.rejectReason}`
-                  : t('common.error'))
+            : response.status === 'CHECKLIST_GATE'
+              ? (confirmGenerate
+                ? '已基于当前逻辑图继续生成，请查看最新结果。'
+                : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。')
+            : isProcessing
+              ? `策略代码仍在生成中（${response.status}），请稍候。`
+            : response.status === 'REJECTED'
+              ? (response.rejectReason
+                  ? `基于当前逻辑图生成失败：${response.rejectReason}`
+                  : '基于当前逻辑图生成失败：后端未返回详细原因，请查看服务日志。')
               : t('aiQuant.messages.graphRevise'))
         return {
           ...conv,
@@ -398,7 +359,116 @@ export function AiQuantPageClient() {
           updatedAt: Date.now(),
         }
       }))
-    } catch {
+    }
+
+    try {
+      const currentConversation = conversations.find(conv => conv.id === conversationId)
+      const checklistPayload = resolveChecklistPayload({
+        usePresetRules,
+        confirmGenerate,
+        message: trimmedMessage,
+        sessionId,
+        graph: currentConversation?.logicGraph,
+        params: targetParams,
+      })
+
+      const startNewSession = async () =>
+        startLlmCodegenSession({
+          userId: session.userId,
+          initialMessage: trimmedMessage,
+          ...checklistPayload,
+        })
+
+      const continueSession = async (id: string) =>
+        continueLlmCodegenSession(id, {
+          userId: session.userId,
+          message: trimmedMessage,
+          confirmGenerate,
+          ...checklistPayload,
+        })
+
+      const advanceConfirmGenerate = async (id: string, initial: Awaited<ReturnType<typeof continueSession>>) => {
+        if (!confirmGenerate) {
+          return initial
+        }
+        let current = initial
+        let attempts = 0
+        while (current.status === 'CHECKLIST_GATE' && attempts < 2) {
+          current = await continueSession(id)
+          attempts += 1
+        }
+        return current
+      }
+
+      let continued
+      if (!activeSessionId) {
+        const created = await startNewSession()
+        activeSessionId = created.id
+        if (confirmGenerate) {
+          continued = await continueSession(activeSessionId)
+          continued = await advanceConfirmGenerate(activeSessionId, continued)
+        } else {
+          continued = created
+        }
+      } else {
+        try {
+          continued = await continueSession(activeSessionId)
+          continued = await advanceConfirmGenerate(activeSessionId, continued)
+        } catch (error) {
+          const isTerminalSessionError = error instanceof ApiError
+            && error.statusCode === 409
+            && error.message.includes('会话已终态')
+          if (!isTerminalSessionError) {
+            throw error
+          }
+
+          let recovered: Awaited<ReturnType<typeof continueSession>> | null = null
+          try {
+            recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+          } catch {
+            recovered = null
+          }
+
+          if (recovered && (
+            recovered.status === 'PUBLISHED'
+            || recovered.status === 'REJECTED'
+          )) {
+            continued = recovered
+          } else {
+            const recreated = await startNewSession()
+            activeSessionId = recreated.id
+            if (confirmGenerate) {
+              continued = await continueSession(activeSessionId)
+              continued = await advanceConfirmGenerate(activeSessionId, continued)
+            } else {
+              continued = recreated
+            }
+          }
+        }
+      }
+
+      applyCodegenResponseToConversation(continued)
+    } catch (error) {
+      if (activeSessionId && error instanceof ApiError && (error.statusCode ?? 0) >= 500) {
+        try {
+          const recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+          if (
+            recovered.status === 'PUBLISHED'
+            || recovered.status === 'REJECTED'
+            || recovered.status === 'CHECKLIST_GATE'
+            || recovered.status === 'GENERATING'
+            || recovered.status === 'VALIDATING_STATIC'
+            || recovered.status === 'VALIDATING_RUNTIME'
+            || recovered.status === 'VALIDATING_OUTPUT'
+          ) {
+            applyCodegenResponseToConversation(recovered)
+            return
+          }
+        } catch {
+          // keep original error branch
+        }
+      }
+      const message = extractCodegenErrorMessage(error, t('common.error'))
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
         return {
@@ -407,7 +477,7 @@ export function AiQuantPageClient() {
           messages: [
             ...conv.messages.map(msg =>
               msg.id === loadingMessageId
-                ? { ...msg, content: t('common.error') }
+                ? { ...msg, content: message }
                 : msg,
             ),
           ],
@@ -426,6 +496,14 @@ export function AiQuantPageClient() {
     const currentParams = activeConversation.params
     const currentSessionId = activeConversation.llmCodegenSessionId
     const currentGraphStatus = activeConversation.logicGraph?.status
+    const lastAssistantMessage = [...activeConversation.messages]
+      .reverse()
+      .find(msg => msg.role === 'assistant')?.content
+    const autoAdvance = shouldAutoAdvanceOnConfirmation({
+      userMessage: trimmedInput,
+      lastAssistantMessage,
+      hasLogicGraph: Boolean(activeConversation.logicGraph),
+    })
 
     updateActiveConversation(curr => {
       const nextMessages: QuantMessage[] = [
@@ -464,6 +542,18 @@ export function AiQuantPageClient() {
       await requestBackendGraphGeneration({
         conversationId: currentConversationId,
         message: trimmedInput,
+        params: currentParams,
+        sessionId: currentSessionId,
+        usePresetRules: false,
+        confirmGenerate: true,
+      })
+      return
+    }
+
+    if (autoAdvance) {
+      await requestBackendGraphGeneration({
+        conversationId: currentConversationId,
+        message: buildAutoAdvanceMessage(lastAssistantMessage),
         params: currentParams,
         sessionId: currentSessionId,
         usePresetRules: false,

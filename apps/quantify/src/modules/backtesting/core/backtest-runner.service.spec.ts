@@ -3,6 +3,7 @@ import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.ser
 import { BacktestReporterService } from '../report/backtest-reporter.service'
 import { StateEngineService } from '../state/state-engine.service'
 import { BacktestRunnerService, createBar } from './backtest-runner.service'
+import type { StrategyDecisionV1 } from '@ai/shared'
 
 describe('backtestRunnerService', () => {
   it('should run low-tf loop and return report skeleton', async () => {
@@ -133,5 +134,212 @@ describe('backtestRunnerService', () => {
     })
 
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1)
+  })
+
+  it('should accept llm signal payload and open long by positionSizeRatio', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 2,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: {},
+        fn: () => ({
+          direction: 'BUY',
+          signalType: 'ENTRY',
+          confidence: 80,
+          entryPrice: 100,
+          stopLoss: 95,
+          takeProfit: 110,
+          reasoning: 'test',
+          positionSizeRatio: 0.2,
+        }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.qty).toBeCloseTo(2)
+  })
+
+  it('should accept llm signal payload and close long position', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 2,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: {},
+        fn: ({ ts }) => {
+          if (ts === 1) {
+            return {
+              direction: 'BUY',
+              signalType: 'ENTRY',
+              confidence: 80,
+              entryPrice: 100,
+              stopLoss: 95,
+              takeProfit: 110,
+              reasoning: 'open',
+              positionSizeQuote: 100,
+            }
+          }
+          return {
+            direction: 'CLOSE_LONG',
+            signalType: 'EXIT',
+            confidence: 90,
+            entryPrice: 102,
+            stopLoss: 95,
+            takeProfit: 110,
+            reasoning: 'close',
+          }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 102, close: 102 }),
+      ],
+    })
+
+    expect((report.openPositions ?? []).length).toBe(0)
+    expect(report.summary.totalTrades).toBe(1)
+  })
+
+  it('should accept strategy decision protocol and open long', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: {},
+        fn: (): StrategyDecisionV1 => ({
+          action: 'OPEN_LONG',
+          size: { mode: 'QTY', value: 1.5 },
+          confidence: 90,
+          reason: 'protocol v1',
+        }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
+  })
+
+  it('should support ADJUST_POSITION with TARGET mode', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 2,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: {},
+        fn: ({ ts }): StrategyDecisionV1 => {
+          if (ts === 1) {
+            return { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          }
+          return {
+            action: 'ADJUST_POSITION',
+            adjustMode: 'TARGET',
+            size: { mode: 'QTY', value: 2.5 },
+            confidence: 90,
+            reason: 'target adjust',
+          }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.qty).toBeCloseTo(2.5)
+  })
+
+  it('should support ADJUST_POSITION with DELTA mode', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 2,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: {},
+        fn: ({ ts }): StrategyDecisionV1 => {
+          if (ts === 1) {
+            return { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          }
+          return {
+            action: 'ADJUST_POSITION',
+            adjustMode: 'DELTA',
+            size: { mode: 'QTY', value: 0.5 },
+            confidence: 90,
+            reason: 'delta adjust',
+          }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
   })
 })

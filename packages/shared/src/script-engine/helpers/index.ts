@@ -20,6 +20,7 @@ export type {
   HelperFunctionDoc,
   StrategyContext,
   StrategyHelpers,
+  StrategyParamsNormalized,
 } from './helpers.types'
 export { getHelperDocs } from './helpers.types'
 

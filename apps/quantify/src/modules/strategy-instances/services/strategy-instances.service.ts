@@ -16,6 +16,8 @@ import {
   mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
+import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 import { CreateStrategyInstanceDto } from '../dto/create-strategy-instance.dto'
@@ -507,6 +509,10 @@ export class StrategyInstancesService {
     }
 
     const engine = createScriptEngine()
+    const compiledScript = compileStrategyScriptForVm(strategy.script)
+    if (!compiledScript.ok) {
+      throw new BadRequestException(`脚本 TypeScript 类型检查失败：${compiledScript.error ?? '未知错误'}`)
+    }
 
     // 与正式执行路径保持一致：合并模板 defaultParams 与实例 params
     const effectiveParams = this.buildEffectiveParams(strategy, instance)
@@ -627,7 +633,7 @@ export class StrategyInstancesService {
     }
 
     // 优先以标准模式执行（不包装 async 函数），新脚本使用最后表达式作为返回值
-    let result = await engine.execute(strategy.script, {
+    let result = await engine.execute(compiledScript.executableCode, {
       context: contextObject,
       timeout: StrategyInstancesService.DEBUG_SCRIPT_TIMEOUT_MS,
       allowAsync: false,
@@ -646,7 +652,7 @@ export class StrategyInstancesService {
         this.logger.warn(
           `Test run for strategy instance ${id} detected script needs async context (${errorMsg}), retrying with allowAsync`,
         )
-        result = await engine.execute(strategy.script, {
+        result = await engine.execute(compiledScript.executableCode, {
           context: contextObject,
           timeout: StrategyInstancesService.DEBUG_SCRIPT_TIMEOUT_MS,
           allowAsync: true,
@@ -683,7 +689,20 @@ export class StrategyInstancesService {
       )
     }
 
-    const scriptResult = validation.value
+    const resolved = await resolveStrategyOutput(
+      validation.value as Record<string, unknown>,
+      scriptContext as unknown as Record<string, unknown>,
+    )
+    if (resolved.error) {
+      this.logger.error(
+        `Test run for strategy instance ${id} protocol resolution failed: ${resolved.error}`,
+      )
+      throw new BadRequestException(`脚本协议不合法：${resolved.error}`)
+    }
+
+    const scriptResult = resolved.decision
+      ? strategyDecisionToSignalPayload(resolved.decision, dto.currentPrice ?? 0)
+      : (resolved.passthrough ?? validation.value)
 
     let filledPrompt: string | undefined
     if (strategy.promptTemplate) {

@@ -1,6 +1,8 @@
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable } from '@nestjs/common'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
+import { resolveStrategyOutput, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 
 export interface RuntimeGuardrailResult {
   runtimePassed: boolean
@@ -8,10 +10,24 @@ export interface RuntimeGuardrailResult {
   reason?: string
 }
 
+type SignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+type SignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
+
+const ALLOWED_DIRECTIONS: readonly SignalDirection[] = ['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT']
+const ALLOWED_SIGNAL_TYPES: readonly SignalType[] = ['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT']
+
 @Injectable()
 export class RuntimeGuardrailService {
   async validate(script: string): Promise<RuntimeGuardrailResult> {
     const engine = createScriptEngine()
+    const compiled = compileStrategyScriptForVm(script)
+    if (!compiled.ok) {
+      return {
+        runtimePassed: false,
+        outputPassed: false,
+        reason: `TypeScript 类型检查失败: ${compiled.error ?? '未知错误'}`,
+      }
+    }
 
     const context = buildStrategyContext({
       bars: [
@@ -26,14 +42,14 @@ export class RuntimeGuardrailService {
       params: { riskPct: 0.01 },
     })
 
-    let result = await engine.execute(script, {
+    let result = await engine.execute(compiled.executableCode, {
       context,
       timeout: 5000,
     })
 
     const errorMessage = result.error?.message ?? ''
     if (!result.success && errorMessage.includes('Illegal return statement')) {
-      result = await engine.execute(`(() => { ${script} })()`, {
+      result = await engine.execute(`(() => { ${compiled.executableCode} })()`, {
         context,
         timeout: 5000,
       })
@@ -54,6 +70,39 @@ export class RuntimeGuardrailService {
         runtimePassed: true,
         outputPassed: false,
         reason: output.error ?? '脚本输出结构非法',
+      }
+    }
+
+    const resolved = await resolveStrategyOutput(output.value, context as Record<string, unknown>)
+    if (resolved.error) {
+      return {
+        runtimePassed: true,
+        outputPassed: false,
+        reason: resolved.error,
+      }
+    }
+
+    if (resolved.decision) {
+      const decisionValidation = validateStrategyDecision(resolved.decision)
+      if (!decisionValidation.valid) {
+        return {
+          runtimePassed: true,
+          outputPassed: false,
+          reason: decisionValidation.error ?? '策略协议决策不合法',
+        }
+      }
+      return {
+        runtimePassed: true,
+        outputPassed: true,
+      }
+    }
+
+    const signalPayloadError = this.validateSignalPayload(resolved.passthrough ?? output.value)
+    if (signalPayloadError) {
+      return {
+        runtimePassed: true,
+        outputPassed: false,
+        reason: signalPayloadError,
       }
     }
 
@@ -82,5 +131,80 @@ export class RuntimeGuardrailService {
     } catch {
       return value
     }
+  }
+
+  private validateSignalPayload(value: Record<string, unknown>): string | null {
+    const direction = this.readNonEmptyString(value.direction)
+    if (!direction || !ALLOWED_DIRECTIONS.includes(direction as SignalDirection)) {
+      return '脚本输出缺少合法的 direction（BUY/SELL/CLOSE_LONG/CLOSE_SHORT）'
+    }
+
+    const signalType = this.readNonEmptyString(value.signalType)
+    if (!signalType || !ALLOWED_SIGNAL_TYPES.includes(signalType as SignalType)) {
+      return '脚本输出缺少合法的 signalType（ENTRY/EXIT/ADJUSTMENT/ALERT）'
+    }
+
+    const confidence = this.readFiniteNumber(value.confidence)
+    if (confidence === null || confidence < 0 || confidence > 100) {
+      return '脚本输出缺少合法的 confidence（0-100）'
+    }
+
+    const entryPrice = this.readFiniteNumber(value.entryPrice)
+    if (entryPrice === null || entryPrice <= 0) {
+      return '脚本输出缺少合法的 entryPrice（> 0）'
+    }
+
+    const stopLoss = this.readFiniteNumber(value.stopLoss)
+    if (stopLoss === null || stopLoss <= 0) {
+      return '脚本输出缺少合法的 stopLoss（> 0）'
+    }
+
+    const takeProfit = this.readFiniteNumber(value.takeProfit)
+    if (takeProfit === null || takeProfit <= 0) {
+      return '脚本输出缺少合法的 takeProfit（> 0）'
+    }
+
+    const reasoning = this.readNonEmptyString(value.reasoning)
+    if (!reasoning) {
+      return '脚本输出缺少合法的 reasoning（非空字符串）'
+    }
+
+    let positionSizeQuote: number | undefined
+    if (value.positionSizeQuote !== undefined && value.positionSizeQuote !== null) {
+      positionSizeQuote = this.readFiniteNumber(value.positionSizeQuote) ?? undefined
+      if (positionSizeQuote === undefined) {
+        return '脚本输出中的 positionSizeQuote 必须是 number'
+      }
+      if (positionSizeQuote <= 0) {
+        return '脚本输出中的 positionSizeQuote 必须 > 0'
+      }
+    }
+
+    let positionSizeRatio: number | undefined
+    if (value.positionSizeRatio !== undefined && value.positionSizeRatio !== null) {
+      positionSizeRatio = this.readFiniteNumber(value.positionSizeRatio) ?? undefined
+      if (positionSizeRatio === undefined) {
+        return '脚本输出中的 positionSizeRatio 必须是 number'
+      }
+      if (positionSizeRatio <= 0 || positionSizeRatio > 1) {
+        return '脚本输出中的 positionSizeRatio 必须在 (0, 1] 范围内'
+      }
+    }
+
+    if (positionSizeQuote !== undefined && positionSizeRatio !== undefined) {
+      return '脚本输出中 positionSizeQuote 与 positionSizeRatio 只能二选一'
+    }
+
+    return null
+  }
+
+  private readNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const normalized = value.trim()
+    return normalized || null
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 }

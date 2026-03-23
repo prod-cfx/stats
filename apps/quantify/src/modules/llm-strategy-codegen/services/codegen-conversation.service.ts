@@ -15,6 +15,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
+import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
+import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -48,6 +50,15 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
+interface ScriptValidationResult {
+  passed: boolean
+  scriptCode: string
+  reason?: string
+  staticPassed: boolean
+  runtimePassed: boolean
+  outputPassed: boolean
+}
+
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
 type RecommendationStyle = 'ma' | 'drop-rise'
 
@@ -56,9 +67,26 @@ const MAX_HELPER_SIGNATURE_LINES = 24
 const MAX_PLANNER_HISTORY_LINES = 12
 const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
 const DEFAULT_MODEL = 'gpt-4'
+const MAX_CODEGEN_AUTO_REPAIR_RETRIES = 2
+const DEFAULT_CODEGEN_STRICT_ENABLED = true
+const DEFAULT_CODEGEN_STRICT_FALLBACK = true
+
+const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['code'],
+  properties: {
+    code: {
+      type: 'string',
+      minLength: 1,
+    },
+  },
+}
 
 @Injectable()
 export class CodegenConversationService {
+  private readonly strictUnsupportedTargets = new Set<string>()
+
   constructor(
     private readonly aiService: AiService,
     private readonly sessionsRepo: CodegenSessionsRepository,
@@ -110,6 +138,28 @@ export class CodegenConversationService {
       assistantPrompt: plan.logicReady
         ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
         : plan.assistantPrompt,
+    }
+  }
+
+  async getSession(sessionId: string, userId: string): Promise<CodegenSessionResponseDto> {
+    const session = await this.sessionsRepo.findById(sessionId)
+    if (!session || session.userId !== userId) {
+      throw new DomainException('会话不存在', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { sessionId },
+      })
+    }
+
+    return {
+      id: session.id,
+      status: session.status,
+      missingFields: [],
+      scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
+      specDesc: session.latestSpecDesc && typeof session.latestSpecDesc === 'object' && !Array.isArray(session.latestSpecDesc)
+        ? (session.latestSpecDesc as Record<string, unknown>)
+        : null,
+      rejectReason: session.rejectReason,
     }
   }
 
@@ -203,43 +253,21 @@ export class CodegenConversationService {
     }
 
     const missingFields = this.resolveChecklistMissingFields(mergedChecklist)
-    const canGenerate = session.status === 'CHECKLIST_GATE' && missingFields.length === 0
-    if (!canGenerate) {
-      if (missingFields.length > 0) {
-        await this.sessionsRepo.updateSession(session.id, {
-          status: 'DRAFTING',
-          checklist: mergedChecklist as Prisma.InputJsonValue,
-          constraintPack: {
-            ...nextConstraintPack,
-            conversationHistory: historyAfterPlanner,
-          } as unknown as Prisma.InputJsonValue,
-        })
-
-        return {
-          id: session.id,
-          status: 'DRAFTING',
-          missingFields,
-          assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
-        }
-      }
-
-      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+    if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(session.id, {
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         checklist: mergedChecklist as Prisma.InputJsonValue,
         constraintPack: {
           ...nextConstraintPack,
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
-        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
-        status: 'CHECKLIST_GATE',
-        missingFields: [],
-        specDesc,
-        assistantPrompt: `${plan.assistantPrompt}\n请先确认逻辑图，确认后我再生成策略代码。`,
+        status: 'DRAFTING',
+        missingFields,
+        assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
       }
     }
 
@@ -258,83 +286,86 @@ export class CodegenConversationService {
         rejectReason: null,
       })
 
-      const scriptCode = await this.generateScript(mergedChecklist, dto.message, {
-        providerCode,
-        model: dto.model,
-        temperature: dto.temperature,
-        maxTokens: dto.maxTokens,
-      })
+      let lastScriptCode = ''
+      let lastRejectReason = ''
+      let finalValidation: ScriptValidationResult | null = null
+      let generationMessage = dto.message
+      const maxAttempts = MAX_CODEGEN_AUTO_REPAIR_RETRIES + 1
 
-      await this.sessionsRepo.updateSession(session.id, {
-        status: 'VALIDATING_STATIC',
-        latestDraftCode: scriptCode,
-      })
-
-      const staticResult = this.staticGuardrail.validate(scriptCode)
-      if (!staticResult.passed) {
-        await this.sessionsRepo.createVersion({
-          session: { connect: { id: session.id } },
-          scriptCode,
-          specDesc: {} as Prisma.InputJsonValue,
-          staticPassed: false,
-          runtimePassed: false,
-          outputPassed: false,
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const generatedScript = await this.generateScript(mergedChecklist, generationMessage, {
+          providerCode,
+          model: dto.model,
+          temperature: dto.temperature,
+          maxTokens: dto.maxTokens,
         })
+        lastScriptCode = generatedScript
 
         await this.sessionsRepo.updateSession(session.id, {
+          status: 'VALIDATING_STATIC',
+          latestDraftCode: generatedScript,
+        })
+
+        const validation = await this.validateGeneratedScript(generatedScript)
+        if (validation.passed) {
+          finalValidation = validation
+          break
+        }
+
+        lastRejectReason = validation.reason ?? '脚本校验失败'
+        await this.sessionsRepo.createVersion({
+          session: { connect: { id: session.id } },
+          scriptCode: validation.scriptCode,
+          specDesc: {} as Prisma.InputJsonValue,
+          staticPassed: validation.staticPassed,
+          runtimePassed: validation.runtimePassed,
+          outputPassed: validation.outputPassed,
+        })
+
+        if (attempt >= maxAttempts) {
+          const rejectReason = `${lastRejectReason}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
+          await this.sessionsRepo.updateSession(session.id, {
+            status: 'REJECTED',
+            rejectReason,
+          })
+
+          return {
+            id: session.id,
+            status: 'REJECTED',
+            scriptCode: validation.scriptCode,
+            rejectReason,
+          }
+        }
+
+        generationMessage = this.buildRepairGenerationMessage({
+          originalMessage: dto.message,
+          checklist: mergedChecklist,
+          scriptCode: validation.scriptCode,
+          rejectReason: lastRejectReason,
+          attempt,
+        })
+      }
+
+      if (!finalValidation) {
+        const rejectReason = `${lastRejectReason || '脚本校验失败'}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
+        await this.sessionsRepo.updateSession(session.id, {
           status: 'REJECTED',
-          rejectReason: staticResult.reason,
+          rejectReason,
         })
 
         return {
           id: session.id,
           status: 'REJECTED',
-          scriptCode,
-          rejectReason: staticResult.reason,
+          scriptCode: lastScriptCode || undefined,
+          rejectReason,
         }
       }
+
+      const finalScriptCode = finalValidation.scriptCode
 
       await this.sessionsRepo.updateSession(session.id, {
         status: 'VALIDATING_RUNTIME',
       })
-
-      let finalScriptCode = scriptCode
-      let runtimeResult = await this.runtimeGuardrail.validate(finalScriptCode)
-      if (!runtimeResult.runtimePassed || !runtimeResult.outputPassed) {
-        const autoFixedScript = this.tryAutoFixStringOutputScript(finalScriptCode, runtimeResult.reason)
-        if (autoFixedScript) {
-          const autoFixedStatic = this.staticGuardrail.validate(autoFixedScript)
-          if (autoFixedStatic.passed) {
-            const autoFixedRuntime = await this.runtimeGuardrail.validate(autoFixedScript)
-            if (autoFixedRuntime.runtimePassed && autoFixedRuntime.outputPassed) {
-              finalScriptCode = autoFixedScript
-              runtimeResult = autoFixedRuntime
-            }
-          }
-        }
-      }
-      if (!runtimeResult.runtimePassed || !runtimeResult.outputPassed) {
-        await this.sessionsRepo.createVersion({
-          session: { connect: { id: session.id } },
-          scriptCode: finalScriptCode,
-          specDesc: {} as Prisma.InputJsonValue,
-          staticPassed: true,
-          runtimePassed: runtimeResult.runtimePassed,
-          outputPassed: runtimeResult.outputPassed,
-        })
-
-        await this.sessionsRepo.updateSession(session.id, {
-          status: 'REJECTED',
-          rejectReason: runtimeResult.reason,
-        })
-
-        return {
-          id: session.id,
-          status: 'REJECTED',
-          scriptCode: finalScriptCode,
-          rejectReason: runtimeResult.reason,
-        }
-      }
 
       await this.sessionsRepo.updateSession(session.id, {
         status: 'VALIDATING_OUTPUT',
@@ -377,7 +408,11 @@ export class CodegenConversationService {
         status: 'REJECTED',
         rejectReason: reason,
       })
-      throw error
+      return {
+        id: session.id,
+        status: 'REJECTED',
+        rejectReason: reason,
+      }
     }
   }
 
@@ -512,17 +547,23 @@ export class CodegenConversationService {
       exitRules.push(`${frame} 内上涨 ${sellRiseMatch[3]}% 卖出`)
     }
 
-    if (entryRules.length === 0 && /金叉|上穿|突破|入场|开仓|买入/.test(text)) {
-      entryRules.push('短均线上穿长均线（金叉）入场')
+    if (entryRules.length === 0) {
+      if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
+        entryRules.push('短均线上穿长均线（金叉）入场')
+      } else if (/(突破|站上|收盘价?.{0,8}高于).{0,16}(阻力|前高|关键位)|阻力位/.test(text)) {
+        entryRules.push('价格收盘确认突破关键阻力位入场')
+      } else if (/买入|开仓|入场/.test(text)) {
+        entryRules.push('满足入场条件后开仓')
+      }
     }
-    if (exitRules.length === 0 && /死叉|跌破|止盈|止损|回撤|平仓|离场|出场|卖出/.test(text)) {
-      if (/死叉/.test(text)) {
+    if (exitRules.length === 0) {
+      if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
         exitRules.push('短均线下穿长均线（死叉）出场')
-      } else if (/跌破/.test(text)) {
-        exitRules.push('价格跌破关键均线出场')
+      } else if (/跌破.{0,16}(支撑|前低|关键位)|支撑位/.test(text)) {
+        exitRules.push('价格跌破关键支撑位出场')
       } else if (/止盈|止损|回撤/.test(text)) {
         exitRules.push('触发止盈/止损阈值出场')
-      } else {
+      } else if (/平仓|离场|出场|卖出/.test(text)) {
         exitRules.push('满足出场条件后平仓')
       }
     }
@@ -651,15 +692,7 @@ export class CodegenConversationService {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: [
-          '你是量化策略脚本生成器。',
-          '只能输出 JavaScript 脚本代码，不要使用 markdown 代码块。',
-          '只能使用 helpers.finance/helpers.array/helpers.ta/helpers.signal。',
-          '禁止使用 import/require/eval/Function/process。',
-          '脚本必须返回非空对象。',
-          '以下是当前环境允许使用的 helper 函数签名（严格按签名调用，不要臆造函数）：',
-          helperSignatures,
-        ].join('\n'),
+        content: buildStrategyCodegenSystemPrompt(helperSignatures),
       },
       {
         role: 'user',
@@ -667,15 +700,65 @@ export class CodegenConversationService {
       },
     ]
 
-    const result = await this.aiService.chat({
-      providerCode: options?.providerCode,
-      model: options?.model,
-      messages,
-      temperature: options?.temperature ?? 0.2,
-      maxTokens: options?.maxTokens ?? 1000,
-    })
+    const strictEnabled = this.readBooleanEnv('LLM_CODEGEN_STRICT_ENABLED', DEFAULT_CODEGEN_STRICT_ENABLED)
+    const strictFallback = this.readBooleanEnv('LLM_CODEGEN_STRICT_FALLBACK', DEFAULT_CODEGEN_STRICT_FALLBACK)
+    const strictForced = this.readBooleanEnv('LLM_CODEGEN_STRICT_FORCE', false)
 
-    const code = this.normalizeGeneratedScript(result.content)
+    let code = ''
+    if (this.shouldAttemptStrictMode({
+      strictEnabled,
+      strictForced,
+      options,
+    })) {
+      try {
+        const strictResult = await this.aiService.chat({
+          providerCode: options?.providerCode,
+          model: options?.model,
+          messages,
+          temperature: options?.temperature ?? 0.2,
+          maxTokens: options?.maxTokens ?? 1000,
+          responseFormat: {
+            type: 'json_schema',
+            jsonSchema: {
+              name: 'strategy_codegen_response_v1',
+              strict: true,
+              schema: CODEGEN_STRICT_RESPONSE_SCHEMA_V1,
+            },
+          },
+        })
+        code = this.normalizeStrictGeneratedCode(strictResult.content)
+      } catch (error) {
+        if (this.isStrictUnsupportedError(error)) {
+          this.markStrictUnsupported(options)
+        }
+        if (!strictFallback) {
+          const detail = error instanceof Error ? error.message : String(error)
+          throw new DomainException(`策略脚本生成失败（strict 模式）: ${detail}`, {
+            code: ErrorCode.AI_PROVIDER_ERROR,
+            status: HttpStatus.BAD_GATEWAY,
+          })
+        }
+      }
+
+      if (!code && !strictFallback) {
+        throw new DomainException('策略脚本生成失败（strict 模式）：模型未返回 {code}', {
+          code: ErrorCode.AI_PROVIDER_ERROR,
+          status: HttpStatus.BAD_GATEWAY,
+        })
+      }
+    }
+
+    if (!code) {
+      const result = await this.aiService.chat({
+        providerCode: options?.providerCode,
+        model: options?.model,
+        messages,
+        temperature: options?.temperature ?? 0.2,
+        maxTokens: options?.maxTokens ?? 1000,
+      })
+      code = this.normalizeGeneratedScript(result.content)
+    }
+
     if (!code) {
       throw new DomainException('策略脚本生成失败：模型未返回脚本', {
         code: ErrorCode.AI_PROVIDER_ERROR,
@@ -684,6 +767,83 @@ export class CodegenConversationService {
     }
 
     return code
+  }
+
+  private shouldAttemptStrictMode(input: {
+    strictEnabled: boolean
+    strictForced: boolean
+    options?: GenerationOptions
+  }): boolean {
+    if (!input.strictEnabled) return false
+    if (input.strictForced) return true
+    if (this.isStrategyCodegenProviderWithoutExplicitModel(input.options)) return false
+    if (this.isKnownStrictIncompatibleModel(input.options?.model)) return false
+    if (this.isStrictUnsupportedCached(input.options)) return false
+    return true
+  }
+
+  private isStrategyCodegenProviderWithoutExplicitModel(options?: GenerationOptions): boolean {
+    const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
+    const hasModel = typeof options?.model === 'string' && options.model.trim().length > 0
+    return providerCode === DEFAULT_PROVIDER_CODE && !hasModel
+  }
+
+  private isKnownStrictIncompatibleModel(model?: string): boolean {
+    if (!model) return false
+    return /deepseek/i.test(model)
+  }
+
+  private markStrictUnsupported(options?: GenerationOptions): void {
+    this.strictUnsupportedTargets.add(this.buildStrictTargetKey(options))
+    this.strictUnsupportedTargets.add(this.buildStrictProviderKey(options))
+  }
+
+  private isStrictUnsupportedCached(options?: GenerationOptions): boolean {
+    return this.strictUnsupportedTargets.has(this.buildStrictTargetKey(options))
+      || this.strictUnsupportedTargets.has(this.buildStrictProviderKey(options))
+  }
+
+  private buildStrictTargetKey(options?: GenerationOptions): string {
+    const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
+    const model = (options?.model ?? '*').trim().toLowerCase()
+    return `${providerCode}::${model}`
+  }
+
+  private buildStrictProviderKey(options?: GenerationOptions): string {
+    const providerCode = (options?.providerCode ?? DEFAULT_PROVIDER_CODE).trim().toLowerCase()
+    return `${providerCode}::*`
+  }
+
+  private isStrictUnsupportedError(error: unknown): boolean {
+    const detail = error instanceof Error ? error.message : String(error)
+    const normalized = detail.toLowerCase()
+    return normalized.includes('response_format')
+      && (normalized.includes('unavailable') || normalized.includes('not support'))
+  }
+
+  private readBooleanEnv(key: string, defaultValue: boolean): boolean {
+    const raw = process.env[key]
+    if (!raw) return defaultValue
+    const normalized = raw.trim().toLowerCase()
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+    return defaultValue
+  }
+
+  private normalizeStrictGeneratedCode(content?: string): string {
+    const raw = content?.trim() ?? ''
+    if (!raw) return ''
+
+    try {
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return ''
+      }
+      const code = (parsed as Record<string, unknown>).code
+      return typeof code === 'string' ? code.trim() : ''
+    } catch {
+      return ''
+    }
   }
 
   private normalizeGeneratedScript(content?: string): string {
@@ -713,6 +873,80 @@ export class CodegenConversationService {
     }
 
     return raw
+  }
+
+  private async validateGeneratedScript(scriptCode: string): Promise<ScriptValidationResult> {
+    const staticResult = this.staticGuardrail.validate(scriptCode)
+    if (!staticResult.passed) {
+      return {
+        passed: false,
+        scriptCode,
+        reason: staticResult.reason ?? '静态校验失败',
+        staticPassed: false,
+        runtimePassed: false,
+        outputPassed: false,
+      }
+    }
+
+    const runtimeResult = await this.runtimeGuardrail.validate(scriptCode)
+    if (runtimeResult.runtimePassed && runtimeResult.outputPassed) {
+      return {
+        passed: true,
+        scriptCode,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      }
+    }
+
+    const autoFixedScript = this.tryAutoFixStringOutputScript(scriptCode, runtimeResult.reason)
+    if (autoFixedScript) {
+      const autoFixedStatic = this.staticGuardrail.validate(autoFixedScript)
+      if (autoFixedStatic.passed) {
+        const autoFixedRuntime = await this.runtimeGuardrail.validate(autoFixedScript)
+        if (autoFixedRuntime.runtimePassed && autoFixedRuntime.outputPassed) {
+          return {
+            passed: true,
+            scriptCode: autoFixedScript,
+            staticPassed: true,
+            runtimePassed: true,
+            outputPassed: true,
+          }
+        }
+      }
+    }
+
+    return {
+      passed: false,
+      scriptCode,
+      reason: runtimeResult.reason ?? '运行时校验失败',
+      staticPassed: true,
+      runtimePassed: runtimeResult.runtimePassed,
+      outputPassed: runtimeResult.outputPassed,
+    }
+  }
+
+  private buildRepairGenerationMessage(input: {
+    originalMessage: string
+    checklist: ChecklistPayload
+    scriptCode: string
+    rejectReason: string
+    attempt: number
+  }): string {
+    return [
+      `这是第 ${input.attempt} 次自动修复，请严格修复并返回完整 TypeScript 策略源码。`,
+      `原始需求：${input.originalMessage}`,
+      `约束：${JSON.stringify(input.checklist)}`,
+      '必须满足：',
+      '- 输出必须是 const strategy: StrategyAdapterV1 = { ... }，最后一行只能是 strategy',
+      '- 只允许 StrategyDecisionV1 协议（action/size/adjustMode/confidence/reason/risk/meta）',
+      '- 禁止返回旧协议字段（direction/signalType/entryPrice/stopLoss/takeProfit/reasoning）',
+      '- 参数优先用 ctx.paramsNormalized，字段不存在要给默认值并确保类型正确',
+      '- 若使用 helpers，必须来自 ctx.helpers 并先判空',
+      `需要修复的错误：${input.rejectReason}`,
+      '上一版脚本如下：',
+      input.scriptCode,
+    ].join('\n')
   }
 
   private tryAutoFixStringOutputScript(scriptCode: string, reason?: string): string | null {
@@ -763,31 +997,7 @@ export class CodegenConversationService {
         messages: [
           {
             role: 'system',
-            content: [
-              '你是交易策略对话编排器。任务：根据当前上下文，决定下一轮对话，而不是固定问卷。',
-              '你必须维持上下文一致，不能把已有策略重置为默认模板。',
-              '标的/周期/风控可后续配置，不应强制先问这些。',
-              '只输出 JSON，不要 markdown。',
-              'JSON 结构：',
-              '{',
-              '  "related": boolean,',
-              '  "logicReady": boolean,',
-              '  "assistantPrompt": string,',
-              '  "logic": {',
-              '    "entryRules"?: string[],',
-              '    "exitRules"?: string[],',
-              '    "symbols"?: string[],',
-              '    "timeframes"?: string[],',
-              '    "riskRules"?: object',
-              '  }',
-              '}',
-              '规则：',
-              '1) 如果消息与策略无关：related=false，assistantPrompt 提醒回到策略主题。',
-              '2) 如果策略逻辑还不完整：logicReady=false，assistantPrompt 只问一个最关键问题。',
-              '3) 如果策略逻辑已完整可画流程图：logicReady=true，assistantPrompt 用一句话总结策略逻辑并请求确认。',
-              '4) 若用户是在修改已有逻辑，应在 currentLogic 基础上增量修改，而非重置。',
-              '5) 若用户明确表达“推荐/默认/你来定/不要再问”，必须直接给出完整入场+出场规则草案，logicReady=true，不再继续追问。',
-            ].join('\n'),
+            content: buildConversationPlannerSystemPrompt(),
           },
           {
             role: 'user',

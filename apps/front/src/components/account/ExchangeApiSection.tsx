@@ -21,7 +21,7 @@ interface ApiConfigState {
 const STORAGE_KEY = 'exchange_api_configs_v1'
 
 function mask(value: string) {
-  if (!value) return null
+  if (!value) return ''
   if (value.length <= 6) return `${value.slice(0, 2)}***`
   return `${value.slice(0, 3)}***${value.slice(-3)}`
 }

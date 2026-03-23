@@ -9,6 +9,9 @@ import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
+  const originalStrictEnabled = process.env.LLM_CODEGEN_STRICT_ENABLED
+  const originalStrictFallback = process.env.LLM_CODEGEN_STRICT_FALLBACK
+
   const mockRepo = {
     createSession: jest.fn(),
     findById: jest.fn(),
@@ -33,6 +36,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'false'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'true'
+  })
+
+  afterAll(() => {
+    if (originalStrictEnabled === undefined) {
+      delete process.env.LLM_CODEGEN_STRICT_ENABLED
+    } else {
+      process.env.LLM_CODEGEN_STRICT_ENABLED = originalStrictEnabled
+    }
+    if (originalStrictFallback === undefined) {
+      delete process.env.LLM_CODEGEN_STRICT_FALLBACK
+    } else {
+      process.env.LLM_CODEGEN_STRICT_FALLBACK = originalStrictFallback
+    }
   })
 
   it('starts in drafting and asks next key question from llm planner', async () => {
@@ -82,6 +100,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
     expect(result.assistantPrompt).toContain('确认逻辑图')
+  })
+
+  it('does not infer ma rules from pure price-action message in a new session', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: '在BTCUSDT的3m和15m周期，价格收盘高于关键阻力位入场，跌破最近支撑位出场',
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '继续补充风险参数。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-price-action' })
+
+    await service.startSession(dto)
+
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        symbols: ['BTCUSDT'],
+        timeframes: ['3m', '15m'],
+        entryRules: ['价格收盘确认突破关键阻力位入场'],
+        exitRules: ['价格跌破关键支撑位出场'],
+      }),
+    }))
+    const payload = mockRepo.createSession.mock.calls[0]?.[0] as { checklist?: { entryRules?: string[]; exitRules?: string[] } }
+    expect(payload.checklist?.entryRules?.join(' ')).not.toContain('均线')
+    expect(payload.checklist?.exitRules?.join(' ')).not.toContain('均线')
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
@@ -163,7 +210,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       })
       .mockResolvedValueOnce({
-        content: 'return { direction: "BUY" }',
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80, entryPrice: 62000, stopLoss: 60000, takeProfit: 65000, reasoning: "趋势突破", positionSizeRatio: 0.15 }',
       })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
 
@@ -175,11 +222,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.continueSession('s5', dto)
 
     expect(result.status).toBe('PUBLISHED')
-    expect(result.scriptCode).toContain('return { direction: "BUY" }')
+    expect(result.scriptCode).toContain('signalType: "ENTRY"')
     expect(mockRepo.createVersion).toHaveBeenCalled()
   })
 
-  it('auto-fixes script when runtime output is string', async () => {
+  it('rejects when script output cannot satisfy signal payload schema', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's6',
       userId: 'u1',
@@ -198,9 +245,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           assistantPrompt: '可以生成',
         }),
       })
-      .mockResolvedValueOnce({
-        content: 'return "BUY"',
-      })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
     mockRepo.createVersion.mockResolvedValue({ id: 'v2' })
 
     const result = await service.continueSession('s6', {
@@ -209,7 +256,361 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       confirmGenerate: true,
     })
 
+    expect(result.status).toBe('REJECTED')
+    expect(result.rejectReason).toContain('got string')
+    expect(result.rejectReason).toContain('已自动修复重试 2 次仍失败')
+  })
+
+  it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's7',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "阻力位突破", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v3' })
+
+    const result = await service.continueSession('s7', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+    })
+
     expect(result.status).toBe('PUBLISHED')
-    expect(result.scriptCode).toContain('return { signal: __result };')
+    expect(result.scriptCode).toContain('signalType: "ENTRY"')
+  })
+
+  it('returns rejected payload instead of throwing 500 when generation pipeline throws', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's8',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockRejectedValueOnce(new Error('provider timeout'))
+
+    const result = await service.continueSession('s8', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('REJECTED')
+    expect(result.rejectReason).toContain('provider timeout')
+  })
+
+  it('auto-repairs a TypeScript-invalid script and publishes on next attempt', async () => {
+    const brokenScriptFromRealCase = `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx) {
+    const primaryLeg = ctx.legs?.find(leg => leg.role === 'primary');
+    const params = ctx.paramsNormalized || {};
+    if (!ctx.bars || ctx.bars.length < 20) {
+      return { action: 'NOOP', reason: '数据不足' };
+    }
+    const risk = helpers.signal.buildRiskByAtr({
+      side: 'LONG',
+      entryPrice: ctx.currentPrice || 0,
+      atr: 10,
+      atrMultipleStop: params.stopLossPct,
+      atrMultipleTake: params.takeProfitPct,
+    });
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: params.positionPct },
+      confidence: 78,
+      reason: 'breakout',
+      risk: {
+        stopLoss: risk.stopLoss,
+        takeProfit: risk.takeProfit,
+      },
+    }
+  },
+}
+,`
+    const repairedScript = `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = ctx.bars ?? []
+    if (bars.length < 20) return { action: 'NOOP', reason: '数据不足' }
+    const positionPct = ctx.paramsNormalized?.positionPct
+    const ratio = typeof positionPct === 'number' && positionPct > 0
+      ? Math.min(positionPct / 100, 1)
+      : 0.1
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: ratio },
+      confidence: 78,
+      reason: 'breakout',
+    }
+  },
+}
+strategy
+`
+    mockRepo.findById.mockResolvedValue({
+      id: 's9',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格收盘确认突破阻力位入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({ content: brokenScriptFromRealCase })
+      .mockResolvedValueOnce({ content: repairedScript })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v4' })
+
+    const result = await service.continueSession('s9', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.scriptCode).toContain('const strategy: StrategyAdapterV1')
+    expect(mockAi.chat).toHaveBeenCalledTimes(3)
+    const repairPrompt = (mockAi.chat.mock.calls[2]?.[0] as { messages: Array<{ role: string; content: string }> })?.messages?.[1]?.content
+    expect(repairPrompt).toContain('需要修复的错误')
+  })
+
+  it('returns rejected with retry suffix after exhausting auto-repair retries', async () => {
+    const brokenScript = `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx) {
+    return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, reason: 'x' }
+  },
+}
+,`
+    mockRepo.findById.mockResolvedValue({
+      id: 's10',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({ content: brokenScript })
+      .mockResolvedValueOnce({ content: brokenScript })
+      .mockResolvedValueOnce({ content: brokenScript })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v5' })
+
+    const result = await service.continueSession('s10', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('REJECTED')
+    expect(result.rejectReason).toContain('已自动修复重试 2 次仍失败')
+    expect(mockRepo.createVersion).toHaveBeenCalledTimes(3)
+  })
+
+  it('uses strict json schema response in codegen and publishes when code is returned', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's11',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          code: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar(): StrategyDecisionV1 { return { action: "NOOP" } } }\nstrategy',
+        }),
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v6' })
+
+    const result = await service.continueSession('s11', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'uniapi',
+      model: 'gpt-4',
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
+    expect(codegenCall.responseFormat).toBeDefined()
+  })
+
+  it('rejects when strict mode returns payload without code and fallback is disabled', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's12',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          message: 'missing code',
+        }),
+      })
+
+    const result = await service.continueSession('s12', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'uniapi',
+      model: 'gpt-4',
+    })
+
+    expect(result.status).toBe('REJECTED')
+    expect(String(result.rejectReason)).toContain('strict 模式')
+  })
+
+  it('skips strict response_format for deepseek model and uses plain generation directly', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's13',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v7' })
+
+    const result = await service.continueSession('s13', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      model: 'deepseek-chat',
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
+    expect(codegenCall.responseFormat).toBeUndefined()
+  })
+
+  it('skips strict response_format for strategy-codegen provider when model is not explicitly provided', async () => {
+    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
+    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's14',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v8' })
+
+    const result = await service.continueSession('s14', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+      providerCode: 'strategy-codegen',
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
+    expect(codegenCall.responseFormat).toBeUndefined()
   })
 })

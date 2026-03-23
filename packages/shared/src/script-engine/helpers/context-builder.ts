@@ -3,7 +3,13 @@
  * 将辅助函数安全地注入到脚本执行上下文中
  */
 
-import type { LegTimeframeData, MultiLegStrategyContext, StrategyContext, StrategyHelpers } from './helpers.types'
+import type {
+  LegTimeframeData,
+  MultiLegStrategyContext,
+  StrategyContext,
+  StrategyHelpers,
+  StrategyParamsNormalized,
+} from './helpers.types'
 import { getSafeHelpers } from './safe-helpers'
 
 /**
@@ -11,6 +17,7 @@ import { getSafeHelpers } from './safe-helpers'
  * @deprecated 使用 buildMultiLegStrategyContext 替代
  */
 export function buildStrategyContext(context: StrategyContext): Record<string, unknown> {
+  const paramsNormalized = normalizeStrategyParams(context.params)
   return {
     // 市场数据
     bars: context.bars,
@@ -22,6 +29,7 @@ export function buildStrategyContext(context: StrategyContext): Record<string, u
 
     // 策略参数（来自模板 defaultParams 或实例 params）
     params: context.params ?? null,
+    paramsNormalized,
 
     // 辅助函数对象（已做安全处理、只读）
     helpers: getSafeHelpers(),
@@ -35,6 +43,7 @@ export function buildStrategyContext(context: StrategyContext): Record<string, u
  * @returns 包含所有 leg 和 timeframe 数据的脚本上下文
  */
 export function buildMultiLegStrategyContext(context: MultiLegStrategyContext): Record<string, unknown> {
+  const paramsNormalized = normalizeStrategyParams(context.params)
   // 查找 primary leg（用于向后兼容）
   const primaryLeg = context.legs.find(leg => leg.role === 'primary')
   const primaryLegId = primaryLeg?.id
@@ -74,6 +83,7 @@ export function buildMultiLegStrategyContext(context: MultiLegStrategyContext): 
 
     // 策略参数（来自模板 defaultParams 或实例 params）
     params: context.params ?? null,
+    paramsNormalized,
     
     // 向后兼容：主 leg 的快捷访问
     ...compatibilityData,
@@ -81,6 +91,30 @@ export function buildMultiLegStrategyContext(context: MultiLegStrategyContext): 
     // 辅助函数（安全克隆，脚本内只读）
     helpers: getSafeHelpers(),
   }
+}
+
+function normalizeStrategyParams(params: Record<string, unknown> | null | undefined): StrategyParamsNormalized {
+  const source = params && typeof params === 'object' && !Array.isArray(params)
+    ? params
+    : {}
+
+  return {
+    riskPct: readNumber(source.riskPct),
+    positionPct: readNumber(source.positionPct),
+    stopLossPct: readNumber(source.stopLossPct),
+    takeProfitPct: readNumber(source.takeProfitPct),
+    maxDrawdownPct: readNumber(source.maxDrawdownPct),
+    leverage: readNumber(source.leverage),
+    allowShort: readBoolean(source.allowShort),
+  }
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function readBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
 }
 
 /**

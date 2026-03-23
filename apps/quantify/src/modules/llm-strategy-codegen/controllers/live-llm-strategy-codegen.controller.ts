@@ -1,7 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
-import { Body, Controller, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
@@ -32,6 +32,16 @@ export class LiveLlmStrategyCodegenController {
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
     return this.service.continueSession(id, dto)
+  }
+
+  @Get('sessions/:id')
+  @ApiOperation({ summary: '查询策略代码生成会话状态' })
+  @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
+  async getSession(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    return this.service.getSession(id, userId)
   }
 
   @Post('engine/test')
