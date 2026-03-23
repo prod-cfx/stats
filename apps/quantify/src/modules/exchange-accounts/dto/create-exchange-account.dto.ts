@@ -22,6 +22,15 @@ export class CreateExchangeAccountDto {
   @MaxLength(128)
   userId!: string
 
+  @ApiPropertyOptional({
+    description: '业务用户邮箱，用于首次绑定时同步 Quantify 用户镜像',
+    example: 'user@example.com',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(320)
+  userEmail?: string
+
   @ApiProperty({
     description: '交易所标识',
     enum: EXCHANGE_IDS,

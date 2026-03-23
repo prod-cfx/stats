@@ -269,7 +269,7 @@
         "development": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "staging": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
         "production": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"],
-        "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET"]
+        "e2e": ["DATABASE_URL", "REDIS_URL", "APP_SECRET", "JWT_SECRET", "EXCHANGE_ACCOUNT_CRYPTO_KEY"]
       }
     },
     "quantify": {
@@ -301,7 +301,8 @@
           "QUANTIFY_DATABASE_URL",
           "QUANTIFY_REDIS_URL",
           "QUANTIFY_APP_SECRET",
-          "QUANTIFY_JWT_SECRET"
+          "QUANTIFY_JWT_SECRET",
+          "QUANTIFY_EXCHANGE_ACCOUNT_CRYPTO_KEY"
         ]
       }
     },

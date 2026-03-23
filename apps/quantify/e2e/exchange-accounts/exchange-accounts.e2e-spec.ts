@@ -383,6 +383,44 @@ describe('ExchangeAccounts (E2E)', () => {
       expect(account.exchangeId).toBe('binance')
       expect(account.name).toBe('Binance Futures')
     })
+
+    it('keeps previous bound credential when revalidation fails during update', async () => {
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'valid_key',
+          apiSecret: 'valid_secret',
+          marketType: 'spot',
+          name: 'Primary Binance',
+        }))
+        .expect(201)
+
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'invalid_key',
+          apiSecret: 'any_secret',
+          marketType: 'spot',
+          name: 'Broken Binance',
+        }))
+        .expect(400)
+
+      const listResponse = await createApiClient(app)
+        .get(withUserIdPath('exchange-accounts'))
+        .expect(200)
+
+      const accounts = dataOf<any[]>(listResponse)
+      const binance = accounts.find(account => account.exchangeId === 'binance')
+      expect(binance).toBeDefined()
+      expect(binance).toMatchObject({
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Primary Binance',
+      })
+      expect(binance.maskedCredential).toBe('vali****_key')
+    })
   })
 
   describe('POST /exchange-accounts - OKX', () => {
@@ -519,6 +557,101 @@ describe('ExchangeAccounts (E2E)', () => {
 
       // 应该在 DTO 验证阶段就被拒绝
       expect(response.body.message).toBeDefined()
+    })
+  })
+
+  describe('GET /exchange-accounts', () => {
+    it('returns fixed exchange status items for binance okx hyperliquid', async () => {
+      const anotherUser = await prisma.getClient().user.create({
+        data: {
+          email: `empty-${Date.now()}@example.com`,
+        },
+      })
+
+      try {
+        const response = await createApiClient(app)
+          .get(withUserIdPath('exchange-accounts', anotherUser.id))
+          .expect(200)
+
+        const accounts = dataOf<any[]>(response)
+        expect(accounts).toHaveLength(3)
+        expect(accounts).toEqual([
+          {
+            exchangeId: 'binance',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+          {
+            exchangeId: 'okx',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+          {
+            exchangeId: 'hyperliquid',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+        ])
+      }
+      finally {
+        await prisma.getClient().exchangeAccount.deleteMany({
+          where: { userId: anotherUser.id }
+        })
+        await prisma.getClient().user.delete({
+          where: { id: anotherUser.id }
+        })
+      }
+    })
+  })
+
+  describe('DELETE /exchange-accounts/:exchangeId', () => {
+    it('deletes current user binding by exchangeId', async () => {
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'valid_key',
+          apiSecret: 'valid_secret',
+          marketType: 'spot',
+          name: 'Delete Binance',
+        }))
+        .expect(201)
+
+      await createApiClient(app)
+        .delete(withUserIdPath('exchange-accounts/binance'))
+        .expect(200)
+
+      const listResponse = await createApiClient(app)
+        .get(withUserIdPath('exchange-accounts'))
+        .expect(200)
+
+      const accounts = dataOf<any[]>(listResponse)
+      const binance = accounts.find(account => account.exchangeId === 'binance')
+      expect(binance).toEqual({
+        exchangeId: 'binance',
+        isBound: false,
+        id: null,
+        name: null,
+        maskedCredential: null,
+        isTestnet: null,
+        lastValidatedAt: null,
+        createdAt: null,
+      })
     })
   })
 
@@ -743,6 +876,11 @@ describe('ExchangeAccounts (E2E)', () => {
       results.forEach(response => {
         expect(response.status).toBe(201)
       })
+
+      const sameExchangeCount = await prisma.getClient().exchangeAccount.count({
+        where: { userId: testUser.id, exchangeId: 'binance' },
+      })
+      expect(sameExchangeCount).toBe(1)
     })
 
     it('should handle very long account names', async () => {
