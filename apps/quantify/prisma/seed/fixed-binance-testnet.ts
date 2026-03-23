@@ -1,5 +1,5 @@
-import { createCipheriv, randomBytes } from 'node:crypto'
 import type { PrismaClient } from '../../generated/prisma'
+import { createCipheriv, randomBytes } from 'node:crypto'
 
 const AES_ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
@@ -292,7 +292,6 @@ async function ensureExchangeAccount(
     where: {
       userId,
       exchangeId: 'binance',
-      name: accountPlan.name,
     },
   })
 

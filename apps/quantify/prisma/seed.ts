@@ -4,8 +4,8 @@ import { loadEnvironment } from '@net/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 import { PrismaClient } from '../generated/prisma'
-import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
+import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { seedFixedBinanceTestnet } from './seed/fixed-binance-testnet'
 import { seedFixedHyperliquidTestnet } from './seed/fixed-hyperliquid-testnet'
 import { seedFixedOkxSimulated } from './seed/fixed-okx-simulated'
@@ -95,7 +95,6 @@ async function main() {
   await seedFixedBinanceTestnet(prisma)
   await seedFixedHyperliquidTestnet(prisma)
   await seedFixedOkxSimulated(prisma)
-  await seedFixedHyperliquidTestnet(prisma)
 
   console.log('Quantify seed finished')
 }

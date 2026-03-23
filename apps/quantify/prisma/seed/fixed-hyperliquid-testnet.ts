@@ -319,7 +319,6 @@ async function ensureExchangeAccount(
     where: {
       userId,
       exchangeId: 'hyperliquid',
-      name: accountPlan.name,
     },
   })
 

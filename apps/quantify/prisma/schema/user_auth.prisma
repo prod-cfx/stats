@@ -43,7 +43,7 @@ model ExchangeAccount {
   strategySubscriptions    UserStrategySubscription[]
   llmStrategySubscriptions UserLlmStrategySubscription[]
 
-  @@unique([userId, exchangeId, name], map: "uniq_exchange_accounts_user_exchange_name")
+  @@unique([userId, exchangeId], map: "uniq_exchange_accounts_user_exchange")
   @@index([userId], map: "idx_exchange_accounts_user")
   @@map("exchange_accounts")
 }

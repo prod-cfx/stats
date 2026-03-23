@@ -30,13 +30,13 @@ export class ExchangeAccountsController {
     return this.service.list(query.userId)
   }
 
-  @Delete(':accountId')
+  @Delete(':exchangeId')
   @ApiOperation({ summary: '解绑交易所账户' })
   @ApiOkResponse({ description: '解绑成功' })
   async delete(
     @Query() query: ExchangeAccountUserQueryDto,
-    @Param('accountId') accountId: string,
+    @Param('exchangeId') exchangeId: string,
   ): Promise<void> {
-    return this.service.delete(query.userId, accountId)
+    return this.service.delete(query.userId, exchangeId)
   }
 }

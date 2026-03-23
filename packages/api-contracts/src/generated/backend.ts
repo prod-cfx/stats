@@ -124,6 +124,37 @@ const BindTelegramRequestDto = z
     photoUrl: z.string().optional(),
   })
   .passthrough()
+const AccountExchangeAccountResponseDto = z
+  .object({
+    id: z.string().nullish(),
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    isBound: z.boolean(),
+    name: z.string().nullish(),
+    maskedCredential: z.string().nullish(),
+    isTestnet: z.boolean().nullish(),
+    lastValidatedAt: z.string().datetime({ offset: true }).nullish(),
+    createdAt: z.string().datetime({ offset: true }).nullish(),
+  })
+  .passthrough()
+const CreateAccountExchangeAccountDto = z
+  .object({
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    name: z.string().max(64).optional(),
+    isTestnet: z.boolean().optional().default(false),
+    marketType: z.enum(['spot', 'perp']).optional().default('spot'),
+    apiKey: z.string().optional(),
+    apiSecret: z.string().optional(),
+    passphrase: z.string().optional(),
+    mainWalletAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+    agentPrivateKey: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
+  })
+  .passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1024,6 +1055,8 @@ export const schemas = {
   ResendVerificationRequestDto,
   BindEmailRequestDto,
   BindTelegramRequestDto,
+  AccountExchangeAccountResponseDto,
+  CreateAccountExchangeAccountDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -1110,6 +1143,44 @@ export const schemas = {
 }
 
 const endpoints = makeApi([
+  {
+    method: 'get',
+    path: '/account/exchange-accounts',
+    alias: 'AccountExchangeAccountsController_list',
+    requestFormat: 'json',
+    response: z.array(AccountExchangeAccountResponseDto),
+  },
+  {
+    method: 'post',
+    path: '/account/exchange-accounts',
+    alias: 'AccountExchangeAccountsController_upsert',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: CreateAccountExchangeAccountDto,
+      },
+    ],
+    response: AccountExchangeAccountResponseDto,
+  },
+  {
+    method: 'delete',
+    path: '/account/exchange-accounts/:exchangeId',
+    alias: 'AccountExchangeAccountsController_delete',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'exchangeId',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: z.object({ success: z.boolean() }).partial().passthrough() })
+      .partial()
+      .passthrough(),
+  },
   {
     method: 'post',
     path: '/admin/auth/login',
