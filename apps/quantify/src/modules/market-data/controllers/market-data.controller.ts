@@ -1,7 +1,6 @@
 import type { Observable } from 'rxjs';
 import type { MarketQuoteEvent } from '../services/market-data-stream.service';
-import { ErrorCode } from '@ai/shared'
-import { MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES } from '@ai/shared'
+import { ErrorCode, MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES  } from '@ai/shared'
 import { Controller, Get, Inject, Query, Sse } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
@@ -16,8 +15,8 @@ import { MarketQuoteDto } from '../dto/market-quote.response.dto'
 import { MarketSymbolDto } from '../dto/market-symbol.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
 import { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'
-import { MARKET_QUOTE_EVENT } from '../services/market-data-stream.service'
 import { MarketDataIngestionService } from '../services/market-data-ingestion.service'
+import { MARKET_QUOTE_EVENT } from '../services/market-data-stream.service'
 import { MarketDataService } from '../services/market-data.service'
 import { extractRawSymbol, parseSymbolMarket, toSymbolCode } from '../utils/market-symbol-code.util'
 

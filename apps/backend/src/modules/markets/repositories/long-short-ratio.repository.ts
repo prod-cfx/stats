@@ -1,6 +1,7 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type {LongShortRatio as LongShortRatioModel} from '@/prisma/prisma.types';
 import { Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -15,6 +16,7 @@ export interface LongShortRatioQuery {
   from?: Date
   to?: Date
   limit?: number
+  page?: number
 }
 
 export interface LongShortRatioUpsertInput {
@@ -42,13 +44,14 @@ export class LongShortRatioRepository {
    * 按交易对 + 时间范围查询多空比时间序列
    * 默认按时间倒序返回最新的 limit 条数据
    */
-  async findByPairAndTime(query: LongShortRatioQuery): Promise<LongShortRatio[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
-      return this.generateMockRatios(query)
+  async findByPairAndTime(query: LongShortRatioQuery): Promise<{ items: LongShortRatio[], total: number }> {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+      const items = this.generateMockRatios(query)
+      return { items, total: items.length }
     }
     try {
       const client = this.getClient()
-      const { tradingPairId, interval, from, to, limit = 500 } = query
+      const { tradingPairId, interval, from, to, limit = 500, page = 1 } = query
       const prismaInterval = mapTimeframe(interval)
 
       const where: Prisma.LongShortRatioWhereInput = {
@@ -64,19 +67,25 @@ export class LongShortRatioRepository {
       }
 
       // 默认按时间倒序查询，返回最新数据
-      const items = await client.longShortRatio.findMany({
-        where,
-        orderBy: {
-          timestamp: 'desc',
-        },
-        take: limit,
-      })
+      const [result, total] = await Promise.all([
+        client.longShortRatio.findMany({
+          where,
+          orderBy: [
+            { timestamp: 'desc' },
+            { id: 'desc' },
+          ],
+          take: limit,
+          skip: (page - 1) * limit,
+        }),
+        client.longShortRatio.count({ where }),
+      ])
 
       // 反转数组使时间从旧到新排列，便于前端绘制曲线
-      return items.reverse()
+      return { items: result.reverse(), total }
     } catch (error) {
       console.error('Database error in findByPairAndTime, falling back to mock data', error)
-      return this.generateMockRatios(query)
+      const items = this.generateMockRatios(query)
+      return { items, total: items.length }
     }
   }
 

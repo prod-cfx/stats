@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
-import { Inject, Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 
 const AES_ALGORITHM = 'aes-256-gcm'
@@ -31,7 +33,11 @@ export class ConfigCryptoService {
   decryptConfig<T>(cipherText: string): T {
     const buffer = Buffer.from(cipherText, 'base64')
     if (buffer.length <= IV_LENGTH + AUTH_TAG_LENGTH)
-      throw new Error('Invalid cipher text payload')
+      throw new DomainException('config.crypto_error', {
+        code: ErrorCode.CRYPTO_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Invalid cipher text payload' },
+      })
 
     const iv = buffer.subarray(0, IV_LENGTH)
     const authTag = buffer.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
@@ -46,12 +52,20 @@ export class ConfigCryptoService {
   private resolveKey(): Buffer {
     const rawKey = this.envService.getString('EXCHANGE_ACCOUNT_CRYPTO_KEY')
     if (!rawKey || !rawKey.trim())
-      throw new Error('Missing EXCHANGE_ACCOUNT_CRYPTO_KEY')
+      throw new DomainException('config.crypto_error', {
+        code: ErrorCode.CRYPTO_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Missing EXCHANGE_ACCOUNT_CRYPTO_KEY' },
+      })
 
     const normalized = rawKey.trim()
     const buffer = this.decodeKey(normalized)
     if (buffer.length !== 32)
-      throw new Error('EXCHANGE_ACCOUNT_CRYPTO_KEY must decode to 32 bytes for AES-256-GCM')
+      throw new DomainException('config.crypto_error', {
+        code: ErrorCode.CRYPTO_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'EXCHANGE_ACCOUNT_CRYPTO_KEY must decode to 32 bytes for AES-256-GCM' },
+      })
     return buffer
   }
 

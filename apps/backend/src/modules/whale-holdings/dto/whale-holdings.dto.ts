@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsDateString,
@@ -9,6 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class WhaleHoldingDto {
   @ApiProperty({ description: '鲸鱼地址（用户地址）', example: '0xWhaleAddress1' })
@@ -92,7 +93,7 @@ export class WhaleHoldingDto {
   snapshotTime: string
 }
 
-export class QueryWhaleHoldingsDto {
+export class QueryWhaleHoldingsDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '币种符号过滤，例如 BTC / ETH；留空表示所有币种',
     required: false,
@@ -115,10 +116,10 @@ export class QueryWhaleHoldingsDto {
 
   // timeRangeHours 已不再需要，因为 HyperliquidWhalePosition 表只保留最新快照
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '最大返回记录数，默认 100，最大 500',
-    required: false,
     example: 100,
+    default: 100,
     minimum: 1,
     maximum: 500,
   })
@@ -127,7 +128,7 @@ export class QueryWhaleHoldingsDto {
   @IsOptional()
   @Min(1)
   @Max(500)
-  limit?: number
+  override limit: number = 100
 }
 
 

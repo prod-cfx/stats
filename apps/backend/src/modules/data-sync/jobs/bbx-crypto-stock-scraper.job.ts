@@ -7,8 +7,11 @@ import type {
 } from '../contracts/data-pull-job'
 import { Injectable, Logger } from '@nestjs/common'
 import { chromium } from 'playwright'
+
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
+import { DataSyncOperationTimeoutException } from '../exceptions/data-sync-operation-timeout.exception'
 
 const SYMBOL_EXTRACT_REGEX = /([A-Z][A-Z0-9.]{1,9})/g
 
@@ -325,7 +328,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
         )
       }
 
-      const domEnrichmentEnabled = process.env.BBX_SCRAPER_DOM_ENRICH === '1'
+      const domEnrichmentEnabled = defaultEnvAccessor.bool('BBX_SCRAPER_DOM_ENRICH')
       let domQuotesBySymbol: Map<string, BbxScrapedQuote> | undefined
       if (domEnrichmentEnabled) {
         this.logger.warn('BBX DOM enrichment enabled via BBX_SCRAPER_DOM_ENRICH=1')
@@ -831,7 +834,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
     const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> =>
       new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
-          reject(new Error('timeout'))
+          reject(new DataSyncOperationTimeoutException({ operation: 'bbx-crypto-stock-scraper', timeoutMs }))
         }, timeoutMs)
         promise
           .then(resolve)
@@ -1548,7 +1551,7 @@ export class BbxCryptoStockScraperJob implements DataPullJob<BbxScraperMeta> {
   private async fetchCompanyList(request: APIRequestContext): Promise<BbxCompanyListFetchResult> {
     const items: BbxCompanyListItem[] = []
     const queryUrl = BbxCryptoStockScraperJob.COMPANY_LIST_ENDPOINT
-    const netlogEnabled = process.env.BBX_SCRAPER_NETLOG === '1'
+    const netlogEnabled = defaultEnvAccessor.bool('BBX_SCRAPER_NETLOG')
     let totalCount = 0
     let lastDiagnostics: BbxCompanyListDiagnostics | undefined
 

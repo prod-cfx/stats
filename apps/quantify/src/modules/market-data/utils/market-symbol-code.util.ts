@@ -1,3 +1,6 @@
+import { ErrorCode } from '@ai/shared'
+import { DomainException } from '@/common/exceptions/domain.exception'
+
 export type SymbolMarketType = 'SPOT' | 'PERP'
 
 export const normalizeExactCode = (input: string): string => input.trim().toUpperCase()
@@ -19,7 +22,7 @@ export const parseSymbolMarket = (input: string): SymbolMarketType => {
   const normalized = normalizeExactCode(input)
   if (normalized.endsWith(':PERP')) return 'PERP'
   if (normalized.endsWith(':SPOT') || !normalized.includes(':')) return 'SPOT'
-  throw new Error(`Unknown symbol market suffix: ${input}`)
+  throw new DomainException('market.symbol_unknown_suffix', { code: ErrorCode.MARKET_INVALID_SYMBOL, args: { symbol: input } })
 }
 
 export const instrumentTypeToMarket = (instrumentType?: string): SymbolMarketType => {

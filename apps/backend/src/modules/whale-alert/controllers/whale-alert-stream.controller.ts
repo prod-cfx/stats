@@ -28,12 +28,13 @@ export class WhaleAlertStreamController {
     const dataStream$ = interval(2000).pipe(
       switchMap(async (): Promise<WhaleTradeDto[]> => {
         try {
-          const alerts = await this.whaleAlertService.getWhaleTrades({
+          const result = await this.whaleAlertService.getWhaleTrades({
             since: lastQueryTime,
             limit: 50,
+            page: 1,
           })
           lastQueryTime = new Date().toISOString()
-          return alerts
+          return result.items
         } catch (err) {
           this.logger.warn(`Whale alerts query failed: ${err instanceof Error ? err.message : String(err)}`)
           return []

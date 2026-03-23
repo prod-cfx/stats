@@ -383,6 +383,44 @@ describe('ExchangeAccounts (E2E)', () => {
       expect(account.exchangeId).toBe('binance')
       expect(account.name).toBe('Binance Futures')
     })
+
+    it('keeps previous bound credential when revalidation fails during update', async () => {
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'valid_key',
+          apiSecret: 'valid_secret',
+          marketType: 'spot',
+          name: 'Primary Binance',
+        }))
+        .expect(201)
+
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'invalid_key',
+          apiSecret: 'any_secret',
+          marketType: 'spot',
+          name: 'Broken Binance',
+        }))
+        .expect(400)
+
+      const listResponse = await createApiClient(app)
+        .get(withUserIdPath('exchange-accounts'))
+        .expect(200)
+
+      const accounts = dataOf<any[]>(listResponse)
+      const binance = accounts.find(account => account.exchangeId === 'binance')
+      expect(binance).toBeDefined()
+      expect(binance).toMatchObject({
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Primary Binance',
+      })
+      expect(binance.maskedCredential).toBe('vali****_key')
+    })
   })
 
   describe('POST /exchange-accounts - OKX', () => {
@@ -523,6 +561,101 @@ describe('ExchangeAccounts (E2E)', () => {
   })
 
   describe('GET /exchange-accounts', () => {
+    it('returns fixed exchange status items for binance okx hyperliquid', async () => {
+      const anotherUser = await prisma.getClient().user.create({
+        data: {
+          email: `empty-${Date.now()}@example.com`,
+        },
+      })
+
+      try {
+        const response = await createApiClient(app)
+          .get(withUserIdPath('exchange-accounts', anotherUser.id))
+          .expect(200)
+
+        const accounts = dataOf<any[]>(response)
+        expect(accounts).toHaveLength(3)
+        expect(accounts).toEqual([
+          {
+            exchangeId: 'binance',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+          {
+            exchangeId: 'okx',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+          {
+            exchangeId: 'hyperliquid',
+            isBound: false,
+            id: null,
+            name: null,
+            maskedCredential: null,
+            isTestnet: null,
+            lastValidatedAt: null,
+            createdAt: null,
+          },
+        ])
+      }
+      finally {
+        await prisma.getClient().exchangeAccount.deleteMany({
+          where: { userId: anotherUser.id }
+        })
+        await prisma.getClient().user.delete({
+          where: { id: anotherUser.id }
+        })
+      }
+    })
+  })
+
+  describe('DELETE /exchange-accounts/:exchangeId', () => {
+    it('deletes current user binding by exchangeId', async () => {
+      await createApiClient(app)
+        .post('exchange-accounts')
+        .send(withUserId({
+          exchangeId: 'binance',
+          apiKey: 'valid_key',
+          apiSecret: 'valid_secret',
+          marketType: 'spot',
+          name: 'Delete Binance',
+        }))
+        .expect(201)
+
+      await createApiClient(app)
+        .delete(withUserIdPath('exchange-accounts/binance'))
+        .expect(200)
+
+      const listResponse = await createApiClient(app)
+        .get(withUserIdPath('exchange-accounts'))
+        .expect(200)
+
+      const accounts = dataOf<any[]>(listResponse)
+      const binance = accounts.find(account => account.exchangeId === 'binance')
+      expect(binance).toEqual({
+        exchangeId: 'binance',
+        isBound: false,
+        id: null,
+        name: null,
+        maskedCredential: null,
+        isTestnet: null,
+        lastValidatedAt: null,
+        createdAt: null,
+      })
+    })
+  })
+
+  describe('GET /exchange-accounts', () => {
     let createdAccountId: string
 
     beforeAll(async () => {
@@ -575,27 +708,25 @@ describe('ExchangeAccounts (E2E)', () => {
     })
   })
 
-  describe('DELETE /exchange-accounts/:id', () => {
-    let accountToDelete: string
+  describe('DELETE /exchange-accounts/:exchangeId', () => {
+    const deleteExchangeId = 'binance'
 
     beforeEach(async () => {
       // 创建一个账户用于删除
-      const response = await createApiClient(app)
+      await createApiClient(app)
         .post('exchange-accounts')
         .send(withUserId({
-          exchangeId: 'binance',
+          exchangeId: deleteExchangeId,
           apiKey: 'valid_key',
           apiSecret: 'valid_secret',
           marketType: 'spot',
           name: 'Account to Delete',
         }))
-
-      accountToDelete = dataOf<any>(response).id
     })
 
     it('should delete exchange account', async () => {
       await createApiClient(app)
-        .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`))
+        .delete(withUserIdPath(`exchange-accounts/${deleteExchangeId}`))
         .expect(200)
 
       // 验证账户已被删除
@@ -604,13 +735,14 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(200)
 
       const accounts = dataOf<any[]>(response)
-      const account = accounts.find((a: any) => a.id === accountToDelete)
-      expect(account).toBeUndefined()
+      const account = accounts.find((a: any) => a.exchangeId === deleteExchangeId)
+      expect(account).toBeDefined()
+      expect(account.isBound).toBe(false)
     })
 
     it('should return 404 for non-existent account', async () => {
       await createApiClient(app)
-        .delete(withUserIdPath('exchange-accounts/non-existent-id'))
+        .delete(withUserIdPath('exchange-accounts/hyperliquid'))
         .expect(404)
     })
 
@@ -624,7 +756,7 @@ describe('ExchangeAccounts (E2E)', () => {
 
       // 尝试用另一个 userId 删除账户
       await createApiClient(app)
-        .delete(withUserIdPath(`exchange-accounts/${accountToDelete}`, otherUser.id))
+        .delete(withUserIdPath(`exchange-accounts/${deleteExchangeId}`, otherUser.id))
         .expect(404) // 应该返回404，因为找不到属于该用户的账户
 
       // 清理
@@ -704,7 +836,8 @@ describe('ExchangeAccounts (E2E)', () => {
         .expect(201)
 
       const account = dataOf<any>(response)
-      expect(account.name).toBeNull()
+      // create 对同用户同 exchangeId 做 upsert，name 可能继承已有值
+      expect(account.exchangeId).toBe('binance')
     })
 
     it('should accept testnet flag', async () => {
@@ -743,6 +876,11 @@ describe('ExchangeAccounts (E2E)', () => {
       results.forEach(response => {
         expect(response.status).toBe(201)
       })
+
+      const sameExchangeCount = await prisma.getClient().exchangeAccount.count({
+        where: { userId: testUser.id, exchangeId: 'binance' },
+      })
+      expect(sameExchangeCount).toBe(1)
     })
 
     it('should handle very long account names', async () => {

@@ -17,6 +17,7 @@ import { EnvService } from '../common/services/env.service'
 import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
 import { PrismaModule } from '../prisma/prisma.module'
+import { AccountExchangeAccountsModule } from './account-exchange-accounts/account-exchange-accounts.module'
 import { AdminModule } from './admin/admin.module'
 import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated-liquidation.module'
 import { AggregatedOrderbookModule } from './aggregated-orderbook/aggregated-orderbook.module'
@@ -91,6 +92,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     SettingsModule,
     UserModule,
     AuthModule,
+    AccountExchangeAccountsModule,
     AdminModule,
     // 统一数据拉取 & 调度模块（K 线、新闻等）
     DataSyncModule,

@@ -5,8 +5,10 @@ import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 import type { Position, Trade } from '@/prisma/prisma.types'
+import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
@@ -492,7 +494,7 @@ export class PositionsService {
 
     // 3. 验证并使用数据库中存储的 exchangeId/marketType（安全性：不信任客户端传参）
     if (!position.exchangeId || !position.marketType) {
-      throw new Error(`仓位 ${dto.positionId} 缺少交易所信息，无法执行平仓操作`)
+      throw new DomainException('position.close_missing_exchange_info', { code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR, args: { positionId: dto.positionId } })
     }
     
     const exchangeId = position.exchangeId as ExchangeId

@@ -1,5 +1,6 @@
 import type { SystemSetting } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -15,7 +16,7 @@ export class SettingsRepository {
   }
 
   async findAll(): Promise<SystemSetting[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockSettings()
     }
     try {
@@ -58,7 +59,7 @@ export class SettingsRepository {
   }
 
   async findByKey(key: string): Promise<SystemSetting | null> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockSettings().find(s => s.key === key) || null
     }
     try {

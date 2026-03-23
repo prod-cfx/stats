@@ -10,10 +10,13 @@ import {
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
+  ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  getSchemaPath,
 } from '@nestjs/swagger'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   OptionalAccessControl,
   ReadAny,
@@ -27,6 +30,7 @@ import { WhaleHoldingsService } from './whale-holdings.service'
 
 @ApiTags('鲸鱼持仓')
 @ApiBearerAuth('bearer')
+@ApiExtraModels(BasePaginationResponseDto, WhaleHoldingDto)
 @Controller('whale-holdings')
 export class WhaleHoldingsController {
   constructor(private readonly whaleHoldingsService: WhaleHoldingsService) {}
@@ -39,10 +43,17 @@ export class WhaleHoldingsController {
     description:
       '返回 Hyperliquid 平台上持仓价值超过指定阈值的鲸鱼实时持仓快照，每个用户+币种只有最新状态。',
   })
-  @ApiOkResponse({ type: WhaleHoldingDto, isArray: true })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        { properties: { items: { type: 'array', items: { $ref: getSchemaPath(WhaleHoldingDto) } } } },
+      ],
+    },
+  })
   async getWhaleHoldings(
     @Query() query: QueryWhaleHoldingsDto,
-  ): Promise<WhaleHoldingDto[]> {
+  ): Promise<BasePaginationResponseDto<WhaleHoldingDto>> {
     return this.whaleHoldingsService.getCurrentHoldings(query)
   }
 }

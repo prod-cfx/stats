@@ -2,8 +2,11 @@ import type {
   CreateOpenInterestDto,
   QueryOpenInterestDto,
 } from './dto/open-interest.dto'
-import { BadRequestException, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -150,12 +153,7 @@ export class OpenInterestService {
       this.prisma.openInterest.count({ where }),
     ])
 
-    return {
-      data,
-      total,
-      limit,
-      offset,
-    }
+    return new BasePaginationResponseDto(total, page, limit, data)
   }
 
   /**
@@ -178,16 +176,16 @@ export class OpenInterestService {
    */
   async getStats(symbol: string, startTime: Date, endTime: Date) {
     if (!symbol || !startTime || !endTime) {
-      throw new Error('Symbol, startTime, and endTime are required')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'symbol, startTime, and endTime are required' } })
     }
 
     if (startTime >= endTime) {
-      throw new Error('startTime must be before endTime')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'startTime must be before endTime' } })
     }
 
     const rangeMs = endTime.getTime() - startTime.getTime()
     if (rangeMs > OpenInterestService.MAX_STATS_RANGE_MS) {
-      throw new BadRequestException('Time range cannot exceed 31 days')
+      throw new DomainException('open_interest.range_exceeded', { code: ErrorCode.OPEN_INTEREST_RANGE_EXCEEDED, status: HttpStatus.BAD_REQUEST, args: { maxDays: 31 } })
     }
 
     interface StatsRow {

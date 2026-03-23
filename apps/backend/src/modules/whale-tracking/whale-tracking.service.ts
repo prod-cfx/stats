@@ -28,6 +28,8 @@ import type {
 import type { HyperliquidWhaleAlert } from '@/prisma/prisma.types'
 import { safeParseFloat } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports
+import { EnvService } from '@/common/services/env.service'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -66,6 +68,7 @@ export class WhaleTrackingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hyperliquidApi: HyperliquidApiService,
+    private readonly envService: EnvService,
   ) {}
 
   async getDiscoverWhales(): Promise<WhaleDiscoverResponseDto> {
@@ -75,7 +78,7 @@ export class WhaleTrackingService {
 
     // E2E 环境中可能会有后台任务写入真实数据，discover 返回需保持可预期。
     // 约定：E2E 测试数据写入 source='TEST'。
-    const isE2e = process.env.APP_ENV === 'e2e'
+    const isE2e = this.envService.getString('APP_ENV') === 'e2e'
 
     const baseWhere = {
       createTime: {
@@ -936,7 +939,7 @@ export class WhaleTrackingService {
     const client = this.prisma.getClient()
 
     const since = new Date(Date.now() - this.lookbackDays * 24 * 60 * 60 * 1000)
-    const isE2e = process.env.APP_ENV === 'e2e'
+    const isE2e = this.envService.getString('APP_ENV') === 'e2e'
 
     const where = {
       userAddress: address,

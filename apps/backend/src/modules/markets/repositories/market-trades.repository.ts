@@ -1,5 +1,6 @@
 import type { MarketTrade } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -27,7 +28,7 @@ export class MarketTradesRepository {
    * 查询交易记录
    */
   async findTrades(options: FindTradesOptions): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
       return this.generateMockTrades(
         options.exchange || 'Binance',
         options.instrumentType || 'FUTURES',
@@ -108,29 +109,35 @@ export class MarketTradesRepository {
     instrumentType: string,
     symbol: string,
     limit = 50,
-  ): Promise<MarketTrade[]> {
-    if (process.env.USE_MOCK_DATA === 'true') {
-      return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+    page = 1,
+  ): Promise<{ items: MarketTrade[], total: number }> {
+    if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
+      const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      return { items, total: items.length }
     }
     try {
-      const trades = await this.prisma.marketTrade.findMany({
-        where: {
-          exchange,
-          instrumentType,
-          symbol,
-        },
-        orderBy: {
-          tradeTimestamp: 'desc',
-        },
-        take: limit,
-      })
-      if (trades.length === 0) {
-        return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      const where = { exchange, instrumentType, symbol }
+      const [trades, total] = await Promise.all([
+        this.prisma.marketTrade.findMany({
+          where,
+          orderBy: [
+            { tradeTimestamp: 'desc' },
+            { id: 'desc' },
+          ],
+          take: limit,
+          skip: (page - 1) * limit,
+        }),
+        this.prisma.marketTrade.count({ where }),
+      ])
+      if (trades.length === 0 && total === 0) {
+        const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+        return { items, total: items.length }
       }
-      return trades
+      return { items: trades, total }
     } catch (error) {
       console.error('Database error in findLatestTrades, falling back to mock data', error)
-      return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      return { items, total: items.length }
     }
   }
 

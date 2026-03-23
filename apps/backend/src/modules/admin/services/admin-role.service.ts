@@ -2,6 +2,7 @@ import type { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.d
 import type { Role } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { AppRole } from '@/modules/auth/rbac/permissions'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -40,12 +41,7 @@ export class AdminRoleService {
       take: limit,
     })
 
-    return {
-      total,
-      page,
-      limit,
-      items,
-    }
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 
   async findById(id: string): Promise<Role> {

@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
+import { Type } from 'class-transformer'
+import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 /**
  * Trades 订阅请求 DTO
  */
-export class TradesSubscriptionDto {
+export class TradesSubscriptionDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '交易所代码',
     example: 'BINANCE',
@@ -37,15 +39,11 @@ export class TradesSubscriptionDto {
   @Min(0)
   minValue?: number
 
-  @ApiPropertyOptional({
-    description: '返回记录数量限制',
-    example: 50,
-    default: 50,
-    maximum: 200,
-  })
+  @ApiPropertyOptional({ description: '返回记录数量限制', maximum: 200, default: 50 })
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
+  @IsInt()
   @Min(1)
   @Max(200)
-  limit?: number
+  override limit: number = 50
 }

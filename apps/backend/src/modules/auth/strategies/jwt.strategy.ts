@@ -23,7 +23,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     const secret = configService.get<string>('jwt.secret')
     if (!secret) {
-      throw new Error('JWT_SECRET 未配置')
+      throw new DomainException('auth.jwt_config_error', {
+        code: ErrorCode.AUTH_JWT_CONFIG_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'JWT_SECRET is not configured' },
+      })
     }
 
     super({

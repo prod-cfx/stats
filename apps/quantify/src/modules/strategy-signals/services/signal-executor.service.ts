@@ -1,10 +1,10 @@
 import type { OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
-import { setTimeout as sleep } from 'node:timers/promises'
+import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'

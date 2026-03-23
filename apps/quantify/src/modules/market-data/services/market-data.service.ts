@@ -6,7 +6,8 @@ import type { CreateMarketSymbolDto, UpdateMarketSymbolDto } from '../dto/ops-ma
 import type { ProviderSymbol } from '../interfaces/market-data-provider.interface'
 import type { InstrumentType, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { 
   mapSymbolStatus, 
@@ -68,12 +69,7 @@ export class MarketDataService {
       this.prisma.symbol.count({ where }),
     ])
 
-    return {
-      items: items.map(symbol => this.toMarketSymbolResponse(symbol)),
-      total,
-      page,
-      limit,
-    }
+    return new BasePaginationResponseDto(total, page, limit, items.map(symbol => this.toMarketSymbolResponse(symbol)))
   }
 
   async createSymbol(payload: CreateMarketSymbolDto) {
@@ -171,7 +167,7 @@ export class MarketDataService {
     }
 
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException('至少需要提供一个字段进行更新')
+      throw new DomainException('market.symbol_update_no_fields', { code: ErrorCode.BAD_REQUEST })
     }
 
     const symbol = await this.prisma.symbol.update({

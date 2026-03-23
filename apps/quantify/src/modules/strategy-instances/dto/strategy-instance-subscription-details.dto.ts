@@ -85,10 +85,10 @@ export class StrategyInstanceSubscriptionDetailsDto {
   totalSubscribersCount: number
 
   @ApiProperty({ description: '当前页码', example: 1 })
-  currentPage: number
+  page: number
 
   @ApiProperty({ description: '每页数量', example: 50 })
-  pageSize: number
+  limit: number
 
   @ApiProperty({ description: '最后更新时间' })
   lastUpdatedAt: Date

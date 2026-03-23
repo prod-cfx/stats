@@ -70,6 +70,7 @@ const baseArrayResponseSchema = (itemDto: unknown) => ({
   BaseResponseDto,
   ExchangeLongShortRatioResponseDto,
   BasePaginationResponseDto,
+  LongShortRatioPointResponseDto,
   MarketTradeResponseDto,
   AggregatedVolumeResponseDto,
   TickerResponseDto,
@@ -135,25 +136,42 @@ export class MarketsController {
   @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取交易对的多空比时间序列' })
-  @ApiOkResponse({ type: LongShortRatioPointResponseDto, isArray: true })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '页码（从 1 开始）', example: 1 })
+  @ApiOkResponse({
+    description: '查询成功',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(LongShortRatioPointResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
   async getLongShortRatio(
     @Query() query: GetLongShortRatioRequestDto,
-  ): Promise<LongShortRatioPointResponseDto[]> {
+  ): Promise<BasePaginationResponseDto<LongShortRatioPointResponseDto>> {
     const { tradingPairId, interval } = query
 
     const from = query.from ? new Date(query.from) : undefined
     const to = query.to ? new Date(query.to) : undefined
     const limit = query.limit ?? 500
 
-    const items = await this.marketsService.getLongShortRatios({
+    const result = await this.marketsService.getLongShortRatios({
       tradingPairId,
       interval,
       from,
       to,
       limit,
+      page: query.page,
     })
 
-    return items.map(item => {
+    const items = result.items.map(item => {
       const {
         longShortRatio,
         longAccountRatio,
@@ -183,6 +201,8 @@ export class MarketsController {
         source: item.source,
       }
     })
+
+    return new BasePaginationResponseDto(result.total, result.page, result.limit, items)
   }
 
   @Get('long-short-ratio/exchanges')
@@ -207,20 +227,37 @@ export class MarketsController {
   @OptionalAccessControl()
   @ReadAny(AppResource.MARKET_SYMBOL)
   @ApiOperation({ summary: '获取最新成交记录' })
-  @ApiOkResponse({ type: MarketTradeResponseDto, isArray: true })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '页码（从 1 开始）', example: 1 })
+  @ApiOkResponse({
+    description: '查询成功',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(MarketTradeResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
   async getLatestTrades(
     @Query() query: GetLatestTradesRequestDto,
-  ): Promise<MarketTradeResponseDto[]> {
-    const { exchange, instrumentType, symbol, limit = 50 } = query
+  ): Promise<BasePaginationResponseDto<MarketTradeResponseDto>> {
+    const { exchange, instrumentType, symbol, limit = 50, page = 1 } = query
 
-    const trades = await this.marketsService.getLatestTrades(
+    const result = await this.marketsService.getLatestTrades(
       exchange,
       instrumentType,
       symbol,
       limit,
+      page,
     )
 
-    return trades.map(trade => ({
+    const items = result.items.map(trade => ({
       id: trade.id,
       exchange: trade.exchange,
       instrumentType: trade.instrumentType,
@@ -234,6 +271,8 @@ export class MarketsController {
       tradeTimestamp: trade.tradeTimestamp.toString(),
       createdAt: trade.createdAt.toISOString(),
     }))
+
+    return new BasePaginationResponseDto(result.total, result.page, result.limit, items)
   }
 
   @Get('trades/large')

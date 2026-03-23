@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
+import { Type } from 'class-transformer'
+import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export enum WhaleAlertSide {
   Long = 'Long',
@@ -70,7 +72,7 @@ export class RealtimeWhaleAlertDto {
   side: WhaleAlertSide
 }
 
-export class QueryRealtimeWhaleAlertDto {
+export class QueryRealtimeWhaleAlertDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({
     description: '币种符号过滤，例如 BTC',
     example: 'BTC',
@@ -91,12 +93,15 @@ export class QueryRealtimeWhaleAlertDto {
   @ApiPropertyOptional({
     description: '返回记录上限，默认 50，最大 200',
     example: 50,
+    default: 50,
+    maximum: 200,
   })
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
-  @IsPositive()
+  @Min(1)
   @Max(200)
-  limit?: number
+  override limit: number = 50
 
   @ApiPropertyOptional({
     description: '起始时间，用于仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时',

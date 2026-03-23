@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { defaultEnvAccessor } from './common/env/env.accessor'
 import { applyQuantifyEnvOverrides } from './config/quantify-env'
 import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
@@ -56,7 +57,7 @@ async function bootstrap() {
   // 设置全局路由前缀
   app.setGlobalPrefix('api/v1')
 
-  if (process.env.APP_ENV !== 'production') {
+  if (defaultEnvAccessor.appEnv() !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Quantify API')
       .setDescription('Internal API documentation')
@@ -68,7 +69,7 @@ async function bootstrap() {
       jsonDocumentUrl: 'docs-json',
     })
   }
-  const port = Number(process.env.PORT || 3010)
+  const port = defaultEnvAccessor.int('PORT', 3010)
   await app.listen(port)
 
   logger.log(`Quantify ready on http://localhost:${port}/api/v1`)

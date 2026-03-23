@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export const INDICATOR_TIMEFRAMES_DTO = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 export type IndicatorTimeframeDto = (typeof INDICATOR_TIMEFRAMES_DTO)[number]
@@ -93,7 +94,7 @@ export class UpdateIndicatorConfigDto {
   description?: string
 }
 
-export class IndicatorConfigListQueryDto {
+export class IndicatorConfigListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: 'Symbol 代码，如 BTCUSDT' })
   @IsOptional()
   @IsString()
@@ -115,14 +116,6 @@ export class IndicatorConfigListQueryDto {
   @IsOptional()
   @IsBoolean()
   isEnabled?: boolean
-
-  @ApiPropertyOptional({ description: '页码', default: 1 })
-  @IsOptional()
-  page?: number
-
-  @ApiPropertyOptional({ description: '每页数量', default: 20 })
-  @IsOptional()
-  limit?: number
 }
 
 

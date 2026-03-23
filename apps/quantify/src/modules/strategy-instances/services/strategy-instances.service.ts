@@ -1,13 +1,25 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
 import type { MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
-import type { LegTimeframeData, MultiLegStrategyContext, StrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
-import type { StrategyExecutionConfig, StrategyLegDefinition } from '@/modules/strategy-templates/types/strategy-template.types'
+import type {
+  LegTimeframeData,
+  MultiLegStrategyContext,
+  StrategyContext,
+} from '@ai/shared/script-engine/helpers/context-builder'
+import type {
+  StrategyExecutionConfig,
+  StrategyLegDefinition,
+} from '@/modules/strategy-templates/types/strategy-template.types'
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
-import { fillPromptTemplate } from '@ai/shared'
+import { fillPromptTemplate, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
-import { buildMultiLegStrategyContext, buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
+import {
+  buildMultiLegStrategyContext,
+  buildStrategyContext,
+} from '@ai/shared/script-engine/helpers/context-builder'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
+import { EnvService } from '@/common/services/env.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
@@ -28,8 +40,14 @@ import { StrategyInstanceResponseDto } from '../dto/strategy-instance-response.d
 import { StrategyInstanceSignalPublicResponseDto } from '../dto/strategy-instance-signal-public-response.dto'
 import { StrategyInstanceSignalsListQueryDto } from '../dto/strategy-instance-signals-list-query.dto'
 import { StrategyInstanceStatsDto } from '../dto/strategy-instance-stats.dto'
-import { StrategyInstanceSubscriptionDetailsDto, SubscriberInfoDto } from '../dto/strategy-instance-subscription-details.dto'
-import { TestStrategyInstanceDto, TestStrategyInstanceResultDto } from '../dto/test-strategy-instance.dto'
+import {
+  StrategyInstanceSubscriptionDetailsDto,
+  SubscriberInfoDto,
+} from '../dto/strategy-instance-subscription-details.dto'
+import {
+  TestStrategyInstanceDto,
+  TestStrategyInstanceResultDto,
+} from '../dto/test-strategy-instance.dto'
 import { UpdateStrategyInstanceDto } from '../dto/update-strategy-instance.dto'
 import {
   InvalidInstanceModeTransitionException,
@@ -91,6 +109,7 @@ export class StrategyInstancesService {
     private readonly statsService: StrategyInstanceStatsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
     private readonly marketDataReadGateway: MarketDataReadGateway,
+    private readonly env: EnvService,
   ) {}
 
   async createInstance(
@@ -204,9 +223,9 @@ export class StrategyInstancesService {
     if (!instance) {
       throw new StrategyInstanceNotFoundException({ instanceId: id })
     }
-    
+
     const dto = this.toResponseDto(instance)
-    
+
     // 获取统计数据（捕获错误，不影响主流程）
     try {
       const stats = await this.statsService.calculateStats(id)
@@ -217,7 +236,7 @@ export class StrategyInstancesService {
       this.logger.warn(`Failed to calculate stats for instance ${id}`, error)
       // 继续返回不含统计数据的响应
     }
-    
+
     return dto
   }
 
@@ -255,17 +274,15 @@ export class StrategyInstancesService {
     // 状态转换验证
     if (dto.status && dto.status !== instance.status) {
       this.validateStatusTransition(instance.status, dto.status)
-      
-      // 🔴 关键校验：切换到 running 状态时，强制要求 mode 必须为 LIVE
-      // 防止管理员启动 PAPER/TESTNET/BACKTEST 实例导致用户端不可见
-      // （因为 C 端接口已强制过滤 mode !== 'LIVE' 的实例）
+      // 切换到 running 状态时，仅允许 LIVE/TESTNET。
+      // PAPER/BACKTEST 不进入真实运行态，避免语义混乱。
       if (dto.status === 'running') {
         const finalMode = dto.mode ?? instance.mode
-        if (finalMode !== 'LIVE') {
+        if (finalMode !== 'LIVE' && finalMode !== 'TESTNET') {
           throw new InvalidInstanceModeTransitionException({
             from: finalMode,
             to: 'LIVE',
-            reason: '启动实例时必须使用实盘模式（LIVE），以确保用户端可见。请先切换到 LIVE 模式再启动'
+            reason: '启动实例时仅支持 LIVE 或 TESTNET 模式，请先切换模式后再启动',
           })
         }
       }
@@ -358,7 +375,10 @@ export class StrategyInstancesService {
 
     // 只有 draft 状态的实例可以删除
     if (instance.status !== 'draft') {
-      throw new InvalidInstanceStatusTransitionException({ currentStatus: instance.status, targetStatus: 'deleted' })
+      throw new InvalidInstanceStatusTransitionException({
+        currentStatus: instance.status,
+        targetStatus: 'deleted',
+      })
     }
 
     await this.instancesRepo.delete(id)
@@ -395,9 +415,10 @@ export class StrategyInstancesService {
 
     if (!isMultiLeg) {
       // 旧版单 leg 架构：调用方需手动填写 bars/indicators/currentPrice
-      throw new BadRequestException(
-        '当前策略模板未使用多 Leg 多周期架构，可直接在请求体中手动填写 bars/indicators/currentPrice 进行调试',
-      )
+      throw new DomainException('strategy_instance.not_multi_leg_architecture', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     // 1. 批量加载所有 symbols
@@ -418,7 +439,9 @@ export class StrategyInstancesService {
     for (const leg of legs!) {
       const symbol = symbolMap.get(leg.symbol)
       if (!symbol) {
-        this.logger.warn(`Symbol ${leg.symbol} not found for leg ${leg.id} when building test payload`)
+        this.logger.warn(
+          `Symbol ${leg.symbol} not found for leg ${leg.id} when building test payload`,
+        )
         continue
       }
 
@@ -438,8 +461,7 @@ export class StrategyInstancesService {
     }
 
     // 3. 为每个组合加载最近一段 K 线
-    const multiLegData: Record<string, Record<string, LegTimeframeData>> =
-      {}
+    const multiLegData: Record<string, Record<string, LegTimeframeData>> = {}
 
     for (const req of dataRequests) {
       const bars = await this.marketDataReadGateway.getRecentBarsBySymbolId(
@@ -499,7 +521,10 @@ export class StrategyInstancesService {
     const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
 
     if (!strategy.script) {
-      throw new BadRequestException('策略模板未配置脚本（script），无法执行实例检查')
+      throw new DomainException('strategy_instance.script_not_configured', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     if (!strategy.promptTemplate) {
@@ -526,9 +551,10 @@ export class StrategyInstancesService {
 
     if (isMultiLeg) {
       if (!dto.multiLegData || Object.keys(dto.multiLegData).length === 0) {
-        throw new BadRequestException(
-          '当前策略模板使用多 Leg 多周期架构，请在请求体中提供 multiLegData（按 legId + timeframe 组织的数据）',
-        )
+        throw new DomainException('strategy_instance.multi_leg_data_required', {
+          code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+          status: HttpStatus.BAD_REQUEST,
+        })
       }
 
       // 基本校验：确保 dataRequirements 中声明的所有 leg/timeframe 都有对应数据，方便提前发现配置问题
@@ -537,17 +563,23 @@ export class StrategyInstancesService {
         if (!requiredTimeframes || requiredTimeframes.length === 0) continue
 
         for (const timeframe of requiredTimeframes) {
-          const legData = dto.multiLegData?.[leg.id]?.[timeframe] as TestLegTimeframeInput | undefined
+          const legData = dto.multiLegData?.[leg.id]?.[timeframe] as
+            | TestLegTimeframeInput
+            | undefined
           if (!legData) {
-            throw new BadRequestException(
-              `multiLegData 缺少 leg "${leg.id}" 在周期 "${timeframe}" 的数据，请补充后重试`,
-            )
+            throw new DomainException('strategy_instance.multi_leg_data_missing_leg', {
+              code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+              status: HttpStatus.BAD_REQUEST,
+              args: { legId: leg.id, timeframe },
+            })
           }
 
           if (!Array.isArray(legData.bars) || legData.bars.length === 0) {
-            throw new BadRequestException(
-              `multiLegData 中 leg "${leg.id}" 在周期 "${timeframe}" 的 bars 为空，无法执行脚本`,
-            )
+            throw new DomainException('strategy_instance.multi_leg_bars_empty', {
+              code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+              status: HttpStatus.BAD_REQUEST,
+              args: { legId: leg.id, timeframe },
+            })
           }
         }
       }
@@ -597,7 +629,10 @@ export class StrategyInstancesService {
     } else {
       // 旧版单 leg 脚本：允许只传 bars / indicators / currentPrice
       if (!dto.bars || dto.bars.length === 0) {
-        throw new BadRequestException('请至少提供一组 K 线数据 bars 用于脚本执行')
+        throw new DomainException('strategy_instance.bars_required', {
+          code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+          status: HttpStatus.BAD_REQUEST,
+        })
       }
 
       const primarySymbol =
@@ -606,8 +641,7 @@ export class StrategyInstancesService {
         'UNKNOWN'
 
       const primaryTimeframe =
-        dto.timeframe ??
-        (execution && execution.timeframe ? execution.timeframe : '1h')
+        dto.timeframe ?? (execution && execution.timeframe ? execution.timeframe : '1h')
 
       const strategyContext: StrategyContext = {
         bars: dto.bars.map(bar => ({
@@ -643,11 +677,11 @@ export class StrategyInstancesService {
     // 包括：顶层 return、顶层 await 等
     if (!result.success && result.error?.message) {
       const errorMsg = result.error.message
-      const needsAsync = 
+      const needsAsync =
         errorMsg.includes('Illegal return statement') ||
         errorMsg.includes('await is only valid in async functions') ||
         errorMsg.includes('Unexpected reserved word')
-      
+
       if (needsAsync) {
         this.logger.warn(
           `Test run for strategy instance ${id} detected script needs async context (${errorMsg}), retrying with allowAsync`,
@@ -662,13 +696,16 @@ export class StrategyInstancesService {
 
     if (!result.success) {
       const message =
-        result.error?.message ??
-        (result.error ? String(result.error) : '脚本执行失败（未知错误）')
+        result.error?.message ?? (result.error ? String(result.error) : '脚本执行失败（未知错误）')
       this.logger.error(
         `Test run for strategy instance ${id} failed: ${message}`,
         result.error instanceof Error ? result.error.stack : undefined,
       )
-      throw new BadRequestException(`脚本执行失败：${message}`)
+      throw new DomainException('strategy_instance.script_execution_failed', {
+        code: ErrorCode.STRATEGY_INSTANCE_SCRIPT_FAILED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { message },
+      })
     }
 
     // 与正式执行路径保持一致：始终使用 validateScriptOutput 校验返回值类型
@@ -677,16 +714,16 @@ export class StrategyInstancesService {
     const validation = validateScriptOutput(result.value, { allowEmpty: !isMultiLeg })
 
     if (!validation.valid || !validation.value) {
-      const reason =
-        validation.error ??
-        `期望返回对象，实际类型为 ${typeof result.value}`
+      const reason = validation.error ?? `期望返回对象，实际类型为 ${typeof result.value}`
 
       this.logger.error(
         `Test run for strategy instance ${id} returned invalid script result: ${reason}`,
       )
-      throw new BadRequestException(
-        `脚本返回值类型不合法：${reason}`,
-      )
+      throw new DomainException('strategy_instance.script_invalid_return_type', {
+        code: ErrorCode.STRATEGY_INSTANCE_SCRIPT_FAILED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { reason },
+      })
     }
 
     const resolved = await resolveStrategyOutput(
@@ -727,7 +764,7 @@ export class StrategyInstancesService {
       draft: ['running'],
       running: ['paused', 'stopped'],
       paused: ['running', 'stopped'],
-      stopped: [],
+      stopped: ['running'],
     }
 
     const allowed = validTransitions[currentStatus]
@@ -811,7 +848,7 @@ export class StrategyInstancesService {
             strategyInstanceId: { in: instanceIds },
             status: 'active',
           },
-          select: { 
+          select: {
             strategyInstanceId: true,
           },
         })
@@ -843,7 +880,12 @@ export class StrategyInstancesService {
       return dto
     })
 
-    return new BasePaginationResponseDto<StrategyInstancePublicResponseDto>(total, page, limit, data)
+    return new BasePaginationResponseDto<StrategyInstancePublicResponseDto>(
+      total,
+      page,
+      limit,
+      data,
+    )
   }
 
   /**
@@ -861,11 +903,7 @@ export class StrategyInstancesService {
 
     // 在生产环境严格限制，只允许查看运行中的 LIVE 实盘实例
     // 在本地开发环境，则放宽限制，方便调试和演示（只要存在就允许查看）
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       // 只能查看运行中的实例
       if (instance.status !== 'running') {
         throw new StrategyInstanceNotFoundException({ instanceId: id })
@@ -894,14 +932,14 @@ export class StrategyInstancesService {
         },
         select: { id: true },
       })
-      
+
       if (subscription) {
         subscriptionMap.set(id, true)
       }
     }
 
     const dto = this.toUserResponseDto(instance, subscriptionMap)
-    
+
     // 获取统计数据（捕获错误）
     try {
       const stats = await this.statsService.calculateStats(id)
@@ -911,7 +949,7 @@ export class StrategyInstancesService {
     } catch (error) {
       this.logger.warn(`Failed to calculate stats for running instance ${id}`, error)
     }
-    
+
     return dto
   }
 
@@ -928,14 +966,13 @@ export class StrategyInstancesService {
     // 先校验实例是否存在且对当前环境/用户可见
     await this.getRunningInstanceDetail(id, userId)
 
-    const isDevEnv =
-      process.env.NODE_ENV === 'development' ||
-      process.env.APP_ENV === 'development'
-
     // 生产环境必须要求用户对该实例拥有有效订阅
-    if (!isDevEnv) {
+    if (!this.env.isDev()) {
       if (!userId) {
-        throw new ForbiddenException('需要登录后才能查看策略信号')
+        throw new DomainException('strategy_instance.login_required_for_signals', {
+          code: ErrorCode.STRATEGY_INSTANCE_SUBSCRIPTION_REQUIRED,
+          status: HttpStatus.FORBIDDEN,
+        })
       }
 
       const client = this.prisma.getClient()
@@ -949,7 +986,10 @@ export class StrategyInstancesService {
       })
 
       if (!hasSubscription) {
-        throw new ForbiddenException('仅订阅该策略的用户可以查看详细信号')
+        throw new DomainException('strategy_instance.subscription_required_for_signals', {
+          code: ErrorCode.STRATEGY_INSTANCE_SUBSCRIPTION_REQUIRED,
+          status: HttpStatus.FORBIDDEN,
+        })
       }
     }
 
@@ -1043,7 +1083,7 @@ export class StrategyInstancesService {
   /**
    * 获取策略实例的订阅详情
    * 包括订阅用户列表、总订阅金额、当前总仓位等信息
-   * 
+   *
    * @param id 策略实例ID
    * @param page 订阅用户列表页码
    * @param limit 订阅用户列表每页数量
@@ -1055,7 +1095,10 @@ export class StrategyInstancesService {
   ): Promise<StrategyInstanceSubscriptionDetailsDto> {
     // 输入验证
     if (!id || typeof id !== 'string' || id.length < 20) {
-      throw new BadRequestException('Invalid strategy instance ID')
+      throw new DomainException('strategy_instance.invalid_id', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     const instance = await this.instancesRepo.findByIdWithDetails(id)
@@ -1115,8 +1158,11 @@ export class StrategyInstancesService {
 
     // 2. 使用数据库端聚合计算总体金额和持仓（仅统计 active/paused 状态）
     // 只有 active 和 paused 状态的订阅才占用额度，cancelled 的不应计入当前指标
-    const activeStatuses: SubscriptionStatus[] = [SubscriptionStatus.active, SubscriptionStatus.paused]
-    
+    const activeStatuses: SubscriptionStatus[] = [
+      SubscriptionStatus.active,
+      SubscriptionStatus.paused,
+    ]
+
     let totalSubscriptionAmount = new Decimal(0)
     let totalCurrentPositionAmount = new Decimal(0)
     let totalOpenPositions = 0
@@ -1143,10 +1189,12 @@ export class StrategyInstancesService {
 
     // 聚合持仓数量和市值（通过 account 关联到订阅状态）
     // 使用原始 SQL 一次性完成 JOIN 和聚合
-    const positionAggregateResult = await client.$queryRaw<Array<{ 
-      totalPositions: bigint
-      totalValue: any 
-    }>>`
+    const positionAggregateResult = await client.$queryRaw<
+      Array<{
+        totalPositions: bigint
+        totalValue: any
+      }>
+    >`
       SELECT 
         COALESCE(COUNT(*), 0) as "totalPositions",
         COALESCE(SUM(p.quantity * p.avg_entry_price), 0) as "totalValue"
@@ -1158,7 +1206,7 @@ export class StrategyInstancesService {
         AND uss.status = ANY(ARRAY['active', 'paused']::"SubscriptionStatus"[])
         AND p.status = 'OPEN'
     `
-    
+
     if (positionAggregateResult.length > 0) {
       totalOpenPositions = Number(positionAggregateResult[0].totalPositions)
       if (positionAggregateResult[0].totalValue != null) {
@@ -1198,7 +1246,7 @@ export class StrategyInstancesService {
     })
 
     // 按账户分组持仓
-    const positionsByAccountId = new Map<string, typeof pagePositions[0][]>()
+    const positionsByAccountId = new Map<string, (typeof pagePositions)[0][]>()
     for (const pos of pagePositions) {
       const existing = positionsByAccountId.get(pos.userStrategyAccountId) ?? []
       existing.push(pos)
@@ -1255,8 +1303,8 @@ export class StrategyInstancesService {
       totalOpenPositions,
       subscribers,
       totalSubscribersCount: totalCount,
-      currentPage: page,
-      pageSize: limit,
+      page,
+      limit,
       lastUpdatedAt: new Date(),
     }
   }

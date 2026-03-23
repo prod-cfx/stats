@@ -1,10 +1,9 @@
+import { ErrorCode } from '@ai/shared'
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   HttpStatus,
-  NotFoundException,
   Param,
   ParseArrayPipe,
   Post,
@@ -23,6 +22,7 @@ import {
 } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import {
   CreateAny,
   ReadAny,
@@ -130,7 +130,7 @@ export class OpenInterestController {
     dataList: CreateOpenInterestDto[],
   ) {
     if (!Array.isArray(dataList) || dataList.length === 0) {
-      throw new BadRequestException('dataList must be a non-empty array')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'dataList must be a non-empty array' } })
     }
 
     const entities = await this.openInterestService.batchUpsert(dataList)
@@ -158,14 +158,8 @@ export class OpenInterestController {
   })
   async query(@Query() queryDto: QueryOpenInterestDto) {
     const result = await this.openInterestService.query(queryDto)
-    const items = result.data.map(entity => this.toDto(entity))
-    const limit = result.limit || 1
-    const computedPage =
-      Number.isFinite(result.offset) && limit > 0
-        ? Math.floor(result.offset / limit) + 1
-        : 1
-    const page = queryDto.page ?? computedPage
-    return new BasePaginationResponseDto(result.total, page, limit, items)
+    const items = result.items.map(entity => this.toDto(entity))
+    return new BasePaginationResponseDto(result.total, result.page, result.limit, items)
   }
 
   @Get('latest/:exchange/:symbol')
@@ -188,14 +182,12 @@ export class OpenInterestController {
     @Param('symbol') symbol: string,
   ) {
     if (!exchange || !symbol) {
-      throw new BadRequestException('exchange and symbol are required')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'exchange and symbol are required' } })
     }
     const entity = await this.openInterestService.getLatest(exchange, symbol)
 
     if (!entity) {
-      throw new NotFoundException(
-        `Open interest not found for ${exchange}:${symbol}`,
-      )
+      throw new DomainException('open_interest.not_found', { code: ErrorCode.OPEN_INTEREST_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { exchange, symbol } })
     }
 
     return new BaseResponseDto(this.toDto(entity))
@@ -240,9 +232,7 @@ export class OpenInterestController {
     @Query('endTime') endTime: string,
   ) {
     if (!symbol || !startTime || !endTime) {
-      throw new BadRequestException(
-        'symbol, startTime, and endTime are required',
-      )
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'symbol, startTime, and endTime are required' } })
     }
 
     // 验证日期格式
@@ -250,19 +240,17 @@ export class OpenInterestController {
     const end = new Date(endTime)
 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid date format')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'invalid date format' } })
     }
 
     if (start >= end) {
-      throw new BadRequestException('startTime must be before endTime')
+      throw new DomainException('open_interest.invalid_params', { code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS, status: HttpStatus.BAD_REQUEST, args: { reason: 'startTime must be before endTime' } })
     }
 
     const stats = await this.openInterestService.getStats(symbol, start, end)
 
     if (!stats) {
-      throw new NotFoundException(
-        `Open interest stats not found for ${symbol} in range`,
-      )
+      throw new DomainException('open_interest.not_found', { code: ErrorCode.OPEN_INTEREST_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { symbol } })
     }
 
     return new BaseResponseDto(stats)

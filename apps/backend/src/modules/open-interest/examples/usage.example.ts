@@ -101,7 +101,7 @@ export class OpenInterestUsageExample {
       limit: 100,
     } as any)
 
-    console.log(`查询到 ${result.data.length} 条记录，总共 ${result.total} 条`)
+    console.log(`查询到 ${result.items.length} 条记录，总共 ${result.total} 条`)
     return result
   }
 

@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { Injectable, HttpStatus } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -8,11 +10,14 @@ export class StrategySignalStateRepository {
 
   findByStrategyInstanceId(strategyInstanceId: string) {
     return this.prisma.strategySignalState.findUnique({
-      where: { strategyInstanceId }
+      where: { strategyInstanceId },
     })
   }
 
-  async incrementFailure(strategyInstanceId: string, options?: { lockedUntil?: Date; reset?: boolean }) {
+  async incrementFailure(
+    strategyInstanceId: string,
+    options?: { lockedUntil?: Date; reset?: boolean },
+  ) {
     const { lockedUntil, reset } = options ?? {}
 
     // 获取实例对应的模板ID
@@ -22,7 +27,11 @@ export class StrategySignalStateRepository {
     })
 
     if (!instance) {
-      throw new Error(`Strategy instance ${strategyInstanceId} not found`)
+      throw new DomainException('signal.instance_not_found', {
+        code: ErrorCode.STRATEGY_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { id: strategyInstanceId },
+      })
     }
 
     await this.prisma.strategySignalState.upsert({
@@ -53,7 +62,11 @@ export class StrategySignalStateRepository {
     })
 
     if (!instance) {
-      throw new Error(`Strategy instance ${strategyInstanceId} not found`)
+      throw new DomainException('signal.instance_not_found', {
+        code: ErrorCode.STRATEGY_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { id: strategyInstanceId },
+      })
     }
 
     await this.prisma.strategySignalState.upsert({

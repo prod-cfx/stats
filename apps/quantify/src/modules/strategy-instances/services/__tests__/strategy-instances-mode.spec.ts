@@ -3,6 +3,7 @@ import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.d
 import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 
 import { Test } from '@nestjs/testing'
+import { EnvService } from '@/common/services/env.service'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -85,6 +86,10 @@ describe('strategyInstancesService - mode management', () => {
         {
           provide: MarketDataReadGateway,
           useValue: mockMarketDataReadGateway,
+        },
+        {
+          provide: EnvService,
+          useValue: { isDev: jest.fn().mockReturnValue(false), isProd: jest.fn().mockReturnValue(false), isTest: jest.fn().mockReturnValue(true) },
         },
       ],
     }).compile()
@@ -202,6 +207,37 @@ describe('strategyInstancesService - mode management', () => {
         expect.objectContaining({
           mode: 'TESTNET',
         })
+      )
+    })
+
+    it('should allow restarting a stopped TESTNET instance to running', async () => {
+      const stoppedTestnetInstance = {
+        ...mockStrategyInstance,
+        status: 'stopped' as StrategyInstanceStatus,
+        mode: 'TESTNET' as StrategyInstanceMode,
+      }
+
+      mockRepository.findById.mockResolvedValue(stoppedTestnetInstance)
+      mockRepository.existsByTemplateModelName.mockResolvedValue(false)
+      mockRepository.update.mockResolvedValue({
+        ...stoppedTestnetInstance,
+        status: 'running' as StrategyInstanceStatus,
+      })
+      mockRepository.findByIdWithDetails.mockResolvedValue({
+        ...stoppedTestnetInstance,
+        status: 'running' as StrategyInstanceStatus,
+        strategyTemplate: mockStrategyTemplate,
+      })
+
+      await service.updateInstance('instance-123', {
+        status: 'running',
+      })
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        'instance-123',
+        expect.objectContaining({
+          status: 'running',
+        }),
       )
     })
 

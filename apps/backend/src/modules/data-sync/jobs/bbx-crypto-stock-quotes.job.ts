@@ -1,9 +1,11 @@
 import type { DataPullJob, DataPullJobContext, JobMetaSchema, JobRunResult } from '../contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService 和 CryptoStockQuotesRepository，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { BbxSigner } from '@/clients/bbx'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CryptoStockQuotesRepository } from '@/modules/crypto-stock-quotes/crypto-stock-quotes.repository'
 
@@ -125,7 +127,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     const endpoint = rawEndpoint?.trim() || 'https://open.bbx.com/api/upgrade/v2/crypto_stock/quotes'
 
     if (!accessKeyId || !accessSecret) {
-      throw new Error('BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required')
+      throw new DomainException('data_sync.bbx_crypto_stock_quotes.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'BBX_ACCESS_KEY_ID and BBX_ACCESS_SECRET are required' },
+      })
     }
 
     const signer = new BbxSigner(accessKeyId, accessSecret)
@@ -157,9 +163,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     }
 
     if (symbols.length === 0) {
-      throw new Error(
-        'BBX crypto stock symbols are not configured. Please set data_pull_tasks.meta.symbols / symbolsCsv or BBX_CRYPTO_STOCK_SYMBOLS env.',
-      )
+      throw new DomainException('data_sync.bbx_crypto_stock_quotes.config_missing', {
+        code: ErrorCode.DATA_SYNC_CONFIG_MISSING,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'BBX crypto stock symbols are not configured. Please set data_pull_tasks.meta.symbols / symbolsCsv or BBX_CRYPTO_STOCK_SYMBOLS env.' },
+      })
     }
 
     // 将 symbol 转换为 BBX ticker 格式: MSTR -> i:mstr:nasdaq
@@ -176,7 +184,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
     if (json.success === false || (json.code && json.code !== 0 && json.code !== '0')) {
       const errorMsg = `BBX API returned error: code=${json.code}, message=${json.message ?? 'unknown'}`
       this.logger.error(errorMsg, { response: json })
-      throw new Error(errorMsg)
+      throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
+        code: ErrorCode.DATA_SYNC_API_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: errorMsg },
+      })
     }
 
     // 根据实际的 BBX API 响应格式调整解析逻辑
@@ -329,10 +341,14 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
    */
   private parseTimestamp(timestamp?: number | string, symbol?: string): Date {
     if (!timestamp) {
-      const errorMsg = symbol 
-        ? `Missing timestamp for symbol ${symbol}` 
+      const errorMsg = symbol
+        ? `Missing timestamp for symbol ${symbol}`
         : 'Missing timestamp in API response'
-      throw new Error(errorMsg)
+      throw new DomainException('data_sync.bbx_crypto_stock_quotes.invalid_response', {
+        code: ErrorCode.DATA_SYNC_INVALID_RESPONSE,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: errorMsg },
+      })
     }
 
     // 处理数字类型的 timestamp
@@ -346,9 +362,13 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
         const errorMsg = symbol
           ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
           : `Invalid timestamp ${timestamp} in API response`
-        throw new Error(errorMsg)
+        throw new DomainException('data_sync.bbx_crypto_stock_quotes.data_validation_failed', {
+          code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: errorMsg },
+        })
       }
-      
+
       return date
     }
 
@@ -363,7 +383,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
         const errorMsg = symbol
           ? `Invalid timestamp ${timestamp} for symbol ${symbol}`
           : `Invalid timestamp ${timestamp} in API response`
-        throw new Error(errorMsg)
+        throw new DomainException('data_sync.bbx_crypto_stock_quotes.data_validation_failed', {
+          code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: errorMsg },
+        })
       }
       
       return date
@@ -376,7 +400,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
       const errorMsg = symbol
         ? `Cannot parse timestamp "${timestamp}" for symbol ${symbol}`
         : `Cannot parse timestamp "${timestamp}" in API response`
-      throw new Error(errorMsg)
+      throw new DomainException('data_sync.bbx_crypto_stock_quotes.data_validation_failed', {
+        code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: errorMsg },
+      })
     }
     
     return parsed
@@ -429,9 +457,11 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
             continue
           }
 
-          throw new Error(
-            `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as BbxApiResponse
@@ -454,18 +484,22 @@ export class BbxCryptoStockQuotesJob implements DataPullJob<BbxCryptoStockQuotes
           continue
         }
 
-        throw new Error(
-          `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `BBX API request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
     // 理论不可达，兜底
-    throw new Error(
-      `BBX API request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}`,
-    )
+    throw new DomainException('data_sync.bbx_crypto_stock_quotes.api_error', {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `BBX API request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private delay(ms: number): Promise<void> {

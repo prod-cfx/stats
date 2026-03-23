@@ -1,6 +1,8 @@
 import type { ThrottlerStorage } from '@nestjs/throttler'
 import type { Redis } from 'ioredis'
-import { Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // NestJS 依赖注入需要 RedisService 的运行时类型，不能使用 `import type`
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
@@ -36,7 +38,11 @@ export class ThrottlerRedisStorage implements ThrottlerStorage {
     const results = await multi.exec()
 
     if (!results) {
-      throw new Error('Redis transaction failed')
+      throw new DomainException('auth.rate_limit_storage_error', {
+        code: ErrorCode.AUTH_RATE_LIMIT_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'Redis transaction failed' },
+      })
     }
 
     const [[, totalHits], [, timeToExpire]] = results as [[null, number], [null, number]]

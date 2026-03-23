@@ -1,6 +1,7 @@
 import type { TestingModule } from '@nestjs/testing';
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
 import { Test } from '@nestjs/testing'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 
 import { Prisma } from '@/prisma/prisma.types'
@@ -35,25 +36,21 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
     it('应该拒绝无效的 CUID 格式', async () => {
       await expect(
         service.calculateStats('invalid-id')
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toThrow(DomainException)
     })
 
     it('应该拒绝非数组参数', async () => {
       await expect(
         service.calculateBatchStats('not-an-array' as any)
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toMatchObject({ code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT })
     })
 
     it('应该拒绝超大批量请求', async () => {
       const largeArray: string[] = Array.from({length: 101}, () => 'c123456789012345678901234')
-      
+
       await expect(
         service.calculateBatchStats(largeArray)
-      ).rejects.toThrow(BadRequestException)
-      
-      await expect(
-        service.calculateBatchStats(largeArray)
-      ).rejects.toThrow(/exceeds maximum/)
+      ).rejects.toMatchObject({ code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT })
     })
 
     it('应该处理空数组', async () => {
@@ -70,7 +67,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
       await expect(
         service.calculateBatchStats(mixedArray)
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toThrow(DomainException)
     })
   })
 
@@ -278,10 +275,10 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
   })
 
   describe('错误处理测试', () => {
-    it('应该抛出 BadRequestException 对于无效输入', async () => {
+    it('应该抛出 DomainException 对于无效输入', async () => {
       await expect(
         service.calculateStats('')
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toThrow(DomainException)
     })
 
     it('数据库错误应该被正确包装', async () => {
@@ -298,7 +295,7 @@ describe('strategyInstanceStatsService - Review Fixes', () => {
 
       await expect(
         service.calculateStats('c123456789012345678901234')
-      ).rejects.toThrow(InternalServerErrorException)
+      ).rejects.toThrow(DomainException)
     })
   })
 

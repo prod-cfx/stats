@@ -2,97 +2,241 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { listExchangeAccounts, upsertExchangeAccount } from './exchange-account-store'
+import {
+  deleteUserExchangeAccount,
+  fetchUserExchangeAccountStatuses,
+  type UpsertUserExchangeAccountPayload,
+  type UserExchangeAccountStatus,
+  type UserExchangeId,
+  upsertUserExchangeAccount,
+} from '@/lib/api'
+import { ApiError } from '@/lib/errors'
 
 interface ExchangeApiSectionProps {
   highlighted?: boolean
 }
 
-interface ApiConfigState {
-  binanceAccountName: string
-  binanceApiKey: string
-  binanceSecretKey: string
-  okxAccountName: string
-  okxApiKey: string
-  okxSecretKey: string
-  okxPassphrase: string
+interface ExchangeFormState {
+  name: string
+  isTestnet: boolean
+  apiKey: string
+  apiSecret: string
+  passphrase: string
+  mainWalletAddress: string
+  agentPrivateKey: string
 }
 
-const STORAGE_KEY = 'exchange_api_configs_v1'
+const EXCHANGES: UserExchangeId[] = ['binance', 'okx', 'hyperliquid']
 
-function mask(value: string) {
-  if (!value) return ''
-  if (value.length <= 6) return `${value.slice(0, 2)}***`
-  return `${value.slice(0, 3)}***${value.slice(-3)}`
+function createEmptyFormState(): ExchangeFormState {
+  return {
+    name: '',
+    isTestnet: false,
+    apiKey: '',
+    apiSecret: '',
+    passphrase: '',
+    mainWalletAddress: '',
+    agentPrivateKey: '',
+  }
+}
+
+function buildEmptyStatus(exchangeId: UserExchangeId): UserExchangeAccountStatus {
+  return {
+    id: null,
+    exchangeId,
+    isBound: false,
+    name: null,
+    maskedCredential: null,
+    isTestnet: null,
+    lastValidatedAt: null,
+    createdAt: null,
+  }
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.message
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return fallback
+}
+
+function getTitleKey(exchangeId: UserExchangeId): string {
+  if (exchangeId === 'binance') return 'aiQuant.binanceApi'
+  if (exchangeId === 'okx') return 'aiQuant.okxApi'
+  return 'aiQuant.hyperliquidApi'
 }
 
 export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionProps) {
   const { t } = useTranslation()
-  const [form, setForm] = useState<ApiConfigState>({
-    binanceAccountName: '',
-    binanceApiKey: '',
-    binanceSecretKey: '',
-    okxAccountName: '',
-    okxApiKey: '',
-    okxSecretKey: '',
-    okxPassphrase: '',
+  const [accounts, setAccounts] = useState<Record<UserExchangeId, UserExchangeAccountStatus>>({
+    binance: buildEmptyStatus('binance'),
+    okx: buildEmptyStatus('okx'),
+    hyperliquid: buildEmptyStatus('hyperliquid'),
   })
-  const [saved, setSaved] = useState<ApiConfigState | null>(null)
+  const [forms, setForms] = useState<Record<UserExchangeId, ExchangeFormState>>({
+    binance: createEmptyFormState(),
+    okx: createEmptyFormState(),
+    hyperliquid: createEmptyFormState(),
+  })
+  const [editing, setEditing] = useState<Record<UserExchangeId, boolean>>({
+    binance: false,
+    okx: false,
+    hyperliquid: false,
+  })
+  const [submittingExchange, setSubmittingExchange] = useState<UserExchangeId | null>(null)
+  const [deletingExchange, setDeletingExchange] = useState<UserExchangeId | null>(null)
+  const [errors, setErrors] = useState<Record<UserExchangeId, string | null>>({
+    binance: null,
+    okx: null,
+    hyperliquid: null,
+  })
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw) as ApiConfigState
-      setSaved(parsed)
-    } catch {
-      // ignore invalid local data
-    }
+    void loadStatuses()
   }, [])
 
-  const save = () => {
-    const next: ApiConfigState = {
-      binanceAccountName: form.binanceAccountName || saved?.binanceAccountName || '',
-      binanceApiKey: form.binanceApiKey || saved?.binanceApiKey || '',
-      binanceSecretKey: form.binanceSecretKey || saved?.binanceSecretKey || '',
-      okxAccountName: form.okxAccountName || saved?.okxAccountName || '',
-      okxApiKey: form.okxApiKey || saved?.okxApiKey || '',
-      okxSecretKey: form.okxSecretKey || saved?.okxSecretKey || '',
-      okxPassphrase: form.okxPassphrase || saved?.okxPassphrase || '',
-    }
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    if (next.binanceApiKey && next.binanceSecretKey) {
-      upsertExchangeAccount({
-        exchange: 'binance',
-        accountName: form.binanceAccountName || 'Binance 默认账户',
-        apiKeyMask: mask(next.binanceApiKey),
-        status: 'available',
+  async function loadStatuses() {
+    setLoading(true)
+    try {
+      const items = await fetchUserExchangeAccountStatuses()
+      setAccounts({
+        binance: items.find(item => item.exchangeId === 'binance') ?? buildEmptyStatus('binance'),
+        okx: items.find(item => item.exchangeId === 'okx') ?? buildEmptyStatus('okx'),
+        hyperliquid: items.find(item => item.exchangeId === 'hyperliquid') ?? buildEmptyStatus('hyperliquid'),
       })
     }
-    if (next.okxApiKey && next.okxSecretKey && next.okxPassphrase) {
-      upsertExchangeAccount({
-        exchange: 'okx',
-        accountName: form.okxAccountName || 'OKX 默认账户',
-        apiKeyMask: mask(next.okxApiKey),
-        status: 'available',
+    catch (error) {
+      const message = getApiErrorMessage(error, t('aiQuant.loadFailed'))
+      setErrors({
+        binance: message,
+        okx: message,
+        hyperliquid: message,
       })
     }
-    setSaved(next)
-    setForm({
-      binanceAccountName: '',
-      binanceApiKey: '',
-      binanceSecretKey: '',
-      okxAccountName: '',
-      okxApiKey: '',
-      okxSecretKey: '',
-      okxPassphrase: '',
-    })
+    finally {
+      setLoading(false)
+    }
   }
 
-  const binanceReady = Boolean(saved?.binanceApiKey && saved?.binanceSecretKey)
-  const okxReady = Boolean(saved?.okxApiKey && saved?.okxSecretKey && saved?.okxPassphrase)
-  const accounts = listExchangeAccounts()
+  function setFormValue(exchangeId: UserExchangeId, key: keyof ExchangeFormState, value: string) {
+    setForms(prev => ({
+      ...prev,
+      [exchangeId]: {
+        ...prev[exchangeId],
+        [key]: value,
+      },
+    }))
+  }
+
+  function startEditing(exchangeId: UserExchangeId) {
+    const account = accounts[exchangeId]
+    setEditing(prev => ({ ...prev, [exchangeId]: true }))
+    setErrors(prev => ({ ...prev, [exchangeId]: null }))
+    setForms(prev => ({
+      ...prev,
+      [exchangeId]: {
+        ...prev[exchangeId],
+        name: account.name ?? prev[exchangeId].name,
+        isTestnet: account.isTestnet ?? prev[exchangeId].isTestnet,
+      },
+    }))
+  }
+
+  function cancelEditing(exchangeId: UserExchangeId) {
+    setEditing(prev => ({ ...prev, [exchangeId]: false }))
+    setForms(prev => ({
+      ...prev,
+      [exchangeId]: createEmptyFormState(),
+    }))
+    setErrors(prev => ({ ...prev, [exchangeId]: null }))
+  }
+
+  function buildPayload(exchangeId: UserExchangeId): UpsertUserExchangeAccountPayload {
+    const form = forms[exchangeId]
+
+    if (exchangeId === 'binance') {
+      return {
+        exchangeId,
+        name: form.name || undefined,
+        isTestnet: form.isTestnet,
+        apiKey: form.apiKey,
+        apiSecret: form.apiSecret,
+        marketType: 'spot',
+      }
+    }
+
+    if (exchangeId === 'okx') {
+      return {
+        exchangeId,
+        name: form.name || undefined,
+        isTestnet: form.isTestnet,
+        apiKey: form.apiKey,
+        apiSecret: form.apiSecret,
+        passphrase: form.passphrase,
+        marketType: 'spot',
+      }
+    }
+
+    return {
+      exchangeId,
+      name: form.name || undefined,
+      isTestnet: form.isTestnet,
+      mainWalletAddress: form.mainWalletAddress,
+      agentPrivateKey: form.agentPrivateKey,
+    }
+  }
+
+  async function save(exchangeId: UserExchangeId) {
+    setSubmittingExchange(exchangeId)
+    setErrors(prev => ({ ...prev, [exchangeId]: null }))
+    try {
+      await upsertUserExchangeAccount(buildPayload(exchangeId))
+      setForms(prev => ({
+        ...prev,
+        [exchangeId]: createEmptyFormState(),
+      }))
+      setEditing(prev => ({ ...prev, [exchangeId]: false }))
+      await loadStatuses()
+    }
+    catch (error) {
+      setErrors(prev => ({
+        ...prev,
+        [exchangeId]: getApiErrorMessage(error, t('aiQuant.saveFailed')),
+      }))
+    }
+    finally {
+      setSubmittingExchange(null)
+    }
+  }
+
+  async function remove(exchangeId: UserExchangeId) {
+    setDeletingExchange(exchangeId)
+    setErrors(prev => ({ ...prev, [exchangeId]: null }))
+    try {
+      await deleteUserExchangeAccount(exchangeId)
+      setForms(prev => ({
+        ...prev,
+        [exchangeId]: createEmptyFormState(),
+      }))
+      setEditing(prev => ({ ...prev, [exchangeId]: false }))
+      await loadStatuses()
+    }
+    catch (error) {
+      setErrors(prev => ({
+        ...prev,
+        [exchangeId]: getApiErrorMessage(error, t('aiQuant.deleteFailed')),
+      }))
+    }
+    finally {
+      setDeletingExchange(null)
+    }
+  }
 
   return (
     <section
@@ -104,92 +248,200 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.apiConfigTitle')}</h2>
         <div className="flex gap-2 text-xs">
-          <span className={`rounded-lg px-2 py-1 ${binanceReady ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            Binance {binanceReady ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
-          </span>
-          <span className={`rounded-lg px-2 py-1 ${okxReady ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            OKX {okxReady ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
-          </span>
+          {EXCHANGES.map(exchangeId => {
+            const isBound = accounts[exchangeId].isBound
+            return (
+              <span
+                key={exchangeId}
+                className={`rounded-lg px-2 py-1 ${isBound ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}
+              >
+                {exchangeId === 'hyperliquid' ? 'Hyperliquid' : exchangeId.toUpperCase()} {isBound ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
+              </span>
+            )
+          })}
         </div>
       </div>
 
       <p className="text-sm text-[color:var(--cf-muted)]">{t('aiQuant.apiConfigDesc')}</p>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <article className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.binanceApi')}</h3>
-          <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.currentKey')} {mask(saved?.binanceApiKey || '') || t('aiQuant.notConfigured')}</p>
-          <input
-            value={form.binanceAccountName}
-            onChange={event => setForm(prev => ({ ...prev, binanceAccountName: event.target.value }))}
-            placeholder={t('aiQuant.accountName')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-          <input
-            value={form.binanceApiKey}
-            onChange={event => setForm(prev => ({ ...prev, binanceApiKey: event.target.value }))}
-            placeholder={t('aiQuant.apiKey')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-          <input
-            value={form.binanceSecretKey}
-            onChange={event => setForm(prev => ({ ...prev, binanceSecretKey: event.target.value }))}
-            placeholder={t('aiQuant.secretKey')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-        </article>
+      {loading ? (
+        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4 text-sm text-[color:var(--cf-muted)]">
+          {t('aiQuant.loading')}
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          {EXCHANGES.map(exchangeId => {
+            const account = accounts[exchangeId]
+            const isEditing = editing[exchangeId] || !account.isBound
+            const form = forms[exchangeId]
+            const isSubmitting = submittingExchange === exchangeId
+            const isDeleting = deletingExchange === exchangeId
 
-        <article className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-          <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.okxApi')}</h3>
-          <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.currentKey')} {mask(saved?.okxApiKey || '') || t('aiQuant.notConfigured')}</p>
-          <input
-            value={form.okxAccountName}
-            onChange={event => setForm(prev => ({ ...prev, okxAccountName: event.target.value }))}
-            placeholder={t('aiQuant.accountName')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-          <input
-            value={form.okxApiKey}
-            onChange={event => setForm(prev => ({ ...prev, okxApiKey: event.target.value }))}
-            placeholder={t('aiQuant.apiKey')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-          <input
-            value={form.okxSecretKey}
-            onChange={event => setForm(prev => ({ ...prev, okxSecretKey: event.target.value }))}
-            placeholder={t('aiQuant.secretKey')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-          <input
-            value={form.okxPassphrase}
-            onChange={event => setForm(prev => ({ ...prev, okxPassphrase: event.target.value }))}
-            placeholder={t('aiQuant.passphrase')}
-            className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-          />
-        </article>
-      </div>
+            return (
+              <article key={exchangeId} className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(exchangeId))}</h3>
+                    <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                      {account.isBound
+                        ? `${t('aiQuant.currentKey')}${account.maskedCredential ?? '-'}`
+                        : t('aiQuant.notConfigured')}
+                    </p>
+                    {account.lastValidatedAt && (
+                      <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                        {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <span className={`rounded-lg px-2 py-1 text-xs ${account.isBound ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                    {account.isBound ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
+                  </span>
+                </div>
 
-      <button
-        type="button"
-        onClick={save}
-        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700"
-      >
-        {t('aiQuant.saveApiConfig')}
-      </button>
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <input
+                      value={form.name}
+                      onChange={event => setFormValue(exchangeId, 'name', event.target.value)}
+                      placeholder={t('aiQuant.accountName')}
+                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
+                      <input
+                        type="checkbox"
+                        checked={form.isTestnet}
+                        onChange={event => setForms(prev => ({
+                          ...prev,
+                          [exchangeId]: {
+                            ...prev[exchangeId],
+                            isTestnet: event.target.checked,
+                          },
+                        }))}
+                        className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
+                      />
+                      {t('aiQuant.useTestnet')}
+                    </label>
+                    {exchangeId !== 'hyperliquid' && (
+                      <>
+                        <input
+                          value={form.apiKey}
+                          onChange={event => setFormValue(exchangeId, 'apiKey', event.target.value)}
+                          placeholder={t('aiQuant.apiKey')}
+                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                        />
+                        <input
+                          value={form.apiSecret}
+                          type="password"
+                          autoComplete="off"
+                          onChange={event => setFormValue(exchangeId, 'apiSecret', event.target.value)}
+                          placeholder={t('aiQuant.secretKey')}
+                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                        />
+                      </>
+                    )}
+                    {exchangeId === 'okx' && (
+                      <input
+                        value={form.passphrase}
+                        type="password"
+                        autoComplete="off"
+                        onChange={event => setFormValue(exchangeId, 'passphrase', event.target.value)}
+                        placeholder={t('aiQuant.passphrase')}
+                        className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                      />
+                    )}
+                    {exchangeId === 'hyperliquid' && (
+                      <>
+                        <input
+                          value={form.mainWalletAddress}
+                          onChange={event => setFormValue(exchangeId, 'mainWalletAddress', event.target.value)}
+                          placeholder={t('aiQuant.walletAddress')}
+                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                        />
+                        <input
+                          value={form.agentPrivateKey}
+                          type="password"
+                          autoComplete="off"
+                          onChange={event => setFormValue(exchangeId, 'agentPrivateKey', event.target.value)}
+                          placeholder={t('aiQuant.agentPrivateKey')}
+                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
+                        />
+                      </>
+                    )}
 
-      {accounts.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-          <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.boundAccounts')}</p>
-          <div className="mt-2 space-y-2">
-            {accounts.map(account => (
-              <div key={account.accountId} className="flex items-center justify-between text-xs text-[color:var(--cf-muted)]">
-                <span>{account.exchange.toUpperCase()} / {account.accountName}</span>
-                <span>{account.apiKeyMask}</span>
-              </div>
-            ))}
-          </div>
+                    {errors[exchangeId] && (
+                      <p className="text-xs text-red-500">{errors[exchangeId]}</p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void save(exchangeId)}
+                        disabled={isSubmitting}
+                        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700 disabled:opacity-60"
+                      >
+                        {isSubmitting
+                          ? t('aiQuant.saving')
+                          : account.isBound ? t('aiQuant.updateApiConfig') : t('aiQuant.saveApiConfig')}
+                      </button>
+                      {account.isBound && (
+                        <button
+                          type="button"
+                          onClick={() => cancelEditing(exchangeId)}
+                          disabled={isSubmitting}
+                          className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                        >
+                          {t('aiQuant.cancelEdit')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 text-xs text-[color:var(--cf-muted)]">
+                      <p>{t('aiQuant.boundAccountName')} {account.name ?? '-'}</p>
+                      <p className="mt-1">{t('aiQuant.currentKey')} {account.maskedCredential ?? '-'}</p>
+                    </div>
+
+                    {errors[exchangeId] && (
+                      <p className="text-xs text-red-500">{errors[exchangeId]}</p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditing(exchangeId)}
+                        className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                      >
+                        {t('aiQuant.editApiConfig')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void remove(exchangeId)}
+                        disabled={isDeleting}
+                        className="rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 disabled:opacity-60"
+                      >
+                        {isDeleting ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            )
+          })}
         </div>
       )}
+
+      <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+        <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.boundAccounts')}</p>
+        <div className="mt-2 space-y-2">
+          {EXCHANGES.filter(exchangeId => accounts[exchangeId].isBound).map(exchangeId => (
+            <div key={exchangeId} className="flex items-center justify-between text-xs text-[color:var(--cf-muted)]">
+              <span>{exchangeId === 'hyperliquid' ? 'Hyperliquid' : exchangeId.toUpperCase()} / {accounts[exchangeId].name ?? '-'}</span>
+              <span>{accounts[exchangeId].maskedCredential}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   )
 }

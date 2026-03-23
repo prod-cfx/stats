@@ -1,10 +1,10 @@
+import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
-import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
-import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
 
@@ -166,14 +166,14 @@ export class CodegenConversationService {
   async continueSession(sessionId: string, dto: ContinueCodegenSessionDto): Promise<CodegenSessionResponseDto> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== dto.userId) {
-      throw new DomainException('会话不存在', {
+      throw new DomainException('codegen.session_not_found', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
         args: { sessionId },
       })
     }
     if (CodegenConversationService.isTerminalStatus(session.status)) {
-      throw new DomainException('会话已终态，不能继续写入', {
+      throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
@@ -434,7 +434,7 @@ export class CodegenConversationService {
       missing.push('exitRules')
     }
     if (missing.length > 0) {
-      throw new DomainException(`缺少必填信息: ${missing.join(', ')}`, {
+      throw new DomainException('codegen.missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { missingFields: missing },
@@ -514,7 +514,7 @@ export class CodegenConversationService {
       }
     }
 
-    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/gi))
+    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
     const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
       const normalizedUnit = unit.toLowerCase()
       if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
@@ -532,8 +532,8 @@ export class CodegenConversationService {
       return `${value}d`
     }
 
-    const buyDropPattern = /(\d{1,4})\s*(m|min|分钟|h|小时|d|天)[^，。；;\n]{0,30}?(?:跌|下跌|回撤)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:买入|开仓|入场)/i
-    const sellRisePattern = /(\d{1,4})\s*(m|min|分钟|h|小时|d|天)[^，。；;\n]{0,30}?(?:涨|上涨|反弹)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:卖出|平仓|离场|出场)/i
+    const buyDropPattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:跌|下跌|回撤)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:买入|开仓|入场)/i
+    const sellRisePattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:涨|上涨|反弹)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:卖出|平仓|离场|出场)/i
 
     const buyDropMatch = text.match(buyDropPattern)
     if (buyDropMatch?.[1] && buyDropMatch[2] && buyDropMatch[3]) {
@@ -569,15 +569,15 @@ export class CodegenConversationService {
     }
 
     const riskRules: Record<string, unknown> = {}
-    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/i)
+    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/)
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/i)
+    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/)
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
     }
-    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/i)
+    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/)
     if (drawdownMatch?.[1]) {
       riskRules.maxDrawdownPct = Number(drawdownMatch[1])
     }
@@ -760,7 +760,7 @@ export class CodegenConversationService {
     }
 
     if (!code) {
-      throw new DomainException('策略脚本生成失败：模型未返回脚本', {
+      throw new DomainException('codegen.script_generation_empty_result', {
         code: ErrorCode.AI_PROVIDER_ERROR,
         status: HttpStatus.BAD_GATEWAY,
       })
@@ -852,7 +852,7 @@ export class CodegenConversationService {
       return ''
     }
 
-    const fencedMatch = raw.match(/```[A-Za-z0-9_-]*\s*\n([\s\S]*?)\n?```/)
+    const fencedMatch = raw.match(/```[\w-]*[^\S\n]*\n([\s\S]*?)\n?```/)
     if (fencedMatch?.[1]) {
       return fencedMatch[1].trim()
     }
@@ -1117,7 +1117,7 @@ export class CodegenConversationService {
       if (/均线|金叉|死叉|\bma\b|moving average/i.test(text)) {
         return 'ma'
       }
-      if (/(下跌|上涨|回撤|跌|涨|分钟|小时|天|%|\d+\s*[mhd])/i.test(text)) {
+      if (/下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd]/i.test(text)) {
         return 'drop-rise'
       }
     }
@@ -1128,7 +1128,7 @@ export class CodegenConversationService {
     const rules = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
     if (!rules.trim()) return undefined
     if (/金叉|死叉|均线|ma|moving average/i.test(rules)) return 'ma'
-    if (/下跌|上涨|回撤|跌|涨|%|\d+\s*[mhd]/i.test(rules)) return 'drop-rise'
+    if (/下跌|上涨|回撤|[跌涨%]|\d+\s*[mhd]/i.test(rules)) return 'drop-rise'
     return undefined
   }
 

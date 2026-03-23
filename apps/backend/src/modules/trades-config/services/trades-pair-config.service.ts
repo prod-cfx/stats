@@ -38,13 +38,11 @@ export class TradesPairConfigService {
     // 验证 pairId 与其他字段的一致性
     const expectedPairId = `${dto.symbol.toUpperCase()}.${dto.exchange.toUpperCase()}.${dto.instrumentType}`
     if (dto.pairId !== expectedPairId) {
-      throw new DomainException(
-        `pairId 必须与 symbol/exchange/instrumentType 一致。期望: ${expectedPairId}，实际: ${dto.pairId}`,
-        {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-        },
-      )
+      throw new DomainException('trades_config.pair_id_mismatch', {
+        code: ErrorCode.TRADES_CONFIG_PAIR_ID_MISMATCH,
+        status: HttpStatus.BAD_REQUEST,
+        args: { expected: expectedPairId, actual: dto.pairId },
+      })
     }
 
     // 避免 symbol 与 base/quote 不一致导致订阅到错误 instId（尤其是 resolveOkxInstId 主要依赖 base/quote 推导）
@@ -83,13 +81,11 @@ export class TradesPairConfigService {
       })
 
       if (!canonicalInstId) {
-        throw new DomainException(
-          '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
-          {
-            code: ErrorCode.BAD_REQUEST,
-            status: HttpStatus.BAD_REQUEST,
-          },
-        )
+        throw new DomainException('trades_config.okx_instid_unresolvable', {
+          code: ErrorCode.TRADES_CONFIG_OKX_INSTID_UNRESOLVABLE,
+          status: HttpStatus.BAD_REQUEST,
+          args: { symbol: dto.symbol, baseAsset: dto.baseAsset, quoteAsset: dto.quoteAsset },
+        })
       }
 
       // 检查是否存在使用相同 canonical instId 的其他配置，避免 silent duplicate
@@ -109,13 +105,11 @@ export class TradesPairConfigService {
         })
 
         if (cfgInstId && cfgInstId === canonicalInstId) {
-          throw new DomainException(
-            `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
-            {
-              code: ErrorCode.CONFLICT,
-              status: HttpStatus.CONFLICT,
-            },
-          )
+          throw new DomainException('trades_config.okx_instid_conflict', {
+            code: ErrorCode.TRADES_CONFIG_OKX_INSTID_CONFLICT,
+            status: HttpStatus.CONFLICT,
+            args: { instId: canonicalInstId, existingPairId: cfg.pairId },
+          })
         }
       }
     }
@@ -128,13 +122,11 @@ export class TradesPairConfigService {
       if (error?.code === 'P2002') {
         const target = error?.meta?.target
         if (Array.isArray(target) && target.includes('symbol')) {
-          throw new DomainException(
-            `该交易对配置已存在：${dto.symbol} @ ${dto.exchange} (${dto.instrumentType})`,
-            {
-              code: ErrorCode.CONFLICT,
-              status: HttpStatus.CONFLICT,
-            },
-          )
+          throw new DomainException('trades_config.pair_already_exists', {
+            code: ErrorCode.TRADES_CONFIG_PAIR_ALREADY_EXISTS,
+            status: HttpStatus.CONFLICT,
+            args: { symbol: dto.symbol, exchange: dto.exchange, instrumentType: dto.instrumentType },
+          })
         }
         throw new DomainException('Pair ID already exists', {
           code: ErrorCode.CONFLICT,
@@ -169,13 +161,11 @@ export class TradesPairConfigService {
       const canonicalInstId = this.resolveOkxInstId(merged)
 
       if (!canonicalInstId) {
-        throw new DomainException(
-          '无法解析 OKX instId，请检查 symbol/baseAsset/quoteAsset 或在 metadata 中提供 okxInstId/okxContract',
-          {
-            code: ErrorCode.BAD_REQUEST,
-            status: HttpStatus.BAD_REQUEST,
-          },
-        )
+        throw new DomainException('trades_config.okx_instid_unresolvable', {
+          code: ErrorCode.TRADES_CONFIG_OKX_INSTID_UNRESOLVABLE,
+          status: HttpStatus.BAD_REQUEST,
+          args: { symbol: merged.symbol, baseAsset: merged.baseAsset, quoteAsset: merged.quoteAsset },
+        })
       }
 
       // 检查是否与其他配置产生 instId 冲突
@@ -197,13 +187,11 @@ export class TradesPairConfigService {
         })
 
         if (cfgInstId && cfgInstId === canonicalInstId) {
-          throw new DomainException(
-            `已经存在使用相同 OKX instId 的订阅配置：instId=${canonicalInstId}（pairId=${cfg.pairId}）`,
-            {
-              code: ErrorCode.CONFLICT,
-              status: HttpStatus.CONFLICT,
-            },
-          )
+          throw new DomainException('trades_config.okx_instid_conflict', {
+            code: ErrorCode.TRADES_CONFIG_OKX_INSTID_CONFLICT,
+            status: HttpStatus.CONFLICT,
+            args: { instId: canonicalInstId, existingPairId: cfg.pairId },
+          })
         }
       }
 

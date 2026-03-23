@@ -112,16 +112,20 @@ export class MarketsService {
     from?: Date
     to?: Date
     limit?: number
-  }): Promise<LongShortRatio[]> {
-    const { tradingPairId, interval, from, to, limit } = params
+    page?: number
+  }): Promise<BasePaginationResponseDto<LongShortRatio>> {
+    const { tradingPairId, interval, from, to, limit, page } = params
 
-    return this.longShortRatioRepository.findByPairAndTime({
+    const result = await this.longShortRatioRepository.findByPairAndTime({
       tradingPairId,
       interval,
       from,
       to,
       limit,
+      page,
     })
+
+    return new BasePaginationResponseDto(result.total, page ?? 1, limit ?? 500, result.items)
   }
 
   /**
@@ -132,13 +136,16 @@ export class MarketsService {
     instrumentType: string,
     symbol: string,
     limit = 50,
-  ): Promise<MarketTrade[]> {
-    return this.marketTradesRepository.findLatestTrades(
+    page = 1,
+  ): Promise<BasePaginationResponseDto<MarketTrade>> {
+    const result = await this.marketTradesRepository.findLatestTrades(
       exchange.toUpperCase(),
       instrumentType.toUpperCase(),
       symbol.toUpperCase(),
       limit,
+      page,
     )
+    return new BasePaginationResponseDto(result.total, page, limit, result.items)
   }
 
   /**

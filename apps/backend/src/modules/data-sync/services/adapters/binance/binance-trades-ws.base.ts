@@ -1,10 +1,13 @@
 /* eslint-disable perfectionist/sort-imports */
 
+import { ErrorCode } from '@ai/shared'
 import WebSocket from 'ws'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
+import { DomainException } from '@/common/exceptions/domain.exception'
+import { DataSyncOperationTimeoutException } from '@/modules/data-sync/exceptions/data-sync-operation-timeout.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 import type { TradeEvent } from '@/modules/kline/interfaces/trade-event.interface'
@@ -138,8 +141,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       })
 
       if (hadFlushError) {
-        throw new Error(
-          'Failed to flush one or more stale Binance trades states when syncing configs',
+        throw new DomainException(
+          'data_sync.binance_trades_ws.flush_stale_states_failed',
+          { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'Failed to flush one or more stale Binance trades states when syncing configs' } },
         )
       }
     }
@@ -199,7 +203,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     this.connections.length = 0
 
     if (hadError) {
-      throw new Error('One or more Binance trades buffers failed to flush during shutdown')
+      throw new DomainException(
+        'data_sync.binance_trades_ws.shutdown_flush_failed',
+        { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'One or more Binance trades buffers failed to flush during shutdown' } },
+      )
     }
   }
 
@@ -261,8 +268,9 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
     })
 
     if (hadError) {
-      throw new Error(
-        'Failed to reconcile Binance trades WS subscriptions for one or more connections',
+      throw new DomainException(
+        'data_sync.binance_trades_ws.reconcile_subscriptions_failed',
+        { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: 'Failed to reconcile Binance trades WS subscriptions for one or more connections' } },
       )
     }
   }
@@ -283,7 +291,11 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       const message = String(plain.msg)
       this.logger.warn(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`)
       conn.handleAckError(
-        new Error(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`),
+        new DomainException(`Binance Trades WS API error: code=${plain.code} msg=${message}${idPart}`, {
+          code: ErrorCode.DATA_SYNC_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { apiCode: plain.code, apiMsg: message },
+        }),
       )
       return
     }
@@ -440,7 +452,10 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
       }
 
       if (hadError) {
-        throw new Error(`Flush buffer failed for symbol=${state.symbol}`)
+        throw new DomainException(
+          'data_sync.binance_trades_ws.flush_buffer_failed',
+          { code: ErrorCode.DATA_SYNC_API_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR, args: { reason: `Flush buffer failed for symbol=${state.symbol}` } },
+        )
       }
 
       this.trimExcessTrades(state)
@@ -685,7 +700,11 @@ class BinanceTradesWsConnection {
           // 当前连接的订阅状态已不可信，清空本地 active/desired，交由上层重建
           this.active.clear()
           this.desired.clear()
-          pending.reject(err instanceof Error ? err : new Error(reason))
+          pending.reject(err instanceof Error ? err : new DomainException(reason, {
+            code: ErrorCode.DATA_SYNC_API_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason },
+          }))
           return
         }
 
@@ -793,7 +812,11 @@ class BinanceTradesWsConnection {
     this.pendingSync = null
     this.active.clear()
     this.desired.clear()
-    pending.reject(error instanceof Error ? error : new Error(error))
+    pending.reject(error instanceof Error ? error : new DomainException(error, {
+      code: ErrorCode.DATA_SYNC_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { error },
+    }))
   }
 
   private createPendingSync(expectedAcks: number): {
@@ -826,9 +849,10 @@ class BinanceTradesWsConnection {
           `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms without receiving all ACKs`,
         )
         reject(
-          new Error(
-            `Binance Trades WS#${this.index} syncDesiredStreams timeout after ${timeoutMs}ms`,
-          ),
+          new DataSyncOperationTimeoutException({
+            operation: `binance-trades-ws#${this.index}-sync`,
+            timeoutMs,
+          }),
         )
       },
       Math.max(1_000, timeoutMs),

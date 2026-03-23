@@ -1,5 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
   ApiOkResponse,
@@ -8,8 +9,9 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
 
 import { CreateStrategyInstanceDto } from '../dto/create-strategy-instance.dto'
@@ -168,12 +170,21 @@ export class OpsStrategyInstancesController {
       
       // 将验证错误映射为适当的 HTTP 状态码
       if (message.includes('not found')) {
-        throw new NotFoundException(message)
+        throw new DomainException('strategy_instance.not_found', {
+          code: ErrorCode.NOT_FOUND,
+          status: HttpStatus.NOT_FOUND,
+        })
       }
       if (message.includes('disabled via configuration')) {
-        throw new BadRequestException('信号生成功能已禁用，请检查配置 (STRATEGY_SIGNALS_ENABLED)')
+        throw new DomainException('strategy_instance.signal_generation_disabled', {
+          code: ErrorCode.STRATEGY_INSTANCE_SIGNAL_DISABLED,
+          status: HttpStatus.BAD_REQUEST,
+        })
       }
-      throw new BadRequestException(message)
+      throw new DomainException('strategy_instance.signal_generation_failed', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     // 验证通过后，异步触发信号生成（不阻塞 AI 调用），手动触发时跳过 cooldown 检查

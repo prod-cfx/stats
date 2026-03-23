@@ -124,6 +124,37 @@ const BindTelegramRequestDto = z
     photoUrl: z.string().optional(),
   })
   .passthrough()
+const AccountExchangeAccountResponseDto = z
+  .object({
+    id: z.string().nullish(),
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    isBound: z.boolean(),
+    name: z.string().nullish(),
+    maskedCredential: z.string().nullish(),
+    isTestnet: z.boolean().nullish(),
+    lastValidatedAt: z.string().datetime({ offset: true }).nullish(),
+    createdAt: z.string().datetime({ offset: true }).nullish(),
+  })
+  .passthrough()
+const CreateAccountExchangeAccountDto = z
+  .object({
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    name: z.string().max(64).optional(),
+    isTestnet: z.boolean().optional().default(false),
+    marketType: z.enum(['spot', 'perp']).optional().default('spot'),
+    apiKey: z.string().optional(),
+    apiSecret: z.string().optional(),
+    passphrase: z.string().optional(),
+    mainWalletAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+    agentPrivateKey: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
+  })
+  .passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1024,6 +1055,8 @@ export const schemas = {
   ResendVerificationRequestDto,
   BindEmailRequestDto,
   BindTelegramRequestDto,
+  AccountExchangeAccountResponseDto,
+  CreateAccountExchangeAccountDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -1111,6 +1144,44 @@ export const schemas = {
 
 const endpoints = makeApi([
   {
+    method: 'get',
+    path: '/account/exchange-accounts',
+    alias: 'AccountExchangeAccountsController_list',
+    requestFormat: 'json',
+    response: z.array(AccountExchangeAccountResponseDto),
+  },
+  {
+    method: 'post',
+    path: '/account/exchange-accounts',
+    alias: 'AccountExchangeAccountsController_upsert',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: CreateAccountExchangeAccountDto,
+      },
+    ],
+    response: AccountExchangeAccountResponseDto,
+  },
+  {
+    method: 'delete',
+    path: '/account/exchange-accounts/:exchangeId',
+    alias: 'AccountExchangeAccountsController_delete',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'exchangeId',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: z.object({ success: z.boolean() }).partial().passthrough() })
+      .partial()
+      .passthrough(),
+  },
+  {
     method: 'post',
     path: '/admin/auth/login',
     alias: 'AdminAuthController_login',
@@ -1168,12 +1239,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1).optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100).optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'key',
@@ -1366,12 +1437,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'code',
@@ -2863,6 +2934,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(2000).optional().default(500),
+      },
+      {
         name: 'tradingPairId',
         type: 'Query',
         schema: z.string(),
@@ -2882,13 +2963,13 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.string().optional(),
       },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(2000).optional(),
-      },
     ],
-    response: z.array(LongShortRatioPointResponseDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(LongShortRatioPointResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -2966,12 +3047,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'exchange',
@@ -3028,6 +3109,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'exchange',
         type: 'Query',
         schema: z.string(),
@@ -3041,11 +3132,6 @@ const endpoints = makeApi([
         name: 'symbol',
         type: 'Query',
         schema: z.string(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(200).optional().default(50),
       },
       {
         name: 'minValue',
@@ -3062,6 +3148,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'exchange',
         type: 'Query',
         schema: z.string(),
@@ -3076,13 +3172,13 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.string(),
       },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(200).optional().default(50),
-      },
     ],
-    response: z.array(MarketTradeResponseDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(MarketTradeResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3093,12 +3189,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'symbol',
@@ -3148,12 +3244,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1).optional(),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100).optional(),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'exchange',
@@ -3325,12 +3421,12 @@ const endpoints = makeApi([
       {
         name: 'page',
         type: 'Query',
-        schema: z.number().gte(1),
+        schema: z.number().gte(1).optional().default(1),
       },
       {
         name: 'limit',
         type: 'Query',
-        schema: z.number().gte(1).lte(100),
+        schema: z.number().gte(1).lte(100).optional().default(20),
       },
       {
         name: 'category',
@@ -3364,6 +3460,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
@@ -3374,17 +3480,17 @@ const endpoints = makeApi([
         schema: z.number().optional(),
       },
       {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
         name: 'since',
         type: 'Query',
         schema: z.string().optional(),
       },
     ],
-    response: z.array(RealtimeWhaleAlertDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(RealtimeWhaleAlertDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3400,6 +3506,16 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(200).optional().default(50),
+      },
+      {
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
@@ -3410,17 +3526,17 @@ const endpoints = makeApi([
         schema: z.number().optional(),
       },
       {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().optional(),
-      },
-      {
         name: 'since',
         type: 'Query',
         schema: z.string().optional(),
       },
     ],
-    response: z.array(WhaleTradeDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(WhaleTradeDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3429,6 +3545,16 @@ const endpoints = makeApi([
     description: `返回 Hyperliquid 平台上持仓价值超过指定阈值的鲸鱼实时持仓快照，每个用户+币种只有最新状态。`,
     requestFormat: 'json',
     parameters: [
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(500).optional().default(100),
+      },
       {
         name: 'symbol',
         type: 'Query',
@@ -3439,13 +3565,13 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.number().optional(),
       },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(500).optional(),
-      },
     ],
-    response: z.array(WhaleHoldingDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(WhaleHoldingDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3628,6 +3754,16 @@ const endpoints = makeApi([
         schema: z.string(),
       },
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(500).optional().default(200),
+      },
+      {
         name: 'timeRangeDays',
         type: 'Query',
         schema: z.number().gte(1).lte(365).optional(),
@@ -3636,11 +3772,6 @@ const endpoints = makeApi([
         name: 'symbol',
         type: 'Query',
         schema: z.string().optional(),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(500).optional(),
       },
     ],
     response: WhaleAddressPerformanceResponseDto,

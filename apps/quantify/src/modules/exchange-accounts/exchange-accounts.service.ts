@@ -2,14 +2,26 @@ import type { CreateExchangeAccountDto } from './dto/create-exchange-account.dto
 import type { ExchangeAccountResponseDto } from './dto/exchange-account.response.dto'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { BinanceConfig, HyperliquidConfig, OkxConfig } from '@/modules/trading/factory/account-store'
-import type { ExchangeAccount } from '@/prisma/prisma.types'
+import type { ExchangeAccount, ExchangeId as PrismaExchangeId } from '@/prisma/prisma.types'
+import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable } from '@nestjs/common'
 
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { ConfigCryptoService } from '@/common/services/config-crypto.service'
+import { ExchangeOperationFailedException } from '@/modules/trading/exceptions/exchange-operation-failed.exception'
+import { InvalidCredentialsException } from '@/modules/trading/exceptions/invalid-credentials.exception'
 import { TradingService } from '@/modules/trading/trading.service'
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 
 import { ExchangeAccountNotFoundException, InvalidExchangeAccountConfigException } from './exceptions'
+
+const SUPPORTED_EXCHANGES: ExchangeId[] = ['binance', 'okx', 'hyperliquid']
+
+/* eslint-disable no-redeclare, ts/no-redeclare */
+type PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
+const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
+/* eslint-enable no-redeclare, ts/no-redeclare */
 
 @Injectable()
 export class ExchangeAccountsService {
@@ -23,60 +35,130 @@ export class ExchangeAccountsService {
   ) {}
 
   async create(userId: string, dto: CreateExchangeAccountDto): Promise<ExchangeAccountResponseDto> {
+    await this.ensureUserExists(userId, dto.userEmail)
     const config = this.buildConfig(dto)
-    let lastValidatedAt: Date | null = null
-
-    // 验证交易所凭据（所有交易所都需要验证）
-    if (dto.exchangeId === 'binance' || dto.exchangeId === 'okx') {
-      await this.tradingService.validateCexCredentials(
-        dto.exchangeId,
-        this.resolveMarketType(dto.marketType),
-        config as BinanceConfig | OkxConfig,
-      )
-      lastValidatedAt = new Date()
+    const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
+    const encryptedConfig = this.crypto.encryptConfig(config)
+    try {
+      const record = await this.prisma.exchangeAccount.create({
+        data: {
+          userId,
+          exchangeId: dto.exchangeId,
+          name: dto.name,
+          isTestnet: dto.isTestnet ?? false,
+          encryptedConfig,
+          lastValidatedAt,
+        },
+      })
+      return this.toResponse(record, config)
     }
-    else if (dto.exchangeId === 'hyperliquid') {
-      // Hyperliquid 也需要验证凭据（通过 ping/fetchBalance 验证签名）
-      await this.tradingService.validateCexCredentials(
-        dto.exchangeId,
-        this.resolveMarketType(dto.marketType),
-        config as HyperliquidConfig,
-      )
-      lastValidatedAt = new Date()
+    catch (error) {
+      if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error
+
+      const existing = await this.prisma.exchangeAccount.findFirst({
+        where: { userId, exchangeId: dto.exchangeId },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true },
+      })
+      if (!existing)
+        throw error
+
+      const record = await this.prisma.exchangeAccount.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          isTestnet: dto.isTestnet ?? false,
+          encryptedConfig,
+          lastValidatedAt,
+        },
+      })
+      return this.toResponse(record, config)
+    }
+  }
+
+  private async ensureUserExists(userId: string, userEmail?: string): Promise<void> {
+    const existingById = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    })
+    if (existingById) {
+      if (userEmail && existingById.email !== userEmail) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { email: userEmail },
+        })
+      }
+      return
     }
 
-    const record = await this.prisma.exchangeAccount.create({
+    if (!userEmail) {
+      throw new DomainException('exchange_account.missing_email', {
+        code: ErrorCode.EXCHANGE_ACCOUNT_MISSING_EMAIL,
+        args: { userId },
+      })
+    }
+
+    const existingByEmail = await this.prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true },
+    })
+    if (existingByEmail && existingByEmail.id !== userId) {
+      throw new DomainException('exchange_account.user_conflict', {
+        code: ErrorCode.EXCHANGE_ACCOUNT_USER_CONFLICT,
+        args: { userId, existingUserId: existingByEmail.id },
+      })
+    }
+
+    await this.prisma.user.create({
       data: {
-        userId,
-        exchangeId: dto.exchangeId,
-        name: dto.name,
-        isTestnet: dto.isTestnet ?? false,
-        encryptedConfig: this.crypto.encryptConfig(config),
-        lastValidatedAt,
+        id: userId,
+        email: userEmail,
       },
     })
-
-    return this.toResponse(record)
   }
 
   async list(userId: string): Promise<ExchangeAccountResponseDto[]> {
     const records = await this.prisma.exchangeAccount.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     })
-    return records.map(record => this.toResponse(record))
+    const recordMap = new Map<ExchangeId, ExchangeAccount>()
+    for (const record of records) {
+      const exchangeId = record.exchangeId as ExchangeId
+      if (!recordMap.has(exchangeId))
+        recordMap.set(exchangeId, record)
+    }
+
+    return SUPPORTED_EXCHANGES.map((exchangeId) => {
+      const record = recordMap.get(exchangeId)
+      if (!record) {
+        return {
+          id: null,
+          exchangeId,
+          isBound: false,
+          name: null,
+          maskedCredential: null,
+          isTestnet: null,
+          lastValidatedAt: null,
+          createdAt: null,
+        }
+      }
+
+      return this.toResponse(record)
+    })
   }
 
-  async delete(userId: string, accountId: string): Promise<void> {
+  async delete(userId: string, exchangeId: string): Promise<void> {
     const client = this.prisma.getClient()
 
     // 先验证账户归属，防止越权操作
     const account = await client.exchangeAccount.findFirst({
-      where: { id: accountId, userId },
+      where: { exchangeId: exchangeId as PrismaExchangeId, userId },
       select: { id: true },
     })
     if (!account) {
-      throw new ExchangeAccountNotFoundException({ accountId })
+      throw new ExchangeAccountNotFoundException({ accountId: exchangeId })
     }
 
     // 删除账户前，必须先暂停该用户使用该账户的所有 active LLM 订阅
@@ -85,7 +167,7 @@ export class ExchangeAccountsService {
     const pausedCount = await client.userLlmStrategySubscription.updateMany({
       where: {
         userId,
-        exchangeAccountId: accountId,
+        exchangeAccountId: account.id,
         status: 'active',
       },
       data: {
@@ -95,12 +177,12 @@ export class ExchangeAccountsService {
 
     if (pausedCount.count > 0) {
       console.log(
-        `用户 ${userId} 删除账户 ${accountId} 前自动暂停了 ${pausedCount.count} 个 active LLM 订阅`,
+        `用户 ${userId} 删除账户 ${account.id} 前自动暂停了 ${pausedCount.count} 个 active LLM 订阅`,
       )
     }
 
     await client.exchangeAccount.delete({
-      where: { id: accountId },
+      where: { id: account.id },
     })
   }
 
@@ -108,14 +190,166 @@ export class ExchangeAccountsService {
     return marketType ?? 'spot'
   }
 
-  private toResponse(record: ExchangeAccount): ExchangeAccountResponseDto {
+  private toResponse(
+    record: ExchangeAccount,
+    configOverride?: BinanceConfig | OkxConfig | HyperliquidConfig,
+  ): ExchangeAccountResponseDto {
+    const config = configOverride ?? this.decryptConfig(record)
+
     return {
       id: record.id,
       exchangeId: record.exchangeId as ExchangeId,
+      isBound: true,
       name: record.name,
+      maskedCredential: this.maskCredential(record.exchangeId as ExchangeId, config),
       isTestnet: record.isTestnet,
       lastValidatedAt: record.lastValidatedAt,
       createdAt: record.createdAt,
+    }
+  }
+
+  private decryptConfig(record: ExchangeAccount): BinanceConfig | OkxConfig | HyperliquidConfig {
+    return this.crypto.decryptConfig(record.encryptedConfig)
+  }
+
+  private maskCredential(
+    exchangeId: ExchangeId,
+    config: BinanceConfig | OkxConfig | HyperliquidConfig,
+  ): string | null {
+    if (exchangeId === 'binance' || exchangeId === 'okx') {
+      return this.maskValue((config as BinanceConfig | OkxConfig).apiKey, 4, 4)
+    }
+
+    return this.maskValue((config as HyperliquidConfig).mainWalletAddress, 6, 4)
+  }
+
+  private maskValue(value: string | undefined, start: number, end: number): string | null {
+    if (!value)
+      return null
+    if (value.length <= start + end)
+      return `${value.slice(0, start)}****`
+    return `${value.slice(0, start)}****${value.slice(-end)}`
+  }
+
+  private async validateCredentials(
+    exchangeId: ExchangeId,
+    marketType: MarketType | undefined,
+    config: BinanceConfig | OkxConfig | HyperliquidConfig,
+  ): Promise<Date> {
+    try {
+      await this.tradingService.validateCexCredentials(
+        exchangeId,
+        this.resolveMarketType(marketType),
+        config as BinanceConfig | OkxConfig | HyperliquidConfig,
+      )
+    }
+    catch (error) {
+      if (error instanceof InvalidCredentialsException) {
+        const normalized = this.normalizeCredentialError(exchangeId, error.message)
+        throw new DomainException(normalized.reasonMessage, {
+          code: ErrorCode.TRADING_INVALID_CREDENTIALS,
+          args: normalized,
+        })
+      }
+
+      if (error instanceof ExchangeOperationFailedException) {
+        throw new DomainException('exchange_account.exchange_unavailable', {
+          code: ErrorCode.EXCHANGE_ACCOUNT_EXCHANGE_UNAVAILABLE,
+          args: {
+            exchangeId,
+            reasonCode: 'EXCHANGE_UNAVAILABLE',
+            reasonMessage: 'Exchange service temporarily unavailable, please retry later',
+            retryable: true,
+          },
+        })
+      }
+
+      throw error
+    }
+
+    return new Date()
+  }
+
+  private normalizeCredentialError(exchangeId: ExchangeId, message: string) {
+    const messageLower = message.toLowerCase()
+
+    if (exchangeId === 'okx' && message.includes('Passphrase错误')) {
+      return {
+        exchangeId,
+        reasonCode: 'INVALID_PASSPHRASE',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (message.includes('白名单') || messageLower.includes('whitelist')) {
+      return {
+        exchangeId,
+        reasonCode: 'IP_NOT_WHITELISTED',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (message.includes('权限不足') || messageLower.includes('permission')) {
+      return {
+        exchangeId,
+        reasonCode: 'PERMISSION_DENIED',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (message.includes('已过期')) {
+      return {
+        exchangeId,
+        reasonCode: 'API_KEY_EXPIRED',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (message.includes('已被禁用') || message.includes('已被禁用或删除')) {
+      return {
+        exchangeId,
+        reasonCode: 'API_KEY_DISABLED',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (exchangeId === 'hyperliquid' && (messageLower.includes('authorized') || messageLower.includes('authorization'))) {
+      return {
+        exchangeId,
+        reasonCode: 'HYPERLIQUID_AGENT_NOT_AUTHORIZED',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (exchangeId === 'hyperliquid') {
+      return {
+        exchangeId,
+        reasonCode: 'INVALID_AGENT_SIGNATURE',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    if (message.includes('签名验证失败')) {
+      return {
+        exchangeId,
+        reasonCode: 'INVALID_API_SECRET',
+        reasonMessage: message,
+        retryable: false,
+      }
+    }
+
+    return {
+      exchangeId,
+      reasonCode: 'INVALID_API_KEY',
+      reasonMessage: message,
+      retryable: false,
     }
   }
 

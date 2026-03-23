@@ -1,4 +1,7 @@
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import { z } from 'zod'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 export const HyperliquidLeverageSchema = z.object({
   type: z.enum(['cross', 'isolated']),
@@ -129,9 +132,11 @@ export function validateHyperliquidResponse<T>(
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorDetails = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
-      throw new Error(
-        `Hyperliquid API response validation failed${context ? ` (${context})` : ''}: ${errorDetails}`,
-      )
+      throw new DomainException('whale_tracking.schema_validation_error', {
+        code: ErrorCode.WHALE_TRACKING_API_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Hyperliquid API response validation failed${context ? ` (${context})` : ''}: ${errorDetails}` },
+      })
     }
     throw error
   }

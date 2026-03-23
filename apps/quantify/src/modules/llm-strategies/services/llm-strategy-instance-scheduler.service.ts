@@ -1,9 +1,11 @@
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { LlmStrategyInstance } from '@/prisma/prisma.types'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
 import { CronJob } from 'cron'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -43,7 +45,11 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
     
     // 🔧 验证默认cron表达式
     if (!this.validateCronExpression(this.DEFAULT_CRON_EXPRESSION)) {
-      throw new Error(`Invalid default cron expression: ${this.DEFAULT_CRON_EXPRESSION}`)
+      throw new DomainException('llm_strategy.invalid_default_cron_expression', {
+        code: ErrorCode.LLM_STRATEGY_INSTANCE_INVALID_CONFIG,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { expression: this.DEFAULT_CRON_EXPRESSION },
+      })
     }
     
     await this.recoverRunningInstances()
@@ -116,7 +122,11 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
       : instance
 
     if (!instanceData) {
-      throw new Error(`LLM strategy instance ${instance} not found`)
+      throw new DomainException('llm_strategy.instance_not_found', {
+        code: ErrorCode.LLM_STRATEGY_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { instanceId: typeof instance === 'string' ? instance : (instance as { id: string }).id },
+      })
     }
 
     // 🔧 使用并发锁保护
@@ -139,9 +149,12 @@ export class LlmStrategyInstanceSchedulerService implements OnModuleInit, OnModu
       
       // 🔧 验证cron表达式
       if (!this.validateCronExpression(cronExpression)) {
-        const error = `Invalid cron expression: ${cronExpression}`
-        this.logger.error(error)
-        throw new Error(error)
+        this.logger.error(`Invalid cron expression: ${cronExpression}`)
+        throw new DomainException('llm_strategy.invalid_cron_expression', {
+          code: ErrorCode.LLM_STRATEGY_INSTANCE_INVALID_CONFIG,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { expression: cronExpression, instanceId: instanceData.id },
+        })
       }
 
       // 创建 cron 任务

@@ -1,11 +1,14 @@
+import { ErrorCode } from '@ai/shared'
 import { BullModule } from '@nestjs/bull'
-import { Module } from '@nestjs/common'
+import { HttpStatus, Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { ScheduleModule } from '@nestjs/schedule'
 import { WinstonModule } from 'nest-winston'
+
 import { defaultEnvAccessor } from '../common/env/env.accessor'
+import { DomainException } from '../common/exceptions/domain.exception'
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter'
 import { LoggerInterceptor } from '../common/interceptors/logger.interceptor'
 import { RequestContextInterceptor } from '../common/interceptors/request-context.interceptor'
@@ -18,6 +21,7 @@ import { EnvService } from '../common/services/env.service'
 import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
 import { PrismaModule } from '../prisma/prisma.module'
+import { AccountStrategyViewModule } from './account-strategy-view/account-strategy-view.module'
 import { AccountsModule } from './accounts/accounts.module'
 import { BacktestingModule } from './backtesting/backtesting.module'
 import { ExchangeAccountsModule } from './exchange-accounts/exchange-accounts.module'
@@ -46,7 +50,11 @@ const bullImports = isMessageBusRuntimeEnabled()
         useFactory: (env: EnvService) => {
           const url = env.getString('REDIS_URL')
           if (!url) {
-            throw new Error('REDIS_URL is required for Bull queue initialization')
+            throw new DomainException('redis.missing_url_for_bull', {
+              code: ErrorCode.REDIS_CONNECTION_ERROR,
+              status: HttpStatus.INTERNAL_SERVER_ERROR,
+              args: { key: 'REDIS_URL' },
+            })
           }
 
           return { url }
@@ -99,6 +107,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     SettingsModule,
     BacktestingModule,
     AccountsModule,
+    AccountStrategyViewModule,
     IndicatorsModule,
     PositionsModule,
     MarketDataModule,

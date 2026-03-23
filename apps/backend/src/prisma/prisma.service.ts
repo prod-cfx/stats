@@ -3,11 +3,12 @@ import type { ConfigService } from '@nestjs/config'
 import type { ClsService } from 'nestjs-cls'
 import type { EnvService } from '../common/services/env.service'
 import type { PrismaModuleOptions } from './prisma.constants'
-import { generateShortId } from '@ai/shared'
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import { ErrorCode, generateShortId } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { ClsService as ClsServiceToken } from 'nestjs-cls'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaClient as PrismaClientBase } from '@/prisma/prisma.types'
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
@@ -74,12 +75,15 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
       if (isPlaceholder) {
         // 非生产环境：允许无数据库启动（自动进入 mock/offline 模式）
         if (!isProd && !isTestOrE2E) {
+          // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
           process.env.USE_MOCK_DATA = 'true'
           connectionString = ''
         } else {
-          throw new Error(
-            'DATABASE_URL 未配置或仍为占位符。请在 .env.*.local 中设置有效的数据库连接字符串。',
-          )
+          throw new DomainException('prisma.connection_error', {
+            code: ErrorCode.PRISMA_CONNECTION_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: 'DATABASE_URL is not configured or still a placeholder. Set a valid connection string in .env.*.local.' },
+          })
         }
       } else {
         connectionString = dbUrl
@@ -129,7 +133,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
           `原始错误：${(error as Error)?.message}`,
       )
       if (allowFallback) {
-        // 非生产环境：不阻塞启动，让上层 Repository 自行兜底到 mock
+        // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
         process.env.USE_MOCK_DATA = 'true'
         this.logger.warn('Non-prod DB connection failed; falling back to USE_MOCK_DATA=true for this run.')
       } else {

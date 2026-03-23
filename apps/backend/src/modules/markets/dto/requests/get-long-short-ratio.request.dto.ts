@@ -3,8 +3,9 @@ import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
-export class GetLongShortRatioRequestDto {
+export class GetLongShortRatioRequestDto extends BasePaginationRequestDto {
   @ApiProperty({
     description: '交易对唯一 ID（TradingPairConfig.id），例如 BTCUSDT.BINANCE.PERP',
     example: 'BTCUSDT.BINANCE.PERP',
@@ -39,6 +40,7 @@ export class GetLongShortRatioRequestDto {
   @ApiPropertyOptional({
     description: '最多返回的数据点数量，默认 500，最大 2000',
     example: 500,
+    default: 500,
     minimum: 1,
     maximum: 2000,
     type: Number,
@@ -49,7 +51,7 @@ export class GetLongShortRatioRequestDto {
   @IsInt({ message: 'limit 必须是整数' })
   @Min(1, { message: 'limit 必须大于 0' })
   @Max(2000, { message: 'limit 不能超过 2000' })
-  limit?: number
+  override limit: number = 500
 }
 
 

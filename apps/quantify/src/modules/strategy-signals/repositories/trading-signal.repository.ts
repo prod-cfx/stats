@@ -1,6 +1,7 @@
 import type { Prisma, SignalStatus } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
 
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { PrismaService } from '@/prisma/prisma.service'
 
 export interface FindSignalOptions {
@@ -90,6 +91,6 @@ export class TradingSignalRepository {
       this.prisma.tradingSignal.count({ where }),
     ])
 
-    return { items, total, page, limit }
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 }

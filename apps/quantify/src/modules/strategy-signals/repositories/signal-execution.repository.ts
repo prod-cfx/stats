@@ -1,6 +1,6 @@
+import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { Prisma, UserSignalExecution } from '@/prisma/prisma.types'
 import { Inject, Injectable } from '@nestjs/common'
-import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import { PrismaService } from '@/prisma/prisma.service'
 
 import { ExecutionStatus } from '@/prisma/prisma.types'

@@ -1,9 +1,11 @@
 import type { MarketBarPayload, MarketQuotePayload, MarketTimeframe } from '@ai/shared'
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Cron, CronExpression } from '@nestjs/schedule'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 import { MARKET_DATA_LOG_CONTEXT, MARKET_DATA_PROVIDER } from '../constants/market-data.constants'
 import { normalizeExactCode, toSymbolCode } from '../utils/market-symbol-code.util'
@@ -152,7 +154,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
   private getConfig(): MarketDataRuntimeConfig {
     const config = this.configService.get<MarketDataRuntimeConfig>('marketData')
     if (!config) {
-      throw new Error('marketData 配置未加载')
+      throw new DomainException('market_data.config_not_loaded', { code: ErrorCode.MARKET_DATA_INGESTION_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR })
     }
     return {
       ...config,
@@ -174,37 +176,57 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
 
   private async collectDynamicStrategySymbols(): Promise<string[]> {
     const symbolSet = new Set<string>()
+    let strategySubscriptions: Array<{
+      strategyInstance?: {
+        strategyTemplate?: {
+          legs?: unknown
+        } | null
+      } | null
+    }> = []
+    let llmSubscriptions: Array<{
+      llmStrategyInstance?: {
+        strategy?: {
+          allowedSymbols?: unknown
+        } | null
+      } | null
+    }> = []
 
-    const [strategySubscriptions, llmSubscriptions] = await Promise.all([
-      this.prisma.userStrategySubscription.findMany({
-        where: { status: 'active' },
-        select: {
-          strategyInstance: {
-            select: {
-              strategyTemplate: {
-                select: {
-                  legs: true,
+    try {
+      [strategySubscriptions, llmSubscriptions] = await Promise.all([
+        this.prisma.userStrategySubscription.findMany({
+          where: { status: 'active' },
+          select: {
+            strategyInstance: {
+              select: {
+                strategyTemplate: {
+                  select: {
+                    legs: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-      this.prisma.userLlmStrategySubscription.findMany({
-        where: { status: 'active' },
-        select: {
-          llmStrategyInstance: {
-            select: {
-              strategy: {
-                select: {
-                  allowedSymbols: true,
+        }),
+        this.prisma.userLlmStrategySubscription.findMany({
+          where: { status: 'active' },
+          select: {
+            llmStrategyInstance: {
+              select: {
+                strategy: {
+                  select: {
+                    allowedSymbols: true,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-    ])
+        }),
+      ])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(`Dynamic strategy subscriptions unavailable; skip dynamic symbol merge: ${message}`)
+      return []
+    }
 
     for (const item of strategySubscriptions) {
       const legs = item.strategyInstance?.strategyTemplate?.legs
@@ -280,14 +302,14 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
       }
 
       if (!normalized.endsWith(':SPOT') && !normalized.endsWith(':PERP')) {
-        throw new Error(`MARKET_DATA_SYMBOLS 包含未知 market 后缀: ${symbol}`)
+        throw new DomainException('market_data.symbol_unknown_suffix', { code: ErrorCode.MARKET_INVALID_SYMBOL, args: { symbol } })
       }
 
       pushUnique(normalized)
     }
 
     if (normalizedSymbols.length === 0) {
-      throw new Error('marketData.symbols 配置为空')
+      throw new DomainException('market_data.symbols_empty', { code: ErrorCode.MARKET_DATA_INGESTION_ERROR, status: HttpStatus.INTERNAL_SERVER_ERROR })
     }
 
     return normalizedSymbols

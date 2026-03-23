@@ -1,10 +1,11 @@
 import type { z } from 'zod'
-import { validateHyperliquidUrl } from '@ai/shared'
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode, validateHyperliquidUrl } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService,保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { LRUCache } from 'lru-cache'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import {
   HyperliquidClearinghouseStateSchema,
   HyperliquidOpenOrderSchema,
@@ -291,11 +292,19 @@ export class HyperliquidApiService {
               this.logger.warn(
                 `Request failed (attempt ${attempt}/${this.maxRetries}): ${errorMessage}`,
               )
-              lastError = new Error(errorMessage)
+              lastError = new DomainException('whale_tracking.api_error', {
+                code: ErrorCode.WHALE_TRACKING_API_ERROR,
+                status: HttpStatus.INTERNAL_SERVER_ERROR,
+                args: { reason: errorMessage },
+              })
               continue
             }
 
-            throw new Error(errorMessage)
+            throw new DomainException('whale_tracking.api_error', {
+              code: ErrorCode.WHALE_TRACKING_API_ERROR,
+              status: HttpStatus.INTERNAL_SERVER_ERROR,
+              args: { reason: errorMessage },
+            })
           }
 
           const data = (await response.json()) as T
@@ -322,7 +331,11 @@ export class HyperliquidApiService {
             ? error.message
             : String(error)
 
-        lastError = new Error(errorMessage)
+        lastError = new DomainException('whale_tracking.api_error', {
+          code: ErrorCode.WHALE_TRACKING_API_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: errorMessage },
+        })
 
         if (attempt < this.maxRetries) {
           this.logger.warn(
@@ -341,7 +354,11 @@ export class HyperliquidApiService {
     }
 
     // 理论上不可达（循环至少会抛出最后一次错误）
-    throw lastError ?? new Error('Request failed with unknown error')
+    throw lastError ?? new DomainException('whale_tracking.api_error', {
+      code: ErrorCode.WHALE_TRACKING_API_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: 'Request failed with unknown error' },
+    })
   }
 
   /**

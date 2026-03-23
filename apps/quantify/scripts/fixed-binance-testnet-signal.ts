@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
+import { EventEmitterModule } from '@nestjs/event-emitter'
 import { loadEnvironment } from '@net/config'
 import { ClsConfigModule } from '@/common/modules/cls.module'
 import { EnvModule } from '@/common/modules/env.module'
@@ -34,6 +35,7 @@ applyQuantifyEnvOverrides()
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [strategySignalsConfig],

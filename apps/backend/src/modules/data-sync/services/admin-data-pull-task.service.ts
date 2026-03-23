@@ -1,16 +1,14 @@
-import type {
-  DataPullJob,
-  DataPullJobContext,
-  JobMetaSchema,
-} from '../contracts/data-pull-job'
+import type { DataPullJob, DataPullJobContext, JobMetaSchema } from '../contracts/data-pull-job'
 import type {
   AdminDataPullTaskListQueryDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
 } from '../dto/admin-data-pull-task.dto'
 import type { DataPullTask } from '../repositories/data-pull-task.repository'
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { DATA_PULL_JOB_REGISTRY } from '../data-sync.tokens'
 import {
   AdminDataPullExecutionResponseDto,
@@ -127,24 +125,32 @@ export class AdminDataPullTaskService {
   async triggerOnce(id: number): Promise<AdminDataPullExecutionResponseDto> {
     const task = await this.taskRepo.findById(id)
     if (!task) {
-      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+      throw new DomainException('data_sync.task_not_found', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { taskId: id },
+      })
     }
 
     const now = new Date()
 
     const job = this.findJobForTask(task.key)
     if (!job) {
-      throw new BadRequestException(
-        `数据拉取任务 key "${task.key}" 未注册，无法执行。当前已注册的 Job key: ${Array.from(this.registeredKeys).join(', ')}`,
-      )
+      throw new DomainException('data_sync.task_key_not_registered', {
+        code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { key: task.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+      })
     }
 
-    // 通过乐观锁方式标记为 RUNNING，避免并发“立即执行”导致重复跑同一任务
+    // 通过乐观锁方式标记为 RUNNING，避免并发”立即执行”导致重复跑同一任务
     const claimed = await this.taskRepo.tryMarkRunningOnce(task.id, now)
     if (!claimed) {
-      throw new BadRequestException(
-        `数据拉取任务 key "${task.key}" 正在运行中，请稍后再试`,
-      )
+      throw new DomainException('data_sync.task_already_running', {
+        code: ErrorCode.DATA_SYNC_TASK_ALREADY_RUNNING,
+        status: HttpStatus.BAD_REQUEST,
+        args: { key: task.key },
+      })
     }
 
     // 记录一次新的执行历史
@@ -198,24 +204,35 @@ export class AdminDataPullTaskService {
   async interruptTask(id: number): Promise<{ success: boolean; message: string }> {
     const task = await this.taskRepo.findById(id)
     if (!task) {
-      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+      throw new DomainException('data_sync.task_not_found', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { taskId: id },
+      })
     }
 
     if (task.lastStatus !== 'RUNNING') {
-      throw new BadRequestException(
-        `任务 "${task.name}" 当前状态为 ${task.lastStatus ?? 'IDLE'}，不需要中断`,
-      )
+      throw new DomainException('data_sync.task_not_interruptible', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_INTERRUPTIBLE,
+        status: HttpStatus.BAD_REQUEST,
+        args: { name: task.name, status: task.lastStatus ?? 'IDLE' },
+      })
     }
 
     const reset = await this.taskRepo.forceResetStatus(id)
     if (!reset) {
-      throw new BadRequestException(`任务状态已变更，请刷新后重试`)
+      throw new DomainException('data_sync.task_status_changed', {
+        code: ErrorCode.DATA_SYNC_TASK_STATUS_CHANGED,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     return { success: true, message: `任务 "${task.name}" 已中断，状态已重置为 IDLE` }
   }
 
-  async list(query: AdminDataPullTaskListQueryDto): Promise<BasePaginationResponseDto<AdminDataPullTaskResponseDto>> {
+  async list(
+    query: AdminDataPullTaskListQueryDto,
+  ): Promise<BasePaginationResponseDto<AdminDataPullTaskResponseDto>> {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
 
@@ -235,7 +252,11 @@ export class AdminDataPullTaskService {
   async findById(id: number): Promise<AdminDataPullTaskResponseDto> {
     const task = await this.taskRepo.findById(id)
     if (!task) {
-      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+      throw new DomainException('data_sync.task_not_found', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { taskId: id },
+      })
     }
     return this.toResponseDto(task)
   }
@@ -250,7 +271,11 @@ export class AdminDataPullTaskService {
   ): Promise<BasePaginationResponseDto<AdminDataPullExecutionResponseDto>> {
     const task = await this.taskRepo.findById(taskId)
     if (!task) {
-      throw new NotFoundException(`DataPullTask#${taskId} 不存在`)
+      throw new DomainException('data_sync.task_not_found', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { taskId },
+      })
     }
 
     const { total, items } = await this.execRepo.listByTaskId(taskId, page, limit)
@@ -271,17 +296,21 @@ export class AdminDataPullTaskService {
   async create(dto: CreateAdminDataPullTaskDto): Promise<AdminDataPullTaskResponseDto> {
     // 校验 key 是否已注册（支持精确匹配和前缀匹配，如 "job-key:BTC"）
     if (!this.isKeyRegistered(dto.key)) {
-      throw new BadRequestException(
-        `数据拉取任务 key "${dto.key}" 未注册，无法创建。支持的格式：精确匹配或 "jobKey:suffix"。当前已注册的 Job key: ${Array.from(this.registeredKeys).join(', ')}`,
-      )
+      throw new DomainException('data_sync.task_key_not_registered', {
+        code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { key: dto.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+      })
     }
 
     // 检查 key 是否已存在
     const existing = await this.taskRepo.findByKey(dto.key)
     if (existing) {
-      throw new BadRequestException(
-        `数据拉取任务 key "${dto.key}" 已存在，请使用不同的后缀或编辑已有任务`,
-      )
+      throw new DomainException('data_sync.task_key_duplicate', {
+        code: ErrorCode.DATA_SYNC_TASK_KEY_DUPLICATE,
+        status: HttpStatus.BAD_REQUEST,
+        args: { key: dto.key },
+      })
     }
 
     const created = await this.taskRepo.createTask({
@@ -301,14 +330,20 @@ export class AdminDataPullTaskService {
   async update(id: number, dto: UpdateAdminDataPullTaskDto): Promise<AdminDataPullTaskResponseDto> {
     const existing = await this.taskRepo.findById(id)
     if (!existing) {
-      throw new NotFoundException(`DataPullTask#${id} 不存在`)
+      throw new DomainException('data_sync.task_not_found', {
+        code: ErrorCode.DATA_SYNC_TASK_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { taskId: id },
+      })
     }
 
     // 如果要启用任务，校验 key 是否已注册（支持精确匹配和前缀匹配）
     if (dto.enabled && !this.isKeyRegistered(existing.key)) {
-      throw new BadRequestException(
-        `数据拉取任务 key "${existing.key}" 未注册，无法启用。支持的格式：精确匹配或 "jobKey:suffix"。当前已注册的 Job key: ${Array.from(this.registeredKeys).join(', ')}`,
-      )
+      throw new DomainException('data_sync.task_key_not_registered', {
+        code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { key: existing.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+      })
     }
 
     const updated = await this.taskRepo.updateTask(id, {
@@ -355,4 +390,3 @@ export class AdminDataPullTaskService {
     return dto
   }
 }
-

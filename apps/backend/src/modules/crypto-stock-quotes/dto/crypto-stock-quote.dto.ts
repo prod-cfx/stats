@@ -11,6 +11,7 @@ import {
   Max,
   Min,
 } from 'class-validator'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 /**
  * 加密股票报价响应 DTO
@@ -152,7 +153,7 @@ export class CryptoStockQuoteResponseDto {
 /**
  * 查询加密股票报价请求 DTO
  */
-export class QueryCryptoStockQuotesDto {
+export class QueryCryptoStockQuotesDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '股票代码', example: 'MSTR' })
   @IsOptional()
   @IsString()
@@ -181,18 +182,13 @@ export class QueryCryptoStockQuotesDto {
   @IsDate({ message: '结束时间必须是有效的日期' })
   endTime?: Date
 
-  @ApiPropertyOptional({
-    description: '返回记录数量限制（最大 500）',
-    example: 100,
-    minimum: 1,
-    maximum: 500,
-  })
+  @ApiPropertyOptional({ description: '返回记录数量限制（最大 500）', maximum: 500, default: 100 })
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: '返回数量必须是整数' })
-  @Min(1, { message: '返回数量必须大于或等于 1' })
-  @Max(500, { message: '返回数量不能超过 500' })
-  limit?: number
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  override limit: number = 100
 }
 
 /**

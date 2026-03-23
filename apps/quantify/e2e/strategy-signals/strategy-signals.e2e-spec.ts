@@ -2,10 +2,10 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
-import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
 import type { FixedBinanceTestnetSignalContext } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
-import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
 import { FixedBinanceTestnetSignalService } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
+import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
 import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
@@ -14,10 +14,10 @@ import { createTestingApp } from '../fixtures/fixtures'
 const FIXED_BINANCE_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_BASE_ASSET ?? 'BTC').toUpperCase()
 const FIXED_BINANCE_PERP_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_PERP_TESTNET_BASE_ASSET ?? 'XRP').toUpperCase()
 const FIXED_BINANCE_QUOTE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_QUOTE_ASSET ?? 'USDT').toUpperCase()
-const FIXED_BINANCE_USER_EMAIL = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL ?? 'binance-testnet-fixed@local.dev'
+const _FIXED_BINANCE_USER_EMAIL = process.env.QUANTIFY_FIXED_BINANCE_TESTNET_USER_EMAIL ?? 'binance-testnet-fixed@local.dev'
 const FIXED_BINANCE_SYMBOL_CODE = `${FIXED_BINANCE_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
 const FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE = `${FIXED_BINANCE_PERP_BASE_ASSET}${FIXED_BINANCE_QUOTE_ASSET}`
-const FIXED_BINANCE_PERP_SYMBOL_CODE = `${FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE}:PERP`
+const _FIXED_BINANCE_PERP_SYMBOL_CODE = `${FIXED_BINANCE_PERP_LEDGER_SYMBOL_CODE}:PERP`
 const FIXED_BINANCE_OPEN_QUOTE = resolveFixedBinanceSmokeQuote({ signalType: 'ENTRY' }) ?? '8.50'
 const LIVE_SIGNAL_REASON_PREFIX = 'TC-SIGNAL-LIVE'
 
@@ -38,29 +38,51 @@ describe('StrategySignals (E2E, DB only)', () => {
   const TEST_ACCOUNT_ID = 'e2e-signal-account'
   const TEST_SYMBOL_ID = 'e2e-signal-symbol'
 
-  beforeAll(async () => {
-    const context: TestingAppContext = await createTestingApp()
-    app = context.app
-    moduleFixture = context.moduleFixture
-    prisma = context.prisma
-
-    // 准备用户
-    await prisma.user.upsert({
-      where: { id: TEST_USER_ID },
+  function upsertTestUser(
+    p: PrismaService,
+    params: { id: string; email: string; nickname: string },
+  ) {
+    return p.user.upsert({
+      where: { id: params.id },
       update: {},
       create: {
-        id: TEST_USER_ID,
-        email: 'e2e-signal-user@test.com',
-        nickname: 'E2E 策略信号用户',
+        id: params.id,
+        email: params.email,
+        nickname: params.nickname,
       },
     })
+  }
 
-    // 准备策略模板（最小可用字段）
-    await prisma.strategyTemplate.create({
+  function upsertTestUserStrategyAccount(
+    p: PrismaService,
+    params: { id: string; userId: string; strategyId: string; strategyName: string },
+  ) {
+    return p.userStrategyAccount.upsert({
+      where: { id: params.id },
+      update: { balance: '1000', equity: '1000' },
+      create: {
+        id: params.id,
+        userId: params.userId,
+        strategyId: params.strategyId,
+        strategyName: params.strategyName,
+        strategyVersion: 'v1',
+        baseCurrency: 'USDT',
+        initialBalance: '1000',
+        balance: '1000',
+        equity: '1000',
+      },
+    })
+  }
+
+  function createTestStrategyTemplate(
+    p: PrismaService,
+    params: { id: string; name: string; description: string },
+  ) {
+    return p.strategyTemplate.create({
       data: {
-        id: TEST_STRATEGY_TEMPLATE_ID,
-        name: 'E2E-Signal-Template',
-        description: 'E2E 策略信号测试模板',
+        id: params.id,
+        name: params.name,
+        description: params.description,
         legs: [],
         llmModel: 'gpt-4',
         promptTemplate: '测试策略信号 Prompt',
@@ -69,36 +91,182 @@ describe('StrategySignals (E2E, DB only)', () => {
         status: 'draft',
       },
     })
+  }
 
-    // 准备行情交易对
-    await prisma.symbol.create({
+  function createTestSymbol(
+    p: PrismaService,
+    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: string },
+  ) {
+    return p.symbol.create({
       data: {
-        id: TEST_SYMBOL_ID,
-        code: 'E2E-BTCUSDT',
-        baseAsset: 'BTC',
-        quoteAsset: 'USDT',
+        id: params.id,
+        code: params.code,
+        baseAsset: params.baseAsset,
+        quoteAsset: params.quoteAsset,
         exchange: 'BINANCE',
         type: 'CRYPTO',
-        instrumentType: 'SPOT',
+        instrumentType: params.instrumentType ?? 'SPOT',
         status: 'ACTIVE',
         precisionPrice: 2,
         precisionQuantity: 6,
       },
     })
+  }
+
+  function upsertTestSymbol(
+    p: PrismaService,
+    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: string },
+  ) {
+    const instrumentType = params.instrumentType ?? 'SPOT'
+    const common = {
+      code: params.code,
+      baseAsset: params.baseAsset,
+      quoteAsset: params.quoteAsset,
+      exchange: 'BINANCE',
+      instrumentType,
+      type: 'CRYPTO',
+      status: 'ACTIVE',
+      precisionPrice: 2,
+      precisionQuantity: 6,
+    }
+    return p.symbol.upsert({
+      where: { code: params.code },
+      update: common,
+      create: { id: params.id, ...common },
+    })
+  }
+
+  function createTestTradingSignal(
+    p: PrismaService,
+    params: {
+      strategyId: string
+      symbolId: string
+      direction: SignalDirection
+      signalType?: SignalType
+      entryPrice?: string
+      positionSizeQuote?: string
+      positionSizeRatio?: string
+      confidence?: string
+      aiReasoning?: string
+      extraData?: Record<string, unknown>
+    },
+  ) {
+    return p.tradingSignal.create({
+      data: {
+        strategyId: params.strategyId,
+        symbolId: params.symbolId,
+        sourceType: SignalSourceType.AI_GENERATED,
+        signalType: params.signalType ?? SignalType.ENTRY,
+        direction: params.direction,
+        status: SignalStatus.PENDING,
+        confidence: params.confidence ?? '80',
+        entryPrice: params.entryPrice ?? '50000',
+        positionSizeQuote: params.positionSizeQuote,
+        positionSizeRatio: params.positionSizeRatio,
+        aiModel: 'gpt-4',
+        aiReasoning: params.aiReasoning ?? 'E2E test signal',
+        ...params.extraData,
+      },
+    })
+  }
+
+  function createTestUserSignalExecution(
+    p: PrismaService,
+    params: {
+      signalId: string
+      userId: string
+      userStrategyAccountId: string
+      executedPrice: string
+      executedQuantity: string
+      fee: string
+      tradeId: string
+    },
+  ) {
+    return p.userSignalExecution.create({
+      data: {
+        signalId: params.signalId,
+        userId: params.userId,
+        userStrategyAccountId: params.userStrategyAccountId,
+        status: ExecutionStatus.EXECUTED,
+        orderSide: 'BUY',
+        positionSide: 'LONG',
+        executedPrice: params.executedPrice,
+        executedQuantity: params.executedQuantity,
+        fee: params.fee,
+        feeCurrency: 'USDT',
+        tradeId: params.tradeId,
+        executedAt: new Date(),
+      },
+      include: {
+        signal: true,
+        user: true,
+        account: true,
+      },
+    })
+  }
+
+  function createTestPosition(
+    p: PrismaService,
+    params: {
+      userStrategyAccountId: string
+      symbol: string
+      quantity: string
+      avgEntryPrice: string
+      exchangeId: string
+      marketType: string
+    },
+  ) {
+    return p.position.create({
+      data: {
+        userStrategyAccountId: params.userStrategyAccountId,
+        symbol: params.symbol,
+        positionSide: 'LONG',
+        quantity: params.quantity,
+        avgEntryPrice: params.avgEntryPrice,
+        realizedPnl: '0',
+        unrealizedPnl: '0',
+        status: 'OPEN',
+        exchangeId: params.exchangeId,
+        marketType: params.marketType,
+        openedAt: new Date(),
+      },
+    })
+  }
+
+  beforeAll(async () => {
+    const context: TestingAppContext = await createTestingApp()
+    app = context.app
+    moduleFixture = context.moduleFixture
+    prisma = context.prisma
+
+    // 准备用户
+    await upsertTestUser(prisma, {
+      id: TEST_USER_ID,
+      email: 'e2e-signal-user@test.com',
+      nickname: 'E2E 策略信号用户',
+    })
+
+    // 准备策略模板（最小可用字段）
+    await createTestStrategyTemplate(prisma, {
+      id: TEST_STRATEGY_TEMPLATE_ID,
+      name: 'E2E-Signal-Template',
+      description: 'E2E 策略信号测试模板',
+    })
+
+    // 准备行情交易对
+    await createTestSymbol(prisma, {
+      id: TEST_SYMBOL_ID,
+      code: 'E2E-BTCUSDT',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+    })
 
     // 准备用户策略账户
-    await prisma.userStrategyAccount.create({
-      data: {
-        id: TEST_ACCOUNT_ID,
-        userId: TEST_USER_ID,
-        strategyId: TEST_STRATEGY_TEMPLATE_ID,
-        strategyName: 'E2E 策略',
-        strategyVersion: 'v1',
-        baseCurrency: 'USDT',
-        initialBalance: '1000',
-        balance: '1000',
-        equity: '1000',
-      },
+    await upsertTestUserStrategyAccount(prisma, {
+      id: TEST_ACCOUNT_ID,
+      userId: TEST_USER_ID,
+      strategyId: TEST_STRATEGY_TEMPLATE_ID,
+      strategyName: 'E2E 策略',
     })
   })
 
@@ -127,21 +295,17 @@ describe('StrategySignals (E2E, DB only)', () => {
   })
 
   it('[TC-SIGNAL-001] should create TradingSignal record and associate with strategy and symbol', async () => {
-    const signal = await prisma.tradingSignal.create({
-      data: {
-        strategyId: TEST_STRATEGY_TEMPLATE_ID,
-        symbolId: TEST_SYMBOL_ID,
-        sourceType: SignalSourceType.AI_GENERATED,
-        signalType: SignalType.ENTRY,
-        direction: SignalDirection.BUY,
-        status: SignalStatus.PENDING,
-        confidence: '80',
-        entryPrice: '60000',
+    const signal = await createTestTradingSignal(prisma, {
+      strategyId: TEST_STRATEGY_TEMPLATE_ID,
+      symbolId: TEST_SYMBOL_ID,
+      direction: SignalDirection.BUY,
+      entryPrice: '60000',
+      confidence: '80',
+      aiReasoning: 'E2E 测试信号理由',
+      extraData: {
         targetPrice: '65000',
         stopLoss: '58000',
         takeProfit: '64000',
-        aiModel: 'gpt-4',
-        aiReasoning: 'E2E 测试信号理由',
         marketContext: {
           timeframe: '1h',
           indicators: {
@@ -149,11 +313,10 @@ describe('StrategySignals (E2E, DB only)', () => {
           },
         },
       },
-      include: {
-        strategy: true,
-        symbol: true,
-      },
-    })
+    }).then(s => prisma.tradingSignal.findUniqueOrThrow({
+      where: { id: s.id },
+      include: { strategy: true, symbol: true },
+    }))
 
     expect(signal.id).toBeDefined()
     expect(signal.strategyId).toBe(TEST_STRATEGY_TEMPLATE_ID)
@@ -173,26 +336,14 @@ describe('StrategySignals (E2E, DB only)', () => {
       },
     })
 
-    const execution = await prisma.userSignalExecution.create({
-      data: {
-        signalId: baseSignal.id,
-        userId: TEST_USER_ID,
-        userStrategyAccountId: TEST_ACCOUNT_ID,
-        status: ExecutionStatus.EXECUTED,
-        orderSide: 'BUY',
-        positionSide: 'LONG',
-        executedPrice: '61000',
-        executedQuantity: '0.01',
-        fee: '1.2',
-        feeCurrency: 'USDT',
-        tradeId: 'E2E-TRADE-ID',
-        executedAt: new Date(),
-      },
-      include: {
-        signal: true,
-        user: true,
-        account: true,
-      },
+    const execution = await createTestUserSignalExecution(prisma, {
+      signalId: baseSignal.id,
+      userId: TEST_USER_ID,
+      userStrategyAccountId: TEST_ACCOUNT_ID,
+      executedPrice: '61000',
+      executedQuantity: '0.01',
+      fee: '1.2',
+      tradeId: 'E2E-TRADE-ID',
     })
 
     expect(execution.id).toBeDefined()
@@ -211,34 +362,18 @@ describe('StrategySignals (E2E, DB only)', () => {
 
     beforeAll(async () => {
       // 准备风控测试用户
-      await prisma.user.upsert({
-        where: { id: RISK_CONTROL_USER_ID },
-        update: {},
-        create: {
-          id: RISK_CONTROL_USER_ID,
-          email: 'risk-control@test.com',
-          nickname: 'Risk Control Test User',
-        },
+      await upsertTestUser(prisma, {
+        id: RISK_CONTROL_USER_ID,
+        email: 'risk-control@test.com',
+        nickname: 'Risk Control Test User',
       })
 
       // 准备风控测试账户，余额 1000 USDT
-      await prisma.userStrategyAccount.upsert({
-        where: { id: RISK_CONTROL_ACCOUNT_ID },
-        update: {
-          balance: '1000',
-          equity: '1000',
-        },
-        create: {
-          id: RISK_CONTROL_ACCOUNT_ID,
-          userId: RISK_CONTROL_USER_ID,
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          strategyName: 'Risk Control Test Strategy',
-          strategyVersion: 'v1',
-          baseCurrency: 'USDT',
-          initialBalance: '1000',
-          balance: '1000',
-          equity: '1000',
-        },
+      await upsertTestUserStrategyAccount(prisma, {
+        id: RISK_CONTROL_ACCOUNT_ID,
+        userId: RISK_CONTROL_USER_ID,
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        strategyName: 'Risk Control Test Strategy',
       })
     })
 
@@ -259,20 +394,12 @@ describe('StrategySignals (E2E, DB only)', () => {
       // 账户余额 1000，因此风险上限为 1000 * 0.2 = 200
       // 策略要求 positionSizeQuote = 500，应该被限制到 200，而非 defaultQuoteAmount 的 100
 
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: TEST_SYMBOL_ID,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.ENTRY,
-          direction: SignalDirection.BUY,
-          status: SignalStatus.PENDING,
-          confidence: '80',
-          entryPrice: '50000',
-          positionSizeQuote: '500', // 策略要求 500 USDT
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-003 test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: TEST_SYMBOL_ID,
+        direction: SignalDirection.BUY,
+        positionSizeQuote: '500', // 策略要求 500 USDT
+        aiReasoning: 'TC-SIGNAL-003 test',
       })
 
       // Mock TradingService
@@ -319,7 +446,7 @@ describe('StrategySignals (E2E, DB only)', () => {
 
       // 验证实际下单金额被限制在风险上限内（200 USDT），而非 defaultQuoteAmount 的 100 USDT
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)!
       expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
@@ -340,20 +467,12 @@ describe('StrategySignals (E2E, DB only)', () => {
         data: { balance: '1000', equity: '1000' },
       })
 
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: TEST_SYMBOL_ID,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.ENTRY,
-          direction: SignalDirection.BUY,
-          status: SignalStatus.PENDING,
-          confidence: '80',
-          entryPrice: '50000',
-          positionSizeRatio: '0.5', // 策略要求 50% = 500 USDT
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-004 test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: TEST_SYMBOL_ID,
+        direction: SignalDirection.BUY,
+        positionSizeRatio: '0.5', // 策略要求 50% = 500 USDT
+        aiReasoning: 'TC-SIGNAL-004 test',
       })
 
       const tradingService = moduleFixture.get(TradingService)
@@ -399,7 +518,7 @@ describe('StrategySignals (E2E, DB only)', () => {
 
       // 验证实际下单金额被限制在风险上限内（200 USDT）
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)!
       expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
@@ -418,20 +537,12 @@ describe('StrategySignals (E2E, DB only)', () => {
         data: { balance: '1000', equity: '1000' },
       })
 
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: TEST_SYMBOL_ID,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.ENTRY,
-          direction: SignalDirection.BUY,
-          status: SignalStatus.PENDING,
-          confidence: '80',
-          entryPrice: '50000',
-          // 不指定 positionSizeQuote 或 positionSizeRatio
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-005 test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: TEST_SYMBOL_ID,
+        direction: SignalDirection.BUY,
+        // 不指定 positionSizeQuote 或 positionSizeRatio
+        aiReasoning: 'TC-SIGNAL-005 test',
       })
 
       const tradingService = moduleFixture.get(TradingService)
@@ -476,7 +587,7 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(execution!.status).toBe(ExecutionStatus.EXECUTED)
 
       expect(placeOrderSpy).toHaveBeenCalled()
-      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)
+      const callArgs = placeOrderSpy.mock.calls.find(call => call[0] === RISK_CONTROL_USER_ID)!
       expect(callArgs).toBeDefined()
       const orderParams = callArgs[3]
 
@@ -494,20 +605,12 @@ describe('StrategySignals (E2E, DB only)', () => {
         data: { balance: '1000', equity: '1000' },
       })
 
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: TEST_SYMBOL_ID,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.ENTRY,
-          direction: SignalDirection.BUY,
-          status: SignalStatus.PENDING,
-          confidence: '80',
-          entryPrice: '50000',
-          positionSizeQuote: '0', // 无效值
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-006 test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: TEST_SYMBOL_ID,
+        direction: SignalDirection.BUY,
+        positionSizeQuote: '0', // 无效值
+        aiReasoning: 'TC-SIGNAL-006 test',
       })
 
       const tradingService = moduleFixture.get(TradingService)
@@ -568,77 +671,35 @@ describe('StrategySignals (E2E, DB only)', () => {
     let perpCloseResolvedSymbolId = PERP_CLOSE_SYMBOL_ID
 
     beforeAll(async () => {
-      await prisma.user.upsert({
-        where: { id: PERP_CLOSE_USER_ID },
-        update: {},
-        create: {
-          id: PERP_CLOSE_USER_ID,
-          email: 'perp-close@test.com',
-          nickname: 'Perp Close Test User',
-        },
+      await upsertTestUser(prisma, {
+        id: PERP_CLOSE_USER_ID,
+        email: 'perp-close@test.com',
+        nickname: 'Perp Close Test User',
       })
 
-      const perpSymbol = await prisma.symbol.upsert({
-        where: { code: 'BTCUSDT:PERP' },
-        update: {
-          code: 'BTCUSDT:PERP',
-          baseAsset: 'BTC',
-          quoteAsset: 'USDT',
-          exchange: 'BINANCE',
-          instrumentType: 'PERPETUAL',
-          type: 'CRYPTO',
-          status: 'ACTIVE',
-          precisionPrice: 2,
-          precisionQuantity: 6,
-        },
-        create: {
-          id: PERP_CLOSE_SYMBOL_ID,
-          code: 'BTCUSDT:PERP',
-          baseAsset: 'BTC',
-          quoteAsset: 'USDT',
-          exchange: 'BINANCE',
-          instrumentType: 'PERPETUAL',
-          type: 'CRYPTO',
-          status: 'ACTIVE',
-          precisionPrice: 2,
-          precisionQuantity: 6,
-        },
+      const perpSymbol = await upsertTestSymbol(prisma, {
+        id: PERP_CLOSE_SYMBOL_ID,
+        code: 'BTCUSDT:PERP',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
       })
       perpCloseResolvedSymbolId = perpSymbol.id
 
-      await prisma.userStrategyAccount.upsert({
-        where: { id: PERP_CLOSE_ACCOUNT_ID },
-        update: {
-          balance: '1000',
-          equity: '1000',
-        },
-        create: {
-          id: PERP_CLOSE_ACCOUNT_ID,
-          userId: PERP_CLOSE_USER_ID,
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          strategyName: 'Perp Close Strategy',
-          strategyVersion: 'v1',
-          baseCurrency: 'USDT',
-          initialBalance: '1000',
-          balance: '1000',
-          equity: '1000',
-        },
+      await upsertTestUserStrategyAccount(prisma, {
+        id: PERP_CLOSE_ACCOUNT_ID,
+        userId: PERP_CLOSE_USER_ID,
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        strategyName: 'Perp Close Strategy',
       })
 
-      await prisma.position.create({
-        data: {
-          userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID,
-          symbol: 'BTCUSDT',
-          positionSide: 'LONG',
-          quantity: '0.01',
-          avgEntryPrice: '60000',
-          realizedPnl: '0',
-          unrealizedPnl: '0',
-          status: 'OPEN',
-          exchangeId: 'binance',
-          marketType: 'perp',
-          openedAt: new Date(),
-        },
+      await createTestPosition(prisma, {
+        userStrategyAccountId: PERP_CLOSE_ACCOUNT_ID,
+        symbol: 'BTCUSDT',
+        quantity: '0.01',
+        avgEntryPrice: '60000',
+        exchangeId: 'binance',
+        marketType: 'perp',
       })
     })
 
@@ -664,19 +725,14 @@ describe('StrategySignals (E2E, DB only)', () => {
     })
 
     it('[TC-SIGNAL-008] should close an open perp position using normalized local symbol lookup', async () => {
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: perpCloseResolvedSymbolId,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.EXIT,
-          direction: SignalDirection.CLOSE_LONG,
-          status: SignalStatus.PENDING,
-          confidence: '88',
-          entryPrice: '60000',
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-008 close perp position test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: perpCloseResolvedSymbolId,
+        direction: SignalDirection.CLOSE_LONG,
+        signalType: SignalType.EXIT,
+        entryPrice: '60000',
+        confidence: '88',
+        aiReasoning: 'TC-SIGNAL-008 close perp position test',
       })
 
       const tradingService = moduleFixture.get(TradingService)
@@ -744,7 +800,7 @@ describe('StrategySignals (E2E, DB only)', () => {
 
   describe('Fixed Binance Testnet Round Trip (TC-SIGNAL-009~010)', () => {
     let fixedSignalService: FixedBinanceTestnetSignalService
-    let fixedContext: FixedBinanceSeedContext
+    let fixedContext: FixedBinanceTestnetSignalContext
     let createdSignalIds: string[] = []
 
     const liveConfig = {
@@ -928,19 +984,13 @@ describe('StrategySignals (E2E, DB only)', () => {
 
   describe('Execution Metadata Persistence (TC-SIGNAL-007)', () => {
     it('[TC-SIGNAL-007] should persist order stage history and Binance execution payload metadata', async () => {
-      const signal = await prisma.tradingSignal.create({
-        data: {
-          strategyId: TEST_STRATEGY_TEMPLATE_ID,
-          symbolId: TEST_SYMBOL_ID,
-          sourceType: SignalSourceType.AI_GENERATED,
-          signalType: SignalType.ENTRY,
-          direction: SignalDirection.BUY,
-          status: SignalStatus.PENDING,
-          confidence: '90',
-          entryPrice: '60000',
-          aiModel: 'gpt-4',
-          aiReasoning: 'TC-SIGNAL-007 metadata persistence test',
-        },
+      const signal = await createTestTradingSignal(prisma, {
+        strategyId: TEST_STRATEGY_TEMPLATE_ID,
+        symbolId: TEST_SYMBOL_ID,
+        direction: SignalDirection.BUY,
+        entryPrice: '60000',
+        confidence: '90',
+        aiReasoning: 'TC-SIGNAL-007 metadata persistence test',
       })
 
       const tradingService = moduleFixture.get(TradingService)

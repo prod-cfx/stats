@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
 import {
   IsBoolean,
   IsArray,
@@ -12,7 +13,6 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator'
-import { Type } from 'class-transformer'
 import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class ContinueCodegenSessionDto {

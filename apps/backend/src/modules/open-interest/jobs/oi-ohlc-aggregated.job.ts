@@ -5,10 +5,11 @@ import type {
   JobMetaSchema,
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
-import { Injectable, Logger } from '@nestjs/common'
-// Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
@@ -89,7 +90,11 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
       'https://open-api-v4.coinglass.com/api/futures/open-interest/aggregated-history'
 
     if (!apiKey) {
-      throw new Error('COINGLASS_API_KEY is not configured')
+      throw new DomainException('open_interest.oi_ohlc_aggregated.missing_api_key', {
+        code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: 'COINGLASS_API_KEY is not configured' },
+      })
     }
 
     const symbol = ctx.meta?.symbol || this.defaultSymbol
@@ -117,7 +122,11 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
     const json = await this.fetchJson(url, apiKey)
 
     if (json.code !== '0' || !json.data) {
-      throw new Error(`Coinglass OI OHLC API returned error: code=${json.code}, msg=${json.msg}`)
+      throw new DomainException('open_interest.oi_ohlc_aggregated.api_error', {
+        code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        args: { reason: `Coinglass OI OHLC API returned error: code=${json.code}, msg=${json.msg}` },
+      })
     }
 
     if (json.data.length === 0) {
@@ -225,9 +234,11 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
             continue
           }
 
-          throw new Error(
-            `Coinglass OI OHLC request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}`,
-          )
+          throw new DomainException('open_interest.oi_ohlc_aggregated.request_failed', {
+            code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            args: { reason: `Coinglass OI OHLC request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} ${failure}` },
+          })
         }
 
         return (await response.json()) as OiOhlcApiResponse
@@ -249,19 +260,21 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
           continue
         }
 
-        throw new Error(
-          `Coinglass OI OHLC request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}`,
-        )
+        throw new DomainException('open_interest.oi_ohlc_aggregated.request_error', {
+          code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          args: { reason: `Coinglass OI OHLC request failed after ${attempt}/${this.maxAttempts}: url=${url.toString()} error=${failure}` },
+        })
       } finally {
         clearTimeout(timer)
       }
     }
 
-    throw new Error(
-      `Coinglass OI OHLC request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${
-        lastFailure ?? 'unknown'
-      }`,
-    )
+    throw new DomainException('open_interest.oi_ohlc_aggregated.request_exhausted', {
+      code: ErrorCode.OPEN_INTEREST_SYNC_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: `Coinglass OI OHLC request failed after ${this.maxAttempts} attempts: url=${url.toString()} error=${lastFailure ?? 'unknown'}` },
+    })
   }
 
   private parseCursor(currentCursor: string | null): OiOhlcAggregatedCursor {
