@@ -96,7 +96,11 @@ export class CodegenConversationService {
     private readonly recommendationIndex: RecommendationIndexService,
   ) {}
 
-  async startSession(dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
+  async startSession(
+    dto: StartCodegenSessionDto,
+    callerUserId?: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const sessionUserId = this.resolveSessionUserId(callerUserId, dto.userId)
     const seedChecklist = this.normalizeChecklist({
       ...this.extractChecklist(dto),
       ...this.inferChecklistFromMessage(dto.initialMessage),
@@ -117,7 +121,7 @@ export class CodegenConversationService {
     const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
     const session = await this.sessionsRepo.createSession({
-      userId: dto.userId,
+      userId: sessionUserId,
       status,
       checklist: checklist as Prisma.InputJsonValue,
       constraintPack: {
@@ -163,9 +167,14 @@ export class CodegenConversationService {
     }
   }
 
-  async continueSession(sessionId: string, dto: ContinueCodegenSessionDto): Promise<CodegenSessionResponseDto> {
+  async continueSession(
+    sessionId: string,
+    dto: ContinueCodegenSessionDto,
+    callerUserId?: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const sessionUserId = this.resolveSessionUserId(callerUserId, dto.userId)
     const session = await this.sessionsRepo.findById(sessionId)
-    if (!session || session.userId !== dto.userId) {
+    if (!session || session.userId !== sessionUserId) {
       throw new DomainException('codegen.session_not_found', {
         code: ErrorCode.NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
@@ -1141,6 +1150,14 @@ export class CodegenConversationService {
       .slice(0, MAX_HELPER_SIGNATURE_LINES)
       .map(doc => `- ${doc.signature}`)
       .join('\n')
+  }
+
+  private resolveSessionUserId(callerUserId: string | undefined, requestUserId: string): string {
+    const normalizedCallerUserId = callerUserId?.trim()
+    if (normalizedCallerUserId) {
+      return normalizedCallerUserId
+    }
+    return requestUserId
   }
 
   static isTerminalStatus(status: LlmCodegenSessionStatus): boolean {

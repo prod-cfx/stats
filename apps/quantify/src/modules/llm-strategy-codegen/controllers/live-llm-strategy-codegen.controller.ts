@@ -24,18 +24,24 @@ export class LiveLlmStrategyCodegenController {
   @Post('sessions')
   @ApiOperation({ summary: '创建策略代码生成会话' })
   @ApiResponse({ status: 201, type: CodegenSessionResponseDto })
-  async startSession(@Body() dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
-    return this.service.startSession(dto)
+  async startSession(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() dto: StartCodegenSessionDto,
+  ): Promise<CodegenSessionResponseDto> {
+    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.startSession(dto, callerUserId)
   }
 
   @Post('sessions/:id/messages')
   @ApiOperation({ summary: '继续会话并在信息齐全时生成策略脚本' })
   @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
   async continueSession(
+    @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    return this.service.continueSession(id, dto)
+    const callerUserId = this.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.continueSession(id, dto, callerUserId)
   }
 
   @Get('sessions/:id')

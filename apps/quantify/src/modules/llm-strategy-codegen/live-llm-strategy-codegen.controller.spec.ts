@@ -53,10 +53,53 @@ describe('liveLlmStrategyCodegenController', () => {
 
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    const result = await controller.startSession({ userId: 'u1' })
+    const result = await controller.startSession(
+      createBearerToken({ sub: 'caller-u1', exp: 4_102_444_800 }),
+      { userId: 'request-u2' },
+    )
 
     expect(result.status).toBe('DRAFTING')
-    expect(service.startSession).toHaveBeenCalled()
+    expect(service.startSession).toHaveBeenCalledWith({ userId: 'request-u2' }, 'caller-u1')
+  })
+
+  it('rejects startSession when authorization header is missing', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn(),
+      getSession: jest.fn(),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: buildProviders(service),
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    await expect(controller.startSession(undefined, { userId: 'u1' })).rejects.toBeInstanceOf(DomainException)
+    expect(service.startSession).not.toHaveBeenCalled()
+  })
+
+  it('continues session with caller identity from authorization', async () => {
+    const service = {
+      startSession: jest.fn(),
+      continueSession: jest.fn().mockResolvedValue({ id: 's1', status: 'DRAFTING' }),
+      getSession: jest.fn(),
+      testEngine: jest.fn(),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [LiveLlmStrategyCodegenController],
+      providers: buildProviders(service),
+    }).compile()
+    const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+
+    const result = await controller.continueSession(
+      createBearerToken({ sub: 'caller-u1', exp: 4_102_444_800 }),
+      's1',
+      { userId: 'request-u2', message: '继续' },
+    )
+
+    expect(result.status).toBe('DRAFTING')
+    expect(service.continueSession).toHaveBeenCalledWith('s1', { userId: 'request-u2', message: '继续' }, 'caller-u1')
   })
 
   it('rejects testEngine when token is missing', async () => {
