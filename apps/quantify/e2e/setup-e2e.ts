@@ -225,7 +225,7 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
           `SELECT COUNT(*) FROM pg_stat_activity WHERE datname = ${escapeLiteral(dbName)}`,
           true,
         )
-        const activeConns = Number.parseInt(activeConnsResult.trim())
+        const activeConns = Number.parseInt(activeConnsResult.trim(), 10)
 
         if (activeConns > 0) {
           logVerbose(
