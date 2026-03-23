@@ -30,7 +30,7 @@ export class LiveLlmStrategyCodegenController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: StartCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.startSession(dto, callerUserId)
   }
 
@@ -42,7 +42,7 @@ export class LiveLlmStrategyCodegenController {
     @Param('id') id: string,
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.continueSession(id, dto, callerUserId)
   }
 
@@ -53,7 +53,7 @@ export class LiveLlmStrategyCodegenController {
     @Param('id') id: string,
     @Headers('authorization') authorization: string | undefined,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.getSession(id, callerUserId)
   }
 

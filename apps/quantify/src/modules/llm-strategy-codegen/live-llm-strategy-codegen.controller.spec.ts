@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto'
 import { Test } from '@nestjs/testing'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -8,21 +7,18 @@ import { CallerIdentityService } from './services/caller-identity.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
 const TEST_APP_SECRET = 'engine-test-secret'
-const TEST_JWT_SECRET = 'quantify-jwt-secret'
 
-function createBearerToken(payload: Record<string, unknown>, secret = TEST_JWT_SECRET): string {
-  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+function createBearerToken(payload: Record<string, unknown>): string {
+  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const signingInput = `${encodedHeader}.${encodedPayload}`
-  const signature = createHmac('sha256', secret).update(signingInput).digest('base64url')
-  return `Bearer ${signingInput}.${signature}`
+  return `Bearer ${encodedHeader}.${encodedPayload}.signature`
 }
 
 function createMockEnvService() {
   return {
     getString: jest.fn((key: string) => {
       if (key === 'APP_SECRET') return TEST_APP_SECRET
-      if (key === 'JWT_SECRET') return TEST_JWT_SECRET
+      if (key === 'BACKEND_API_BASE_URL') return 'http://backend.test/api/v1'
       return undefined
     }),
     isDev: jest.fn().mockReturnValue(false),
@@ -40,6 +36,19 @@ function buildProviders(service: Record<string, jest.Mock>, envService = createM
 }
 
 describe('liveLlmStrategyCodegenController', () => {
+  const originalFetch = global.fetch
+
+  beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'caller-u1' }),
+    }) as unknown as typeof fetch
+  })
+
+  afterAll(() => {
+    global.fetch = originalFetch
+  })
+
   it('creates session in drafting status', async () => {
     const service = {
       startSession: jest.fn().mockResolvedValue({ id: 's1', status: 'DRAFTING' }),
@@ -56,7 +65,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
     const result = await controller.startSession(
-      createBearerToken({ sub: 'caller-u1', exp: 4_102_444_800 }),
+      createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
       { userId: 'request-u2' },
     )
 
@@ -95,7 +104,7 @@ describe('liveLlmStrategyCodegenController', () => {
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
     const result = await controller.continueSession(
-      createBearerToken({ sub: 'caller-u1', exp: 4_102_444_800 }),
+      createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
       's1',
       { userId: 'request-u2', message: '继续' },
     )
@@ -174,10 +183,10 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', exp: 4_102_444_800 }))
+    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user', exp: 4_102_444_800 }))
 
     expect(result.status).toBe('PUBLISHED')
-    expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
+    expect(service.getSession).toHaveBeenCalledWith('s1', 'caller-u1')
   })
 
   it('rejects getSession when authorization header is missing', async () => {
@@ -197,7 +206,7 @@ describe('liveLlmStrategyCodegenController', () => {
     expect(service.getSession).not.toHaveBeenCalled()
   })
 
-  it('rejects getSession when token signature is invalid', async () => {
+  it('rejects getSession when principalType is not user', async () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
@@ -210,13 +219,11 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1' }, 'wrong-secret'))).rejects.toBeInstanceOf(
-      DomainException,
-    )
+    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'admin' }))).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 
-  it('rejects getSession when jwt subject is missing', async () => {
+  it('rejects getSession when backend verification fails', async () => {
     const service = {
       startSession: jest.fn(),
       continueSession: jest.fn(),
@@ -228,10 +235,13 @@ describe('liveLlmStrategyCodegenController', () => {
       providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    })
 
-    await expect(
-      controller.getSession('s1', createBearerToken({ exp: Math.floor(Date.now() / 1000) + 3600 })),
-    ).rejects.toBeInstanceOf(DomainException)
+    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user' }))).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 })
