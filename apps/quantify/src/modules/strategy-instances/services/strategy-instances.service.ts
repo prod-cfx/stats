@@ -16,7 +16,7 @@ import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
-import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { BadRequestException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
