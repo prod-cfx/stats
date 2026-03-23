@@ -5,6 +5,7 @@ import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-it
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewService } from '../services/account-strategy-view.service'
