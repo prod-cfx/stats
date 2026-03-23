@@ -158,14 +158,8 @@ export class OpenInterestController {
   })
   async query(@Query() queryDto: QueryOpenInterestDto) {
     const result = await this.openInterestService.query(queryDto)
-    const items = result.data.map(entity => this.toDto(entity))
-    const limit = result.limit || 1
-    const computedPage =
-      Number.isFinite(result.offset) && limit > 0
-        ? Math.floor(result.offset / limit) + 1
-        : 1
-    const page = queryDto.page ?? computedPage
-    return new BasePaginationResponseDto(result.total, page, limit, items)
+    const items = result.items.map(entity => this.toDto(entity))
+    return new BasePaginationResponseDto(result.total, result.page, result.limit, items)
   }
 
   @Get('latest/:exchange/:symbol')

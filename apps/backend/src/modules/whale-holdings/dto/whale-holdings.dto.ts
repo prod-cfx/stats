@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsDateString,
@@ -101,6 +101,13 @@ export class QueryWhaleHoldingsDto {
   @IsString()
   @IsOptional()
   symbol?: string
+
+  @ApiPropertyOptional({ description: '页码（从 1 开始）', example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
 
   @ApiProperty({
     description: '仅返回名义价值不低于该数值（USD）的持仓，默认 1_000_000',

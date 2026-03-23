@@ -88,8 +88,10 @@ describe('WhaleHoldingsService (E2E)', () => {
       limit: 10,
     })
 
-    expect(btcHoldings.length).toBe(1)
-    const btc = btcHoldings[0]
+    expect(btcHoldings.total).toBeDefined()
+    expect(btcHoldings.page).toBe(1)
+    expect(btcHoldings.items.length).toBe(1)
+    const btc = btcHoldings.items[0]
     expect(btc.userAddress).toBe('0xWhaleAddress2')
     expect(btc.symbol).toBe('BTC')
     expect(btc.positionValueUsd).toBe(1_200_000)
@@ -101,11 +103,84 @@ describe('WhaleHoldingsService (E2E)', () => {
       limit: 10,
     })
 
-    const addresses = allHoldings.map(h => `${h.userAddress}-${h.symbol}`).sort()
+    expect(allHoldings.total).toBeDefined()
+    expect(allHoldings.page).toBe(1)
+    const addresses = allHoldings.items.map(h => `${h.userAddress}-${h.symbol}`).sort()
     expect(addresses).toEqual([
       '0xWhaleAddress1-BTC',
       '0xWhaleAddress2-BTC',
       '0xWhaleAddress3-ETH',
     ])
+  })
+
+  it('应返回分页结构包含 total/page/limit/items', async () => {
+    const client = prisma.getClient()
+    await client.hyperliquidWhalePosition.deleteMany({})
+    const now = new Date()
+    const minutes = (n: number) => new Date(now.getTime() - n * 60 * 1000)
+
+    // Seed 5 whale positions all above threshold
+    await client.hyperliquidWhalePosition.createMany({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        userAddress: `0xPagWhale${i}`,
+        symbol: 'BTC',
+        positionSize: `${(i + 1) * 10}`,
+        entryPrice: '50000',
+        liquidationPrice: '45000',
+        positionValueUsd: `${(5 - i) * 1000000}`, // 5M, 4M, 3M, 2M, 1M (descending)
+        pnl: '5000',
+        roe: '0.01',
+        snapshotTime: minutes(i),
+        source: 'TEST',
+      })),
+    })
+
+    const result = await whaleHoldingsService.getCurrentHoldings({
+      minPositionValueUsd: 500_000,
+      limit: 2,
+      page: 1,
+    })
+
+    expect(result.total).toBe(5)
+    expect(result.page).toBe(1)
+    expect(result.limit).toBe(2)
+    expect(result.items.length).toBe(2)
+    // Should be sorted by positionValueUsd DESC
+    expect(result.items[0].positionValueUsd).toBe(5_000_000)
+    expect(result.items[1].positionValueUsd).toBe(4_000_000)
+  })
+
+  it('应支持 page 参数翻页', async () => {
+    const page2 = await whaleHoldingsService.getCurrentHoldings({
+      minPositionValueUsd: 500_000,
+      limit: 2,
+      page: 2,
+    })
+
+    expect(page2.total).toBe(5)
+    expect(page2.page).toBe(2)
+    expect(page2.items.length).toBe(2)
+    expect(page2.items[0].positionValueUsd).toBe(3_000_000)
+    expect(page2.items[1].positionValueUsd).toBe(2_000_000)
+
+    const page3 = await whaleHoldingsService.getCurrentHoldings({
+      minPositionValueUsd: 500_000,
+      limit: 2,
+      page: 3,
+    })
+
+    expect(page3.items.length).toBe(1)
+    expect(page3.items[0].positionValueUsd).toBe(1_000_000)
+  })
+
+  it('超出范围的 page 应返回空 items', async () => {
+    const result = await whaleHoldingsService.getCurrentHoldings({
+      minPositionValueUsd: 500_000,
+      limit: 2,
+      page: 100,
+    })
+
+    expect(result.total).toBe(5)
+    expect(result.items.length).toBe(0)
   })
 })

@@ -5,6 +5,7 @@ import type {
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -152,12 +153,7 @@ export class OpenInterestService {
       this.prisma.openInterest.count({ where }),
     ])
 
-    return {
-      data,
-      total,
-      limit,
-      offset,
-    }
+    return new BasePaginationResponseDto(total, page, limit, data)
   }
 
   /**

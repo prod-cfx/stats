@@ -2958,8 +2958,18 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.number().gte(1).lte(2000).optional(),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().optional(),
+      },
     ],
-    response: z.array(LongShortRatioPointResponseDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(LongShortRatioPointResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3119,6 +3129,11 @@ const endpoints = makeApi([
         schema: z.number().gte(1).lte(200).optional().default(50),
       },
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().optional(),
+      },
+      {
         name: 'minValue',
         type: 'Query',
         schema: z.number().gte(0).optional().default(100000),
@@ -3152,8 +3167,18 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.number().gte(1).lte(200).optional().default(50),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().optional(),
+      },
     ],
-    response: z.array(MarketTradeResponseDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(MarketTradeResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3454,8 +3479,18 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.string().optional(),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional(),
+      },
     ],
-    response: z.array(RealtimeWhaleAlertDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(RealtimeWhaleAlertDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3490,8 +3525,18 @@ const endpoints = makeApi([
         type: 'Query',
         schema: z.string().optional(),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional(),
+      },
     ],
-    response: z.array(WhaleTradeDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(WhaleTradeDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -3506,6 +3551,11 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
       {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional(),
+      },
+      {
         name: 'minPositionValueUsd',
         type: 'Query',
         schema: z.number().optional(),
@@ -3516,7 +3566,12 @@ const endpoints = makeApi([
         schema: z.number().gte(1).lte(500).optional(),
       },
     ],
-    response: z.array(WhaleHoldingDto),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(WhaleHoldingDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',

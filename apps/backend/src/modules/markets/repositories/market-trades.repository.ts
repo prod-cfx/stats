@@ -109,29 +109,35 @@ export class MarketTradesRepository {
     instrumentType: string,
     symbol: string,
     limit = 50,
-  ): Promise<MarketTrade[]> {
+    page = 1,
+  ): Promise<{ items: MarketTrade[], total: number }> {
     if (defaultEnvAccessor.bool('USE_MOCK_DATA')) {
-      return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      return { items, total: items.length }
     }
     try {
-      const trades = await this.prisma.marketTrade.findMany({
-        where: {
-          exchange,
-          instrumentType,
-          symbol,
-        },
-        orderBy: {
-          tradeTimestamp: 'desc',
-        },
-        take: limit,
-      })
-      if (trades.length === 0) {
-        return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      const where = { exchange, instrumentType, symbol }
+      const [trades, total] = await Promise.all([
+        this.prisma.marketTrade.findMany({
+          where,
+          orderBy: [
+            { tradeTimestamp: 'desc' },
+            { id: 'desc' },
+          ],
+          take: limit,
+          skip: (page - 1) * limit,
+        }),
+        this.prisma.marketTrade.count({ where }),
+      ])
+      if (trades.length === 0 && total === 0) {
+        const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+        return { items, total: items.length }
       }
-      return trades
+      return { items: trades, total }
     } catch (error) {
       console.error('Database error in findLatestTrades, falling back to mock data', error)
-      return this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      const items = this.generateMockTrades(exchange, instrumentType, symbol, limit)
+      return { items, total: items.length }
     }
   }
 

@@ -270,23 +270,6 @@ export class QueryOpenInterestDto extends BasePaginationRequestDto {
 }
 
 /**
- * 查询结果响应 DTO
- */
-export class QueryOpenInterestResponseDto {
-  @ApiProperty({ description: '数据列表', type: [OpenInterestDto] })
-  data: OpenInterestDto[]
-
-  @ApiProperty({ description: '总数', example: 1000 })
-  total: number
-
-  @ApiProperty({ description: '每页数量', example: 100 })
-  limit: number
-
-  @ApiProperty({ description: '偏移量', example: 0 })
-  offset: number
-}
-
-/**
  * 统计数据响应 DTO
  */
 export class OpenInterestStatsDto {

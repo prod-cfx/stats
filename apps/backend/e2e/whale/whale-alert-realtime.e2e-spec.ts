@@ -103,8 +103,8 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     })
 
     // 默认 min_position_value_usd=1000，应返回 E2E1/E2E2/E2E3（E2E4 超时窗被过滤）
-    expect(result.length).toBe(3)
-    expect(result.map(item => item.user_address).sort()).toEqual([
+    expect(result.items.length).toBe(3)
+    expect(result.items.map(item => item.user_address).sort()).toEqual([
       '0xWhaleE2E1',
       '0xWhaleE2E2',
       '0xWhaleE2E3',
@@ -148,10 +148,10 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
       limit: 1,
     })
 
-    expect(result.length).toBe(1)
-    expect(result[0].symbol).toBe('E2E')
+    expect(result.items.length).toBe(1)
+    expect(result.items[0].symbol).toBe('E2E')
     // 在 >=1,000,000 阈值下，最新一条应为 E2E3（空头，时间更近）
-    expect(result[0].user_address).toBe('0xWhaleE2E3')
+    expect(result.items[0].user_address).toBe('0xWhaleE2E3')
   })
 
   it('should respect custom minPositionValueUsd', async () => {
@@ -181,8 +181,92 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
       since: localSince.toISOString(),
     })
 
-    expect(result.length).toBe(1)
-    expect(result[0].user_address).toBe('0xWhaleE2E1')
-    expect(result[0].position_value_usd).toBeGreaterThanOrEqual(4_000_000)
+    expect(result.items.length).toBe(1)
+    expect(result.items[0].user_address).toBe('0xWhaleE2E1')
+    expect(result.items[0].position_value_usd).toBeGreaterThanOrEqual(4_000_000)
+  })
+
+  it('应返回分页结构包含 total/page/limit/items', async () => {
+    const client = prisma.getClient()
+    await client.hyperliquidWhaleAlert.deleteMany({})
+    const now = new Date()
+
+    // Seed 5 records within time window
+    await client.hyperliquidWhaleAlert.createMany({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        userAddress: `0xPagTest${i}`,
+        symbol: 'PAG',
+        positionSize: '10',
+        entryPrice: '50000',
+        liquidationPrice: '45000',
+        positionValueUsd: '5000000',
+        positionAction: 1,
+        createTime: new Date(now.getTime() - (i + 1) * 60 * 1000),
+        source: 'E2E',
+      })),
+    })
+
+    const result = await whaleAlertService.getRealtimeAlerts({
+      symbol: 'PAG',
+      limit: 2,
+      page: 1,
+    })
+
+    expect(result.total).toBe(5)
+    expect(result.page).toBe(1)
+    expect(result.limit).toBe(2)
+    expect(result.items.length).toBe(2)
+  })
+
+  it('应支持 page 参数翻页', async () => {
+    const page2 = await whaleAlertService.getRealtimeAlerts({
+      symbol: 'PAG',
+      limit: 2,
+      page: 2,
+    })
+
+    expect(page2.total).toBe(5)
+    expect(page2.page).toBe(2)
+    expect(page2.items.length).toBe(2)
+
+    const page3 = await whaleAlertService.getRealtimeAlerts({
+      symbol: 'PAG',
+      limit: 2,
+      page: 3,
+    })
+
+    expect(page3.total).toBe(5)
+    expect(page3.page).toBe(3)
+    expect(page3.items.length).toBe(1) // Only 1 remaining
+  })
+
+  it('超出范围的 page 应返回空 items', async () => {
+    // 独立 seed，不依赖前序测试数据
+    const client = prisma.getClient()
+    await client.hyperliquidWhaleAlert.deleteMany({})
+    const now = new Date()
+    await client.hyperliquidWhaleAlert.createMany({
+      data: Array.from({ length: 3 }, (_, i) => ({
+        userAddress: `0xOutOfRange${i}`,
+        symbol: 'OOR',
+        positionSize: '10',
+        entryPrice: '50000',
+        liquidationPrice: '45000',
+        positionValueUsd: '5000000',
+        positionAction: 1,
+        createTime: new Date(now.getTime() - (i + 1) * 60 * 1000),
+        source: 'E2E',
+      })),
+    })
+
+    const result = await whaleAlertService.getRealtimeAlerts({
+      symbol: 'OOR',
+      limit: 2,
+      page: 100,
+    })
+
+    expect(result.total).toBe(3)
+    expect(result.page).toBe(100)
+    expect(result.items.length).toBe(0)
   })
 })

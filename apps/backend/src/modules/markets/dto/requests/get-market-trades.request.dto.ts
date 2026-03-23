@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
@@ -121,6 +121,16 @@ export class GetLatestTradesRequestDto {
   @Min(1)
   @Max(200)
   limit?: number
+
+  @ApiPropertyOptional({
+    description: '页码（从 1 开始）',
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
 }
 
 export class GetLargeTradesRequestDto extends GetLatestTradesRequestDto {

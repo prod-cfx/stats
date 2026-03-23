@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Type } from 'class-transformer'
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
 
 export enum WhaleAlertSide {
@@ -105,6 +106,13 @@ export class QueryRealtimeWhaleAlertDto {
   @IsDateString()
   @IsOptional()
   since?: string
+
+  @ApiPropertyOptional({ description: '页码（从 1 开始）', example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
 }
 
 

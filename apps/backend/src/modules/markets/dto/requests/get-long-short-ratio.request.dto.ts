@@ -50,6 +50,16 @@ export class GetLongShortRatioRequestDto {
   @Min(1, { message: 'limit 必须大于 0' })
   @Max(2000, { message: 'limit 不能超过 2000' })
   limit?: number
+
+  @ApiPropertyOptional({
+    description: '页码（从 1 开始）',
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
 }
 
 

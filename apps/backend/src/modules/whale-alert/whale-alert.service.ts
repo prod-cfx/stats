@@ -3,6 +3,7 @@ import type {
   RealtimeWhaleAlertDto,
 } from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
@@ -30,7 +31,7 @@ export class WhaleAlertService {
    * - 支持按 symbol 过滤
    * - 结果按 create_time 倒序排列
    */
-  async getRealtimeAlerts(query: QueryRealtimeWhaleAlertDto): Promise<RealtimeWhaleAlertDto[]> {
+  async getRealtimeAlerts(query: QueryRealtimeWhaleAlertDto): Promise<BasePaginationResponseDto<RealtimeWhaleAlertDto>> {
     const where: Prisma.HyperliquidWhaleAlertWhereInput = {}
 
     if (query.symbol) {
@@ -59,6 +60,8 @@ export class WhaleAlertService {
     }
 
     const limit = Math.min(query.limit ?? 50, 200)
+    const page = query.page ?? 1
+    const skip = (page - 1) * limit
 
     this.logger.debug(
       `Fetching realtime whale alerts with criteria: ${JSON.stringify({
@@ -66,18 +69,23 @@ export class WhaleAlertService {
         minValueUsd,
         since: sinceForQuery ? sinceForQuery.toISOString() : null,
         limit,
+        page,
       })}`,
     )
 
-    const rows = await this.prisma.hyperliquidWhaleAlert.findMany({
-      where,
-      orderBy: {
-        createTime: 'desc',
-      },
-      take: limit,
-    })
+    const [rows, total] = await Promise.all([
+      this.prisma.hyperliquidWhaleAlert.findMany({
+        where,
+        orderBy: {
+          createTime: 'desc',
+        },
+        take: limit,
+        skip,
+      }),
+      this.prisma.hyperliquidWhaleAlert.count({ where }),
+    ])
 
-    return rows.map(row => {
+    const items = rows.map(row => {
       const positionSize = Number(row.positionSize)
       const entryPrice = Number(row.entryPrice)
       const liqPrice = Number(row.liquidationPrice)
@@ -102,6 +110,8 @@ export class WhaleAlertService {
 
       return dto
     })
+
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 
   /**
@@ -111,7 +121,7 @@ export class WhaleAlertService {
    * - 支持按 symbol 过滤
    * - 结果按 trade_time 倒序排列
    */
-  async getWhaleTrades(query: QueryWhaleTradeDto): Promise<WhaleTradeDto[]> {
+  async getWhaleTrades(query: QueryWhaleTradeDto): Promise<BasePaginationResponseDto<WhaleTradeDto>> {
     const where: Prisma.HyperliquidWhaleTradeWhereInput = {}
 
     if (query.symbol) {
@@ -139,6 +149,8 @@ export class WhaleAlertService {
     }
 
     const limit = Math.min(query.limit ?? 50, 200)
+    const page = query.page ?? 1
+    const skip = (page - 1) * limit
 
     this.logger.debug(
       `Fetching whale trades with criteria: ${JSON.stringify({
@@ -146,18 +158,23 @@ export class WhaleAlertService {
         minValueUsd,
         since: sinceForQuery ? sinceForQuery.toISOString() : null,
         limit,
+        page,
       })}`,
     )
 
-    const rows = await this.prisma.hyperliquidWhaleTrade.findMany({
-      where,
-      orderBy: {
-        tradeTime: 'desc',
-      },
-      take: limit,
-    })
+    const [rows, total] = await Promise.all([
+      this.prisma.hyperliquidWhaleTrade.findMany({
+        where,
+        orderBy: {
+          tradeTime: 'desc',
+        },
+        take: limit,
+        skip,
+      }),
+      this.prisma.hyperliquidWhaleTrade.count({ where }),
+    ])
 
-    return rows.map(row => {
+    const items = rows.map(row => {
       const tradeSize = Number(row.tradeSize)
       const price = Number(row.price)
       const tradeValueUsd = Number(row.tradeValueUsd)
@@ -178,6 +195,8 @@ export class WhaleAlertService {
 
       return dto
     })
+
+    return new BasePaginationResponseDto(total, page, limit, items)
   }
 
   /**

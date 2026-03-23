@@ -1292,9 +1292,9 @@ export class KlineGateway implements OnGatewayConnection, OnGatewayDisconnect {
               this.marketsService.getLargeTrades(exchange, instrumentType, symbol, minValue, limit),
             )
           } else {
-            rawTrades = await withTimeout(
-              this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit),
-            )
+            rawTrades = (await withTimeout(
+              this.marketsService.getLatestTrades(exchange, instrumentType, symbol, limit, 1),
+            )).items
           }
         } catch (error) {
           this.logger.error({

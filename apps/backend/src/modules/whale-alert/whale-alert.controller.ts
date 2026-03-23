@@ -7,14 +7,17 @@ import { QueryRealtimeWhaleAlertDto, RealtimeWhaleAlertDto } from './dto/realtim
 // eslint-disable-next-line ts/consistent-type-imports
 import { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import { Controller, Get, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports
 import { WhaleAlertService } from './whale-alert.service'
+// eslint-disable-next-line ts/consistent-type-imports
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 
 @ApiTags('whale-alerts')
 @ApiBearerAuth('bearer')
+@ApiExtraModels(BasePaginationResponseDto, RealtimeWhaleAlertDto, WhaleTradeDto)
 @Controller('whale-alerts')
 export class WhaleAlertController {
   constructor(private readonly service: WhaleAlertService) {}
@@ -43,10 +46,23 @@ export class WhaleAlertController {
     required: false,
     description: '仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时',
   })
-  @ApiOkResponse({ type: RealtimeWhaleAlertDto, isArray: true })
-  async getRealtime(@Query() query: QueryRealtimeWhaleAlertDto): Promise<RealtimeWhaleAlertDto[]> {
-    const result = await this.service.getRealtimeAlerts(query)
-    return result
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(RealtimeWhaleAlertDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  async getRealtime(@Query() query: QueryRealtimeWhaleAlertDto): Promise<BasePaginationResponseDto<RealtimeWhaleAlertDto>> {
+    return this.service.getRealtimeAlerts(query)
   }
 
   @Get('trades')
@@ -73,9 +89,22 @@ export class WhaleAlertController {
     required: false,
     description: '仅返回该时间之后的记录（ISO 时间字符串），默认过去 24 小时',
   })
-  @ApiOkResponse({ type: WhaleTradeDto, isArray: true })
-  async getWhaleTrades(@Query() query: QueryWhaleTradeDto): Promise<WhaleTradeDto[]> {
-    const result = await this.service.getWhaleTrades(query)
-    return result
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(WhaleTradeDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  async getWhaleTrades(@Query() query: QueryWhaleTradeDto): Promise<BasePaginationResponseDto<WhaleTradeDto>> {
+    return this.service.getWhaleTrades(query)
   }
 }

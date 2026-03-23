@@ -8,6 +8,7 @@ import type { AdminUser } from '@/prisma/prisma.types'
 import { PrincipalType } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { compare, hash } from 'bcrypt'
+import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaService } from '@/prisma/prisma.service'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'
@@ -236,12 +237,7 @@ export class AdminUserService {
       roleMap.set(principalId, list)
     })
 
-    return {
-      total,
-      page,
-      limit,
-      items: items.map(user => this.mapToDto(user, roleMap.get(user.id) ?? [])),
-    }
+    return new BasePaginationResponseDto(total, page, limit, items.map(user => this.mapToDto(user, roleMap.get(user.id) ?? [])))
   }
 
   async findById(id: string): Promise<AdminUserDto> {
