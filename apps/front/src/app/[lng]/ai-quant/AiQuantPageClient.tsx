@@ -1202,7 +1202,7 @@ export function AiQuantPageClient() {
               ],
               updatedAt: Date.now(),
             }))
-          } catch {
+          } catch (error) {
             // 后端部署失败时，在本地 mock 模式下保留可演示能力，但明确这是本地模拟
             if (mockExecutionMode) {
               upsertStrategyDeployment({
@@ -1234,7 +1234,25 @@ export function AiQuantPageClient() {
                 ],
                 updatedAt: Date.now(),
               }))
+              return
             }
+
+            const deployErrorMessage = extractCodegenErrorMessage(error, '策略部署失败，请稍后重试。')
+            updateActiveConversation(curr => ({
+              ...curr,
+              messages: [
+                ...curr.messages,
+                {
+                  id: `deploy-fail-${Date.now()}`,
+                  role: 'assistant',
+                  content: `策略部署失败：${deployErrorMessage}`,
+                },
+              ],
+              updatedAt: Date.now(),
+            }))
+            throw error instanceof ApiError
+              ? error
+              : new ApiError(deployErrorMessage, 'AI_QUANT_DEPLOY_FAILED', 500, { error })
           }
         }}
         lng={lng}
