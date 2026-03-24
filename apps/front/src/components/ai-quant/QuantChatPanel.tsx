@@ -3,11 +3,11 @@
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
 import type { BacktestRangePreset } from '@/components/ai-quant/backtest-range'
 import { resolveBacktestRange } from '@/components/ai-quant/backtest-range'
-import DOMPurify from 'dompurify'
-import { ArrowUp, Bot, Check, ChevronsUpDown, Play, Search, Settings2, User } from 'lucide-react'
+import { ArrowUp, Bot, Check, ChevronsUpDown, Copy, Play, Search, Settings2, User } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import showdown from 'showdown'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export interface QuantMessage {
   id: string
@@ -46,13 +46,15 @@ const RANGE_PRESETS: Array<{ value: BacktestRangePreset, label: '7D' | '30D' | '
   { value: 'CUSTOM', label: 'CUSTOM' },
 ]
 
-const markdownConverter = new showdown.Converter({
-  ghCodeBlocks: true,
-  simpleLineBreaks: true,
-  strikethrough: true,
-  tables: true,
-  tasklists: true,
-})
+function getCodeLanguage(className?: string): string {
+  if (!className) return 'text'
+  const languageMatch = /language-([\w-]+)/.exec(className)
+  return languageMatch?.[1]?.toLowerCase() || 'text'
+}
+
+function normalizeCodeText(children: unknown): string {
+  return String(children ?? '').replace(/\n$/, '')
+}
 
 export function QuantChatPanel({
   messages,
@@ -65,7 +67,7 @@ export function QuantChatPanel({
   const { t } = useTranslation()
   const [input, setInput] = useState('')
   const [showSettings, setShowSettings] = useState(true)
-  
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
   // Custom Combobox State
   const [openCombobox, setOpenCombobox] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -126,6 +128,19 @@ export function QuantChatPanel({
     })
   }
 
+  const copyCode = async (code: string, codeId: string) => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopiedCodeId(codeId)
+      window.setTimeout(() => {
+        setCopiedCodeId(prev => (prev === codeId ? null : prev))
+      }, 1400)
+    }
+    catch {
+      setCopiedCodeId(null)
+    }
+  }
+
   return (
     <section className="flex h-[calc(100vh-200px)] min-h-[600px] flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
       {/* Header / Toolbar */}
@@ -138,6 +153,7 @@ export function QuantChatPanel({
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setShowSettings(!showSettings)}
             className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
               showSettings
@@ -149,6 +165,7 @@ export function QuantChatPanel({
             <span>{t('aiQuant.paramsConfig')}</span>
           </button>
           <button
+            type="button"
             onClick={onRunBacktest}
             disabled={!canRunBacktest}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all hover:from-violet-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -315,16 +332,74 @@ export function QuantChatPanel({
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
-                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-[color:var(--cf-border)] [&_pre]:bg-[color:var(--cf-bg)] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0'
+                    ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5'
                     : 'rounded-tr-none bg-primary text-white'
                 }`}
               >
                 {message.role === 'assistant' ? (
-                  <div
-                    dangerouslySetInnerHTML={{
-                      __html: DOMPurify.sanitize(markdownConverter.makeHtml(message.content)),
-                    }}
-                  />
+                  <div className="space-y-3 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
+                    {(() => {
+                      let codeBlockIndex = 0
+                      return (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code({ inline, className, children, node: _node, ...rest }: any) {
+                              if (inline) {
+                                return (
+                                  <code className="rounded bg-[color:var(--cf-bg)] px-1.5 py-0.5" {...rest}>
+                                    {children}
+                                  </code>
+                                )
+                              }
+
+                              const normalizedText = normalizeCodeText(children)
+                              const language = getCodeLanguage(className)
+                              const blockId = `${message.id}-code-${codeBlockIndex}`
+                              codeBlockIndex += 1
+
+                              return (
+                                <div className="overflow-hidden rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
+                                  <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-3 py-2 text-xs">
+                                    <span className="font-mono uppercase tracking-wide text-[color:var(--cf-muted)]">
+                                      {language}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyCode(normalizedText, blockId)}
+                                      aria-label={copiedCodeId === blockId ? t('common.copied', { defaultValue: '已复制' }) : t('common.copy', { defaultValue: '复制' })}
+                                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
+                                    >
+                                      {copiedCodeId === blockId
+                                        ? (
+                                            <>
+                                              <Check className="h-3.5 w-3.5" />
+                                              <span>{t('common.copied', { defaultValue: '已复制' })}</span>
+                                            </>
+                                          )
+                                        : (
+                                            <>
+                                              <Copy className="h-3.5 w-3.5" />
+                                              <span>{t('common.copy', { defaultValue: '复制' })}</span>
+                                            </>
+                                          )}
+                                    </button>
+                                  </div>
+                                  <pre className="overflow-x-auto p-3 text-xs leading-6">
+                                    <code className={className} {...rest}>
+                                      {normalizedText}
+                                    </code>
+                                  </pre>
+                                </div>
+                              )
+                            },
+                          }}
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      )
+                    })()}
+                  </div>
                 ) : (
                   message.content
                 )}
