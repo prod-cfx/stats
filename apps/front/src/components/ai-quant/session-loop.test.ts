@@ -167,4 +167,68 @@ describe('ai-quant session-loop', () => {
       },
     })
   })
+
+  it('treats missing paramValues object as missing required keys', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramSchema: {
+        type: 'object',
+        required: ['symbols', 'timeframes'],
+      },
+      paramValues: undefined,
+    } as any)
+
+    expect(payload).toEqual({
+      error: {
+        code: 'MISSING_REQUIRED_PARAMS',
+        missingKeys: ['symbols', 'timeframes'],
+      },
+    })
+  })
+
+  it('blocks generate path when schema validation has non-required errors', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramSchema: {
+        type: 'object',
+        required: ['exchange'],
+        properties: {
+          exchange: {
+            type: 'string',
+            enum: ['binance', 'okx'],
+          },
+          positionPct: {
+            type: 'number',
+            minimum: 1,
+            maximum: 100,
+          },
+        },
+      },
+      paramValues: {
+        exchange: 'kraken',
+        positionPct: 120,
+      },
+    } as any)
+
+    expect(payload).toEqual({
+      error: {
+        code: 'INVALID_PARAM_VALUES',
+        missingKeys: [],
+        fieldErrors: {
+          exchange: 'enum',
+          positionPct: 'maximum',
+        },
+      },
+    })
+  })
 })

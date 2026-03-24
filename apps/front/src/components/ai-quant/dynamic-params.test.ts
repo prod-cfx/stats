@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@jest/globals'
-import { buildDynamicParamFields, validateDynamicParamValues } from './dynamic-params'
+import {
+  buildDynamicParamFields,
+  parseDynamicParamInputValue,
+  validateDynamicParamValues,
+} from './dynamic-params'
 
 describe('ai-quant dynamic-params', () => {
   const schema = {
@@ -88,5 +92,11 @@ describe('ai-quant dynamic-params', () => {
       positionPct: 'type',
       enabled: 'type',
     })
+  })
+
+  it('does not coerce empty numeric input to 0', () => {
+    expect(parseDynamicParamInputValue('number', '')).toBeUndefined()
+    expect(parseDynamicParamInputValue('integer', '   ')).toBeUndefined()
+    expect(parseDynamicParamInputValue('number', '12.5')).toBe(12.5)
   })
 })

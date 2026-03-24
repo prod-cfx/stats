@@ -516,7 +516,11 @@ export function AiQuantPageClient() {
         paramValues: currentConversation?.paramValues ?? null,
       })
       if ('error' in checklistResult) {
-        const missing = checklistResult.error.missingKeys.join(', ')
+        const errorMessage = checklistResult.error.code === 'MISSING_REQUIRED_PARAMS'
+          ? `参数不完整，请补充必填字段：${checklistResult.error.missingKeys.join(', ')}`
+          : `参数校验失败，请修正：${Object.entries(checklistResult.error.fieldErrors ?? {})
+            .map(([key, reason]) => `${key}(${reason})`)
+            .join(', ')}`
         setConversations(prev => prev.map((conv) => {
           if (conv.id !== conversationId) return conv
           return {
@@ -525,7 +529,7 @@ export function AiQuantPageClient() {
             messages: [
               ...conv.messages.map(msg =>
                 msg.id === loadingMessageId
-                  ? { ...msg, content: `参数不完整，请补充必填字段：${missing}` }
+                  ? { ...msg, content: errorMessage }
                   : msg,
               ),
             ],

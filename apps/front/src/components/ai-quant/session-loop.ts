@@ -1,4 +1,5 @@
 import type { StrategyLogicGraph } from './logic-graph-model'
+import { validateDynamicParamValues } from './dynamic-params'
 
 export interface SessionChecklistPayload {
   entryRules?: string[]
@@ -22,8 +23,9 @@ export interface SessionLoopParams {
 
 export interface SessionLoopResolveError {
   error: {
-    code: 'MISSING_REQUIRED_PARAMS'
+    code: 'MISSING_REQUIRED_PARAMS' | 'INVALID_PARAM_VALUES'
     missingKeys: string[]
+    fieldErrors?: Record<string, string>
   }
 }
 
@@ -52,12 +54,12 @@ function collectMissingRequiredKeys(
   paramSchema: Record<string, unknown> | null | undefined,
   paramValues: Record<string, unknown> | null | undefined,
 ): string[] {
-  if (!paramSchema || !paramValues) return []
+  if (!paramSchema) return []
   const required = paramSchema.required
   if (!Array.isArray(required)) return []
   return required.filter((key): key is string => {
     if (typeof key !== 'string') return false
-    const value = paramValues[key]
+    const value = paramValues?.[key]
     if (value === undefined || value === null) return true
     if (typeof value === 'string' && value.trim() === '') return true
     if (Array.isArray(value) && value.length === 0) return true
@@ -166,6 +168,17 @@ export function resolveChecklistPayload(input: {
       error: {
         code: 'MISSING_REQUIRED_PARAMS',
         missingKeys: missingRequiredKeys,
+      },
+    }
+  }
+
+  const validation = validateDynamicParamValues(input.paramSchema, input.paramValues)
+  if (!validation.valid) {
+    return {
+      error: {
+        code: 'INVALID_PARAM_VALUES',
+        missingKeys: [],
+        fieldErrors: validation.fieldErrors,
       },
     }
   }

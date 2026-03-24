@@ -23,6 +23,18 @@ export interface DynamicParamValidationResult {
   fieldErrors: Record<string, string>
 }
 
+export function parseDynamicParamInputValue(
+  fieldType: DynamicParamFieldViewModel['type'],
+  rawValue: string,
+): unknown {
+  if (fieldType === 'number' || fieldType === 'integer') {
+    if (rawValue.trim() === '') return undefined
+    const parsed = Number(rawValue)
+    return Number.isFinite(parsed) ? parsed : rawValue
+  }
+  return rawValue
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>

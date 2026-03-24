@@ -6,7 +6,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { buildDynamicParamFields, validateDynamicParamValues } from './dynamic-params'
+import {
+  buildDynamicParamFields,
+  parseDynamicParamInputValue,
+  validateDynamicParamValues,
+} from './dynamic-params'
 
 export interface QuantMessage {
   id: string
@@ -182,7 +186,7 @@ export function QuantChatPanel({
                               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
                               onChange={(event) => {
                                 if (field.type === 'number' || field.type === 'integer') {
-                                  onParamChange(field.key, Number(event.target.value || 0))
+                                  onParamChange(field.key, parseDynamicParamInputValue(field.type, event.target.value))
                                   return
                                 }
                                 onParamChange(field.key, event.target.value)
