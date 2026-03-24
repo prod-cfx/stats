@@ -2,7 +2,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { Transactional } from '@nestjs-cls/transactional'
-import { Body, Controller, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -12,6 +12,7 @@ import { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import { CallerIdentityService } from '../services/caller-identity.service'
 import { CodegenConversationService } from '../services/codegen-conversation.service'
 
 @ApiTags('llm-strategy-codegen')
@@ -19,6 +20,7 @@ import { CodegenConversationService } from '../services/codegen-conversation.ser
 export class LiveLlmStrategyCodegenController {
   constructor(
     private readonly service: CodegenConversationService,
+    private readonly callerIdentityService: CallerIdentityService,
     private readonly env: EnvService,
   ) {}
 
@@ -26,8 +28,12 @@ export class LiveLlmStrategyCodegenController {
   @Post('sessions')
   @ApiOperation({ summary: '创建策略代码生成会话' })
   @ApiResponse({ status: 201, type: CodegenSessionResponseDto })
-  async startSession(@Body() dto: StartCodegenSessionDto): Promise<CodegenSessionResponseDto> {
-    return this.service.startSession(dto)
+  async startSession(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() dto: StartCodegenSessionDto,
+  ): Promise<CodegenSessionResponseDto> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.startSession(dto, callerUserId)
   }
 
   @Transactional()
@@ -35,10 +41,23 @@ export class LiveLlmStrategyCodegenController {
   @ApiOperation({ summary: '继续会话并在信息齐全时生成策略脚本' })
   @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
   async continueSession(
+    @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    return this.service.continueSession(id, dto)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.continueSession(id, dto, callerUserId)
+  }
+
+  @Get('sessions/:id')
+  @ApiOperation({ summary: '查询策略代码生成会话状态' })
+  @ApiResponse({ status: 200, type: CodegenSessionResponseDto })
+  async getSession(
+    @Param('id') id: string,
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<CodegenSessionResponseDto> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.getSession(id, callerUserId)
   }
 
   @Transactional()

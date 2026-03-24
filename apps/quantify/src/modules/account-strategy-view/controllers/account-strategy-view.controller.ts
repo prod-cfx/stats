@@ -6,20 +6,24 @@ import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.q
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
-import { MissingUserIdentityException, UserIdMismatchException } from '../exceptions'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewService } from '../services/account-strategy-view.service'
 
 @Controller('account/ai-quant/strategies')
 export class AccountStrategyViewController {
-  constructor(private readonly service: AccountStrategyViewService) {}
+  constructor(
+    private readonly service: AccountStrategyViewService,
+    private readonly callerIdentityService: AccountStrategyCallerIdentityService,
+  ) {}
 
   @Get()
   async list(
     @Query() query: AccountStrategyListQueryDto,
-    @Headers('x-user-id') headerUserId?: string,
+    @Headers('authorization') authorization?: string,
   ): Promise<BasePaginationResponseDto<AccountStrategyListItemDto>> {
-    const userId = this.resolveUserId(headerUserId, query.userId)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.listStrategies({
       ...query,
       userId,
@@ -29,10 +33,9 @@ export class AccountStrategyViewController {
   @Get(':id')
   async detail(
     @Param('id') id: string,
-    @Query('userId') queryUserId?: string,
-    @Headers('x-user-id') headerUserId?: string,
+    @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.resolveUserId(headerUserId, queryUserId)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.getStrategyDetail(userId, id)
   }
 
@@ -41,9 +44,9 @@ export class AccountStrategyViewController {
   async action(
     @Param('id') id: string,
     @Body() dto: AccountStrategyActionDto,
-    @Headers('x-user-id') headerUserId?: string,
+    @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.resolveUserId(headerUserId, dto.userId)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.performAction(id, {
       ...dto,
       userId,
@@ -54,33 +57,12 @@ export class AccountStrategyViewController {
   @Post('deploy')
   async deploy(
     @Body() dto: AccountStrategyDeployDto,
-    @Headers('x-user-id') headerUserId?: string,
+    @Headers('authorization') authorization?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = this.resolveUserId(headerUserId, dto.userId)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.service.deployStrategy({
       ...dto,
       userId,
     })
-  }
-
-  private resolveUserId(headerUserId?: string, requestedUserId?: string): string {
-    const authUserId = this.normalizeUserId(headerUserId)
-    const inputUserId = this.normalizeUserId(requestedUserId)
-
-    if (!authUserId && !inputUserId) {
-      throw new MissingUserIdentityException()
-    }
-
-    if (authUserId && inputUserId && authUserId !== inputUserId) {
-      throw new UserIdMismatchException({ authUserId, inputUserId })
-    }
-
-    return authUserId ?? inputUserId!
-  }
-
-  private normalizeUserId(value?: string): string | null {
-    if (!value) return null
-    const normalized = value.trim()
-    return normalized.length > 0 ? normalized : null
   }
 }

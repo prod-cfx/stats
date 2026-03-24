@@ -1,5 +1,6 @@
 import type { BacktestReport, BacktestRunInput, Bar, SignalIntent } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
+import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -79,7 +80,11 @@ export class BacktestRunnerService {
         params: input.strategy.params,
       })
 
-      const normalized = this.normalizeIntent(intent, position.qty)
+      const normalized = this.normalizeIntent(intent, {
+        currentQty: position.qty,
+        equity: snapshot.equity,
+        markPrice: this.getMarkPrice(bar, input.execution.priceSource),
+      })
       const adjustedDelta = this.applyLeverageCap({
         leverage: input.leverage,
         price: this.getMarkPrice(bar, input.execution.priceSource),
@@ -87,6 +92,7 @@ export class BacktestRunnerService {
         requestedDelta: normalized,
         equity: snapshot.equity,
       })
+      const intentReason = this.extractIntentReason(intent)
 
       if (adjustedDelta === 0) {
         ledger.markToMarket({ [bar.symbol]: bar.close })
@@ -95,7 +101,7 @@ export class BacktestRunnerService {
       }
 
       const side: 'BUY' | 'SELL' = adjustedDelta > 0 ? 'BUY' : 'SELL'
-      const fill = this.executionModel.fill(bar, side, Math.abs(adjustedDelta), input.execution, intent.reason)
+      const fill = this.executionModel.fill(bar, side, Math.abs(adjustedDelta), input.execution, intentReason)
       const events = ledger.applyFill(fill)
       events.forEach((event) => {
         if (event.type === 'OPEN') {
@@ -106,7 +112,7 @@ export class BacktestRunnerService {
             side: event.side,
             qty: event.qty,
             fee: event.fee,
-            reason: intent.reason,
+            reason: intentReason,
           })
           return
         }
@@ -119,7 +125,7 @@ export class BacktestRunnerService {
           qty: event.qty,
           fee: event.fee,
           pnl: event.pnl ?? 0,
-          reason: intent.reason,
+          reason: intentReason,
         })
       })
 
@@ -144,20 +150,84 @@ export class BacktestRunnerService {
     }
   }
 
-  private normalizeIntent(intent: SignalIntent, currentQty: number): number {
+  private normalizeIntent(
+    intent: SignalIntent,
+    context: { currentQty: number; equity: number; markPrice: number },
+  ): number {
+    const decisionValidation = validateStrategyDecision(intent)
+    if (decisionValidation.valid && decisionValidation.value) {
+      return strategyDecisionToDeltaQty(decisionValidation.value, context)
+    }
+
+    if (this.isLlmSignalIntent(intent)) {
+      return this.normalizeLlmSignalIntent(intent, context)
+    }
+
+    if (!this.isLegacyEngineIntent(intent)) {
+      return 0
+    }
+
     switch (intent.type) {
       case 'TARGET_POSITION':
-        return intent.targetQty - currentQty
+        return intent.targetQty - context.currentQty
       case 'OPEN_LONG':
         return Math.abs(intent.qty)
       case 'OPEN_SHORT':
         return -Math.abs(intent.qty)
       case 'CLOSE':
-        return currentQty === 0 ? 0 : -Math.sign(currentQty) * (intent.qty ?? Math.abs(currentQty))
+        return context.currentQty === 0 ? 0 : -Math.sign(context.currentQty) * (intent.qty ?? Math.abs(context.currentQty))
       case 'NOOP':
       default:
         return 0
     }
+  }
+
+  private isLlmSignalIntent(intent: SignalIntent): intent is Extract<SignalIntent, { direction: string }> {
+    return typeof intent === 'object' && intent !== null && 'direction' in intent
+  }
+
+  private isLegacyEngineIntent(
+    intent: SignalIntent,
+  ): intent is Extract<SignalIntent, { type: 'TARGET_POSITION' | 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE' | 'NOOP' }> {
+    return typeof intent === 'object' && intent !== null && 'type' in intent
+  }
+
+  private normalizeLlmSignalIntent(
+    intent: Extract<SignalIntent, { direction: string }>,
+    context: { currentQty: number; equity: number; markPrice: number },
+  ): number {
+    const signalQty = this.resolveLlmSignalQty(intent, context)
+    switch (intent.direction) {
+      case 'BUY':
+        return signalQty > 0 ? signalQty : 0
+      case 'SELL':
+        return signalQty > 0 ? -signalQty : 0
+      case 'CLOSE_LONG':
+        return context.currentQty > 0 ? -context.currentQty : 0
+      case 'CLOSE_SHORT':
+        return context.currentQty < 0 ? Math.abs(context.currentQty) : 0
+      default:
+        return 0
+    }
+  }
+
+  private resolveLlmSignalQty(
+    intent: Extract<SignalIntent, { direction: string }>,
+    context: { equity: number; markPrice: number },
+  ): number {
+    const referencePrice = context.markPrice > 0
+      ? context.markPrice
+      : (intent.entryPrice > 0 ? intent.entryPrice : 1)
+
+    if (typeof intent.positionSizeQuote === 'number' && Number.isFinite(intent.positionSizeQuote) && intent.positionSizeQuote > 0) {
+      return intent.positionSizeQuote / referencePrice
+    }
+
+    if (typeof intent.positionSizeRatio === 'number' && Number.isFinite(intent.positionSizeRatio) && intent.positionSizeRatio > 0) {
+      return (Math.max(0, context.equity) * intent.positionSizeRatio) / referencePrice
+    }
+
+    return 1
   }
 
   private getMarkPrice(bar: Bar, priceSource: BacktestRunInput['execution']['priceSource']): number {
@@ -179,6 +249,20 @@ export class BacktestRunnerService {
     const targetQty = input.currentQty + input.requestedDelta
     const clippedTargetQty = Math.max(-maxAbsQty, Math.min(maxAbsQty, targetQty))
     return clippedTargetQty - input.currentQty
+  }
+
+  private extractIntentReason(intent: SignalIntent): string | undefined {
+    if (typeof intent !== 'object' || intent === null) return undefined
+
+    if ('reason' in intent && typeof intent.reason === 'string' && intent.reason.trim()) {
+      return intent.reason
+    }
+
+    if ('reasoning' in intent && typeof intent.reasoning === 'string' && intent.reasoning.trim()) {
+      return intent.reasoning
+    }
+
+    return undefined
   }
 }
 

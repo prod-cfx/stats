@@ -1,4 +1,8 @@
-import type { AiSignalPayload, MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
+import type {
+  AiSignalPayload,
+  MarketTimeframe as AppMarketTimeframe,
+  StrategyDecisionV1,
+} from '@ai/shared'
 import type {
   LegTimeframeData,
   MultiLegStrategyContext,
@@ -46,6 +50,8 @@ import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
 import {
   mapLegDataRequirementTimeframes,
@@ -724,73 +730,107 @@ export class SignalGeneratorService {
     if (strategy.script) {
       try {
         const engine = createScriptEngine()
-
-        const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
-        const bars = normalizeGatewayBars(marketBars ?? [])
-
-        const scriptContext = buildStrategyContext({
-          bars,
-          symbol: symbol.code,
-          timeframe,
-          indicators,
-          currentPrice: referencePrice || 0,
-          timestamp: Date.now(),
-          params: this.buildEffectiveParams(strategy, instance),
-        })
-
-        // 执行脚本 - 智能重试机制
-        // 优先用标准模式（新脚本：最后表达式作为返回值）
-        let result = await engine.execute(strategy.script, {
-          context: scriptContext,
-          timeout: MAX_SCRIPT_TIMEOUT_MS,
-          allowAsync: false,
-        })
-
+        const compiledScript = compileStrategyScriptForVm(strategy.script)
+        if (!compiledScript.ok) {
+          this.logger.error(
+            `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
+          )
+          promptData = indicators
+        } else {
+          const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
+          const bars = normalizeGatewayBars(marketBars ?? [])
+          
+          const scriptContext = buildStrategyContext({
+            bars,
+            symbol: symbol.code,
+            timeframe,
+            indicators,
+            currentPrice: referencePrice || 0,
+            timestamp: Date.now(),
+            params: this.buildEffectiveParams(strategy, instance),
+          })
+          
+          // 执行脚本 - 智能重试机制
+          // 优先用标准模式（新脚本：最后表达式作为返回值）
+          let result = await engine.execute(compiledScript.executableCode, {
+            context: scriptContext,
+            timeout: MAX_SCRIPT_TIMEOUT_MS,
+            allowAsync: false,
+          })
+        
         // 检测到需要 async 上下文的语法错误，用 allowAsync 重试（旧脚本兼容）
         // 包括：顶层 return、顶层 await 等
-        if (!result.success && result.error?.message) {
-          const errorMsg = result.error.message
-          const needsAsync =
-            errorMsg.includes('Illegal return statement') ||
-            errorMsg.includes('await is only valid in async functions') ||
-            errorMsg.includes('Unexpected reserved word')
-
-          if (needsAsync) {
-            this.logger.warn(
-              `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
-            )
-            result = await engine.execute(strategy.script, {
-              context: scriptContext,
-              timeout: MAX_SCRIPT_TIMEOUT_MS,
-              allowAsync: true,
-            })
+          if (!result.success && result.error?.message) {
+            const errorMsg = result.error.message
+            const needsAsync = 
+              errorMsg.includes('Illegal return statement') ||
+              errorMsg.includes('await is only valid in async functions') ||
+              errorMsg.includes('Unexpected reserved word')
+            
+            if (needsAsync) {
+              this.logger.warn(
+                `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
+              )
+              result = await engine.execute(compiledScript.executableCode, {
+                context: scriptContext,
+                timeout: MAX_SCRIPT_TIMEOUT_MS,
+                allowAsync: true,
+              })
+            }
           }
-        }
 
-        if (result.success) {
-          // 始终调用 validateScriptOutput，即使 result.value 为 undefined
-          // 这样可以提供一致的错误提示，与调试接口和多leg路径保持一致
-          const validation = validateScriptOutput(result.value, { allowEmpty: true })
-
-          if (!validation.valid || !validation.value) {
-            this.logger.warn(
-              `Script for strategy ${strategy.id} returned invalid data. ` +
+          if (result.success) {
+            // 始终调用 validateScriptOutput，即使 result.value 为 undefined
+            // 这样可以提供一致的错误提示，与调试接口和多leg路径保持一致
+            const validation = validateScriptOutput(result.value, { allowEmpty: true })
+            
+            if (!validation.valid || !validation.value) {
+              this.logger.warn(
+                `Script for strategy ${strategy.id} returned invalid data. ` +
                 `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
                 `Using indicators as fallback.`,
-            )
-            promptData = indicators
-          } else {
-            promptData = validation.value as Record<string, any>
-            this.logger.debug(
-              `Script executed successfully for strategy ${strategy.id}, data: ${JSON.stringify(promptData)}`,
-            )
+              )
+              promptData = indicators
+            }
+            else {
+              const resolved = await resolveStrategyOutput(
+                validation.value as Record<string, unknown>,
+                scriptContext as unknown as Record<string, unknown>,
+              )
+              if (resolved.error) {
+                this.logger.warn(
+                  `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}. Using indicators as fallback.`,
+                )
+                promptData = indicators
+              } else if (resolved.decision) {
+                const decisionContext = this.buildDecisionContext(indicators, referencePrice)
+                if (
+                  this.requiresExplicitDecisionContext(resolved.decision) &&
+                  !this.hasExplicitDecisionContext(decisionContext)
+                ) {
+                  this.logger.error(
+                    `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+                  )
+                  return null
+                }
+                promptData = strategyDecisionToSignalPayload(
+                  resolved.decision,
+                  referencePrice || 0,
+                  decisionContext,
+                ) as Record<string, any>
+              } else {
+                promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
+              }
+              this.logger.debug(
+                `Script executed successfully for strategy ${strategy.id}, data: ${JSON.stringify(promptData)}`,
+              )
+            }
           }
-        } else {
-          this.logger.warn(
-            `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
-          )
-          // 脚本执行失败时，使用原始指标数据作为后备
-          promptData = indicators
+          else {
+            this.logger.warn(`Script execution failed for strategy ${strategy.id}: ${result.error?.message}`)
+            // 脚本执行失败时，使用原始指标数据作为后备
+            promptData = indicators
+          }
         }
       } catch (error) {
         this.logger.error(
@@ -1251,13 +1291,27 @@ export class SignalGeneratorService {
 
     try {
       const engine = createScriptEngine()
+      const compiledScript = compileStrategyScriptForVm(strategy.script)
+      if (!compiledScript.ok) {
+        this.logger.error(
+          `TypeScript check failed for multi-leg strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
+        )
+        await this.handleStrategyFailure(instance.id, config)
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode: primaryLeg.symbol,
+          success: false,
+          reason: 'TS_TYPECHECK_FAILED',
+        })
+        return
+      }
       const ctx = buildMultiLegStrategyContext(scriptContext)
 
       // 调试日志：打印脚本内容（仅在启用调试时）
       this.logScriptDebug(strategy)
 
       // 智能重试机制：优先标准模式，遇到需要 async 上下文的语法错误则用 allowAsync 重试
-      let result = await engine.execute(strategy.script, {
+      let result = await engine.execute(compiledScript.executableCode, {
         context: ctx,
         timeout: MAX_SCRIPT_TIMEOUT_MS,
         allowAsync: false,
@@ -1279,7 +1333,7 @@ export class SignalGeneratorService {
           this.logger.warn(
             `Multi-leg strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
           )
-          result = await engine.execute(strategy.script, {
+          result = await engine.execute(compiledScript.executableCode, {
             context: ctx,
             timeout: MAX_SCRIPT_TIMEOUT_MS,
             allowAsync: true,
@@ -1349,9 +1403,55 @@ export class SignalGeneratorService {
         })
         return
       }
+      
+      const resolved = await resolveStrategyOutput(
+        validation.value as Record<string, unknown>,
+        scriptContext as unknown as Record<string, unknown>,
+      )
+      if (resolved.error) {
+        this.logger.error(
+          `Multi-leg script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}`,
+        )
+        await this.handleStrategyFailure(instance.id, config)
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode: primaryLeg.symbol,
+          success: false,
+          reason: 'INVALID_SCRIPT_PROTOCOL',
+        })
+        return
+      }
 
-      promptData = validation.value as Record<string, any>
-
+      if (resolved.decision) {
+        const adapterReferencePrice =
+          multiLegData[primaryLeg.id]?.[execution.timeframe]?.currentPrice ?? 0
+        const primaryIndicators = multiLegData[primaryLeg.id]?.[execution.timeframe]?.indicators ?? {}
+        const decisionContext = this.buildDecisionContext(primaryIndicators, adapterReferencePrice)
+        if (
+          this.requiresExplicitDecisionContext(resolved.decision) &&
+          !this.hasExplicitDecisionContext(decisionContext)
+        ) {
+          this.logger.error(
+            `Multi-leg strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+          )
+          await this.handleStrategyFailure(instance.id, config)
+          this.telemetry.recordGeneration({
+            strategyId: strategy.id,
+            symbolCode: primaryLeg.symbol,
+            success: false,
+            reason: 'ADJUST_POSITION_CONTEXT_REQUIRED',
+          })
+          return
+        }
+        promptData = strategyDecisionToSignalPayload(
+          resolved.decision,
+          adapterReferencePrice,
+          decisionContext,
+        ) as Record<string, any>
+      } else {
+        promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
+      }
+      
       this.logger.debug(`Multi-leg script executed successfully for strategy ${strategy.id}`)
     } catch (error) {
       this.logger.error(
@@ -1627,6 +1727,40 @@ export class SignalGeneratorService {
    * 将任意值转换为 JSON-safe 的值
    * 处理 Date、undefined、NaN、Infinity、循环引用等非 JSON-safe 的值
    */
+  private buildDecisionContext(
+    indicators: Record<string, unknown>,
+    markPrice: number | undefined,
+  ): { currentQty?: number; equity?: number; markPrice?: number } {
+    return {
+      currentQty: this.readFiniteNumber(indicators.currentQty),
+      equity: this.readFiniteNumber(indicators.equity),
+      markPrice: this.readFiniteNumber(markPrice),
+    }
+  }
+
+  private requiresExplicitDecisionContext(decision: StrategyDecisionV1): boolean {
+    return decision.action === 'ADJUST_POSITION'
+  }
+
+  private hasExplicitDecisionContext(context: {
+    currentQty?: number
+    equity?: number
+    markPrice?: number
+  }): context is { currentQty: number; equity: number; markPrice: number } {
+    return (
+      typeof context.currentQty === 'number' &&
+      Number.isFinite(context.currentQty) &&
+      typeof context.equity === 'number' &&
+      Number.isFinite(context.equity) &&
+      typeof context.markPrice === 'number' &&
+      Number.isFinite(context.markPrice)
+    )
+  }
+
+  private readFiniteNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  }
+
   private toJsonSafe(value: any): any {
     // 处理基本类型
     if (value === null || value === undefined) {

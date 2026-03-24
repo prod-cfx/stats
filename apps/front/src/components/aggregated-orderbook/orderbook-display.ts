@@ -1,13 +1,11 @@
-import type { AggregatedOrderbookLevel } from '@/lib/api'
-
 /**
  * Evenly sample levels while preserving order.
  * Used to keep fixed row count but cover a wider price range.
  */
-export function sampleLevelsForDisplay(
-  levels: AggregatedOrderbookLevel[],
+export function sampleLevelsForDisplay<T>(
+  levels: T[],
   limit: number,
-): AggregatedOrderbookLevel[] {
+): T[] {
   if (limit <= 0 || levels.length === 0)
     return []
   if (levels.length <= limit)
@@ -15,7 +13,7 @@ export function sampleLevelsForDisplay(
   if (limit === 1)
     return [levels[0]]
 
-  const result: AggregatedOrderbookLevel[] = []
+  const result: T[] = []
   const maxIndex = levels.length - 1
   const step = maxIndex / (limit - 1)
   let prevIndex = -1

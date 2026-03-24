@@ -1,3 +1,5 @@
+import type { StrategyDecisionV1 } from '@ai/shared'
+
 export type Timeframe = '5m' | '15m' | '1h' | '4h' | '1d'
 
 export interface Bar {
@@ -50,6 +52,18 @@ export type SignalIntent =
   | { type: 'OPEN_SHORT'; qty: number; reason?: string }
   | { type: 'CLOSE'; qty?: number; reason?: string }
   | { type: 'NOOP'; reason?: string }
+  | StrategyDecisionV1
+  | {
+    direction: 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    signalType: 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
+    confidence: number
+    entryPrice: number
+    stopLoss: number
+    takeProfit: number
+    reasoning: string
+    positionSizeQuote?: number
+    positionSizeRatio?: number
+  }
 
 export type StrategyFn = (ctx: StrategyContext) => SignalIntent | Promise<SignalIntent>
 
