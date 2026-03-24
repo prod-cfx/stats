@@ -30,6 +30,10 @@ export interface AiQuantStrategyRecord {
   metrics: StrategyMetricSnapshot
   equitySeries: StrategyEquityPoint[]
   timeline: StrategyTimelineEvent[]
+  paramSchema: Record<string, unknown> | null
+  paramValues: Record<string, unknown> | null
+  schemaVersion: string | null
+  supportsDynamicParams: boolean
   totalPnl?: number | null
   todayPnl?: number | null
   deploy?: {
@@ -88,6 +92,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-03-01 09:25', event: 'Deployed', note: 'Connected Binance' },
         { at: '2026-03-01 09:26', event: 'Started' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 15).toISOString(),
     },
     {
@@ -107,6 +115,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-02-27 10:20', event: 'Deployed' },
         { at: '2026-03-03 18:30', event: 'Stopped', note: 'User Manual Stop' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 90).toISOString(),
     },
     {
@@ -123,6 +135,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
       timeline: [
         { at: '2026-03-04 08:40', event: 'Strategy Created', note: 'Pending Backtest' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 220).toISOString(),
     },
     {
@@ -142,6 +158,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-03-02 14:20', event: 'Deployed' },
         { at: '2026-03-02 14:21', event: 'Started' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 35).toISOString(),
     },
   ]
@@ -160,6 +180,10 @@ function migrateRecord(record: AiQuantStrategyRecord, seed: number): AiQuantStra
     ...record,
     initialCapital: record.initialCapital || 10000,
     equitySeries: nextSeries,
+    paramSchema: record.paramSchema ?? null,
+    paramValues: record.paramValues ?? null,
+    schemaVersion: record.schemaVersion ?? null,
+    supportsDynamicParams: Boolean(record.paramSchema),
   }
 }
 
@@ -218,6 +242,10 @@ export function upsertStrategyDeployment(input: {
           positionPct: input.positionPct,
           initialCapital: item.initialCapital || 10000,
           metrics: input.metrics,
+          paramSchema: item.paramSchema ?? null,
+          paramValues: item.paramValues ?? null,
+          schemaVersion: item.schemaVersion ?? null,
+          supportsDynamicParams: Boolean(item.paramSchema),
           status: 'running',
           deploy: {
             exchange: input.exchange,
@@ -259,6 +287,10 @@ export function upsertStrategyDeployment(input: {
             at: now,
             status: 'running',
           },
+          paramSchema: null,
+          paramValues: null,
+          schemaVersion: null,
+          supportsDynamicParams: false,
           updatedAt: now,
         },
         ...existing,

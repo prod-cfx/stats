@@ -1289,6 +1289,9 @@ export interface AccountAiQuantStrategyMetrics {
   tradeCount: number | null
 }
 
+export type AccountAiQuantParamSchema = Record<string, unknown>
+export type AccountAiQuantParamValues = Record<string, unknown>
+
 export interface AccountAiQuantStrategyListItem {
   id: string
   name: string
@@ -1298,6 +1301,9 @@ export interface AccountAiQuantStrategyListItem {
   timeframe: string | null
   positionPct: number | null
   isSubscribed: boolean
+  paramSchema: AccountAiQuantParamSchema | null
+  paramValues: AccountAiQuantParamValues | null
+  schemaVersion: string | null
   metrics: AccountAiQuantStrategyMetrics
   updatedAt: string
 }
@@ -1319,6 +1325,9 @@ export interface AccountAiQuantStrategySnapshot {
   symbol: string | null
   timeframe: string | null
   positionPct: number | null
+  paramSchema: AccountAiQuantParamSchema | null
+  paramValues: AccountAiQuantParamValues | null
+  schemaVersion: string | null
   deployAccountName?: string | null
   deployAt?: string | null
 }
@@ -1377,6 +1386,9 @@ function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[n
     timeframe: item.timeframe,
     positionPct: item.positionPct,
     isSubscribed: true,
+    paramSchema: item.paramSchema ?? null,
+    paramValues: item.paramValues ?? null,
+    schemaVersion: item.schemaVersion ?? null,
     metrics: {
       returnPct: item.metrics.returnPct,
       maxDrawdownPct: item.metrics.maxDrawdownPct,
@@ -1405,6 +1417,9 @@ function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): Acco
       symbol: item.symbol,
       timeframe: item.timeframe,
       positionPct: item.positionPct,
+      paramSchema: item.paramSchema ?? null,
+      paramValues: item.paramValues ?? null,
+      schemaVersion: item.schemaVersion ?? null,
       deployAccountName: item.deploy?.accountName ?? null,
       deployAt: item.deploy?.at ?? null,
     },

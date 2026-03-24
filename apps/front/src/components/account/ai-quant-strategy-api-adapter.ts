@@ -27,9 +27,24 @@ function fmtTimelineTime(ts: string): string {
   return `${y}-${mm}-${dd} ${hh}:${min}`
 }
 
+function mapDynamicParamFields(
+  paramSchema: Record<string, unknown> | null | undefined,
+  paramValues: Record<string, unknown> | null | undefined,
+  schemaVersion: string | null | undefined,
+) {
+  return {
+    paramSchema: paramSchema ?? null,
+    paramValues: paramValues ?? null,
+    schemaVersion: schemaVersion ?? null,
+    supportsDynamicParams: Boolean(paramSchema),
+  }
+}
+
 export function mapAccountStrategyListItemToRecord(
   item: AccountAiQuantStrategyListItem,
 ): AiQuantStrategyRecord {
+  const dynamicParams = mapDynamicParamFields(item.paramSchema, item.paramValues, item.schemaVersion)
+
   return {
     id: item.id,
     name: item.name,
@@ -45,6 +60,7 @@ export function mapAccountStrategyListItemToRecord(
       winRatePct: normalizeNumber(item.metrics.winRatePct),
       tradeCount: normalizeNumber(item.metrics.tradeCount),
     },
+    ...dynamicParams,
     equitySeries: [],
     timeline: [],
     updatedAt: item.updatedAt,
@@ -55,6 +71,11 @@ export function mapAccountStrategyDetailToRecord(
   detail: AccountAiQuantStrategyDetail,
 ): AiQuantStrategyRecord {
   const exchange = detail.exchange === 'okx' ? 'okx' : 'binance'
+  const dynamicParams = mapDynamicParamFields(
+    detail.snapshot.paramSchema ?? detail.paramSchema,
+    detail.snapshot.paramValues ?? detail.paramValues,
+    detail.snapshot.schemaVersion ?? detail.schemaVersion,
+  )
 
   return {
     id: detail.id,
@@ -71,6 +92,7 @@ export function mapAccountStrategyDetailToRecord(
       winRatePct: normalizeNumber(detail.metrics.winRatePct),
       tradeCount: normalizeNumber(detail.metrics.tradeCount),
     },
+    ...dynamicParams,
     totalPnl: detail.totalPnl ?? null,
     todayPnl: detail.todayPnl ?? null,
     equitySeries: detail.equitySeries.map(item => ({

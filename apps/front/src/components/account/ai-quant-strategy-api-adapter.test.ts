@@ -11,6 +11,16 @@ describe('ai-quant-strategy-api-adapter', () => {
       timeframe: null,
       positionPct: Number.NaN,
       isSubscribed: false,
+      paramSchema: {
+        type: 'object',
+        properties: {
+          threshold: { type: 'number' },
+        },
+      },
+      paramValues: {
+        threshold: 0.25,
+      },
+      schemaVersion: 'v1',
       metrics: {
         returnPct: Number.NaN,
         maxDrawdownPct: undefined as any,
@@ -31,6 +41,15 @@ describe('ai-quant-strategy-api-adapter', () => {
       winRatePct: 0,
       tradeCount: 0,
     })
+    expect(record.paramSchema).toEqual({
+      type: 'object',
+      properties: {
+        threshold: { type: 'number' },
+      },
+    })
+    expect(record.paramValues).toEqual({ threshold: 0.25 })
+    expect(record.schemaVersion).toBe('v1')
+    expect(record.supportsDynamicParams).toBe(true)
   })
 
   it('preserves backend pnl values and maps null/undefined as expected', () => {
@@ -60,6 +79,11 @@ describe('ai-quant-strategy-api-adapter', () => {
         positionPct: 10,
         deployAccountName: null,
         deployAt: null,
+        paramSchema: null,
+        paramValues: {
+          leverage: 3,
+        },
+        schemaVersion: null,
       },
       timeline: [],
     } as any)
@@ -68,6 +92,9 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.todayPnl).toBeNull()
     expect(record.status).toBe('running')
     expect(record.exchange).toBe('okx')
+    expect(record.paramSchema).toBeNull()
+    expect(record.paramValues).toEqual({ leverage: 3 })
+    expect(record.schemaVersion).toBeNull()
+    expect(record.supportsDynamicParams).toBe(false)
   })
 })
-
