@@ -47,6 +47,7 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     )
   })
 

@@ -472,6 +472,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
 
     const filledOrder = {
