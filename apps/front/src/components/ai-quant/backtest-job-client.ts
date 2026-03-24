@@ -1,5 +1,6 @@
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
-import { ApiError } from '@/lib/errors'
+import { getToken } from '@/lib/auth-storage'
+import { ApiError, AuthenticationError } from '@/lib/errors'
 
 export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -65,6 +66,8 @@ const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
   'succeeded',
   'failed',
 ])
+const JWT_FORMAT_REGEX = /^[\w-]+\.[\w-]+\.[\w-]+$/
+export const BACKTEST_REQUEST_TIMEOUT_MS = 12_000
 
 function extractErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== 'object') {
@@ -125,14 +128,63 @@ function parseBacktestJob(payload: unknown, context: string): BacktestJob {
   return job
 }
 
+function requireAuthHeaders(): Record<string, string> {
+  const token = getToken()
+  if (!token) {
+    throw new AuthenticationError('UNAUTHENTICATED')
+  }
+  if (!JWT_FORMAT_REGEX.test(token)) {
+    throw new AuthenticationError('INVALID_TOKEN')
+  }
+  return { Authorization: `Bearer ${token}` }
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
+  const timeoutController = new AbortController()
+  let timedOut = false
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true
+    timeoutController.abort()
+  }, BACKTEST_REQUEST_TIMEOUT_MS)
+
+  const upstreamSignal = init?.signal
+  const abortFromUpstream = () => timeoutController.abort()
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      timeoutController.abort()
+    } else {
+      upstreamSignal.addEventListener('abort', abortFromUpstream)
+    }
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+        ...(init?.headers ?? {}),
+      },
+      signal: timeoutController.signal,
+    })
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError('Request timeout', 'API_TIMEOUT', 408, { path, timeoutMs: BACKTEST_REQUEST_TIMEOUT_MS })
+    }
+    if (error instanceof ApiError) {
+      throw error
+    }
+    const message = error instanceof Error && error.message.trim()
+      ? error.message
+      : 'Request failed'
+    throw new ApiError(message, 'API_ERROR')
+  } finally {
+    globalThis.clearTimeout(timeout)
+    if (upstreamSignal) {
+      upstreamSignal.removeEventListener('abort', abortFromUpstream)
+    }
+  }
 
   let payload: unknown = null
   try {

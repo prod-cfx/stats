@@ -279,7 +279,21 @@ function normalizeParamsFromValues(values: Record<string, unknown>, fallback: Qu
 
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
 type BacktestRangePresetValue = typeof VALID_RANGE_PRESETS[number]
-const SCRIPT_CODE_BLOCK_REGEX = /```(?:javascript|js)?\n([\s\S]*?)```/i
+const SCRIPT_CODE_BLOCK_REGEX = /```(?:typescript|ts|javascript|js)?\r?\n([\s\S]*?)```/i
+const TRANSIENT_BACKTEST_STATES = new Set<ConversationState['backtestExecutionState']>([
+  'submitting',
+  'running',
+  'timeout',
+])
+
+function normalizeHydratedBacktestExecutionState(
+  state: ConversationState['backtestExecutionState'] | undefined,
+): ConversationState['backtestExecutionState'] {
+  if (!state || TRANSIENT_BACKTEST_STATES.has(state)) {
+    return 'idle'
+  }
+  return state
+}
 
 function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRangeInput {
   const presetRaw = typeof values.backtestRangePreset === 'string'
@@ -389,7 +403,7 @@ export function AiQuantPageClient() {
           : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
-        backtestExecutionState: item.backtestExecutionState ?? 'idle',
+        backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
       }))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)

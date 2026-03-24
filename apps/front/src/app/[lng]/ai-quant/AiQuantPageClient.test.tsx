@@ -10,7 +10,7 @@ const mockPush = jest.fn()
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key === 'aiQuant.messages.welcome'
-      ? '```javascript\nreturn { ok: true }\n```'
+      ? '```typescript\r\nreturn { ok: true }\r\n```'
       : key,
   }),
 }))

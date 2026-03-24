@@ -281,6 +281,44 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
   })
 
+  it.each(['submitting', 'running', 'timeout'] as const)(
+    'hydrates transient execution state %s to idle to avoid refresh lock',
+    async (state) => {
+      const now = Date.now()
+      localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+        {
+          id: 'conv-1',
+          title: 'conv',
+          messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+          },
+          paramSchema: null,
+          paramValues: {},
+          backtestResult: null,
+          logicGraph: null,
+          llmCodegenSessionId: null,
+          latestSignalMessage: null,
+          backtestExecutionState: state,
+          updatedAt: now,
+        },
+      ]))
+
+      await act(async () => {
+        root?.render(<AiQuantPageClient />)
+      })
+
+      const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
+      expect(runButton?.disabled).toBe(false)
+    },
+  )
+
   it('timeout path shows timeout feedback message', async () => {
     mockGetBacktestJob.mockResolvedValue({
       id: 'job-1',

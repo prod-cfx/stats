@@ -1,10 +1,17 @@
 import { API_BASE_URL } from '@/lib/api-client'
-import { ApiError } from '@/lib/errors'
+import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
+  BACKTEST_REQUEST_TIMEOUT_MS,
   createBacktestJob,
   getBacktestJob,
   getBacktestJobResult,
 } from './backtest-job-client'
+
+const mockGetToken = jest.fn()
+
+jest.mock('@/lib/auth-storage', () => ({
+  getToken: () => mockGetToken(),
+}))
 
 interface MockFetchResponseInit {
   ok: boolean
@@ -28,6 +35,7 @@ function mockFetchResponse(init: MockFetchResponseInit) {
 describe('backtest-job-client', () => {
   beforeEach(() => {
     globalThis.fetch = jest.fn()
+    mockGetToken.mockReturnValue('header.payload.signature')
   })
 
   afterEach(() => {
@@ -62,8 +70,12 @@ describe('backtest-job-client', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/backtesting/jobs`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer header.payload.signature',
+      },
       body: JSON.stringify(payload),
+      signal: expect.any(AbortSignal),
     })
     expect(result).toEqual({
       id: 'btjob-1',
@@ -88,7 +100,11 @@ describe('backtest-job-client', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(4)
     expect(globalThis.fetch).toHaveBeenLastCalledWith(`${API_BASE_URL}/backtesting/jobs/btjob-1`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer header.payload.signature',
+      },
+      signal: expect.any(AbortSignal),
     })
   })
 
@@ -105,9 +121,43 @@ describe('backtest-job-client', () => {
       `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent('job/with spaces?x=1')}`,
       {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer header.payload.signature',
+        },
+        signal: expect.any(AbortSignal),
       },
     )
+  })
+
+  it('throws auth error when token is missing', async () => {
+    mockGetToken.mockReturnValueOnce(null)
+
+    await expect(createBacktestJob({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: {
+        id: 'strategy-1',
+        protocolVersion: 'v1',
+        scriptCode: 'return { type: "NOOP" }',
+        params: {},
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    })).rejects.toBeInstanceOf(AuthenticationError)
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  it('throws auth error when token is invalid', async () => {
+    mockGetToken.mockReturnValueOnce('not-a-jwt')
+
+    await expect(getBacktestJob('btjob-1')).rejects.toBeInstanceOf(AuthenticationError)
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
   it('getBacktestJobResult returns summary', async () => {
@@ -196,5 +246,25 @@ describe('backtest-job-client', () => {
       message: expect.stringContaining('Service Unavailable'),
       statusCode: 503,
     })
+  })
+
+  it('throws timeout ApiError when request hangs', async () => {
+    jest.useFakeTimers()
+    ;(globalThis.fetch as jest.Mock).mockImplementation((_url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        })
+      })
+    })
+
+    const assertion = expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
+      code: 'API_TIMEOUT',
+      statusCode: 408,
+    })
+    await jest.advanceTimersByTimeAsync(BACKTEST_REQUEST_TIMEOUT_MS)
+    await assertion
+    jest.useRealTimers()
   })
 })
