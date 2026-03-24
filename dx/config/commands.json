@@ -130,14 +130,14 @@
 
   "db": {
     "generate": {
-      "command": "pnpm --filter @net/backend run prisma:generate",
+      "command": "bash -lc 'set -euo pipefail; pnpm --filter @net/backend run prisma:generate; pnpm run generate:enums'",
       "app": "backend",
-      "description": "生成Prisma客户端",
+      "description": "生成Prisma客户端并同步枚举到@ai/shared",
       "quantify": {
-        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:generate",
+        "command": "bash -lc 'set -euo pipefail; node scripts/dx/quantify-launcher.cjs pnpm --filter @net/quantify run prisma:generate; pnpm run generate:enums'",
         "app": "quantify",
         "skipEnvValidation": true,
-        "description": "生成 Quantify Prisma 客户端"
+        "description": "生成 Quantify Prisma 客户端并同步枚举到@ai/shared"
       }
     },
     "migrate": {

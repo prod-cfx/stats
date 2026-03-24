@@ -57,4 +57,30 @@ describe('tradingService', () => {
       service.getOrder('user-1', 'binance', 'spot', 'order-1', 'BTC/USDT'),
     ).rejects.toBeInstanceOf(ExchangeOperationFailedException)
   })
+
+  it('falls back to userId + exchangeId lookup when exchangeAccountId is missing', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfig.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.createOrder.mockResolvedValue({ id: 'order-2', status: 'open' })
+
+    await service.placeOrder(
+      'user-9',
+      'okx',
+      'spot',
+      {
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+      },
+    )
+
+    expect(accountStore.getAccountConfig).toHaveBeenCalledWith('user-9', 'okx')
+    expect(accountStore.getAccountConfigById).not.toHaveBeenCalled()
+  })
 })

@@ -1,7 +1,7 @@
+import { SignalDirection, SignalType } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { convertDecimalToString } from '@/common/utils/decimal-converter'
 
-import { SignalDirection, SignalType } from '@/prisma/prisma.types'
+import { convertDecimalToString } from '@/common/utils/decimal-converter'
 
 /**
  * 面向外部调用方的策略实例信号响应 DTO（已脱敏）

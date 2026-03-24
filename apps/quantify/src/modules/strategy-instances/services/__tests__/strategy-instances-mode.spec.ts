@@ -1,6 +1,6 @@
+import type { StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import type { TestingModule } from '@nestjs/testing'
 import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.dto'
-import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 
 import { Test } from '@nestjs/testing'
 import { EnvService } from '@/common/services/env.service'

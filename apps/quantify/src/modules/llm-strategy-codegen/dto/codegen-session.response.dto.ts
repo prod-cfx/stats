@@ -19,6 +19,9 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '结构化策略描述（用于推荐）', type: 'object', additionalProperties: true })
   specDesc?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
+  strategyInstanceId?: string | null
+
   @ApiPropertyOptional({ description: '拒绝原因' })
   rejectReason?: string | null
 

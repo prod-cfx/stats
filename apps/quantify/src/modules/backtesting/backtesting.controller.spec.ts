@@ -1,3 +1,10 @@
+import { Test } from '@nestjs/testing'
+import { BacktestingController } from './backtesting.controller'
+import { BacktestRunnerService } from './core/backtest-runner.service'
+import { BacktestJobsService } from './jobs/backtest-jobs.service'
+import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
+import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+
 jest.mock('@nestjs-cls/transactional', () => ({
   Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
 }))
@@ -9,13 +16,6 @@ jest.mock('@nestjs/throttler', () => ({
     }
   },
 }))
-
-import { Test } from '@nestjs/testing'
-import { BacktestingController } from './backtesting.controller'
-import { BacktestRunnerService } from './core/backtest-runner.service'
-import { BacktestJobsService } from './jobs/backtest-jobs.service'
-import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
-import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 
 describe('backtestingController', () => {
   it('should expose run and jobs endpoint methods', async () => {

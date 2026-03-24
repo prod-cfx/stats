@@ -1,6 +1,6 @@
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsJSON, IsOptional, IsString } from 'class-validator'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 
 export class UpdateStrategyInstanceDto {
   @ApiProperty({ description: '实例名称', required: false })

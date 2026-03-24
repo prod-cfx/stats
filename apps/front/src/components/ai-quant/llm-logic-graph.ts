@@ -13,7 +13,7 @@ interface CodegenSpec {
 }
 
 interface GraphFallbackMeta {
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   positionPct: number
 }
@@ -34,6 +34,7 @@ export function buildLogicGraphFromCodegenSpec(
   spec: unknown,
   fallback: GraphFallbackMeta,
   version: number,
+  status: StrategyLogicGraph['status'] = 'draft',
 ): StrategyLogicGraph {
   const typed = (spec && typeof spec === 'object' ? spec : {}) as CodegenSpec
   const entryRules = asStringList(typed.entryRules)
@@ -85,7 +86,7 @@ export function buildLogicGraphFromCodegenSpec(
 
   return {
     version,
-    status: 'draft',
+    status,
     trigger: trigger.length > 0
       ? trigger
       : [{

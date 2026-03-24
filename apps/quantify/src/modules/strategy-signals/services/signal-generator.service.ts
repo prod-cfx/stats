@@ -1,7 +1,7 @@
 import type {
   AiSignalPayload,
   MarketTimeframe as AppMarketTimeframe,
-  StrategyDecisionV1,
+  StrategyDecisionV1, SignalSourceType, SignalStatus 
 } from '@ai/shared'
 import type {
   LegTimeframeData,
@@ -19,11 +19,10 @@ import type {
 import type {
   IndicatorConfig,
   Prisma,
-  SignalSourceType,
-  SignalStatus,
   StrategyInstance,
   StrategyTemplate,
-  Symbol, PrismaClient 
+  Symbol,
+  PrismaClient,
 } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
@@ -50,6 +49,7 @@ import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
@@ -91,6 +91,10 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
     strategyTemplate: true
   }
 }>
+
+type GeneratedSignalPayload =
+  | { type: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
+  | { type: 'none'; reason: string }
 
 @Injectable()
 export class SignalGeneratorService {
@@ -247,7 +251,7 @@ export class SignalGeneratorService {
       })
     }
 
-    if (instance.mode !== 'LIVE') {
+    if (instance.mode !== 'LIVE' && instance.mode !== 'TESTNET') {
       throw new DomainException('signal.generation_error', {
         code: ErrorCode.STRATEGY_SIGNAL_GENERATION_ERROR,
         status: HttpStatus.BAD_REQUEST,
@@ -309,7 +313,7 @@ export class SignalGeneratorService {
       })
     }
 
-    if (instance.mode !== 'LIVE') {
+    if (instance.mode !== 'LIVE' && instance.mode !== 'TESTNET') {
       throw new DomainException('signal.generation_error', {
         code: ErrorCode.STRATEGY_SIGNAL_GENERATION_ERROR,
         status: HttpStatus.BAD_REQUEST,
@@ -844,6 +848,19 @@ export class SignalGeneratorService {
       promptData = indicators
     }
 
+    const directSignal = this.buildPublishedCodegenSignalPayload(
+      promptData,
+      referencePrice,
+      strategy,
+      instance,
+    )
+    if (directSignal) {
+      if (directSignal.type === 'none') {
+        return null
+      }
+      return directSignal.payload
+    }
+
     // 填充 prompt 模板中的占位符（使用 shared helper，保证与调试接口一致）
     const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
 
@@ -996,6 +1013,73 @@ export class SignalGeneratorService {
     }
   }
 
+  private buildPublishedCodegenSignalPayload(
+    promptData: Record<string, unknown>,
+    referencePrice: number | undefined,
+    strategy: Pick<StrategyTemplate, 'promptTemplate' | 'defaultParams'>,
+    instance: Pick<StrategyInstance, 'params'>,
+  ): GeneratedSignalPayload | null {
+    if (strategy.promptTemplate !== 'AI_CODEGEN_PUBLISHED_TEMPLATE') {
+      return null
+    }
+
+    const action = typeof promptData.action === 'string' ? promptData.action.trim().toLowerCase() : ''
+    if (!action || action === 'hold' || action === 'wait' || action === 'none') {
+      return { type: 'none', reason: 'NO_ACTION' }
+    }
+
+    const metadata = this.asRecord(promptData.metadata)
+    const effectiveParams = this.buildEffectiveParams(strategy as StrategyTemplate, instance as StrategyInstance) ?? {}
+    const entryPrice = this.readNumeric(metadata.entryPrice) ?? referencePrice ?? 0
+    if (!(entryPrice > 0)) {
+      return { type: 'none', reason: 'MISSING_ENTRY_PRICE' }
+    }
+
+    const stopLoss = this.readNumeric(metadata.stopLossPrice)
+    const takeProfit = this.readNumeric(metadata.takeProfitPrice)
+    const rawAmount = this.readNumeric(promptData.amount)
+    const positionSizeQuote =
+      this.readNumeric(promptData.positionSizeQuote)
+      ?? this.readNumeric((effectiveParams as Record<string, unknown>).entryQuoteAmount)
+      ?? (rawAmount && rawAmount > 0 ? Number((rawAmount * entryPrice).toFixed(8)) : undefined)
+    const rawResponse = this.truncateRawResponse(JSON.stringify(promptData), this.getConfig())
+
+    if (action === 'buy') {
+      return {
+        type: 'signal',
+        payload: {
+          signalType: 'ENTRY',
+          direction: 'BUY',
+          confidence: 90,
+          entryPrice,
+          stopLoss,
+          takeProfit,
+          positionSizeQuote,
+          reasoning: 'AI codegen direct signal: buy',
+          rawResponse,
+        },
+      }
+    }
+
+    if (action === 'sell') {
+      return {
+        type: 'signal',
+        payload: {
+          signalType: 'EXIT',
+          direction: 'CLOSE_LONG',
+          confidence: 90,
+          entryPrice: referencePrice ?? entryPrice,
+          stopLoss,
+          takeProfit,
+          reasoning: 'AI codegen direct signal: sell',
+          rawResponse,
+        },
+      }
+    }
+
+    return { type: 'none', reason: 'UNSUPPORTED_ACTION' }
+  }
+
   private truncateRawResponse(
     content: string | undefined,
     config: StrategySignalsRuntimeConfig,
@@ -1004,6 +1088,18 @@ export class SignalGeneratorService {
     const limit = config.ai.maxRawResponseLength ?? DEFAULT_RAW_RESPONSE_LIMIT
     if (content.length <= limit) return content
     return `${content.slice(0, limit)}...`
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {}
+    }
+    return value as Record<string, unknown>
+  }
+
+  private readNumeric(value: unknown): number | undefined {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : undefined
   }
 
   private buildManualFallbackSignal(
@@ -1123,7 +1219,8 @@ export class SignalGeneratorService {
 
     const dataRequests: DataRequest[] = []
     for (const leg of legs) {
-      const symbol = symbolMap.get(leg.symbol)
+      const normalizedLegSymbol = normalizeRequestedCode(leg.symbol)
+      const symbol = symbolMap.get(normalizedLegSymbol)
       if (!symbol) {
         this.logger.warn(`Symbol ${leg.symbol} not found for leg ${leg.id}`)
         continue
@@ -1468,9 +1565,6 @@ export class SignalGeneratorService {
       return
     }
 
-    // 5. 填充 prompt 并调用 AI
-    const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
-
     const primaryTimeframeData = multiLegData[primaryLeg.id]?.[execution.timeframe]
 
     // 运行时检查：确保主周期数据存在
@@ -1495,6 +1589,60 @@ export class SignalGeneratorService {
     }
 
     const referencePrice = primaryTimeframeData.currentPrice
+
+    const directSignal = this.buildPublishedCodegenSignalPayload(
+      promptData,
+      referencePrice,
+      strategy,
+      instance,
+    )
+    if (directSignal) {
+      if (directSignal.type === 'none') {
+        this.logger.debug(
+          `Multi-leg strategy ${strategy.id} direct codegen output requested no action (${directSignal.reason})`,
+        )
+        return
+      }
+
+      await this.resetStrategyFailure(instance.id)
+
+      const signalResult = await this.createMultiLegSignal(
+        instance,
+        strategy,
+        primarySymbol,
+        execution,
+        promptData,
+        directSignal.payload,
+        config,
+        options.skipCooldown ?? false,
+      )
+
+      if (!signalResult.created) {
+        this.logger.debug(
+          `Signal not created for strategy ${strategy.id} on ${primaryLeg.symbol}: ${signalResult.reason || 'COOLDOWN'}`,
+        )
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode: primaryLeg.symbol,
+          success: false,
+          reason: signalResult.reason || 'COOLDOWN',
+        })
+        return
+      }
+
+      this.logger.log(
+        `Generated multi-leg signal ${signalResult.signalId} for strategy ${strategy.id} on ${primaryLeg.symbol}`,
+      )
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: true,
+      })
+      return
+    }
+
+    // 5. 填充 prompt 并调用 AI
+    const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
 
     const systemPrompt =
       'You are a quantitative trading assistant. Analyze the provided market data and respond with a strict JSON object. ' +

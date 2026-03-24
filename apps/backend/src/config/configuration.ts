@@ -1,5 +1,5 @@
 import type {MarketTimeframe} from '@ai/shared';
-import { DEFAULT_MARKET_SYMBOLS, ErrorCode, MARKET_TIMEFRAMES  } from '@ai/shared'
+import { DEFAULT_MARKET_SYMBOLS, ErrorCode, MARKET_TIMEFRAMES } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { registerAs } from '@nestjs/config'
 import { defaultEnvAccessor, parsePositiveInt } from '../common/env/env.accessor'

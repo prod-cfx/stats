@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import type { SubscriptionStatus } from '@/prisma/prisma.types'
+import type { SubscriptionStatus } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import Ajv from 'ajv'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'

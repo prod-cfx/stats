@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import type { MarketTimeframe as AppMarketTimeframe } from '@ai/shared'
+import type { MarketTimeframe as AppMarketTimeframe, StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import type {
   LegTimeframeData,
   MultiLegStrategyContext,
@@ -9,8 +9,7 @@ import type {
   StrategyExecutionConfig,
   StrategyLegDefinition,
 } from '@/modules/strategy-templates/types/strategy-template.types'
-import type { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
-import { fillPromptTemplate, ErrorCode } from '@ai/shared'
+import { fillPromptTemplate, ErrorCode, SubscriptionStatus } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import {
   buildMultiLegStrategyContext,
@@ -22,15 +21,15 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { TradingSignalRepository } from '@/modules/strategy-signals/repositories/trading-signal.repository'
 import { StrategyTemplateNotFoundException } from '@/modules/strategy-templates/exceptions/strategy-template-not-found.exception'
 import {
   mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
-import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
-import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
+import { Prisma } from '@/prisma/prisma.types'
 import { CreateStrategyInstanceDto } from '../dto/create-strategy-instance.dto'
 import { LiveStrategyInstanceListQueryDto } from '../dto/live-strategy-instance-list-query.dto'
 import { StrategyInstancePublicResponseDto } from '../dto/live-strategy-instance-response.dto'

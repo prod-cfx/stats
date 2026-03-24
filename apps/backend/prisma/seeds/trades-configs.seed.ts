@@ -1,4 +1,5 @@
-import { InstrumentType, type PrismaClient } from '../../generated/prisma'
+import { BackendInstrumentType } from '@ai/shared'
+import type { PrismaClient } from '../../generated/prisma'
 
 /**
  * 交易记录订阅配置种子数据
@@ -16,7 +17,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'BTC-USD',
       baseAsset: 'BTC',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 1,
       metadata: {
@@ -30,7 +31,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'ETH-USD',
       baseAsset: 'ETH',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 2,
       metadata: {
@@ -44,7 +45,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'SOL-USD',
       baseAsset: 'SOL',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 3,
       metadata: {
@@ -58,7 +59,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'ARB-USD',
       baseAsset: 'ARB',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 4,
       metadata: {
@@ -72,7 +73,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'AVAX-USD',
       baseAsset: 'AVAX',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 5,
       metadata: {
@@ -86,7 +87,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'MATIC-USD',
       baseAsset: 'MATIC',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 6,
       metadata: {
@@ -100,7 +101,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'DOGE-USD',
       baseAsset: 'DOGE',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 7,
       metadata: {
@@ -114,7 +115,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'OP-USD',
       baseAsset: 'OP',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 8,
       metadata: {
@@ -128,7 +129,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'SUI-USD',
       baseAsset: 'SUI',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 9,
       metadata: {
@@ -142,7 +143,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'WIF-USD',
       baseAsset: 'WIF',
       quoteAsset: 'USD',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 10,
       metadata: {
@@ -157,7 +158,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'BTC-USDT',
       baseAsset: 'BTC',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.SPOT,
+      instrumentType: BackendInstrumentType.SPOT,
       enabled: true,
       priority: 10,
       metadata: {
@@ -171,7 +172,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'ETH-USDT',
       baseAsset: 'ETH',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.SPOT,
+      instrumentType: BackendInstrumentType.SPOT,
       enabled: true,
       priority: 20,
       metadata: {
@@ -185,7 +186,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'SOL-USDT',
       baseAsset: 'SOL',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.SPOT,
+      instrumentType: BackendInstrumentType.SPOT,
       enabled: true,
       priority: 30,
       metadata: {
@@ -200,7 +201,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'BTC-USDT-SWAP',
       baseAsset: 'BTC',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 15,
       metadata: {
@@ -214,7 +215,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'ETH-USDT-SWAP',
       baseAsset: 'ETH',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 25,
       metadata: {
@@ -228,7 +229,7 @@ export async function seedTradesConfigs(prisma: PrismaClient) {
       symbol: 'SOL-USDT-SWAP',
       baseAsset: 'SOL',
       quoteAsset: 'USDT',
-      instrumentType: InstrumentType.PERPETUAL,
+      instrumentType: BackendInstrumentType.PERPETUAL,
       enabled: true,
       priority: 35,
       metadata: {

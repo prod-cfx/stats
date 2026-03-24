@@ -78,12 +78,11 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
 
   const loadStrategies = useCallback(async () => {
-    if (!session?.userId) return
+    if (!session) return
     setIsLoading(true)
     setError(null)
     try {
       const response = await fetchAccountAiQuantStrategies({
-        userId: session.userId,
         page: 1,
         limit: 20,
       })
@@ -93,7 +92,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     } finally {
       setIsLoading(false)
     }
-  }, [session?.userId])
+  }, [session])
 
   useEffect(() => {
     void loadStrategies()
@@ -102,11 +101,10 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const handleStatusChange = async (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
     e.preventDefault()
     e.stopPropagation()
-    if (!session?.userId) return
+    if (!session) return
     setPendingActionId(id)
     try {
       await performAccountAiQuantStrategyAction(id, {
-        userId: session.userId,
         action: status === 'running' ? 'run' : 'stop',
       })
       await loadStrategies()

@@ -1,4 +1,4 @@
-import { PositionSide } from '@/prisma/prisma.types'
+import { PositionSide } from '@ai/shared'
 import { PositionsService } from './positions.service'
 
 describe('positionsService', () => {

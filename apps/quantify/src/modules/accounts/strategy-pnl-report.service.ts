@@ -1,5 +1,6 @@
+import { LedgerEntryType } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
-import { LedgerEntryType, Prisma } from '@/prisma/prisma.types'
+import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategyPnlReportRepository } from './repositories/strategy-pnl-report.repository'
 

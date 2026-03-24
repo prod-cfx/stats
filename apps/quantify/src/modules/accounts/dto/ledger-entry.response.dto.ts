@@ -1,5 +1,5 @@
+import { LedgerEntryType } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
-import { LedgerEntryType } from '@/prisma/prisma.types'
 
 export class LedgerEntryResponseDto {
   @ApiProperty({ description: '流水 ID' })

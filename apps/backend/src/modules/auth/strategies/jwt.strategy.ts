@@ -3,7 +3,7 @@ import type { JwtPayload } from '../interfaces/jwt-payload.interface'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
 
-import { ErrorCode } from '@ai/shared'
+import { ErrorCode, PrincipalType } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
@@ -11,7 +11,6 @@ import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrincipalType } from '@/prisma/prisma.types'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

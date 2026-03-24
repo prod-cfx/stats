@@ -2,17 +2,9 @@
  * 信号生成和条件判断辅助函数
  */
 
+import type { SignalDirection } from '../../generated/prisma-enums'
 import type { Bar } from './technical-indicators'
-
-/**
- * 信号方向
- */
-export type SignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
-
-/**
- * 信号类型
- */
-export type SignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
+import { SignalType } from '../../generated/prisma-enums'
 
 /**
  * 信号对象
@@ -41,7 +33,7 @@ export function createSignal(params: {
 }): Signal {
   return {
     direction: params.direction,
-    signalType: params.signalType || 'ENTRY',
+    signalType: params.signalType || SignalType.ENTRY,
     confidence: params.confidence,
     entryPrice: params.entryPrice,
     stopLoss: params.stopLoss,

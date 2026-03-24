@@ -1,2 +1,31 @@
-export * from '../../generated/prisma'
-export { $Enums, Prisma, PrismaClient } from '../../generated/prisma'
+export { Prisma, PrismaClient } from '../../generated/prisma'
+export type {
+  AiProviderKey,
+  ExchangeAccount,
+  IndicatorConfig,
+  IndicatorValue,
+  LlmStrategy,
+  LlmStrategyCodegenSession,
+  LlmStrategyCodeVersion,
+  LlmStrategyInstance,
+  LlmStrategyRun,
+  MarketBar,
+  MarketQuote,
+  OutboxMessage,
+  PnlLedger,
+  Position,
+  PositionSyncLog,
+  StrategyInstance,
+  StrategyPnlDaily,
+  StrategySignalState,
+  StrategyTemplate,
+  Symbol,
+  SystemSetting,
+  Trade,
+  TradingSignal,
+  User,
+  UserLlmStrategySubscription,
+  UserSignalExecution,
+  UserStrategyAccount,
+  UserStrategySubscription,
+} from '../../generated/prisma'

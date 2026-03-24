@@ -80,7 +80,7 @@ export class WhaleNotificationRulesController {
   private toResponse(row: WhaleNotificationRule): WhaleNotificationRuleResponseDto {
     return {
       id: row.id,
-      type: row.type,
+      type: row.type as import('@ai/shared').WhaleNotificationRuleType,
       address: row.whaleAddress ?? undefined,
       symbol: row.symbol ?? undefined,
       thresholdUsd: Number(row.thresholdUsd),

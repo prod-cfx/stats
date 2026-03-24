@@ -2,6 +2,7 @@ import type { TriggerPositionSyncDto } from './dto/position-sync.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
+import { PositionStatus } from '@ai/shared'
 import { Transactional } from '@nestjs-cls/transactional'
 import {
   Body,
@@ -20,7 +21,6 @@ import {
 } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
-import { PositionStatus } from '@/prisma/prisma.types'
 // DTOs 需要在运行时存在以支持 class-validator 和 Swagger，必须使用普通 import
 import { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import { PositionSyncResultDto } from './dto/position-sync.dto'

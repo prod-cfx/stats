@@ -1,5 +1,5 @@
+import { PrincipalType } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
-import { PrincipalType } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { UserRepository } from './repositories/user.repository'
 

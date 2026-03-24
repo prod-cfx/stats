@@ -15,7 +15,13 @@ describe('accountStrategyViewService.performAction', () => {
 
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
     await service.performAction('inst-1', { userId: 'user-1', action: AccountStrategyAction.RUN })
@@ -40,7 +46,13 @@ describe('accountStrategyViewService.performAction', () => {
 
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
     await service.performAction('inst-1', { userId: 'user-1', action: AccountStrategyAction.STOP })
@@ -65,11 +77,17 @@ describe('accountStrategyViewService.performAction', () => {
 
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
 
     await expect(
       service.performAction('inst-1', { userId: 'user-2', action: AccountStrategyAction.STOP }),
-    ).rejects.toThrow('Only strategy owner can operate instance status')
+    ).rejects.toThrow('account_strategy.owner_only')
 
     expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
   })

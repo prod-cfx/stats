@@ -1,6 +1,6 @@
 /* eslint-disable perfectionist/sort-imports */
 import type { AdminMenu } from '@/prisma/prisma.types'
-import { AdminMenuType } from '@/prisma/prisma.types'
+import { AdminMenuType } from '@ai/shared'
 import type { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 
 type MenuNode = AdminMenu & { children: MenuNode[] }
@@ -36,7 +36,7 @@ export const buildAuthorizedMenuTree = (
     const nodeCode = node.code ?? null
     const nodeAllowed = allowAll || (nodeCode ? permissionCodes.has(nodeCode) : false)
     const shouldInclude =
-      node.type === AdminMenuType.DIRECTORY ? nodeAllowed || children.length > 0 : nodeAllowed
+      (node.type as string) === AdminMenuType.DIRECTORY ? nodeAllowed || children.length > 0 : nodeAllowed
 
     if (!shouldInclude) return null
 
@@ -48,7 +48,7 @@ export const buildAuthorizedMenuTree = (
       icon: node.icon ?? null,
       sortOrder: node.sort,
       code: nodeCode,
-      type: node.type,
+      type: node.type as AdminMenuType,
       children,
     }
   }

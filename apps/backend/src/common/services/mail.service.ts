@@ -154,11 +154,11 @@ export class MailService {
         html,
         text,
       })
+
+      this.logStagingVerificationCode(email, normalizedCode, 'delivered')
     } catch (error) {
       if (this.shouldFallbackVerificationCodeToLog(error)) {
-        const fallbackLog = `[staging-email-fallback] verification code for ${this.maskEmail(email)}: ${normalizedCode}`
-        this.logger.warn(fallbackLog)
-        appendFileSync('/tmp/staging-email-codes.log', `${new Date().toISOString()} ${fallbackLog}\n`, 'utf8')
+        this.logStagingVerificationCode(email, normalizedCode, 'fallback')
         return
       }
       throw error
@@ -245,6 +245,16 @@ export class MailService {
 
     const reason = String(error.args?.reason ?? '').toLowerCase()
     return reason.includes('daily email sending quota')
+  }
+
+  private logStagingVerificationCode(email: string, code: string, source: 'delivered' | 'fallback'): void {
+    if (this.appEnv !== 'staging') {
+      return
+    }
+
+    const message = `[staging-email-code] source=${source} verification code for ${this.maskEmail(email)}: ${code}`
+    this.logger.log(message)
+    appendFileSync('/tmp/staging-email-codes.log', `${new Date().toISOString()} ${message}\n`, 'utf8')
   }
 
   private logMockEmail(options: SendMailOptions) {

@@ -1,7 +1,7 @@
+import { SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { convertDecimalToString } from '@/common/utils/decimal-converter'
 
-import { SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
+import { convertDecimalToString } from '@/common/utils/decimal-converter'
 
 export class TradingSignalResponseDto {
   @ApiProperty({ description: '信号 ID' })

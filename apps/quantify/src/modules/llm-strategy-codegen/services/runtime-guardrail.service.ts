@@ -1,8 +1,8 @@
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable } from '@nestjs/common'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { resolveStrategyOutput, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 
 export interface RuntimeGuardrailResult {
   runtimePassed: boolean

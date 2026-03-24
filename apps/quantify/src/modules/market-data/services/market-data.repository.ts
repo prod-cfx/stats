@@ -1,13 +1,12 @@
-import type { MarketTimeframe } from '@ai/shared'
+import type { MarketTimeframe, QuantifyInstrumentType as InstrumentType, SymbolType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient, InstrumentType, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
-import { ErrorCode } from '@ai/shared'
+import type { PrismaClient, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol } from '@/prisma/prisma.types'
+import { ErrorCode, SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
 
 interface IndicatorSnapshotRecord {

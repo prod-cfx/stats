@@ -23,6 +23,7 @@ import { AccountExchangeAccountsModule } from './account-exchange-accounts/accou
 import { AdminModule } from './admin/admin.module'
 import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated-liquidation.module'
 import { AggregatedOrderbookModule } from './aggregated-orderbook/aggregated-orderbook.module'
+import { AiQuantProxyModule } from './ai-quant-proxy/ai-quant-proxy.module'
 import { AuthModule } from './auth/auth.module'
 import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
@@ -94,6 +95,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     UserModule,
     AuthModule,
     AccountExchangeAccountsModule,
+    AiQuantProxyModule,
     AdminModule,
     // 统一数据拉取 & 调度模块（K 线、新闻等）
     DataSyncModule,

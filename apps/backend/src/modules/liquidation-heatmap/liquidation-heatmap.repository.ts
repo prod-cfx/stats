@@ -1,8 +1,8 @@
+import type { LiquidationHeatmapModelType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   LiquidationHeatmapCandle,
   LiquidationHeatmapCell,
-  LiquidationHeatmapModelType,
   LiquidationHeatmapSnapshot,
   LiquidationHeatmapYAxis,
 } from '@/prisma/prisma.types'

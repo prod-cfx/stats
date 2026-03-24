@@ -1,6 +1,5 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
-import { ErrorCode } from '@ai/shared'
+import { LiquidationHeatmapModelType, ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -42,9 +41,9 @@ export class CoinglassHeatmapJob implements DataPullJob {
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
-    const modelType = cursor.modelType ?? 'MODEL3'
+    const modelType = cursor.modelType ?? LiquidationHeatmapModelType.MODEL3
     const modelSuffix =
-      modelType === 'MODEL1' ? 'model1' : modelType === 'MODEL2' ? 'model2' : 'model3'
+      modelType === LiquidationHeatmapModelType.MODEL1 ? 'model1' : modelType === LiquidationHeatmapModelType.MODEL2 ? 'model2' : 'model3'
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
     const rawEndpoint = this.configService.get<string>('COINGLASS_HEATMAP_ENDPOINT')
@@ -111,7 +110,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
 
     const snapshot = await this.repo.createSnapshotWithData({
       source: 'COINGLASS',
-      modelType: cursor.modelType ?? 'MODEL3',
+      modelType: cursor.modelType ?? LiquidationHeatmapModelType.MODEL3,
       exchangeCode: cursor.exchangeCode ?? null,
       symbol: cursor.symbol,
       tradingPair: null,
@@ -244,7 +243,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
     if (!currentCursor) {
       return {
         symbol: 'BTC',
-        modelType: 'MODEL3',
+        modelType: LiquidationHeatmapModelType.MODEL3,
         interval: '15m',
       }
     }
@@ -256,7 +255,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
       }
       if (parsed.modelType) {
         const normalized = String(parsed.modelType).trim().toUpperCase()
-        const allowed: LiquidationHeatmapModelType[] = ['MODEL1', 'MODEL2', 'MODEL3']
+        const allowed: LiquidationHeatmapModelType[] = [LiquidationHeatmapModelType.MODEL1, LiquidationHeatmapModelType.MODEL2, LiquidationHeatmapModelType.MODEL3]
         if (!allowed.includes(normalized as LiquidationHeatmapModelType)) {
           throw new DomainException('data_sync.heatmap.invalid_model_type', {
             code: ErrorCode.DATA_SYNC_DATA_VALIDATION_FAILED,
@@ -266,7 +265,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
         }
         parsed.modelType = normalized as LiquidationHeatmapModelType
       } else {
-        parsed.modelType = 'MODEL3'
+        parsed.modelType = LiquidationHeatmapModelType.MODEL3
       }
       if (!parsed.interval) {
         parsed.interval = '15m'
@@ -282,7 +281,7 @@ export class CoinglassHeatmapJob implements DataPullJob {
         this.logger.warn(`Failed to parse cursor JSON: ${currentCursor}, fallback to default`)
         return {
           symbol: 'BTC',
-          modelType: 'MODEL3',
+          modelType: LiquidationHeatmapModelType.MODEL3,
           interval: '15m',
         }
       }

@@ -254,7 +254,7 @@ function resolveDeltaContext(
       typeof equity !== 'number' || !Number.isFinite(equity) ||
       typeof markPrice !== 'number' || !Number.isFinite(markPrice)
     ) {
-      throw new Error(
+      throw new TypeError(
         'ADJUST_POSITION requires explicit context: currentQty/equity/markPrice',
       )
     }

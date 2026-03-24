@@ -1,6 +1,6 @@
+import { StrategyInstanceMode } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsJSON, IsNotEmpty, IsOptional, IsString } from 'class-validator'
-import { StrategyInstanceMode } from '@/prisma/prisma.types'
 
 export class CreateStrategyInstanceDto {
   @ApiProperty({ description: '策略模板 ID' })

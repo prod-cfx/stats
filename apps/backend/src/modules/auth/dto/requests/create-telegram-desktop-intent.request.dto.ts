@@ -1,15 +1,8 @@
+import { TelegramDesktopIntentKind, TelegramDesktopIntentLanguage } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
 
-export enum TelegramDesktopIntentKind {
-  LOGIN = 'login',
-  BIND = 'bind',
-}
-
-export enum TelegramDesktopIntentLanguage {
-  ZH = 'zh',
-  EN = 'en',
-}
+export { TelegramDesktopIntentKind, TelegramDesktopIntentLanguage }
 
 export class CreateTelegramDesktopIntentRequestDto {
   @ApiProperty({ enum: TelegramDesktopIntentKind, required: false, default: TelegramDesktopIntentKind.LOGIN })

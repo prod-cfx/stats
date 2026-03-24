@@ -1,13 +1,9 @@
 import type { MarketBarPayload, MarketTimeframe } from './market-data'
+import { IndicatorType } from '../generated/prisma-enums'
 
-export interface IndicatorParamsByType {
-  RET: WindowedIndicatorParams
-  MOVING_AVG: WindowedIndicatorParams
-  VOLATILITY: WindowedIndicatorParams
-  VOLUME_RATIO: WindowedIndicatorParams
+export type IndicatorParamsByType = {
+  [K in IndicatorType]: WindowedIndicatorParams
 }
-
-export type IndicatorType = keyof IndicatorParamsByType
 
 export interface WindowedIndicatorParams {
   window: number
@@ -27,20 +23,20 @@ interface IndicatorCalculatorInstance<T extends IndicatorType> {
 }
 
 const calculators: { [K in IndicatorType]: IndicatorCalculatorInstance<K> } = {
-  RET: {
-    type: 'RET',
+  [IndicatorType.RET]: {
+    type: IndicatorType.RET,
     compute: (ctx, params) => computeReturn(ctx.bars, params.window),
   },
-  MOVING_AVG: {
-    type: 'MOVING_AVG',
+  [IndicatorType.MOVING_AVG]: {
+    type: IndicatorType.MOVING_AVG,
     compute: (ctx, params) => computeMovingAverage(ctx.bars, params.window),
   },
-  VOLATILITY: {
-    type: 'VOLATILITY',
+  [IndicatorType.VOLATILITY]: {
+    type: IndicatorType.VOLATILITY,
     compute: (ctx, params) => computeVolatility(ctx.bars, params.window),
   },
-  VOLUME_RATIO: {
-    type: 'VOLUME_RATIO',
+  [IndicatorType.VOLUME_RATIO]: {
+    type: IndicatorType.VOLUME_RATIO,
     compute: (ctx, params) => computeVolumeRatio(ctx.bars, params.window),
   },
 }

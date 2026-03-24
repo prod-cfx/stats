@@ -1,5 +1,5 @@
+import { AdminMenuType } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
-import { AdminMenuType } from '@/prisma/prisma.types'
 
 class AdminMenuPermissionDto {
   @ApiProperty()

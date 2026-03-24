@@ -4,6 +4,7 @@
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用
 // eslint-disable-next-line ts/consistent-type-imports
 import { GetLiquidationHeatmapRequestDto } from './dto/requests/get-liquidation-heatmap.request.dto'
+import { LiquidationHeatmapModelType } from '@ai/shared'
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { ReadAny, RequireAuth } from '@/modules/auth/decorators/access-control.decorator'
@@ -55,7 +56,7 @@ export class LiquidationHeatmapController {
       exchangeCode: query.exchangeCode === '' ? null : query.exchangeCode,
       contractType: query.contractType === '' ? null : query.contractType,
       timeInterval: query.timeInterval,
-      modelType: query.modelType ?? 'MODEL3',
+      modelType: query.modelType ?? LiquidationHeatmapModelType.MODEL3,
     })
 
     return result
