@@ -1122,9 +1122,21 @@ export function AiQuantPageClient() {
               result={activeConversation.backtestResult}
               canDeploy={canDeploy}
               drawdownLimited={!mockExecutionMode}
-              onOpenFullScreen={() =>
-                router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}`)
-              }
+              onOpenFullScreen={() => {
+                const currentBacktest = activeConversation.backtestResult
+                if (!currentBacktest) {
+                  return
+                }
+                const search = new URLSearchParams()
+                search.set('symbol', currentBacktest.symbol ?? activeConversation.params.symbol)
+                if (currentBacktest.startAt) {
+                  search.set('startAt', currentBacktest.startAt)
+                }
+                if (currentBacktest.endAt) {
+                  search.set('endAt', currentBacktest.endAt)
+                }
+                router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
+              }}
               onOptimize={() => {
                 const optimizeMessage: QuantMessage = {
                   id: `opt-${Date.now()}`,

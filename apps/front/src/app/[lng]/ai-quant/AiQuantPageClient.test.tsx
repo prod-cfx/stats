@@ -98,8 +98,17 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
 }))
 
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
-  BacktestSummaryCard: ({ result }: { result: { startAt: string, endAt: string } }) => (
-    <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
+  BacktestSummaryCard: ({
+    result,
+    onOpenFullScreen,
+  }: {
+    result: { startAt: string, endAt: string }
+    onOpenFullScreen: () => void
+  }) => (
+    <>
+      <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
+      <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
+    </>
   ),
 }))
 
@@ -184,6 +193,37 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(summary?.textContent).toContain('2026-03-17T12:00:00.000Z')
     expect(summary?.textContent).toContain('2026-03-24T12:00:00.000Z')
     expect(scrollIntoViewMock).toHaveBeenCalled()
+  })
+
+  it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="set-valid-preset"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await act(async () => {
+      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-fullscreen"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    const pushedUrl = mockPush.mock.calls[0][0] as string
+    const [path, queryString] = pushedUrl.split('?')
+    expect(path).toContain('/zh/ai-quant/backtest/')
+
+    const query = new URLSearchParams(queryString)
+    expect(query.get('symbol')).toBe('BTCUSDT')
+    expect(query.get('startAt')).toBe('2026-03-17T12:00:00.000Z')
+    expect(query.get('endAt')).toBe('2026-03-24T12:00:00.000Z')
   })
 
   it('closes backtest confirm dialog on Escape without executing backtest', async () => {
