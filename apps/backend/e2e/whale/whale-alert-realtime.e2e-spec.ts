@@ -24,8 +24,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     whaleAlertService = app.get(WhaleAlertServiceToken)
 
     // 清理历史测试数据，避免断言被污染
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
   })
 
   afterAll(async () => {
@@ -35,7 +34,6 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should apply default filters and mapping correctly', async () => {
-    const client = prisma.getClient()
     const now = new Date()
 
     recentLongTime = new Date(now.getTime() - 5 * 60 * 1000)
@@ -45,7 +43,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     // 插入多条不同条件的数据，覆盖默认过滤条件：
     // - 名义价值阈值（min_position_value_usd 默认 1_000_000）
     // - 时间窗口（默认最近 24 小时）
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: [
         // 最近的多头，名义价值 5,000,000（应被包含）
         {
@@ -112,10 +110,9 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should respect symbol filter and limit', async () => {
-    const client = prisma.getClient()
     const now = new Date()
-    await client.hyperliquidWhaleAlert.deleteMany({})
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: [
         {
           userAddress: '0xWhaleE2E1',
@@ -155,10 +152,9 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should respect custom minPositionValueUsd', async () => {
-    const client = prisma.getClient()
     const localSince = new Date(Date.now() - 10 * 60 * 1000)
-    await client.hyperliquidWhaleAlert.deleteMany({})
-    await client.hyperliquidWhaleAlert.create({
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.create({
       data: {
         userAddress: '0xWhaleE2E1',
         symbol: 'E2E',
@@ -187,12 +183,11 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   })
 
   it('should return paginated structure with total/page/limit/items', async () => {
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
 
     // Seed 5 records within time window
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: Array.from({ length: 5 }, (_, i) => ({
         userAddress: `0xPagTest${i}`,
         symbol: 'PAG',
@@ -242,10 +237,9 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
 
   it('should return empty items when page is out of range', async () => {
     // 独立 seed，不依赖前序测试数据
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: Array.from({ length: 3 }, (_, i) => ({
         userAddress: `0xOutOfRange${i}`,
         symbol: 'OOR',

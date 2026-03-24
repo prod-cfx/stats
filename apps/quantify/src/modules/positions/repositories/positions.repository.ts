@@ -1,21 +1,17 @@
- 
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId } from '@/modules/trading/core/types'
-import type { Prisma } from '@/prisma/prisma.types'
+import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入
-import { PrismaService } from '@/prisma/prisma.service'
 import { PositionStatus } from '@/prisma/prisma.types'
 
 @Injectable()
 export class PositionsRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findOpenByAccount(accountId: string) {
-    return this.getClient().position.findMany({
+    return this.txHost.tx.position.findMany({
       where: {
         userStrategyAccountId: accountId,
         status: PositionStatus.OPEN,
@@ -24,7 +20,7 @@ export class PositionsRepository {
   }
 
   async findUniqueWithAccount(positionId: string) {
-    return this.getClient().position.findUnique({
+    return this.txHost.tx.position.findUnique({
       where: { id: positionId },
       include: {
         account: {
@@ -39,18 +35,18 @@ export class PositionsRepository {
 
   async findManyPaginated(where: Prisma.PositionWhereInput, skip: number, take: number) {
     return Promise.all([
-      this.getClient().position.findMany({
+      this.txHost.tx.position.findMany({
         where,
         orderBy: { updatedAt: 'desc' },
         skip,
         take,
       }),
-      this.getClient().position.count({ where }),
+      this.txHost.tx.position.count({ where }),
     ])
   }
 
   async findUserStrategyAccount(userId: string, strategyId: string) {
-    return this.getClient().userStrategyAccount.findUnique({
+    return this.txHost.tx.userStrategyAccount.findUnique({
       where: {
         userId_strategyId: {
           userId,
@@ -62,7 +58,7 @@ export class PositionsRepository {
   }
 
   async findFirstPositionByAccount(accountId: string, exchangeId: ExchangeId) {
-    return this.getClient().position.findFirst({
+    return this.txHost.tx.position.findFirst({
       where: {
         userStrategyAccountId: accountId,
         exchangeId,
@@ -79,7 +75,7 @@ export class PositionsRepository {
 
   async findActiveSubscriptionsForBatchSync(take: number) {
     return Promise.all([
-      this.getClient().userStrategySubscription.findMany({
+      this.txHost.tx.userStrategySubscription.findMany({
         where: {
           status: 'active',
           exchangeAccountId: { not: null },
@@ -99,7 +95,7 @@ export class PositionsRepository {
         },
         take,
       }),
-      this.getClient().userLlmStrategySubscription.findMany({
+      this.txHost.tx.userLlmStrategySubscription.findMany({
         where: {
           status: 'active',
           exchangeAccountId: { not: null },
@@ -137,17 +133,14 @@ export class PositionsRepository {
     durationMs: number
     triggeredBy?: string
   }) {
-    return this.getClient().positionSyncLog.create({ data })
+    return this.txHost.tx.positionSyncLog.create({ data })
   }
 
   async findUserStrategyAccountById(accountId: string) {
-    return this.getClient().userStrategyAccount.findUnique({
+    return this.txHost.tx.userStrategyAccount.findUnique({
       where: { id: accountId },
       select: { userId: true, id: true },
     })
   }
 
-  runInTransaction<T>(fn: (prisma: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    return this.prisma.runInTransaction(fn)
-  }
 }

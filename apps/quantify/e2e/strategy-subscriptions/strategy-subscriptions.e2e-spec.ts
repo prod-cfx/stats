@@ -24,7 +24,7 @@ describe('UserStrategySubscriptionsController (E2E)', () => {
     app = testing.app
     _moduleFixture = testing.moduleFixture
     prismaService = testing.prisma
-    prismaClient = prismaService.getClient() as PrismaClient
+    prismaClient = prismaService as unknown as PrismaClient
 
     // 创建测试用户
     testUser = await seedUser('e2e-subscriber@test.com', 'Test123!')

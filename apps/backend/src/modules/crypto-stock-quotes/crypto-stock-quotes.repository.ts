@@ -1,9 +1,11 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CryptoStockQuote, Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { SourceConsistencyException } from '@/common/exceptions/source-consistency.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 
 type Decimal = Prisma.Decimal
 
@@ -46,15 +48,10 @@ export class CryptoStockQuotesRepository {
   private readonly logger: Logger
 
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
     @Optional() @Inject(Logger) logger?: Logger,
   ) {
     this.logger = logger ?? new Logger(CryptoStockQuotesRepository.name)
-  }
-
-  private getClient() {
-    return this.prisma.getClient()
   }
 
   /**
@@ -120,10 +117,9 @@ export class CryptoStockQuotesRepository {
    * 创建或更新加密股票报价记录
    */
   async upsertQuote(input: CreateCryptoStockQuoteInput): Promise<CryptoStockQuote> {
-    const client = this.getClient()
     const source = input.source ?? 'BBX'
 
-    return client.cryptoStockQuote.upsert({
+    return this.txHost.tx.cryptoStockQuote.upsert({
       where: {
         symbol_source_quoteTimestamp: {
           symbol: input.symbol,
@@ -139,48 +135,44 @@ export class CryptoStockQuotesRepository {
   /**
    * 批量创建或更新加密股票报价（快照模式）
    *
-   * ⚠️ 警告：此方法会删除该source的所有旧记录，只保留本次抓取的快照数据。
-   * 这是全量替换操作，不是增量更新。
-   *
    * 每次调用会删除该source的所有旧记录，只保留本次抓取的快照数据。
    * 适用于BBX_SCRAPER等不需要历史数据累积的场景。
+   * 事务由上层 @Transactional 保证。
    */
   async upsertQuotes(inputs: CreateCryptoStockQuoteInput[]): Promise<number> {
     if (inputs.length === 0) {
       return 0
     }
 
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const source = inputs[0]?.source ?? 'BBX'
+    const source = inputs[0]?.source ?? 'BBX'
 
-      const inconsistentSource = inputs.find(input => (input.source ?? 'BBX') !== source)
-      if (inconsistentSource) {
-        throw new SourceConsistencyException({
-          expected: source,
-          got: inconsistentSource.source ?? 'BBX',
-        })
-      }
-
-      const deleteCount = await tx.cryptoStockQuote.count({ where: { source } })
-      if (deleteCount > 0) {
-        this.logger.log(
-          `Snapshot mode: deleting ${deleteCount} existing records for source: ${source}`,
-        )
-      }
-
-      await tx.cryptoStockQuote.deleteMany({
-        where: {
-          source,
-        },
+    const inconsistentSource = inputs.find(input => (input.source ?? 'BBX') !== source)
+    if (inconsistentSource) {
+      throw new SourceConsistencyException({
+        expected: source,
+        got: inconsistentSource.source ?? 'BBX',
       })
+    }
 
-      const createData = inputs.map(input => this.buildCreateData(input))
-      await tx.cryptoStockQuote.createMany({
-        data: createData,
-      })
+    const deleteCount = await this.txHost.tx.cryptoStockQuote.count({ where: { source } })
+    if (deleteCount > 0) {
+      this.logger.log(
+        `Snapshot mode: deleting ${deleteCount} existing records for source: ${source}`,
+      )
+    }
 
-      return inputs.length
+    await this.txHost.tx.cryptoStockQuote.deleteMany({
+      where: {
+        source,
+      },
     })
+
+    const createData = inputs.map(input => this.buildCreateData(input))
+    await this.txHost.tx.cryptoStockQuote.createMany({
+      data: createData,
+    })
+
+    return inputs.length
   }
 
   /**
@@ -189,6 +181,7 @@ export class CryptoStockQuotesRepository {
    * - 仅允许 source='BBX_SCRAPER'
    * - 同一轮 inputs 的 quoteTimestamp 必须一致
    * - 每个 symbol 仅删除该 symbol+source 的旧记录，再插入该 symbol 的新快照
+   * 事务由上层 @Transactional 保证。
    */
   async upsertBbxScraperQuotesBySymbolReplace(
     inputs: CreateCryptoStockQuoteInput[],
@@ -241,48 +234,37 @@ export class CryptoStockQuotesRepository {
     }
 
     const startedAt = Date.now()
-    const { createdCount, symbolCount } = await this.prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        let created = 0
+    let created = 0
 
-        for (const [symbol, symbolInputs] of groupedBySymbol) {
-          await tx.cryptoStockQuote.deleteMany({
-            where: {
-              source,
-              symbol,
-            },
-          })
+    for (const [symbol, symbolInputs] of groupedBySymbol) {
+      await this.txHost.tx.cryptoStockQuote.deleteMany({
+        where: {
+          source,
+          symbol,
+        },
+      })
 
-          const createData = symbolInputs.map(input => this.buildCreateData(input))
-          if (createData.length > 0) {
-            await tx.cryptoStockQuote.createMany({
-              data: createData,
-            })
-            created += createData.length
-          }
-        }
-
-        return {
-          createdCount: created,
-          symbolCount: groupedBySymbol.size,
-        }
-      },
-    )
+      const createData = symbolInputs.map(input => this.buildCreateData(input))
+      if (createData.length > 0) {
+        await this.txHost.tx.cryptoStockQuote.createMany({
+          data: createData,
+        })
+        created += createData.length
+      }
+    }
 
     const durationMs = Date.now() - startedAt
     this.logger.log(
-      `BBX_SCRAPER replace by symbol: symbols=${symbolCount}, created=${createdCount}, durationMs=${durationMs}`,
+      `BBX_SCRAPER replace by symbol: symbols=${groupedBySymbol.size}, created=${created}, durationMs=${durationMs}`,
     )
 
-    return createdCount
+    return created
   }
 
   /**
    * 查询加密股票报价记录
    */
   async findQuotes(query: QueryCryptoStockQuotesInput): Promise<CryptoStockQuote[]> {
-    const client = this.getClient()
-
     const where: Prisma.CryptoStockQuoteWhereInput = {}
 
     if (query.symbol) {
@@ -303,7 +285,7 @@ export class CryptoStockQuotesRepository {
       }
     }
 
-    return client.cryptoStockQuote.findMany({
+    return this.txHost.tx.cryptoStockQuote.findMany({
       where,
       orderBy: {
         quoteTimestamp: 'desc',
@@ -317,9 +299,7 @@ export class CryptoStockQuotesRepository {
    * 查询最新的报价记录
    */
   async findLatestQuote(symbol: string, source?: string): Promise<CryptoStockQuote | null> {
-    const client = this.getClient()
-
-    return client.cryptoStockQuote.findFirst({
+    return this.txHost.tx.cryptoStockQuote.findFirst({
       where: {
         symbol,
         source: source ?? 'BBX_SCRAPER',
@@ -341,14 +321,12 @@ export class CryptoStockQuotesRepository {
   ): Promise<CryptoStockQuote[]> {
     if (!symbols.length) return []
 
-    const client = this.getClient()
-
     const where: Prisma.CryptoStockQuoteWhereInput = {
       symbol: { in: symbols },
       source: source ?? 'BBX_SCRAPER',
     }
 
-    return client.cryptoStockQuote.findMany({
+    return this.txHost.tx.cryptoStockQuote.findMany({
       where,
       orderBy: [{ symbol: 'asc' }, { source: 'asc' }, { quoteTimestamp: 'desc' }],
       distinct: ['symbol', 'source'],
@@ -361,13 +339,11 @@ export class CryptoStockQuotesRepository {
    * - 对每个 (symbol, source) 组合返回一条最新记录
    */
   async findLatestQuotesForAllSymbols(source?: string): Promise<CryptoStockQuote[]> {
-    const client = this.getClient()
-
     const where: Prisma.CryptoStockQuoteWhereInput = {
       source: source ?? 'BBX_SCRAPER',
     }
 
-    return client.cryptoStockQuote.findMany({
+    return this.txHost.tx.cryptoStockQuote.findMany({
       where,
       orderBy: [{ symbol: 'asc' }, { source: 'asc' }, { quoteTimestamp: 'desc' }],
       distinct: ['symbol', 'source'],

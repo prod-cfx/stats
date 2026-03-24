@@ -1,7 +1,8 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PolymarketMarket as PolymarketMarketModel, Prisma } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export interface PolymarketMarketWriteInput {
   marketId: string
@@ -91,12 +92,7 @@ export type PolymarketMarketWithOutcomes = Prisma.PolymarketMarketGetPayload<{
 
 @Injectable()
 export class PolymarketRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   private toMarketUpsertData(market: PolymarketMarketWriteInput) {
     return {
       marketId: market.marketId,
@@ -129,9 +125,8 @@ export class PolymarketRepository {
   }
 
   async upsertMarket(market: PolymarketMarketWriteInput): Promise<PolymarketMarketModel> {
-    const client = this.getClient()
     const marketData = this.toMarketUpsertData(market)
-    return client.polymarketMarket.upsert({
+    return this.txHost.tx.polymarketMarket.upsert({
       where: { marketId: market.marketId },
       create: marketData,
       update: marketData,
@@ -142,68 +137,22 @@ export class PolymarketRepository {
     market: PolymarketMarketWriteInput,
     outcomes: PolymarketOutcomeWriteWithoutMarketInput[],
   ): Promise<void> {
-    const client = this.getClient()
     const marketData = this.toMarketUpsertData(market)
 
-    await client.$transaction(async tx => {
-      const marketRecord = await tx.polymarketMarket.upsert({
-        where: { marketId: market.marketId },
-        create: marketData,
-        update: marketData,
-      })
-
-      if (!outcomes.length) return
-
-      await Promise.all(
-        outcomes.map(outcome =>
-          tx.polymarketOutcome.upsert({
-            where: { outcomeTokenId: outcome.outcomeTokenId },
-            create: {
-              marketId: marketRecord.id,
-              outcomeTokenId: outcome.outcomeTokenId,
-              name: outcome.name,
-              shortName: outcome.shortName,
-              nameZh: outcome.nameZh,
-              shortNameZh: outcome.shortNameZh,
-              side: outcome.side,
-              price: outcome.price ?? undefined,
-              probability: outcome.probability ?? undefined,
-              liquidity: outcome.liquidity ?? undefined,
-              poolBalance: outcome.poolBalance ?? undefined,
-              lastTradePrice: outcome.lastTradePrice ?? undefined,
-              lastTradeAt: outcome.lastTradeAt ?? undefined,
-              rawPayload: outcome.rawPayload,
-            },
-            update: {
-              marketId: marketRecord.id,
-              name: outcome.name,
-              shortName: outcome.shortName,
-              nameZh: outcome.nameZh,
-              shortNameZh: outcome.shortNameZh,
-              side: outcome.side,
-              price: outcome.price ?? undefined,
-              probability: outcome.probability ?? undefined,
-              liquidity: outcome.liquidity ?? undefined,
-              poolBalance: outcome.poolBalance ?? undefined,
-              lastTradePrice: outcome.lastTradePrice ?? undefined,
-              lastTradeAt: outcome.lastTradeAt ?? undefined,
-              rawPayload: outcome.rawPayload,
-            },
-          }),
-        ),
-      )
+    const marketRecord = await this.txHost.tx.polymarketMarket.upsert({
+      where: { marketId: market.marketId },
+      create: marketData,
+      update: marketData,
     })
-  }
 
-  async upsertOutcomes(outcomes: PolymarketOutcomeWriteInput[]): Promise<void> {
     if (!outcomes.length) return
-    const client = this.getClient()
-    await client.$transaction(
+
+    await Promise.all(
       outcomes.map(outcome =>
-        client.polymarketOutcome.upsert({
+        this.txHost.tx.polymarketOutcome.upsert({
           where: { outcomeTokenId: outcome.outcomeTokenId },
           create: {
-            marketId: outcome.marketDbId,
+            marketId: marketRecord.id,
             outcomeTokenId: outcome.outcomeTokenId,
             name: outcome.name,
             shortName: outcome.shortName,
@@ -219,7 +168,7 @@ export class PolymarketRepository {
             rawPayload: outcome.rawPayload,
           },
           update: {
-            marketId: outcome.marketDbId,
+            marketId: marketRecord.id,
             name: outcome.name,
             shortName: outcome.shortName,
             nameZh: outcome.nameZh,
@@ -238,8 +187,47 @@ export class PolymarketRepository {
     )
   }
 
+  async upsertOutcomes(outcomes: PolymarketOutcomeWriteInput[]): Promise<void> {
+    if (!outcomes.length) return
+    for (const outcome of outcomes) {
+      await this.txHost.tx.polymarketOutcome.upsert({
+        where: { outcomeTokenId: outcome.outcomeTokenId },
+        create: {
+          marketId: outcome.marketDbId,
+          outcomeTokenId: outcome.outcomeTokenId,
+          name: outcome.name,
+          shortName: outcome.shortName,
+          nameZh: outcome.nameZh,
+          shortNameZh: outcome.shortNameZh,
+          side: outcome.side,
+          price: outcome.price ?? undefined,
+          probability: outcome.probability ?? undefined,
+          liquidity: outcome.liquidity ?? undefined,
+          poolBalance: outcome.poolBalance ?? undefined,
+          lastTradePrice: outcome.lastTradePrice ?? undefined,
+          lastTradeAt: outcome.lastTradeAt ?? undefined,
+          rawPayload: outcome.rawPayload,
+        },
+        update: {
+          marketId: outcome.marketDbId,
+          name: outcome.name,
+          shortName: outcome.shortName,
+          nameZh: outcome.nameZh,
+          shortNameZh: outcome.shortNameZh,
+          side: outcome.side,
+          price: outcome.price ?? undefined,
+          probability: outcome.probability ?? undefined,
+          liquidity: outcome.liquidity ?? undefined,
+          poolBalance: outcome.poolBalance ?? undefined,
+          lastTradePrice: outcome.lastTradePrice ?? undefined,
+          lastTradeAt: outcome.lastTradeAt ?? undefined,
+          rawPayload: outcome.rawPayload,
+        },
+      })
+    }
+  }
+
   async saveOrderbookSnapshot(input: PolymarketOrderbookSnapshotInput): Promise<void> {
-    const client = this.getClient()
     const seqValue =
       typeof input.seq === 'number'
         ? BigInt(Math.trunc(input.seq))
@@ -247,7 +235,7 @@ export class PolymarketRepository {
           ? input.seq
           : undefined
 
-    await client.polymarketOrderbookSnapshot.upsert({
+    await this.txHost.tx.polymarketOrderbookSnapshot.upsert({
       where: {
         marketExternalId_outcomeTokenId_capturedAt: {
           marketExternalId: input.marketExternalId,
@@ -286,7 +274,6 @@ export class PolymarketRepository {
     limit?: number
     offset?: number
   }): Promise<OutcomeTokenRecord[]> {
-    const client = this.getClient()
     const limit = Math.max(1, Math.min(params.limit ?? 50, 500))
     const offset = Math.max(0, params.offset ?? 0)
 
@@ -316,7 +303,7 @@ export class PolymarketRepository {
       },
     }
 
-    const rows = await client.polymarketOutcome.findMany({
+    const rows = await this.txHost.tx.polymarketOutcome.findMany({
       take: limit,
       skip: offset,
       orderBy: {
@@ -355,8 +342,7 @@ export class PolymarketRepository {
       lastUpdatedAt?: Date
     },
   ): Promise<void> {
-    const client = this.getClient()
-    await client.polymarketMarket.update({
+    await this.txHost.tx.polymarketMarket.update({
       where: { id: marketId },
       data: {
         isActive: updates.isActive ?? undefined,
@@ -371,13 +357,12 @@ export class PolymarketRepository {
     offset?: number
     limit?: number
   }): Promise<PolymarketMarketWithOutcomes[]> {
-    const client = this.getClient()
     const limit = Math.max(1, Math.min(params.limit ?? 50, 200))
     const offset = Math.max(0, params.offset ?? 0)
 
     const normalizedCategory = params.category?.trim().toLowerCase()
 
-    return client.polymarketMarket.findMany({
+    return this.txHost.tx.polymarketMarket.findMany({
       where: {
         ...(params.onlyActive !== false ? { isActive: true } : {}),
         ...(normalizedCategory ? { category: normalizedCategory } : {}),
@@ -396,8 +381,7 @@ export class PolymarketRepository {
   async findMarketsForTranslation(ids: string[]): Promise<MarketTranslationSnapshot[]> {
     if (!ids.length) return []
 
-    const client = this.getClient()
-    return client.polymarketMarket.findMany({
+    return this.txHost.tx.polymarketMarket.findMany({
       where: {
         marketId: {
           in: ids,

@@ -29,14 +29,13 @@ describe('Whale notification rules HTTP (E2E)', () => {
     app = ctx.app
 
     prisma = app.get(PrismaServiceToken)
-    const client = prisma.getClient()
-    await client.whaleNotificationRule.deleteMany({
+    await prisma.whaleNotificationRule.deleteMany({
       where: { userId: 'e2e-user-whale-notify' },
     })
-    await client.user.deleteMany({
+    await prisma.user.deleteMany({
       where: { id: 'e2e-user-whale-notify' },
     })
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: 'e2e-user-whale-notify',
         email: 'e2e-user-whale-notify@example.com',
@@ -50,11 +49,10 @@ describe('Whale notification rules HTTP (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationRule.deleteMany({
+      await prisma.whaleNotificationRule.deleteMany({
         where: { userId: 'e2e-user-whale-notify' },
       })
-      await client.user.deleteMany({
+      await prisma.user.deleteMany({
         where: { id: 'e2e-user-whale-notify' },
       })
     }

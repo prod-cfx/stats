@@ -32,13 +32,12 @@ describe('Whale notification inbox HTTP (E2E)', () => {
     app = ctx.app
 
     prisma = app.get(PrismaServiceToken)
-    const client = prisma.getClient()
 
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await client.whaleNotificationRule.deleteMany({ where: { userId } })
-    await client.user.deleteMany({ where: { id: userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+    await prisma.user.deleteMany({ where: { id: userId } })
 
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: userId,
         email: 'e2e-inbox-user@example.com',
@@ -49,7 +48,7 @@ describe('Whale notification inbox HTTP (E2E)', () => {
       },
     })
 
-    const rule = await client.whaleNotificationRule.create({
+    const rule = await prisma.whaleNotificationRule.create({
       data: {
         userId,
         type: 'ADDRESS',
@@ -59,7 +58,7 @@ describe('Whale notification inbox HTTP (E2E)', () => {
     })
     ruleId = rule.id
 
-    await client.whaleNotificationDelivery.createMany({
+    await prisma.whaleNotificationDelivery.createMany({
       data: [
         {
           userId,
@@ -82,10 +81,9 @@ describe('Whale notification inbox HTTP (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await client.whaleNotificationRule.deleteMany({ where: { userId } })
-      await client.user.deleteMany({ where: { id: userId } })
+      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+      await prisma.user.deleteMany({ where: { id: userId } })
     }
 
     if (app) await app.close()

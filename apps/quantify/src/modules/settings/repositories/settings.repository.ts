@@ -1,36 +1,27 @@
-import type { SystemSetting } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留普通导入
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, SystemSetting } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class SettingsRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findAll(): Promise<SystemSetting[]> {
-    const client = this.getClient()
-    return client.systemSetting.findMany({
+    return this.txHost.tx.systemSetting.findMany({
       orderBy: { category: 'asc' },
     })
   }
 
   async findByKey(key: string): Promise<SystemSetting | null> {
-    const client = this.getClient()
-    return client.systemSetting.findUnique({
+    return this.txHost.tx.systemSetting.findUnique({
       where: { key },
     })
   }
 
   async findByCategory(category: string): Promise<SystemSetting[]> {
-    const client = this.getClient()
-    return client.systemSetting.findMany({
+    return this.txHost.tx.systemSetting.findMany({
       where: { category },
       orderBy: { key: 'asc' },
     })
@@ -44,8 +35,7 @@ export class SettingsRepository {
     category?: string
     isSystem?: boolean
   }): Promise<SystemSetting> {
-    const client = this.getClient()
-    return client.systemSetting.create({
+    return this.txHost.tx.systemSetting.create({
       data,
     })
   }
@@ -60,8 +50,7 @@ export class SettingsRepository {
       isSystem?: boolean
     },
   ): Promise<SystemSetting> {
-    const client = this.getClient()
-    return client.systemSetting.update({
+    return this.txHost.tx.systemSetting.update({
       where: { key },
       data,
     })
@@ -75,8 +64,7 @@ export class SettingsRepository {
     category?: string
     isSystem?: boolean
   }): Promise<SystemSetting> {
-    const client = this.getClient()
-    return client.systemSetting.upsert({
+    return this.txHost.tx.systemSetting.upsert({
       where: { key: data.key },
       update: {
         value: data.value,
@@ -91,8 +79,7 @@ export class SettingsRepository {
   }
 
   async delete(key: string): Promise<SystemSetting> {
-    const client = this.getClient()
-    return client.systemSetting.delete({
+    return this.txHost.tx.systemSetting.delete({
       where: { key },
     })
   }

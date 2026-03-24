@@ -1,16 +1,16 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { JwtPayload } from '../interfaces/jwt-payload.interface'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
-import { ErrorCode } from '@ai/shared'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
- 
+
+import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
- 
 import { PrincipalType } from '@/prisma/prisma.types'
 
 @Injectable()
@@ -19,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigService,
-    @Inject(PrismaService) private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
   ) {
     const secret = configService.get<string>('jwt.secret')
     if (!secret) {
@@ -46,11 +46,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const principalType: PrincipalType = payload.principalType === 'admin' ? PrincipalType.ADMIN : PrincipalType.USER
-    const prismaClient = this.prisma.getClient()
 
     // 验证 tokenVersion（仅对 USER 类型，ADMIN 暂不校验）
     if (principalType === PrincipalType.USER && payload.tokenVersion !== undefined) {
-      const user = await prismaClient.user.findUnique({
+      const user = await this.txHost.tx.user.findUnique({
         where: { id: payload.sub },
         select: { tokenVersion: true },
       })
@@ -76,7 +75,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // 验证角色分配
-    const hasAssignment = await prismaClient.roleAssignment.findFirst({
+    const hasAssignment = await this.txHost.tx.roleAssignment.findFirst({
       where: {
         principalId: payload.sub,
         principalType,

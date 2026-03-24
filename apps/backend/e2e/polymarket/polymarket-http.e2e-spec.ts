@@ -26,9 +26,8 @@ describe('Polymarket markets service (E2E)', () => {
       )
     }
 
-    const client = prisma.getClient()
 
-    await client.polymarketOrderbookSnapshot.deleteMany({
+    await prisma.polymarketOrderbookSnapshot.deleteMany({
       where: {
         marketExternalId: {
           in: ['e2e-m-crypto', 'e2e-m-crypto-missing-prob', 'e2e-m-sports'],
@@ -36,7 +35,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketOutcome.deleteMany({
+    await prisma.polymarketOutcome.deleteMany({
       where: {
         outcomeTokenId: {
           in: ['e2e-token-yes', 'e2e-token-no', 'e2e-token-missing-prob', 'e2e-token-suspect-zero'],
@@ -44,7 +43,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketMarket.deleteMany({
+    await prisma.polymarketMarket.deleteMany({
       where: {
         marketId: {
           in: [
@@ -58,7 +57,7 @@ describe('Polymarket markets service (E2E)', () => {
     })
 
     // 插入一条 crypto 市场和一条 sports 市场，用于验证 category 过滤与映射逻辑
-    const cryptoMarket = await client.polymarketMarket.create({
+    const cryptoMarket = await prisma.polymarketMarket.create({
       data: {
         marketId: 'e2e-m-crypto',
         question: 'E2E: Will BTC go up?',
@@ -73,7 +72,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketOutcome.createMany({
+    await prisma.polymarketOutcome.createMany({
       data: [
         {
           marketId: cryptoMarket.id,
@@ -98,7 +97,7 @@ describe('Polymarket markets service (E2E)', () => {
       ],
     })
 
-    const cryptoMarketMissingProb = await client.polymarketMarket.create({
+    const cryptoMarketMissingProb = await prisma.polymarketMarket.create({
       data: {
         marketId: 'e2e-m-crypto-missing-prob',
         question: 'E2E: Missing probability should fallback to price',
@@ -109,7 +108,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketOutcome.create({
+    await prisma.polymarketOutcome.create({
       data: {
         marketId: cryptoMarketMissingProb.id,
         outcomeTokenId: 'e2e-token-missing-prob',
@@ -122,7 +121,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    const cryptoMarketSuspectZero = await client.polymarketMarket.create({
+    const cryptoMarketSuspectZero = await prisma.polymarketMarket.create({
       data: {
         marketId: 'e2e-m-crypto-suspect-zero',
         question: 'E2E: Suspect probability=0 should be treated as missing',
@@ -133,7 +132,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketOutcome.create({
+    await prisma.polymarketOutcome.create({
       data: {
         marketId: cryptoMarketSuspectZero.id,
         outcomeTokenId: 'e2e-token-suspect-zero',
@@ -146,7 +145,7 @@ describe('Polymarket markets service (E2E)', () => {
       },
     })
 
-    await client.polymarketMarket.create({
+    await prisma.polymarketMarket.create({
       data: {
         marketId: 'e2e-m-sports',
         question: 'E2E: Some sports market',

@@ -1,7 +1,9 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
-import type { Prisma, UserSignalExecution } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-import { PrismaService } from '@/prisma/prisma.service'
+import type { PrismaClient, Prisma, UserSignalExecution } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 import { ExecutionStatus } from '@/prisma/prisma.types'
 
@@ -23,17 +25,14 @@ interface ExecutionStageMetadata extends Prisma.JsonObject {
 
 @Injectable()
 export class SignalExecutionRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(data: Prisma.UserSignalExecutionCreateInput): Promise<UserSignalExecution> {
-    return this.prisma.userSignalExecution.create({ data })
+    return this.txHost.tx.userSignalExecution.create({ data })
   }
 
   async markStage(id: string, stage: ExecutionStage, metadataPatch: Prisma.JsonObject = {}) {
-    const existing = await this.prisma.userSignalExecution.findUnique({
+    const existing = await this.txHost.tx.userSignalExecution.findUnique({
       where: { id },
       select: { metadata: true },
     })
@@ -53,7 +52,7 @@ export class SignalExecutionRepository {
       ] as Prisma.JsonArray,
     }
 
-    await this.prisma.userSignalExecution.update({
+    await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         metadata: nextMetadata,
@@ -62,7 +61,7 @@ export class SignalExecutionRepository {
   }
 
   async markExecuted(id: string, payload: ExecutionUpdatePayload = {}) {
-    const existing = await this.prisma.userSignalExecution.findUnique({
+    const existing = await this.txHost.tx.userSignalExecution.findUnique({
       where: { id },
       select: { metadata: true },
     })
@@ -75,7 +74,7 @@ export class SignalExecutionRepository {
           }
         : current
 
-    await this.prisma.userSignalExecution.update({
+    await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.EXECUTED,
@@ -93,7 +92,7 @@ export class SignalExecutionRepository {
   }
 
   async markFailed(id: string, errorMessage: string) {
-    await this.prisma.userSignalExecution.update({
+    await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.FAILED,
@@ -104,7 +103,7 @@ export class SignalExecutionRepository {
   }
 
   async markSkipped(id: string, reason: string) {
-    await this.prisma.userSignalExecution.update({
+    await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.SKIPPED,

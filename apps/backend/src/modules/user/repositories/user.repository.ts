@@ -1,19 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrincipalType } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class UserRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findProfileById(userId: string) {
-    const client = this.getClient()
-    return client.user.findUnique({
+    return this.txHost.tx.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -32,8 +27,7 @@ export class UserRepository {
     userId: string,
     principalType: PrincipalType,
   ): Promise<{ role: { code: string } }[]> {
-    const client = this.getClient()
-    return client.roleAssignment.findMany({
+    return this.txHost.tx.roleAssignment.findMany({
       where: { principalId: userId, principalType },
       select: { role: { select: { code: true } } },
     })

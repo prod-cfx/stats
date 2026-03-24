@@ -1,11 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
-import { HyperliquidApiService } from '@/modules/whale-tracking/services/hyperliquid-api.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { HyperliquidApiService } from '@/modules/whale-tracking/services/hyperliquid-api.service'
 
 interface UserFundingCursor {
   /**
@@ -32,11 +35,16 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
   private readonly logger = new Logger(HyperliquidUserFundingSyncJob.name)
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
     private readonly hyperliquidApi: HyperliquidApiService,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     if (!cursor.userAddress) {
@@ -75,7 +83,7 @@ export class HyperliquidUserFundingSyncJob implements DataPullJob {
       }
     }
 
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     // 转换数据并写入数据库
     const rows = funding.map(item => ({

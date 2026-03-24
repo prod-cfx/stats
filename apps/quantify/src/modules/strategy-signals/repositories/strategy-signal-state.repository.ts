@@ -1,15 +1,17 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class StrategySignalStateRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   findByStrategyInstanceId(strategyInstanceId: string) {
-    return this.prisma.strategySignalState.findUnique({
+    return this.txHost.tx.strategySignalState.findUnique({
       where: { strategyInstanceId },
     })
   }
@@ -21,7 +23,7 @@ export class StrategySignalStateRepository {
     const { lockedUntil, reset } = options ?? {}
 
     // 获取实例对应的模板ID
-    const instance = await this.prisma.strategyInstance.findUnique({
+    const instance = await this.txHost.tx.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: { strategyTemplateId: true },
     })
@@ -34,7 +36,7 @@ export class StrategySignalStateRepository {
       })
     }
 
-    await this.prisma.strategySignalState.upsert({
+    await this.txHost.tx.strategySignalState.upsert({
       where: { strategyInstanceId },
       update: reset
         ? {
@@ -56,7 +58,7 @@ export class StrategySignalStateRepository {
 
   async reset(strategyInstanceId: string) {
     // 获取实例对应的模板ID
-    const instance = await this.prisma.strategyInstance.findUnique({
+    const instance = await this.txHost.tx.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
       select: { strategyTemplateId: true },
     })
@@ -69,7 +71,7 @@ export class StrategySignalStateRepository {
       })
     }
 
-    await this.prisma.strategySignalState.upsert({
+    await this.txHost.tx.strategySignalState.upsert({
       where: { strategyInstanceId },
       update: {
         consecutiveFailures: 0,

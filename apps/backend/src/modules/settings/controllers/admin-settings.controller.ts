@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -69,6 +70,7 @@ export class AdminSettingsController {
   }
 
   @Post()
+  @Transactional()
   @CreateAny(AppResource.SETTINGS)
   @ApiOperation({ summary: '创建配置（管理员）' })
   @ApiBody({ type: CreateSettingDto })
@@ -100,6 +102,7 @@ export class AdminSettingsController {
   }
 
   @Put(':key')
+  @Transactional()
   @UpdateAny(AppResource.SETTINGS)
   @ApiOperation({ summary: '更新配置（管理员）' })
   @ApiBody({ type: UpdateSettingDto })
@@ -134,6 +137,7 @@ export class AdminSettingsController {
   }
 
   @Patch('reload')
+  @Transactional()
   @UpdateAny(AppResource.SETTINGS)
   @ApiOperation({ summary: '重新加载所有配置（管理员）' })
   @ApiResponse({

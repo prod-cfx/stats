@@ -1,12 +1,11 @@
-import type {
-  LlmStrategyInstance,
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, LlmStrategyInstance,
   LlmStrategyInstanceMode,
   LlmStrategyInstanceStatus,
-  Prisma,
-} from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
+  Prisma, } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 interface ListParams {
   status?: LlmStrategyInstanceStatus
@@ -18,23 +17,16 @@ interface ListParams {
 
 @Injectable()
 export class LlmStrategyInstancesRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findById(id: string): Promise<LlmStrategyInstance | null> {
-    return this.client.llmStrategyInstance.findUnique({
+    return this.txHost.tx.llmStrategyInstance.findUnique({
       where: { id },
     })
   }
 
   async findByIdWithStrategy(id: string) {
-    return this.client.llmStrategyInstance.findUnique({
+    return this.txHost.tx.llmStrategyInstance.findUnique({
       where: { id },
       include: {
         strategy: true,
@@ -56,7 +48,7 @@ export class LlmStrategyInstancesRepository {
     const skip = params.skip !== undefined ? Math.max(0, params.skip) : undefined
     const take = params.take !== undefined ? Math.max(1, Math.min(params.take, 100)) : undefined
 
-    return this.client.llmStrategyInstance.findMany({
+    return this.txHost.tx.llmStrategyInstance.findMany({
       where,
       orderBy: params.orderBy ?? { createdAt: 'desc' },
       skip,
@@ -75,7 +67,7 @@ export class LlmStrategyInstancesRepository {
       where.strategyId = params.strategyId
     }
 
-    return this.client.llmStrategyInstance.count({ where })
+    return this.txHost.tx.llmStrategyInstance.count({ where })
   }
 
   async listByStatus(
@@ -85,14 +77,14 @@ export class LlmStrategyInstancesRepository {
   }
 
   async create(data: Prisma.LlmStrategyInstanceCreateInput): Promise<LlmStrategyInstance> {
-    return this.client.llmStrategyInstance.create({ data })
+    return this.txHost.tx.llmStrategyInstance.create({ data })
   }
 
   async update(
     id: string,
     data: Prisma.LlmStrategyInstanceUpdateInput,
   ): Promise<LlmStrategyInstance | null> {
-    const instance = await this.client.llmStrategyInstance.findUnique({
+    const instance = await this.txHost.tx.llmStrategyInstance.findUnique({
       where: { id },
     })
 
@@ -100,14 +92,14 @@ export class LlmStrategyInstancesRepository {
       return null
     }
 
-    return this.client.llmStrategyInstance.update({
+    return this.txHost.tx.llmStrategyInstance.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string): Promise<void> {
-    await this.client.llmStrategyInstance.delete({
+    await this.txHost.tx.llmStrategyInstance.delete({
       where: { id },
     })
   }
@@ -127,21 +119,21 @@ export class LlmStrategyInstancesRepository {
     }
 
     const [items, total] = await Promise.all([
-      this.client.llmStrategyInstance.findMany({
+      this.txHost.tx.llmStrategyInstance.findMany({
         where,
         include: { strategy: { select: { name: true, description: true } } },
         orderBy: { updatedAt: 'desc' },
         skip: params.skip,
         take: params.take,
       }),
-      this.client.llmStrategyInstance.count({ where }),
+      this.txHost.tx.llmStrategyInstance.count({ where }),
     ])
 
     return { items, total }
   }
 
   async findByIdWithStrategyDetail(id: string) {
-    return this.client.llmStrategyInstance.findUnique({
+    return this.txHost.tx.llmStrategyInstance.findUnique({
       where: { id },
       include: {
         strategy: { select: { name: true, description: true, status: true } },
@@ -150,7 +142,7 @@ export class LlmStrategyInstancesRepository {
   }
 
   async findRunningWithSchedule() {
-    return this.client.llmStrategyInstance.findMany({
+    return this.txHost.tx.llmStrategyInstance.findMany({
       where: {
         status: 'running',
         scheduleCron: { not: null },

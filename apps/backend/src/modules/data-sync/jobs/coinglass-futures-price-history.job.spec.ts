@@ -19,16 +19,17 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const prisma = {
-      getClient: () => ({
+    const txHost = {
+      tx: {
         futuresPriceHistory: {
           findFirst: async () => null,
           createMany: async () => ({ count: 0 }),
         },
-      }),
+      },
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, prisma as any)
+    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -72,16 +73,17 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const prisma = {
-      getClient: () => ({
+    const txHost = {
+      tx: {
         futuresPriceHistory: {
           findFirst: async () => null,
           createMany: async () => ({ count: 0 }),
         },
-      }),
+      },
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, prisma as any)
+    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {
@@ -118,16 +120,17 @@ describe('coinglassFuturesPriceHistoryJob', () => {
       },
     }
 
-    const prisma = {
-      getClient: () => ({
+    const txHost = {
+      tx: {
         futuresPriceHistory: {
           findFirst: async () => null,
           createMany: async () => ({ count: 0 }),
         },
-      }),
+      },
     }
 
-    const job = new CoinglassFuturesPriceHistoryJob(configService as any, prisma as any)
+    const txEvents = { withAfterCommit: (fn: () => Promise<any>) => fn() }
+    const job = new CoinglassFuturesPriceHistoryJob(configService as any, txHost as any, txEvents as any)
 
     let requestedUrl: string | null = null
     ;(globalThis as { fetch?: typeof fetch }).fetch = (async (url: string) => {

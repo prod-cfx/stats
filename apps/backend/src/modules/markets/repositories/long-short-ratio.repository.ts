@@ -1,11 +1,12 @@
 import type { MarketTimeframe } from '@ai/shared'
+// Nest 注入需要运行时引用 PrismaService，保留值导入
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {LongShortRatio as LongShortRatioModel} from '@/prisma/prisma.types';
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 import {  Prisma } from '@/prisma/prisma.types'
 
 export type LongShortRatio = LongShortRatioModel
@@ -34,12 +35,7 @@ export interface LongShortRatioUpsertInput {
 
 @Injectable()
 export class LongShortRatioRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   /**
    * 按交易对 + 时间范围查询多空比时间序列
    * 默认按时间倒序返回最新的 limit 条数据
@@ -50,7 +46,6 @@ export class LongShortRatioRepository {
       return { items, total: items.length }
     }
     try {
-      const client = this.getClient()
       const { tradingPairId, interval, from, to, limit = 500, page = 1 } = query
       const prismaInterval = mapTimeframe(interval)
 
@@ -68,7 +63,7 @@ export class LongShortRatioRepository {
 
       // 默认按时间倒序查询，返回最新数据
       const [result, total] = await Promise.all([
-        client.longShortRatio.findMany({
+        this.txHost.tx.longShortRatio.findMany({
           where,
           orderBy: [
             { timestamp: 'desc' },
@@ -77,7 +72,7 @@ export class LongShortRatioRepository {
           take: limit,
           skip: (page - 1) * limit,
         }),
-        client.longShortRatio.count({ where }),
+        this.txHost.tx.longShortRatio.count({ where }),
       ])
 
       // 反转数组使时间从旧到新排列，便于前端绘制曲线
@@ -119,7 +114,6 @@ export class LongShortRatioRepository {
    * 单条 upsert，用于数据拉取任务写入
    */
   async upsertOne(input: LongShortRatioUpsertInput): Promise<LongShortRatio> {
-    const client = this.getClient()
 
     const {
       tradingPairId,
@@ -135,7 +129,7 @@ export class LongShortRatioRepository {
     } = input
     const prismaInterval = mapTimeframe(interval)
 
-    return client.longShortRatio.upsert({
+    return this.txHost.tx.longShortRatio.upsert({
       where: {
         tradingPairId_interval_timestamp: {
           tradingPairId,

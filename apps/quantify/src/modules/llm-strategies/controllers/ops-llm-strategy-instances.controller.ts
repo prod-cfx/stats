@@ -1,6 +1,7 @@
 import type { MessageEvent } from '@nestjs/common'
 import type { Observable } from 'rxjs'
 import type { LlmOpsTestLogEvent } from '../llm-ops-test-log.events'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Logger, Param, Post, Put, Query, Sse } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type
 import { EventEmitter2 } from '@nestjs/event-emitter'
@@ -125,6 +126,7 @@ export class OpsLlmStrategyInstancesController {
     return new LlmStrategyInstanceResponseDto(instance)
   }
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建LLM策略实例' })
   @ApiBody({ description: '创建LLM策略实例请求体', type: CreateLlmStrategyInstanceDto })
@@ -136,6 +138,7 @@ export class OpsLlmStrategyInstancesController {
     return new LlmStrategyInstanceResponseDto(instance)
   }
 
+  @Transactional()
   @Put(':id')
   @ApiOperation({ summary: '更新LLM策略实例' })
   @ApiBody({ description: '更新LLM策略实例请求体', type: UpdateLlmStrategyInstanceDto })
@@ -148,6 +151,7 @@ export class OpsLlmStrategyInstancesController {
     return new LlmStrategyInstanceResponseDto(instance)
   }
 
+  @Transactional()
   @Delete(':id')
   @ApiOperation({ summary: '删除LLM策略实例' })
   async delete(
@@ -174,6 +178,7 @@ export class OpsLlmStrategyInstancesController {
     return runs.map(run => new LlmStrategyRunResponseDto(run))
   }
 
+  @Transactional()
   @Post(':id/test-run')
   @ApiOperation({
     summary: '手动测试运行 LLM 策略实例（忽略调度与冷却限制）',

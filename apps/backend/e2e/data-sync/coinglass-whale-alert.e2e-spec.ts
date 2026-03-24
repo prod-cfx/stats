@@ -21,8 +21,7 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
     job = app.get(CoinglassWhaleAlertJob)
 
     // 清理历史测试数据，避免断言被污染
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
   })
 
   afterAll(async () => {
@@ -32,8 +31,7 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
   })
 
   it('should fetch whale alerts (via mocked API) and persist to database correctly', async () => {
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
 
     const nowSeconds = Math.floor(Date.now() / 1000)
     const mockData = [
@@ -97,7 +95,7 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
       })
 
       // 2）数据库数据断言（确认映射 & 幂等键逻辑）
-      const rows = await client.hyperliquidWhaleAlert.findMany({
+      const rows = await prisma.hyperliquidWhaleAlert.findMany({
         where: {
           source: 'COINGLASS',
           userAddress: { in: mockData.map(item => item.user) },

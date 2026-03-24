@@ -1,7 +1,8 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { AdminMenu, PrincipalType } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export interface AdminMenuCreateData {
   parentId?: string | null
@@ -31,55 +32,42 @@ export interface AdminMenuUpdateData {
 
 @Injectable()
 export class AdminMenuRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findMany(): Promise<AdminMenu[]> {
-    const client = this.getClient()
-    return client.adminMenu.findMany({ orderBy: { sort: 'asc' } })
+    return this.txHost.tx.adminMenu.findMany({ orderBy: { sort: 'asc' } })
   }
 
   async findById(id: string): Promise<AdminMenu | null> {
-    const client = this.getClient()
-    return client.adminMenu.findUnique({ where: { id } })
+    return this.txHost.tx.adminMenu.findUnique({ where: { id } })
   }
 
   async findByIdSelect(id: string): Promise<{ id: string } | null> {
-    const client = this.getClient()
-    return client.adminMenu.findUnique({ where: { id }, select: { id: true } })
+    return this.txHost.tx.adminMenu.findUnique({ where: { id }, select: { id: true } })
   }
 
   async findChildrenIds(parentId: string): Promise<{ id: string }[]> {
-    const client = this.getClient()
-    return client.adminMenu.findMany({ where: { parentId }, select: { id: true } })
+    return this.txHost.tx.adminMenu.findMany({ where: { parentId }, select: { id: true } })
   }
 
   async findRoleAssignmentsByAdmin(
     adminId: string,
     principalType: PrincipalType,
   ): Promise<{ role: { menuPermissions: string[] } }[]> {
-    const client = this.getClient()
-    return client.roleAssignment.findMany({
+    return this.txHost.tx.roleAssignment.findMany({
       where: { principalId: adminId, principalType },
       select: { role: { select: { menuPermissions: true } } },
     })
   }
 
   async create(data: AdminMenuCreateData): Promise<AdminMenu> {
-    const client = this.getClient()
-    return client.adminMenu.create({ data: data as never })
+    return this.txHost.tx.adminMenu.create({ data: data as never })
   }
 
   async update(id: string, data: AdminMenuUpdateData): Promise<AdminMenu> {
-    const client = this.getClient()
-    return client.adminMenu.update({ where: { id }, data: data as never })
+    return this.txHost.tx.adminMenu.update({ where: { id }, data: data as never })
   }
 
   async deleteMany(ids: string[]): Promise<void> {
-    const client = this.getClient()
-    await client.adminMenu.deleteMany({ where: { id: { in: ids } } })
+    await this.txHost.tx.adminMenu.deleteMany({ where: { id: { in: ids } } })
   }
 }

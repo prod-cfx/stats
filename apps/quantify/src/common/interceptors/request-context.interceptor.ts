@@ -41,11 +41,9 @@ export class RequestContextInterceptor implements NestInterceptor {
       userId: this.resolveUserId(request),
     }
 
-    return this.cls.run(() => {
-      this.cls.set(REQUEST_CONTEXT_KEY, payload)
-      this.cls.set(REQUEST_ID_KEY, requestId)
-      return next.handle()
-    })
+    this.cls.set(REQUEST_CONTEXT_KEY, payload)
+    this.cls.set(REQUEST_ID_KEY, requestId)
+    return next.handle()
   }
 
   private ensureRequestId(request: Request, response: Response): string {

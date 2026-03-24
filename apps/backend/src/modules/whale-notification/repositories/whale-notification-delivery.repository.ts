@@ -1,17 +1,13 @@
-import type { PrismaService } from '@/prisma/prisma.service'
-import { Inject, Injectable } from '@nestjs/common'
-import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class WhaleNotificationDeliveryRepository {
-  constructor(@Inject(PrismaServiceToken) private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async listInboxByUser(userId: string, limit = 100) {
-    return this.getClient().whaleNotificationDelivery.findMany({
+    return this.txHost.tx.whaleNotificationDelivery.findMany({
       where: { userId },
       orderBy: [{ createdAt: 'desc' }],
       take: limit,
@@ -19,25 +15,25 @@ export class WhaleNotificationDeliveryRepository {
   }
 
   async findById(id: string) {
-    return this.getClient().whaleNotificationDelivery.findUnique({ where: { id } })
+    return this.txHost.tx.whaleNotificationDelivery.findUnique({ where: { id } })
   }
 
   async markRead(userId: string, id: string) {
-    return this.getClient().whaleNotificationDelivery.updateMany({
+    return this.txHost.tx.whaleNotificationDelivery.updateMany({
       where: { id, userId },
       data: { isRead: true },
     })
   }
 
   async markAllRead(userId: string) {
-    return this.getClient().whaleNotificationDelivery.updateMany({
+    return this.txHost.tx.whaleNotificationDelivery.updateMany({
       where: { userId, isRead: false },
       data: { isRead: true },
     })
   }
 
   async countUnread(userId: string) {
-    return this.getClient().whaleNotificationDelivery.count({
+    return this.txHost.tx.whaleNotificationDelivery.count({
       where: {
         userId,
         isRead: false,
@@ -46,7 +42,7 @@ export class WhaleNotificationDeliveryRepository {
   }
 
   async findUserEmail(userId: string): Promise<string | null> {
-    const row = await this.getClient().user.findUnique({
+    const row = await this.txHost.tx.user.findUnique({
       where: { id: userId },
       select: { email: true },
     })
@@ -54,7 +50,7 @@ export class WhaleNotificationDeliveryRepository {
   }
 
   async findUserTelegramId(userId: string): Promise<string | null> {
-    const credential = await this.getClient().userCredential.findFirst({
+    const credential = await this.txHost.tx.userCredential.findFirst({
       where: {
         userId,
         value: {

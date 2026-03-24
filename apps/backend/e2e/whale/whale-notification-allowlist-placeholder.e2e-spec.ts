@@ -55,13 +55,12 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
 
     prisma = app.get(PrismaServiceToken)
     whaleAlertService = app.get(WhaleAlertServiceToken)
-    const client = prisma.getClient()
 
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await client.whaleNotificationRule.deleteMany({ where: { userId } })
-    await client.user.deleteMany({ where: { id: userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+    await prisma.user.deleteMany({ where: { id: userId } })
 
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: userId,
         email: 'e2e-allowlist@example.com',
@@ -72,7 +71,7 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
       },
     })
 
-    await client.whaleNotificationRule.create({
+    await prisma.whaleNotificationRule.create({
       data: {
         userId,
         type: 'SYMBOL',
@@ -88,11 +87,10 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await client.whaleNotificationRule.deleteMany({ where: { userId } })
-      await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xabc' } })
-      await client.user.deleteMany({ where: { id: userId } })
+      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+      await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xabc' } })
+      await prisma.user.deleteMany({ where: { id: userId } })
     }
 
     if (originalAllowlist === undefined) {
@@ -114,7 +112,7 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
       tradeTime: new Date(Date.now() - 1000),
     })
 
-    const deliveries = await prisma.getClient().whaleNotificationDelivery.findMany({
+    const deliveries = await prisma.whaleNotificationDelivery.findMany({
       where: { userId },
     })
 

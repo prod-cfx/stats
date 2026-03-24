@@ -4,6 +4,7 @@ import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-d
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
@@ -38,6 +39,7 @@ export class AccountStrategyViewController {
     return this.service.getStrategyDetail(userId, id)
   }
 
+  @Transactional()
   @Post(':id/actions')
   async action(
     @Param('id') id: string,
@@ -51,6 +53,7 @@ export class AccountStrategyViewController {
     })
   }
 
+  @Transactional()
   @Post('deploy')
   async deploy(
     @Body() dto: AccountStrategyDeployDto,

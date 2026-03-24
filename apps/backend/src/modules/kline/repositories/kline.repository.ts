@@ -1,25 +1,20 @@
-import type { MarketTimeframe } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
  
-import { Injectable } from '@nestjs/common'
+import type { MarketTimeframe } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class KlineRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findMany(params: {
     where: Prisma.FuturesPriceHistoryWhereInput
     orderBy: { timestamp: 'desc' }
     take: number
   }) {
-    const client = this.getClient()
-    return client.futuresPriceHistory.findMany(params)
+    return this.txHost.tx.futuresPriceHistory.findMany(params)
   }
 
   async groupByTimestamp(params: {
@@ -27,8 +22,7 @@ export class KlineRepository {
     orderBy: { timestamp: 'desc' }
     take: number
   }) {
-    const client = this.getClient()
-    return client.futuresPriceHistory.groupBy({
+    return this.txHost.tx.futuresPriceHistory.groupBy({
       by: ['timestamp'],
       where: params.where,
       _max: { high: true },
@@ -44,8 +38,7 @@ export class KlineRepository {
     dbInterval: string,
     timestamps: Date[],
   ): Promise<{ timestamp: Date; open: number; close: number }[]> {
-    const client = this.getClient()
-    return client.$queryRaw(Prisma.sql`
+    return this.txHost.tx.$queryRaw(Prisma.sql`
       WITH ranked AS (
         SELECT
           timestamp,

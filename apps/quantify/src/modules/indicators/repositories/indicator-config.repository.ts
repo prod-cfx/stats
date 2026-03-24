@@ -1,6 +1,8 @@
-import type { IndicatorConfig, MarketTimeframe, Prisma } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, IndicatorConfig, MarketTimeframe, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 export interface IndicatorConfigListParams {
   symbolCode?: string
@@ -13,17 +15,10 @@ export interface IndicatorConfigListParams {
 
 @Injectable()
 export class IndicatorConfigRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findById(id: string): Promise<IndicatorConfig | null> {
-    return this.client.indicatorConfig.findUnique({
+    return this.txHost.tx.indicatorConfig.findUnique({
       where: { id },
     })
   }
@@ -53,20 +48,20 @@ export class IndicatorConfigRepository {
     const take = params.take ?? 50
 
     const [items, total] = await Promise.all([
-      this.client.indicatorConfig.findMany({
+      this.txHost.tx.indicatorConfig.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip,
         take,
       }),
-      this.client.indicatorConfig.count({ where }),
+      this.txHost.tx.indicatorConfig.count({ where }),
     ])
 
     return [items, total]
   }
 
   async listAllActive(): Promise<IndicatorConfig[]> {
-    return this.client.indicatorConfig.findMany({
+    return this.txHost.tx.indicatorConfig.findMany({
       where: {
         isEnabled: true,
       },
@@ -77,7 +72,7 @@ export class IndicatorConfigRepository {
   }
 
   async listActiveBySymbolAndTimeframe(symbolId: string, timeframe: MarketTimeframe): Promise<IndicatorConfig[]> {
-    return this.client.indicatorConfig.findMany({
+    return this.txHost.tx.indicatorConfig.findMany({
       where: {
         symbolId,
         timeframe,
@@ -90,26 +85,26 @@ export class IndicatorConfigRepository {
   }
 
   async create(data: Prisma.IndicatorConfigCreateInput): Promise<IndicatorConfig> {
-    return this.client.indicatorConfig.create({
+    return this.txHost.tx.indicatorConfig.create({
       data,
     })
   }
 
   async update(id: string, data: Prisma.IndicatorConfigUpdateInput): Promise<IndicatorConfig> {
-    return this.client.indicatorConfig.update({
+    return this.txHost.tx.indicatorConfig.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string): Promise<IndicatorConfig> {
-    return this.client.indicatorConfig.delete({
+    return this.txHost.tx.indicatorConfig.delete({
       where: { id },
     })
   }
 
   async findSymbolByCode(code: string): Promise<{ id: string; code: string } | null> {
-    return this.client.symbol.findUnique({
+    return this.txHost.tx.symbol.findUnique({
       where: { code },
       select: { id: true, code: true },
     })

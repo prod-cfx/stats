@@ -25,8 +25,7 @@ describe('Whale tracking discover API (E2E)', () => {
     prisma = app.get(PrismaService)
 
     // 清理历史测试数据
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
 
     // 准备若干条测试鲸鱼数据（3 个 address，各自多条记录）
     const now = new Date()
@@ -80,7 +79,7 @@ describe('Whale tracking discover API (E2E)', () => {
       },
     ]
 
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: clientData,
     })
   })
@@ -129,8 +128,7 @@ describe('Whale tracking discover API (E2E)', () => {
   })
 
   it('should return empty lists when no whale alerts exist', async () => {
-    const prismaClient = prisma.getClient()
-    await prismaClient.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
 
     const client = createApiClient(app)
     const res = await client.get('whale-tracking/discover').expect(200)

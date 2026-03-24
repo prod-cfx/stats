@@ -1,22 +1,17 @@
+// Nest 注入需要运行时引用 PrismaService，保留值导入
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CreateOrderbookPairConfigDto } from '../dto/create-orderbook-pair-config.dto'
 import type { QueryOrderbookPairConfigDto } from '../dto/query-orderbook-pair-config.dto'
 import type { UpdateOrderbookPairConfigDto } from '../dto/update-orderbook-pair-config.dto'
 import type { OrderbookPairConfig } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class OrderbookPairConfigRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findAll(filter?: QueryOrderbookPairConfigDto): Promise<OrderbookPairConfig[]> {
-    const client = this.getClient()
 
     const where: any = {}
 
@@ -36,30 +31,27 @@ export class OrderbookPairConfigRepository {
       where.enabled = true
     }
 
-    return client.orderbookPairConfig.findMany({
+    return this.txHost.tx.orderbookPairConfig.findMany({
       where,
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     })
   }
 
   async findById(id: string): Promise<OrderbookPairConfig | null> {
-    const client = this.getClient()
-    return client.orderbookPairConfig.findUnique({
+    return this.txHost.tx.orderbookPairConfig.findUnique({
       where: { id },
     })
   }
 
   async findByPairId(pairId: string): Promise<OrderbookPairConfig | null> {
-    const client = this.getClient()
-    return client.orderbookPairConfig.findUnique({
+    return this.txHost.tx.orderbookPairConfig.findUnique({
       where: { pairId },
     })
   }
 
   async create(dto: CreateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
-    const client = this.getClient()
     
-    return client.orderbookPairConfig.create({
+    return this.txHost.tx.orderbookPairConfig.create({
       data: {
         pairId: dto.pairId,
         venue: dto.venue,
@@ -79,7 +71,6 @@ export class OrderbookPairConfigRepository {
   }
 
   async update(id: string, dto: UpdateOrderbookPairConfigDto): Promise<OrderbookPairConfig> {
-    const client = this.getClient()
     const data: any = {}
 
     if (dto.enabled !== undefined) data.enabled = dto.enabled
@@ -89,22 +80,20 @@ export class OrderbookPairConfigRepository {
     if (dto.metadata !== undefined) data.metadata = dto.metadata
     if (dto.description !== undefined) data.description = dto.description
 
-    return client.orderbookPairConfig.update({
+    return this.txHost.tx.orderbookPairConfig.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    await client.orderbookPairConfig.delete({
+    await this.txHost.tx.orderbookPairConfig.delete({
       where: { id },
     })
   }
 
   async findEnabledConfigs(): Promise<OrderbookPairConfig[]> {
-    const client = this.getClient()
-    return client.orderbookPairConfig.findMany({
+    return this.txHost.tx.orderbookPairConfig.findMany({
       where: { enabled: true },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     })

@@ -1,23 +1,17 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CreateExchangeConfigDto } from '../dto/create-exchange-config.dto'
 import type { QueryExchangeConfigDto } from '../dto/query-exchange-config.dto'
 import type { UpdateExchangeConfigDto } from '../dto/update-exchange-config.dto'
 import type { ExchangeConfig, Prisma as PrismaTypes } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class ExchangeConfigRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async list(params: QueryExchangeConfigDto): Promise<{ total: number; items: ExchangeConfig[] }> {
-    const client = this.getClient()
     const where: PrismaTypes.ExchangeConfigWhereInput = {}
 
     if (params.code) {
@@ -39,9 +33,9 @@ export class ExchangeConfigRepository {
     const page = params.page ?? 1
     const limit = params.limit ?? 20
 
-    const [total, items] = await client.$transaction([
-      client.exchangeConfig.count({ where }),
-      client.exchangeConfig.findMany({
+    const [total, items] = await Promise.all([
+      this.txHost.tx.exchangeConfig.count({ where }),
+      this.txHost.tx.exchangeConfig.findMany({
         where,
         orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
         skip: (page - 1) * limit,
@@ -53,17 +47,14 @@ export class ExchangeConfigRepository {
   }
 
   async findById(id: string): Promise<ExchangeConfig | null> {
-    const client = this.getClient()
-    return client.exchangeConfig.findUnique({ where: { id } })
+    return this.txHost.tx.exchangeConfig.findUnique({ where: { id } })
   }
 
   async findByCode(code: string): Promise<ExchangeConfig | null> {
-    const client = this.getClient()
-    return client.exchangeConfig.findUnique({ where: { code } })
+    return this.txHost.tx.exchangeConfig.findUnique({ where: { code } })
   }
 
   async create(dto: CreateExchangeConfigDto): Promise<ExchangeConfig> {
-    const client = this.getClient()
     const data: PrismaTypes.ExchangeConfigCreateInput = {
       code: dto.code,
       name: dto.name,
@@ -81,13 +72,12 @@ export class ExchangeConfigRepository {
         : (dto.metadata as unknown as PrismaTypes.InputJsonValue)
     }
 
-    return client.exchangeConfig.create({
+    return this.txHost.tx.exchangeConfig.create({
       data,
     })
   }
 
   async update(id: string, dto: UpdateExchangeConfigDto): Promise<ExchangeConfig> {
-    const client = this.getClient()
     const data: PrismaTypes.ExchangeConfigUpdateInput = {}
 
     if (dto.code !== undefined) data.code = dto.code
@@ -104,12 +94,11 @@ export class ExchangeConfigRepository {
         : (dto.metadata as unknown as PrismaTypes.InputJsonValue)
     }
 
-    return client.exchangeConfig.update({ where: { id }, data })
+    return this.txHost.tx.exchangeConfig.update({ where: { id }, data })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    await client.exchangeConfig.delete({ where: { id } })
+    await this.txHost.tx.exchangeConfig.delete({ where: { id } })
   }
 }
 

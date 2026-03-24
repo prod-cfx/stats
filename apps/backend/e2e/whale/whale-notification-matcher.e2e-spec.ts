@@ -16,14 +16,13 @@ describe('Whale notification matcher (service E2E)', () => {
     prisma = app.get(PrismaServiceToken)
     matcher = app.get(WhaleNotificationMatcherService)
 
-    const client = prisma.getClient()
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-    await client.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-    await client.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-    await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-    await client.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
+    await prisma.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
+    await prisma.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
+    await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
+    await prisma.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
 
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: 'e2e-matcher-user',
         email: 'e2e-matcher-user@example.com',
@@ -37,12 +36,11 @@ describe('Whale notification matcher (service E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-      await client.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-      await client.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-      await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-      await client.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
+      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
+      await prisma.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
+      await prisma.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
+      await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
+      await prisma.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
     }
 
     if (app) {
@@ -51,9 +49,8 @@ describe('Whale notification matcher (service E2E)', () => {
   })
 
   it('should apply threshold priority: address+symbol override > symbol override > default threshold', async () => {
-    const client = prisma.getClient()
 
-    const rule = await client.whaleNotificationRule.create({
+    const rule = await prisma.whaleNotificationRule.create({
       data: {
         userId: 'e2e-matcher-user',
         type: 'ADDRESS',
@@ -65,7 +62,7 @@ describe('Whale notification matcher (service E2E)', () => {
       },
     })
 
-    await client.whaleNotificationRuleSymbolOverride.createMany({
+    await prisma.whaleNotificationRuleSymbolOverride.createMany({
       data: [
         {
           ruleId: rule.id,

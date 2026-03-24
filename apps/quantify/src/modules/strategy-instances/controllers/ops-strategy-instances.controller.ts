@@ -1,5 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { ErrorCode } from '@ai/shared'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -42,6 +43,7 @@ export class OpsStrategyInstancesController {
     private readonly signalGenerator: SignalGeneratorService,
   ) {}
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建策略实例' })
   @ApiResponse({ status: 201, type: StrategyInstanceResponseDto })
@@ -95,6 +97,7 @@ export class OpsStrategyInstancesController {
     return this.instancesService.getInstanceDetail(id)
   }
 
+  @Transactional()
   @Patch(':id')
   @ApiOperation({ summary: '更新策略实例' })
   @ApiResponse({ status: 200, type: StrategyInstanceResponseDto })
@@ -105,6 +108,7 @@ export class OpsStrategyInstancesController {
     return this.instancesService.updateInstance(id, dto, dto.updatedBy)
   }
 
+  @Transactional()
   @Delete(':id')
   @ApiOperation({ summary: '删除策略实例（仅 draft 状态）' })
   @ApiResponse({ status: 200, description: '删除成功' })
@@ -123,6 +127,7 @@ export class OpsStrategyInstancesController {
     return this.instancesService.buildTestPayload(id)
   }
 
+  @Transactional()
   @Post(':id/test-run')
   @ApiOperation({
     summary: '主动触发策略实例检查（调试用，不会产生真实信号）',
@@ -137,6 +142,7 @@ export class OpsStrategyInstancesController {
     return this.instancesService.testInstance(id, dto)
   }
 
+  @Transactional()
   @Post(':id/generate-signal')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

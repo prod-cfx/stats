@@ -1,7 +1,8 @@
-import type { LlmStrategy, LlmStrategyStatus, Prisma } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, LlmStrategy, LlmStrategyStatus, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 interface ListParams {
   status?: LlmStrategyStatus
@@ -13,23 +14,16 @@ interface ListParams {
 
 @Injectable()
 export class LlmStrategiesRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findById(id: string): Promise<LlmStrategy | null> {
-    return this.client.llmStrategy.findUnique({
+    return this.txHost.tx.llmStrategy.findUnique({
       where: { id },
     })
   }
 
   async findByName(name: string): Promise<LlmStrategy | null> {
-    return this.client.llmStrategy.findFirst({
+    return this.txHost.tx.llmStrategy.findFirst({
       where: { name },
     })
   }
@@ -51,7 +45,7 @@ export class LlmStrategiesRepository {
     const skip = params.skip !== undefined ? Math.max(0, params.skip) : undefined
     const take = params.take !== undefined ? Math.max(1, Math.min(params.take, 100)) : undefined
 
-    return this.client.llmStrategy.findMany({
+    return this.txHost.tx.llmStrategy.findMany({
       where,
       orderBy: params.orderBy ?? { createdAt: 'desc' },
       skip,
@@ -60,14 +54,14 @@ export class LlmStrategiesRepository {
   }
 
   async create(data: Prisma.LlmStrategyCreateInput): Promise<LlmStrategy> {
-    return this.client.llmStrategy.create({ data })
+    return this.txHost.tx.llmStrategy.create({ data })
   }
 
   async update(
     id: string,
     data: Prisma.LlmStrategyUpdateInput,
   ): Promise<LlmStrategy | null> {
-    const strategy = await this.client.llmStrategy.findUnique({
+    const strategy = await this.txHost.tx.llmStrategy.findUnique({
       where: { id },
     })
 
@@ -75,7 +69,7 @@ export class LlmStrategiesRepository {
       return null
     }
 
-    return this.client.llmStrategy.update({
+    return this.txHost.tx.llmStrategy.update({
       where: { id },
       data,
     })
@@ -95,11 +89,11 @@ export class LlmStrategiesRepository {
       ]
     }
 
-    return this.client.llmStrategy.count({ where })
+    return this.txHost.tx.llmStrategy.count({ where })
   }
 
   async delete(id: string): Promise<void> {
-    await this.client.llmStrategy.delete({
+    await this.txHost.tx.llmStrategy.delete({
       where: { id },
     })
   }

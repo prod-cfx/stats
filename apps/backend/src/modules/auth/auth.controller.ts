@@ -22,6 +22,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard'
 // NestJS DI 需要运行时引用 UserAuthService，用于生成设计时类型元数据
 // eslint-disable-next-line ts/consistent-type-imports
 import { UserAuthService } from './services/user-auth.service'
+import { Transactional } from '@nestjs-cls/transactional'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -69,6 +70,7 @@ export class AuthController {
 
   @Post('telegram/desktop/intent')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '创建 Telegram 桌面端登录意图' })
   @ApiBody({ type: CreateTelegramDesktopIntentRequestDto })
@@ -95,6 +97,7 @@ export class AuthController {
 
   @Post('telegram/desktop/exchange')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '消费 Telegram 桌面端登录意图并登录' })
   @ApiBody({ type: TelegramDesktopExchangeRequestDto })
@@ -109,6 +112,7 @@ export class AuthController {
 
   @Post('bind/telegram/desktop')
   @UseGuards(JwtAuthGuard, AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '消费 Telegram 桌面端登录意图并绑定 Telegram' })
   @ApiBody({ type: TelegramDesktopExchangeRequestDto })
@@ -125,6 +129,7 @@ export class AuthController {
   }
 
   @Post('telegram/bot/webhook')
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Telegram Bot Webhook 回调' })
   @ApiBody({ type: TelegramBotWebhookRequestDto })
@@ -138,6 +143,7 @@ export class AuthController {
 
   @Post('send-verification-code')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送验证码（注册/密码重置）' })
   @ApiBody({ type: SendVerificationCodeRequestDto })
@@ -147,6 +153,7 @@ export class AuthController {
 
   @Post('email/send-code')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送邮箱登录验证码' })
   @ApiBody({ type: SendEmailLoginCodeRequestDto })
@@ -156,6 +163,7 @@ export class AuthController {
 
   @Post('email/verify-code')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '验证邮箱登录验证码（自动注册或登录）' })
   @ApiBody({ type: VerifyEmailLoginCodeRequestDto })
@@ -170,6 +178,7 @@ export class AuthController {
 
   @Post('telegram/exchange')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Telegram 登录换取会话' })
   @ApiBody({ type: TelegramExchangeRequestDto })
@@ -184,6 +193,7 @@ export class AuthController {
 
   @Post('register')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: '用户注册' })
   @ApiBody({ type: RegisterRequestDto })
@@ -212,6 +222,7 @@ export class AuthController {
 
   @Post('password-reset')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '申请重置密码' })
   @ApiBody({ type: PasswordResetRequestDto })
@@ -221,6 +232,7 @@ export class AuthController {
 
   @Post('password-reset/verify')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '验证重置密码验证码并更新密码' })
   @ApiBody({ type: VerifyPasswordResetRequestDto })
@@ -230,6 +242,7 @@ export class AuthController {
 
   @Post('verify-email')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '验证邮箱验证码' })
   @ApiBody({ type: VerifyEmailRequestDto })
@@ -239,6 +252,7 @@ export class AuthController {
 
   @Post('resend-verification')
   @UseGuards(AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '重新发送邮箱验证码' })
   @ApiBody({ type: ResendVerificationRequestDto })
@@ -248,6 +262,7 @@ export class AuthController {
 
   @Post('bind/email')
   @UseGuards(JwtAuthGuard, AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '绑定邮箱登录方式' })
   @ApiBody({ type: BindEmailRequestDto })
@@ -265,6 +280,7 @@ export class AuthController {
 
   @Post('bind/telegram')
   @UseGuards(JwtAuthGuard, AuthRateLimitGuard)
+  @Transactional()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '绑定 Telegram 登录方式' })
   @ApiBody({ type: BindTelegramRequestDto })

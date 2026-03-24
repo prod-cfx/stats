@@ -1,4 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   DataPullJob,
   DataPullJobContext,
@@ -6,12 +7,14 @@ import type {
   JobRunResult,
 } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 
 /**
  * Binance K 线数据游标
@@ -132,7 +135,10 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   private readonly defaultMarketType: 'PERPETUAL' | 'SPOT' = 'PERPETUAL'
   private readonly defaultInterval: MarketTimeframe = '5m'
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
+  ) {}
 
   /**
    * 根据市场类型返回 API limit 上限
@@ -143,6 +149,10 @@ export class BinanceKlineHistoryJob implements DataPullJob {
   }
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     const endpoint =
@@ -157,7 +167,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       typeof cursor.backfillCompletedAt === 'number' &&
       Date.now() - cursor.backfillCompletedAt < this.BACKFILL_RECHECK_WINDOW_MS
 
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     if (!shouldSkipBackfillCheck) {
@@ -345,7 +355,7 @@ export class BinanceKlineHistoryJob implements DataPullJob {
       }
     }
 
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
     const pointsWithTimestamps = klineData.map(point => ({
       openTime: point[0],

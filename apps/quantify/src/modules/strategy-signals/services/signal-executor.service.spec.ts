@@ -27,6 +27,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
   }
 
@@ -131,6 +132,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -211,6 +213,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -294,6 +297,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -377,6 +381,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
+      {} as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)

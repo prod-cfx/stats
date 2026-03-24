@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -164,6 +165,7 @@ export class AdminDataPullTaskController {
   }
 
   @Post(':id/trigger')
+  @Transactional()
   @UpdateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({
     summary: '手动触发一次数据拉取任务执行（用于测试）',
@@ -179,6 +181,7 @@ export class AdminDataPullTaskController {
   }
 
   @Post(':id/interrupt')
+  @Transactional()
   @UpdateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({
     summary: '中断正在运行的数据拉取任务',
@@ -199,6 +202,7 @@ export class AdminDataPullTaskController {
   }
 
   @Post()
+  @Transactional()
   @CreateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({ summary: '创建数据拉取任务' })
   @ApiBody({ type: CreateAdminDataPullTaskDto })
@@ -208,6 +212,7 @@ export class AdminDataPullTaskController {
   }
 
   @Put(':id')
+  @Transactional()
   @UpdateAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({ summary: '更新数据拉取任务' })
   @ApiBody({ type: UpdateAdminDataPullTaskDto })
@@ -217,6 +222,7 @@ export class AdminDataPullTaskController {
   }
 
   @Delete(':id')
+  @Transactional()
   @DeleteAny(AppResource.DATA_PULL_TASK)
   @ApiOperation({ summary: '删除数据拉取任务' })
   @ApiOkResponse({ description: '删除成功' })

@@ -1,18 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { LiquidationTimeframe } from './dto/aggregated-liquidation.dto'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class AggregatedLiquidationRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findLatestBySymbolAndInterval(symbol: string, interval: LiquidationTimeframe) {
-    return this.getClient().aggregatedLiquidationHistory.findFirst({
+    return this.txHost.tx.aggregatedLiquidationHistory.findFirst({
       where: { symbol, interval },
       orderBy: { timestamp: 'desc' },
     })
@@ -24,7 +20,7 @@ export class AggregatedLiquidationRepository {
     timestamp: Date,
     orderBy?: { exchangeCode: 'asc' | 'desc' },
   ) {
-    return this.getClient().aggregatedLiquidationHistory.findMany({
+    return this.txHost.tx.aggregatedLiquidationHistory.findMany({
       where: { symbol, interval, timestamp },
       ...(orderBy ? { orderBy } : {}),
     })

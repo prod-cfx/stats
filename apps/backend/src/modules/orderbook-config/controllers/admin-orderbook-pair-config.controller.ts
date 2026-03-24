@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -108,6 +109,7 @@ export class AdminOrderbookPairConfigController {
   }
 
   @Post()
+  @Transactional()
   @CreateAny(AppResource.ORDERBOOK_CONFIG)
   @ApiOperation({ summary: '创建订单薄交易对配置' })
   @ApiBody({ type: CreateOrderbookPairConfigDto })
@@ -133,6 +135,7 @@ export class AdminOrderbookPairConfigController {
   }
 
   @Put(':id')
+  @Transactional()
   @UpdateAny(AppResource.ORDERBOOK_CONFIG)
   @ApiOperation({ summary: '更新订单薄交易对配置' })
   @ApiBody({ type: UpdateOrderbookPairConfigDto })
@@ -159,6 +162,7 @@ export class AdminOrderbookPairConfigController {
   }
 
   @Delete(':id')
+  @Transactional()
   @DeleteAny(AppResource.ORDERBOOK_CONFIG)
   @ApiOperation({ summary: '删除订单薄交易对配置' })
   @ApiResponse({

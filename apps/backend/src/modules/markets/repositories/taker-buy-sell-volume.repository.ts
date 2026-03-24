@@ -1,14 +1,15 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { TakerBuySellVolume } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
-import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class TakerBuySellVolumeRepository {
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
   ) {}
 
   /**
@@ -27,7 +28,6 @@ export class TakerBuySellVolumeRepository {
       source?: string
     }>,
   ): Promise<number> {
-    const client = this.prisma.getClient()
     const batchSize = 20
     const batchConcurrency = 3
     let processedCount = 0
@@ -39,7 +39,7 @@ export class TakerBuySellVolumeRepository {
 
     const processBatch = async (batch: typeof data): Promise<void> => {
       for (const item of batch) {
-        await client.takerBuySellVolume.upsert({
+        await this.txHost.tx.takerBuySellVolume.upsert({
           where: {
             exchange_symbol_range_timestamp: {
               exchange: item.exchange,
@@ -88,9 +88,8 @@ export class TakerBuySellVolumeRepository {
     range: string
     limit?: number
   }): Promise<TakerBuySellVolume[]> {
-    const client = this.prisma.getClient()
 
-    return client.takerBuySellVolume.findMany({
+    return this.txHost.tx.takerBuySellVolume.findMany({
       where: {
         exchange: params.exchange,
         symbol: params.symbol,
@@ -114,10 +113,9 @@ export class TakerBuySellVolumeRepository {
       return this.generateMockVolumes(params)
     }
     try {
-      const client = this.prisma.getClient()
 
       // 为每个交易所获取最新的一条记录
-      const latestTimestamp = await client.takerBuySellVolume.groupBy({
+      const latestTimestamp = await this.txHost.tx.takerBuySellVolume.groupBy({
         by: ['exchange'],
         where: {
           symbol: params.symbol,
@@ -133,7 +131,7 @@ export class TakerBuySellVolumeRepository {
       }
 
       // 获取每个交易所最新时间点的数据
-      return client.takerBuySellVolume.findMany({
+      return this.txHost.tx.takerBuySellVolume.findMany({
         where: {
           symbol: params.symbol,
           range: params.range,

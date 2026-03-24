@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBody,
@@ -104,6 +105,7 @@ export class OpsStrategyTemplatesController {
     return new StrategyTemplateResponseDto(template)
   }
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建策略模板' })
   @ApiBody({ description: '创建策略模板请求体', type: CreateStrategyTemplateDto })
@@ -113,6 +115,7 @@ export class OpsStrategyTemplatesController {
     return new StrategyTemplateResponseDto(template)
   }
 
+  @Transactional()
   @Put(':id')
   @ApiOperation({ summary: '更新策略模板' })
   @ApiBody({ description: '更新策略模板请求体', type: UpdateStrategyTemplateDto })
@@ -125,6 +128,7 @@ export class OpsStrategyTemplatesController {
     return new StrategyTemplateResponseDto(template)
   }
 
+  @Transactional()
   @Delete(':id')
   @ApiOperation({ summary: '删除策略模板' })
   async delete(@Param('id') id: string) {
@@ -132,6 +136,7 @@ export class OpsStrategyTemplatesController {
     return { success: true }
   }
 
+  @Transactional()
   @Post(':id/generate-script')
   @ApiOperation({ summary: '根据策略模板的 prompt 生成脚本代码' })
   @ApiOkResponse({
@@ -148,6 +153,7 @@ export class OpsStrategyTemplatesController {
     return { script }
   }
 
+  @Transactional()
   @Post('validate-script')
   @ApiOperation({ summary: '验证脚本代码的语法和安全性' })
   @ApiBody({

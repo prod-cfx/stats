@@ -1,19 +1,15 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CreateOpenInterestDto } from './dto/open-interest.dto'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 
 @Injectable()
 export class OpenInterestRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async upsert(data: CreateOpenInterestDto) {
-    return this.getClient().openInterest.upsert({
+    return this.txHost.tx.openInterest.upsert({
       where: {
         open_interest_exchange_symbol_data_timestamp_key: {
           exchange: data.exchange,
@@ -56,7 +52,7 @@ export class OpenInterestRepository {
   }
 
   async findMany(where: Prisma.OpenInterestWhereInput, take: number, skip: number) {
-    return this.getClient().openInterest.findMany({
+    return this.txHost.tx.openInterest.findMany({
       where,
       orderBy: { dataTimestamp: 'desc' },
       take,
@@ -65,11 +61,11 @@ export class OpenInterestRepository {
   }
 
   async count(where: Prisma.OpenInterestWhereInput) {
-    return this.getClient().openInterest.count({ where })
+    return this.txHost.tx.openInterest.count({ where })
   }
 
   async findLatest(exchange: string, symbol: string) {
-    return this.getClient().openInterest.findFirst({
+    return this.txHost.tx.openInterest.findFirst({
       where: { exchange, symbol },
       orderBy: { dataTimestamp: 'desc' },
     })
@@ -85,7 +81,7 @@ export class OpenInterestRepository {
       latest: Prisma.Decimal | null
     }
 
-    return this.getClient().$queryRaw(
+    return this.txHost.tx.$queryRaw(
       Prisma.sql`
       WITH aggregated AS (
         SELECT

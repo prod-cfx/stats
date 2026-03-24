@@ -1,4 +1,5 @@
 import type { AdminRoleListQueryDto } from '../dto/admin-role-list.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -10,7 +11,6 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { Transaction } from '@/common/decorators/transaction.decorator'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
@@ -93,7 +93,7 @@ export class AdminRoleController {
 
   @Post()
   @CreateAny(AppResource.ROLE)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '创建角色' })
   @ApiBody({ type: CreateAdminRoleDto })
   @ApiOkResponse({ description: '创建成功' })
@@ -103,7 +103,7 @@ export class AdminRoleController {
 
   @Put(':id')
   @UpdateAny(AppResource.ROLE)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '更新角色' })
   @ApiBody({ type: UpdateAdminRoleDto })
   @ApiOkResponse({ description: '更新成功' })
@@ -113,7 +113,7 @@ export class AdminRoleController {
 
   @Delete(':id')
   @DeleteAny(AppResource.ROLE)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '删除角色' })
   @ApiOkResponse({ description: '删除成功' })
   async delete(@Param('id') id: string) {

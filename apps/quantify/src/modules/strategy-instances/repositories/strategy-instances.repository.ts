@@ -1,12 +1,12 @@
-/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器和依赖注入需要运行时导入 */
-import type { Prisma, PositionStatus, StrategyInstanceMode, StrategyInstanceStatus, SubscriptionStatus } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma, PositionStatus, StrategyInstanceMode, StrategyInstanceStatus, SubscriptionStatus } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class StrategyInstancesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(data: {
     strategyTemplateId: string
@@ -18,7 +18,7 @@ export class StrategyInstancesRepository {
     metadata?: Prisma.InputJsonValue
     createdBy?: string
   }) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.create({
       data: {
         ...data,
@@ -28,14 +28,14 @@ export class StrategyInstancesRepository {
   }
 
   async findById(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findUnique({
       where: { id },
     })
   }
 
   async findByIdWithDetails(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findUnique({
       where: { id },
       include: {
@@ -59,7 +59,7 @@ export class StrategyInstancesRepository {
     skip?: number
     take?: number
   }) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     const where: Prisma.StrategyInstanceWhereInput = {}
 
@@ -113,7 +113,7 @@ export class StrategyInstancesRepository {
     skip?: number
     take?: number
   }) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     const where: Prisma.StrategyInstanceWhereInput = {
       status: 'running',
@@ -170,7 +170,7 @@ export class StrategyInstancesRepository {
       updatedBy?: string
     },
   ) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.update({
       where: { id },
       data,
@@ -178,7 +178,7 @@ export class StrategyInstancesRepository {
   }
 
   async delete(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.delete({
       where: { id },
     })
@@ -190,7 +190,7 @@ export class StrategyInstancesRepository {
     name: string,
     excludeId?: string,
   ): Promise<boolean> {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     const where: Prisma.StrategyInstanceWhereInput = {
       strategyTemplateId,
       llmModel,
@@ -206,7 +206,7 @@ export class StrategyInstancesRepository {
   }
 
   async findTemplateById(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyTemplate.findUnique({
       where: { id },
       select: { id: true, name: true },
@@ -216,7 +216,7 @@ export class StrategyInstancesRepository {
   // ── Stats queries ────────────────────────────────────────────────────────────
 
   async findByIdWithTemplate(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findUnique({
       where: { id },
       include: {
@@ -228,7 +228,7 @@ export class StrategyInstancesRepository {
   }
 
   async findManyWithTemplate(ids: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findMany({
       where: { id: { in: ids } },
       include: {
@@ -240,7 +240,7 @@ export class StrategyInstancesRepository {
   }
 
   async findActiveSubscriptionsByInstanceId(strategyInstanceId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findMany({
       where: { strategyInstanceId, status: 'active' },
       select: { userId: true },
@@ -248,7 +248,7 @@ export class StrategyInstancesRepository {
   }
 
   async findActiveSubscriptionsByInstanceIds(instanceIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findMany({
       where: { strategyInstanceId: { in: instanceIds }, status: 'active' },
       select: { strategyInstanceId: true, userId: true },
@@ -256,7 +256,7 @@ export class StrategyInstancesRepository {
   }
 
   async findAccountsByUserIdsAndTemplates(userIds: string[], templateIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findMany({
       where: {
         userId: { in: userIds },
@@ -276,7 +276,7 @@ export class StrategyInstancesRepository {
   }
 
   async findAccountsByUserIdsAndTemplate(userIds: string[], strategyTemplateId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findMany({
       where: {
         userId: { in: userIds },
@@ -294,14 +294,14 @@ export class StrategyInstancesRepository {
   }
 
   async countPositionsByAccountIds(accountIds: string[], status: PositionStatus) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.count({
       where: { userStrategyAccountId: { in: accountIds }, status },
     })
   }
 
   async findClosedPositionsByAccountIds(accountIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.findMany({
       where: { userStrategyAccountId: { in: accountIds }, status: 'CLOSED' },
       select: { realizedPnl: true },
@@ -309,7 +309,7 @@ export class StrategyInstancesRepository {
   }
 
   async findTodayPnlMetrics(accountIds: string[], todayStart: Date) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany({
       where: {
         userStrategyAccountId: { in: accountIds },
@@ -320,7 +320,7 @@ export class StrategyInstancesRepository {
   }
 
   async findTodayPnlMetricsBatch(accountIds: string[], todayStart: Date) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany({
       where: {
         userStrategyAccountId: { in: accountIds },
@@ -331,7 +331,7 @@ export class StrategyInstancesRepository {
   }
 
   async findPositionsByAccountIds(accountIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.findMany({
       where: { userStrategyAccountId: { in: accountIds } },
       select: { userStrategyAccountId: true, status: true },
@@ -339,7 +339,7 @@ export class StrategyInstancesRepository {
   }
 
   async findClosedPositionsWithPnlByAccountIds(accountIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.findMany({
       where: { userStrategyAccountId: { in: accountIds }, status: 'CLOSED' },
       select: { userStrategyAccountId: true, realizedPnl: true },
@@ -349,7 +349,7 @@ export class StrategyInstancesRepository {
   // ── Subscription details queries ─────────────────────────────────────────────
 
   async findInstanceWithTemplateFull(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findUnique({
       where: { id },
       include: {
@@ -366,12 +366,12 @@ export class StrategyInstancesRepository {
   }
 
   async countSubscriptionsByInstance(strategyInstanceId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.count({ where: { strategyInstanceId } })
   }
 
   async groupSubscriptionsByStatus(strategyInstanceId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.groupBy({
       by: ['status'],
       where: { strategyInstanceId },
@@ -380,7 +380,7 @@ export class StrategyInstancesRepository {
   }
 
   async findSubscriptionsWithUsers(strategyInstanceId: string, skip: number, take: number) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findMany({
       where: { strategyInstanceId },
       include: {
@@ -398,7 +398,7 @@ export class StrategyInstancesRepository {
   }
 
   async aggregateAccountBalance(strategyInstanceId: string, strategyTemplateId: string, activeStatuses: SubscriptionStatus[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.aggregate({
       where: {
         strategyId: strategyTemplateId,
@@ -416,7 +416,7 @@ export class StrategyInstancesRepository {
   }
 
   async queryPositionAggregateRaw(strategyTemplateId: string, strategyInstanceId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.$queryRaw<Array<{ totalPositions: bigint; totalValue: any }>>`
       SELECT
         COALESCE(COUNT(*), 0) as "totalPositions",
@@ -432,7 +432,7 @@ export class StrategyInstancesRepository {
   }
 
   async findPageAccountsByUserIds(userIds: string[], strategyTemplateId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findMany({
       where: {
         userId: { in: userIds },
@@ -443,7 +443,7 @@ export class StrategyInstancesRepository {
   }
 
   async findOpenPositionsByAccountIds(accountIds: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.findMany({
       where: { userStrategyAccountId: { in: accountIds }, status: 'OPEN' },
       select: { userStrategyAccountId: true, quantity: true, avgEntryPrice: true },
@@ -451,7 +451,7 @@ export class StrategyInstancesRepository {
   }
 
   async findInstanceWithStrategyTemplate(id: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findUnique({
       where: { id },
       include: { strategyTemplate: true },
@@ -459,14 +459,14 @@ export class StrategyInstancesRepository {
   }
 
   async findSymbolsByCodes(codes: string[]) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.symbol.findMany({
       where: { code: { in: codes } },
     })
   }
 
   async findActiveUserSubscription(userId: string, strategyInstanceId: string, status: SubscriptionStatus) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findFirst({
       where: { userId, strategyInstanceId, status },
       select: { id: true },
@@ -474,7 +474,7 @@ export class StrategyInstancesRepository {
   }
 
   async findActiveUserSubscriptionFull(userId: string, strategyInstanceId: string, status: SubscriptionStatus) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findMany({
       where: {
         userId,
@@ -486,7 +486,7 @@ export class StrategyInstancesRepository {
   }
 
   async findUserSubscriptionsByInstanceIds(userId: string, instanceIds: string[], status: SubscriptionStatus) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategySubscription.findMany({
       where: { userId, strategyInstanceId: { in: instanceIds }, status },
       select: { strategyInstanceId: true },

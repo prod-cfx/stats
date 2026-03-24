@@ -22,8 +22,7 @@ describe('Coinglass aggregated liquidation history job (E2E)', () => {
     job = app.get(CoinglassAggregatedLiquidationJob)
 
     // 清理测试相关数据，避免受历史数据影响
-    const client = prisma.getClient()
-    await client.aggregatedLiquidationHistory.deleteMany({
+    await prisma.aggregatedLiquidationHistory.deleteMany({
       where: {
         symbol: 'BTC',
       },
@@ -40,7 +39,6 @@ describe('Coinglass aggregated liquidation history job (E2E)', () => {
   })
 
   it('should insert aggregated liquidation history and update cursor incrementally', async () => {
-    const client = prisma.getClient()
 
     // 模拟 Coinglass 聚合爆仓历史返回的两条数据（时间戳单位毫秒）
     const firstPointTime = 1_700_000_000_000
@@ -103,7 +101,7 @@ describe('Coinglass aggregated liquidation history job (E2E)', () => {
     expect(cursor1.interval).toBe('4h')
     expect(cursor1.lastTimestamp).toBe(secondPointTime)
 
-    const rowsAfterFirstRun = await client.aggregatedLiquidationHistory.findMany({
+    const rowsAfterFirstRun = await prisma.aggregatedLiquidationHistory.findMany({
       where: {
         symbol: 'BTC',
         exchangeCode: cursor1.exchangeCode,
@@ -140,7 +138,7 @@ describe('Coinglass aggregated liquidation history job (E2E)', () => {
     expect(fetchCallCount).toBe(2)
     expect(result2.fetchedCount).toBe(0)
 
-    const rowsAfterSecondRun = await client.aggregatedLiquidationHistory.findMany({
+    const rowsAfterSecondRun = await prisma.aggregatedLiquidationHistory.findMany({
       where: {
         symbol: 'BTC',
         exchangeCode: cursor1.exchangeCode,
