@@ -106,17 +106,12 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   }: {
     result: { startAt: string, endAt: string }
     onOpenFullScreen: () => void
-  }) => {
-    React.useEffect(() => {
-      document.body.scrollIntoView()
-    }, [])
-    return (
-      <>
-        <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
-        <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
-      </>
-    )
-  },
+  }) => (
+    <>
+      <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
+      <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
+    </>
+  ),
 }))
 
 jest.mock('@/components/ai-quant/backtest-job-client', () => ({
@@ -148,7 +143,6 @@ jest.mock('@/lib/api', () => ({
 describe('AiQuantPageClient backtest range integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
-  let scrollIntoViewMock: jest.Mock
 
   beforeEach(() => {
     ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
@@ -159,8 +153,6 @@ describe('AiQuantPageClient backtest range integration', () => {
     jest.clearAllMocks()
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-24T12:00:00.000Z'))
-    scrollIntoViewMock = jest.fn()
-    Element.prototype.scrollIntoView = scrollIntoViewMock
   })
 
   afterEach(async () => {
@@ -175,6 +167,10 @@ describe('AiQuantPageClient backtest range integration', () => {
   })
 
   it('blocks backtest when custom range is invalid and shows range error message', async () => {
+    const { createBacktestJob } = jest.requireMock('@/components/ai-quant/backtest-job-client') as {
+      createBacktestJob: jest.Mock
+    }
+
     await act(async () => {
       root?.render(<AiQuantPageClient />)
     })
@@ -189,9 +185,10 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.textContent).toContain('aiQuant.messages.backtestRangeOrderInvalid')
+    expect(createBacktestJob).not.toHaveBeenCalled()
   })
 
-  it('writes normalized startAt/endAt into backtest result when range is valid and scrolls to summary', async () => {
+  it('writes normalized startAt/endAt into backtest result when range is valid', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
     })
@@ -211,7 +208,6 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(summary).toBeTruthy()
     expect(summary?.textContent).toContain('2026-03-17T12:00:00.000Z')
     expect(summary?.textContent).toContain('2026-03-24T12:00:00.000Z')
-    expect(scrollIntoViewMock).toHaveBeenCalled()
   })
 
   it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
