@@ -197,26 +197,14 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     </div>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
-                    {primarySummary.isDynamic
-                      ? primarySummary.entries.map((entry, idx) => (
-                          <div key={`${item.id}-param-${idx}`} className="contents">
-                            {idx > 0 && <span>/</span>}
-                            <span className={idx === 0 ? 'font-medium text-[color:var(--cf-text)]' : undefined}>
-                              {entry}
-                            </span>
-                          </div>
-                        ))
-                      : (
-                          <>
-                            <span className="font-medium text-[color:var(--cf-text)]">{item.exchange.toUpperCase()}</span>
-                            <span>/</span>
-                            <span>{item.symbol}</span>
-                            <span>/</span>
-                            <span>{item.timeframe}</span>
-                            <span>/</span>
-                            <span>{t('aiQuant.position')} {item.positionPct}%</span>
-                          </>
-                        )}
+                    {primarySummary.entries.map((entry, idx) => (
+                      <div key={`${item.id}-param-${idx}`} className="contents">
+                        {idx > 0 && <span>/</span>}
+                        <span className={idx === 0 ? 'font-medium text-[color:var(--cf-text)]' : undefined}>
+                          {entry}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

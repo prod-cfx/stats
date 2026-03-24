@@ -113,9 +113,12 @@ describe('AiQuant strategy dynamic params', () => {
     )
 
     expect(html).toContain('参数快照')
-    expect(html).toContain('杠杆：3')
-    expect(html).toContain('ATR周期：14')
-    expect(html).toContain('移动止盈：true')
+    expect(html).toContain('杠杆')
+    expect(html).toContain('ATR周期')
+    expect(html).toContain('移动止盈')
+    expect(html).toContain('3')
+    expect(html).toContain('14')
+    expect(html).toContain('true')
   })
 
   it('shows legacy rejection when schema is missing and hides param panel', () => {
@@ -146,7 +149,8 @@ describe('AiQuant strategy dynamic params', () => {
     )
 
     expect(html).toContain('参数快照')
-    expect(html).toContain('杠杆：3')
+    expect(html).toContain('杠杆')
+    expect(html).toContain('3')
     expect(html).not.toContain('不支持旧策略，请重新生成')
   })
 
@@ -163,5 +167,29 @@ describe('AiQuant strategy dynamic params', () => {
     expect(html).toContain('参数快照')
     expect(html).toContain('暂无参数')
     expect(html).not.toContain('不支持旧策略，请重新生成')
+  })
+
+  it('renders deploy labels without hardcoded full-width punctuation coupling', () => {
+    const html = renderToStaticMarkup(
+      <AiQuantStrategyDetail
+        lng="zh"
+        strategy={makeStrategy({
+          deploy: {
+            exchange: 'binance',
+            accountId: 'acc-1',
+            accountName: 'MainAccount',
+            at: '2026-03-20T10:30:00.000Z',
+            status: 'running',
+          },
+        })}
+      />,
+    )
+
+    expect(html).toContain('部署账户')
+    expect(html).toContain('MainAccount')
+    expect(html).toContain('部署时间')
+    expect(html).toContain('2026-03-20 10:30')
+    expect(html).not.toContain('部署账户：')
+    expect(html).not.toContain('部署时间：')
   })
 })

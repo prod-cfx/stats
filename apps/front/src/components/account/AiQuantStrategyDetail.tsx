@@ -210,15 +210,22 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
                 <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
                   {dynamicParamRows.length > 0
                     ? dynamicParamRows.map(row => (
-                        <p key={row.key}>
-                          {row.label}：{row.value}
+                        <p key={row.key} className="flex items-start gap-2">
+                          <span className="text-[color:var(--cf-muted)]">{row.label}</span>
+                          <span>{row.value}</span>
                         </p>
                       ))
                     : <p className="text-[color:var(--cf-muted)]">{t('aiQuant.paramSummaryEmpty')}</p>}
                   {strategy.deploy && (
                     <>
-                      <p>{t('aiQuant.deployAccountLabel')}：{strategy.deploy.accountName}</p>
-                      <p>{t('aiQuant.deployTimeLabel')}：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
+                      <p className="flex items-start gap-2">
+                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployAccountLabel')}</span>
+                        <span>{strategy.deploy.accountName}</span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployTimeLabel')}</span>
+                        <span>{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</span>
+                      </p>
                     </>
                   )}
                 </div>
