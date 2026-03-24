@@ -1,5 +1,6 @@
 'use client'
 
+import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { useTranslation } from 'react-i18next'
 
 interface BacktestSummaryCardProps {
@@ -32,7 +33,7 @@ export function BacktestSummaryCard({
 }: BacktestSummaryCardProps) {
   const { t } = useTranslation()
   const backtestContext = result.symbol && result.startAt && result.endAt
-    ? `${result.symbol} · ${result.startAt.slice(0, 10)} ~ ${result.endAt.slice(0, 10)}`
+    ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
 
   return (
