@@ -1377,6 +1377,9 @@ function buildMockAccountAiQuantListResponse(
 }
 
 function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[number]): AccountAiQuantStrategyListItem {
+  const paramSchema = item.paramSchema ?? null
+  const paramValues = paramSchema ? (item.paramValues ?? {}) : null
+
   return {
     id: item.id,
     name: item.name,
@@ -1386,8 +1389,8 @@ function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[n
     timeframe: item.timeframe,
     positionPct: item.positionPct,
     isSubscribed: true,
-    paramSchema: item.paramSchema ?? null,
-    paramValues: item.paramValues ?? null,
+    paramSchema,
+    paramValues,
     schemaVersion: item.schemaVersion ?? null,
     metrics: {
       returnPct: item.metrics.returnPct,
@@ -1418,7 +1421,7 @@ function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): Acco
       timeframe: item.timeframe,
       positionPct: item.positionPct,
       paramSchema: item.paramSchema ?? null,
-      paramValues: item.paramValues ?? null,
+      paramValues: item.paramSchema ? (item.paramValues ?? {}) : null,
       schemaVersion: item.schemaVersion ?? null,
       deployAccountName: item.deploy?.accountName ?? null,
       deployAt: item.deploy?.at ?? null,

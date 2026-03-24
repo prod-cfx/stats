@@ -171,19 +171,35 @@ function isLegacyTs(ts: string) {
   return /^T\d+$/i.test(ts)
 }
 
+function normalizeDynamicParams(record: Pick<AiQuantStrategyRecord, 'paramSchema' | 'paramValues' | 'schemaVersion'>) {
+  if (!record.paramSchema) {
+    return {
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: record.schemaVersion ?? null,
+      supportsDynamicParams: false,
+    }
+  }
+
+  return {
+    paramSchema: record.paramSchema,
+    paramValues: record.paramValues ?? {},
+    schemaVersion: record.schemaVersion ?? null,
+    supportsDynamicParams: true,
+  }
+}
+
 function migrateRecord(record: AiQuantStrategyRecord, seed: number): AiQuantStrategyRecord {
   const nextSeries = record.equitySeries.some(point => isLegacyTs(point.ts))
     ? makeEquity(seed).map((item, idx) => ({ ...item, value: record.equitySeries[idx]?.value ?? item.value }))
     : record.equitySeries
+  const dynamicParams = normalizeDynamicParams(record)
 
   return {
     ...record,
     initialCapital: record.initialCapital || 10000,
     equitySeries: nextSeries,
-    paramSchema: record.paramSchema ?? null,
-    paramValues: record.paramValues ?? null,
-    schemaVersion: record.schemaVersion ?? null,
-    supportsDynamicParams: Boolean(record.paramSchema),
+    ...dynamicParams,
   }
 }
 
@@ -233,7 +249,9 @@ export function upsertStrategyDeployment(input: {
   const target = existing.find(item => item.id === input.id)
   const next: AiQuantStrategyRecord[] = target
     ? existing.map(item => (item.id === input.id
-      ? {
+      ? (() => {
+          const dynamicParams = normalizeDynamicParams(item)
+          return {
           ...item,
           name: input.name,
           exchange: input.exchange,
@@ -242,10 +260,7 @@ export function upsertStrategyDeployment(input: {
           positionPct: input.positionPct,
           initialCapital: item.initialCapital || 10000,
           metrics: input.metrics,
-          paramSchema: item.paramSchema ?? null,
-          paramValues: item.paramValues ?? null,
-          schemaVersion: item.schemaVersion ?? null,
-          supportsDynamicParams: Boolean(item.paramSchema),
+          ...dynamicParams,
           status: 'running',
           deploy: {
             exchange: input.exchange,
@@ -260,7 +275,8 @@ export function upsertStrategyDeployment(input: {
             { at: now.replace('T', ' ').slice(0, 16), event: '开始运行' },
           ],
           updatedAt: now,
-        }
+          }
+        })()
       : item))
     : [
         {

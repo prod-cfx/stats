@@ -32,11 +32,20 @@ function mapDynamicParamFields(
   paramValues: Record<string, unknown> | null | undefined,
   schemaVersion: string | null | undefined,
 ) {
+  if (!paramSchema) {
+    return {
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: schemaVersion ?? null,
+      supportsDynamicParams: false,
+    }
+  }
+
   return {
-    paramSchema: paramSchema ?? null,
-    paramValues: paramValues ?? null,
+    paramSchema,
+    paramValues: paramValues ?? {},
     schemaVersion: schemaVersion ?? null,
-    supportsDynamicParams: Boolean(paramSchema),
+    supportsDynamicParams: true,
   }
 }
 
