@@ -17,6 +17,9 @@ export interface BacktestResult {
   totalReturnPct: number
   winRatePct: number
   tradeCount: number
+  symbol?: string
+  startAt?: string
+  endAt?: string
 }
 
 export function BacktestSummaryCard({
@@ -28,6 +31,9 @@ export function BacktestSummaryCard({
   onDeploy,
 }: BacktestSummaryCardProps) {
   const { t } = useTranslation()
+  const backtestContext = result.symbol && result.startAt && result.endAt
+    ? `${result.symbol} · ${result.startAt.slice(0, 10)} ~ ${result.endAt.slice(0, 10)}`
+    : null
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -37,6 +43,9 @@ export function BacktestSummaryCard({
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
             {drawdownLimited ? t('aiQuant.messages.backtestDrawdownLimit') : '当前为模拟部署模式：忽略回撤门槛'}
           </p>
+          {backtestContext && (
+            <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
+          )}
         </div>
         <button
           type="button"

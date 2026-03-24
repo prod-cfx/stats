@@ -19,6 +19,11 @@ import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import {
+  resolveBacktestRange,
+  validateBacktestRange,
+  type BacktestRangePreset,
+} from '@/components/ai-quant/backtest-range'
+import {
   buildAutoAdvanceMessage,
   shouldAutoAdvanceOnConfirmation,
   resolveChecklistPayload,
@@ -42,9 +47,12 @@ export interface QuantParams {
   sellWindowMin: number
   sellRisePct: number
   positionPct: number
+  backtestRangePreset: BacktestRangePreset
+  backtestStart: string
+  backtestEnd: string
 }
 
-const DEFAULT_PARAMS: QuantParams = {
+const BASE_DEFAULT_PARAMS = {
   exchange: 'binance',
   symbol: 'BTCUSDT',
   buyWindowMin: 3,
@@ -52,6 +60,42 @@ const DEFAULT_PARAMS: QuantParams = {
   sellWindowMin: 15,
   sellRisePct: 2,
   positionPct: 10,
+} as const
+
+function normalizePreset(value: unknown): BacktestRangePreset {
+  if (value === '7D' || value === '30D' || value === '90D' || value === '1Y' || value === 'CUSTOM') {
+    return value
+  }
+  return '30D'
+}
+
+function buildDefaultParams(now = new Date()): QuantParams {
+  const backtestRangePreset: BacktestRangePreset = '30D'
+  const resolved = resolveBacktestRange({ preset: backtestRangePreset }, now)
+  return {
+    ...BASE_DEFAULT_PARAMS,
+    backtestRangePreset,
+    backtestStart: resolved.startAt,
+    backtestEnd: resolved.endAt,
+  }
+}
+
+function normalizeQuantParams(raw: Partial<QuantParams> | null | undefined, now = new Date()): QuantParams {
+  const defaults = buildDefaultParams(now)
+  const merged = { ...defaults, ...raw }
+  const backtestRangePreset = normalizePreset(merged.backtestRangePreset)
+  const resolved = resolveBacktestRange({
+    preset: backtestRangePreset,
+    startAt: merged.backtestStart,
+    endAt: merged.backtestEnd,
+  }, now)
+
+  return {
+    ...merged,
+    backtestRangePreset,
+    backtestStart: resolved.startAt,
+    backtestEnd: resolved.endAt,
+  }
 }
 
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
@@ -176,6 +220,9 @@ function getMockBacktest(params: QuantParams): BacktestResult {
     totalReturnPct,
     winRatePct,
     tradeCount,
+    symbol: params.symbol,
+    startAt: params.backtestStart,
+    endAt: params.backtestEnd,
   }
 }
 
@@ -198,7 +245,7 @@ export function AiQuantPageClient() {
           content: t('aiQuant.messages.welcome'),
         },
       ],
-      params: DEFAULT_PARAMS,
+      params: buildDefaultParams(),
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
@@ -242,6 +289,7 @@ export function AiQuantPageClient() {
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => ({
         ...item,
+        params: normalizeQuantParams(item.params),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
       }))
@@ -731,9 +779,47 @@ export function AiQuantPageClient() {
       }))
       return
     }
-    const result = runBacktestWithParams(activeConversation.params)
+    const validation = validateBacktestRange({
+      preset: activeConversation.params.backtestRangePreset,
+      startAt: activeConversation.params.backtestStart,
+      endAt: activeConversation.params.backtestEnd,
+    })
+    if (!validation.ok) {
+      const errorKeyByReason: Record<string, string> = {
+        missing_range: 'aiQuant.messages.backtestRangeMissing',
+        start_after_end: 'aiQuant.messages.backtestRangeOrderInvalid',
+        range_too_large: 'aiQuant.messages.backtestRangeTooLarge',
+      }
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `range-guard-${Date.now()}`,
+            role: 'assistant',
+            content: t(errorKeyByReason[validation.reason] ?? 'aiQuant.messages.backtestRangeOrderInvalid'),
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
+    const normalizedRange = resolveBacktestRange({
+      preset: activeConversation.params.backtestRangePreset,
+      startAt: activeConversation.params.backtestStart,
+      endAt: activeConversation.params.backtestEnd,
+    })
+    const normalizedParams = {
+      ...activeConversation.params,
+      backtestStart: normalizedRange.startAt,
+      backtestEnd: normalizedRange.endAt,
+    }
+
+    const result = runBacktestWithParams(normalizedParams)
     updateActiveConversation(curr => ({
       ...curr,
+      params: normalizedParams,
       backtestResult: result,
       messages: [
         ...curr.messages,
@@ -951,9 +1037,14 @@ export function AiQuantPageClient() {
               result={activeConversation.backtestResult}
               canDeploy={canDeploy}
               drawdownLimited={!mockExecutionMode}
-              onOpenFullScreen={() =>
-                router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}`)
-              }
+              onOpenFullScreen={() => {
+                const search = new URLSearchParams({
+                  symbol: activeConversation.backtestResult!.symbol ?? activeConversation.params.symbol,
+                  startAt: activeConversation.backtestResult!.startAt ?? activeConversation.params.backtestStart,
+                  endAt: activeConversation.backtestResult!.endAt ?? activeConversation.params.backtestEnd,
+                })
+                router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}?${search.toString()}`)
+              }}
               onOptimize={() => {
                 const optimizeMessage: QuantMessage = {
                   id: `opt-${Date.now()}`,

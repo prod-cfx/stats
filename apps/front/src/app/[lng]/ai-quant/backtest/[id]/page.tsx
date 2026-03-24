@@ -4,11 +4,19 @@ import { Navbar } from '@/components/layout/Navbar'
 
 export default async function AiQuantBacktestDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ lng: string, id: string }> | { lng: string, id: string }
+  searchParams?:
+    | Promise<{ symbol?: string | string[], startAt?: string | string[], endAt?: string | string[] }>
+    | { symbol?: string | string[], startAt?: string | string[], endAt?: string | string[] }
 }) {
   const resolved = await Promise.resolve(params)
+  const resolvedSearch = await Promise.resolve(searchParams ?? {})
   const lng = resolved.lng === 'en' ? 'en' : 'zh'
+  const symbol = typeof resolvedSearch.symbol === 'string' ? resolvedSearch.symbol : 'BTCUSDT'
+  const startAt = typeof resolvedSearch.startAt === 'string' ? resolvedSearch.startAt : null
+  const endAt = typeof resolvedSearch.endAt === 'string' ? resolvedSearch.endAt : null
 
   const seed = Number(resolved.id.slice(-4)) || 1024
   const maxDrawdownPct = Number((8 + (seed % 17)).toFixed(2))
@@ -47,6 +55,15 @@ export default async function AiQuantBacktestDetailPage({
             <p className="text-xs text-[color:var(--cf-muted)]">交易次数</p>
             <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{tradeCount}</p>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <p className="text-xs text-[color:var(--cf-muted)]">交易标的</p>
+          <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">{symbol}</p>
+          <p className="mt-3 text-xs text-[color:var(--cf-muted)]">历史回测区间</p>
+          <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">
+            {startAt && endAt ? `${startAt.slice(0, 10)} ~ ${endAt.slice(0, 10)}` : '-'}
+          </p>
         </section>
 
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
