@@ -1,7 +1,22 @@
 import { plainToInstance } from 'class-transformer'
 import { validateSync } from 'class-validator'
 import { AccountStrategyActionDto } from './account-strategy-action.dto'
+import { AccountStrategySnapshotDto } from './account-strategy-detail.response.dto'
 import { AccountStrategyListQueryDto } from './account-strategy-list.query.dto'
+import { AccountStrategyListItemDto } from './account-strategy-list-item.dto'
+
+type DynamicParamRecord = Record<string, unknown> | null
+type SchemaVersion = string | null
+type AssertTrue<T extends true> = T
+type IsExact<T, U> = (<G>() => G extends T ? 1 : 2) extends
+  (<G>() => G extends U ? 1 : 2) ? true : false
+
+type _ListItemParamSchemaType = AssertTrue<IsExact<AccountStrategyListItemDto['paramSchema'], DynamicParamRecord>>
+type _ListItemParamValuesType = AssertTrue<IsExact<AccountStrategyListItemDto['paramValues'], DynamicParamRecord>>
+type _ListItemSchemaVersionType = AssertTrue<IsExact<AccountStrategyListItemDto['schemaVersion'], SchemaVersion>>
+type _SnapshotParamSchemaType = AssertTrue<IsExact<AccountStrategySnapshotDto['paramSchema'], DynamicParamRecord>>
+type _SnapshotParamValuesType = AssertTrue<IsExact<AccountStrategySnapshotDto['paramValues'], DynamicParamRecord>>
+type _SnapshotSchemaVersionType = AssertTrue<IsExact<AccountStrategySnapshotDto['schemaVersion'], SchemaVersion>>
 
 describe('accountStrategyViewDtos', () => {
   it('uses pagination defaults for list query dto', () => {
@@ -25,5 +40,21 @@ describe('accountStrategyViewDtos', () => {
     })
     const errors = validateSync(dto)
     expect(errors.length).toBe(0)
+  })
+
+  it('defines dynamic param contract fields on list item and snapshot dto', () => {
+    const listItemMetadataKeys = Reflect.getMetadataKeys(AccountStrategyListItemDto.prototype, 'paramSchema')
+    const listItemValuesMetadataKeys = Reflect.getMetadataKeys(AccountStrategyListItemDto.prototype, 'paramValues')
+    const listItemVersionMetadataKeys = Reflect.getMetadataKeys(AccountStrategyListItemDto.prototype, 'schemaVersion')
+    const snapshotSchemaMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'paramSchema')
+    const snapshotValuesMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'paramValues')
+    const snapshotVersionMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'schemaVersion')
+
+    expect(listItemMetadataKeys.length).toBeGreaterThan(0)
+    expect(listItemValuesMetadataKeys.length).toBeGreaterThan(0)
+    expect(listItemVersionMetadataKeys.length).toBeGreaterThan(0)
+    expect(snapshotSchemaMetadataKeys.length).toBeGreaterThan(0)
+    expect(snapshotValuesMetadataKeys.length).toBeGreaterThan(0)
+    expect(snapshotVersionMetadataKeys.length).toBeGreaterThan(0)
   })
 })

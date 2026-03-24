@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategies, performAccountAiQuantStrategyAction } from '@/lib/api'
 import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
+import { buildDynamicParamSummary } from './dynamic-param-summary'
 
 function fmtTime(ts: string, lng: string) {
   const date = new Date(ts)
@@ -17,6 +18,55 @@ function fmtTime(ts: string, lng: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+export function buildParamSummary(
+  paramSchema: Record<string, unknown> | null,
+  paramValues: Record<string, unknown> | null,
+): string[] {
+  return buildDynamicParamSummary(paramSchema, paramValues, 3)
+}
+
+export function buildPrimarySummary(
+  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>,
+  t: (key: string) => string,
+): string[] {
+  if (item.paramSchema) {
+    const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues)
+    return dynamicSummary.length ? dynamicSummary : [t('aiQuant.paramSummaryEmpty')]
+  }
+
+  return [
+    item.exchange.toUpperCase(),
+    item.symbol,
+    item.timeframe,
+    `${t('aiQuant.position')} ${item.positionPct}%`,
+  ]
+}
+
+export function AiQuantStrategyPrimarySummary({
+  item,
+  t,
+  keyPrefix,
+}: {
+  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>
+  t: (key: string) => string
+  keyPrefix: string
+}) {
+  const entries = buildPrimarySummary(item, t)
+
+  return (
+    <>
+      {entries.map((entry, idx) => (
+        <div key={`${keyPrefix}-param-${idx}`} className="contents">
+          {idx > 0 && <span>/</span>}
+          <span className={idx === 0 ? 'font-medium text-[color:var(--cf-text)]' : undefined}>
+            {entry}
+          </span>
+        </div>
+      ))}
+    </>
+  )
 }
 
 export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
@@ -158,13 +208,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     </div>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
-                    <span className="font-medium text-[color:var(--cf-text)]">{item.exchange.toUpperCase()}</span>
-                    <span>/</span>
-                    <span>{item.symbol}</span>
-                    <span>/</span>
-                    <span>{item.timeframe}</span>
-                    <span>/</span>
-                    <span>{t('aiQuant.position')} {item.positionPct}%</span>
+                    <AiQuantStrategyPrimarySummary item={item} t={t} keyPrefix={item.id} />
                   </div>
                 </div>
               </div>

@@ -55,6 +55,11 @@ export class AccountStrategyViewService {
         ...(item.params ?? {}),
         ...(item.customParams ?? {}),
       } as Record<string, unknown>
+      const dynamicParams = this.buildDynamicParams({
+        strategySchema: this.resolveStrategySchema(item),
+        mergedParams,
+        schemaVersion: this.resolveSchemaVersion(item),
+      })
       const symbol = this.readString(mergedParams, ['symbol'])
 
       let fallback = null as Awaited<ReturnType<typeof this.buildAccountFallbackMetrics>> | null
@@ -79,6 +84,7 @@ export class AccountStrategyViewService {
         symbol,
         timeframe: this.readString(mergedParams, ['timeframe', 'period']),
         positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+        ...dynamicParams,
         isSubscribed: item.subscribed,
         metrics: {
           returnPct: this.pickStatsOrFallbackMetric(statsReturnPct, fallback?.returnPct),
@@ -110,6 +116,11 @@ export class AccountStrategyViewService {
       ...(row.params as Record<string, unknown> ?? {}),
       ...(sub?.customParams as Record<string, unknown> ?? {}),
     } as Record<string, unknown>
+    const dynamicParams = this.buildDynamicParams({
+      strategySchema: this.resolveStrategySchema(row),
+      mergedParams,
+      schemaVersion: this.resolveSchemaVersion(row),
+    })
 
     const symbol = this.readString(mergedParams, ['symbol'])
     const normalizedSymbol = symbol?.split(':')[0] ?? null
@@ -180,6 +191,7 @@ export class AccountStrategyViewService {
       symbol,
       timeframe: this.readString(mergedParams, ['timeframe', 'period']),
       positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+      ...dynamicParams,
       isSubscribed: !!sub && sub.status === 'active',
       metrics: {
         returnPct,
@@ -198,6 +210,9 @@ export class AccountStrategyViewService {
         symbol,
         timeframe: this.readString(mergedParams, ['timeframe', 'period']),
         positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+        paramSchema: dynamicParams.paramSchema,
+        paramValues: dynamicParams.paramValues,
+        schemaVersion: dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
       },
@@ -282,6 +297,74 @@ export class AccountStrategyViewService {
     if (status === 'running') return 'running'
     if (status === 'draft') return 'draft'
     return 'stopped'
+  }
+
+  private buildDynamicParams(meta: {
+    strategySchema: Record<string, unknown> | null
+    mergedParams: Record<string, unknown>
+    schemaVersion: string | null
+  }): {
+    paramSchema: Record<string, unknown> | null
+    paramValues: Record<string, unknown> | null
+    schemaVersion: string | null
+  } {
+    return {
+      paramSchema: meta.strategySchema,
+      paramValues: meta.strategySchema ? meta.mergedParams : null,
+      schemaVersion: meta.strategySchema ? meta.schemaVersion : null,
+    }
+  }
+
+  private resolveStrategySchema(source: unknown): Record<string, unknown> | null {
+    const root = this.readRecord(source)
+    if (!root) return null
+
+    const template = this.readRecord(root.strategyTemplate)
+    const candidates = [
+      root.strategySchema,
+      root.paramSchema,
+      root.paramsSchema,
+      template?.strategySchema,
+      template?.paramSchema,
+      template?.paramsSchema,
+    ]
+
+    for (const candidate of candidates) {
+      const schema = this.readRecord(candidate)
+      if (schema) return schema
+    }
+    return null
+  }
+
+  private resolveSchemaVersion(source: unknown): string | null {
+    const root = this.readRecord(source)
+    if (!root) return null
+
+    const template = this.readRecord(root.strategyTemplate)
+    const rootMeta = this.readRecord(root.metadata)
+    const templateMeta = this.readRecord(template?.metadata)
+    const candidates = [
+      root.schemaVersion,
+      root.strategySchemaVersion,
+      root.paramSchemaVersion,
+      rootMeta?.schemaVersion,
+      template?.schemaVersion,
+      template?.strategySchemaVersion,
+      template?.paramSchemaVersion,
+      template?.rulesVersion,
+      templateMeta?.schemaVersion,
+    ]
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) return candidate
+      if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate)
+    }
+    return null
+  }
+
+  private readRecord(input: unknown): Record<string, unknown> | null {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+    return input as Record<string, unknown>
   }
 
   private readString(source: Record<string, unknown>, keys: string[]): string | null {

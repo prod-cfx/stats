@@ -33,7 +33,7 @@ export class CallerIdentityService {
       })
     }
 
-    const callerUserId = await this.verifyTokenByBackendAuth(token)
+    const callerUserId = await this.verifyTokenByBackendAuth(token, payload)
     if (!callerUserId) {
       throw new DomainException('codegen.jwt_subject_missing', {
         code: ErrorCode.UNAUTHORIZED,
@@ -98,7 +98,40 @@ export class CallerIdentityService {
     return null
   }
 
-  private async verifyTokenByBackendAuth(token: string): Promise<string> {
+  private extractUserIdFromJwtPayload(payload: Record<string, unknown>): string | null {
+    const sub = payload.sub
+    if (typeof sub === 'string' && sub.trim()) {
+      return sub.trim()
+    }
+    const userId = payload.userId
+    if (typeof userId === 'string' && userId.trim()) {
+      return userId.trim()
+    }
+    const id = payload.id
+    if (typeof id === 'string' && id.trim()) {
+      return id.trim()
+    }
+    return null
+  }
+
+  private isJwtPayloadNotExpired(payload: Record<string, unknown>): boolean {
+    const exp = payload.exp
+    if (typeof exp !== 'number' || !Number.isFinite(exp)) {
+      return false
+    }
+    return exp * 1000 > Date.now()
+  }
+
+  private shouldAllowUnverifiedJwtFallback(payload: Record<string, unknown>): boolean {
+    if (!this.env.isDev()) return false
+    const enabled = this.env.getBoolean('CODEGEN_ALLOW_UNVERIFIED_JWT_FALLBACK', false) === true
+    if (!enabled) return false
+    const fallbackUserId = this.extractUserIdFromJwtPayload(payload)
+    if (!fallbackUserId) return false
+    return this.isJwtPayloadNotExpired(payload)
+  }
+
+  private async verifyTokenByBackendAuth(token: string, payload: Record<string, unknown>): Promise<string> {
     const profileUrl = `${this.resolveBackendApiBaseUrl()}/users/me`
     let response: Response
     try {
@@ -111,6 +144,12 @@ export class CallerIdentityService {
       })
     }
     catch {
+      if (this.shouldAllowUnverifiedJwtFallback(payload)) {
+        const fallbackUserId = this.extractUserIdFromJwtPayload(payload)
+        if (fallbackUserId) {
+          return fallbackUserId
+        }
+      }
       throw new DomainException('codegen.auth_verification_unreachable', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,

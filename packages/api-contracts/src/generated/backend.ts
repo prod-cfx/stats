@@ -155,62 +155,7 @@ const CreateAccountExchangeAccountDto = z
       .optional(),
   })
   .passthrough()
-const AccountAiQuantActionRequestDto = z.object({ action: z.enum(['run', 'stop']) }).passthrough()
-const AccountAiQuantDeployRequestDto = z
-  .object({
-    name: z.string(),
-    exchange: z.enum(['binance', 'okx', 'hyperliquid']),
-    symbol: z.string(),
-    timeframe: z.string(),
-    positionPct: z.number(),
-    exchangeAccountId: z.string().optional(),
-    strategyInstanceId: z.string().optional(),
-    exchangeAccountName: z.string().optional(),
-  })
-  .passthrough()
-const LlmCodegenStartRequestDto = z
-  .object({
-    initialMessage: z.string(),
-    symbols: z.array(z.string()),
-    timeframes: z.array(z.string()),
-    entryRules: z.array(z.string()),
-    exitRules: z.array(z.string()),
-    riskRules: z.object({}).partial().passthrough(),
-    guideConfig: z.object({}).partial().passthrough(),
-  })
-  .partial()
-  .passthrough()
-const LlmCodegenContinueRequestDto = z
-  .object({
-    message: z.string(),
-    symbols: z.array(z.string()).optional(),
-    timeframes: z.array(z.string()).optional(),
-    entryRules: z.array(z.string()).optional(),
-    exitRules: z.array(z.string()).optional(),
-    riskRules: z.object({}).partial().passthrough().optional(),
-    guideConfig: z.object({}).partial().passthrough().optional(),
-    confirmGenerate: z.boolean().optional(),
-    providerCode: z.string().optional(),
-    model: z.string().optional(),
-    temperature: z.number().optional(),
-    maxTokens: z.number().optional(),
-  })
-  .passthrough()
-const LlmSubscriptionCreateRequestDto = z
-  .object({
-    llmStrategyInstanceId: z.string(),
-    customParams: z.object({}).partial().passthrough().nullish(),
-    exchangeAccountId: z.string(),
-  })
-  .passthrough()
-const LlmSubscriptionUpdateRequestDto = z
-  .object({
-    status: z.enum(['active', 'paused', 'cancelled']),
-    customParams: z.object({}).partial().passthrough().nullable(),
-    exchangeAccountId: z.string().nullable(),
-  })
-  .partial()
-  .passthrough()
+const Function = z.object({}).partial().passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1113,12 +1058,7 @@ export const schemas = {
   BindTelegramRequestDto,
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
-  AccountAiQuantActionRequestDto,
-  AccountAiQuantDeployRequestDto,
-  LlmCodegenStartRequestDto,
-  LlmCodegenContinueRequestDto,
-  LlmSubscriptionCreateRequestDto,
-  LlmSubscriptionUpdateRequestDto,
+  Function,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -1216,21 +1156,6 @@ const endpoints = makeApi([
         type: 'Header',
         schema: z.string(),
       },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional().default(1),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(100).optional().default(20),
-      },
-      {
-        name: 'status',
-        type: 'Query',
-        schema: z.enum(['running', 'stopped', 'draft']).optional(),
-      },
     ],
     response: z.void(),
   },
@@ -1262,7 +1187,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: AccountAiQuantActionRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
       {
         name: 'authorization',
@@ -1286,7 +1211,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: AccountAiQuantDeployRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
       {
         name: 'authorization',
@@ -3089,7 +3014,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: LlmCodegenStartRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
     ],
     response: z.void(),
@@ -3103,7 +3028,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: LlmCodegenContinueRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
       {
         name: 'id',
@@ -3118,28 +3043,6 @@ const endpoints = makeApi([
     path: '/llm-strategy-instances',
     alias: 'LlmStrategyInstancesController_list',
     requestFormat: 'json',
-    parameters: [
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional().default(1),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(100).optional().default(20),
-      },
-      {
-        name: 'llmModel',
-        type: 'Query',
-        schema: z.string().optional(),
-      },
-      {
-        name: 'strategyId',
-        type: 'Query',
-        schema: z.string().optional(),
-      },
-    ],
     response: z.void(),
   },
   {
@@ -3167,16 +3070,6 @@ const endpoints = makeApi([
         type: 'Path',
         schema: z.string(),
       },
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional().default(1),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(100).optional().default(20),
-      },
     ],
     response: z.void(),
   },
@@ -3189,7 +3082,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: LlmSubscriptionCreateRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
     ],
     response: z.void(),
@@ -3199,23 +3092,6 @@ const endpoints = makeApi([
     path: '/llm-strategy-subscriptions',
     alias: 'LlmStrategySubscriptionsController_list',
     requestFormat: 'json',
-    parameters: [
-      {
-        name: 'page',
-        type: 'Query',
-        schema: z.number().gte(1).optional().default(1),
-      },
-      {
-        name: 'limit',
-        type: 'Query',
-        schema: z.number().gte(1).lte(100).optional().default(20),
-      },
-      {
-        name: 'status',
-        type: 'Query',
-        schema: z.enum(['active', 'paused', 'cancelled']).optional(),
-      },
-    ],
     response: z.void(),
   },
   {
@@ -3241,7 +3117,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: LlmSubscriptionUpdateRequestDto,
+        schema: z.object({}).partial().passthrough(),
       },
       {
         name: 'subscriptionId',

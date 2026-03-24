@@ -3,8 +3,10 @@
 import type { AiQuantStrategyRecord, StrategyEquityPoint, StrategyStatus } from './ai-quant-strategy-store'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
+import { buildDynamicParamRows } from './dynamic-param-summary'
 
 const STATUS_LABEL: Record<StrategyStatus, string> = {
   running: '运行中',
@@ -63,6 +65,7 @@ interface AiQuantStrategyDetailProps {
 }
 
 export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailProps) {
+  const { t } = useTranslation()
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
@@ -78,6 +81,10 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
+  const dynamicParamRows = useMemo(
+    () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
+    [strategy?.paramSchema, strategy?.paramValues],
+  )
 
   if (!strategy) {
     return (
@@ -196,21 +203,40 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">参数快照</h2>
-          <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
-            <p>交易所：{strategy.exchange.toUpperCase()}</p>
-            <p>币种：{strategy.symbol}</p>
-            <p>周期：{strategy.timeframe}</p>
-            <p>单笔仓位：{strategy.positionPct}%</p>
-            {strategy.deploy && (
-              <>
-                <p>部署账户：{strategy.deploy.accountName}</p>
-                <p>部署时间：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
-              </>
+        {strategy.paramSchema
+          ? (
+              <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.paramSnapshotTitle')}</h2>
+                <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
+                  {dynamicParamRows.length > 0
+                    ? dynamicParamRows.map(row => (
+                        <p key={row.key} className="flex items-start gap-2">
+                          <span className="text-[color:var(--cf-muted)]">{row.label}</span>
+                          <span>{row.value}</span>
+                        </p>
+                      ))
+                    : <p className="text-[color:var(--cf-muted)]">{t('aiQuant.paramSummaryEmpty')}</p>}
+                  {strategy.deploy && (
+                    <>
+                      <p className="flex items-start gap-2">
+                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployAccountLabel')}</span>
+                        <span>{strategy.deploy.accountName}</span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deployTimeLabel')}</span>
+                        <span>{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</span>
+                      </p>
+                    </>
+                  )}
+                </div>
+              </article>
+            )
+          : (
+              <article className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.legacyUnsupportedTitle')}</h2>
+                <p className="mt-3 text-sm text-amber-300">{t('aiQuant.legacyUnsupportedMessage')}</p>
+              </article>
             )}
-          </div>
-        </article>
 
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>

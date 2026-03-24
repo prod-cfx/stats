@@ -25,6 +25,20 @@ export class CodegenSessionsRepository {
     })
   }
 
+  async tryMarkGenerating(
+    id: string,
+    data: Prisma.LlmStrategyCodegenSessionUpdateInput,
+  ): Promise<boolean> {
+    const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
+      where: {
+        id,
+        status: { in: ['DRAFTING', 'CHECKLIST_GATE'] },
+      },
+      data,
+    })
+    return result.count === 1
+  }
+
   async createVersion(data: Prisma.LlmStrategyCodeVersionCreateInput): Promise<LlmStrategyCodeVersion> {
     return this.txHost.tx.llmStrategyCodeVersion.create({ data })
   }

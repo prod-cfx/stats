@@ -11,6 +11,16 @@ describe('ai-quant-strategy-api-adapter', () => {
       timeframe: null,
       positionPct: Number.NaN,
       isSubscribed: false,
+      paramSchema: {
+        type: 'object',
+        properties: {
+          threshold: { type: 'number' },
+        },
+      },
+      paramValues: {
+        threshold: 0.25,
+      },
+      schemaVersion: 'v1',
       metrics: {
         returnPct: Number.NaN,
         maxDrawdownPct: undefined as any,
@@ -31,9 +41,18 @@ describe('ai-quant-strategy-api-adapter', () => {
       winRatePct: 0,
       tradeCount: 0,
     })
+    expect(record.paramSchema).toEqual({
+      type: 'object',
+      properties: {
+        threshold: { type: 'number' },
+      },
+    })
+    expect(record.paramValues).toEqual({ threshold: 0.25 })
+    expect(record.schemaVersion).toBe('v1')
+    expect(record.supportsDynamicParams).toBe(true)
   })
 
-  it('preserves backend pnl values and maps null/undefined as expected', () => {
+  it('enforces dynamic param contract when schema is missing', () => {
     const record = mapAccountStrategyDetailToRecord({
       id: 'inst-2',
       name: 'detail strategy',
@@ -60,6 +79,11 @@ describe('ai-quant-strategy-api-adapter', () => {
         positionPct: 10,
         deployAccountName: null,
         deployAt: null,
+        paramSchema: null,
+        paramValues: {
+          leverage: 3,
+        },
+        schemaVersion: null,
       },
       timeline: [],
     } as any)
@@ -68,6 +92,59 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.todayPnl).toBeNull()
     expect(record.status).toBe('running')
     expect(record.exchange).toBe('okx')
+    expect(record.paramSchema).toBeNull()
+    expect(record.paramValues).toBeNull()
+    expect(record.schemaVersion).toBeNull()
+    expect(record.supportsDynamicParams).toBe(false)
+  })
+
+  it('normalizes paramValues to empty object when schema exists but values are absent', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-3',
+      name: 'detail strategy 2',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '5m',
+      positionPct: 20,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 1,
+        maxDrawdownPct: 2,
+        winRatePct: 3,
+        tradeCount: 4,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 1,
+      todayPnl: 1,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 10000 }],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '5m',
+        positionPct: 20,
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: {
+          type: 'object',
+          properties: {
+            leverage: { type: 'number' },
+          },
+        },
+        paramValues: undefined as any,
+        schemaVersion: 'v2',
+      },
+      timeline: [],
+    } as any)
+
+    expect(record.paramSchema).toEqual({
+      type: 'object',
+      properties: {
+        leverage: { type: 'number' },
+      },
+    })
+    expect(record.paramValues).toEqual({})
+    expect(record.schemaVersion).toBe('v2')
+    expect(record.supportsDynamicParams).toBe(true)
   })
 })
-

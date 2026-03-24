@@ -18,6 +18,21 @@ describe('accountStrategyViewService.listStrategies', () => {
               timeframe: '3m/15m',
               positionPct: 10,
             },
+            defaultParams: {
+              timeframe: '1m/5m',
+              riskMode: 'balanced',
+            },
+            customParams: {
+              riskMode: 'aggressive',
+            },
+            strategySchema: {
+              type: 'object',
+              properties: {
+                timeframe: { type: 'string' },
+                riskMode: { type: 'string' },
+              },
+            },
+            schemaVersion: 'v3',
             updatedAt: new Date('2026-03-20T10:00:00.000Z'),
             subscribed: true,
           },
@@ -55,6 +70,21 @@ describe('accountStrategyViewService.listStrategies', () => {
       symbol: 'BTCUSDT',
       timeframe: '3m/15m',
       positionPct: 10,
+      paramSchema: {
+        type: 'object',
+        properties: {
+          timeframe: { type: 'string' },
+          riskMode: { type: 'string' },
+        },
+      },
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '3m/15m',
+        positionPct: 10,
+        riskMode: 'aggressive',
+      },
+      schemaVersion: 'v3',
       isSubscribed: true,
       metrics: {
         returnPct: 21.8,
@@ -63,6 +93,44 @@ describe('accountStrategyViewService.listStrategies', () => {
         tradeCount: 74,
       },
     })
+  })
+
+  it('returns null dynamic param fields when strategy schema is missing', async () => {
+    const repo = {
+      listStrategiesForUser: jest.fn().mockResolvedValue({
+        total: 1,
+        page: 1,
+        limit: 20,
+        items: [{
+          id: 'inst-legacy',
+          name: 'Legacy 模板策略',
+          status: 'running',
+          params: { exchange: 'binance', symbol: 'ETHUSDT' },
+          defaultParams: { timeframe: '1h' },
+          customParams: { positionPct: 20 },
+          strategySchema: null,
+          schemaVersion: 'v2',
+          updatedAt: new Date('2026-03-20T10:00:00.000Z'),
+          subscribed: true,
+        }],
+      }),
+    }
+    const statsService = {
+      calculateBatchStats: jest.fn().mockResolvedValue(new Map()),
+    }
+    const marketDataIngestionService = { ingestAndComputeIndicators: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      null as any,
+      marketDataIngestionService as any,
+    )
+    const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20 })
+
+    expect(result.items[0]?.paramSchema).toBeNull()
+    expect(result.items[0]?.paramValues).toBeNull()
+    expect(result.items[0]?.schemaVersion).toBeNull()
   })
 
   it('maps paused strategy status to stopped for account ui', async () => {

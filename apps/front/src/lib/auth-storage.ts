@@ -1,8 +1,13 @@
-import type { AuthResponseDto } from '@/types/auth'
 import type { AuthSession } from '@/features/auth/types'
+import type { AuthResponseDto } from '@/types/auth'
 
 const SESSION_KEY = 'auth_session'
 const TOKEN_KEY = 'accessToken'
+
+function normalizeAccessToken(raw: string | null | undefined): string {
+  if (!raw) return ''
+  return raw.trim().replace(/^Bearer\s+/i, '')
+}
 
 function ensureSessionShape(session: AuthSession): AuthSession {
   if (!Array.isArray(session.loginMethods)) {
@@ -18,13 +23,14 @@ function ensureSessionShape(session: AuthSession): AuthSession {
 export function buildSession(response: AuthResponseDto): AuthSession {
   const expiresIn = 7 * 24 * 60 * 60
   const expiresAt = Date.now() + expiresIn * 1000
+  const accessToken = normalizeAccessToken(response.accessToken)
 
   return {
     userId: response.user.id,
     email: response.user.email,
     telegram: null,
     loginMethods: ['email'],
-    accessToken: response.accessToken,
+    accessToken,
     expiresAt,
   }
 }
@@ -40,6 +46,7 @@ export function loadStoredSession(): AuthSession | null {
     if (!raw) return null
 
     const session = ensureSessionShape(JSON.parse(raw) as AuthSession)
+    session.accessToken = normalizeAccessToken(session.accessToken)
 
     if (!session.userId || !session.accessToken || session.expiresAt <= Date.now()) {
       clearStoredSession()
@@ -60,11 +67,14 @@ export function loadStoredSession(): AuthSession | null {
 export function persistSession(session: AuthSession): void {
   if (typeof window === 'undefined') return
 
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-  localStorage.setItem(TOKEN_KEY, session.accessToken)
+  const accessToken = normalizeAccessToken(session.accessToken)
+  const nextSession: AuthSession = { ...session, accessToken }
+
+  localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
+  localStorage.setItem(TOKEN_KEY, accessToken)
 
   const maxAge = Math.max(1, Math.floor((session.expiresAt - Date.now()) / 1000))
-  document.cookie = `accessToken=${session.accessToken}; path=/; max-age=${maxAge}; samesite=lax`
+  document.cookie = `accessToken=${accessToken}; path=/; max-age=${maxAge}; samesite=lax`
 }
 
 /**
@@ -83,7 +93,8 @@ export function clearStoredSession(): void {
  */
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(TOKEN_KEY)
+  const token = normalizeAccessToken(localStorage.getItem(TOKEN_KEY))
+  return token || null
 }
 
 /**

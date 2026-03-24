@@ -6,6 +6,11 @@ import type {
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
+import {
+  getStrategyById,
+  listStrategies as listMockStrategies,
+  updateStrategyStatus as updateMockStrategyStatus,
+} from '@/components/account/ai-quant-strategy-store'
 import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
@@ -1284,6 +1289,9 @@ export interface AccountAiQuantStrategyMetrics {
   tradeCount: number | null
 }
 
+export type AccountAiQuantParamSchema = Record<string, unknown>
+export type AccountAiQuantParamValues = Record<string, unknown>
+
 export interface AccountAiQuantStrategyListItem {
   id: string
   name: string
@@ -1293,6 +1301,9 @@ export interface AccountAiQuantStrategyListItem {
   timeframe: string | null
   positionPct: number | null
   isSubscribed: boolean
+  paramSchema: AccountAiQuantParamSchema | null
+  paramValues: AccountAiQuantParamValues | null
+  schemaVersion: string | null
   metrics: AccountAiQuantStrategyMetrics
   updatedAt: string
 }
@@ -1314,6 +1325,9 @@ export interface AccountAiQuantStrategySnapshot {
   symbol: string | null
   timeframe: string | null
   positionPct: number | null
+  paramSchema: AccountAiQuantParamSchema | null
+  paramValues: AccountAiQuantParamValues | null
+  schemaVersion: string | null
   deployAccountName?: string | null
   deployAt?: string | null
 }
@@ -1327,26 +1341,105 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
 }
 
 interface AccountAiQuantListQuery {
+  userId: string
   page?: number
   limit?: number
   status?: AccountAiQuantStrategyStatus
 }
 
 export interface AccountAiQuantDeployPayload {
+  userId: string
   name: string
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   timeframe: string
   positionPct: number
-  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
 }
 
-function buildAccountAiQuantHeaders() {
+function buildMockAccountAiQuantListResponse(
+  query: AccountAiQuantListQuery,
+): PaginatedResponse<AccountAiQuantStrategyListItem> {
+  const page = query.page ?? 1
+  const limit = query.limit ?? 20
+  const all = listMockStrategies()
+    .filter(item => !query.status || item.status === query.status)
+    .map(mapMockStrategyToListItem)
+  const start = (page - 1) * limit
+  const items = all.slice(start, start + limit)
+  return {
+    total: all.length,
+    page,
+    limit,
+    items,
+  }
+}
+
+function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[number]): AccountAiQuantStrategyListItem {
+  const paramSchema = item.paramSchema ?? null
+  const paramValues = paramSchema ? (item.paramValues ?? {}) : null
+
+  return {
+    id: item.id,
+    name: item.name,
+    status: item.status,
+    exchange: item.exchange,
+    symbol: item.symbol,
+    timeframe: item.timeframe,
+    positionPct: item.positionPct,
+    isSubscribed: true,
+    paramSchema,
+    paramValues,
+    schemaVersion: item.schemaVersion ?? null,
+    metrics: {
+      returnPct: item.metrics.returnPct,
+      maxDrawdownPct: item.metrics.maxDrawdownPct,
+      winRatePct: item.metrics.winRatePct,
+      tradeCount: item.metrics.tradeCount,
+    },
+    updatedAt: item.updatedAt,
+  }
+}
+
+function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): AccountAiQuantStrategyDetail {
+  if (!item) {
+    throw new ApiError('策略不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
+  }
+
+  return {
+    ...mapMockStrategyToListItem(item),
+    totalPnl: item.totalPnl ?? null,
+    todayPnl: item.todayPnl ?? null,
+    equitySeries: item.equitySeries.map(point => ({
+      ts: point.ts,
+      value: point.value,
+    })),
+    snapshot: {
+      exchange: item.exchange,
+      symbol: item.symbol,
+      timeframe: item.timeframe,
+      positionPct: item.positionPct,
+      paramSchema: item.paramSchema ?? null,
+      paramValues: item.paramSchema ? (item.paramValues ?? {}) : null,
+      schemaVersion: item.schemaVersion ?? null,
+      deployAccountName: item.deploy?.accountName ?? null,
+      deployAt: item.deploy?.at ?? null,
+    },
+    timeline: item.timeline.map(event => ({
+      at: event.at,
+      eventType: 'system',
+      event: event.event,
+      note: event.note ?? null,
+    })),
+  }
+}
+
+function buildAccountAiQuantHeaders(userId?: string) {
   return {
     'Content-Type': 'application/json',
-    ...requireAuthHeaders(),
+    ...(userId ? { 'x-user-id': userId } : {}),
+    ...optionalAuthHeaders(),
   }
 }
 
@@ -1373,86 +1466,149 @@ async function parseAccountAiQuantJson(response: Response, fallbackMessage: stri
 export async function fetchAccountAiQuantStrategies(
   query: AccountAiQuantListQuery,
 ): Promise<PaginatedResponse<AccountAiQuantStrategyListItem>> {
-  return apiCall(async () => {
-    const search = new URLSearchParams({
-      page: String(query.page ?? 1),
-      limit: String(query.limit ?? 20),
-    })
-    if (query.status) search.set('status', query.status)
+  try {
+    return await apiCall(async () => {
+      if (!query.userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
 
-    const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies?${search.toString()}`, {
-      method: 'GET',
-      headers: buildAccountAiQuantHeaders(),
-    })
-    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略列表失败')
-    return unwrapResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>(
-      json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
-    )
-  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
+      const search = new URLSearchParams({
+        userId: query.userId.trim(),
+        page: String(query.page ?? 1),
+        limit: String(query.limit ?? 20),
+      })
+      if (query.status) search.set('status', query.status)
+
+      const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies?${search.toString()}`, {
+        method: 'GET',
+        headers: buildAccountAiQuantHeaders(query.userId.trim()),
+      })
+      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略列表失败')
+      const remote = unwrapResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>(
+        json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
+      )
+
+      if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) {
+        return remote
+      }
+
+      const mock = buildMockAccountAiQuantListResponse(query)
+      if (mock.total === 0) {
+        return remote
+      }
+      if (remote.total === 0) {
+        return mock
+      }
+
+      const mergedById = new Map<string, AccountAiQuantStrategyListItem>()
+      for (const item of remote.items) mergedById.set(item.id, item)
+      for (const item of mock.items) {
+        if (!mergedById.has(item.id)) mergedById.set(item.id, item)
+      }
+      const mergedItems = Array.from(mergedById.values())
+      const mergedTotal = new Set([
+        ...remote.items.map(item => item.id),
+        ...mock.items.map(item => item.id),
+      ]).size
+
+      return {
+        total: mergedTotal,
+        page: remote.page,
+        limit: remote.limit,
+        items: mergedItems.slice(0, remote.limit),
+      }
+    }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    return buildMockAccountAiQuantListResponse(query)
+  }
 }
 
 export async function fetchAccountAiQuantStrategyDetail(
   strategyId: string,
+  userId: string,
 ): Promise<AccountAiQuantStrategyDetail> {
-  return apiCall(async () => {
-    validateId(strategyId, 'strategy ID')
+  try {
+    return await apiCall(async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
 
-    const response = await fetch(
-      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`,
-      {
-        method: 'GET',
-        headers: buildAccountAiQuantHeaders(),
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
-    return unwrapResponse<AccountAiQuantStrategyDetail>(
-      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
-    )
-  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
+      const search = new URLSearchParams({ userId: userId.trim() })
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+        {
+          method: 'GET',
+          headers: buildAccountAiQuantHeaders(userId.trim()),
+        },
+      )
+      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
+      return unwrapResponse<AccountAiQuantStrategyDetail>(
+        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+      )
+    }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    return mapMockStrategyToDetail(getStrategyById(strategyId))
+  }
 }
 
 export async function performAccountAiQuantStrategyAction(
   strategyId: string,
-  payload: { action: AccountAiQuantStrategyAction },
+  payload: { userId: string; action: AccountAiQuantStrategyAction },
 ): Promise<AccountAiQuantStrategyDetail> {
-  return apiCall(async () => {
-    validateId(strategyId, 'strategy ID')
+  try {
+    return await apiCall(async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!payload.userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
 
-    const response = await fetch(
-      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
-      {
-        method: 'POST',
-        headers: buildAccountAiQuantHeaders(),
-        body: JSON.stringify({
-          action: payload.action,
-        }),
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
-    return unwrapResponse<AccountAiQuantStrategyDetail>(
-      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
-    )
-  }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
+        {
+          method: 'POST',
+          headers: buildAccountAiQuantHeaders(payload.userId.trim()),
+          body: JSON.stringify({
+            userId: payload.userId.trim(),
+            action: payload.action,
+          }),
+        },
+      )
+      const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
+      return unwrapResponse<AccountAiQuantStrategyDetail>(
+        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+      )
+    }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    updateMockStrategyStatus(strategyId, payload.action === 'run' ? 'running' : 'stopped')
+    return mapMockStrategyToDetail(getStrategyById(strategyId))
+  }
 }
 
 export async function deployAccountAiQuantStrategy(
   payload: AccountAiQuantDeployPayload,
 ): Promise<AccountAiQuantStrategyDetail> {
   return apiCall(async () => {
+    if (!payload.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
     if (!payload.name?.trim()) {
       throw new ApiError('name is required', 'INVALID_INPUT')
     }
 
     const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies/deploy`, {
       method: 'POST',
-      headers: buildAccountAiQuantHeaders(),
+      headers: buildAccountAiQuantHeaders(payload.userId.trim()),
       body: JSON.stringify({
+        userId: payload.userId.trim(),
         name: payload.name.trim(),
         exchange: payload.exchange,
         symbol: payload.symbol,
         timeframe: payload.timeframe,
         positionPct: payload.positionPct,
-        strategyInstanceId: payload.strategyInstanceId,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
       }),
@@ -1720,6 +1876,9 @@ export async function fetchHistoricalPositions(
 // Using a generic type until the DTO is added
 export type TradingSignalResponse = Record<string, unknown>
 
+// NOTE: All LLM strategy and subscription controller methods do not exist in current backend
+// These functions are stubs that will be implemented when the backend controllers are added
+
 export interface LlmStrategyInstanceSignalsQuery {
   page?: number
   limit?: number
@@ -1743,12 +1902,12 @@ export interface LlmCodegenSessionResponse {
   missingFields?: string[]
   scriptCode?: string | null
   specDesc?: Record<string, unknown> | null
-  strategyInstanceId?: string | null
   rejectReason?: string | null
   assistantPrompt?: string
 }
 
 export interface StartLlmCodegenSessionPayload {
+  userId: string
   initialMessage?: string
   symbols?: string[]
   timeframes?: string[]
@@ -1758,6 +1917,7 @@ export interface StartLlmCodegenSessionPayload {
 }
 
 export interface ContinueLlmCodegenSessionPayload {
+  userId: string
   message: string
   confirmGenerate?: boolean
   symbols?: string[]
@@ -1786,49 +1946,37 @@ function parseApiErrorMessage(status: number, payload: unknown, fallback: string
 }
 
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
-  const isTransientStatus = (status: number) => status === 408 || status === 429 || status >= 500
-  const request = async () => fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...requireAuthHeaders(),
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   })
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await request()
-      let json: unknown = null
-      try {
-        json = await response.json()
-      } catch {
-        json = null
-      }
-
-      if (!response.ok) {
-        if (attempt === 0 && isTransientStatus(response.status)) {
-          continue
-        }
-        const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
-        throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
-      }
-
-      return unwrapResponse<T>(json as T | BaseResponse<T>)
-    } catch (error) {
-      if (attempt === 0) {
-        continue
-      }
-      throw error
-    }
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
   }
 
-  throw new ApiError('LLM 策略生成请求失败', 'LLM_CODEGEN_ERROR')
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
+    throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
+  }
+
+  return unwrapResponse<T>(json as T | BaseResponse<T>)
 }
 
 export async function startLlmCodegenSession(
   payload: StartLlmCodegenSessionPayload,
 ): Promise<LlmCodegenSessionResponse> {
+  if (!payload.userId.trim()) {
+    throw new ApiError('userId is required', 'INVALID_INPUT')
+  }
   return postLlmCodegen<LlmCodegenSessionResponse>('/sessions', payload)
 }
 
@@ -1837,6 +1985,9 @@ export async function continueLlmCodegenSession(
   payload: ContinueLlmCodegenSessionPayload,
 ): Promise<LlmCodegenSessionResponse> {
   validateId(sessionId, 'llm codegen session ID')
+  if (!payload.userId.trim()) {
+    throw new ApiError('userId is required', 'INVALID_INPUT')
+  }
   if (!payload.message.trim()) {
     throw new ApiError('message is required', 'INVALID_INPUT')
   }
@@ -1854,13 +2005,11 @@ export async function getLlmCodegenSession(
   if (!userId.trim()) {
     throw new ApiError('userId is required', 'INVALID_INPUT')
   }
-  const token = getToken()
+  const authHeaders = requireAuthHeaders()
   const encodedUserId = encodeURIComponent(userId)
   const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen/sessions/${sessionId}?userId=${encodedUserId}`, {
     method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: authHeaders,
   })
   let json: unknown = null
   try {
@@ -1881,45 +2030,19 @@ export async function fetchLlmStrategyInstances(query?: {
   llmModel?: string
   strategyId?: string
 }): Promise<PaginatedResponse<UserLlmStrategyInstanceResponse>> {
-  return apiCall(async () => {
-    const search = new URLSearchParams({
-      page: String(query?.page ?? 1),
-      limit: String(query?.limit ?? 20),
-    })
-    if (query?.llmModel) search.set('llmModel', query.llmModel)
-    if (query?.strategyId) search.set('strategyId', query.strategyId)
-
-    const response = await fetch(`${API_BASE_URL}/llm-strategy-instances?${search.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...optionalAuthHeaders(),
-      },
-    })
-    const json = await parseAccountAiQuantJson(response, '获取 LLM 策略实例列表失败')
-    return unwrapResponse<PaginatedResponse<UserLlmStrategyInstanceResponse>>(
-      json as PaginatedResponse<UserLlmStrategyInstanceResponse> | BaseResponse<PaginatedResponse<UserLlmStrategyInstanceResponse>>,
-    )
-  }, 'FETCH_LLM_STRATEGY_INSTANCES')
+  return {
+    total: 0,
+    page: query?.page ?? 1,
+    limit: query?.limit ?? 20,
+    items: [],
+  }
 }
 
 export async function fetchLlmStrategyInstanceDetail(
   id: string,
 ): Promise<UserLlmStrategyInstanceResponse | null> {
   validateId(id, 'llm strategy instance ID')
-  return apiCall(async () => {
-    const response = await fetch(`${API_BASE_URL}/llm-strategy-instances/${encodeURIComponent(id)}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...optionalAuthHeaders(),
-      },
-    })
-    const json = await parseAccountAiQuantJson(response, '获取 LLM 策略实例详情失败')
-    return unwrapResponse<UserLlmStrategyInstanceResponse>(
-      json as UserLlmStrategyInstanceResponse | BaseResponse<UserLlmStrategyInstanceResponse>,
-    )
-  }, 'FETCH_LLM_STRATEGY_INSTANCE_DETAIL')
+  return null
 }
 
 export async function fetchLlmStrategyInstanceSignals(
@@ -1927,26 +2050,12 @@ export async function fetchLlmStrategyInstanceSignals(
   query: LlmStrategyInstanceSignalsQuery = {},
 ): Promise<PaginatedResponse<Record<string, unknown>>> {
   validateId(id, 'llm strategy instance ID')
-  return apiCall(async () => {
-    const search = new URLSearchParams({
-      page: String(query.page ?? 1),
-      limit: String(query.limit ?? 20),
-    })
-    const response = await fetch(
-      `${API_BASE_URL}/llm-strategy-instances/${encodeURIComponent(id)}/signals?${search.toString()}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '获取 LLM 策略实例信号失败')
-    return unwrapResponse<PaginatedResponse<Record<string, unknown>>>(
-      json as PaginatedResponse<Record<string, unknown>> | BaseResponse<PaginatedResponse<Record<string, unknown>>>,
-    )
-  }, 'FETCH_LLM_STRATEGY_INSTANCE_SIGNALS')
+  return {
+    total: 0,
+    page: query.page ?? 1,
+    limit: query.limit ?? 20,
+    items: [],
+  }
 }
 
 export interface CreateLlmSubscriptionPayload {
@@ -1963,22 +2072,9 @@ export interface LlmSubscriptionResponse {
 }
 
 export async function createLlmSubscription(
-  payload: CreateLlmSubscriptionPayload,
+  _payload: CreateLlmSubscriptionPayload,
 ): Promise<LlmSubscriptionResponse | null> {
-  return apiCall(async () => {
-    const response = await fetch(`${API_BASE_URL}/llm-strategy-subscriptions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
-      },
-      body: JSON.stringify(payload),
-    })
-    const json = await parseAccountAiQuantJson(response, '创建 LLM 策略订阅失败')
-    return unwrapResponse<LlmSubscriptionResponse>(
-      json as LlmSubscriptionResponse | BaseResponse<LlmSubscriptionResponse>,
-    )
-  }, 'CREATE_LLM_SUBSCRIPTION')
+  return null
 }
 
 export async function fetchMyLlmSubscriptions(query?: {
@@ -1986,92 +2082,35 @@ export async function fetchMyLlmSubscriptions(query?: {
   limit?: number
   status?: 'active' | 'paused' | 'cancelled'
 }): Promise<PaginatedResponse<LlmSubscriptionResponse>> {
-  return apiCall(async () => {
-    const search = new URLSearchParams({
-      page: String(query?.page ?? 1),
-      limit: String(query?.limit ?? 20),
-    })
-    if (query?.status) search.set('status', query.status)
-
-    const response = await fetch(`${API_BASE_URL}/llm-strategy-subscriptions?${search.toString()}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
-      },
-    })
-    const json = await parseAccountAiQuantJson(response, '获取 LLM 策略订阅列表失败')
-    return unwrapResponse<PaginatedResponse<LlmSubscriptionResponse>>(
-      json as PaginatedResponse<LlmSubscriptionResponse> | BaseResponse<PaginatedResponse<LlmSubscriptionResponse>>,
-    )
-  }, 'FETCH_LLM_SUBSCRIPTIONS')
+  return {
+    total: 0,
+    page: query?.page ?? 1,
+    limit: query?.limit ?? 20,
+    items: [],
+  }
 }
 
 export async function fetchLlmSubscriptionDetail(
   subscriptionId: string,
 ): Promise<LlmSubscriptionResponse | null> {
   validateId(subscriptionId, 'llm subscription ID')
-  return apiCall(async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '获取 LLM 策略订阅详情失败')
-    return unwrapResponse<LlmSubscriptionResponse>(
-      json as LlmSubscriptionResponse | BaseResponse<LlmSubscriptionResponse>,
-    )
-  }, 'FETCH_LLM_SUBSCRIPTION_DETAIL')
+  return null
 }
 
 export async function updateLlmSubscription(
   subscriptionId: string,
-  payload: {
+  _payload: {
     status?: 'active' | 'paused' | 'cancelled'
     customParams?: Record<string, unknown> | null
     exchangeAccountId?: string | null
   },
 ): Promise<LlmSubscriptionResponse | null> {
   validateId(subscriptionId, 'llm subscription ID')
-  return apiCall(async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-        body: JSON.stringify(payload),
-      },
-    )
-    const json = await parseAccountAiQuantJson(response, '更新 LLM 策略订阅失败')
-    return unwrapResponse<LlmSubscriptionResponse>(
-      json as LlmSubscriptionResponse | BaseResponse<LlmSubscriptionResponse>,
-    )
-  }, 'UPDATE_LLM_SUBSCRIPTION')
+  return null
 }
 
 export async function cancelLlmSubscription(subscriptionId: string): Promise<void> {
   validateId(subscriptionId, 'llm subscription ID')
-  return apiCall(async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          ...requireAuthHeaders(),
-        },
-      },
-    )
-    await parseAccountAiQuantJson(response, '取消 LLM 策略订阅失败')
-  }, 'CANCEL_LLM_SUBSCRIPTION')
 }
 
 // ===== 预测市场（Polymarket）相关 API =====

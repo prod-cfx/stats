@@ -1,4 +1,3 @@
-import type { AiQuantProxyService } from './ai-quant-proxy.service'
 import type { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
 import type { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
 import type { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list.query.dto'
@@ -6,6 +5,7 @@ import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/comm
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { AiQuantProxyService } from './ai-quant-proxy.service'
 
 @ApiTags('account-ai-quant')
 @ApiBearerAuth('bearer')

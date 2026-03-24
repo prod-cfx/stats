@@ -30,6 +30,10 @@ export interface AiQuantStrategyRecord {
   metrics: StrategyMetricSnapshot
   equitySeries: StrategyEquityPoint[]
   timeline: StrategyTimelineEvent[]
+  paramSchema: Record<string, unknown> | null
+  paramValues: Record<string, unknown> | null
+  schemaVersion: string | null
+  supportsDynamicParams: boolean
   totalPnl?: number | null
   todayPnl?: number | null
   deploy?: {
@@ -88,6 +92,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-03-01 09:25', event: 'Deployed', note: 'Connected Binance' },
         { at: '2026-03-01 09:26', event: 'Started' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 15).toISOString(),
     },
     {
@@ -107,6 +115,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-02-27 10:20', event: 'Deployed' },
         { at: '2026-03-03 18:30', event: 'Stopped', note: 'User Manual Stop' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 90).toISOString(),
     },
     {
@@ -123,6 +135,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
       timeline: [
         { at: '2026-03-04 08:40', event: 'Strategy Created', note: 'Pending Backtest' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 220).toISOString(),
     },
     {
@@ -142,6 +158,10 @@ function seedStrategies(): AiQuantStrategyRecord[] {
         { at: '2026-03-02 14:20', event: 'Deployed' },
         { at: '2026-03-02 14:21', event: 'Started' },
       ],
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      supportsDynamicParams: false,
       updatedAt: new Date(now - 1000 * 60 * 35).toISOString(),
     },
   ]
@@ -151,15 +171,35 @@ function isLegacyTs(ts: string) {
   return /^T\d+$/i.test(ts)
 }
 
+function normalizeDynamicParams(record: Pick<AiQuantStrategyRecord, 'paramSchema' | 'paramValues' | 'schemaVersion'>) {
+  if (!record.paramSchema) {
+    return {
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: record.schemaVersion ?? null,
+      supportsDynamicParams: false,
+    }
+  }
+
+  return {
+    paramSchema: record.paramSchema,
+    paramValues: record.paramValues ?? {},
+    schemaVersion: record.schemaVersion ?? null,
+    supportsDynamicParams: true,
+  }
+}
+
 function migrateRecord(record: AiQuantStrategyRecord, seed: number): AiQuantStrategyRecord {
   const nextSeries = record.equitySeries.some(point => isLegacyTs(point.ts))
     ? makeEquity(seed).map((item, idx) => ({ ...item, value: record.equitySeries[idx]?.value ?? item.value }))
     : record.equitySeries
+  const dynamicParams = normalizeDynamicParams(record)
 
   return {
     ...record,
     initialCapital: record.initialCapital || 10000,
     equitySeries: nextSeries,
+    ...dynamicParams,
   }
 }
 
@@ -209,7 +249,9 @@ export function upsertStrategyDeployment(input: {
   const target = existing.find(item => item.id === input.id)
   const next: AiQuantStrategyRecord[] = target
     ? existing.map(item => (item.id === input.id
-      ? {
+      ? (() => {
+          const dynamicParams = normalizeDynamicParams(item)
+          return {
           ...item,
           name: input.name,
           exchange: input.exchange,
@@ -218,6 +260,7 @@ export function upsertStrategyDeployment(input: {
           positionPct: input.positionPct,
           initialCapital: item.initialCapital || 10000,
           metrics: input.metrics,
+          ...dynamicParams,
           status: 'running',
           deploy: {
             exchange: input.exchange,
@@ -232,7 +275,8 @@ export function upsertStrategyDeployment(input: {
             { at: now.replace('T', ' ').slice(0, 16), event: '开始运行' },
           ],
           updatedAt: now,
-        }
+          }
+        })()
       : item))
     : [
         {
@@ -259,6 +303,10 @@ export function upsertStrategyDeployment(input: {
             at: now,
             status: 'running',
           },
+          paramSchema: null,
+          paramValues: null,
+          schemaVersion: null,
+          supportsDynamicParams: false,
           updatedAt: now,
         },
         ...existing,
