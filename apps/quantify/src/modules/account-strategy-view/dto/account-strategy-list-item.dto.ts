@@ -36,6 +36,15 @@ export class AccountStrategyListItemDto {
   @ApiPropertyOptional({ nullable: true })
   positionPct!: number | null
 
+  @ApiPropertyOptional({ nullable: true, type: 'object' })
+  paramSchema!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object' })
+  paramValues!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true })
+  schemaVersion!: string | null
+
   @ApiProperty()
   isSubscribed!: boolean
 
