@@ -2,6 +2,16 @@ import Link from 'next/link'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 
+function formatDateForDisplay(input: string | null): string {
+  if (!input) return '-'
+  const date = new Date(input)
+  if (Number.isNaN(date.getTime())) return '-'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default async function AiQuantBacktestDetailPage({
   params,
   searchParams,
@@ -17,6 +27,11 @@ export default async function AiQuantBacktestDetailPage({
   const symbol = typeof resolvedSearch.symbol === 'string' ? resolvedSearch.symbol : 'BTCUSDT'
   const startAt = typeof resolvedSearch.startAt === 'string' ? resolvedSearch.startAt : null
   const endAt = typeof resolvedSearch.endAt === 'string' ? resolvedSearch.endAt : null
+  const startAtDisplay = formatDateForDisplay(startAt)
+  const endAtDisplay = formatDateForDisplay(endAt)
+  const rangeDisplay = startAtDisplay !== '-' && endAtDisplay !== '-'
+    ? `${startAtDisplay} ~ ${endAtDisplay}`
+    : '-'
 
   const seed = Number(resolved.id.slice(-4)) || 1024
   const maxDrawdownPct = Number((8 + (seed % 17)).toFixed(2))
@@ -62,7 +77,7 @@ export default async function AiQuantBacktestDetailPage({
           <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">{symbol}</p>
           <p className="mt-3 text-xs text-[color:var(--cf-muted)]">历史回测区间</p>
           <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">
-            {startAt && endAt ? `${startAt.slice(0, 10)} ~ ${endAt.slice(0, 10)}` : '-'}
+            {rangeDisplay}
           </p>
         </section>
 

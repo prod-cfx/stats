@@ -31,4 +31,19 @@ describe('AiQuantBacktestDetailPage', () => {
     expect(html).toContain('ETHUSDT')
     expect(html).toContain('2026-01-01 ~ 2026-02-01')
   })
+
+  it('falls back to dash when dates are invalid', async () => {
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'zh', id: 'backtest-1234' },
+      searchParams: {
+        symbol: 'BTCUSDT',
+        startAt: 'not-a-date',
+        endAt: 'still-not-a-date',
+      },
+    })
+
+    const html = renderToStaticMarkup(element)
+    expect(html).toContain('BTCUSDT')
+    expect(html).toContain('>-<')
+  })
 })
