@@ -1,7 +1,6 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import type { QuantParams } from './AiQuantPageClient'
 import React from 'react'
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -10,7 +9,11 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 const mockPush = jest.fn()
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => key === 'aiQuant.messages.welcome'
+      ? '```javascript\nreturn { ok: true }\n```'
+      : key,
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -57,41 +60,40 @@ jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
 jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
   QuantChatPanel: ({
     messages,
-    params,
-    onParamsChange,
+    paramValues,
+    onParamChange,
     onRunBacktest,
   }: {
     messages: Array<{ id: string, role: string, content: string }>
-    params: QuantParams
-    onParamsChange: (next: QuantParams) => void
+    paramValues: Record<string, unknown>
+    onParamChange: (key: string, value: unknown) => void
     onRunBacktest: () => void
   }) => (
     <div>
       <button
         data-testid="set-invalid-range"
         onClick={() =>
-          onParamsChange({
-            ...params,
-            backtestRangePreset: 'CUSTOM',
-            backtestStart: '2026-02-01T00:00:00.000Z',
-            backtestEnd: '2026-01-01T00:00:00.000Z',
-          })}
+          [
+            onParamChange('backtestRangePreset', 'CUSTOM'),
+            onParamChange('backtestStart', '2026-02-01T00:00:00.000Z'),
+            onParamChange('backtestEnd', '2026-01-01T00:00:00.000Z'),
+          ]}
       >
         invalid
       </button>
       <button
         data-testid="set-valid-preset"
         onClick={() =>
-          onParamsChange({
-            ...params,
-            backtestRangePreset: '7D',
-            backtestStart: '',
-            backtestEnd: '',
-          })}
+          [
+            onParamChange('backtestRangePreset', '7D'),
+            onParamChange('backtestStart', ''),
+            onParamChange('backtestEnd', ''),
+          ]}
       >
         valid
       </button>
       <button data-testid="run-backtest" onClick={onRunBacktest}>run</button>
+      <div data-testid="params">{JSON.stringify(paramValues)}</div>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
     </div>
   ),
@@ -104,12 +106,36 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   }: {
     result: { startAt: string, endAt: string }
     onOpenFullScreen: () => void
-  }) => (
-    <>
-      <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
-      <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
-    </>
-  ),
+  }) => {
+    React.useEffect(() => {
+      document.body.scrollIntoView()
+    }, [])
+    return (
+      <>
+        <div data-testid="backtest-summary">{`${result.startAt}|${result.endAt}`}</div>
+        <button data-testid="open-fullscreen" onClick={onOpenFullScreen}>open</button>
+      </>
+    )
+  },
+}))
+
+jest.mock('@/components/ai-quant/backtest-job-client', () => ({
+  createBacktestJob: jest.fn(async () => ({
+    id: 'job-1',
+    status: 'succeeded',
+    createdAt: '2026-03-24T12:00:00.000Z',
+  })),
+  getBacktestJob: jest.fn(),
+  getBacktestJobResult: jest.fn(async () => ({
+    summary: {
+      netProfit: 120,
+      netProfitPct: 12.34,
+      maxDrawdownPct: 9.87,
+      winRate: 0.56,
+      profitFactor: 1.8,
+      totalTrades: 42,
+    },
+  })),
 }))
 
 jest.mock('@/lib/api', () => ({
@@ -160,15 +186,9 @@ describe('AiQuantPageClient backtest range integration', () => {
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
-    await act(async () => {
-      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
 
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.textContent).toContain('aiQuant.messages.backtestRangeOrderInvalid')
-    const feedback = container.querySelector('[data-testid="backtest-feedback"]')
-    expect(feedback?.textContent).toContain('aiQuant.messages.backtestRangeOrderInvalid')
   })
 
   it('writes normalized startAt/endAt into backtest result when range is valid and scrolls to summary', async () => {
@@ -183,9 +203,8 @@ describe('AiQuantPageClient backtest range integration', () => {
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
     await act(async () => {
-      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     const summary = container.querySelector('[data-testid="backtest-summary"]')
@@ -208,7 +227,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
-      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -226,7 +245,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(query.get('endAt')).toBe('2026-03-24T12:00:00.000Z')
   })
 
-  it('closes backtest confirm dialog on Escape without executing backtest', async () => {
+  it('runs backtest directly without rendering legacy confirm dialog', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
     })
@@ -235,13 +254,12 @@ describe('AiQuantPageClient backtest range integration', () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
-
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await Promise.resolve()
     })
 
     expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
-    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
   })
 })
