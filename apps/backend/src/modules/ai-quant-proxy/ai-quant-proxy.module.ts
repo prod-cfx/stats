@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common'
-import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { AccountAiQuantStrategiesController } from './account-ai-quant-strategies.controller'
+import { AiQuantProxyService } from './ai-quant-proxy.service'
+import { QuantifyAiQuantClient } from './clients/quantify-ai-quant.client'
 import { LlmStrategyCodegenController } from './llm-strategy-codegen.controller'
 import { LlmStrategyInstancesController } from './llm-strategy-instances.controller'
 import { LlmStrategySubscriptionsController } from './llm-strategy-subscriptions.controller'
-import { QuantifyAiQuantClient } from './clients/quantify-ai-quant.client'
 
 @Module({
   controllers: [

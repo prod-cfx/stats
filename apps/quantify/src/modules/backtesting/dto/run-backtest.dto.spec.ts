@@ -1,8 +1,9 @@
-// eslint-disable-next-line perfectionist/sort-imports -- side-effect import must execute before decorator-dependent modules
+/* eslint-disable perfectionist/sort-imports -- side-effect import must execute before decorator-dependent modules */
 import 'reflect-metadata'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
 import { RunBacktestDto } from './run-backtest.dto'
+/* eslint-enable perfectionist/sort-imports */
 
 function buildValidPayload() {
   return {

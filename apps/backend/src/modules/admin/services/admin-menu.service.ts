@@ -1,10 +1,9 @@
 import type { CreateAdminMenuDto, UpdateAdminMenuDto } from '../dto/admin-menu.dto'
 import type { AdminUserInfoDto } from '../dto/admin-user-info.dto'
 import type { AdminMenu } from '@/prisma/prisma.types'
-import { ErrorCode } from '@ai/shared'
+import { ErrorCode, AdminMenuType, PrincipalType } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { AdminMenuType, PrincipalType } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AdminMenuRepository } from '../repositories/admin-menu.repository'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'

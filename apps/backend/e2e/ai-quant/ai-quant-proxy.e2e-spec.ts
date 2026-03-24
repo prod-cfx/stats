@@ -1,6 +1,6 @@
 import type { ExecutionContext, INestApplication } from '@nestjs/common'
-import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { QuantifyAiQuantClient } from '@/modules/ai-quant-proxy/clients/quantify-ai-quant.client'
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 describe('AI Quant proxy HTTP (E2E)', () => {

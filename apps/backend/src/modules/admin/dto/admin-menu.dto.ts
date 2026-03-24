@@ -1,6 +1,6 @@
+import { AdminMenuType } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator'
-import { AdminMenuType } from '@ai/shared'
 
 export class CreateAdminMenuDto {
   @ApiPropertyOptional({ description: '父级菜单 ID，顶级菜单可为空' })

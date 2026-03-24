@@ -582,7 +582,7 @@ export class CodegenConversationService {
     if (entryRules.length === 0) {
       if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
         entryRules.push('短均线上穿长均线（金叉）入场')
-      } else if (/(突破|站上|收盘价?.{0,8}高于).{0,16}(阻力|前高|关键位)|阻力位/.test(text)) {
+      } else if (/(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
         entryRules.push('价格收盘确认突破关键阻力位入场')
       } else if (/买入|开仓|入场/.test(text)) {
         entryRules.push('满足入场条件后开仓')
@@ -594,7 +594,7 @@ export class CodegenConversationService {
     if (exitRules.length === 0) {
       if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
         exitRules.push('短均线下穿长均线（死叉）出场')
-      } else if (/跌破.{0,16}(支撑|前低|关键位)|支撑位/.test(text)) {
+      } else if (/跌破.{0,16}(?:支撑|前低|关键位)|支撑位/.test(text)) {
         exitRules.push('价格跌破关键支撑位出场')
       } else if (/止盈|止损|回撤/.test(text)) {
         exitRules.push('触发止盈/止损阈值出场')
@@ -1278,7 +1278,7 @@ export class CodegenConversationService {
 
   private inferMarketTypeFromMessage(message?: string): 'spot' | 'perp' {
     const text = (message ?? '').trim()
-    if (/合约|永续|perp|perpetual|swap/i.test(text)) return 'perp'
+    if (/合约|永续|perp|swap/i.test(text)) return 'perp'
     return 'spot'
   }
 
@@ -1292,8 +1292,8 @@ export class CodegenConversationService {
       }
     }
 
-    const balanceMatch = text.match(/账户余额[：: ]*(?:[\x09-\x0D\xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]\s*)?(\d+(?:\.\d+)?)\s*USDT/i)
-    const buyAmountMatch = text.match(/(?:开仓|买入)[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
+    const balanceMatch = text.match(/账户余额[：:]*\s*(\d+(?:\.\d+)?)\s*USDT/i)
+    const buyAmountMatch = text.match(/(?:开仓|买入)[^。\n\d]*(\d+(?:\.\d+)?)\s*USDT/i)
     if (balanceMatch?.[1] && buyAmountMatch?.[1]) {
       const balance = Number(balanceMatch[1])
       const buyAmount = Number(buyAmountMatch[1])

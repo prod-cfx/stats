@@ -122,6 +122,17 @@ export default antfu(
     },
   },
   {
+    files: [
+      'packages/shared/src/constants/enums.ts',
+      'packages/shared/src/generated/prisma-enums.ts',
+    ],
+    rules: {
+      // const + type 同名是标准 TypeScript 枚举替代模式，不属于真正的重复声明
+      'no-redeclare': 'off',
+      'ts/no-redeclare': 'off',
+    },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.e2e-spec.ts', '**/*.test.ts'],
     rules: {
       'no-console': 'off',

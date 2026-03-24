@@ -1,6 +1,5 @@
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
-import { LiquidationHeatmapModelType } from '@ai/shared'
-import { ErrorCode } from '@ai/shared'
+import { LiquidationHeatmapModelType, ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports

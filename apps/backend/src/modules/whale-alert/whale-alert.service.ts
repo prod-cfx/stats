@@ -4,10 +4,10 @@ import type {
 } from './dto/realtime-whale-alert.dto'
 import type { QueryWhaleTradeDto, WhaleTradeDto } from './dto/whale-trade.dto'
 import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
+import { WhaleAlertSide, WhaleAlertTradeSide } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
-import { WhaleAlertSide, WhaleAlertTradeSide } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { WhaleAlertRepository } from './whale-alert.repository'

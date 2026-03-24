@@ -1,11 +1,10 @@
 import type { WhaleNotificationDeliveryRepository } from '../repositories/whale-notification-delivery.repository'
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
-import { ErrorCode } from '@ai/shared'
+import { ErrorCode, WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { MailService } from '@/common/services/mail.service'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@ai/shared'
 import { WhaleNotificationDeliveryRepository as WhaleNotificationDeliveryRepositoryToken } from '../repositories/whale-notification-delivery.repository'
 import { WhaleNotificationMetricsService as WhaleNotificationMetricsServiceToken } from './whale-notification-metrics.service'
 

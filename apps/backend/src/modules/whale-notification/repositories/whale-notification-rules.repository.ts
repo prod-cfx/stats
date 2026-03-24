@@ -1,6 +1,6 @@
+import type { WhaleNotificationChannel, WhaleNotificationDeliveryStatus, WhaleNotificationRuleType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { Prisma as PrismaTypes } from '@/prisma/prisma.types'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus, WhaleNotificationRuleType } from '@ai/shared'
 import { randomUUID } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'

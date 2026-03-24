@@ -1,11 +1,11 @@
+import type { AiQuantProxyService } from './ai-quant-proxy.service'
+import type { LlmStrategyInstanceListQueryDto } from './dto/llm-strategy-instance-list.query.dto'
+import type { LlmStrategyInstanceSignalsQueryDto } from './dto/llm-strategy-instance-signals.query.dto'
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { OptionalJwtAuthGuard } from '@/modules/auth/guards/optional-jwt-auth.guard'
-import { AiQuantProxyService } from './ai-quant-proxy.service'
-import { LlmStrategyInstanceListQueryDto } from './dto/llm-strategy-instance-list.query.dto'
-import { LlmStrategyInstanceSignalsQueryDto } from './dto/llm-strategy-instance-signals.query.dto'
 
 @ApiTags('llm-strategy-instances')
 @UseGuards(OptionalJwtAuthGuard)

@@ -1,7 +1,7 @@
+import { MarketType } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, Max, Min } from 'class-validator'
-import { MarketType } from '@ai/shared'
 
 export { MarketType }
 

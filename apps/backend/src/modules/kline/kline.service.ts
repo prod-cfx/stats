@@ -1,5 +1,5 @@
-import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { MarketTimeframe } from '@ai/shared'
+import type { KlineBarDto } from './dto/kline-bar.dto'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'

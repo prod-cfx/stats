@@ -2,8 +2,9 @@
  * 信号生成和条件判断辅助函数
  */
 
+import type { SignalDirection } from '../../generated/prisma-enums'
 import type { Bar } from './technical-indicators'
-import { type SignalDirection, SignalType } from '../../generated/prisma-enums'
+import { SignalType } from '../../generated/prisma-enums'
 
 /**
  * 信号对象

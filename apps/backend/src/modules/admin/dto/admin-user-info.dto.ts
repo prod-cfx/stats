@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
 import { AdminMenuType } from '@ai/shared'
+import { ApiProperty } from '@nestjs/swagger'
 
 class AdminMenuPermissionDto {
   @ApiProperty()

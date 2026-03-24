@@ -1,7 +1,7 @@
-import { RolesBuilder } from 'nest-access-control'
 import { AppRole, AppResource } from '@ai/shared'
+import { RolesBuilder } from 'nest-access-control'
 
-export { AppRole, AppResource }
+export { AppResource, AppRole }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
 

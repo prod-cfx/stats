@@ -18,12 +18,11 @@ import type { CreateTelegramDesktopIntentRequestDto } from '../dto/requests/crea
 import type { TelegramBotWebhookRequestDto } from '../dto/requests/telegram-bot-webhook.request.dto'
 import type { TelegramDesktopExchangeRequestDto } from '../dto/requests/telegram-desktop-exchange.request.dto'
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { ErrorCode } from '@ai/shared'
+import { ErrorCode, PrincipalType, UserCredentialType, VerificationCodePurpose } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/JwtService，保留值导入
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
-import { PrincipalType, UserCredentialType, VerificationCodePurpose } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'
 import { compare, hash } from 'bcrypt'
 import { DomainException } from '@/common/exceptions/domain.exception'

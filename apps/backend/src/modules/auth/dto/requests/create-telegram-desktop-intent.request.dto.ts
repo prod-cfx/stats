@@ -1,6 +1,6 @@
+import { TelegramDesktopIntentKind, TelegramDesktopIntentLanguage } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
-import { TelegramDesktopIntentKind, TelegramDesktopIntentLanguage } from '@ai/shared'
 
 export { TelegramDesktopIntentKind, TelegramDesktopIntentLanguage }
 

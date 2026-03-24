@@ -1,10 +1,10 @@
 import { OpenAiCompatibleAdapter } from '../openai-compatible.adapter'
 
 describe('openAiCompatibleAdapter retry', () => {
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   afterEach(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
     jest.restoreAllMocks()
   })
 
@@ -20,7 +20,7 @@ describe('openAiCompatibleAdapter retry', () => {
     const fetchMock = jest.fn()
       .mockResolvedValueOnce(mockResponse(429, { error: { message: 'rate limited' } }))
       .mockResolvedValueOnce(mockResponse(200, { choices: [{ message: { content: 'OK' } }] }))
-    global.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const adapter = new OpenAiCompatibleAdapter({
       baseUrl: 'https://api.example.com',
@@ -43,7 +43,7 @@ describe('openAiCompatibleAdapter retry', () => {
     const fetchMock = jest.fn()
       .mockRejectedValueOnce(new Error('This operation was aborted'))
       .mockResolvedValueOnce(mockResponse(200, { choices: [{ message: { content: 'OK2' } }] }))
-    global.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const adapter = new OpenAiCompatibleAdapter({
       baseUrl: 'https://api.example.com',

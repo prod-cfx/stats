@@ -1,10 +1,10 @@
+import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@ai/shared'
 import { ConfigService } from '@nestjs/config'
 import { Test } from '@nestjs/testing'
 import { MailService } from '@/common/services/mail.service'
 import { WhaleNotificationDeliveryRepository } from '@/modules/whale-notification/repositories/whale-notification-delivery.repository'
 import { WhaleNotificationDispatcherService } from '@/modules/whale-notification/services/whale-notification-dispatcher.service'
 import { WhaleNotificationMetricsService } from '@/modules/whale-notification/services/whale-notification-metrics.service'
-import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@ai/shared'
 
 describe('WhaleNotificationDispatcherService retry (E2E)', () => {
   it('retries email dispatch and succeeds on later attempt', async () => {
