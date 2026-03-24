@@ -71,4 +71,16 @@ describe('backtest-payload-builder', () => {
 
     expect(payload.bars).toEqual([])
   })
+
+  it('throws when scriptCode is missing', () => {
+    expect(() => {
+      buildBacktestPayload(createInput({
+        strategy: {
+          id: 'strategy-1',
+          scriptCode: '   ',
+          params: {},
+        },
+      }), now)
+    }).toThrow('missing_script_code')
+  })
 })

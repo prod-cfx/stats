@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
+import { buildBacktestPayload } from '@/components/ai-quant/backtest-payload-builder'
+import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
@@ -281,6 +283,40 @@ function normalizeParamsFromValues(values: Record<string, unknown>, fallback: Qu
     sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
     positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
   }
+}
+
+const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
+type BacktestRangePresetValue = typeof VALID_RANGE_PRESETS[number]
+const SCRIPT_CODE_BLOCK_REGEX = /```(?:javascript|js)?\n([\s\S]*?)```/i
+
+function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRangeInput {
+  const presetRaw = typeof values.backtestRangePreset === 'string'
+    ? values.backtestRangePreset.toUpperCase()
+    : '30D'
+  const preset = (VALID_RANGE_PRESETS as readonly string[]).includes(presetRaw)
+    ? presetRaw as BacktestRangePresetValue
+    : '30D'
+  if (preset !== 'CUSTOM') {
+    return { preset }
+  }
+
+  return {
+    preset: 'CUSTOM',
+    startAt: typeof values.backtestStart === 'string' ? values.backtestStart : '',
+    endAt: typeof values.backtestEnd === 'string' ? values.backtestEnd : '',
+  }
+}
+
+function extractLatestScriptCode(messages: QuantMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (message.role !== 'assistant') continue
+    const match = SCRIPT_CODE_BLOCK_REGEX.exec(message.content)
+    if (match?.[1]?.trim()) {
+      return match[1].trim()
+    }
+  }
+  return ''
 }
 
 export function AiQuantPageClient() {
@@ -832,9 +868,38 @@ export function AiQuantPageClient() {
     })
   }
 
-  const runBacktestWithParams = (targetParams: QuantParams) => {
+  const runBacktestWithParams = (
+    targetParams: QuantParams,
+    paramValues: Record<string, unknown>,
+    messages: QuantMessage[],
+    strategyId: string | null,
+  ) => {
+    const payload = buildBacktestPayload({
+      symbol: targetParams.symbol,
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: {
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+      },
+      strategy: {
+        id: strategyId ?? `mock-${Date.now()}`,
+        scriptCode: extractLatestScriptCode(messages),
+        params: paramValues,
+      },
+      range: resolveBacktestRangeInput(paramValues),
+    })
+
     const result = getMockBacktest(targetParams)
-    return result
+    return {
+      ...result,
+      symbol: payload.symbols[0],
+      startAt: new Date(payload.dataRange.fromTs).toISOString(),
+      endAt: new Date(payload.dataRange.toTs).toISOString(),
+    }
   }
 
   const onRunStrategy = (
@@ -893,7 +958,36 @@ export function AiQuantPageClient() {
       }))
       return
     }
-    const result = runBacktestWithParams(activeConversation.params)
+    let result: BacktestResult
+    try {
+      result = runBacktestWithParams(
+        activeConversation.params,
+        activeConversation.paramValues,
+        activeConversation.messages,
+        activeConversation.llmCodegenSessionId,
+      )
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown_error'
+      const message = reason === 'start_after_end'
+        ? t('aiQuant.messages.backtestRangeOrderInvalid')
+        : reason === 'missing_script_code'
+          ? '策略代码为空，请先确认并生成策略代码。'
+          : `回测参数无效：${reason}`
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `bt-invalid-${Date.now()}`,
+            role: 'assistant',
+            content: message,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
     updateActiveConversation(curr => ({
       ...curr,
       backtestResult: result,

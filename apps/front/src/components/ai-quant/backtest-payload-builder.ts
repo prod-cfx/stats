@@ -21,6 +21,16 @@ export function buildBacktestPayload(
   input: BuildBacktestPayloadInput,
   now = new Date(),
 ): CreateBacktestJobPayload {
+  const symbol = input.symbol.trim()
+  if (!symbol) {
+    throw new Error('missing_symbol')
+  }
+
+  const scriptCode = input.strategy.scriptCode.trim()
+  if (!scriptCode) {
+    throw new Error('missing_script_code')
+  }
+
   const validation = validateBacktestRange(input.range)
   if (!validation.ok) {
     throw new Error(validation.reason)
@@ -29,7 +39,7 @@ export function buildBacktestPayload(
   const resolvedRange = resolveBacktestRange(input.range, now)
 
   return {
-    symbols: [input.symbol],
+    symbols: [symbol],
     baseTimeframe: input.baseTimeframe,
     stateTimeframes: input.stateTimeframes,
     initialCash: input.initialCash,
@@ -38,7 +48,7 @@ export function buildBacktestPayload(
     strategy: {
       id: input.strategy.id,
       protocolVersion: 'v1',
-      scriptCode: input.strategy.scriptCode,
+      scriptCode,
       params: input.strategy.params,
     },
     dataRange: {
