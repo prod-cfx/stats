@@ -12,6 +12,11 @@ import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
+import {
+  createBacktestJob,
+  getBacktestJob,
+  getBacktestJobResult,
+} from '@/components/ai-quant/backtest-job-client'
 import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
@@ -104,6 +109,8 @@ const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
 const DEV_MOCK_EXECUTION_MODE = true
+const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
+const BACKTEST_JOB_TIMEOUT_MS = 60_000
 
 interface ConversationState {
   id: string
@@ -248,22 +255,6 @@ function isTerminalSessionConflict(error: unknown): boolean {
   return false
 }
 
-function getMockBacktest(params: QuantParams): BacktestResult {
-  const score = params.buyDropPct + params.sellRisePct + params.positionPct / 10 + (params.exchange === 'okx' ? 1 : 0)
-  const maxDrawdownPct = Number(Math.max(8, Math.min(35, 28 - score)).toFixed(2))
-  const totalReturnPct = Number((score * 1.8 - maxDrawdownPct * 0.4).toFixed(2))
-  const winRatePct = Number(Math.max(25, Math.min(78, 42 + score * 2.2)).toFixed(2))
-  const tradeCount = Math.max(8, Math.round(15 + score))
-
-  return {
-    id: String(Date.now()),
-    maxDrawdownPct,
-    totalReturnPct,
-    winRatePct,
-    tradeCount,
-  }
-}
-
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -359,6 +350,7 @@ export function AiQuantPageClient() {
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [backtestExecutionState, setBacktestExecutionState] = useState<'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'>('idle')
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -480,6 +472,14 @@ export function AiQuantPageClient() {
     if (!activeConversation) return
     setConversations(prev =>
       prev.map(conv => (conv.id === activeConversation.id ? updater(conv) : conv)),
+    )
+  }
+  const updateConversationById = (
+    conversationId: string,
+    updater: (curr: ConversationState) => ConversationState,
+  ) => {
+    setConversations(prev =>
+      prev.map(conv => (conv.id === conversationId ? updater(conv) : conv)),
     )
   }
 
@@ -868,40 +868,6 @@ export function AiQuantPageClient() {
     })
   }
 
-  const runBacktestWithParams = (
-    targetParams: QuantParams,
-    paramValues: Record<string, unknown>,
-    messages: QuantMessage[],
-    strategyId: string | null,
-  ) => {
-    const payload = buildBacktestPayload({
-      symbol: targetParams.symbol,
-      baseTimeframe: '15m',
-      stateTimeframes: ['15m'],
-      initialCash: 10000,
-      leverage: 1,
-      execution: {
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
-      },
-      strategy: {
-        id: strategyId ?? `mock-${Date.now()}`,
-        scriptCode: extractLatestScriptCode(messages),
-        params: paramValues,
-      },
-      range: resolveBacktestRangeInput(paramValues),
-    })
-
-    const result = getMockBacktest(targetParams)
-    return {
-      ...result,
-      symbol: payload.symbols[0],
-      startAt: new Date(payload.dataRange.fromTs).toISOString(),
-      endAt: new Date(payload.dataRange.toTs).toISOString(),
-    }
-  }
-
   const onRunStrategy = (
     _strategyId: string,
     preset: Partial<QuantParams>,
@@ -943,6 +909,10 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
+    if (backtestExecutionState === 'submitting' || backtestExecutionState === 'running') {
+      return
+    }
+
     if (!graphConfirmed && !mockExecutionMode) {
       updateActiveConversation(curr => ({
         ...curr,
@@ -958,14 +928,27 @@ export function AiQuantPageClient() {
       }))
       return
     }
-    let result: BacktestResult
+
+    let payload: ReturnType<typeof buildBacktestPayload>
     try {
-      result = runBacktestWithParams(
-        activeConversation.params,
-        activeConversation.paramValues,
-        activeConversation.messages,
-        activeConversation.llmCodegenSessionId,
-      )
+      payload = buildBacktestPayload({
+        symbol: activeConversation.params.symbol,
+        baseTimeframe: '15m',
+        stateTimeframes: ['15m'],
+        initialCash: 10000,
+        leverage: 1,
+        execution: {
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+        },
+        strategy: {
+          id: activeConversation.llmCodegenSessionId ?? `mock-${Date.now()}`,
+          scriptCode: extractLatestScriptCode(activeConversation.messages),
+          params: activeConversation.paramValues,
+        },
+        range: resolveBacktestRangeInput(activeConversation.paramValues),
+      })
     } catch (error) {
       const message = (() => {
         if (!isBacktestPayloadBuilderError(error)) {
@@ -1001,22 +984,93 @@ export function AiQuantPageClient() {
       return
     }
 
-    updateActiveConversation(curr => ({
+    const conversationId = activeConversation.id
+    const appendBacktestMessage = (content: string) => {
+      updateConversationById(conversationId, curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `bt-${Date.now()}`,
+            role: 'assistant',
+            content,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+    }
+    const toFailureMessage = (reason: string) => t('aiQuant.messages.backtestPayloadInvalid', { reason })
+
+    setBacktestExecutionState('submitting')
+    updateConversationById(conversationId, curr => ({
       ...curr,
-      backtestResult: result,
-      messages: [
-        ...curr.messages,
-        {
-          id: `bt-${Date.now()}`,
-          role: 'assistant',
-          content:
-            result.maxDrawdownPct <= 20
-              ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-              : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
-        },
-      ],
+      backtestResult: null,
       updatedAt: Date.now(),
     }))
+
+    void (async () => {
+      try {
+        const createdJob = await createBacktestJob(payload)
+        setBacktestExecutionState('running')
+
+        const deadline = Date.now() + BACKTEST_JOB_TIMEOUT_MS
+        let latestJob = createdJob
+
+        while (latestJob.status === 'queued' || latestJob.status === 'running') {
+          if (Date.now() >= deadline) {
+            setBacktestExecutionState('timeout')
+            appendBacktestMessage(toFailureMessage('timeout'))
+            return
+          }
+          await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
+          latestJob = await getBacktestJob(createdJob.id)
+        }
+
+        if (latestJob.status === 'failed') {
+          setBacktestExecutionState('failed')
+          appendBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
+          return
+        }
+
+        const jobResult = await getBacktestJobResult(createdJob.id)
+        const summary = jobResult.summary
+        const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
+        const result: BacktestResult = {
+          id: createdJob.id,
+          maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
+          totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
+          winRatePct: Number(winRatePct.toFixed(2)),
+          tradeCount: summary.totalTrades,
+          symbol: payload.symbols[0],
+          startAt: new Date(payload.dataRange.fromTs).toISOString(),
+          endAt: new Date(payload.dataRange.toTs).toISOString(),
+        }
+
+        setBacktestExecutionState('succeeded')
+        updateConversationById(conversationId, curr => ({
+          ...curr,
+          backtestResult: result,
+          messages: [
+            ...curr.messages,
+            {
+              id: `bt-${Date.now()}`,
+              role: 'assistant',
+              content:
+                result.maxDrawdownPct <= 20
+                  ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+            },
+          ],
+          updatedAt: Date.now(),
+        }))
+      } catch (error) {
+        setBacktestExecutionState('failed')
+        const message = error instanceof ApiError
+          ? (error.message?.trim() || toFailureMessage('unknown_error'))
+          : toFailureMessage('unknown_error')
+        appendBacktestMessage(message)
+      }
+    })()
   }
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
@@ -1168,7 +1222,7 @@ export function AiQuantPageClient() {
             })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={graphConfirmed || mockExecutionMode}
+            canRunBacktest={(graphConfirmed || mockExecutionMode) && backtestExecutionState !== 'submitting' && backtestExecutionState !== 'running'}
           />
 
           {activeConversation.logicGraph && (
