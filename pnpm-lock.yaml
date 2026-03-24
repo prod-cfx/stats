@@ -574,12 +574,18 @@ importers:
       react-i18next:
         specifier: ^15.6.1
         version: 15.7.4(i18next@24.2.3(typescript@5.9.2))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.2)
+      react-markdown:
+        specifier: ^9.1.0
+        version: 9.1.0(@types/react@19.2.4)(react@19.2.4)
       react-redux:
         specifier: ^9.2.0
         version: 9.2.0(@types/react@19.2.4)(react@19.2.4)(redux@5.0.1)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
       showdown:
         specifier: ^2.1.0
         version: 2.1.0
@@ -749,6 +755,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
       winston:
         specifier: ^3.17.0
         version: 3.18.3
@@ -804,9 +813,6 @@ importers:
       tsx:
         specifier: ^4.19.1
         version: 4.20.6
-      typescript:
-        specifier: 5.9.2
-        version: 5.9.2
 
   packages/api-contracts:
     dependencies:
