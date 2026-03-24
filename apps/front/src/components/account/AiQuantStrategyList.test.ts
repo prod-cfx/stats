@@ -1,6 +1,8 @@
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import { describe, expect, it, jest } from '@jest/globals'
-import { buildParamSummary, buildPrimarySummary } from './AiQuantStrategyList'
+import { renderToStaticMarkup } from 'react-dom/server.node'
+import React from 'react'
+import { AiQuantStrategyPrimarySummary, buildParamSummary, buildPrimarySummary } from './AiQuantStrategyList'
 
 jest.mock('lucide-react', () => ({
   Activity: () => null,
@@ -71,12 +73,11 @@ describe('AiQuantStrategyList primary summary', () => {
     const record = makeListRecord()
     const out = buildPrimarySummary(record, key => key)
 
-    expect(out.isDynamic).toBe(true)
-    expect(out.entries).toEqual(['杠杆: 3', 'ATR周期: 14'])
-    expect(out.entries).not.toContain(record.exchange.toUpperCase())
-    expect(out.entries).not.toContain(record.symbol)
-    expect(out.entries).not.toContain(record.timeframe)
-    expect(out.entries).not.toContain(`aiQuant.position ${record.positionPct}%`)
+    expect(out).toEqual(['杠杆: 3', 'ATR周期: 14'])
+    expect(out).not.toContain(record.exchange.toUpperCase())
+    expect(out).not.toContain(record.symbol)
+    expect(out).not.toContain(record.timeframe)
+    expect(out).not.toContain(`aiQuant.position ${record.positionPct}%`)
   })
 
   it('uses fixed summary path when schema is missing', () => {
@@ -86,8 +87,7 @@ describe('AiQuantStrategyList primary summary', () => {
     })
     const out = buildPrimarySummary(record, key => key)
 
-    expect(out.isDynamic).toBe(false)
-    expect(out.entries).toEqual([
+    expect(out).toEqual([
       'BINANCE',
       'BTCUSDT',
       '15m',
@@ -133,7 +133,35 @@ describe('AiQuantStrategyList primary summary', () => {
     })
     const out = buildPrimarySummary(record, key => (key === 'aiQuant.paramSummaryEmpty' ? '暂无参数' : key))
 
-    expect(out.isDynamic).toBe(true)
-    expect(out.entries).toEqual(['暂无参数'])
+    expect(out).toEqual(['暂无参数'])
+  })
+
+  it('renders static fallback summary in DOM with separators and expected order', () => {
+    const record = makeListRecord({
+      paramSchema: null,
+      paramValues: null,
+    })
+    const html = renderToStaticMarkup(
+      React.createElement(
+        'div',
+        { className: 'mt-1 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]' },
+        React.createElement(AiQuantStrategyPrimarySummary, { item: record, t: (key: string) => key, keyPrefix: record.id }),
+      ),
+    )
+
+    expect(html).toContain('BINANCE')
+    expect(html).toContain('BTCUSDT')
+    expect(html).toContain('15m')
+    expect(html).toContain('aiQuant.position 10%')
+    expect((html.match(/<span>\/<\/span>/g) || []).length).toBe(3)
+
+    const exchangePos = html.indexOf('BINANCE')
+    const symbolPos = html.indexOf('BTCUSDT')
+    const timeframePos = html.indexOf('15m')
+    const positionPos = html.indexOf('aiQuant.position 10%')
+    expect(exchangePos).toBeGreaterThan(-1)
+    expect(symbolPos).toBeGreaterThan(exchangePos)
+    expect(timeframePos).toBeGreaterThan(symbolPos)
+    expect(positionPos).toBeGreaterThan(timeframePos)
   })
 })
