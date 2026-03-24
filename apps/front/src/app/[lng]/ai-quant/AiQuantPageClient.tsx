@@ -6,7 +6,7 @@ import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
@@ -113,6 +113,11 @@ interface ConversationState {
   llmCodegenSessionId: string | null
   latestSignalMessage: string | null
   updatedAt: number
+}
+
+interface BacktestFeedbackState {
+  type: 'error' | 'success'
+  message: string
 }
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
@@ -264,6 +269,8 @@ export function AiQuantPageClient() {
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [backtestFeedback, setBacktestFeedback] = useState<BacktestFeedbackState | null>(null)
+  const backtestSummaryRef = useRef<HTMLDivElement | null>(null)
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -275,6 +282,11 @@ export function AiQuantPageClient() {
       setActiveConversationId(conversations[0].id)
     }
   }, [activeConversationId, conversations])
+
+  useEffect(() => {
+    if (!activeConversation?.backtestResult) return
+    backtestSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [activeConversation?.backtestResult?.id])
 
   useEffect(() => {
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
@@ -765,6 +777,8 @@ export function AiQuantPageClient() {
 
   const onRunBacktest = () => {
     if (!graphConfirmed && !mockExecutionMode) {
+      const message = t('aiQuant.messages.graphGuard')
+      setBacktestFeedback({ type: 'error', message })
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -772,7 +786,7 @@ export function AiQuantPageClient() {
           {
             id: `graph-guard-${Date.now()}`,
             role: 'assistant',
-            content: t('aiQuant.messages.graphGuard'),
+            content: message,
           },
         ],
         updatedAt: Date.now(),
@@ -790,6 +804,8 @@ export function AiQuantPageClient() {
         start_after_end: 'aiQuant.messages.backtestRangeOrderInvalid',
         range_too_large: 'aiQuant.messages.backtestRangeTooLarge',
       }
+      const message = t(errorKeyByReason[validation.reason] ?? 'aiQuant.messages.backtestRangeOrderInvalid')
+      setBacktestFeedback({ type: 'error', message })
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -797,7 +813,7 @@ export function AiQuantPageClient() {
           {
             id: `range-guard-${Date.now()}`,
             role: 'assistant',
-            content: t(errorKeyByReason[validation.reason] ?? 'aiQuant.messages.backtestRangeOrderInvalid'),
+            content: message,
           },
         ],
         updatedAt: Date.now(),
@@ -817,6 +833,10 @@ export function AiQuantPageClient() {
     }
 
     const result = runBacktestWithParams(normalizedParams)
+    const resultMessage = result.maxDrawdownPct <= 20
+      ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+      : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct })
+    setBacktestFeedback({ type: 'success', message: resultMessage })
     updateActiveConversation(curr => ({
       ...curr,
       params: normalizedParams,
@@ -826,10 +846,7 @@ export function AiQuantPageClient() {
         {
           id: `bt-${Date.now()}`,
           role: 'assistant',
-          content:
-            result.maxDrawdownPct <= 20
-              ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-              : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+          content: resultMessage,
         },
       ],
       updatedAt: Date.now(),
@@ -969,6 +986,21 @@ export function AiQuantPageClient() {
         />
 
         <div className="space-y-4">
+          {backtestFeedback && (
+            <section
+              className={`rounded-2xl border px-4 py-3 text-sm ${
+                backtestFeedback.type === 'error'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+              }`}
+              role="status"
+              aria-live="polite"
+              data-testid="backtest-feedback"
+            >
+              {backtestFeedback.message}
+            </section>
+          )}
+
           <QuantChatPanel
             messages={activeConversation.messages}
             params={activeConversation.params}
@@ -1033,32 +1065,34 @@ export function AiQuantPageClient() {
           )}
 
           {activeConversation.backtestResult && (
-            <BacktestSummaryCard
-              result={activeConversation.backtestResult}
-              canDeploy={canDeploy}
-              drawdownLimited={!mockExecutionMode}
-              onOpenFullScreen={() => {
-                const search = new URLSearchParams({
-                  symbol: activeConversation.backtestResult!.symbol ?? activeConversation.params.symbol,
-                  startAt: activeConversation.backtestResult!.startAt ?? activeConversation.params.backtestStart,
-                  endAt: activeConversation.backtestResult!.endAt ?? activeConversation.params.backtestEnd,
-                })
-                router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}?${search.toString()}`)
-              }}
-              onOptimize={() => {
-                const optimizeMessage: QuantMessage = {
-                  id: `opt-${Date.now()}`,
-                  role: 'assistant',
-                  content: t('aiQuant.messages.optimizeHint'),
-                }
-                updateActiveConversation(curr => ({
-                  ...curr,
-                  messages: [...curr.messages, optimizeMessage],
-                  updatedAt: Date.now(),
-                }))
-              }}
-              onDeploy={() => setDeployOpen(true)}
-            />
+            <div ref={backtestSummaryRef} data-testid="backtest-summary-anchor">
+              <BacktestSummaryCard
+                result={activeConversation.backtestResult}
+                canDeploy={canDeploy}
+                drawdownLimited={!mockExecutionMode}
+                onOpenFullScreen={() => {
+                  const search = new URLSearchParams({
+                    symbol: activeConversation.backtestResult!.symbol ?? activeConversation.params.symbol,
+                    startAt: activeConversation.backtestResult!.startAt ?? activeConversation.params.backtestStart,
+                    endAt: activeConversation.backtestResult!.endAt ?? activeConversation.params.backtestEnd,
+                  })
+                  router.push(`/${lng}/ai-quant/backtest/${activeConversation.backtestResult!.id}?${search.toString()}`)
+                }}
+                onOptimize={() => {
+                  const optimizeMessage: QuantMessage = {
+                    id: `opt-${Date.now()}`,
+                    role: 'assistant',
+                    content: t('aiQuant.messages.optimizeHint'),
+                  }
+                  updateActiveConversation(curr => ({
+                    ...curr,
+                    messages: [...curr.messages, optimizeMessage],
+                    updatedAt: Date.now(),
+                  }))
+                }}
+                onDeploy={() => setDeployOpen(true)}
+              />
+            </div>
           )}
         </div>
       </div>
