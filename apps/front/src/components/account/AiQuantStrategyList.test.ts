@@ -126,4 +126,14 @@ describe('AiQuantStrategyList primary summary', () => {
       '数组: a, 1, true',
     ])
   })
+
+  it('uses localized fallback when schema exists but dynamic summary is empty', () => {
+    const record = makeListRecord({
+      paramValues: {},
+    })
+    const out = buildPrimarySummary(record, key => (key === 'aiQuant.paramSummaryEmpty' ? '暂无参数' : key))
+
+    expect(out.isDynamic).toBe(true)
+    expect(out.entries).toEqual(['暂无参数'])
+  })
 })

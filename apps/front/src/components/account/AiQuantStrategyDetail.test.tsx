@@ -21,7 +21,16 @@ jest.mock('next/link', () => ({
 }))
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => ({
+      'aiQuant.paramSnapshotTitle': '参数快照',
+      'aiQuant.paramSummaryEmpty': '暂无参数',
+      'aiQuant.deployAccountLabel': '部署账户',
+      'aiQuant.deployTimeLabel': '部署时间',
+      'aiQuant.legacyUnsupportedTitle': '策略参数不可用',
+      'aiQuant.legacyUnsupportedMessage': '不支持旧策略，请重新生成',
+    }[key] ?? key),
+  }),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -138,6 +147,21 @@ describe('AiQuant strategy dynamic params', () => {
 
     expect(html).toContain('参数快照')
     expect(html).toContain('杠杆：3')
+    expect(html).not.toContain('不支持旧策略，请重新生成')
+  })
+
+  it('shows localized empty text when schema exists but no renderable params', () => {
+    const html = renderToStaticMarkup(
+      <AiQuantStrategyDetail
+        lng="zh"
+        strategy={makeStrategy({
+          paramValues: {},
+        })}
+      />,
+    )
+
+    expect(html).toContain('参数快照')
+    expect(html).toContain('暂无参数')
     expect(html).not.toContain('不支持旧策略，请重新生成')
   })
 })

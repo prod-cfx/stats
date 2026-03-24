@@ -3,6 +3,7 @@
 import type { AiQuantStrategyRecord, StrategyEquityPoint, StrategyStatus } from './ai-quant-strategy-store'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 import { buildDynamicParamRows } from './dynamic-param-summary'
@@ -64,6 +65,7 @@ interface AiQuantStrategyDetailProps {
 }
 
 export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailProps) {
+  const { t } = useTranslation()
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
@@ -204,7 +206,7 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
         {strategy.paramSchema
           ? (
               <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">参数快照</h2>
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.paramSnapshotTitle')}</h2>
                 <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
                   {dynamicParamRows.length > 0
                     ? dynamicParamRows.map(row => (
@@ -212,11 +214,11 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
                           {row.label}：{row.value}
                         </p>
                       ))
-                    : <p className="text-[color:var(--cf-muted)]">暂无参数</p>}
+                    : <p className="text-[color:var(--cf-muted)]">{t('aiQuant.paramSummaryEmpty')}</p>}
                   {strategy.deploy && (
                     <>
-                      <p>部署账户：{strategy.deploy.accountName}</p>
-                      <p>部署时间：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
+                      <p>{t('aiQuant.deployAccountLabel')}：{strategy.deploy.accountName}</p>
+                      <p>{t('aiQuant.deployTimeLabel')}：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
                     </>
                   )}
                 </div>
@@ -224,8 +226,8 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
             )
           : (
               <article className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
-                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">策略参数不可用</h2>
-                <p className="mt-3 text-sm text-amber-300">不支持旧策略，请重新生成</p>
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.legacyUnsupportedTitle')}</h2>
+                <p className="mt-3 text-sm text-amber-300">{t('aiQuant.legacyUnsupportedMessage')}</p>
               </article>
             )}
 
