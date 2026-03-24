@@ -185,4 +185,23 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(summary?.textContent).toContain('2026-03-24T12:00:00.000Z')
     expect(scrollIntoViewMock).toHaveBeenCalled()
   })
+
+  it('closes backtest confirm dialog on Escape without executing backtest', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+  })
 })

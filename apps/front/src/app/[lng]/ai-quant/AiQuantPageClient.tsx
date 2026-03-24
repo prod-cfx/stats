@@ -273,6 +273,9 @@ export function AiQuantPageClient() {
   const [backtestFeedback, setBacktestFeedback] = useState<BacktestFeedbackState | null>(null)
   const [backtestConfirmOpen, setBacktestConfirmOpen] = useState(false)
   const backtestSummaryRef = useRef<HTMLDivElement | null>(null)
+  const backtestConfirmDialogRef = useRef<HTMLDivElement | null>(null)
+  const backtestConfirmSubmitRef = useRef<HTMLButtonElement | null>(null)
+  const backtestConfirmTriggerRef = useRef<HTMLElement | null>(null)
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -289,6 +292,61 @@ export function AiQuantPageClient() {
     if (!activeConversation?.backtestResult) return
     backtestSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [activeConversation?.backtestResult?.id])
+
+  const closeBacktestConfirm = () => {
+    setBacktestConfirmOpen(false)
+    backtestConfirmTriggerRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!backtestConfirmOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    requestAnimationFrame(() => {
+      backtestConfirmSubmitRef.current?.focus()
+    })
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeBacktestConfirm()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const dialog = backtestConfirmDialogRef.current
+      if (!dialog) return
+      const focusables = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+
+      if (event.shiftKey) {
+        if (active === first || !active || !dialog.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+        return
+      }
+
+      if (active === last || !active || !dialog.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [backtestConfirmOpen])
 
   useEffect(() => {
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
@@ -857,6 +915,9 @@ export function AiQuantPageClient() {
 
   const onRunBacktest = () => {
     setBacktestFeedback(null)
+    backtestConfirmTriggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
     setBacktestConfirmOpen(true)
   }
 
@@ -1019,9 +1080,20 @@ export function AiQuantPageClient() {
           />
 
           {backtestConfirmOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" data-testid="backtest-confirm">
-              <section className="w-full max-w-md rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl">
-                <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestConfirmTitle')}</h3>
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="backtest-confirm-title"
+              data-testid="backtest-confirm"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeBacktestConfirm()
+                }
+              }}
+            >
+              <section ref={backtestConfirmDialogRef} className="w-full max-w-md rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 shadow-2xl">
+                <h3 id="backtest-confirm-title" className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestConfirmTitle')}</h3>
                 <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
                   {activeConversation.params.symbol}
                   {' · '}
@@ -1037,16 +1109,17 @@ export function AiQuantPageClient() {
                   <button
                     type="button"
                     className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)]"
-                    onClick={() => setBacktestConfirmOpen(false)}
+                    onClick={closeBacktestConfirm}
                     data-testid="backtest-confirm-cancel"
                   >
                     {t('aiQuant.deployDialog.cancel')}
                   </button>
                   <button
                     type="button"
+                    ref={backtestConfirmSubmitRef}
                     className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
                     onClick={() => {
-                      setBacktestConfirmOpen(false)
+                      closeBacktestConfirm()
                       executeBacktest()
                     }}
                     data-testid="backtest-confirm-submit"
