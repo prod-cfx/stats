@@ -1,5 +1,5 @@
-import { ErrorCode } from '@ai/shared'
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.type'
+import { ErrorCode } from '@ai/shared'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { QuantifyClientError } from './clients/quantify-ai-quant.client'
 
@@ -23,11 +23,27 @@ describe('aiQuantProxyService', () => {
     return { service, quantifyClient }
   }
 
-  it('injects user identity into account strategy list requests', async () => {
+  it('injects user identity and authorization into account strategy list requests', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
 
-    await service.listAccountStrategies('user-1', {
+    await service.listAccountStrategies('user-1', 'Bearer token-1', {
+      page: 1,
+      limit: 20,
+      status: 'running',
+    })
+
+    expect(quantifyClient.get).toHaveBeenCalledWith(
+      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running',
+      { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('keeps x-user-id header when authorization is absent', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+
+    await service.listAccountStrategies('user-1', undefined, {
       page: 1,
       limit: 20,
       status: 'running',

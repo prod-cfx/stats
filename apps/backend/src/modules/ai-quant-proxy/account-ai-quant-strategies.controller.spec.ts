@@ -16,13 +16,13 @@ describe('accountAiQuantStrategiesController', () => {
   it('lists strategies for the authenticated user only', async () => {
     const { controller, service } = createController()
 
-    await controller.list('user-1', {
+    await controller.list('user-1', 'Bearer token-1', {
       page: 2,
       limit: 10,
       status: 'running',
     })
 
-    expect(service.listAccountStrategies).toHaveBeenCalledWith('user-1', {
+    expect(service.listAccountStrategies).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       page: 2,
       limit: 10,
       status: 'running',
@@ -32,9 +32,9 @@ describe('accountAiQuantStrategiesController', () => {
   it('forwards authenticated user id when executing strategy actions', async () => {
     const { controller, service } = createController()
 
-    await controller.action('user-1', 'strategy-1', { action: 'run' })
+    await controller.action('user-1', 'Bearer token-1', 'strategy-1', { action: 'run' })
 
-    expect(service.performAccountStrategyAction).toHaveBeenCalledWith('user-1', 'strategy-1', {
+    expect(service.performAccountStrategyAction).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
       action: 'run',
     })
   })
@@ -42,7 +42,7 @@ describe('accountAiQuantStrategiesController', () => {
   it('deploys strategies with backend-controlled user identity', async () => {
     const { controller, service } = createController()
 
-    await controller.deploy('user-1', {
+    await controller.deploy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       exchange: 'binance',
       symbol: 'BTCUSDT',
@@ -53,7 +53,7 @@ describe('accountAiQuantStrategiesController', () => {
       exchangeAccountName: 'Binance Testnet',
     })
 
-    expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', {
+    expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       exchange: 'binance',
       symbol: 'BTCUSDT',

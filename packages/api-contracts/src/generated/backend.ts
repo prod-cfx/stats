@@ -1212,6 +1212,11 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
         name: 'page',
         type: 'Query',
         schema: z.number().gte(1).optional().default(1),
@@ -1236,6 +1241,11 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
         name: 'id',
         type: 'Path',
         schema: z.string(),
@@ -1255,6 +1265,11 @@ const endpoints = makeApi([
         schema: AccountAiQuantActionRequestDto,
       },
       {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
         name: 'id',
         type: 'Path',
         schema: z.string(),
@@ -1272,6 +1287,11 @@ const endpoints = makeApi([
         name: 'body',
         type: 'Body',
         schema: AccountAiQuantDeployRequestDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
       },
     ],
     response: z.void(),

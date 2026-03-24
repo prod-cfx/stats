@@ -11,35 +11,48 @@ export class AiQuantProxyService {
     private readonly quantifyClient: QuantifyAiQuantClient,
   ) {}
 
-  async listAccountStrategies(userId: string, query: Record<string, string | number | undefined>) {
+  async listAccountStrategies(
+    userId: string,
+    authorization: string | undefined,
+    query: Record<string, string | number | undefined>,
+  ) {
     return this.quantifyClient.get(this.buildPath('/account/ai-quant/strategies', {
       userId,
       page: query.page,
       limit: query.limit,
       status: query.status,
-    }), { headers: this.userHeaders(userId) }).catch(error => { throw this.mapQuantifyError(error) })
+    }), { headers: this.userHeaders(userId, authorization) }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getAccountStrategyDetail(userId: string, strategyId: string) {
+  async getAccountStrategyDetail(userId: string, authorization: string | undefined, strategyId: string) {
     return this.quantifyClient.get(
       this.buildPath(`/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`, { userId }),
-      { headers: this.userHeaders(userId) },
+      { headers: this.userHeaders(userId, authorization) },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async performAccountStrategyAction(userId: string, strategyId: string, body: Record<string, unknown>) {
+  async performAccountStrategyAction(
+    userId: string,
+    authorization: string | undefined,
+    strategyId: string,
+    body: Record<string, unknown>,
+  ) {
     return this.quantifyClient.post(
       `/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
       { ...body, userId },
-      { headers: this.userHeaders(userId) },
+      { headers: this.userHeaders(userId, authorization) },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async deployAccountStrategy(userId: string, body: Record<string, unknown>) {
+  async deployAccountStrategy(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+  ) {
     return this.quantifyClient.post(
       '/account/ai-quant/strategies/deploy',
       { ...body, userId },
-      { headers: this.userHeaders(userId) },
+      { headers: this.userHeaders(userId, authorization) },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -126,8 +139,11 @@ export class AiQuantProxyService {
     return queryString.length > 0 ? `${path}?${queryString}` : path
   }
 
-  private userHeaders(userId: string) {
-    return { 'x-user-id': userId }
+  private userHeaders(userId: string, authorization: string | undefined) {
+    return {
+      'x-user-id': userId,
+      ...(authorization ? { authorization } : {}),
+    }
   }
 
   private mapQuantifyError(error: unknown): DomainException {
