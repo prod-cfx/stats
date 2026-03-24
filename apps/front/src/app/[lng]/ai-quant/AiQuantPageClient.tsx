@@ -7,7 +7,7 @@ import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type { LlmCodegenSessionResponse } from '@/lib/api'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
@@ -123,6 +123,7 @@ interface ConversationState {
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
   latestSignalMessage: string | null
+  backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
 
@@ -336,6 +337,7 @@ export function AiQuantPageClient() {
       logicGraph: null,
       llmCodegenSessionId: null,
       latestSignalMessage: null,
+      backtestExecutionState: 'idle',
       updatedAt: now,
     }
   }
@@ -350,7 +352,11 @@ export function AiQuantPageClient() {
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
-  const [backtestExecutionState, setBacktestExecutionState] = useState<'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'>('idle')
+  const isMountedRef = useRef(true)
+  const activeConversationIdRef = useRef('')
+  const previousActiveConversationIdRef = useRef<string>('')
+  const backtestRunTokenRef = useRef(new Map<string, number>())
+  const backtestRunMutexRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -383,6 +389,7 @@ export function AiQuantPageClient() {
           : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
+        backtestExecutionState: item.backtestExecutionState ?? 'idle',
       }))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
@@ -399,6 +406,29 @@ export function AiQuantPageClient() {
     if (!conversations.length) return
     localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations))
   }, [conversations])
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+    const previousId = previousActiveConversationIdRef.current
+    if (previousId && previousId !== activeConversationId && backtestRunMutexRef.current.has(previousId)) {
+      backtestRunTokenRef.current.set(previousId, (backtestRunTokenRef.current.get(previousId) ?? 0) + 1)
+      backtestRunMutexRef.current.delete(previousId)
+      setConversations(prev => prev.map(conv =>
+        conv.id === previousId
+          ? { ...conv, backtestExecutionState: 'idle', updatedAt: Date.now() }
+          : conv,
+      ))
+    }
+    previousActiveConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      backtestRunTokenRef.current.clear()
+      backtestRunMutexRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     const syncApiReady = () => {
@@ -481,6 +511,16 @@ export function AiQuantPageClient() {
     setConversations(prev =>
       prev.map(conv => (conv.id === conversationId ? updater(conv) : conv)),
     )
+  }
+  const setConversationBacktestExecutionState = (
+    conversationId: string,
+    state: ConversationState['backtestExecutionState'],
+  ) => {
+    updateConversationById(conversationId, curr => ({
+      ...curr,
+      backtestExecutionState: state,
+      updatedAt: Date.now(),
+    }))
   }
 
   const requestBackendGraphGeneration = async (args: {
@@ -909,11 +949,19 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
-    if (backtestExecutionState === 'submitting' || backtestExecutionState === 'running') {
+    const conversationId = activeConversation.id
+    if (backtestRunMutexRef.current.has(conversationId)) {
+      return
+    }
+    backtestRunMutexRef.current.add(conversationId)
+
+    if (activeConversation.backtestExecutionState === 'submitting' || activeConversation.backtestExecutionState === 'running') {
+      backtestRunMutexRef.current.delete(conversationId)
       return
     }
 
     if (!graphConfirmed && !mockExecutionMode) {
+      backtestRunMutexRef.current.delete(conversationId)
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -950,6 +998,7 @@ export function AiQuantPageClient() {
         range: resolveBacktestRangeInput(activeConversation.paramValues),
       })
     } catch (error) {
+      backtestRunMutexRef.current.delete(conversationId)
       const message = (() => {
         if (!isBacktestPayloadBuilderError(error)) {
           return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'unknown_error' })
@@ -984,7 +1033,8 @@ export function AiQuantPageClient() {
       return
     }
 
-    const conversationId = activeConversation.id
+    const runToken = (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1
+    backtestRunTokenRef.current.set(conversationId, runToken)
     const appendBacktestMessage = (content: string) => {
       updateConversationById(conversationId, curr => ({
         ...curr,
@@ -1000,8 +1050,13 @@ export function AiQuantPageClient() {
       }))
     }
     const toFailureMessage = (reason: string) => t('aiQuant.messages.backtestPayloadInvalid', { reason })
+    const canContinue = () => (
+      isMountedRef.current
+      && backtestRunTokenRef.current.get(conversationId) === runToken
+      && activeConversationIdRef.current === conversationId
+    )
 
-    setBacktestExecutionState('submitting')
+    setConversationBacktestExecutionState(conversationId, 'submitting')
     updateConversationById(conversationId, curr => ({
       ...curr,
       backtestResult: null,
@@ -1011,28 +1066,43 @@ export function AiQuantPageClient() {
     void (async () => {
       try {
         const createdJob = await createBacktestJob(payload)
-        setBacktestExecutionState('running')
+        if (!canContinue()) {
+          return
+        }
+        setConversationBacktestExecutionState(conversationId, 'running')
 
         const deadline = Date.now() + BACKTEST_JOB_TIMEOUT_MS
         let latestJob = createdJob
 
         while (latestJob.status === 'queued' || latestJob.status === 'running') {
+          if (!canContinue()) {
+            return
+          }
           if (Date.now() >= deadline) {
-            setBacktestExecutionState('timeout')
+            setConversationBacktestExecutionState(conversationId, 'timeout')
             appendBacktestMessage(toFailureMessage('timeout'))
             return
           }
           await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
+          if (!canContinue()) {
+            return
+          }
           latestJob = await getBacktestJob(createdJob.id)
         }
 
+        if (!canContinue()) {
+          return
+        }
         if (latestJob.status === 'failed') {
-          setBacktestExecutionState('failed')
+          setConversationBacktestExecutionState(conversationId, 'failed')
           appendBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
           return
         }
 
         const jobResult = await getBacktestJobResult(createdJob.id)
+        if (!canContinue()) {
+          return
+        }
         const summary = jobResult.summary
         const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
         const result: BacktestResult = {
@@ -1046,7 +1116,7 @@ export function AiQuantPageClient() {
           endAt: new Date(payload.dataRange.toTs).toISOString(),
         }
 
-        setBacktestExecutionState('succeeded')
+        setConversationBacktestExecutionState(conversationId, 'succeeded')
         updateConversationById(conversationId, curr => ({
           ...curr,
           backtestResult: result,
@@ -1064,11 +1134,16 @@ export function AiQuantPageClient() {
           updatedAt: Date.now(),
         }))
       } catch (error) {
-        setBacktestExecutionState('failed')
+        if (!canContinue()) {
+          return
+        }
+        setConversationBacktestExecutionState(conversationId, 'failed')
         const message = error instanceof ApiError
           ? (error.message?.trim() || toFailureMessage('unknown_error'))
           : toFailureMessage('unknown_error')
         appendBacktestMessage(message)
+      } finally {
+        backtestRunMutexRef.current.delete(conversationId)
       }
     })()
   }
@@ -1222,7 +1297,7 @@ export function AiQuantPageClient() {
             })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={(graphConfirmed || mockExecutionMode) && backtestExecutionState !== 'submitting' && backtestExecutionState !== 'running'}
+            canRunBacktest={(graphConfirmed || mockExecutionMode) && activeConversation.backtestExecutionState !== 'submitting' && activeConversation.backtestExecutionState !== 'running'}
           />
 
           {activeConversation.logicGraph && (

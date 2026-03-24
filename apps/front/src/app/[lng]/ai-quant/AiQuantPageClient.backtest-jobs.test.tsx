@@ -42,7 +42,24 @@ jest.mock('@/components/account/ai-quant-strategy-store', () => ({
 }))
 
 jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
-  ConversationSidebar: () => <div data-testid="sidebar" />,
+  ConversationSidebar: ({ onCreate, onSwitch, items }: {
+    onCreate: () => void
+    onSwitch: (id: string) => void
+    items: Array<{ id: string }>
+  }) => (
+    <div data-testid="sidebar">
+      <button data-testid="sidebar-create" onClick={onCreate}>create</button>
+      {items.map((item, index) => (
+        <button
+          key={item.id}
+          data-testid={`sidebar-switch-${index}`}
+          onClick={() => onSwitch(item.id)}
+        >
+          switch
+        </button>
+      ))}
+    </div>
+  ),
 }))
 
 jest.mock('@/components/ai-quant/DeployDialog', () => ({
@@ -288,6 +305,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
     expect(mockGetBacktestJobResult).not.toHaveBeenCalled()
+    expect(mockGetBacktestJob.mock.calls.length).toBeLessThanOrEqual(50)
   })
 
   it('builder payload failure blocks execution and shows message', async () => {
@@ -307,5 +325,57 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestMissingScriptCode')
+  })
+
+  it('double click triggers only one create job call', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      const button = container.querySelector('[data-testid="run-backtest"]')
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+  })
+
+  it('unmount while running does not emit react unmount update warning', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    let resolvePoll: ((value: unknown) => void) | null = null
+    const pollPromise = new Promise(resolve => {
+      resolvePoll = resolve
+    })
+    mockGetBacktestJob.mockReturnValue(pollPromise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      root?.unmount()
+      root = null
+    })
+
+    resolvePoll?.({ id: 'job-1', status: 'succeeded', createdAt: '2026-03-24T12:00:01.000Z' })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const unmountWarnings = consoleErrorSpy.mock.calls
+      .flatMap(call => call.map(arg => String(arg)))
+      .filter(msg => msg.includes('unmounted') || msg.includes('state update'))
+    expect(unmountWarnings).toHaveLength(0)
+    consoleErrorSpy.mockRestore()
   })
 })
