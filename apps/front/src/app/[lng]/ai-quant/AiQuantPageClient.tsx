@@ -494,6 +494,27 @@ export function AiQuantPageClient() {
       }))
     }, 1000)
 
+    const resolveProcessingSession = async (
+      id: string,
+      initial: LlmCodegenSessionResponse,
+    ): Promise<LlmCodegenSessionResponse> => {
+      if (!isCodegenProcessingStatus(initial.status)) {
+        return initial
+      }
+
+      let current = initial
+      const deadline = Date.now() + 120_000
+      while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
+        await new Promise(resolve => window.setTimeout(resolve, 1500))
+        current = await getLlmCodegenSession(id, session.userId)
+        if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
+          return current
+        }
+      }
+
+      return current
+    }
+
     const applyCodegenResponseToConversation = (response: Awaited<ReturnType<typeof continueLlmCodegenSession>>) => {
       setConversations(prev => prev.map((conv) => {
         if (conv.id !== conversationId) return conv
@@ -602,27 +623,6 @@ export function AiQuantPageClient() {
           current = await continueSession(id)
           attempts += 1
         }
-        return current
-      }
-
-      const resolveProcessingSession = async (
-        id: string,
-        initial: Awaited<ReturnType<typeof continueSession>>,
-      ): Promise<Awaited<ReturnType<typeof continueSession>>> => {
-        if (!isCodegenProcessingStatus(initial.status)) {
-          return initial
-        }
-
-        let current = initial
-        const deadline = Date.now() + 120_000
-        while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
-          await new Promise(resolve => window.setTimeout(resolve, 1500))
-          current = await getLlmCodegenSession(id, session.userId)
-          if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
-            return current
-          }
-        }
-
         return current
       }
 
@@ -1152,6 +1152,9 @@ export function AiQuantPageClient() {
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
         onSelectExchange={(nextExchange) => {
+          if (nextExchange !== 'binance' && nextExchange !== 'okx') {
+            return
+          }
           setSelectedDeployExchange(nextExchange)
           setSelectedDeployAccountId('')
         }}
