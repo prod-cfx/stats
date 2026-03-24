@@ -1,8 +1,10 @@
+import type {
+  BacktestPayloadBuilderErrorCode,
+  BuildBacktestPayloadInput,
+} from './backtest-payload-builder'
 import {
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
-  type BacktestPayloadBuilderErrorCode,
-  type BuildBacktestPayloadInput,
 } from './backtest-payload-builder'
 
 function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildBacktestPayloadInput {

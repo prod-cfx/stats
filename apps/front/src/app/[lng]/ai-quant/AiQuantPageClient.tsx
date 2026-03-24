@@ -1,5 +1,6 @@
 'use client'
 
+import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
@@ -11,14 +12,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
-import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import {
   createBacktestJob,
   getBacktestJob,
   getBacktestJobResult,
 } from '@/components/ai-quant/backtest-job-client'
 import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
-import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
+import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'

@@ -6,7 +6,7 @@ import {
   getBacktestJobResult,
 } from './backtest-job-client'
 
-type MockFetchResponseInit = {
+interface MockFetchResponseInit {
   ok: boolean
   status: number
   statusText?: string
@@ -15,7 +15,7 @@ type MockFetchResponseInit = {
 }
 
 function mockFetchResponse(init: MockFetchResponseInit) {
-  ;(global.fetch as jest.Mock).mockResolvedValue({
+  ;(globalThis.fetch as jest.Mock).mockResolvedValue({
     ok: init.ok,
     status: init.status,
     statusText: init.statusText ?? '',
@@ -27,7 +27,7 @@ function mockFetchResponse(init: MockFetchResponseInit) {
 
 describe('backtest-job-client', () => {
   beforeEach(() => {
-    global.fetch = jest.fn()
+    globalThis.fetch = jest.fn()
   })
 
   afterEach(() => {
@@ -60,7 +60,7 @@ describe('backtest-job-client', () => {
 
     const result = await createBacktestJob(payload)
 
-    expect(global.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/backtesting/jobs`, {
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/backtesting/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -85,8 +85,8 @@ describe('backtest-job-client', () => {
       expect(job.status).toBe(status)
     }
 
-    expect(global.fetch).toHaveBeenCalledTimes(4)
-    expect(global.fetch).toHaveBeenLastCalledWith(`${API_BASE_URL}/backtesting/jobs/btjob-1`, {
+    expect(globalThis.fetch).toHaveBeenCalledTimes(4)
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${API_BASE_URL}/backtesting/jobs/btjob-1`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -101,7 +101,7 @@ describe('backtest-job-client', () => {
 
     await getBacktestJob('job/with spaces?x=1')
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent('job/with spaces?x=1')}`,
       {
         method: 'GET',

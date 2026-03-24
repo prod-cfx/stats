@@ -47,7 +47,7 @@ export interface BacktestJobResult {
   }
 }
 
-type ErrorPayload = {
+interface ErrorPayload {
   code?: unknown
   message?: unknown
   error?: {

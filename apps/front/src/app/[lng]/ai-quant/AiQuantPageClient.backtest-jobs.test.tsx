@@ -1,8 +1,7 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import React from 'react'
-import { act } from 'react'
+import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
@@ -310,7 +309,10 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('builder payload failure blocks execution and shows message', async () => {
     mockBuildBacktestPayload.mockImplementation(() => {
-      throw { __builderError: true, code: 'missing_script_code' }
+      const error = new Error('missing_script_code')
+      ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
+      ;(error as Error & { __builderError: boolean; code: string }).code = 'missing_script_code'
+      throw error
     })
 
     await act(async () => {
