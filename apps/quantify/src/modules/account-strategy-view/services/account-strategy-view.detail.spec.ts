@@ -10,11 +10,21 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         createdBy: 'user-1',
         params: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '3m/15m', positionPct: 10 },
         strategyTemplateId: 'tpl-1',
-        strategyTemplate: { defaultParams: {} },
+        strategyTemplate: {
+          defaultParams: { timeframe: '1m/5m', riskMode: 'balanced' },
+          paramsSchema: {
+            type: 'object',
+            properties: {
+              timeframe: { type: 'string' },
+              riskMode: { type: 'string' },
+            },
+          },
+          rulesVersion: 7,
+        },
         subscriptions: [{
           userId: 'user-1',
           status: 'active',
-          customParams: null,
+          customParams: { riskMode: 'aggressive' },
           subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
           exchangeAccount: { name: '主账户' },
         }],
@@ -56,6 +66,24 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
     expect(detail.timeline.some(e => e.eventType === 'trade')).toBe(true)
     expect(detail.timeline[0]?.event).toBe('创建策略')
+    expect(detail.paramSchema).toEqual({
+      type: 'object',
+      properties: {
+        timeframe: { type: 'string' },
+        riskMode: { type: 'string' },
+      },
+    })
+    expect(detail.paramValues).toEqual({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m/15m',
+      positionPct: 10,
+      riskMode: 'aggressive',
+    })
+    expect(detail.schemaVersion).toBe('7')
+    expect(detail.snapshot.paramSchema).toEqual(detail.paramSchema)
+    expect(detail.snapshot.paramValues).toEqual(detail.paramValues)
+    expect(detail.snapshot.schemaVersion).toBe('7')
   })
 
   it('falls back to instance stats tradeCount when account trade stats are empty', async () => {
@@ -238,5 +266,51 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
     expect(detail.metrics.maxDrawdownPct).toBe(0)
     expect(detail.equitySeries.every(item => item.value > 1000)).toBe(true)
+  })
+
+  it('returns null dynamic param fields when strategy template schema is missing', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-legacy',
+        name: 'Legacy strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'ETHUSDT', exchange: 'okx' },
+        strategyTemplateId: 'tpl-legacy',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+          paramsSchema: null,
+          rulesVersion: 9,
+        },
+        subscriptions: [],
+        startedAt: null,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+
+    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const detail = await service.getStrategyDetail('user-1', 'inst-legacy')
+
+    expect(detail.paramSchema).toBeNull()
+    expect(detail.paramValues).toBeNull()
+    expect(detail.schemaVersion).toBeNull()
+    expect(detail.snapshot.paramSchema).toBeNull()
+    expect(detail.snapshot.paramValues).toBeNull()
+    expect(detail.snapshot.schemaVersion).toBeNull()
   })
 })
