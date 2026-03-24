@@ -1,4 +1,5 @@
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
+import { ApiError } from '@/lib/errors'
 
 export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -47,14 +48,23 @@ export interface BacktestJobResult {
 }
 
 type ErrorPayload = {
+  code?: unknown
   message?: unknown
   error?: {
+    code?: unknown
     message?: unknown
     args?: {
       reasonMessage?: unknown
     }
   }
 }
+
+const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+])
 
 function extractErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== 'object') {
@@ -72,6 +82,47 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
     return candidate.message
   }
   return fallback
+}
+
+function extractErrorCode(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') {
+    return 'API_ERROR'
+  }
+
+  const candidate = payload as ErrorPayload
+  if (typeof candidate.error?.code === 'string' && candidate.error.code.trim()) {
+    return candidate.error.code
+  }
+  if (typeof candidate.code === 'string' && candidate.code.trim()) {
+    return candidate.code
+  }
+  return 'API_ERROR'
+}
+
+function normalizeJobId(jobId: string): string {
+  const trimmed = jobId.trim()
+  if (!trimmed) {
+    throw new ApiError('jobId is required', 'VALIDATION_ERROR', 400, { jobId })
+  }
+  return encodeURIComponent(trimmed)
+}
+
+function assertBacktestJobStatus(status: unknown, context: string): asserts status is BacktestJobStatus {
+  if (typeof status === 'string' && VALID_BACKTEST_JOB_STATUSES.has(status as BacktestJobStatus)) {
+    return
+  }
+  throw new ApiError(
+    `Unexpected backtest job status: ${String(status)}`,
+    'API_ERROR',
+    500,
+    { context, status },
+  )
+}
+
+function parseBacktestJob(payload: unknown, context: string): BacktestJob {
+  const job = payload as BacktestJob
+  assertBacktestJobStatus(job?.status, context)
+  return job
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -92,27 +143,31 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = extractErrorMessage(payload, response.statusText || 'Request failed')
-    throw new Error(`HTTP ${response.status}: ${message}`)
+    throw new ApiError(message, extractErrorCode(payload), response.status, payload)
   }
 
   return unwrapApiResponse(payload as T | { data?: T; message?: string }) as T
 }
 
-export function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
-  return requestJson<BacktestJob>('/backtesting/jobs', {
+export async function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
+  const job = await requestJson<BacktestJob>('/backtesting/jobs', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+  return parseBacktestJob(job, 'createBacktestJob')
 }
 
-export function getBacktestJob(jobId: string): Promise<BacktestJob> {
-  return requestJson<BacktestJob>(`/backtesting/jobs/${jobId}`, {
+export async function getBacktestJob(jobId: string): Promise<BacktestJob> {
+  const safeJobId = normalizeJobId(jobId)
+  const job = await requestJson<BacktestJob>(`/backtesting/jobs/${safeJobId}`, {
     method: 'GET',
   })
+  return parseBacktestJob(job, 'getBacktestJob')
 }
 
 export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> {
-  return requestJson<BacktestJobResult>(`/backtesting/jobs/${jobId}/result`, {
+  const safeJobId = normalizeJobId(jobId)
+  return requestJson<BacktestJobResult>(`/backtesting/jobs/${safeJobId}/result`, {
     method: 'GET',
   })
 }

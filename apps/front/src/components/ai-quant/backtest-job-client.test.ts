@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/lib/api-client'
+import { ApiError } from '@/lib/errors'
 import {
   createBacktestJob,
   getBacktestJob,
@@ -10,6 +11,7 @@ type MockFetchResponseInit = {
   status: number
   statusText?: string
   body?: unknown
+  jsonRejects?: boolean
 }
 
 function mockFetchResponse(init: MockFetchResponseInit) {
@@ -17,7 +19,9 @@ function mockFetchResponse(init: MockFetchResponseInit) {
     ok: init.ok,
     status: init.status,
     statusText: init.statusText ?? '',
-    json: jest.fn().mockResolvedValue(init.body),
+    json: init.jsonRejects
+      ? jest.fn().mockRejectedValue(new Error('invalid json'))
+      : jest.fn().mockResolvedValue(init.body),
   } as unknown as Response)
 }
 
@@ -88,6 +92,24 @@ describe('backtest-job-client', () => {
     })
   })
 
+  it('encodes jobId safely in URL path', async () => {
+    mockFetchResponse({
+      ok: true,
+      status: 200,
+      body: { data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' } },
+    })
+
+    await getBacktestJob('job/with spaces?x=1')
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent('job/with spaces?x=1')}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+  })
+
   it('getBacktestJobResult returns summary', async () => {
     mockFetchResponse({
       ok: true,
@@ -117,7 +139,7 @@ describe('backtest-job-client', () => {
     })
   })
 
-  it('throws error with status and message on non-2xx', async () => {
+  it('throws ApiError with statusCode and message on non-2xx', async () => {
     mockFetchResponse({
       ok: false,
       status: 409,
@@ -125,7 +147,54 @@ describe('backtest-job-client', () => {
       body: { message: 'backtest.job_not_completed' },
     })
 
-    await expect(getBacktestJobResult('btjob-1')).rejects.toThrow('409')
-    await expect(getBacktestJobResult('btjob-1')).rejects.toThrow('backtest.job_not_completed')
+    await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
+      message: expect.stringContaining('backtest.job_not_completed'),
+      statusCode: 409,
+    })
+  })
+
+  it('rejects unknown status with ApiError', async () => {
+    mockFetchResponse({
+      ok: true,
+      status: 200,
+      body: { data: { id: 'btjob-1', status: 'unknown', createdAt: '2026-03-25T00:00:00.000Z' } },
+    })
+
+    await expect(getBacktestJob('btjob-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(getBacktestJob('btjob-1')).rejects.toMatchObject({
+      statusCode: 500,
+      code: 'API_ERROR',
+    })
+  })
+
+  it('uses statusText fallback when error body is non-JSON', async () => {
+    mockFetchResponse({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      jsonRejects: true,
+    })
+
+    await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
+      message: expect.stringContaining('Bad Gateway'),
+      statusCode: 502,
+    })
+  })
+
+  it('uses statusText fallback when error body is empty', async () => {
+    mockFetchResponse({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      body: null,
+    })
+
+    await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
+    await expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
+      message: expect.stringContaining('Service Unavailable'),
+      statusCode: 503,
+    })
   })
 })
