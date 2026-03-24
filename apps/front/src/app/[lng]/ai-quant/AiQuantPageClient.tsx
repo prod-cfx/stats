@@ -4,6 +4,7 @@ import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
+import type { LlmCodegenSessionResponse } from '@/lib/api'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -31,7 +32,6 @@ import {
   getLlmCodegenSession,
   startLlmCodegenSession,
 } from '@/lib/api'
-import type { LlmCodegenSessionResponse } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
 export interface QuantParams {
@@ -54,6 +54,50 @@ const DEFAULT_PARAMS: QuantParams = {
   positionPct: 10,
 }
 
+const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  required: ['exchange', 'symbol', 'buyWindowMin', 'buyDropPct', 'sellWindowMin', 'sellRisePct', 'positionPct'],
+  properties: {
+    exchange: {
+      type: 'string',
+      title: 'Exchange',
+      enum: ['binance', 'okx'],
+    },
+    symbol: {
+      type: 'string',
+      title: 'Symbol',
+    },
+    buyWindowMin: {
+      type: 'number',
+      title: 'Buy Window (min)',
+      minimum: 1,
+    },
+    buyDropPct: {
+      type: 'number',
+      title: 'Buy Drop %',
+      minimum: 0,
+    },
+    sellWindowMin: {
+      type: 'number',
+      title: 'Sell Window (min)',
+      minimum: 1,
+    },
+    sellRisePct: {
+      type: 'number',
+      title: 'Sell Rise %',
+      minimum: 0,
+    },
+    positionPct: {
+      type: 'number',
+      title: 'Position %',
+      minimum: 1,
+      maximum: 100,
+    },
+  },
+}
+
+const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
+
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
@@ -64,6 +108,8 @@ interface ConversationState {
   title: string
   messages: QuantMessage[]
   params: QuantParams
+  paramSchema: Record<string, unknown> | null
+  paramValues: Record<string, unknown>
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
@@ -179,6 +225,27 @@ function getMockBacktest(params: QuantParams): BacktestResult {
   }
 }
 
+function normalizeNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function normalizeParamsFromValues(values: Record<string, unknown>, fallback: QuantParams): QuantParams {
+  return {
+    exchange: values.exchange === 'okx' ? 'okx' : 'binance',
+    symbol: typeof values.symbol === 'string' && values.symbol.trim() ? values.symbol.trim() : fallback.symbol,
+    buyWindowMin: normalizeNumber(values.buyWindowMin, fallback.buyWindowMin),
+    buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
+    sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
+    sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
+    positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
+  }
+}
+
 export function AiQuantPageClient() {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
@@ -199,6 +266,8 @@ export function AiQuantPageClient() {
         },
       ],
       params: DEFAULT_PARAMS,
+      paramSchema: DEFAULT_PARAM_SCHEMA,
+      paramValues: { ...DEFAULT_PARAM_VALUES },
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
@@ -242,6 +311,11 @@ export function AiQuantPageClient() {
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => ({
         ...item,
+        paramSchema: item.paramSchema ?? DEFAULT_PARAM_SCHEMA,
+        paramValues: item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) },
+        params: item.params
+          ? normalizeParamsFromValues(item.paramValues ?? item.params, item.params)
+          : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
       }))
@@ -431,14 +505,36 @@ export function AiQuantPageClient() {
 
     try {
       const currentConversation = conversations.find(conv => conv.id === conversationId)
-      const checklistPayload = resolveChecklistPayload({
+      const checklistResult = resolveChecklistPayload({
         usePresetRules,
         confirmGenerate,
         message: trimmedMessage,
         sessionId,
         graph: currentConversation?.logicGraph,
         params: targetParams,
+        paramSchema: currentConversation?.paramSchema ?? null,
+        paramValues: currentConversation?.paramValues ?? null,
       })
+      if ('error' in checklistResult) {
+        const missing = checklistResult.error.missingKeys.join(', ')
+        setConversations(prev => prev.map((conv) => {
+          if (conv.id !== conversationId) return conv
+          return {
+            ...conv,
+            latestSignalMessage: null,
+            messages: [
+              ...conv.messages.map(msg =>
+                msg.id === loadingMessageId
+                  ? { ...msg, content: `参数不完整，请补充必填字段：${missing}` }
+                  : msg,
+              ),
+            ],
+            updatedAt: Date.now(),
+          }
+        }))
+        return
+      }
+      const checklistPayload = checklistResult
 
       const startNewSession = async () =>
         startLlmCodegenSession({
@@ -647,6 +743,7 @@ export function AiQuantPageClient() {
     updateActiveConversation(curr => ({
       ...curr,
       params: nextParams,
+      paramValues: { ...curr.paramValues, ...nextParams },
       backtestResult: null,
       latestSignalMessage: null,
       messages: [
@@ -691,6 +788,7 @@ export function AiQuantPageClient() {
     updateActiveConversation(curr => ({
       ...curr,
       params: nextParams,
+      paramValues: { ...curr.paramValues, ...nextParams },
       backtestResult: null,
       latestSignalMessage: null,
       messages: [
@@ -885,9 +983,18 @@ export function AiQuantPageClient() {
         <div className="space-y-4">
           <QuantChatPanel
             messages={activeConversation.messages}
-            params={activeConversation.params}
+            paramSchema={activeConversation.paramSchema}
+            paramValues={activeConversation.paramValues}
             compactMode={compactMode}
-            onParamsChange={nextParams => updateActiveConversation(curr => ({ ...curr, params: nextParams, updatedAt: Date.now() }))}
+            onParamChange={(key, value) => updateActiveConversation((curr) => {
+              const nextValues = { ...curr.paramValues, [key]: value }
+              return {
+                ...curr,
+                paramValues: nextValues,
+                params: normalizeParamsFromValues(nextValues, curr.params),
+                updatedAt: Date.now(),
+              }
+            })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
             canRunBacktest={graphConfirmed || mockExecutionMode}

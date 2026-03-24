@@ -119,4 +119,52 @@ describe('ai-quant session-loop', () => {
     expect(prompt).toContain('不要继续追问')
     expect(prompt).toContain('上一条草案')
   })
+
+  it('derives symbols/timeframes/riskRules from dynamic paramValues when provided', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramValues: {
+        symbols: ['ETHUSDT'],
+        timeframes: ['5m', '30m'],
+        riskRules: {
+          positionPct: 25,
+          maxDrawdownPct: 12,
+        },
+      },
+    } as any)
+
+    expect(payload.symbols).toEqual(['ETHUSDT'])
+    expect(payload.timeframes).toEqual(['5m', '30m'])
+    expect(payload.riskRules).toEqual({ positionPct: 25, maxDrawdownPct: 12 })
+  })
+
+  it('returns explicit error object when schema required keys are missing in paramValues', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramSchema: {
+        type: 'object',
+        required: ['symbols', 'riskRules'],
+      },
+      paramValues: {
+        symbols: ['BTCUSDT'],
+      },
+    } as any)
+
+    expect(payload).toEqual({
+      error: {
+        code: 'MISSING_REQUIRED_PARAMS',
+        missingKeys: ['riskRules'],
+      },
+    })
+  })
 })
