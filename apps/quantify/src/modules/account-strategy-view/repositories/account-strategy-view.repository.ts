@@ -1,10 +1,12 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+import type { PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { SubscriptionStatus } from '@/prisma/prisma.types'
+import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
+import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 
 interface ListStrategiesQuery {
   userId: string
@@ -20,6 +22,7 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
 }
@@ -29,6 +32,7 @@ export class AccountStrategyViewRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<string> {
+    const normalizedName = this.normalizeStrategyName(input.name)
     const strategyInstanceId = await this.txHost.withTransaction(async () => {
       const tx = this.txHost.tx
       const existingUser = await tx.user.findUnique({
@@ -56,34 +60,127 @@ export class AccountStrategyViewRepository {
           },
           select: { id: true },
         })
-        resolvedExchangeAccountId = matchedAccount?.id
+        if (!matchedAccount) {
+          throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
+        }
+        resolvedExchangeAccountId = matchedAccount.id
       }
 
       if (!resolvedExchangeAccountId) {
-        const accountName = input.exchangeAccountName?.trim() || `${input.exchange.toUpperCase()} Mock Account`
         const existingAccount = await tx.exchangeAccount.findFirst({
           where: {
             userId: input.userId,
             exchangeId: input.exchange,
-            name: accountName,
+          },
+          orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+          select: { id: true },
+        })
+        if (!existingAccount) {
+          throw new ExchangeAccountNotFoundException({
+            accountId: input.exchangeAccountId ?? `${input.exchange}-account`,
+          })
+        }
+        resolvedExchangeAccountId = existingAccount.id
+      }
+
+      if (input.strategyInstanceId) {
+        const existingInstance = await tx.strategyInstance.findFirst({
+          where: {
+            id: input.strategyInstanceId,
+            createdBy: input.userId,
+          },
+          select: {
+            id: true,
+            strategyTemplateId: true,
+            params: true,
+          },
+        })
+
+        if (!existingInstance) {
+          throw new Error('Strategy instance not found')
+        }
+
+        const mergedParams = {
+          ...this.asRecord(existingInstance.params),
+          exchange: input.exchange,
+          symbol: input.symbol,
+          timeframe: input.timeframe,
+          positionPct: input.positionPct,
+        }
+
+        await tx.strategyInstance.update({
+          where: { id: existingInstance.id },
+          data: {
+            name: normalizedName,
+            description: `AI 策略部署 - ${input.symbol}`,
+            params: mergedParams,
+            status: 'running',
+            mode: 'TESTNET',
+            startedAt: new Date(),
+            updatedBy: input.userId,
+            metadata: {
+              source: 'account-ai-quant-deploy',
+              sourceStrategyInstanceId: existingInstance.id,
+            },
+          },
+        })
+
+        const existingSubscription = await tx.userStrategySubscription.findFirst({
+          where: {
+            userId: input.userId,
+            strategyInstanceId: existingInstance.id,
           },
           select: { id: true },
         })
-        if (existingAccount) {
-          resolvedExchangeAccountId = existingAccount.id
+
+        if (existingSubscription) {
+          await tx.userStrategySubscription.update({
+            where: { id: existingSubscription.id },
+            data: {
+              status: 'active',
+              customParams: mergedParams,
+              exchangeAccountId: resolvedExchangeAccountId,
+              unsubscribedAt: null,
+            },
+          })
         } else {
-          const createdAccount = await tx.exchangeAccount.create({
+          await tx.userStrategySubscription.create({
             data: {
               userId: input.userId,
-              exchangeId: input.exchange,
-              name: accountName,
-              isTestnet: true,
-              encryptedConfig: '{}',
+              strategyInstanceId: existingInstance.id,
+              status: 'active',
+              customParams: mergedParams,
+              exchangeAccountId: resolvedExchangeAccountId,
             },
-            select: { id: true },
           })
-          resolvedExchangeAccountId = createdAccount.id
         }
+
+        const existingStrategyAccount = await tx.userStrategyAccount.findUnique({
+          where: {
+            userId_strategyId: {
+              userId: input.userId,
+              strategyId: existingInstance.strategyTemplateId,
+            },
+          },
+          select: { id: true },
+        })
+
+        if (!existingStrategyAccount) {
+          const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
+          await tx.userStrategyAccount.create({
+            data: {
+              userId: input.userId,
+              strategyId: existingInstance.strategyTemplateId,
+              strategyName: normalizedName,
+              baseCurrency: 'USDT',
+              initialBalance,
+              balance: initialBalance,
+              equity: initialBalance,
+            },
+          })
+        }
+
+        return existingInstance.id
       }
 
       const templateName = `AI量化快捷模板-${input.userId}`
@@ -114,7 +211,6 @@ export class AccountStrategyViewRepository {
             select: { id: true },
           })).id
 
-      const normalizedName = input.name.trim() || 'AI策略'
       const instanceName = `${normalizedName}-${Date.now()}`
       const params = {
         exchange: input.exchange,
@@ -157,9 +253,9 @@ export class AccountStrategyViewRepository {
   }
 
   async listStrategiesForUser(query: ListStrategiesQuery) {
+    const page = this.normalizePage(query.page)
+    const limit = this.normalizeLimit(query.limit)
     const client = this.txHost.tx
-    const page = Number(query.page)
-    const limit = Number(query.limit)
     const skip = (page - 1) * limit
 
     const subscribedInstanceIds = (
@@ -216,6 +312,48 @@ export class AccountStrategyViewRepository {
         subscribed: isSubscribed,
       }
     }))
+  }
+
+  private normalizePage(value: number): number {
+    const page = Number(value)
+    if (!Number.isFinite(page) || page < 1) {
+      return 1
+    }
+    return Math.trunc(page)
+  }
+
+  private normalizeLimit(value: number): number {
+    const limit = Number(value)
+    if (!Number.isFinite(limit) || limit < 1) {
+      return PAGINATION_CONSTANTS.DEFAULT_PAGE_SIZE
+    }
+    return Math.min(Math.trunc(limit), PAGINATION_CONSTANTS.MAX_PAGE_SIZE)
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {}
+    }
+    return value as Record<string, unknown>
+  }
+
+  private normalizeStrategyName(value: unknown): string {
+    if (typeof value !== 'string') {
+      return 'AI策略'
+    }
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : 'AI策略'
+  }
+
+  private resolveInitialBalanceQuote(params: Record<string, unknown>): Prisma.Decimal {
+    const candidates = [params.initialBalanceQuote, params.accountBalanceQuote]
+    for (const candidate of candidates) {
+      const numeric = Number(candidate)
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return new Prisma.Decimal(numeric)
+      }
+    }
+    return new Prisma.Decimal(1000)
   }
 
   async findStrategyForUser(userId: string, strategyInstanceId: string) {

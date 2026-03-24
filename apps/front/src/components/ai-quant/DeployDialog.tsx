@@ -1,17 +1,24 @@
-import type { ExchangeAccount } from '@/components/account/exchange-account-store'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 import { ApiKeyStatusBadge } from './ApiKeyStatusBadge'
+
+export interface DeployExchangeAccount {
+  accountId: string
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  accountName: string
+  apiKeyMask: string
+  status: 'available' | 'invalid'
+}
 
 interface DeployDialogProps {
   open: boolean
   canDeploy: boolean
   apiConfigured: boolean
-  exchange: 'binance' | 'okx'
-  accounts: ExchangeAccount[]
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  accounts: DeployExchangeAccount[]
   selectedAccountId: string
   lng: 'zh' | 'en'
-  onSelectExchange: (exchange: 'binance' | 'okx') => void
+  onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
   onSelectAccount: (accountId: string) => void
   onConfirmDeploy: () => void
   onClose: () => void
@@ -66,11 +73,12 @@ export function DeployDialog({
             {t('aiQuant.exchange')}
             <select
               value={exchange}
-              onChange={event => onSelectExchange(event.target.value as 'binance' | 'okx')}
+              onChange={event => onSelectExchange(event.target.value as 'binance' | 'okx' | 'hyperliquid')}
               className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
             >
               <option value="binance">Binance</option>
               <option value="okx">OKX</option>
+              <option value="hyperliquid">Hyperliquid</option>
             </select>
           </label>
 

@@ -46,6 +46,6 @@ import { MarketDataService } from './services/market-data.service'
       },
     },
   ],
-  exports: [MarketDataService, MarketDataReadGateway, MarketDataHealthService],
+  exports: [MarketDataService, MarketDataReadGateway, MarketDataHealthService, MarketDataIngestionService],
 })
 export class MarketDataModule {}

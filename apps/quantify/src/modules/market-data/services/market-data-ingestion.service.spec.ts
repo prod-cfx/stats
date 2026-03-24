@@ -62,4 +62,16 @@ describe('marketDataIngestionService', () => {
     await expect((service as any).collectDynamicStrategySymbols()).resolves.toEqual([])
     expect(warnSpy).toHaveBeenCalled()
   })
+
+  it('skips empty symbol values during ingestion normalization', () => {
+    const service = createServiceWithMissingSubscriptionTables()
+
+    expect((service as any).normalizeIngestionSymbols([
+      'SOLUSDT',
+      undefined,
+      null,
+      '',
+      '  ',
+    ])).toEqual(['SOLUSDT:SPOT', 'SOLUSDT:PERP'])
+  })
 })

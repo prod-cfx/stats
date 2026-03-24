@@ -185,10 +185,11 @@ export function QuantChatPanel({
               <select
                 className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
                 value={params.exchange}
-                onChange={event => onParamsChange({ ...params, exchange: event.target.value as 'binance' | 'okx' })}
+                onChange={event => onParamsChange({ ...params, exchange: event.target.value as 'binance' | 'okx' | 'hyperliquid' })}
               >
                 <option value="binance">Binance</option>
                 <option value="okx">OKX</option>
+                <option value="hyperliquid">Hyperliquid</option>
               </select>
             </label>
 

@@ -3,8 +3,12 @@ import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dt
 import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
-import { Injectable } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -20,6 +24,7 @@ export class AccountStrategyViewService {
     private readonly repo: AccountStrategyViewRepository,
     private readonly statsService: StrategyInstanceStatsService,
     private readonly strategyInstancesService: StrategyInstancesService,
+    private readonly marketDataIngestionService: MarketDataIngestionService,
   ) {}
 
   async listStrategies(
@@ -254,13 +259,18 @@ export class AccountStrategyViewService {
       throw new MissingUserIdentityException()
     }
 
+    const resolvedDeploy = await this.resolveDeployPayload(dto)
+
+    await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
+
     const strategyInstanceId = await this.repo.deployStrategyForUser({
       userId: dto.userId,
       name: dto.name,
-      exchange: dto.exchange,
-      symbol: dto.symbol,
-      timeframe: dto.timeframe,
-      positionPct: dto.positionPct,
+      exchange: resolvedDeploy.exchange,
+      symbol: resolvedDeploy.symbol,
+      timeframe: resolvedDeploy.timeframe,
+      positionPct: resolvedDeploy.positionPct,
+      strategyInstanceId: dto.strategyInstanceId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
     })
@@ -519,5 +529,49 @@ export class AccountStrategyViewService {
       .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
 
     return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
+  }
+
+  private async resolveDeployPayload(dto: AccountStrategyDeployDto): Promise<{
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    symbol: string
+    timeframe: string
+    positionPct: number
+  }> {
+    let fallbackParams: Record<string, unknown> = {}
+
+    if (dto.strategyInstanceId) {
+      const row = await this.repo.findStrategyForUser(dto.userId!, dto.strategyInstanceId)
+      fallbackParams = {
+        ...(row?.strategyTemplate?.defaultParams as Record<string, unknown> ?? {}),
+        ...(row?.params as Record<string, unknown> ?? {}),
+        ...(row?.subscriptions?.[0]?.customParams as Record<string, unknown> ?? {}),
+      }
+    }
+
+    const exchange = (dto.exchange
+      || this.readString(fallbackParams, ['exchange', 'exchangeId', 'provider'])) as
+      | 'binance'
+      | 'okx'
+      | 'hyperliquid'
+      | null
+    const symbol = dto.symbol || this.readString(fallbackParams, ['symbol'])
+    const timeframe = dto.timeframe || this.readString(fallbackParams, ['timeframe', 'period'])
+    const positionPct = dto.positionPct ?? this.readNumber(fallbackParams, ['positionPct', 'positionSizeRatioPercent'])
+
+    if (!exchange || !symbol || !timeframe || positionPct === null) {
+      throw new DomainException('account_strategy.deploy_missing_required_fields', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          exchange,
+          symbol,
+          timeframe,
+          positionPct,
+          strategyInstanceId: dto.strategyInstanceId ?? null,
+        },
+      })
+    }
+
+    return { exchange, symbol, timeframe, positionPct }
   }
 }

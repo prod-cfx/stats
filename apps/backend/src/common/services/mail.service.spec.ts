@@ -28,11 +28,11 @@ describe('mailService', () => {
         }),
       },
     }
-    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {})
+    const logSpy = jest.spyOn((service as any).logger, 'log').mockImplementation(() => {})
 
     await expect(service.sendVerificationCode('541172405@qq.com', '896872', 'registration')).resolves.toBeUndefined()
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[staging-email-fallback] verification code for 54***@qq.com: 896872'))
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[staging-email-code] source=fallback verification code for 54***@qq.com: 896872'))
   })
 
   it('should continue throwing on staging when failure is not quota related', async () => {
@@ -65,5 +65,26 @@ describe('mailService', () => {
     }))
 
     await expect(service.sendVerificationCode('541172405@qq.com', '896872', 'registration')).rejects.toBeInstanceOf(EmailFailedException)
+  })
+
+  it('should log verification codes on staging even when email delivery succeeds', async () => {
+    const service = new MailService(createConfigService({
+      'app.appEnv': 'staging',
+      EMAIL_FROM: 'noreply@coinflux.ai',
+      EMAIL_FROM_NAME: 'Coinflux',
+      RESEND_API_KEY: 're_fake_success_key',
+    }))
+
+    const logSpy = jest.spyOn((service as any).logger, 'log').mockImplementation(() => {})
+
+    ;(service as any).resend = {
+      emails: {
+        send: jest.fn().mockResolvedValue({ error: null }),
+      },
+    }
+
+    await expect(service.sendVerificationCode('541172405@qq.com', '896872', 'registration')).resolves.toBeUndefined()
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[staging-email-code] source=delivered verification code for 54***@qq.com: 896872'))
   })
 })

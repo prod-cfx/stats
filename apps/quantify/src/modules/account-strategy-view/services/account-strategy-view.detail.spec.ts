@@ -46,7 +46,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
 
     expect(detail.id).toBe('inst-1')
@@ -98,7 +104,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     }
     const strategyInstancesService = { updateInstance: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
 
     expect(detail.metrics.tradeCount).toBe(74)
@@ -135,7 +147,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     }
     const strategyInstancesService = { updateInstance: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-9')
 
     expect(detail.totalPnl).toBeNull()
@@ -179,7 +197,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     }
     const strategyInstancesService = { updateInstance: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-fallback')
 
     expect(repo.findLatestExecutedAccountByUserAndSymbol).toHaveBeenCalledWith('user-1', 'BTCUSDT')
@@ -233,7 +257,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-dd')
 
     expect(detail.metrics.maxDrawdownPct).toBe(0)

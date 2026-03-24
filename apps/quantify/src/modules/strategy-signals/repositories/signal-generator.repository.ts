@@ -3,6 +3,7 @@ import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 
 @Injectable()
 export class SignalGeneratorRepository {
@@ -12,7 +13,7 @@ export class SignalGeneratorRepository {
     return this.txHost.tx.strategyInstance.findMany({
       where: {
         status: 'running',
-        mode: 'LIVE',
+        mode: { in: ['LIVE', 'TESTNET'] },
         strategyTemplate: { status: 'live' },
       },
       orderBy: { id: 'asc' },
@@ -52,13 +53,18 @@ export class SignalGeneratorRepository {
   }
 
   findSymbolsByCode(codes: string[]) {
+    const normalizedCodes = [...new Set(codes.map(code => normalizeRequestedCode(code)))]
     return this.txHost.tx.symbol.findMany({
-      where: { code: { in: codes } },
+      where: { code: { in: normalizedCodes } },
     })
   }
 
   findSymbolByCode(code: string) {
-    return this.txHost.tx.symbol.findUnique({ where: { code } })
+    return this.txHost.tx.symbol.findUnique({
+      where: {
+        code: normalizeRequestedCode(code),
+      },
+    })
   }
 
   async createSignalWithCooldownLock(params: {

@@ -440,4 +440,114 @@ describe('signalExecutorService', () => {
     expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-3', 'ORDER_RECONCILE_ERROR')
     expect((service as any).releaseReservation).not.toHaveBeenCalled()
   })
+
+  it('uses subscribed exchangeAccountId for llm subscription execution', async () => {
+    const prisma = {
+      userLlmStrategySubscription: {
+        findFirst: jest.fn().mockResolvedValue({
+          exchangeAccountId: 'exchange-account-1',
+          exchangeAccount: { exchangeId: 'binance' },
+        }),
+      },
+    }
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const service = new SignalExecutorService(
+      prisma as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+      {} as any,
+    )
+
+    const filledOrder = {
+      id: 'ord-fill-1',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 0.001,
+      filled: 0.001,
+      average: 50000,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-llm-1' },
+      orderParams: {
+        exchangeId: 'binance',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: undefined,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(10),
+      reserveReference: 'reserve-llm-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).reconcilePositionAndRecordTrade = jest.fn().mockResolvedValue(undefined)
+    ;(service as any).buildExecutionResultSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).buildOrderResponseSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
+    ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
+
+    tradingService.placeOrder.mockResolvedValue(filledOrder)
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-llm-1',
+        llmStrategyInstanceId: 'llm-instance-1',
+        direction: 'BUY',
+        symbol: {
+          exchange: 'BINANCE',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-llm-1', userId: 'user-llm-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(prisma.userLlmStrategySubscription.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        userId: 'user-llm-1',
+        llmStrategyInstanceId: 'llm-instance-1',
+        status: 'active',
+      }),
+    }))
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-llm-1',
+      'binance',
+      'spot',
+      expect.objectContaining({
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+      }),
+      'exchange-account-1',
+    )
+  })
 })

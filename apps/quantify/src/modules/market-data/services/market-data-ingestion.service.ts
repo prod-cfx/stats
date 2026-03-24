@@ -128,7 +128,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  async ensureSymbolsSubscribed(symbols: string[]): Promise<void> {
+  async ensureSymbolsSubscribed(symbols: Array<string | null | undefined>): Promise<void> {
     const normalizedRequested = this.normalizeIngestionSymbols(symbols)
     if (normalizedRequested.length === 0) return
 
@@ -235,7 +235,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     return normalized
   }
 
-  private normalizeIngestionSymbols(symbols: string[]): string[] {
+  private normalizeIngestionSymbols(symbols: Array<string | null | undefined>): string[] {
     const normalizedSymbols: string[] = []
     const seen = new Set<string>()
     const providerName = this.provider.name?.toUpperCase() ?? ''
@@ -252,6 +252,7 @@ export class MarketDataIngestionService implements OnModuleInit, OnModuleDestroy
     }
 
     for (const symbol of symbols) {
+      if (typeof symbol !== 'string') continue
       const normalized = normalizeExactCode(symbol)
       if (!normalized) continue
 
