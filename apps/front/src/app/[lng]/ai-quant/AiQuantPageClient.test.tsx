@@ -151,6 +151,10 @@ describe('AiQuantPageClient backtest range integration', () => {
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
+    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
+    await act(async () => {
+      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
 
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.textContent).toContain('aiQuant.messages.backtestRangeOrderInvalid')
@@ -169,6 +173,10 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeTruthy()
+    await act(async () => {
+      container.querySelector('[data-testid="backtest-confirm-submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     const summary = container.querySelector('[data-testid="backtest-summary"]')

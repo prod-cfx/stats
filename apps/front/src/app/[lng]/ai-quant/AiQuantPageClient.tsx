@@ -270,6 +270,7 @@ export function AiQuantPageClient() {
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
   const [backtestFeedback, setBacktestFeedback] = useState<BacktestFeedbackState | null>(null)
+  const [backtestConfirmOpen, setBacktestConfirmOpen] = useState(false)
   const backtestSummaryRef = useRef<HTMLDivElement | null>(null)
 
   const activeConversation = useMemo(() => {
@@ -775,7 +776,7 @@ export function AiQuantPageClient() {
     })
   }
 
-  const onRunBacktest = () => {
+  const executeBacktest = () => {
     if (!graphConfirmed && !mockExecutionMode) {
       const message = t('aiQuant.messages.graphGuard')
       setBacktestFeedback({ type: 'error', message })
@@ -851,6 +852,11 @@ export function AiQuantPageClient() {
       ],
       updatedAt: Date.now(),
     }))
+  }
+
+  const onRunBacktest = () => {
+    setBacktestFeedback(null)
+    setBacktestConfirmOpen(true)
   }
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
@@ -1010,6 +1016,43 @@ export function AiQuantPageClient() {
             onRunBacktest={onRunBacktest}
             canRunBacktest={graphConfirmed || mockExecutionMode}
           />
+
+          {backtestConfirmOpen && (
+            <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4" data-testid="backtest-confirm">
+              <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">确认回测参数</h3>
+              <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
+                {activeConversation.params.symbol}
+                {' · '}
+                {activeConversation.params.backtestStart.slice(0, 10)}
+                {' ~ '}
+                {activeConversation.params.backtestEnd.slice(0, 10)}
+              </p>
+              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                交易所：{activeConversation.params.exchange.toUpperCase()}，仓位：{activeConversation.params.positionPct}%
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)]"
+                  onClick={() => setBacktestConfirmOpen(false)}
+                  data-testid="backtest-confirm-cancel"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white"
+                  onClick={() => {
+                    setBacktestConfirmOpen(false)
+                    executeBacktest()
+                  }}
+                  data-testid="backtest-confirm-submit"
+                >
+                  确认开始回测
+                </button>
+              </div>
+            </section>
+          )}
 
           {activeConversation.logicGraph && (
             <LogicGraphPreview
