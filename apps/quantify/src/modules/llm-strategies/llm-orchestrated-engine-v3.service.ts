@@ -1,9 +1,10 @@
+import type { LlmStrategyRunStatus } from '@ai/shared'
 import type { LlmOpsTestLogEvent } from './llm-ops-test-log.events'
 import type { LlmRunReason } from './llm-run-reasons'
 import type { LlmToolExecutionContext } from './llm-tools.service'
 import type { AiSignalPayloadWithMeta } from './llm-v3-tools'
 import type { ChatCompletionToolCall, ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
-import type { LlmStrategy, LlmStrategyInstance, LlmStrategyRunStatus, Prisma } from '@/prisma/prisma.types'
+import type { LlmStrategy, LlmStrategyInstance, Prisma } from '@/prisma/prisma.types'
 import { ErrorCode, fillPromptTemplate } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入 EventEmitter2

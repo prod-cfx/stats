@@ -1,5 +1,5 @@
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
 
 import { StrategyInstanceStatsDto } from './strategy-instance-stats.dto'
 

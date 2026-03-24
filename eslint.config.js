@@ -13,6 +13,7 @@ export default antfu(
       '**/.next/**',
       '**/temp/**',
       'apps/backend/src/generated/**',
+      'apps/quantify/generated/**',
       'apps/admin-front/dist/**',
       'apps/admin-front/.next/**',
       'apps/admin-front/build/**',
@@ -128,6 +129,43 @@ export default antfu(
       '@typescript-eslint/no-explicit-any': 'off',
       'node/prefer-global/process': 'off',
       'node/prefer-global/buffer': 'off',
+    },
+  },
+  // 枚举 SSOT 防护：禁止从 prisma.types 或 generated/prisma 导入枚举（Refs: #533）
+  {
+    files: ['apps/**/*.ts', 'apps/**/*.tsx'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['**/prisma/prisma.types', '**/generated/prisma'],
+          importNames: [
+            // --- backend enums ---
+            'PrincipalType', 'AdminMenuType',
+            'LiquidationHeatmapSource', 'LiquidationHeatmapModelType',
+            'BackendMarketTimeframe', 'VenueType', 'BackendInstrumentType',
+            'UserCredentialType', 'VerificationCodePurpose',
+            'WhaleNotificationRuleType', 'WhaleNotificationChannel',
+            'WhaleNotificationDeliveryStatus',
+            // --- quantify enums ---
+            'LlmStrategyStatus', 'LlmStrategyInstanceStatus',
+            'LlmStrategyInstanceMode', 'LlmStrategyRunStatus',
+            'LlmCodegenSessionStatus',
+            'SymbolType', 'SymbolStatus',
+            'QuantifyInstrumentType', 'IndicatorType', 'QuantifyMarketTimeframe',
+            'OutboxStatus',
+            'TradeSide', 'PositionSide', 'PositionStatus', 'LedgerEntryType',
+            'SignalSourceType', 'SignalType', 'SignalDirection', 'SignalStatus',
+            'ExecutionStatus',
+            'StrategyTemplateStatus', 'StrategyInstanceStatus', 'StrategyInstanceMode',
+            'SubscriptionStatus', 'ExchangeId',
+            // --- raw Prisma enum names (codegen adds prefix, but originals still accessible) ---
+            'MarketTimeframe', 'InstrumentType',
+            // --- $Enums namespace (backdoor prevention) ---
+            '$Enums',
+          ],
+          message: '枚举必须从 @ai/shared 导入，不要从 prisma.types 或 generated/prisma 导入。参见 ruler/conventions.md 枚举 SSOT 约定。',
+        }],
+      }],
     },
   },
 )

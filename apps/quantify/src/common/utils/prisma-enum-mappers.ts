@@ -7,7 +7,8 @@
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { $Enums } from '@/prisma/prisma.types'
+// eslint-disable-next-line no-restricted-imports -- $Enums needed for Prisma 7 @map key-name mapping
+import { $Enums } from '../../../generated/prisma'
 
 export type PrismaMarketTimeframe = $Enums.MarketTimeframe
 export type PrismaIndicatorType = $Enums.IndicatorType

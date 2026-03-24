@@ -1,10 +1,10 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { QuotesUpdateDto } from './dto/quotes-update.dto'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import { PositionSide, PositionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
-import { PositionSide, PositionStatus } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值

@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { PositionSide, PositionStatus } from '@ai/shared'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class PositionResponseDto {
   @ApiProperty()

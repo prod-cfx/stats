@@ -1,5 +1,6 @@
+import type { QuantifyMarketTimeframe as MarketTimeframe, IndicatorType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient, IndicatorValue, MarketBar, MarketTimeframe, Prisma, IndicatorType as PrismaIndicatorType } from '@/prisma/prisma.types'
+import type { PrismaClient, IndicatorValue, MarketBar, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
@@ -24,7 +25,7 @@ export interface IndicatorValueUpsertInput {
   indicatorConfigId: string
   symbolId: string
   timeframe: MarketTimeframe
-  type: PrismaIndicatorType
+  type: IndicatorType
   time: Date
   valueNumeric: Prisma.Decimal | number
   valueJson: Prisma.JsonValue | null

@@ -1,3 +1,4 @@
+// eslint-disable-next-line perfectionist/sort-imports -- side-effect import must execute before decorator-dependent modules
 import 'reflect-metadata'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'

@@ -1,4 +1,5 @@
-import type { LlmStrategyRun, LlmStrategyRunStatus, TradingSignal } from '@/prisma/prisma.types'
+import type { LlmStrategyRunStatus } from '@ai/shared'
+import type { LlmStrategyRun, TradingSignal } from '@/prisma/prisma.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 import { TradingSignalResponseDto } from '@/modules/strategy-signals/dto/trading-signal-response.dto'

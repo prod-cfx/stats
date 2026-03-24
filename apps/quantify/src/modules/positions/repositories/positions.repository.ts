@@ -1,10 +1,10 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId } from '@/modules/trading/core/types'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+import { PositionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-import { PositionStatus } from '@ai/shared'
 
 @Injectable()
 export class PositionsRepository {

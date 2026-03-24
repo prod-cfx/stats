@@ -1,7 +1,7 @@
 import type {
   AiSignalPayload,
   MarketTimeframe as AppMarketTimeframe,
-  StrategyDecisionV1,
+  StrategyDecisionV1, SignalSourceType, SignalStatus 
 } from '@ai/shared'
 import type {
   LegTimeframeData,
@@ -16,13 +16,13 @@ import type {
   StrategyExecutionConfig,
   StrategyLegDefinition,
 } from '@/modules/strategy-templates/types/strategy-template.types'
-import type { SignalSourceType, SignalStatus } from '@ai/shared'
 import type {
   IndicatorConfig,
   Prisma,
   StrategyInstance,
   StrategyTemplate,
-  Symbol, PrismaClient
+  Symbol,
+  PrismaClient,
 } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
@@ -47,9 +47,9 @@ import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
-import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'

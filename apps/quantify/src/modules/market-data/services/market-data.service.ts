@@ -1,11 +1,11 @@
-import type { MarketBarPayload, MarketQuotePayload, MarketTimeframe } from '@ai/shared'
+import type { MarketBarPayload, MarketQuotePayload, MarketTimeframe, QuantifyInstrumentType as InstrumentType, SymbolType } from '@ai/shared'
 import type { MarketBarsQueryDto } from '../dto/market-bars-query.dto'
 import type { MarketQuoteQueryDto } from '../dto/market-quote-query.dto'
 import type { MarketSymbolsQueryDto } from '../dto/market-symbols-query.dto'
 import type { CreateMarketSymbolDto, UpdateMarketSymbolDto } from '../dto/ops-market-symbol.dto'
 import type { ProviderSymbol } from '../interfaces/market-data-provider.interface'
-import type { InstrumentType, Prisma, Symbol as PrismaSymbol, SymbolType } from '@/prisma/prisma.types'
-import { ErrorCode } from '@ai/shared'
+import type { Prisma, Symbol as PrismaSymbol } from '@/prisma/prisma.types'
+import { ErrorCode, SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -15,7 +15,6 @@ import {
   reverseMapTimeframe,
 } from '@/common/utils/prisma-enum-mappers'
 import { IndicatorEngineService } from '@/modules/indicators/services/indicator-engine.service'
-import { SymbolStatus as PrismaSymbolStatus } from '@/prisma/prisma.types'
 import { MarketSymbolNotFoundException } from '../exceptions'
 import {
   normalizeExactCode,

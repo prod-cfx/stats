@@ -1,4 +1,4 @@
-import type { IndicatorComputeContext, IndicatorParamsByType, IndicatorType, MarketTimeframe  } from '@ai/shared'
+import type { IndicatorComputeContext, IndicatorParamsByType, IndicatorType, MarketTimeframe } from '@ai/shared'
 import type { IndicatorValueUpsertInput } from '../repositories/indicator-value.repository'
 import type { RuntimeIndicatorConfig } from './indicator-config.service'
 import type {PrismaMarketTimeframe} from '@/common/utils/prisma-enum-mappers';

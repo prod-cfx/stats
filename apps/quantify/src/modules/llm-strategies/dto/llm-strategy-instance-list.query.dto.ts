@@ -1,4 +1,4 @@
-import type { LlmStrategyInstanceStatus } from '@/prisma/prisma.types'
+import type { LlmStrategyInstanceStatus } from '@ai/shared'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'

@@ -5,7 +5,7 @@ import type { WhaleNotificationDeduplicatorService } from './whale-notification-
 import type { WhaleNotificationDispatcherService } from './whale-notification-dispatcher.service'
 import type { WhaleNotificationMatcherService } from './whale-notification-matcher.service'
 import type { WhaleNotificationMetricsService } from './whale-notification-metrics.service'
-import { Inject, Injectable, Logger  } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { WhaleNotificationChannel, WhaleNotificationDeliveryStatus } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'

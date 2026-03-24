@@ -1,9 +1,9 @@
+import { StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import { ApiProperty } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
-import { StrategyInstanceMode, StrategyInstanceStatus } from '@/prisma/prisma.types'
+import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
 export class StrategyInstanceListQueryDto extends BasePaginationRequestDto {
   @ApiProperty({ description: '策略模板 ID 筛选', required: false })

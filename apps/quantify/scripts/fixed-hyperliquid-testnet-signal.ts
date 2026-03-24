@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
+import type { SignalDirection, SignalType } from '@ai/shared'
 import * as path from 'node:path'
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'

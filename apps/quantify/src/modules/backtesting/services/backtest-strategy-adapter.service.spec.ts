@@ -1,4 +1,4 @@
-import { DomainException } from '@/common/exceptions/domain.exception'
+import type { DomainException } from '@/common/exceptions/domain.exception'
 import { BacktestStrategyAdapterService } from './backtest-strategy-adapter.service'
 
 describe('backtestStrategyAdapterService', () => {

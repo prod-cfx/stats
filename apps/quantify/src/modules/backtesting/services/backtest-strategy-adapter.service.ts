@@ -1,10 +1,10 @@
 import type { BacktestRunInput } from '../types/backtesting.types'
-import { createScriptEngine } from '@ai/shared/node'
 import { ErrorCode } from '@ai/shared'
+import { createScriptEngine } from '@ai/shared/node'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { isStrategyAdapterV1 } from '@/modules/strategy-runtime/strategy-protocol.util'
+import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 
 export interface BacktestProtocolScriptInput {
   id: string

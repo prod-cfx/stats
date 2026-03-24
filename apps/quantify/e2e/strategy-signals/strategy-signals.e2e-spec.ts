@@ -3,12 +3,12 @@ import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
 import type { FixedBinanceTestnetSignalContext } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
+import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@ai/shared'
 import { resolveFixedBinanceSmokeQuote } from '@/modules/strategy-signals/services/fixed-binance-smoke-quote'
 import { FixedBinanceTestnetSignalService } from '@/modules/strategy-signals/services/fixed-binance-testnet-signal.service'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
-import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@/prisma/prisma.types'
 import { createTestingApp } from '../fixtures/fixtures'
 
 const FIXED_BINANCE_BASE_ASSET = (process.env.QUANTIFY_FIXED_BINANCE_TESTNET_BASE_ASSET ?? 'BTC').toUpperCase()

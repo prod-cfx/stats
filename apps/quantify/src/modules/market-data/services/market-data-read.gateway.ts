@@ -1,4 +1,4 @@
-import type { MarketTimeframe, MarketBarPayload  } from '@ai/shared'
+import type { MarketTimeframe, MarketBarPayload } from '@ai/shared'
 import type { MarketBar, MarketQuote } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable } from '@nestjs/common'

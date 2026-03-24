@@ -1,6 +1,6 @@
 import type { Observable } from 'rxjs';
 import type { MarketQuoteEvent } from '../services/market-data-stream.service';
-import { ErrorCode, MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES  } from '@ai/shared'
+import { ErrorCode, MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES } from '@ai/shared'
 import { Controller, Get, Inject, Query, Sse } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'

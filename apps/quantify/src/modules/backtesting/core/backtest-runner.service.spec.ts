@@ -1,9 +1,9 @@
+import type { StrategyDecisionV1 } from '@ai/shared'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from '../report/backtest-reporter.service'
 import { StateEngineService } from '../state/state-engine.service'
 import { BacktestRunnerService, createBar } from './backtest-runner.service'
-import type { StrategyDecisionV1 } from '@ai/shared'
 
 describe('backtestRunnerService', () => {
   it('should run low-tf loop and return report skeleton', async () => {

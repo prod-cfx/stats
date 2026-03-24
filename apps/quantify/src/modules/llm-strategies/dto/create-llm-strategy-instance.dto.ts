@@ -1,4 +1,4 @@
-import type { LlmStrategyInstanceMode } from '@/prisma/prisma.types'
+import type { LlmStrategyInstanceMode } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsEnum,

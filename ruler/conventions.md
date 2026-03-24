@@ -49,6 +49,11 @@
   - 非开发环境使用 `dx db deploy --<env>`
 - Quantify 数据库命令使用对应目标：`dx db format quantify --dev`、`dx db generate quantify --dev`、`dx db migrate quantify --dev --name <name>`、`dx db deploy quantify --<env>`
 - Backend DTO / OpenAPI 变更后，执行 `dx build contracts --dev` 更新 `@ai/api-contracts`
+- 枚举 SSOT 维护（新增 Prisma 枚举后须同步）：
+  1. 运行 codegen 更新 `packages/shared/src/generated/prisma-enums.ts`
+  2. 确认 `prisma.types.ts` 的显式导出列表不包含新枚举名
+  3. 在 `eslint.config.js` 的 `no-restricted-imports.importNames` 中添加新枚举名
+  4. 所有业务代码从 `@ai/shared` 导入枚举，禁止从 `@/prisma/prisma.types` 或 `generated/prisma` 导入
 
 ## 6) 事务规范
 

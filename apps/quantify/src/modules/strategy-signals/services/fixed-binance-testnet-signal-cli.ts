@@ -1,5 +1,5 @@
+import type { SignalDirection, SignalType } from '@ai/shared'
 import type { MarketType } from '@/modules/trading/core/types'
-import type { SignalDirection, SignalType } from '@/prisma/prisma.types'
 
 export type FixedBinancePreset =
   | 'open-spot'

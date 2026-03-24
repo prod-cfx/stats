@@ -1,7 +1,7 @@
+import { PositionSide, PositionStatus } from '@ai/shared'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
-import { PositionSide, PositionStatus } from '@ai/shared'
 
 export class PositionsQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '业务用户 ID', example: 'usr_123' })

@@ -1,6 +1,6 @@
 import { OpenAiCompatibleAdapter } from '../openai-compatible.adapter'
 
-describe('OpenAiCompatibleAdapter retry', () => {
+describe('openAiCompatibleAdapter retry', () => {
   const originalFetch = global.fetch
 
   afterEach(() => {

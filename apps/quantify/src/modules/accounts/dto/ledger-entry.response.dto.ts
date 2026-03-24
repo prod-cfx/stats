@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger'
 import { LedgerEntryType } from '@ai/shared'
+import { ApiProperty } from '@nestjs/swagger'
 
 export class LedgerEntryResponseDto {
   @ApiProperty({ description: '流水 ID' })

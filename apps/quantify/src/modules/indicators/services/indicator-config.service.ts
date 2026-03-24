@@ -1,11 +1,9 @@
-import type { IndicatorParamsByType, IndicatorType } from '@ai/shared'
+import type { IndicatorParamsByType, IndicatorType, QuantifyMarketTimeframe as MarketTimeframe } from '@ai/shared'
 import type { OnModuleInit } from '@nestjs/common'
 import type { IndicatorSeriesQuery, IndicatorSnapshotQuery } from '../repositories/indicator-value.repository'
 import type {
-  MarketTimeframe,
   Prisma,
   IndicatorConfig as PrismaIndicatorConfig,
-  IndicatorType as PrismaIndicatorType,
 } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
@@ -18,7 +16,7 @@ import { IndicatorValueRepository } from '../repositories/indicator-value.reposi
 export interface IndicatorConfigCreateInput {
   symbolId: string
   timeframe: MarketTimeframe
-  type: PrismaIndicatorType
+  type: IndicatorType
   name: string
   params: unknown
   isEnabled: boolean
@@ -28,7 +26,7 @@ export interface IndicatorConfigCreateInput {
 export interface IndicatorConfigUpdateInput {
   symbolId?: string
   timeframe?: MarketTimeframe
-  type?: PrismaIndicatorType
+  type?: IndicatorType
   name?: string
   params?: unknown
   isEnabled?: boolean

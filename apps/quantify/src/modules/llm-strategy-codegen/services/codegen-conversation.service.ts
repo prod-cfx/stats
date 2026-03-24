@@ -1,3 +1,4 @@
+import type { LlmCodegenSessionStatus } from '@ai/shared'
 import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
@@ -6,7 +7,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
-import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
+import type { Prisma } from '@/prisma/prisma.types'
 
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
@@ -576,8 +577,8 @@ export class CodegenConversationService {
       entryRules.push(`${timeframes[0]} 周期开盘时市价买入 ${marketBuyAmountMatch[1]} USDT`)
     }
 
-    const takeProfitMatch = text.match(/止盈[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/i)
-    const stopLossMatch = text.match(/止损[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/i)
+    const takeProfitMatch = text.match(/止盈[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/)
+    const stopLossMatch = text.match(/止损[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/)
     if (entryRules.length === 0) {
       if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
         entryRules.push('短均线上穿长均线（金叉）入场')
@@ -1164,8 +1165,8 @@ export class CodegenConversationService {
   private isExecutionTemplateMessage(message?: string): boolean {
     const text = (message ?? '').trim()
     if (!text) return false
-    return /(?:平台|交易对|开仓|买入)/.test(text)
-      && /(?:交易周期|\d+\s*(?:分钟|min|m|小时|h))/i.test(text)
+    return /平台|交易对|开仓|买入/.test(text)
+      && /交易周期|\d+\s*(?:分钟|min|m|小时|h)/i.test(text)
       && /止盈/.test(text)
       && /止损/.test(text)
   }
@@ -1291,8 +1292,8 @@ export class CodegenConversationService {
       }
     }
 
-    const balanceMatch = text.match(/账户余额[：: ]*\s*(\d+(?:\.\d+)?)\s*USDT/i)
-    const buyAmountMatch = text.match(/(?:开仓|买入)[：: ]*[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
+    const balanceMatch = text.match(/账户余额[：: ]*(?:[\x09-\x0D\xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]\s*)?(\d+(?:\.\d+)?)\s*USDT/i)
+    const buyAmountMatch = text.match(/(?:开仓|买入)[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
     if (balanceMatch?.[1] && buyAmountMatch?.[1]) {
       const balance = Number(balanceMatch[1])
       const buyAmount = Number(buyAmountMatch[1])

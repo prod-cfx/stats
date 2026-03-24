@@ -1,8 +1,9 @@
+import type { ExchangeId as PrismaExchangeId } from '@ai/shared'
 import type { CreateExchangeAccountDto } from './dto/create-exchange-account.dto'
 import type { ExchangeAccountResponseDto } from './dto/exchange-account.response.dto'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { BinanceConfig, HyperliquidConfig, OkxConfig } from '@/modules/trading/factory/account-store'
-import type { ExchangeAccount, ExchangeId as PrismaExchangeId } from '@/prisma/prisma.types'
+import type { ExchangeAccount } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable } from '@nestjs/common'
 

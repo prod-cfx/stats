@@ -1,6 +1,7 @@
+import type { SignalDirection, SignalType } from '@ai/shared'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { MarketType } from '@/modules/trading/core/types'
-import type { Prisma, SignalDirection, SignalType } from '@/prisma/prisma.types'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'

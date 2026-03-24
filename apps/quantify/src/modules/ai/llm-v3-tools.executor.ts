@@ -18,7 +18,7 @@ import type {
   GetSymbolUniverseResult,
   LlmV3ToolName,
 } from './llm-v3-tools.schemas'
-import type { Prisma, PrismaClient  } from '@/prisma/prisma.types'
+import type { Prisma, PrismaClient } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import {
   annualizedReturn,

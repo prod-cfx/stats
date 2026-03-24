@@ -1,6 +1,6 @@
+import { ExchangeId, MarketType } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator'
-import { ExchangeId, MarketType } from '@ai/shared'
 
 // 仅允许大于 0 的正数
 const POSITIVE_DECIMAL_PATTERN = /^(?:0*[1-9]\d*(?:\.\d+)?|0*\.0*[1-9]\d*)$/
