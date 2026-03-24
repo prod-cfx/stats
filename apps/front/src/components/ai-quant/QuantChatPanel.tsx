@@ -64,7 +64,7 @@ export function QuantChatPanel({
 }: QuantChatPanelProps) {
   const { t } = useTranslation()
   const [input, setInput] = useState('')
-  const [showSettings, setShowSettings] = useState(false)
+  const [showSettings, setShowSettings] = useState(true)
   
   // Custom Combobox State
   const [openCombobox, setOpenCombobox] = useState(false)

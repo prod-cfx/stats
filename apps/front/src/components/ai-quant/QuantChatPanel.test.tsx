@@ -69,7 +69,7 @@ describe('QuantChatPanel range settings', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders range preset options 7D/30D/90D/1Y/custom after opening settings', async () => {
+  it('renders range preset options 7D/30D/90D/1Y/custom by default', async () => {
     const onParamsChange = jest.fn()
 
     await act(async () => {
@@ -82,13 +82,6 @@ describe('QuantChatPanel range settings', () => {
           onRunBacktest={() => {}}
         />,
       )
-    })
-
-    const openBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.includes('aiQuant.paramsConfig'))
-    expect(openBtn).toBeTruthy()
-
-    await act(async () => {
-      openBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(container.textContent).toContain('7D')
@@ -118,11 +111,6 @@ describe('QuantChatPanel range settings', () => {
 
     await act(async () => {
       root?.render(<Harness />)
-    })
-
-    const openBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.includes('aiQuant.paramsConfig'))
-    await act(async () => {
-      openBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     const customBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.includes('aiQuant.customRange'))
