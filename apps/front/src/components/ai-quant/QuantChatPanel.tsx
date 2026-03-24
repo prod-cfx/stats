@@ -1,6 +1,8 @@
 'use client'
 
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
+import type { BacktestRangePreset } from '@/components/ai-quant/backtest-range'
+import { resolveBacktestRange } from '@/components/ai-quant/backtest-range'
 import { ArrowUp, Bot, Check, ChevronsUpDown, Copy, Play, Search, Settings2, User } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -36,6 +38,14 @@ const SYMBOLS = [
   { value: 'MATICUSDT', label: 'MATIC/USDT' },
 ]
 
+const RANGE_PRESETS: Array<{ value: BacktestRangePreset, label: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM' }> = [
+  { value: '7D', label: '7D' },
+  { value: '30D', label: '30D' },
+  { value: '90D', label: '90D' },
+  { value: '1Y', label: '1Y' },
+  { value: 'CUSTOM', label: 'CUSTOM' },
+]
+
 function getCodeLanguage(className?: string): string {
   if (!className) return 'text'
   const languageMatch = /language-([\w-]+)/.exec(className)
@@ -56,9 +66,8 @@ export function QuantChatPanel({
 }: QuantChatPanelProps) {
   const { t } = useTranslation()
   const [input, setInput] = useState('')
-  const [showSettings, setShowSettings] = useState(false)
+  const [showSettings, setShowSettings] = useState(true)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
-
   // Custom Combobox State
   const [openCombobox, setOpenCombobox] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -92,6 +101,32 @@ export function QuantChatPanel({
     symbol.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
     symbol.value.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const formatDateTimeLocal = (value: string): string => {
+    if (!value) return ''
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return ''
+    const year = parsed.getFullYear()
+    const month = String(parsed.getMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getDate()).padStart(2, '0')
+    const hour = String(parsed.getHours()).padStart(2, '0')
+    const minute = String(parsed.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hour}:${minute}`
+  }
+
+  const onPresetChange = (preset: BacktestRangePreset) => {
+    if (preset === 'CUSTOM') {
+      onParamsChange({ ...params, backtestRangePreset: 'CUSTOM' })
+      return
+    }
+    const range = resolveBacktestRange({ preset })
+    onParamsChange({
+      ...params,
+      backtestRangePreset: preset,
+      backtestStart: range.startAt,
+      backtestEnd: range.endAt,
+    })
+  }
 
   const copyCode = async (code: string, codeId: string) => {
     try {
@@ -225,6 +260,57 @@ export function QuantChatPanel({
                 onChange={event => onParamsChange({ ...params, positionPct: Number(event.target.value || 0) })}
               />
             </label>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestRange')}</p>
+            <div className="flex flex-wrap gap-2">
+              {RANGE_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => onPresetChange(preset.value)}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                    params.backtestRangePreset === preset.value
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface)]'
+                  }`}
+                >
+                  {preset.value === 'CUSTOM' ? t('aiQuant.customRange') : preset.label}
+                </button>
+              ))}
+            </div>
+
+            {params.backtestRangePreset === 'CUSTOM' && (
+              <div className="grid gap-3 pt-1 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestStart')}</span>
+                  <input
+                    type="datetime-local"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
+                    value={formatDateTimeLocal(params.backtestStart)}
+                    onChange={event => onParamsChange({
+                      ...params,
+                      backtestRangePreset: 'CUSTOM',
+                      backtestStart: event.target.value,
+                    })}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestEnd')}</span>
+                  <input
+                    type="datetime-local"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
+                    value={formatDateTimeLocal(params.backtestEnd)}
+                    onChange={event => onParamsChange({
+                      ...params,
+                      backtestRangePreset: 'CUSTOM',
+                      backtestEnd: event.target.value,
+                    })}
+                  />
+                </label>
+              </div>
+            )}
           </div>
         </div>
       )}
