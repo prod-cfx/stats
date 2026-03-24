@@ -17,7 +17,8 @@
     "dx:status": "dx status",
     "dx:lint": "dx lint",
     "dx:build:contracts": "dx build contracts --dev",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "generate:enums": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\"}' ts-node scripts/generate-prisma-enums.ts"
   },
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",
