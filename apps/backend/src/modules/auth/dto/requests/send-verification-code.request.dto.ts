@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEmail, IsEnum, IsNotEmpty } from 'class-validator'
-import { VerificationCodePurpose } from '@/prisma/prisma.types'
+import { VerificationCodePurpose } from '@ai/shared'
 
 export class SendVerificationCodeRequestDto {
   @ApiProperty({ description: 'Email address', example: 'user@example.com' })

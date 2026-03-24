@@ -5,7 +5,7 @@ import type { PrismaClient, Prisma, UserSignalExecution } from '@/prisma/prisma.
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 
-import { ExecutionStatus } from '@/prisma/prisma.types'
+import { ExecutionStatus } from '@ai/shared'
 
 interface ExecutionUpdatePayload {
   executedPrice?: number

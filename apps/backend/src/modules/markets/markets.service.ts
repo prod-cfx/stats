@@ -11,9 +11,9 @@ import { FuturesPairsMarketRepository } from './repositories/futures-pairs-marke
 // eslint-disable-next-line ts/consistent-type-imports
 import { TakerBuySellVolumeRepository } from './repositories/taker-buy-sell-volume.repository'
 import type {
-  ExchangeId,
   MarketInstrumentType,
   MarketTimeframe,
+  TradingExchangeId,
   TradingPairConfig,
   TradingVenueType,
 } from '@ai/shared'
@@ -29,7 +29,7 @@ import type { AggregatedVolumeResponseDto } from './dto/responses/aggregated-vol
 export interface MarketsFilter {
   venueType?: TradingVenueType
   instrumentType?: MarketInstrumentType
-  exchange?: ExchangeId
+  exchange?: TradingExchangeId
 }
 
 interface ExchangeDefinition {

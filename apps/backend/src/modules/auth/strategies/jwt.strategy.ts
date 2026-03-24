@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrincipalType } from '@/prisma/prisma.types'
+import { PrincipalType } from '@ai/shared'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

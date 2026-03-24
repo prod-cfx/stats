@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import { ErrorCode, validateHyperliquidUrl } from '@ai/shared'
+import { ErrorCode, HyperliquidApiType, validateHyperliquidUrl } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService,保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
@@ -14,19 +14,7 @@ import {
   validateHyperliquidResponse,
 } from '../schemas/hyperliquid.schema'
 
-/**
- * Hyperliquid API 请求类型枚举
- */
-export enum HyperliquidApiType {
-  CLEARINGHOUSE_STATE = 'clearinghouseState',
-  SPOT_CLEARINGHOUSE_STATE = 'spotClearinghouseState',
-  OPEN_ORDERS = 'openOrders',
-  USER_FILLS = 'userFills',
-  USER_FILLS_BY_TIME = 'userFillsByTime',
-  USER_FUNDING = 'userFunding',
-  HISTORICAL_ORDERS = 'historicalOrders',
-  USER_NON_FUNDING_LEDGER_UPDATES = 'userNonFundingLedgerUpdates',
-}
+export { HyperliquidApiType }
 
 /**
  * Hyperliquid API 基础请求接口
@@ -41,7 +29,7 @@ interface HyperliquidBaseRequest {
  * Hyperliquid API 清算所状态请求
  */
 export interface HyperliquidClearinghouseStateRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.CLEARINGHOUSE_STATE
+  type: typeof HyperliquidApiType.CLEARINGHOUSE_STATE
   user: string
 }
 
@@ -49,7 +37,7 @@ export interface HyperliquidClearinghouseStateRequest extends HyperliquidBaseReq
  * Hyperliquid API 现货清算所状态请求
  */
 export interface HyperliquidSpotClearinghouseStateRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.SPOT_CLEARINGHOUSE_STATE
+  type: typeof HyperliquidApiType.SPOT_CLEARINGHOUSE_STATE
   user: string
 }
 
@@ -57,7 +45,7 @@ export interface HyperliquidSpotClearinghouseStateRequest extends HyperliquidBas
  * Hyperliquid API 挂单请求
  */
 export interface HyperliquidOpenOrdersRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.OPEN_ORDERS
+  type: typeof HyperliquidApiType.OPEN_ORDERS
   user: string
 }
 
@@ -65,7 +53,7 @@ export interface HyperliquidOpenOrdersRequest extends HyperliquidBaseRequest {
  * Hyperliquid API 用户成交请求
  */
 export interface HyperliquidUserFillsRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.USER_FILLS
+  type: typeof HyperliquidApiType.USER_FILLS
   user: string
   aggregateByTime?: boolean
 }
@@ -74,7 +62,7 @@ export interface HyperliquidUserFillsRequest extends HyperliquidBaseRequest {
  * Hyperliquid API 用户成交（按时间）请求
  */
 export interface HyperliquidUserFillsByTimeRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.USER_FILLS_BY_TIME
+  type: typeof HyperliquidApiType.USER_FILLS_BY_TIME
   user: string
   startTime: number
   endTime?: number
@@ -84,7 +72,7 @@ export interface HyperliquidUserFillsByTimeRequest extends HyperliquidBaseReques
  * Hyperliquid API 用户资金费率请求
  */
 export interface HyperliquidUserFundingRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.USER_FUNDING
+  type: typeof HyperliquidApiType.USER_FUNDING
   user: string
   startTime: number
   endTime?: number
@@ -94,7 +82,7 @@ export interface HyperliquidUserFundingRequest extends HyperliquidBaseRequest {
  * Hyperliquid API 历史订单请求
  */
 export interface HyperliquidHistoricalOrdersRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.HISTORICAL_ORDERS
+  type: typeof HyperliquidApiType.HISTORICAL_ORDERS
   user: string
 }
 
@@ -102,7 +90,7 @@ export interface HyperliquidHistoricalOrdersRequest extends HyperliquidBaseReque
  * Hyperliquid API 用户账本更新请求
  */
 export interface HyperliquidUserNonFundingLedgerUpdatesRequest extends HyperliquidBaseRequest {
-  type: HyperliquidApiType.USER_NON_FUNDING_LEDGER_UPDATES
+  type: typeof HyperliquidApiType.USER_NON_FUNDING_LEDGER_UPDATES
   user: string
   startTime: number
   endTime?: number

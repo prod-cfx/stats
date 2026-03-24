@@ -26,7 +26,8 @@ export { getHelperDocs } from './helpers.types'
 
 export * as signalHelpers from './signal-helpers'
 
-export type { Signal, SignalDirection, SignalType } from './signal-helpers'
+export type { Signal } from './signal-helpers'
+export type { SignalDirection, SignalType } from '../../generated/prisma-enums'
 
 export * as technicalIndicators from './technical-indicators'
 export type { Bar } from './technical-indicators'

@@ -5,7 +5,7 @@ export const TRADING_VENUE_TYPES = ['DEX', 'CEX'] as const
 export type TradingVenueType = (typeof TRADING_VENUE_TYPES)[number]
 
 export const EXCHANGES = ['BINANCE', 'OKX', 'BYBIT'] as const
-export type ExchangeId = (typeof EXCHANGES)[number]
+export type TradingExchangeId = (typeof EXCHANGES)[number]
 
 export interface BaseTradingPairConfig {
   /** 统一内部 ID，例如 BTCUSDT.BINANCE.PERP */
@@ -34,7 +34,7 @@ export interface BaseTradingPairConfig {
 export interface CexTradingPairConfig extends BaseTradingPairConfig {
   venueType: 'CEX'
   /** 交易所 ID */
-  exchange: ExchangeId
+  exchange: TradingExchangeId
   /** 交易所原始 symbol（与内部 symbol 不一致时使用） */
   exchangeSymbol?: string
   /** 杠杆与合约面值等 */

@@ -1,20 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator'
+import { ExchangeId, MarketType } from '@ai/shared'
 
 // 仅允许大于 0 的正数
 const POSITIVE_DECIMAL_PATTERN = /^(?:0*[1-9]\d*(?:\.\d+)?|0*\.0*[1-9]\d*)$/
-
-// 定义枚举以保持类型安全
-enum ExchangeId {
-  BINANCE = 'binance',
-  OKX = 'okx',
-  HYPERLIQUID = 'hyperliquid',
-}
-
-enum MarketType {
-  SPOT = 'spot',
-  PERP = 'perp',
-}
 
 export class ClosePositionDto {
   @ApiProperty({ description: '业务用户 ID' })

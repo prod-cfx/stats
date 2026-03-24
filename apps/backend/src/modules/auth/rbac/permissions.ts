@@ -1,31 +1,7 @@
 import { RolesBuilder } from 'nest-access-control'
+import { AppRole, AppResource } from '@ai/shared'
 
-export enum AppRole {
-  VISITOR = 'visitor',
-  USER = 'user',
-  MODERATOR = 'moderator',
-  ADMIN = 'admin',
-  SUPER_ADMIN = 'super_admin',
-}
-
-export enum AppResource {
-  ROLE = 'role',
-  SETTINGS = 'settings',
-  ADMIN_USER = 'admin_user',
-  ADMIN_MENU = 'admin_menu',
-  PORTFOLIO_ACCOUNT = 'portfolio_account',
-  STRATEGY_TEMPLATE = 'strategy_template',
-  STRATEGY_INSTANCE = 'strategy_instance',
-  LLM_STRATEGY = 'llm_strategy',
-  LLM_STRATEGY_INSTANCE = 'llm_strategy_instance',
-  MARKET_SYMBOL = 'market_symbol',
-  WHALE_TRACKING = 'whale_tracking',
-  PREDICTION_MARKET = 'prediction_market',
-  DATA_PULL_TASK = 'data_pull_task',
-  ORDERBOOK_CONFIG = 'orderbook_config',
-  EXCHANGE_CONFIG = 'exchange_config',
-  TRADES_CONFIG = 'trades_config',
-}
+export { AppRole, AppResource }
 
 export const RBAC_PERMISSIONS = new RolesBuilder()
 

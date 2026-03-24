@@ -9,7 +9,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator'
-import { PositionSide, TradeSide } from '@/prisma/prisma.types'
+import { PositionSide, TradeSide } from '@ai/shared'
 
 // 仅允许大于 0 的正数（禁止 0 和负数），用于 price/quantity/leverage（不含 0）
 const POSITIVE_DECIMAL_PATTERN = /^(?:0*[1-9]\d*(?:\.\d+)?|0*\.0*[1-9]\d*)$/

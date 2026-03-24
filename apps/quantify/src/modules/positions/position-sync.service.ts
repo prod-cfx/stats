@@ -2,7 +2,8 @@ import type { ExchangeId, MarketType, UnifiedPosition } from '@/modules/trading/
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
-import { PositionSide, PositionStatus, Prisma, TradeSide } from '@/prisma/prisma.types'
+import { PositionSide, PositionStatus, TradeSide } from '@ai/shared'
+import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用

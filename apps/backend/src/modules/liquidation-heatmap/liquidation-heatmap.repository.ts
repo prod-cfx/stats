@@ -2,10 +2,10 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type {
   LiquidationHeatmapCandle,
   LiquidationHeatmapCell,
-  LiquidationHeatmapModelType,
   LiquidationHeatmapSnapshot,
   LiquidationHeatmapYAxis,
 } from '@/prisma/prisma.types'
+import type { LiquidationHeatmapModelType } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'

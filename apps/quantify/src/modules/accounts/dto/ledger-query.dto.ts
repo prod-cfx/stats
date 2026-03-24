@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsBoolean, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
-import { LedgerEntryType } from '@/prisma/prisma.types'
+import { LedgerEntryType } from '@ai/shared'
 
 export class LedgerQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({

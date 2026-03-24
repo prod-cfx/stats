@@ -3,7 +3,7 @@ import type { PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
-import { OutboxStatus } from '@/prisma/prisma.types'
+import { OutboxStatus } from '@ai/shared'
 
 @Injectable()
 export class OutboxRepository {

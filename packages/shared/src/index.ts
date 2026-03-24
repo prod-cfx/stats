@@ -19,6 +19,8 @@ export * from './constants/trading-symbols'
 // NOTE: script-engine is Node-only and should not be imported in browser environments
 // Use direct import: import { createScriptEngine } from '@ai/shared/script-engine'
 // export * from './script-engine'
+export * from './generated/prisma-enums'
+export * from './constants/enums'
 export * from './signal-output'
 export * from './types/indicator'
 export * from './types/market-data'

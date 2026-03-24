@@ -16,14 +16,13 @@ import type {
   StrategyExecutionConfig,
   StrategyLegDefinition,
 } from '@/modules/strategy-templates/types/strategy-template.types'
+import type { SignalSourceType, SignalStatus } from '@ai/shared'
 import type {
   IndicatorConfig,
   Prisma,
-  SignalSourceType,
-  SignalStatus,
   StrategyInstance,
   StrategyTemplate,
-  Symbol, PrismaClient 
+  Symbol, PrismaClient
 } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'

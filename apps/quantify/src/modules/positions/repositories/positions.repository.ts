@@ -4,7 +4,7 @@ import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-import { PositionStatus } from '@/prisma/prisma.types'
+import { PositionStatus } from '@ai/shared'
 
 @Injectable()
 export class PositionsRepository {

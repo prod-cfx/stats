@@ -1,11 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
+import { TelegramLoginSource } from '@ai/shared'
 
-export enum TelegramLoginSource {
-  WEB = 'web',
-  DESKTOP = 'desktop',
-  WEBAPP = 'webapp',
-}
+export { TelegramLoginSource }
 
 export class TelegramExchangeRequestDto {
   @ApiProperty({ description: 'Telegram unique identifier', example: '123456789' })

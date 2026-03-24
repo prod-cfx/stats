@@ -1,9 +1,9 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { User, UserCredential, VerificationCode, VerificationCodePurpose , UserCredentialType } from '@/prisma/prisma.types'
+import type { User, UserCredential, VerificationCode } from '@/prisma/prisma.types'
+import { PrincipalType, UserCredentialType, VerificationCodePurpose } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-import { PrincipalType } from '@/prisma/prisma.types'
 
 @Injectable()
 export class UserAuthRepository {

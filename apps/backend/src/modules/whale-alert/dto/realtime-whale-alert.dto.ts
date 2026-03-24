@@ -2,11 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { WhaleAlertSide } from '@ai/shared'
 
-export enum WhaleAlertSide {
-  Long = 'Long',
-  Short = 'Short',
-}
+export { WhaleAlertSide }
 
 export class RealtimeWhaleAlertDto {
   @ApiProperty({ description: '鲸鱼地址（Hyperliquid 用户地址）', example: '0x481234567890abcdef1234567890abcdef1234af' })

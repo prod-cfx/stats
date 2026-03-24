@@ -7,9 +7,8 @@ import type { WhaleNotificationOrchestratorService } from '@/modules/whale-notif
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { WhaleNotificationOrchestratorService as WhaleNotificationOrchestratorServiceToken } from '@/modules/whale-notification/services/whale-notification-orchestrator.service'
+import { WhaleAlertSide, WhaleAlertTradeSide } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'
-import { WhaleAlertSide } from './dto/realtime-whale-alert.dto'
-import { TradeSide } from './dto/whale-trade.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { WhaleAlertRepository } from './whale-alert.repository'
 
@@ -163,7 +162,7 @@ export class WhaleAlertService {
       const tradeSize = Number(row.tradeSize)
       const price = Number(row.price)
       const tradeValueUsd = Number(row.tradeValueUsd)
-      const side: TradeSide = row.side === TradeSide.Short ? TradeSide.Short : TradeSide.Long
+      const side: WhaleAlertTradeSide = row.side === WhaleAlertTradeSide.Short ? WhaleAlertTradeSide.Short : WhaleAlertTradeSide.Long
 
       const dto: WhaleTradeDto = {
         user_address: row.userAddress,

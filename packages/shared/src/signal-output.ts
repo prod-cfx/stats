@@ -1,10 +1,8 @@
-export type AiSignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
-
-export type AiSignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
+import { SignalDirection, SignalType } from './generated/prisma-enums'
 
 export interface AiSignalPayload {
-  direction: AiSignalDirection
-  signalType: AiSignalType
+  direction: SignalDirection
+  signalType: SignalType
   confidence?: number
   entryPrice?: number
   stopLoss?: number
@@ -14,20 +12,20 @@ export interface AiSignalPayload {
   positionSizeRatio?: number
 }
 
-const SUPPORTED_DIRECTIONS: Record<string, AiSignalDirection> = {
-  BUY: 'BUY',
-  LONG: 'BUY',
-  SELL: 'SELL',
-  SHORT: 'SELL',
-  CLOSE_LONG: 'CLOSE_LONG',
-  CLOSE_SHORT: 'CLOSE_SHORT',
+const SUPPORTED_DIRECTIONS: Record<string, SignalDirection> = {
+  BUY: SignalDirection.BUY,
+  LONG: SignalDirection.BUY,
+  SELL: SignalDirection.SELL,
+  SHORT: SignalDirection.SELL,
+  CLOSE_LONG: SignalDirection.CLOSE_LONG,
+  CLOSE_SHORT: SignalDirection.CLOSE_SHORT,
 }
 
-const SUPPORTED_SIGNAL_TYPES: Record<string, AiSignalType> = {
-  ENTRY: 'ENTRY',
-  EXIT: 'EXIT',
-  ADJUSTMENT: 'ADJUSTMENT',
-  ALERT: 'ALERT',
+const SUPPORTED_SIGNAL_TYPES: Record<string, SignalType> = {
+  ENTRY: SignalType.ENTRY,
+  EXIT: SignalType.EXIT,
+  ADJUSTMENT: SignalType.ADJUSTMENT,
+  ALERT: SignalType.ALERT,
 }
 
 /**
@@ -61,7 +59,7 @@ export function parseAiSignalResponse(
   }
 
   const signalTypeRaw = normalizeString(parsed.signalType ?? parsed.type)
-  const signalType = signalTypeRaw ? SUPPORTED_SIGNAL_TYPES[signalTypeRaw] : 'ENTRY'
+  const signalType = signalTypeRaw ? SUPPORTED_SIGNAL_TYPES[signalTypeRaw] : SignalType.ENTRY
 
   const confidenceRaw =
     parsed.confidence ?? parsed.confidenceScore ?? parsed.score

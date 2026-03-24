@@ -1,5 +1,5 @@
 import type { HeatmapQueryCriteria, HeatmapSnapshotWithData } from './liquidation-heatmap.repository'
-import type { LiquidationHeatmapModelType } from '@/prisma/prisma.types'
+import type { LiquidationHeatmapModelType } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -87,7 +87,7 @@ export class LiquidationHeatmapService {
       exchangeCode: snapshot.exchangeCode,
       tradingPair: snapshot.tradingPair,
       contractType: snapshot.contractType,
-      modelType: snapshot.modelType,
+      modelType: snapshot.modelType as LiquidationHeatmapModelType,
       timeInterval: snapshot.timeInterval,
       valueCurrency: snapshot.valueCurrency,
       fetchedAt: snapshot.fetchedAt,

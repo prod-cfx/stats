@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { PositionSide, TradeSide } from '@/prisma/prisma.types'
+import { PositionSide, TradeSide } from '@ai/shared'
 
 export class TradeResponseDto {
   @ApiProperty()

@@ -2,11 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { WhaleAlertTradeSide } from '@ai/shared'
 
-export enum TradeSide {
-  Long = 'Long',
-  Short = 'Short',
-}
+export { WhaleAlertTradeSide }
+/** @deprecated Use WhaleAlertTradeSide from @ai/shared */
+export type TradeSide = WhaleAlertTradeSide
 
 export class WhaleTradeDto {
   @ApiProperty({ description: '鲸鱼地址', example: '0x481234567890abcdef1234567890abcdef1234af' })
@@ -17,9 +17,9 @@ export class WhaleTradeDto {
   @IsString()
   symbol: string
 
-  @ApiProperty({ description: '交易方向', enum: TradeSide, example: 'Long' })
-  @IsEnum(TradeSide)
-  side: TradeSide
+  @ApiProperty({ description: '交易方向', enum: WhaleAlertTradeSide, example: 'Long' })
+  @IsEnum(WhaleAlertTradeSide)
+  side: WhaleAlertTradeSide
 
   @ApiProperty({ description: '交易数量（绝对值）', example: 0.5 })
   @IsNumber()

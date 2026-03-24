@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { WhaleNotificationRuleType } from '@/prisma/prisma.types'
+import { WhaleNotificationRuleType } from '@ai/shared'
 import { WhaleNotificationChannelsDto } from './whale-notification-channels.dto'
 
 export class WhaleNotificationRuleResponseDto {

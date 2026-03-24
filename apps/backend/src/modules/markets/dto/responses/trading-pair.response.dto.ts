@@ -1,4 +1,4 @@
-import type { ExchangeId, MarketInstrumentType, TradingVenueType } from '@ai/shared'
+import type { MarketInstrumentType, TradingExchangeId, TradingVenueType } from '@ai/shared'
 import { EXCHANGES, MARKET_INSTRUMENT_TYPES, TRADING_VENUE_TYPES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
@@ -41,7 +41,7 @@ export class TradingPairConfigResponseDto {
 
   // CEX 专用字段
   @ApiPropertyOptional({ description: '交易所标识，仅对 CEX 生效', enum: EXCHANGES })
-  exchange?: ExchangeId
+  exchange?: TradingExchangeId
 
   @ApiPropertyOptional({ description: '交易所原始 symbol，仅对 CEX 生效' })
   exchangeSymbol?: string

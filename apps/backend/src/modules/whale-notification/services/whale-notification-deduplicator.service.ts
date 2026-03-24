@@ -1,6 +1,6 @@
 import type { WhaleNotificationRulesRepository } from '../repositories/whale-notification-rules.repository'
 import { Inject, Injectable } from '@nestjs/common'
-import { WhaleNotificationChannel } from '@/prisma/prisma.types'
+import { WhaleNotificationChannel } from '@ai/shared'
 import { WhaleNotificationRulesRepository as WhaleNotificationRulesRepositoryToken } from '../repositories/whale-notification-rules.repository'
 
 export interface DeliveryCandidate {

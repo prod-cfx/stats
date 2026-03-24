@@ -1,7 +1,7 @@
 // 标准化的订单簿与市场模型类型
 // 统一多 CEX / DEX 的内部数据结构
 
-export type VenueType = 'spot' | 'perp' | 'future' | 'margin' | 'amm'
+export type MarketVenueType = 'spot' | 'perp' | 'future' | 'margin' | 'amm'
 
 // 流动性来源唯一标识，例如：
 // - 'binance-spot'
@@ -15,7 +15,7 @@ export type VenueId = string
 export interface MarketId {
   base: string // 例如 'BTC'
   quote: string // 例如 'USDT'
-  venueType: VenueType // 例如 'spot'
+  venueType: MarketVenueType // 例如 'spot'
 }
 
 // 方便作为 Map key 使用的扁平字符串形式
@@ -50,8 +50,8 @@ export function parseMarketKey(key: MarketKey): MarketId {
   const base = symbolPart.slice(0, lastDash)
   const quote = symbolPart.slice(lastDash + 1)
 
-  const normalizedVenueType = venueType as VenueType
-  const allowedVenueTypes: readonly VenueType[] = ['spot', 'perp', 'future', 'margin', 'amm']
+  const normalizedVenueType = venueType as MarketVenueType
+  const allowedVenueTypes: readonly MarketVenueType[] = ['spot', 'perp', 'future', 'margin', 'amm']
   if (!allowedVenueTypes.includes(normalizedVenueType)) {
     throw new Error(`Invalid MarketKey venue type: "${venueType}"`)
   }

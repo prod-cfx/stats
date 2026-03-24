@@ -1,5 +1,6 @@
 import type { KlineBarDto } from './dto/kline-bar.dto'
-import type { MarketTimeframe, Prisma } from '@/prisma/prisma.types'
+import type { MarketTimeframe } from '@ai/shared'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -152,9 +153,9 @@ export class KlineService {
       gte: new Date(from * 1000),
       lte: new Date(to * 1000),
     }
-    const where = {
+    const where: Prisma.FuturesPriceHistoryWhereInput = {
       symbol: cleanSymbol,
-      interval: timeframe,
+      interval: timeframe as Prisma.FuturesPriceHistoryWhereInput['interval'],
       timestamp: timeRange,
       ...(!shouldAggregate && { exchangeCode: normalizedExchange?.toUpperCase() }),
     }
