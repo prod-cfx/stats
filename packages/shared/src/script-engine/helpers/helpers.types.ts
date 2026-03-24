@@ -5,6 +5,19 @@
 import type { Bar } from './technical-indicators'
 
 /**
+ * 规范化后的策略参数（固定字段，便于脚本获得确定结构）
+ */
+export interface StrategyParamsNormalized {
+  riskPct: number | null
+  positionPct: number | null
+  stopLossPct: number | null
+  takeProfitPct: number | null
+  maxDrawdownPct: number | null
+  leverage: number | null
+  allowShort: boolean | null
+}
+
+/**
  * 单个 leg 在单个时间周期的数据
  * 
  * 包含该 leg 在特定时间周期的所有市场数据。
@@ -63,6 +76,10 @@ export interface StrategyContext {
    * - 允许脚本根据不同实例的配置生成差异化的 promptData
    */
   params?: Record<string, unknown> | null
+  /**
+   * 规范化策略参数（固定字段，优先使用）
+   */
+  paramsNormalized?: StrategyParamsNormalized
 }
 
 /**
@@ -154,6 +171,10 @@ export interface MultiLegStrategyContext {
    * - 在多 Leg 策略脚本中可通过 params 访问
    */
   params?: Record<string, unknown> | null
+  /**
+   * 规范化策略参数（固定字段，优先使用）
+   */
+  paramsNormalized?: StrategyParamsNormalized
 
   // 向后兼容：主腿的快捷访问（如果存在 primary leg）
   /**

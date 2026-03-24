@@ -1,0 +1,122 @@
+import { describe, expect, it } from '@jest/globals'
+import {
+  buildAutoAdvanceMessage,
+  buildLockedChecklistFromGraph,
+  isAssistantDraftLikeMessage,
+  isShortConfirmationMessage,
+  resolveChecklistPayload,
+  shouldAutoAdvanceOnConfirmation,
+} from './session-loop'
+
+const baseParams = {
+  symbol: 'BTCUSDT',
+  buyWindowMin: 3,
+  buyDropPct: 1,
+  sellWindowMin: 15,
+  sellRisePct: 2,
+  positionPct: 10,
+}
+
+const graph = {
+  version: 1,
+  status: 'confirmed',
+  trigger: [
+    { id: 'entry_1', operator: '短均线上穿长均线' },
+    { id: 'exit_1', operator: '短均线下穿长均线' },
+  ],
+  risk: [],
+  execution: [],
+} as any
+
+describe('ai-quant session-loop', () => {
+  it('locks checklist from graph when confirmGenerate=true even without sessionId', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+    })
+
+    expect(payload.entryRules).toEqual(['短均线上穿长均线'])
+    expect(payload.exitRules).toEqual(['短均线下穿长均线'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['3m', '15m'])
+    expect(payload.riskRules).toEqual({ positionPct: 10, maxDrawdownPct: 20 })
+  })
+
+  it('uses preset checklist when preset mode is enabled', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: true,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+    })
+
+    expect(payload.entryRules).toEqual(['3m 内下跌 1%'])
+    expect(payload.exitRules).toEqual(['15m 内上涨 2%'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+  })
+
+  it('falls back to graph checklist when message is strategy modification intent', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: false,
+      message: '把出场条件修改为更激进',
+      sessionId: null,
+      graph,
+      params: baseParams,
+    })
+
+    expect(payload.entryRules).toEqual(['短均线上穿长均线'])
+    expect(payload.exitRules).toEqual(['短均线下穿长均线'])
+    expect(payload.symbols).toBeUndefined()
+  })
+
+  it('buildLockedChecklistFromGraph always includes symbol/timeframe/risk', () => {
+    const payload = buildLockedChecklistFromGraph(null, baseParams)
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['3m', '15m'])
+    expect(payload.riskRules).toEqual({ positionPct: 10, maxDrawdownPct: 20 })
+  })
+
+  it('recognizes short confirmation messages', () => {
+    expect(isShortConfirmationMessage('可以')).toBe(true)
+    expect(isShortConfirmationMessage('继续')).toBe(true)
+    expect(isShortConfirmationMessage('按你说的来')).toBe(true)
+    expect(isShortConfirmationMessage('我想加一个止损')).toBe(false)
+  })
+
+  it('recognizes assistant draft-like messages', () => {
+    expect(isAssistantDraftLikeMessage('策略逻辑如下：入场条件...出场条件...')).toBe(true)
+    expect(isAssistantDraftLikeMessage('请确认逻辑图，确认后我再生成策略代码。')).toBe(true)
+    expect(isAssistantDraftLikeMessage('你好')).toBe(false)
+  })
+
+  it('auto-advances on short confirmation with draft context', () => {
+    expect(shouldAutoAdvanceOnConfirmation({
+      userMessage: '可以',
+      lastAssistantMessage: '策略逻辑如下：入场条件...',
+      hasLogicGraph: false,
+    })).toBe(true)
+    expect(shouldAutoAdvanceOnConfirmation({
+      userMessage: '可以',
+      lastAssistantMessage: null,
+      hasLogicGraph: true,
+    })).toBe(true)
+    expect(shouldAutoAdvanceOnConfirmation({
+      userMessage: '继续',
+      lastAssistantMessage: '你好',
+      hasLogicGraph: false,
+    })).toBe(false)
+  })
+
+  it('builds auto-advance message with assistant draft', () => {
+    const prompt = buildAutoAdvanceMessage('策略逻辑如下：入场...')
+    expect(prompt).toContain('不要继续追问')
+    expect(prompt).toContain('上一条草案')
+  })
+})

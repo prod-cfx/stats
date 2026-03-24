@@ -34,9 +34,8 @@ describe('Polymarket markets job (E2E)', () => {
     }
 
     // 仅清理本测试中会用到的测试数据，避免误删其他数据
-    const client = prisma.getClient()
-    await client.$transaction([
-      client.polymarketOrderbookSnapshot.deleteMany({
+    await prisma.$transaction([
+      prisma.polymarketOrderbookSnapshot.deleteMany({
         where: {
           OR: [
             { marketExternalId: { in: ['m-1', 'm-3'] } },
@@ -44,12 +43,12 @@ describe('Polymarket markets job (E2E)', () => {
           ],
         },
       }),
-      client.polymarketOutcome.deleteMany({
+      prisma.polymarketOutcome.deleteMany({
         where: {
           outcomeTokenId: { in: ['token-yes', 'token-no', 'token-eth-yes'] },
         },
       }),
-      client.polymarketMarket.deleteMany({
+      prisma.polymarketMarket.deleteMany({
         where: {
           marketId: { in: ['m-1', 'm-3'] },
         },
@@ -69,7 +68,6 @@ describe('Polymarket markets job (E2E)', () => {
   })
 
   it('should upsert markets/outcomes and advance cursor with offset/cursor strategy', async () => {
-    const client = prisma.getClient()
 
     const baseCtx: Omit<DataPullJobContext<PolymarketTaskMeta>, 'cursor'> = {
       taskId: 1,
@@ -251,7 +249,7 @@ describe('Polymarket markets job (E2E)', () => {
     expect(cursor1.nextCursor).toBeNull()
     expect(cursor1.usedCursor).toBe(false)
 
-    const marketsAfterRun1 = await client.polymarketMarket.findMany({
+    const marketsAfterRun1 = await prisma.polymarketMarket.findMany({
       where: {
         marketId: {
           in: ['m-1', 'm-3'],
@@ -263,7 +261,7 @@ describe('Polymarket markets job (E2E)', () => {
     expect(marketsAfterRun1.map(m => m.marketId)).toEqual(['m-1', 'm-3'])
     expect(marketsAfterRun1[0].category).toBe('crypto')
 
-    const outcomesAfterRun1 = await client.polymarketOutcome.findMany({
+    const outcomesAfterRun1 = await prisma.polymarketOutcome.findMany({
       where: {
         outcomeTokenId: {
           in: ['token-eth-yes', 'token-no', 'token-yes'],

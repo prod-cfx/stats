@@ -50,11 +50,17 @@ export const aiConfig = registerAs('ai', () => ({
   uniapi: {
     apiKey: env.str('UNIAPI_API_KEY'),
     baseUrl: env.str('UNIAPI_BASE_URL', 'https://api.uniapi.io'),
+    timeoutMs: env.int('UNIAPI_TIMEOUT_MS', 30_000),
+    maxRetries: env.int('UNIAPI_MAX_RETRIES', 1),
+    retryDelayMs: env.int('UNIAPI_RETRY_DELAY_MS', 300),
   },
   strategyCodegen: {
     apiKey: env.str('LLM_STRATEGY_CODEGEN_API_KEY'),
     baseUrl: env.str('LLM_STRATEGY_CODEGEN_BASE_URL', 'https://api.uniapi.io'),
     defaultModel: env.str('LLM_STRATEGY_CODEGEN_MODEL', 'deepseek-chat'),
+    timeoutMs: env.int('LLM_STRATEGY_CODEGEN_TIMEOUT_MS', 45_000),
+    maxRetries: env.int('LLM_STRATEGY_CODEGEN_MAX_RETRIES', 2),
+    retryDelayMs: env.int('LLM_STRATEGY_CODEGEN_RETRY_DELAY_MS', 500),
   },
 }))
 

@@ -1,15 +1,18 @@
 import type { CoinglassContractType, MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode, toCoinglassSymbol } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { INTERVAL_MS } from '@/modules/kline/utils/kline-time.utils'
-// eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
 
 interface FuturesPriceCursor {
   /**
@@ -111,10 +114,15 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   ] as const satisfies readonly MarketTimeframe[]
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     // 首次运行时（cursor 为空）允许用 task.meta 填充参数，避免 seed 配置不生效。
@@ -150,7 +158,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       typeof cursor.backfillCompletedAt === 'number' &&
       Date.now() - cursor.backfillCompletedAt < this.BACKFILL_RECHECK_WINDOW_MS
 
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     if (!shouldSkipBackfillCheck) {
@@ -285,7 +293,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       }
     }
 
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     const pointsWithTimestamps = json.data.map(point => {
       const timestampMs = point.time >= 1_000_000_000_000 ? point.time : point.time * 1000
@@ -491,7 +499,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
   ): Promise<JobRunResult> {
     const isSpot = cursor.contractType === null
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
 
     const baseUrl = new URL(endpoint)
     baseUrl.searchParams.set('symbol', this.getApiSymbol(cursor))
@@ -649,7 +657,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
       return []
     }
 
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 
     // 使用分块查询避免大数据量场景下的内存爆炸
@@ -732,7 +740,7 @@ export class CoinglassFuturesPriceHistoryJob implements DataPullJob {
     const contractType = isSpot ? null : (cursor.contractType ?? this.defaultContractType)
     const interval = cursor.interval ?? this.defaultInterval
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
-    const dbClient = this.prisma.getClient()
+    const dbClient = this.txHost.tx
 
     let totalInserted = 0
 

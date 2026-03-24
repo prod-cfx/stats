@@ -6,6 +6,7 @@ import type { MutateBalanceDto } from './dto/mutate-balance.dto'
 import type { StrategyAccountListQueryDto } from './dto/strategy-account-list.query.dto'
 import type { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily.query.dto'
 import { ErrorCode } from '@ai/shared'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -38,6 +39,7 @@ export class AccountsController {
     private readonly strategyPnlReportService: StrategyPnlReportService,
   ) {}
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建策略账户' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
@@ -83,6 +85,7 @@ export class AccountsController {
     return detail
   }
 
+  @Transactional()
   @Post(':accountId/deposit')
   @ApiOperation({ summary: '账户入金' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
@@ -94,6 +97,7 @@ export class AccountsController {
     return this.accountsService.deposit(accountId, dto)
   }
 
+  @Transactional()
   @Post(':accountId/withdraw')
   @ApiOperation({ summary: '账户出金' })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
@@ -155,6 +159,7 @@ export class AccountsController {
     return this.accountsService.listDailyStats(accountId, query)
   }
 
+  @Transactional()
   @Post('reports/daily')
   @ApiOperation({ summary: '生成指定日期的日度收益' })
   async generateDailyReport(@Body() dto: GenerateDailyReportDto) {

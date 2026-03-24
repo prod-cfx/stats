@@ -29,10 +29,9 @@ describe('MarketsService.getLongShortRatios pagination (E2E)', () => {
     prisma = app.get<PrismaService>(PrismaServiceToken)
     service = app.get<MarketsService>(MarketsServiceToken)
 
-    const client = prisma.getClient()
 
     // 清理本测试写入的数据
-    await client.longShortRatio.deleteMany({
+    await prisma.longShortRatio.deleteMany({
       where: { tradingPairId: PAIR_ID },
     })
 
@@ -46,13 +45,12 @@ describe('MarketsService.getLongShortRatios pagination (E2E)', () => {
       shortAccountRatio: String(0.45 - i * 0.01),
     }))
 
-    await client.longShortRatio.createMany({ data: records, skipDuplicates: true })
+    await prisma.longShortRatio.createMany({ data: records, skipDuplicates: true })
   })
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.longShortRatio.deleteMany({
+      await prisma.longShortRatio.deleteMany({
         where: { tradingPairId: PAIR_ID },
       })
     }
@@ -150,10 +148,9 @@ describe('MarketsService.getLatestTrades pagination (E2E)', () => {
     prisma = app.get<PrismaService>(PrismaServiceToken)
     service = app.get<MarketsService>(MarketsServiceToken)
 
-    const client = prisma.getClient()
 
     // 清理本测试写入的数据
-    await client.marketTrade.deleteMany({
+    await prisma.marketTrade.deleteMany({
       where: { exchange: EXCHANGE, instrumentType: INSTRUMENT_TYPE, symbol: SYMBOL },
     })
 
@@ -171,13 +168,12 @@ describe('MarketsService.getLatestTrades pagination (E2E)', () => {
       tradeTimestamp: BASE_TS + BigInt(i * 1000),
     }))
 
-    await client.marketTrade.createMany({ data: records, skipDuplicates: true })
+    await prisma.marketTrade.createMany({ data: records, skipDuplicates: true })
   })
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.marketTrade.deleteMany({
+      await prisma.marketTrade.deleteMany({
         where: { exchange: EXCHANGE, instrumentType: INSTRUMENT_TYPE, symbol: SYMBOL },
       })
     }

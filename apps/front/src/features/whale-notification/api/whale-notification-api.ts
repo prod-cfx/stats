@@ -42,8 +42,8 @@ function hashString(input: string): string {
 }
 
 function resolveStorageScope(): string {
-  const profile = loadStoredSession()?.profile as { id?: string } | undefined
-  if (profile?.id) return `uid:${profile.id}`
+  const session = loadStoredSession()
+  if (session?.userId) return `uid:${session.userId}`
 
   const token = getToken()
   if (token) return `tk:${hashString(token).slice(0, 10)}`
@@ -205,8 +205,8 @@ function appendRuleCreatedInboxItem(rule: WhaleNotificationRule): void {
 }
 
 function getDefaultEmailChannelState(): boolean {
-  const profile = loadStoredSession()?.profile
-  return Boolean(profile?.email)
+  const session = loadStoredSession()
+  return Boolean(session?.email)
 }
 
 export function getDefaultWhaleChannels() {

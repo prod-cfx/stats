@@ -2,7 +2,11 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import { ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { ConfigModule } from '@nestjs/config'
+import { ClsConfigModule } from '@/common/modules/cls.module'
+import { EnvModule } from '@/common/modules/env.module'
 import { BacktestingModule } from '@/modules/backtesting/backtesting.module'
+import { PrismaModule } from '@/prisma/prisma.module'
 import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runner.service'
 import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -51,7 +55,7 @@ describe('backtestingController (e2e)', () => {
     }
 
     moduleFixture = await Test.createTestingModule({
-      imports: [BacktestingModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), EnvModule, ClsConfigModule, PrismaModule, BacktestingModule],
     })
       .overrideProvider(BacktestRunnerService)
       .useValue(runnerMock)

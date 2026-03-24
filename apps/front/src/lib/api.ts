@@ -1846,6 +1846,35 @@ export async function continueLlmCodegenSession(
   )
 }
 
+export async function getLlmCodegenSession(
+  sessionId: string,
+  userId: string,
+): Promise<LlmCodegenSessionResponse> {
+  validateId(sessionId, 'llm codegen session ID')
+  if (!userId.trim()) {
+    throw new ApiError('userId is required', 'INVALID_INPUT')
+  }
+  const token = getToken()
+  const encodedUserId = encodeURIComponent(userId)
+  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen/sessions/${sessionId}?userId=${encodedUserId}`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '查询 LLM 代码生成会话失败')
+    throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
+  }
+  return unwrapResponse<LlmCodegenSessionResponse>(json as LlmCodegenSessionResponse | BaseResponse<LlmCodegenSessionResponse>)
+}
+
 export async function fetchLlmStrategyInstances(query?: {
   page?: number
   limit?: number

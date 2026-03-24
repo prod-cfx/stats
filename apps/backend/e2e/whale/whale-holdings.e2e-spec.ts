@@ -20,8 +20,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     whaleHoldingsService = app.get(WhaleHoldingsServiceToken)
 
     // 清理历史测试数据，避免断言被污染
-    const client = prisma.getClient()
-    await client.hyperliquidWhalePosition.deleteMany({})
+    await prisma.hyperliquidWhalePosition.deleteMany({})
   })
 
   afterAll(async () => {
@@ -31,7 +30,6 @@ describe('WhaleHoldingsService (E2E)', () => {
   })
 
   it('should aggregate latest open whale positions per (user, symbol)', async () => {
-    const client = prisma.getClient()
 
     const now = new Date()
     const minutes = (n: number) => new Date(now.getTime() - n * 60 * 1000)
@@ -40,7 +38,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     // - user1/BTC: 持仓价值 500k（低于 1M 阈值）
     // - user2/BTC: 持仓价值 1.2M（高于 1M 阈值）
     // - user3/ETH: 持仓价值 200k（低于 1M 但高于 100k 阈值）
-    await client.hyperliquidWhalePosition.createMany({
+    await prisma.hyperliquidWhalePosition.createMany({
       data: [
         {
           userAddress: '0xWhaleAddress1',
@@ -114,13 +112,12 @@ describe('WhaleHoldingsService (E2E)', () => {
   })
 
   it('should return paginated structure with total/page/limit/items', async () => {
-    const client = prisma.getClient()
-    await client.hyperliquidWhalePosition.deleteMany({})
+    await prisma.hyperliquidWhalePosition.deleteMany({})
     const now = new Date()
     const minutes = (n: number) => new Date(now.getTime() - n * 60 * 1000)
 
     // Seed 5 whale positions all above threshold
-    await client.hyperliquidWhalePosition.createMany({
+    await prisma.hyperliquidWhalePosition.createMany({
       data: Array.from({ length: 5 }, (_, i) => ({
         userAddress: `0xPagWhale${i}`,
         symbol: 'BTC',

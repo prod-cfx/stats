@@ -18,10 +18,9 @@ describe('Aggregated liquidation service (E2E)', () => {
     prisma = app.get(PrismaService)
     service = app.get(AggregatedLiquidationService)
 
-    const client = prisma.getClient()
 
     // 仅清理本测试写入的 BTC 聚合爆仓历史，避免影响真实业务数据
-    await client.aggregatedLiquidationHistory.deleteMany({
+    await prisma.aggregatedLiquidationHistory.deleteMany({
       where: {
         symbol: 'BTC',
         source: 'TEST',
@@ -35,7 +34,7 @@ describe('Aggregated liquidation service (E2E)', () => {
     const t1hLatest = new Date(baseTime.getTime() + 60 * 60 * 1000)
     const t4hLatest = new Date(baseTime.getTime() + 4 * 60 * 60 * 1000)
 
-    await client.aggregatedLiquidationHistory.createMany({
+    await prisma.aggregatedLiquidationHistory.createMany({
       data: [
         // 1h 聚合行（优先使用 AGGREGATED）
         {
@@ -83,9 +82,8 @@ describe('Aggregated liquidation service (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
       // 清理本测试写入的数据，避免污染后续真实环境或其他用例
-      await client.aggregatedLiquidationHistory.deleteMany({
+      await prisma.aggregatedLiquidationHistory.deleteMany({
         where: {
           symbol: 'BTC',
           source: 'TEST',

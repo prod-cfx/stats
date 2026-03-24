@@ -1,10 +1,13 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
-import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount } from '@/prisma/prisma.types'
+import type { PositionSide, Symbol as PrismaSymbol, SignalDirection, SignalStatus, TradeSide, UserStrategyAccount, PrismaClient  } from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
@@ -64,6 +67,7 @@ export class SignalExecutorService implements OnModuleInit {
     private readonly tradingSignalRepository: TradingSignalRepository,
     private readonly executionRepository: SignalExecutionRepository,
     private readonly telemetry: SignalTelemetryService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {}
 
   async onModuleInit() {
@@ -537,7 +541,8 @@ export class SignalExecutorService implements OnModuleInit {
     | { type: 'skip'; reason: string; executionId?: string }
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
-    return this.executorRepository.runInTransaction(async prisma => {
+    return this.txHost.withTransaction(async () => {
+      const prisma = this.txHost.tx
       const existing = await prisma.userSignalExecution.findUnique({
         where: {
           signalId_userStrategyAccountId: {
@@ -551,7 +556,7 @@ export class SignalExecutorService implements OnModuleInit {
         return { type: 'duplicate' }
       }
 
-      const lockedAccount = await this.lockAccount(prisma, account.id)
+      const lockedAccount = await this.lockAccount(account.id)
       if (!lockedAccount) {
         return { type: 'skip', reason: 'Account not found' }
       }
@@ -641,7 +646,7 @@ export class SignalExecutorService implements OnModuleInit {
       let reservedQuoteForExecution = orderParamsResult.quoteBudget
 
       if (!isCloseSignal) {
-        await this.accountsService.applyLedgerDeltaWithClient(prisma, {
+        await this.accountsService.applyLedgerDelta({
           accountId: account.id,
           delta: orderParamsResult.quoteBudget.neg(),
           ledgerType: LedgerEntryType.ADJUSTMENT,
@@ -681,10 +686,9 @@ export class SignalExecutorService implements OnModuleInit {
   }
 
   private async lockAccount(
-    prisma: Prisma.TransactionClient,
     accountId: string,
   ): Promise<Pick<UserStrategyAccount, 'id' | 'userId' | 'baseCurrency' | 'balance'> | null> {
-    const rows = await prisma.$queryRaw<
+    const rows = await this.txHost.tx.$queryRaw<
       Array<{
         id: string
         userId: string

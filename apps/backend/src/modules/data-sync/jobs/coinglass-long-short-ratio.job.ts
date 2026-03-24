@@ -1,14 +1,17 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { DataPullJob, DataPullJobContext, JobRunResult } from '../contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // Nest 注入需要运行时引用 ConfigService/PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 
 interface LongShortRatioCursor {
   /**
@@ -75,10 +78,15 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
@@ -136,7 +144,7 @@ export class CoinglassLongShortRatioJob implements DataPullJob {
       }
     }
 
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     const prismaInterval = mapTimeframe(interval as MarketTimeframe)
 

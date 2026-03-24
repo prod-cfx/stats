@@ -1,4 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type {
   DataPullJob,
   DataPullJobContext,
@@ -6,13 +7,15 @@ import type {
   JobRunResult,
 } from '../../data-sync/contracts/data-pull-job'
 import { ErrorCode } from '@ai/shared'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
 import { ConfigService } from '@nestjs/config'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 
 interface OiOhlcAggregatedMeta {
   symbol: string
@@ -78,10 +81,15 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma>,
+    private readonly txEvents: TransactionEventsService,
   ) {}
 
   async run(ctx: DataPullJobContext<OiOhlcAggregatedMeta>): Promise<JobRunResult> {
+    return this.txEvents.withAfterCommit(() => this.execute(ctx))
+  }
+
+  private async execute(ctx: DataPullJobContext<OiOhlcAggregatedMeta>): Promise<JobRunResult> {
     const cursor = this.parseCursor(ctx.cursor)
 
     const apiKey = this.configService.get<string>('COINGLASS_API_KEY')
@@ -141,7 +149,7 @@ export class CoinglassOiOhlcAggregatedJob implements DataPullJob<OiOhlcAggregate
       }
     }
 
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     const prismaInterval = mapTimeframe(interval)
 
     const pointsWithTimestamps = json.data.map(point => ({

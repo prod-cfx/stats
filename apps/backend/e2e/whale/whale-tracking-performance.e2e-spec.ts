@@ -20,8 +20,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
     whaleTrackingService = app.get(WhaleTrackingServiceToken)
 
     // 清理历史测试数据，避免断言被污染
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
   })
 
   afterAll(async () => {
@@ -31,8 +30,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
   })
 
   it('should aggregate trader performance by address within lookback window', async () => {
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
 
     const now = new Date()
     const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000)
@@ -41,7 +39,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
     // - BTC: 多空各一条
     // - ETH: 多头一条
     // - 其中一条超出 timeRangeDays 窗口，应被排除
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: [
         {
           userAddress: '0xWhaleAddressPerf1',
@@ -131,10 +129,9 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
   })
 
   it('should support symbol filter', async () => {
-    const client = prisma.getClient()
-    await client.hyperliquidWhaleAlert.deleteMany({})
+    await prisma.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
-    await client.hyperliquidWhaleAlert.createMany({
+    await prisma.hyperliquidWhaleAlert.createMany({
       data: [
         {
           userAddress: '0xWhaleAddressPerf1',

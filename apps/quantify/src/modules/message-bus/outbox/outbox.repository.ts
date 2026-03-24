@@ -1,18 +1,15 @@
-import type { Prisma } from '@/prisma/prisma.types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
 import { OutboxStatus } from '@/prisma/prisma.types'
 
 @Injectable()
 export class OutboxRepository {
   private readonly logger = new Logger(OutboxRepository.name)
 
-  constructor(private readonly prisma: PrismaService) {}
-
-  getClient(tx?: Prisma.TransactionClient) {
-    return (tx as any) || this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(
     data: {
@@ -25,9 +22,8 @@ export class OutboxRepository {
       priority?: number | null
       deliverAt?: Date | null
     },
-    tx?: Prisma.TransactionClient,
   ) {
-    const client = this.getClient(tx)
+    const client = this.txHost.tx
     return (client as any).outboxMessage.create({
       data: {
         topic: data.topic,
@@ -71,7 +67,7 @@ export class OutboxRepository {
   > {
     const now = new Date()
     const lockExpiredBefore = new Date(now.getTime() - lockTimeoutSec * 1000)
-    const client = this.getClient()
+    const client = this.txHost.tx
 
     const candidates: Array<{ id: bigint }> = await (client as any).outboxMessage.findMany({
       select: { id: true },
@@ -136,7 +132,7 @@ export class OutboxRepository {
   }
 
   async markSent(id: bigint) {
-    const client = this.getClient()
+    const client = this.txHost.tx
     await (client as any).outboxMessage.update({
       where: { id },
       data: { status: OutboxStatus.SENT, lockedBy: null, lockedAt: null },
@@ -144,7 +140,7 @@ export class OutboxRepository {
   }
 
   async markRetry(id: bigint, attempts: number, backoffMs: number, error?: string) {
-    const client = this.getClient()
+    const client = this.txHost.tx
     const nextVisibleAt = new Date(Date.now() + backoffMs)
     await (client as any).outboxMessage.update({
       where: { id },
@@ -160,7 +156,7 @@ export class OutboxRepository {
   }
 
   async markDead(id: bigint, error?: string) {
-    const client = this.getClient()
+    const client = this.txHost.tx
     await (client as any).outboxMessage.update({
       where: { id },
       data: {
@@ -173,7 +169,7 @@ export class OutboxRepository {
   }
 
   async incrementAttemptsAndGet(id: bigint): Promise<number> {
-    const client: any = this.getClient()
+    const client: any = this.txHost.tx
     const row = await client.outboxMessage.update({
       where: { id },
       data: { attempts: { increment: 1 } },
@@ -183,7 +179,7 @@ export class OutboxRepository {
   }
 
   async purgeSentOlderThan(cutoff: Date, batchSize = 500): Promise<number> {
-    const client: any = this.getClient()
+    const client: any = this.txHost.tx
     let total = 0
     for (;;) {
       const rows: Array<{ id: bigint }> = await client.outboxMessage.findMany({

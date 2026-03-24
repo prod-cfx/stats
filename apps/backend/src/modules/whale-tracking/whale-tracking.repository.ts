@@ -1,21 +1,17 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { HyperliquidWhaleAlert, Prisma  } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class WhaleTrackingRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async groupWhaleAlertsByAddress(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
     take: number,
   ) {
-    return this.getClient().hyperliquidWhaleAlert.groupBy({
+    return this.txHost.tx.hyperliquidWhaleAlert.groupBy({
       by: ['userAddress'],
       where,
       _sum: { positionValueUsd: true },
@@ -28,13 +24,13 @@ export class WhaleTrackingRepository {
   async findManyAlerts(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
   ): Promise<HyperliquidWhaleAlert[]> {
-    return this.getClient().hyperliquidWhaleAlert.findMany({ where })
+    return this.txHost.tx.hyperliquidWhaleAlert.findMany({ where })
   }
 
   async groupAlertsByAddressForSummary(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
   ) {
-    return this.getClient().hyperliquidWhaleAlert.groupBy({
+    return this.txHost.tx.hyperliquidWhaleAlert.groupBy({
       by: ['userAddress'],
       where,
       _sum: { positionValueUsd: true },
@@ -45,7 +41,7 @@ export class WhaleTrackingRepository {
   async groupAlertsBySymbol(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
   ) {
-    return this.getClient().hyperliquidWhaleAlert.groupBy({
+    return this.txHost.tx.hyperliquidWhaleAlert.groupBy({
       by: ['symbol'],
       where,
       _sum: { positionValueUsd: true },
@@ -56,7 +52,7 @@ export class WhaleTrackingRepository {
   async groupAlertsBySymbolWithPositionFilter(
     where: Prisma.HyperliquidWhaleAlertWhereInput,
   ) {
-    return this.getClient().hyperliquidWhaleAlert.groupBy({
+    return this.txHost.tx.hyperliquidWhaleAlert.groupBy({
       by: ['symbol'],
       where,
       _count: { _all: true },
@@ -67,7 +63,7 @@ export class WhaleTrackingRepository {
     where: Prisma.HyperliquidWhaleAlertWhereInput,
     take: number,
   ): Promise<HyperliquidWhaleAlert[]> {
-    return this.getClient().hyperliquidWhaleAlert.findMany({
+    return this.txHost.tx.hyperliquidWhaleAlert.findMany({
       where,
       orderBy: { createTime: 'desc' },
       take,

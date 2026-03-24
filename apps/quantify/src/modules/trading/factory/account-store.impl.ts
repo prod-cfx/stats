@@ -1,23 +1,24 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId } from '../core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './account-store'
-import type { ExchangeId as PrismaExchangeId } from '@/prisma/prisma.types'
+import type { PrismaClient, ExchangeId as PrismaExchangeId } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Inject, Injectable } from '@nestjs/common'
 
 import { ConfigCryptoService } from '@/common/services/config-crypto.service'
 import { InvalidExchangeAccountConfigException } from '@/modules/exchange-accounts/exceptions/invalid-exchange-account-config.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class DbExchangeAccountStore implements ExchangeAccountStore {
   constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     @Inject(ConfigCryptoService)
     private readonly crypto: ConfigCryptoService,
   ) {}
 
   async getAccountConfig(userId: string, exchangeId: ExchangeId): Promise<ExchangeAccountConfig | null> {
-    const account = await this.prisma.exchangeAccount.findFirst({
+    const account = await this.txHost.tx.exchangeAccount.findFirst({
       where: {
         userId,
         exchangeId: exchangeId as PrismaExchangeId,
@@ -34,7 +35,7 @@ export class DbExchangeAccountStore implements ExchangeAccountStore {
   }
 
   async getAccountConfigById(accountId: string, userId: string): Promise<ExchangeAccountConfig | null> {
-    const account = await this.prisma.exchangeAccount.findFirst({
+    const account = await this.txHost.tx.exchangeAccount.findFirst({
       where: {
         id: accountId,
         userId,

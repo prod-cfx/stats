@@ -1,4 +1,5 @@
 import { ErrorCode } from '@ai/shared'
+import { Transactional } from '@nestjs-cls/transactional'
 import {
   Body,
   Controller,
@@ -81,6 +82,7 @@ export class OpenInterestController {
   constructor(private readonly openInterestService: OpenInterestService) {}
 
   @Post()
+  @Transactional()
   @ApiBearerAuth()
   @RequireAuth()
   @CreateAny(AppResource.MARKET_SYMBOL)
@@ -102,6 +104,7 @@ export class OpenInterestController {
   }
 
   @Post('batch')
+  @Transactional()
   @ApiBearerAuth()
   @RequireAuth()
   @CreateAny(AppResource.MARKET_SYMBOL)

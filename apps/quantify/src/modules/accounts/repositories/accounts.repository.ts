@@ -1,18 +1,12 @@
-import type { StrategyPnlDaily, UserStrategyAccount, Prisma  } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
- 
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, StrategyPnlDaily, UserStrategyAccount, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class AccountsRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(data: {
     userId: string
@@ -24,7 +18,7 @@ export class AccountsRepository {
     balance: Prisma.Decimal
     equity: Prisma.Decimal
   }): Promise<UserStrategyAccount> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.create({ data })
   }
 
@@ -34,17 +28,17 @@ export class AccountsRepository {
     skip: number
     take: number
   }): Promise<UserStrategyAccount[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findMany(params)
   }
 
   async count(where: Prisma.UserStrategyAccountWhereInput): Promise<number> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.count({ where })
   }
 
   async findById(id: string): Promise<UserStrategyAccount | null> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findUnique({ where: { id } })
   }
 
@@ -52,17 +46,17 @@ export class AccountsRepository {
     id: string,
     select: T,
   ): Promise<Prisma.UserStrategyAccountGetPayload<{ select: T }> | null> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findUnique({ where: { id }, select }) as Promise<Prisma.UserStrategyAccountGetPayload<{ select: T }> | null>
   }
 
   async countAll(): Promise<number> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.count()
   }
 
   async findLatestDailyStatForAccount(id: string): Promise<StrategyPnlDaily | null> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findFirst({
       where: { userStrategyAccountId: id },
       orderBy: { date: 'desc' },
@@ -70,7 +64,7 @@ export class AccountsRepository {
   }
 
   async groupLatestDailyStats(accountIds: string[]) {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.groupBy({
       by: ['userStrategyAccountId'],
       _max: { date: true },
@@ -81,7 +75,7 @@ export class AccountsRepository {
   async findDailyStatsByConditions(
     conditions: Array<{ userStrategyAccountId: string; date: Date }>,
   ): Promise<StrategyPnlDaily[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany({
       where: { OR: conditions },
     })
@@ -93,19 +87,13 @@ export class AccountsRepository {
     skip: number
     take: number
   }): Promise<StrategyPnlDaily[]> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany(params)
   }
 
   async countDailyStats(where: Prisma.StrategyPnlDailyWhereInput): Promise<number> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.count({ where })
-  }
-
-  async runInTransaction<T>(
-    fn: (prisma: Prisma.TransactionClient) => Promise<T>,
-  ): Promise<T> {
-    return this.prisma.runInTransaction(fn)
   }
 
   // --- ledger methods used within transaction client ---
@@ -116,43 +104,33 @@ export class AccountsRepository {
     skip: number
     take: number
   }) {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.pnlLedger.findMany(params)
   }
 
   async countLedger(where: Prisma.PnlLedgerWhereInput): Promise<number> {
-    const client = this.getClient()
+    const client = this.txHost.tx
     return client.pnlLedger.count({ where })
   }
 
-  // --- transaction-scoped operations (accept TransactionClient) ---
+  // --- transaction-scoped operations (use CLS transaction context) ---
 
-  async findAccountInTx(
-    prisma: Prisma.TransactionClient,
-    id: string,
-  ): Promise<UserStrategyAccount | null> {
-    return prisma.userStrategyAccount.findUnique({ where: { id } })
+  async findAccount(id: string): Promise<UserStrategyAccount | null> {
+    return this.txHost.tx.userStrategyAccount.findUnique({ where: { id } })
   }
 
-  async findLedgerFirstInTx(
-    prisma: Prisma.TransactionClient,
-    where: Prisma.PnlLedgerWhereInput,
-  ) {
-    return prisma.pnlLedger.findFirst({ where })
+  async findLedgerFirst(where: Prisma.PnlLedgerWhereInput) {
+    return this.txHost.tx.pnlLedger.findFirst({ where })
   }
 
-  async updateAccountInTx(
-    prisma: Prisma.TransactionClient,
+  async updateAccount(
     id: string,
     data: Prisma.UserStrategyAccountUpdateInput,
   ): Promise<UserStrategyAccount> {
-    return prisma.userStrategyAccount.update({ where: { id }, data })
+    return this.txHost.tx.userStrategyAccount.update({ where: { id }, data })
   }
 
-  async createLedgerInTx(
-    prisma: Prisma.TransactionClient,
-    data: Prisma.PnlLedgerUncheckedCreateInput,
-  ) {
-    return prisma.pnlLedger.create({ data })
+  async createLedger(data: Prisma.PnlLedgerUncheckedCreateInput) {
+    return this.txHost.tx.pnlLedger.create({ data })
   }
 }

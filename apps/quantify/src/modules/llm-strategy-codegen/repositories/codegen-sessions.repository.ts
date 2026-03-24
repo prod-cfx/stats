@@ -1,36 +1,32 @@
-import type { LlmStrategyCodegenSession, LlmStrategyCodeVersion, Prisma } from '@/prisma/prisma.types'
-
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, LlmStrategyCodegenSession, LlmStrategyCodeVersion, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class CodegenSessionsRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async createSession(data: Prisma.LlmStrategyCodegenSessionCreateInput): Promise<LlmStrategyCodegenSession> {
-    return this.client.llmStrategyCodegenSession.create({ data })
+    return this.txHost.tx.llmStrategyCodegenSession.create({ data })
   }
 
   async findById(id: string): Promise<LlmStrategyCodegenSession | null> {
-    return this.client.llmStrategyCodegenSession.findUnique({ where: { id } })
+    return this.txHost.tx.llmStrategyCodegenSession.findUnique({ where: { id } })
   }
 
   async updateSession(id: string, data: Prisma.LlmStrategyCodegenSessionUpdateInput): Promise<LlmStrategyCodegenSession> {
-    return this.client.llmStrategyCodegenSession.update({
+    return this.txHost.tx.llmStrategyCodegenSession.update({
       where: { id },
       data,
     })
   }
 
   async createVersion(data: Prisma.LlmStrategyCodeVersionCreateInput): Promise<LlmStrategyCodeVersion> {
-    return this.client.llmStrategyCodeVersion.create({ data })
+    return this.txHost.tx.llmStrategyCodeVersion.create({ data })
   }
 
   async createDraftStrategyInstanceFromPublishedSession(input: {
@@ -44,7 +40,8 @@ export class CodegenSessionsRepository {
     params: Record<string, unknown>
     metadata?: Record<string, unknown>
   }): Promise<{ strategyTemplateId: string, strategyInstanceId: string }> {
-    return this.prisma.runInTransaction(async (tx) => {
+    return this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
       const executionTimeframe = this.resolveExecutionTimeframe(input.params)
       const executionSymbol = this.resolveExecutionSymbol(input.params)
       const templateName = `${input.name}-${input.sessionId}`

@@ -1,4 +1,5 @@
 import type { AdminUserListQueryDto } from '../dto/admin-user-list.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -11,7 +12,6 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { Transaction } from '@/common/decorators/transaction.decorator'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
@@ -124,7 +124,7 @@ export class AdminUserController {
   @Post()
   @RequireAuth()
   @CreateAny(AppResource.ADMIN_USER)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '创建管理员账号' })
   @ApiBody({ type: CreateAdminUserDto })
   @ApiCreatedResponse({ description: '创建成功', type: AdminUserDto })
@@ -135,7 +135,7 @@ export class AdminUserController {
   @Put(':id')
   @RequireAuth()
   @UpdateAny(AppResource.ADMIN_USER)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '更新管理员账号' })
   @ApiBody({ type: UpdateAdminUserDto })
   @ApiOkResponse({ description: '更新成功', type: AdminUserDto })
@@ -146,7 +146,7 @@ export class AdminUserController {
   @Delete(':id')
   @RequireAuth()
   @DeleteAny(AppResource.ADMIN_USER)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '删除管理员账号' })
   @ApiOkResponse({ description: '删除成功' })
   async delete(@Param('id') id: string) {

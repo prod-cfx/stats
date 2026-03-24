@@ -22,21 +22,20 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     prisma = app.get(PrismaServiceToken)
     whaleAlertService = app.get(WhaleAlertServiceToken)
 
-    const client = prisma.getClient()
 
-    await client.whaleNotificationCooldownGuard.deleteMany({
+    await prisma.whaleNotificationCooldownGuard.deleteMany({
       where: {
         dedupKey: {
           startsWith: `${userId}:`,
         },
       },
     })
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await client.whaleNotificationRule.deleteMany({ where: { userId } })
-    await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
-    await client.user.deleteMany({ where: { id: userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+    await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
+    await prisma.user.deleteMany({ where: { id: userId } })
 
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: userId,
         email: 'e2e-orchestrator-user@example.com',
@@ -47,7 +46,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       },
     })
 
-    await client.whaleNotificationRule.create({
+    await prisma.whaleNotificationRule.create({
       data: {
         userId,
         type: 'ADDRESS',
@@ -61,15 +60,14 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   })
 
   beforeEach(async () => {
-    const client = prisma.getClient()
-    await client.whaleNotificationCooldownGuard.deleteMany({
+    await prisma.whaleNotificationCooldownGuard.deleteMany({
       where: {
         dedupKey: {
           startsWith: `${userId}:`,
         },
       },
     })
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
   })
 
   afterAll(async () => {
@@ -78,18 +76,17 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     process.env.TELEGRAM_BOT_TOKEN = originalTelegramBotToken
 
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationCooldownGuard.deleteMany({
+      await prisma.whaleNotificationCooldownGuard.deleteMany({
         where: {
           dedupKey: {
             startsWith: `${userId}:`,
           },
         },
       })
-      await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await client.whaleNotificationRule.deleteMany({ where: { userId } })
-      await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
-      await client.user.deleteMany({ where: { id: userId } })
+      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
+      await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
+      await prisma.user.deleteMany({ where: { id: userId } })
     }
 
     if (app) {
@@ -120,7 +117,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       tradeTime: new Date(now.getTime() + 1_000),
     })
 
-    const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
+    const rows = await prisma.whaleNotificationDelivery.findMany({
       where: { userId },
       orderBy: [{ createdAt: 'asc' }],
     })
@@ -137,7 +134,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   it('should skip orchestration when feature flag is disabled', async () => {
     process.env.WHALE_NOTIFICATION_ENABLED = 'false'
 
-    await prisma.getClient().whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
 
     await whaleAlertService.recordWhaleTrade({
       whaleAddress: '0xorchestrator',
@@ -149,7 +146,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       tradeTime: new Date(),
     })
 
-    const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
+    const rows = await prisma.whaleNotificationDelivery.findMany({
       where: { userId },
     })
 
@@ -162,11 +159,10 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     process.env.WHALE_NOTIFICATION_ENABLED = 'true'
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = ''
 
-    const client = prisma.getClient()
     const whaleAddress = '0xorchestrator-telegram'
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
-    const telegramRule = await client.whaleNotificationRule.create({
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
+    const telegramRule = await prisma.whaleNotificationRule.create({
       data: {
         userId,
         type: 'ADDRESS',
@@ -199,7 +195,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       tradeTime: new Date(now.getTime() + 1_000),
     })
 
-    const rows = await client.whaleNotificationDelivery.findMany({
+    const rows = await prisma.whaleNotificationDelivery.findMany({
       where: { userId },
       orderBy: [{ createdAt: 'asc' }],
     })
@@ -210,8 +206,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     expect(failedRows.length).toBe(2)
     expect(skippedRows.length).toBe(0)
 
-    await client.whaleNotificationRule.delete({ where: { id: telegramRule.id } })
-    await client.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
+    await prisma.whaleNotificationRule.delete({ where: { id: telegramRule.id } })
+    await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
     process.env.TELEGRAM_BOT_TOKEN = originalTelegramBotToken
   })
 
@@ -242,7 +238,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
   it('should ignore allowlist setting and continue dispatching', async () => {
     process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = 'some-other-user'
-    await prisma.getClient().whaleNotificationDelivery.deleteMany({ where: { userId } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
 
     await whaleAlertService.recordWhaleTrade({
       whaleAddress: '0xorchestrator',
@@ -254,7 +250,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       tradeTime: new Date(),
     })
 
-    const rows = await prisma.getClient().whaleNotificationDelivery.findMany({
+    const rows = await prisma.whaleNotificationDelivery.findMany({
       where: { userId },
     })
     expect(rows.length).toBeGreaterThan(0)

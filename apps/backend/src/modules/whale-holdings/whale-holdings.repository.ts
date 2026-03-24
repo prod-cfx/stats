@@ -1,22 +1,18 @@
-import { Injectable } from '@nestjs/common'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class WhaleHoldingsRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findManyPositions(
     where: { positionValueUsd: { gte: number }; symbol?: string },
     orderBy: { positionValueUsd: 'desc' },
     take: number,
     skip: number,
   ) {
-    return this.getClient().hyperliquidWhalePosition.findMany({
+    return this.txHost.tx.hyperliquidWhalePosition.findMany({
       where,
       orderBy,
       take,
@@ -25,6 +21,6 @@ export class WhaleHoldingsRepository {
   }
 
   async countPositions(where: { positionValueUsd: { gte: number }; symbol?: string }) {
-    return this.getClient().hyperliquidWhalePosition.count({ where })
+    return this.txHost.tx.hyperliquidWhalePosition.count({ where })
   }
 }

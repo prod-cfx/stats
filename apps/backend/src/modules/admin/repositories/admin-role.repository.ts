@@ -1,19 +1,14 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { Prisma, Role } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class AdminRoleRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async count(where: Prisma.RoleWhereInput): Promise<number> {
-    const client = this.getClient()
-    return client.role.count({ where })
+    return this.txHost.tx.role.count({ where })
   }
 
   async findMany(params: {
@@ -22,37 +17,30 @@ export class AdminRoleRepository {
     skip: number
     take: number
   }): Promise<Role[]> {
-    const client = this.getClient()
-    return client.role.findMany(params)
+    return this.txHost.tx.role.findMany(params)
   }
 
   async findById(id: string): Promise<Role | null> {
-    const client = this.getClient()
-    return client.role.findUnique({ where: { id } })
+    return this.txHost.tx.role.findUnique({ where: { id } })
   }
 
   async findFirst(where: Prisma.RoleWhereInput): Promise<Role | null> {
-    const client = this.getClient()
-    return client.role.findFirst({ where })
+    return this.txHost.tx.role.findFirst({ where })
   }
 
   async create(data: Prisma.RoleCreateInput): Promise<Role> {
-    const client = this.getClient()
-    return client.role.create({ data })
+    return this.txHost.tx.role.create({ data })
   }
 
   async update(id: string, data: Prisma.RoleUpdateInput): Promise<Role> {
-    const client = this.getClient()
-    return client.role.update({ where: { id }, data })
+    return this.txHost.tx.role.update({ where: { id }, data })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    await client.role.delete({ where: { id } })
+    await this.txHost.tx.role.delete({ where: { id } })
   }
 
   async deleteAssignmentsByRole(roleId: string): Promise<void> {
-    const client = this.getClient()
-    await client.roleAssignment.deleteMany({ where: { roleId } })
+    await this.txHost.tx.roleAssignment.deleteMany({ where: { roleId } })
   }
 }

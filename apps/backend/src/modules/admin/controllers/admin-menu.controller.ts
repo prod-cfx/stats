@@ -1,6 +1,6 @@
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { Transaction } from '@/common/decorators/transaction.decorator'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
@@ -49,7 +49,7 @@ export class AdminMenuController {
 
   @Post()
   @CreateAny(AppResource.ADMIN_MENU)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '创建菜单' })
   @ApiBody({ type: CreateAdminMenuDto })
   @ApiOkResponse({ description: '创建成功' })
@@ -59,7 +59,7 @@ export class AdminMenuController {
 
   @Put(':id')
   @UpdateAny(AppResource.ADMIN_MENU)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '更新菜单' })
   @ApiBody({ type: UpdateAdminMenuDto })
   @ApiOkResponse({ description: '更新成功' })
@@ -69,7 +69,7 @@ export class AdminMenuController {
 
   @Delete(':id')
   @DeleteAny(AppResource.ADMIN_MENU)
-  @Transaction()
+  @Transactional()
   @ApiOperation({ summary: '删除菜单（包含直接子菜单）' })
   @ApiOkResponse({ description: '删除成功' })
   async delete(@Param('id') id: string) {

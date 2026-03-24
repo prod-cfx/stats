@@ -16,19 +16,18 @@ describe('Whale notification deduplicator (service E2E)', () => {
     prisma = app.get(PrismaServiceToken)
     deduplicator = app.get(WhaleNotificationDeduplicatorService)
 
-    const client = prisma.getClient()
-    await client.whaleNotificationCooldownGuard.deleteMany({
+    await prisma.whaleNotificationCooldownGuard.deleteMany({
       where: {
         dedupKey: {
           startsWith: 'e2e-dedup-user:',
         },
       },
     })
-    await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
-    await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
-    await client.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
+    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
+    await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
+    await prisma.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
 
-    await client.user.create({
+    await prisma.user.create({
       data: {
         id: 'e2e-dedup-user',
         email: 'e2e-dedup-user@example.com',
@@ -42,17 +41,16 @@ describe('Whale notification deduplicator (service E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      const client = prisma.getClient()
-      await client.whaleNotificationCooldownGuard.deleteMany({
+      await prisma.whaleNotificationCooldownGuard.deleteMany({
         where: {
           dedupKey: {
             startsWith: 'e2e-dedup-user:',
           },
         },
       })
-      await client.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
-      await client.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
-      await client.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
+      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-dedup-user' } })
+      await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
+      await prisma.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
     }
 
     if (app) {
@@ -61,9 +59,8 @@ describe('Whale notification deduplicator (service E2E)', () => {
   })
 
   it('should skip candidate within cooldown window by dedup key', async () => {
-    const client = prisma.getClient()
 
-    const rule = await client.whaleNotificationRule.create({
+    const rule = await prisma.whaleNotificationRule.create({
       data: {
         userId: 'e2e-dedup-user',
         type: 'ADDRESS',

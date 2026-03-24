@@ -1,7 +1,8 @@
-import type { Prisma, StrategyTemplate } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
-
-import { PrismaService } from '@/prisma/prisma.service'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma, StrategyTemplate } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 interface ListParams {
   skip: number
@@ -12,58 +13,53 @@ interface ListParams {
 
 @Injectable()
 export class StrategyTemplatesRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
-
-  private get client() {
-    return this.prisma.getClient()
-  }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async findById(id: string): Promise<StrategyTemplate | null> {
-    return this.client.strategyTemplate.findUnique({
+    return this.txHost.tx.strategyTemplate.findUnique({
       where: { id },
     })
   }
 
   async findByName(name: string): Promise<StrategyTemplate | null> {
-    return this.client.strategyTemplate.findUnique({
+    return this.txHost.tx.strategyTemplate.findUnique({
       where: { name },
     })
   }
 
   async paginate(params: ListParams): Promise<[StrategyTemplate[], number]> {
-    const delegate = this.client.strategyTemplate
-    return this.prisma.getPaginatedList(
-      delegate as any,
-      {
+    const orderBy = params.orderBy ?? { createdAt: 'desc' }
+    const [items, total] = await Promise.all([
+      this.txHost.tx.strategyTemplate.findMany({
         where: params.where,
-        orderBy: params.orderBy ?? { createdAt: 'desc' },
-      },
-      { skip: params.skip, take: params.take },
-    )
+        orderBy,
+        skip: params.skip,
+        take: params.take,
+      }),
+      this.txHost.tx.strategyTemplate.count({ where: params.where }),
+    ])
+    return [items, total]
   }
 
   async create(data: Prisma.StrategyTemplateCreateInput): Promise<StrategyTemplate> {
-    return this.client.strategyTemplate.create({ data })
+    return this.txHost.tx.strategyTemplate.create({ data })
   }
 
   async update(id: string, data: Prisma.StrategyTemplateUpdateInput): Promise<StrategyTemplate> {
-    return this.client.strategyTemplate.update({
+    return this.txHost.tx.strategyTemplate.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string): Promise<StrategyTemplate> {
-    return this.client.strategyTemplate.delete({
+    return this.txHost.tx.strategyTemplate.delete({
       where: { id },
     })
   }
 
   async findSymbolsByCodes(codes: string[]) {
-    return this.client.symbol.findMany({
+    return this.txHost.tx.symbol.findMany({
       where: { code: { in: codes } },
       select: { code: true, status: true },
     })

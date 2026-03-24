@@ -1,8 +1,10 @@
-import type { Prisma, SignalStatus } from '@/prisma/prisma.types'
-import { Inject, Injectable } from '@nestjs/common'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma, SignalStatus } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
-import { PrismaService } from '@/prisma/prisma.service'
 
 export interface FindSignalOptions {
   includeStrategy?: boolean
@@ -11,17 +13,14 @@ export interface FindSignalOptions {
 
 @Injectable()
 export class TradingSignalRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(data: Prisma.TradingSignalCreateInput) {
-    return this.prisma.tradingSignal.create({ data })
+    return this.txHost.tx.tradingSignal.create({ data })
   }
 
   async findById(id: string, options?: FindSignalOptions) {
-    return this.prisma.tradingSignal.findUnique({
+    return this.txHost.tx.tradingSignal.findUnique({
       where: { id },
       include: {
         strategy: Boolean(options?.includeStrategy),
@@ -31,7 +30,7 @@ export class TradingSignalRepository {
   }
 
   async existsRecent(strategyId: string, symbolId: string, since: Date) {
-    const count = await this.prisma.tradingSignal.count({
+    const count = await this.txHost.tx.tradingSignal.count({
       where: {
         strategyId,
         symbolId,
@@ -44,7 +43,7 @@ export class TradingSignalRepository {
   }
 
   async updateStatus(id: string, status: SignalStatus, metadata?: Prisma.JsonValue) {
-    await this.prisma.tradingSignal.update({
+    await this.txHost.tx.tradingSignal.update({
       where: { id },
       data: {
         status,
@@ -75,7 +74,7 @@ export class TradingSignalRepository {
 
     const skip = (page - 1) * limit
     const [items, total] = await Promise.all([
-      this.prisma.tradingSignal.findMany({
+      this.txHost.tx.tradingSignal.findMany({
         where,
         include: {
           symbol: {
@@ -88,7 +87,7 @@ export class TradingSignalRepository {
         skip,
         take: limit,
       }),
-      this.prisma.tradingSignal.count({ where }),
+      this.txHost.tx.tradingSignal.count({ where }),
     ])
 
     return new BasePaginationResponseDto(total, page, limit, items)

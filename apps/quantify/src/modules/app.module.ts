@@ -1,3 +1,4 @@
+import type { MiddlewareConsumer, NestModule } from '@nestjs/common'
 import { ErrorCode } from '@ai/shared'
 import { BullModule } from '@nestjs/bull'
 import { HttpStatus, Module } from '@nestjs/common'
@@ -6,17 +7,18 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { ScheduleModule } from '@nestjs/schedule'
 import { WinstonModule } from 'nest-winston'
+import { ClsMiddleware } from 'nestjs-cls'
 
 import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { DomainException } from '../common/exceptions/domain.exception'
 import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter'
+import { AfterCommitInterceptor } from '../common/interceptors/after-commit.interceptor'
 import { LoggerInterceptor } from '../common/interceptors/logger.interceptor'
 import { RequestContextInterceptor } from '../common/interceptors/request-context.interceptor'
 import { TransformInterceptor } from '../common/interceptors/transform.interceptor'
 import { CacheModule } from '../common/modules/cache.module'
 import { ClsConfigModule } from '../common/modules/cls.module'
 import { EnvModule } from '../common/modules/env.module'
-import { TransactionEventsModule } from '../common/modules/transaction-events.module'
 import { EnvService } from '../common/services/env.service'
 import { allConfigLoaders } from '../config'
 import { createWinstonTransports, resolveLoggerConfig } from '../config/logger.config'
@@ -99,7 +101,6 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     }),
     ...bullImports,
     CacheModule, // 必须在 WinstonModule 之后，因为 RedisService 依赖 WINSTON_MODULE_NEST_PROVIDER
-    TransactionEventsModule, // 全局事务事件服务
     PrismaModule, // Global 模块，需要在其他模块之前导入
     ScheduleModule.forRoot(),
     ...infrastructureImports,
@@ -135,9 +136,17 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
       useClass: TransformInterceptor,
     },
     {
+      provide: APP_INTERCEPTOR,
+      useClass: AfterCommitInterceptor,
+    },
+    {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(ClsMiddleware).forRoutes('/')
+  }
+}

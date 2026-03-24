@@ -3,6 +3,7 @@ import type {
   IndicatorConfigListQueryDto,
   UpdateIndicatorConfigDto,
 } from '../dto/ops-indicator-config.dto'
+import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
@@ -60,6 +61,7 @@ export class OpsIndicatorConfigsController {
     return { ...result, items }
   }
 
+  @Transactional()
   @Post()
   @ApiOperation({ summary: '创建指标配置（运营接口）' })
   async create(@Body() dto: CreateIndicatorConfigDto) {
@@ -79,6 +81,7 @@ export class OpsIndicatorConfigsController {
     }
   }
 
+  @Transactional()
   @Patch(':id')
   @ApiOperation({ summary: '更新指标配置（运营接口）' })
   async update(@Param('id') id: string, @Body() dto: UpdateIndicatorConfigDto) {
@@ -98,6 +101,7 @@ export class OpsIndicatorConfigsController {
     }
   }
 
+  @Transactional()
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: '删除指标配置（运营接口）' })
@@ -105,6 +109,7 @@ export class OpsIndicatorConfigsController {
     await this.indicatorConfigService.delete(id)
   }
 
+  @Transactional()
   @Patch('reload/cache')
   @ApiOperation({ summary: '重新加载指标配置缓存（运营接口）' })
   async reloadCache() {

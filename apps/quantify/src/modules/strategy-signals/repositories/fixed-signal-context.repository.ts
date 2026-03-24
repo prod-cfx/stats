@@ -1,42 +1,42 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
-import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class FixedSignalContextRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() { return this.prisma.getClient() }
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   findLlmStrategyByName(name: string) {
-    return this.getClient().llmStrategy.findUnique({ where: { name } })
+    return this.txHost.tx.llmStrategy.findUnique({ where: { name } })
   }
 
   findUserByEmail(email: string) {
-    return this.getClient().user.findUnique({ where: { email } })
+    return this.txHost.tx.user.findUnique({ where: { email } })
   }
 
   findSymbolByCode(code: string) {
-    return this.getClient().symbol.findFirst({ where: { code } })
+    return this.txHost.tx.symbol.findFirst({ where: { code } })
   }
 
   findSymbolsByCodes(codes: string[]) {
-    return this.getClient().symbol.findMany({ where: { code: { in: codes } } })
+    return this.txHost.tx.symbol.findMany({ where: { code: { in: codes } } })
   }
 
   findUserStrategyAccount(userId: string, strategyId: string) {
-    return this.getClient().userStrategyAccount.findFirst({
+    return this.txHost.tx.userStrategyAccount.findFirst({
       where: { userId, strategyId },
     })
   }
 
   findLlmStrategyInstance(strategyId: string, name: string) {
-    return this.getClient().llmStrategyInstance.findFirst({
+    return this.txHost.tx.llmStrategyInstance.findFirst({
       where: { strategyId, name },
     })
   }
 
-  createTradingSignal(data: Parameters<ReturnType<FixedSignalContextRepository['getClient']>['tradingSignal']['create']>[0]['data']) {
-    return this.getClient().tradingSignal.create({ data })
+  createTradingSignal(data: Prisma.TradingSignalUncheckedCreateInput) {
+    return this.txHost.tx.tradingSignal.create({ data })
   }
 }

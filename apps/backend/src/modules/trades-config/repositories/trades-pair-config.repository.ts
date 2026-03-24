@@ -1,22 +1,17 @@
+// Nest 注入需要运行时引用 PrismaService，保留值导入
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CreateTradesPairConfigDto } from '../dto/create-trades-pair-config.dto'
 import type { QueryTradesPairConfigDto } from '../dto/query-trades-pair-config.dto'
 import type { UpdateTradesPairConfigDto } from '../dto/update-trades-pair-config.dto'
 import type { TradesPairConfig } from '@/prisma/prisma.types'
-import { Injectable } from '@nestjs/common'
-// Nest 注入需要运行时引用 PrismaService，保留值导入
 // eslint-disable-next-line ts/consistent-type-imports
-import { PrismaService } from '@/prisma/prisma.service'
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class TradesPairConfigRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getClient() {
-    return this.prisma.getClient()
-  }
-
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
   async findAll(filter?: QueryTradesPairConfigDto): Promise<TradesPairConfig[]> {
-    const client = this.getClient()
 
     const where: any = {}
 
@@ -32,32 +27,29 @@ export class TradesPairConfigRepository {
       where.enabled = true
     }
 
-    return client.tradesPairConfig.findMany({
+    return this.txHost.tx.tradesPairConfig.findMany({
       where,
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     })
   }
 
   async findById(id: string): Promise<TradesPairConfig | null> {
-    const client = this.getClient()
-    return client.tradesPairConfig.findUnique({
+    return this.txHost.tx.tradesPairConfig.findUnique({
       where: { id },
     })
   }
 
   async findByPairId(pairId: string): Promise<TradesPairConfig | null> {
-    const client = this.getClient()
-    return client.tradesPairConfig.findUnique({
+    return this.txHost.tx.tradesPairConfig.findUnique({
       where: { pairId },
     })
   }
 
   async create(dto: CreateTradesPairConfigDto, canonicalInstId: string | null): Promise<TradesPairConfig> {
-    const client = this.getClient()
 
     const normalize = (value: string) => value.trim().toUpperCase()
 
-    return client.tradesPairConfig.create({
+    return this.txHost.tx.tradesPairConfig.create({
       data: {
         pairId: dto.pairId,
         exchange: normalize(dto.exchange),
@@ -79,7 +71,6 @@ export class TradesPairConfigRepository {
     dto: UpdateTradesPairConfigDto,
     options?: { canonicalInstId?: string | null },
   ): Promise<TradesPairConfig> {
-    const client = this.getClient()
     const data: any = {}
 
     if (dto.enabled !== undefined) data.enabled = dto.enabled
@@ -88,22 +79,20 @@ export class TradesPairConfigRepository {
     if (dto.description !== undefined) data.description = dto.description
     if (options && 'canonicalInstId' in options) data.canonicalInstId = options.canonicalInstId
 
-    return client.tradesPairConfig.update({
+    return this.txHost.tx.tradesPairConfig.update({
       where: { id },
       data,
     })
   }
 
   async delete(id: string): Promise<void> {
-    const client = this.getClient()
-    await client.tradesPairConfig.delete({
+    await this.txHost.tx.tradesPairConfig.delete({
       where: { id },
     })
   }
 
   async findEnabledConfigs(): Promise<TradesPairConfig[]> {
-    const client = this.getClient()
-    return client.tradesPairConfig.findMany({
+    return this.txHost.tx.tradesPairConfig.findMany({
       where: { enabled: true },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     })

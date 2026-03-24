@@ -1,5 +1,6 @@
 import type {
   ChatCompletionResult,
+  ChatCompletionOptions,
   ChatCompletionTool,
   ChatMessage,
   LlmProviderAdapter,
@@ -21,6 +22,7 @@ export interface AiChatOptions {
   maxTokens?: number
   tools?: ChatCompletionTool[]
   toolChoice?: ToolChoice
+  responseFormat?: ChatCompletionOptions['responseFormat']
 }
 
 @Injectable()
@@ -79,8 +81,9 @@ export class AiService {
     const adapter: LlmProviderAdapter = new OpenAiCompatibleAdapter({
       baseUrl,
       apiKey,
-      // 默认超时时间 30s，避免多轮工具调用场景过早中断
-      timeoutMs: 30_000,
+      timeoutMs: providerConfig?.timeoutMs ?? 30_000,
+      maxRetries: providerConfig?.maxRetries ?? 1,
+      retryDelayMs: providerConfig?.retryDelayMs ?? 300,
     })
     try {
       return await adapter.sendChatCompletion({
@@ -90,6 +93,7 @@ export class AiService {
         maxTokens: options.maxTokens,
         tools: options.tools,
         toolChoice: options.toolChoice,
+        responseFormat: options.responseFormat,
       })
     }
     catch (error) {
@@ -123,6 +127,14 @@ export class AiService {
   }
 
   private buildMockCompletion(options: AiChatOptions): ChatCompletionResult {
+    if (options.responseFormat?.type === 'json_schema') {
+      return {
+        content: JSON.stringify({
+          code: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar() { return { action: "NOOP" } } }\nstrategy',
+        }),
+      }
+    }
+
     const signalTool = options.tools?.find(tool => tool.function?.name === AiService.MOCK_SIGNAL_TOOL_NAME)
     if (!signalTool) {
       return {

@@ -1,10 +1,12 @@
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
-// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
-import { PrismaService } from '@/prisma/prisma.service'
-import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
+import { SubscriptionStatus } from '@/prisma/prisma.types'
 
 interface ListStrategiesQuery {
   userId: string
@@ -27,11 +29,12 @@ interface DeployStrategyInput {
 
 @Injectable()
 export class AccountStrategyViewRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<string> {
     const normalizedName = this.normalizeStrategyName(input.name)
-    const strategyInstanceId = await this.prisma.runInTransaction(async (tx) => {
+    const strategyInstanceId = await this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
       const existingUser = await tx.user.findUnique({
         where: { id: input.userId },
         select: { id: true },
@@ -250,9 +253,9 @@ export class AccountStrategyViewRepository {
   }
 
   async listStrategiesForUser(query: ListStrategiesQuery) {
-    const client = this.prisma.getClient()
     const page = this.normalizePage(query.page)
     const limit = this.normalizeLimit(query.limit)
+    const client = this.txHost.tx
     const skip = (page - 1) * limit
 
     const subscribedInstanceIds = (
@@ -354,7 +357,7 @@ export class AccountStrategyViewRepository {
   }
 
   async findStrategyForUser(userId: string, strategyInstanceId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyInstance.findFirst({
       where: {
         id: strategyInstanceId,
@@ -385,7 +388,7 @@ export class AccountStrategyViewRepository {
   }
 
   async findUserStrategyAccount(userId: string, strategyId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.userStrategyAccount.findUnique({
       where: {
         userId_strategyId: {
@@ -397,7 +400,7 @@ export class AccountStrategyViewRepository {
   }
 
   async findLatestExecutedAccountByUserAndSymbol(userId: string, symbol: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     const normalizedSymbol = symbol.trim().toUpperCase()
 
     const latestTrade = await client.trade.findFirst({
@@ -427,7 +430,7 @@ export class AccountStrategyViewRepository {
   }
 
   async loadEquitySeries(accountId: string, limit = 120) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.strategyPnlDaily.findMany({
       where: { userStrategyAccountId: accountId },
       orderBy: { date: 'asc' },
@@ -436,7 +439,7 @@ export class AccountStrategyViewRepository {
   }
 
   async loadTradeStats(accountId: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     const [tradeCount, closedCount, winningCount] = await Promise.all([
       client.trade.count({ where: { userStrategyAccountId: accountId } }),
       client.position.count({
@@ -459,7 +462,7 @@ export class AccountStrategyViewRepository {
   }
 
   async loadClosedPositionPnlSeries(accountId: string, limit = 500) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
     return client.position.findMany({
       where: {
         userStrategyAccountId: accountId,
@@ -478,7 +481,7 @@ export class AccountStrategyViewRepository {
   }
 
   async loadTimeline(userId: string, strategyInstanceId: string, accountId?: string) {
-    const client = this.prisma.getClient()
+    const client = this.txHost.tx
 
     const [instance, subscription, signalExecutions, trades] = await Promise.all([
       client.strategyInstance.findUnique({

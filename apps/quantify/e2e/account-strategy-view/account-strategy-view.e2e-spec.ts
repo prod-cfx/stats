@@ -8,7 +8,7 @@ describe('account-strategy-view (E2E)', () => {
   let app: INestApplication
   let _moduleFixture: TestingModule
   let prismaService: PrismaService
-  let prisma: PrismaClient
+  let prisma: PrismaService
 
   let owner: User
   let subscriber: User
@@ -110,7 +110,7 @@ describe('account-strategy-view (E2E)', () => {
     app = testing.app
     _moduleFixture = testing.moduleFixture
     prismaService = testing.prisma
-    prisma = prismaService.getClient() as PrismaClient
+    prisma = prismaService
 
     owner = await createTestUser(prisma, 'account-strategy-owner', 'owner')
     subscriber = await createTestUser(prisma, 'account-strategy-subscriber', 'subscriber')

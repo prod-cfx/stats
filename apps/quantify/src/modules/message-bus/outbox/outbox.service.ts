@@ -1,6 +1,5 @@
 import type { OnModuleInit } from '@nestjs/common'
 import type { MessageEnvelope } from '../message-bus.types'
-import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { OutboxRepository } from './outbox.repository'
@@ -36,21 +35,17 @@ export class OutboxService implements OnModuleInit {
   async record<T = unknown>(
     envelope: MessageEnvelope<T>,
     options?: OutboxRecordOptions,
-    tx?: Prisma.TransactionClient,
   ) {
-    const row = await this.repo.create(
-      {
-        topic: envelope.topic,
-        type: envelope.type,
-        payload: envelope.data as any,
-        dedupeKey: options?.dedupeKey ?? undefined,
-        correlationId: envelope.meta?.correlationId || options?.correlationId,
-        partitionKey: options?.partitionKey ?? undefined,
-        priority: options?.priority ?? undefined,
-        deliverAt: options?.deliverAt ?? undefined,
-      },
-      tx,
-    )
+    const row = await this.repo.create({
+      topic: envelope.topic,
+      type: envelope.type,
+      payload: envelope.data as any,
+      dedupeKey: options?.dedupeKey ?? undefined,
+      correlationId: envelope.meta?.correlationId || options?.correlationId,
+      partitionKey: options?.partitionKey ?? undefined,
+      priority: options?.priority ?? undefined,
+      deliverAt: options?.deliverAt ?? undefined,
+    })
 
     this.logger.debug(
       `Outbox recorded id='${row.id}' topic='${envelope.topic}' type='${envelope.type}'`,
