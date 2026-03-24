@@ -213,6 +213,8 @@
       "backtestRangeMissing": "请完整选择历史回测区间。",
       "backtestRangeOrderInvalid": "开始时间必须早于结束时间。",
       "backtestRangeTooLarge": "回测区间最大支持 365 天，请缩小时间范围。",
+      "backtestMissingScriptCode": "策略代码为空，请先确认并生成策略代码。",
+      "backtestPayloadInvalid": "回测参数无效：{{reason}}",
       "returnToChat": "返回对话继续优化",
       "graphTitle": "策略逻辑图确认",
       "version": "版本",

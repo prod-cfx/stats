@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
-import { buildBacktestPayload } from '@/components/ai-quant/backtest-payload-builder'
+import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
@@ -967,12 +967,25 @@ export function AiQuantPageClient() {
         activeConversation.llmCodegenSessionId,
       )
     } catch (error) {
-      const reason = error instanceof Error ? error.message : 'unknown_error'
-      const message = reason === 'start_after_end'
-        ? t('aiQuant.messages.backtestRangeOrderInvalid')
-        : reason === 'missing_script_code'
-          ? '策略代码为空，请先确认并生成策略代码。'
-          : `回测参数无效：${reason}`
+      const message = (() => {
+        if (!isBacktestPayloadBuilderError(error)) {
+          return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'unknown_error' })
+        }
+
+        switch (error.code) {
+          case 'missing_range':
+            return t('aiQuant.messages.backtestRangeMissing')
+          case 'start_after_end':
+            return t('aiQuant.messages.backtestRangeOrderInvalid')
+          case 'range_too_large':
+            return t('aiQuant.messages.backtestRangeTooLarge')
+          case 'missing_script_code':
+            return t('aiQuant.messages.backtestMissingScriptCode')
+          case 'missing_symbol':
+          default:
+            return t('aiQuant.messages.backtestPayloadInvalid', { reason: error.code })
+        }
+      })()
       updateActiveConversation(curr => ({
         ...curr,
         messages: [

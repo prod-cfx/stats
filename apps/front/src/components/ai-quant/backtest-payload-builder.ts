@@ -2,6 +2,24 @@ import type { CreateBacktestJobPayload } from './backtest-job-client'
 import type { BacktestRangeInput } from './backtest-range'
 import { resolveBacktestRange, validateBacktestRange } from './backtest-range'
 
+export type BacktestPayloadBuilderErrorCode =
+  | 'missing_symbol'
+  | 'missing_script_code'
+  | 'missing_range'
+  | 'start_after_end'
+  | 'range_too_large'
+
+export class BacktestPayloadBuilderError extends Error {
+  constructor(public readonly code: BacktestPayloadBuilderErrorCode) {
+    super(code)
+    this.name = 'BacktestPayloadBuilderError'
+  }
+}
+
+export function isBacktestPayloadBuilderError(error: unknown): error is BacktestPayloadBuilderError {
+  return error instanceof BacktestPayloadBuilderError
+}
+
 export interface BuildBacktestPayloadInput {
   symbol: string
   baseTimeframe: string
@@ -23,17 +41,17 @@ export function buildBacktestPayload(
 ): CreateBacktestJobPayload {
   const symbol = input.symbol.trim()
   if (!symbol) {
-    throw new Error('missing_symbol')
+    throw new BacktestPayloadBuilderError('missing_symbol')
   }
 
   const scriptCode = input.strategy.scriptCode.trim()
   if (!scriptCode) {
-    throw new Error('missing_script_code')
+    throw new BacktestPayloadBuilderError('missing_script_code')
   }
 
   const validation = validateBacktestRange(input.range)
   if (!validation.ok) {
-    throw new Error(validation.reason)
+    throw new BacktestPayloadBuilderError(validation.reason)
   }
 
   const resolvedRange = resolveBacktestRange(input.range, now)

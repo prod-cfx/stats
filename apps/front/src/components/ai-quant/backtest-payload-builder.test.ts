@@ -1,4 +1,9 @@
-import { buildBacktestPayload, type BuildBacktestPayloadInput } from './backtest-payload-builder'
+import {
+  buildBacktestPayload,
+  isBacktestPayloadBuilderError,
+  type BacktestPayloadBuilderErrorCode,
+  type BuildBacktestPayloadInput,
+} from './backtest-payload-builder'
 
 function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildBacktestPayloadInput {
   return {
@@ -27,6 +32,18 @@ function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildB
 describe('backtest-payload-builder', () => {
   const now = new Date('2026-03-24T12:00:00.000Z')
 
+  function expectBuildErrorCode(fn: () => unknown, code: BacktestPayloadBuilderErrorCode) {
+    try {
+      fn()
+      throw new Error('expected buildBacktestPayload to throw')
+    } catch (error) {
+      expect(isBacktestPayloadBuilderError(error)).toBe(true)
+      if (isBacktestPayloadBuilderError(error)) {
+        expect(error.code).toBe(code)
+      }
+    }
+  }
+
   it('maps symbol into symbols[0]', () => {
     const payload = buildBacktestPayload(createInput(), now)
 
@@ -44,7 +61,7 @@ describe('backtest-payload-builder', () => {
   })
 
   it('validates custom range ordering', () => {
-    expect(() => {
+    expectBuildErrorCode(() => {
       buildBacktestPayload(createInput({
         range: {
           preset: 'CUSTOM',
@@ -52,7 +69,22 @@ describe('backtest-payload-builder', () => {
           endAt: '2026-03-24T12:00:00.000Z',
         },
       }), now)
-    }).toThrow('start_after_end')
+    }, 'start_after_end')
+  })
+
+  it('maps valid custom range into fromTs/toTs', () => {
+    const payload = buildBacktestPayload(createInput({
+      range: {
+        preset: 'CUSTOM',
+        startAt: '2026-03-01T08:30:00.000Z',
+        endAt: '2026-03-20T09:45:00.000Z',
+      },
+    }), now)
+
+    expect(payload.dataRange).toEqual({
+      fromTs: Date.parse('2026-03-01T08:30:00.000Z'),
+      toTs: Date.parse('2026-03-20T09:45:00.000Z'),
+    })
   })
 
   it('includes strategy protocolVersion=v1, scriptCode and params', () => {
@@ -73,7 +105,7 @@ describe('backtest-payload-builder', () => {
   })
 
   it('throws when scriptCode is missing', () => {
-    expect(() => {
+    expectBuildErrorCode(() => {
       buildBacktestPayload(createInput({
         strategy: {
           id: 'strategy-1',
@@ -81,6 +113,6 @@ describe('backtest-payload-builder', () => {
           params: {},
         },
       }), now)
-    }).toThrow('missing_script_code')
+    }, 'missing_script_code')
   })
 })
