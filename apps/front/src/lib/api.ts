@@ -1946,45 +1946,29 @@ function parseApiErrorMessage(status: number, payload: unknown, fallback: string
 }
 
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
-  const token = getToken()
-  const isTransientStatus = (status: number) => status === 408 || status === 429 || status >= 500
-  const request = async () => fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   })
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await request()
-      let json: unknown = null
-      try {
-        json = await response.json()
-      } catch {
-        json = null
-      }
-
-      if (!response.ok) {
-        if (attempt === 0 && isTransientStatus(response.status)) {
-          continue
-        }
-        const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
-        throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
-      }
-
-      return unwrapResponse<T>(json as T | BaseResponse<T>)
-    } catch (error) {
-      if (attempt === 0) {
-        continue
-      }
-      throw error
-    }
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
   }
 
-  throw new ApiError('LLM 策略生成请求失败', 'LLM_CODEGEN_ERROR')
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
+    throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
+  }
+
+  return unwrapResponse<T>(json as T | BaseResponse<T>)
 }
 
 export async function startLlmCodegenSession(
@@ -2021,13 +2005,11 @@ export async function getLlmCodegenSession(
   if (!userId.trim()) {
     throw new ApiError('userId is required', 'INVALID_INPUT')
   }
-  const token = getToken()
+  const authHeaders = requireAuthHeaders()
   const encodedUserId = encodeURIComponent(userId)
   const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen/sessions/${sessionId}?userId=${encodedUserId}`, {
     method: 'GET',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: authHeaders,
   })
   let json: unknown = null
   try {

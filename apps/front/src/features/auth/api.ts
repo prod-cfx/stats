@@ -8,6 +8,7 @@ type TelegramDesktopIntentStatus = 'pending' | 'confirmed' | 'expired'
 const DEV_EMAIL_TEST_CODE = '123456'
 const DEV_EMAIL_FALLBACK_HINT = 'DEV_EMAIL_FALLBACK_CODE_123456'
 const DEV_MODE = process.env.NODE_ENV !== 'production'
+const ENABLE_DEV_AUTH_SESSION_FALLBACK = process.env.NEXT_PUBLIC_DEV_AUTH_SESSION_FALLBACK === 'true'
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
@@ -80,7 +81,7 @@ export async function verifyEmailCodeRequest(email: string, code: string): Promi
   const normalized = normalizeEmail(email)
   const normalizedCode = code.trim()
 
-  if (DEV_MODE && normalizedCode === DEV_EMAIL_TEST_CODE) {
+  if (DEV_MODE && ENABLE_DEV_AUTH_SESSION_FALLBACK && normalizedCode === DEV_EMAIL_TEST_CODE) {
     const expiresIn = 7 * 24 * 60 * 60
     return {
       userId: `dev-${normalized.replace(/[^a-z0-9]/gi, '') || 'email-user'}`,

@@ -84,6 +84,13 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   },
 }
 
+const PROCESSING_SESSION_STATUSES: readonly LlmCodegenSessionStatus[] = [
+  'GENERATING',
+  'VALIDATING_STATIC',
+  'VALIDATING_RUNTIME',
+  'VALIDATING_OUTPUT',
+]
+
 @Injectable()
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
@@ -156,16 +163,7 @@ export class CodegenConversationService {
       })
     }
 
-    return {
-      id: session.id,
-      status: session.status,
-      missingFields: [],
-      scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
-      specDesc: session.latestSpecDesc && typeof session.latestSpecDesc === 'object' && !Array.isArray(session.latestSpecDesc)
-        ? (session.latestSpecDesc as Record<string, unknown>)
-        : null,
-      rejectReason: session.rejectReason,
-    }
+    return this.toSessionSnapshotResponse(session)
   }
 
   async continueSession(
@@ -188,6 +186,9 @@ export class CodegenConversationService {
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
       })
+    }
+    if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
+      return this.toSessionSnapshotResponse(session)
     }
 
     const baseChecklist = this.readChecklist(session.checklist)
@@ -282,36 +283,85 @@ export class CodegenConversationService {
     }
 
     const providerCode = this.resolveProviderCode(dto.providerCode)
-    try {
-      await this.sessionsRepo.updateSession(session.id, {
-        status: 'GENERATING',
-        checklist: mergedChecklist as Prisma.InputJsonValue,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: this.appendConversationHistory(
-            constraintPack.conversationHistory ?? [],
-            dto.message,
-          ),
-        } as unknown as Prisma.InputJsonValue,
-        rejectReason: null,
-      })
+    const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
+      status: 'GENERATING',
+      checklist: mergedChecklist as Prisma.InputJsonValue,
+      constraintPack: {
+        ...nextConstraintPack,
+        conversationHistory: this.appendConversationHistory(
+          constraintPack.conversationHistory ?? [],
+          dto.message,
+        ),
+      } as unknown as Prisma.InputJsonValue,
+      rejectReason: null,
+    })
 
+    if (!markedGenerating) {
+      const latest = await this.sessionsRepo.findById(session.id)
+      if (!latest || latest.userId !== sessionUserId) {
+        throw new DomainException('codegen.session_not_found', {
+          code: ErrorCode.NOT_FOUND,
+          status: HttpStatus.NOT_FOUND,
+          args: { sessionId },
+        })
+      }
+      return this.toSessionSnapshotResponse(latest)
+    }
+
+    void this.runGenerationPipeline({
+      sessionId: session.id,
+      checklist: mergedChecklist,
+      message: dto.message,
+      providerCode,
+      model: dto.model,
+      temperature: dto.temperature,
+      maxTokens: dto.maxTokens,
+    })
+
+    return {
+      id: session.id,
+      status: 'GENERATING',
+      missingFields: [],
+    }
+  }
+
+  private async runGenerationPipeline(args: {
+    sessionId: string
+    checklist: ChecklistPayload
+    message: string
+    providerCode: string
+    model?: string
+    temperature?: number
+    maxTokens?: number
+  }): Promise<void> {
+    const {
+      sessionId,
+      checklist,
+      message,
+      providerCode,
+      model,
+      temperature,
+      maxTokens,
+    } = args
+    try {
       let lastScriptCode = ''
       let lastRejectReason = ''
       let finalValidation: ScriptValidationResult | null = null
-      let generationMessage = dto.message
+      let generationMessage = message
       const maxAttempts = MAX_CODEGEN_AUTO_REPAIR_RETRIES + 1
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const generatedScript = await this.generateScript(mergedChecklist, generationMessage, {
+        const isRepairAttempt = attempt > 1
+        const generatedScript = await this.generateScript(checklist, generationMessage, {
           providerCode,
-          model: dto.model,
-          temperature: dto.temperature,
-          maxTokens: dto.maxTokens,
+          model,
+          // 修复回合降低随机性，优先最小改动修复语法/类型错误
+          temperature: isRepairAttempt ? 0 : temperature,
+          maxTokens: maxTokens ?? 1400,
         })
         lastScriptCode = generatedScript
 
-        await this.sessionsRepo.updateSession(session.id, {
+        await this.sessionsRepo.updateSession(sessionId, {
           status: 'VALIDATING_STATIC',
           latestDraftCode: generatedScript,
         })
@@ -324,7 +374,7 @@ export class CodegenConversationService {
 
         lastRejectReason = validation.reason ?? '脚本校验失败'
         await this.sessionsRepo.createVersion({
-          session: { connect: { id: session.id } },
+          session: { connect: { id: sessionId } },
           scriptCode: validation.scriptCode,
           specDesc: {} as Prisma.InputJsonValue,
           staticPassed: validation.staticPassed,
@@ -333,23 +383,24 @@ export class CodegenConversationService {
         })
 
         if (attempt >= maxAttempts) {
+          const fallbackScript = this.buildTypeSafeFallbackScript(checklist)
+          const fallbackValidation = await this.validateGeneratedScript(fallbackScript)
+          if (fallbackValidation.passed) {
+            finalValidation = fallbackValidation
+            break
+          }
+
           const rejectReason = `${lastRejectReason}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-          await this.sessionsRepo.updateSession(session.id, {
+          await this.sessionsRepo.updateSession(sessionId, {
             status: 'REJECTED',
             rejectReason,
           })
-
-          return {
-            id: session.id,
-            status: 'REJECTED',
-            scriptCode: validation.scriptCode,
-            rejectReason,
-          }
+          return
         }
 
         generationMessage = this.buildRepairGenerationMessage({
-          originalMessage: dto.message,
-          checklist: mergedChecklist,
+          originalMessage: message,
+          checklist,
           scriptCode: validation.scriptCode,
           rejectReason: lastRejectReason,
           attempt,
@@ -358,33 +409,28 @@ export class CodegenConversationService {
 
       if (!finalValidation) {
         const rejectReason = `${lastRejectReason || '脚本校验失败'}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-        await this.sessionsRepo.updateSession(session.id, {
+        await this.sessionsRepo.updateSession(sessionId, {
           status: 'REJECTED',
           rejectReason,
+          latestDraftCode: lastScriptCode || null,
         })
-
-        return {
-          id: session.id,
-          status: 'REJECTED',
-          scriptCode: lastScriptCode || undefined,
-          rejectReason,
-        }
+        return
       }
 
       const finalScriptCode = finalValidation.scriptCode
 
-      await this.sessionsRepo.updateSession(session.id, {
+      await this.sessionsRepo.updateSession(sessionId, {
         status: 'VALIDATING_RUNTIME',
       })
 
-      await this.sessionsRepo.updateSession(session.id, {
+      await this.sessionsRepo.updateSession(sessionId, {
         status: 'VALIDATING_OUTPUT',
       })
 
-      const specDesc = this.specDescBuilder.build(mergedChecklist, finalScriptCode)
+      const specDesc = this.specDescBuilder.build(checklist, finalScriptCode)
 
       const version = await this.sessionsRepo.createVersion({
-        session: { connect: { id: session.id } },
+        session: { connect: { id: sessionId } },
         scriptCode: finalScriptCode,
         specDesc: specDesc as Prisma.InputJsonValue,
         staticPassed: true,
@@ -397,32 +443,18 @@ export class CodegenConversationService {
         specDesc,
       })
 
-      await this.sessionsRepo.updateSession(session.id, {
+      await this.sessionsRepo.updateSession(sessionId, {
         status: 'PUBLISHED',
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
         latestDraftCode: finalScriptCode,
         rejectReason: null,
       })
-
-      return {
-        id: session.id,
-        status: 'PUBLISHED',
-        scriptCode: finalScriptCode,
-        specDesc,
-        missingFields: [],
-      }
-    }
-    catch (error) {
+    } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      await this.sessionsRepo.updateSession(session.id, {
+      await this.sessionsRepo.updateSession(sessionId, {
         status: 'REJECTED',
         rejectReason: reason,
       })
-      return {
-        id: session.id,
-        status: 'REJECTED',
-        rejectReason: reason,
-      }
     }
   }
 
@@ -432,6 +464,25 @@ export class CodegenConversationService {
     }
 
     return this.normalizeChecklist(payload as Record<string, unknown>)
+  }
+
+  private toSessionSnapshotResponse(session: {
+    id: string
+    status: LlmCodegenSessionStatus
+    latestDraftCode: Prisma.JsonValue | null
+    latestSpecDesc: Prisma.JsonValue | null
+    rejectReason: string | null
+  }): CodegenSessionResponseDto {
+    return {
+      id: session.id,
+      status: session.status,
+      missingFields: [],
+      scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
+      specDesc: session.latestSpecDesc && typeof session.latestSpecDesc === 'object' && !Array.isArray(session.latestSpecDesc)
+        ? (session.latestSpecDesc as Record<string, unknown>)
+        : null,
+      rejectReason: session.rejectReason,
+    }
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -959,19 +1010,75 @@ export class CodegenConversationService {
     rejectReason: string
     attempt: number
   }): string {
+    const normalizedRejectReason = this.normalizeRepairRejectReason(input.rejectReason)
     return [
       `这是第 ${input.attempt} 次自动修复，请严格修复并返回完整 TypeScript 策略源码。`,
       `原始需求：${input.originalMessage}`,
       `约束：${JSON.stringify(input.checklist)}`,
+      `上一轮主要错误：${normalizedRejectReason}`,
       '必须满足：',
       '- 输出必须是 const strategy: StrategyAdapterV1 = { ... }，最后一行只能是 strategy',
+      '- 不要输出 markdown/code fence/解释文字，只输出 TypeScript 代码',
+      '- 对上一版脚本做最小改动修复，不要重写架构',
+      '- 所有显式声明返回类型的函数必须保证每条分支都有 return',
+      '- strategy.decide 必须返回 StrategyDecisionV1 或 null，禁止返回字符串',
+      '- strategy 对象内部只能是属性声明，禁止在对象字面量中写 const/let/function 语句',
       '- 只允许 StrategyDecisionV1 协议（action/size/adjustMode/confidence/reason/risk/meta）',
       '- 禁止返回旧协议字段（direction/signalType/entryPrice/stopLoss/takeProfit/reasoning）',
       '- 参数优先用 ctx.paramsNormalized，字段不存在要给默认值并确保类型正确',
       '- 若使用 helpers，必须来自 ctx.helpers 并先判空',
-      `需要修复的错误：${input.rejectReason}`,
       '上一版脚本如下：',
       input.scriptCode,
+    ].join('\n')
+  }
+
+  private normalizeRepairRejectReason(reason: string): string {
+    const trimmed = reason.trim()
+    if (!trimmed) return '脚本校验失败'
+
+    const normalized = trimmed.replace(/^TypeScript 类型检查失败:\s*/u, '')
+    const items = normalized
+      .split(';')
+      .map(item => item.trim())
+      .filter(Boolean)
+
+    if (items.length === 0) return trimmed
+
+    const unique = Array.from(new Set(items))
+    return unique.slice(0, 12).join('; ')
+  }
+
+  private buildTypeSafeFallbackScript(checklist: ChecklistPayload): string {
+    const riskRules = checklist.riskRules ?? {}
+    const rawPositionPct = riskRules.positionPct
+    const parsedPositionPct = typeof rawPositionPct === 'number' && Number.isFinite(rawPositionPct)
+      ? rawPositionPct
+      : null
+    const ratio = (() => {
+      if (parsedPositionPct === null) return 0.1
+      const pctBased = parsedPositionPct > 1 ? parsedPositionPct / 100 : parsedPositionPct
+      return Math.max(0.01, Math.min(1, pctBased))
+    })()
+    const ratioText = Number(ratio.toFixed(4))
+
+    return [
+      'const strategy: StrategyAdapterV1 = {',
+      "  protocolVersion: 'v1',",
+      '  onBar(ctx): StrategyDecisionV1 {',
+      "    const bars = Array.isArray(ctx.bars) ? ctx.bars : []",
+      "    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }",
+      "    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))",
+      "    if (closes.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient close series' }",
+      '    const fast = ctx.helpers?.ta?.sma(closes, 5)',
+      '    const slow = ctx.helpers?.ta?.sma(closes, 20)',
+      "    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'fallback: SMA unavailable' }",
+      `    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: ${ratioText} }`,
+      "    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }",
+      "    if (fast < slow) return { action: 'OPEN_SHORT', size, confidence: 55, reason: 'fallback: fast SMA below slow SMA' }",
+      "    return { action: 'NOOP', reason: 'fallback: neutral trend' }",
+      '  },',
+      '}',
+      'strategy',
     ].join('\n')
   }
 

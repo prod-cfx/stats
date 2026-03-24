@@ -209,6 +209,43 @@ function extractCodegenErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function isTerminalSessionConflict(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.statusCode !== 409) {
+    return false
+  }
+
+  if (error.code === 'codegen.session_terminal_status') {
+    return true
+  }
+
+  if (error.message.includes('会话已终态') || error.message.includes('codegen.session_terminal_status')) {
+    return true
+  }
+
+  const details = error.details
+  if (!details || typeof details !== 'object') {
+    return false
+  }
+
+  const detailRecord = details as Record<string, unknown>
+  const nestedError = detailRecord.error
+  if (!nestedError || typeof nestedError !== 'object') {
+    return false
+  }
+
+  const nestedCode = (nestedError as Record<string, unknown>).code
+  if (typeof nestedCode === 'string' && nestedCode === 'codegen.session_terminal_status') {
+    return true
+  }
+
+  const nestedMessage = (nestedError as Record<string, unknown>).message
+  if (typeof nestedMessage === 'string') {
+    return nestedMessage.includes('会话已终态') || nestedMessage.includes('codegen.session_terminal_status')
+  }
+
+  return false
+}
+
 function getMockBacktest(params: QuantParams): BacktestResult {
   const score = params.buyDropPct + params.sellRisePct + params.positionPct / 10 + (params.exchange === 'okx' ? 1 : 0)
   const maxDrawdownPct = Number(Math.max(8, Math.min(35, 28 - score)).toFixed(2))
@@ -568,6 +605,27 @@ export function AiQuantPageClient() {
         return current
       }
 
+      const resolveProcessingSession = async (
+        id: string,
+        initial: Awaited<ReturnType<typeof continueSession>>,
+      ): Promise<Awaited<ReturnType<typeof continueSession>>> => {
+        if (!isCodegenProcessingStatus(initial.status)) {
+          return initial
+        }
+
+        let current = initial
+        const deadline = Date.now() + 120_000
+        while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
+          await new Promise(resolve => window.setTimeout(resolve, 1500))
+          current = await getLlmCodegenSession(id, session.userId)
+          if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
+            return current
+          }
+        }
+
+        return current
+      }
+
       let continued
       if (!activeSessionId) {
         const created = await startNewSession()
@@ -575,6 +633,7 @@ export function AiQuantPageClient() {
         if (confirmGenerate) {
           continued = await continueSession(activeSessionId)
           continued = await advanceConfirmGenerate(activeSessionId, continued)
+          continued = await resolveProcessingSession(activeSessionId, continued)
         } else {
           continued = created
         }
@@ -582,10 +641,9 @@ export function AiQuantPageClient() {
         try {
           continued = await continueSession(activeSessionId)
           continued = await advanceConfirmGenerate(activeSessionId, continued)
+          continued = await resolveProcessingSession(activeSessionId, continued)
         } catch (error) {
-          const isTerminalSessionError = error instanceof ApiError
-            && error.statusCode === 409
-            && error.message.includes('会话已终态')
+          const isTerminalSessionError = isTerminalSessionConflict(error)
           if (!isTerminalSessionError) {
             throw error
           }
@@ -608,6 +666,7 @@ export function AiQuantPageClient() {
             if (confirmGenerate) {
               continued = await continueSession(activeSessionId)
               continued = await advanceConfirmGenerate(activeSessionId, continued)
+              continued = await resolveProcessingSession(activeSessionId, continued)
             } else {
               continued = recreated
             }
@@ -617,9 +676,10 @@ export function AiQuantPageClient() {
 
       applyCodegenResponseToConversation(continued)
     } catch (error) {
-      if (activeSessionId && error instanceof ApiError && (error.statusCode ?? 0) >= 500) {
+      if (activeSessionId) {
         try {
-          const recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+          let recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+          recovered = await resolveProcessingSession(activeSessionId, recovered)
           if (isRecoverableCodegenStatus(recovered.status)) {
             applyCodegenResponseToConversation(recovered)
             return
