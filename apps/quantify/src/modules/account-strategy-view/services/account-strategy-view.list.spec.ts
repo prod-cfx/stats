@@ -118,8 +118,14 @@ describe('accountStrategyViewService.listStrategies', () => {
     const statsService = {
       calculateBatchStats: jest.fn().mockResolvedValue(new Map()),
     }
+    const marketDataIngestionService = { ingestAndComputeIndicators: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, null as any)
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      null as any,
+      marketDataIngestionService as any,
+    )
     const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20 })
 
     expect(result.items[0]?.paramSchema).toBeNull()

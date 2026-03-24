@@ -6,7 +6,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
-import type { LlmCodegenSessionStatus, Prisma } from '@/prisma/prisma.types'
+import type { Prisma } from '@/prisma/prisma.types'
 
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
@@ -58,6 +58,16 @@ interface ScriptValidationResult {
   runtimePassed: boolean
   outputPassed: boolean
 }
+
+type LlmCodegenSessionStatus
+  = 'DRAFTING'
+    | 'CHECKLIST_GATE'
+    | 'GENERATING'
+    | 'VALIDATING_STATIC'
+    | 'VALIDATING_RUNTIME'
+    | 'VALIDATING_OUTPUT'
+    | 'PUBLISHED'
+    | 'REJECTED'
 
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
 type RecommendationStyle = 'ma' | 'drop-rise'

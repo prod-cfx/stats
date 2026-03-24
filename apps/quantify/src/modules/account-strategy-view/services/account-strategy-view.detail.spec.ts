@@ -332,8 +332,14 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       calculateBatchStats: jest.fn(),
     }
     const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ingestAndComputeIndicators: jest.fn() }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, strategyInstancesService as any)
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
     const detail = await service.getStrategyDetail('user-1', 'inst-legacy')
 
     expect(detail.paramSchema).toBeNull()
