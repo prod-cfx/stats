@@ -1,4 +1,3 @@
-import type { AiQuantProxyService } from './ai-quant-proxy.service'
 import type { LlmSubscriptionCreateRequestDto } from './dto/llm-subscription-create.request.dto'
 import type { LlmSubscriptionListQueryDto } from './dto/llm-subscription-list.query.dto'
 import type { LlmSubscriptionUpdateRequestDto } from './dto/llm-subscription-update.request.dto'
@@ -6,6 +5,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { AiQuantProxyService } from './ai-quant-proxy.service'
 
 @ApiTags('llm-strategy-subscriptions')
 @ApiBearerAuth('bearer')
