@@ -57,6 +57,69 @@ function formatAmount(value: number) {
   return Number(value.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
 }
 
+interface DynamicParamRow {
+  key: string
+  label: string
+  value: string
+}
+
+function formatDynamicParamValue(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) {
+    const flat = value
+      .map((item) => {
+        if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
+          return String(item)
+        return null
+      })
+      .filter((item): item is string => item !== null)
+    return flat.length ? flat.join(', ') : null
+  }
+  return null
+}
+
+function extractParamSchemaProperties(paramSchema: Record<string, unknown>): Record<string, unknown> | null {
+  const properties = paramSchema.properties
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return null
+  return properties as Record<string, unknown>
+}
+
+export function buildDynamicParamRows(
+  paramSchema: Record<string, unknown> | null,
+  paramValues: Record<string, unknown> | null,
+): DynamicParamRow[] {
+  if (!paramSchema || !paramValues) return []
+
+  const properties = extractParamSchemaProperties(paramSchema)
+  const rows: DynamicParamRow[] = []
+  const seen = new Set<string>()
+
+  if (properties) {
+    for (const [key, config] of Object.entries(properties)) {
+      const raw = paramValues[key]
+      if (raw === undefined || raw === null || raw === '') continue
+      const value = formatDynamicParamValue(raw)
+      if (!value) continue
+
+      const label = typeof config === 'object' && config !== null && !Array.isArray(config) && typeof config.title === 'string'
+        ? config.title
+        : key
+      rows.push({ key, label, value })
+      seen.add(key)
+    }
+  }
+
+  for (const [key, raw] of Object.entries(paramValues)) {
+    if (seen.has(key) || raw === undefined || raw === null || raw === '') continue
+    const value = formatDynamicParamValue(raw)
+    if (!value) continue
+    rows.push({ key, label: key, value })
+  }
+
+  return rows
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -78,6 +141,10 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
+  const dynamicParamRows = useMemo(
+    () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
+    [strategy?.paramSchema, strategy?.paramValues],
+  )
 
   if (!strategy) {
     return (
@@ -196,21 +263,33 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">参数快照</h2>
-          <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
-            <p>交易所：{strategy.exchange.toUpperCase()}</p>
-            <p>币种：{strategy.symbol}</p>
-            <p>周期：{strategy.timeframe}</p>
-            <p>单笔仓位：{strategy.positionPct}%</p>
-            {strategy.deploy && (
-              <>
-                <p>部署账户：{strategy.deploy.accountName}</p>
-                <p>部署时间：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
-              </>
+        {strategy.supportsDynamicParams && strategy.paramSchema
+          ? (
+              <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">参数快照</h2>
+                <div className="mt-3 space-y-2 text-sm text-[color:var(--cf-text)]">
+                  {dynamicParamRows.length > 0
+                    ? dynamicParamRows.map(row => (
+                        <p key={row.key}>
+                          {row.label}：{row.value}
+                        </p>
+                      ))
+                    : <p className="text-[color:var(--cf-muted)]">暂无参数</p>}
+                  {strategy.deploy && (
+                    <>
+                      <p>部署账户：{strategy.deploy.accountName}</p>
+                      <p>部署时间：{strategy.deploy.at.replace('T', ' ').slice(0, 16)}</p>
+                    </>
+                  )}
+                </div>
+              </article>
+            )
+          : (
+              <article className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+                <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">策略参数不可用</h2>
+                <p className="mt-3 text-sm text-amber-300">不支持旧策略，请重新生成</p>
+              </article>
             )}
-          </div>
-        </article>
 
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
