@@ -6,6 +6,10 @@ import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strateg
 import { CallerIdentityService } from './services/caller-identity.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 const TEST_APP_SECRET = 'engine-test-secret'
 
 function createBearerToken(payload: Record<string, unknown>): string {
@@ -36,17 +40,17 @@ function buildProviders(service: Record<string, jest.Mock>, envService = createM
 }
 
 describe('liveLlmStrategyCodegenController', () => {
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
-    global.fetch = jest.fn().mockResolvedValue({
+    globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ id: 'caller-u1' }),
     }) as unknown as typeof fetch
   })
 
   afterAll(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
   })
 
   it('creates session in drafting status', async () => {
@@ -235,7 +239,7 @@ describe('liveLlmStrategyCodegenController', () => {
       providers: buildProviders(service),
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
-    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+    ;(globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: false,
       status: 401,
       json: async () => ({}),
