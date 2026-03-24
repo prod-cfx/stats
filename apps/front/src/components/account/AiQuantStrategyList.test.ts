@@ -1,6 +1,6 @@
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import { describe, expect, it, jest } from '@jest/globals'
-import { buildPrimarySummary } from './AiQuantStrategyList'
+import { buildParamSummary, buildPrimarySummary } from './AiQuantStrategyList'
 
 jest.mock('lucide-react', () => ({
   Activity: () => null,
@@ -77,5 +77,53 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(out.entries).not.toContain(record.symbol)
     expect(out.entries).not.toContain(record.timeframe)
     expect(out.entries).not.toContain(`aiQuant.position ${record.positionPct}%`)
+  })
+
+  it('uses fixed summary path when schema is missing', () => {
+    const record = makeListRecord({
+      paramSchema: null,
+      paramValues: null,
+    })
+    const out = buildPrimarySummary(record, key => key)
+
+    expect(out.isDynamic).toBe(false)
+    expect(out.entries).toEqual([
+      'BINANCE',
+      'BTCUSDT',
+      '15m',
+      'aiQuant.position 10%',
+    ])
+  })
+
+  it('caps dynamic summary at 3 items and filters invalid values', () => {
+    const summary = buildParamSummary(
+      {
+        type: 'object',
+        properties: {
+          emptyString: { type: 'string', title: '空字符串' },
+          zero: { type: 'number', title: '零值' },
+          falseFlag: { type: 'boolean', title: '开关' },
+          nullField: { type: 'string', title: '空值' },
+          arrayField: { type: 'array', title: '数组' },
+          objField: { type: 'object', title: '对象' },
+          extra: { type: 'string', title: '额外' },
+        },
+      },
+      {
+        emptyString: '',
+        zero: 0,
+        falseFlag: false,
+        nullField: null,
+        arrayField: ['a', 1, true, { bad: 'x' }],
+        objField: { bad: 'x' },
+        extra: 'ignored-by-limit',
+      },
+    )
+
+    expect(summary).toEqual([
+      '零值: 0',
+      '开关: false',
+      '数组: a, 1, true',
+    ])
   })
 })

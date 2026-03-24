@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategies, performAccountAiQuantStrategyAction } from '@/lib/api'
 import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
+import { buildDynamicParamSummary } from './dynamic-param-summary'
 
 function fmtTime(ts: string, lng: string) {
   const date = new Date(ts)
@@ -19,64 +20,11 @@ function fmtTime(ts: string, lng: string) {
   })
 }
 
-function formatParamValue(value: unknown): string | null {
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (Array.isArray(value)) {
-    const flat = value
-      .map((item) => {
-        if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
-          return String(item)
-        return null
-      })
-      .filter((item): item is string => item !== null)
-    return flat.length ? flat.join(', ') : null
-  }
-  return null
-}
-
-function extractSchemaProperties(paramSchema: Record<string, unknown>): Record<string, unknown> | null {
-  const properties = paramSchema.properties
-  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return null
-  return properties as Record<string, unknown>
-}
-
 export function buildParamSummary(
   paramSchema: Record<string, unknown> | null,
   paramValues: Record<string, unknown> | null,
 ): string[] {
-  if (!paramSchema || !paramValues) return []
-
-  const properties = extractSchemaProperties(paramSchema)
-  const output: string[] = []
-  const seen = new Set<string>()
-
-  if (properties) {
-    for (const [key, config] of Object.entries(properties)) {
-      const raw = paramValues[key]
-      if (raw === undefined || raw === null || raw === '') continue
-
-      const value = formatParamValue(raw)
-      if (!value) continue
-
-      const label = typeof config === 'object' && config !== null && !Array.isArray(config) && typeof config.title === 'string'
-        ? config.title
-        : key
-      output.push(`${label}: ${value}`)
-      seen.add(key)
-      if (output.length >= 3) return output
-    }
-  }
-
-  for (const [key, raw] of Object.entries(paramValues)) {
-    if (seen.has(key) || raw === undefined || raw === null || raw === '') continue
-    const value = formatParamValue(raw)
-    if (!value) continue
-    output.push(`${key}: ${value}`)
-    if (output.length >= 3) break
-  }
-
-  return output
+  return buildDynamicParamSummary(paramSchema, paramValues, 3)
 }
 
 interface PrimarySummary {
@@ -92,7 +40,7 @@ export function buildPrimarySummary(
     const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues)
     return {
       isDynamic: true,
-      entries: dynamicSummary.length ? dynamicSummary : ['暂无参数'],
+      entries: dynamicSummary.length ? dynamicSummary : [t('aiQuant.paramSummaryEmpty')],
     }
   }
 
