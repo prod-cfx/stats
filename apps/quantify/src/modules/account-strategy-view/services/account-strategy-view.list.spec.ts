@@ -30,7 +30,13 @@ describe('accountStrategyViewService.listStrategies', () => {
       ])),
     }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, null as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      null as any,
+      marketDataIngestionService as any,
+    )
 
     const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20, status: 'running' })
 
@@ -81,7 +87,13 @@ describe('accountStrategyViewService.listStrategies', () => {
       ])),
     }
 
-    const service = new AccountStrategyViewService(repo as any, statsService as any, null as any)
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      null as any,
+      marketDataIngestionService as any,
+    )
     const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20 })
 
     expect(result.items[0]?.status).toBe('stopped')

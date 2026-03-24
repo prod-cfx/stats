@@ -39,6 +39,11 @@ export class AccountStrategyDeployDto {
   @IsString()
   exchangeAccountId?: string
 
+  @ApiPropertyOptional({ description: '当前 AI 会话发布出的策略实例 ID' })
+  @IsOptional()
+  @IsString()
+  strategyInstanceId?: string
+
   @ApiPropertyOptional({ description: '交易所账户名称（本地/兜底）' })
   @IsOptional()
   @IsString()

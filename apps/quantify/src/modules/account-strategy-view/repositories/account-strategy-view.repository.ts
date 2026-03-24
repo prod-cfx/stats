@@ -1,10 +1,10 @@
-import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PrismaService } from '@/prisma/prisma.service'
-import { SubscriptionStatus } from '@/prisma/prisma.types'
+import { Prisma, SubscriptionStatus } from '@/prisma/prisma.types'
 
 interface ListStrategiesQuery {
   userId: string
@@ -20,6 +20,7 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
 }
@@ -29,6 +30,7 @@ export class AccountStrategyViewRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<string> {
+    const normalizedName = this.normalizeStrategyName(input.name)
     const strategyInstanceId = await this.prisma.runInTransaction(async (tx) => {
       const existingUser = await tx.user.findUnique({
         where: { id: input.userId },
@@ -78,6 +80,106 @@ export class AccountStrategyViewRepository {
         resolvedExchangeAccountId = existingAccount.id
       }
 
+      if (input.strategyInstanceId) {
+        const existingInstance = await tx.strategyInstance.findFirst({
+          where: {
+            id: input.strategyInstanceId,
+            createdBy: input.userId,
+          },
+          select: {
+            id: true,
+            strategyTemplateId: true,
+            params: true,
+          },
+        })
+
+        if (!existingInstance) {
+          throw new Error('Strategy instance not found')
+        }
+
+        const mergedParams = {
+          ...this.asRecord(existingInstance.params),
+          exchange: input.exchange,
+          symbol: input.symbol,
+          timeframe: input.timeframe,
+          positionPct: input.positionPct,
+        }
+
+        await tx.strategyInstance.update({
+          where: { id: existingInstance.id },
+          data: {
+            name: normalizedName,
+            description: `AI 策略部署 - ${input.symbol}`,
+            params: mergedParams,
+            status: 'running',
+            mode: 'TESTNET',
+            startedAt: new Date(),
+            updatedBy: input.userId,
+            metadata: {
+              source: 'account-ai-quant-deploy',
+              sourceStrategyInstanceId: existingInstance.id,
+            },
+          },
+        })
+
+        const existingSubscription = await tx.userStrategySubscription.findFirst({
+          where: {
+            userId: input.userId,
+            strategyInstanceId: existingInstance.id,
+          },
+          select: { id: true },
+        })
+
+        if (existingSubscription) {
+          await tx.userStrategySubscription.update({
+            where: { id: existingSubscription.id },
+            data: {
+              status: 'active',
+              customParams: mergedParams,
+              exchangeAccountId: resolvedExchangeAccountId,
+              unsubscribedAt: null,
+            },
+          })
+        } else {
+          await tx.userStrategySubscription.create({
+            data: {
+              userId: input.userId,
+              strategyInstanceId: existingInstance.id,
+              status: 'active',
+              customParams: mergedParams,
+              exchangeAccountId: resolvedExchangeAccountId,
+            },
+          })
+        }
+
+        const existingStrategyAccount = await tx.userStrategyAccount.findUnique({
+          where: {
+            userId_strategyId: {
+              userId: input.userId,
+              strategyId: existingInstance.strategyTemplateId,
+            },
+          },
+          select: { id: true },
+        })
+
+        if (!existingStrategyAccount) {
+          const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
+          await tx.userStrategyAccount.create({
+            data: {
+              userId: input.userId,
+              strategyId: existingInstance.strategyTemplateId,
+              strategyName: normalizedName,
+              baseCurrency: 'USDT',
+              initialBalance,
+              balance: initialBalance,
+              equity: initialBalance,
+            },
+          })
+        }
+
+        return existingInstance.id
+      }
+
       const templateName = `AI量化快捷模板-${input.userId}`
       const existingTemplate = await tx.strategyTemplate.findUnique({
         where: { name: templateName },
@@ -106,7 +208,6 @@ export class AccountStrategyViewRepository {
             select: { id: true },
           })).id
 
-      const normalizedName = input.name.trim() || 'AI策略'
       const instanceName = `${normalizedName}-${Date.now()}`
       const params = {
         exchange: input.exchange,
@@ -150,8 +251,8 @@ export class AccountStrategyViewRepository {
 
   async listStrategiesForUser(query: ListStrategiesQuery) {
     const client = this.prisma.getClient()
-    const page = Number(query.page)
-    const limit = Number(query.limit)
+    const page = this.normalizePage(query.page)
+    const limit = this.normalizeLimit(query.limit)
     const skip = (page - 1) * limit
 
     const subscribedInstanceIds = (
@@ -208,6 +309,48 @@ export class AccountStrategyViewRepository {
         subscribed: isSubscribed,
       }
     }))
+  }
+
+  private normalizePage(value: number): number {
+    const page = Number(value)
+    if (!Number.isFinite(page) || page < 1) {
+      return 1
+    }
+    return Math.trunc(page)
+  }
+
+  private normalizeLimit(value: number): number {
+    const limit = Number(value)
+    if (!Number.isFinite(limit) || limit < 1) {
+      return PAGINATION_CONSTANTS.DEFAULT_PAGE_SIZE
+    }
+    return Math.min(Math.trunc(limit), PAGINATION_CONSTANTS.MAX_PAGE_SIZE)
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {}
+    }
+    return value as Record<string, unknown>
+  }
+
+  private normalizeStrategyName(value: unknown): string {
+    if (typeof value !== 'string') {
+      return 'AI策略'
+    }
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : 'AI策略'
+  }
+
+  private resolveInitialBalanceQuote(params: Record<string, unknown>): Prisma.Decimal {
+    const candidates = [params.initialBalanceQuote, params.accountBalanceQuote]
+    for (const candidate of candidates) {
+      const numeric = Number(candidate)
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return new Prisma.Decimal(numeric)
+      }
+    }
+    return new Prisma.Decimal(1000)
   }
 
   async findStrategyForUser(userId: string, strategyInstanceId: string) {

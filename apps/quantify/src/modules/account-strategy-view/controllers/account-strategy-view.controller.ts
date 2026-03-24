@@ -1,16 +1,23 @@
-import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
-import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
-import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
+import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
 import { MissingUserIdentityException, UserIdMismatchException } from '../exceptions'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewService } from '../services/account-strategy-view.service'
 
 @Controller('account/ai-quant/strategies')
 export class AccountStrategyViewController {
+  // Keep DTOs as runtime values so Nest can emit decorator metadata for body/query binding.
+  private static readonly dtoRefs = [
+    AccountStrategyActionDto,
+    AccountStrategyDeployDto,
+    AccountStrategyListQueryDto,
+  ]
+
   constructor(private readonly service: AccountStrategyViewService) {}
 
   @Get()

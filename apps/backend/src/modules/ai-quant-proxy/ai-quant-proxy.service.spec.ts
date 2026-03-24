@@ -1,9 +1,10 @@
 import { ErrorCode } from '@ai/shared'
+import type { AuthenticatedUser } from '../../common/types/authenticated-user.type'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { QuantifyClientError } from './clients/quantify-ai-quant.client'
 
 describe('aiQuantProxyService', () => {
-  const authenticatedUser = {
+  const authenticatedUser: AuthenticatedUser = {
     id: 'user-1',
     email: 'user-1@example.com',
     roles: [],

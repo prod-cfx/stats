@@ -33,5 +33,10 @@ export class AccountAiQuantDeployRequestDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  strategyInstanceId?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   exchangeAccountName?: string
 }

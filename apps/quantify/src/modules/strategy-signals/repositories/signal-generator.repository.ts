@@ -1,5 +1,6 @@
 import type { Prisma } from '@/prisma/prisma.types'
 import { Injectable } from '@nestjs/common'
+import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
 import { PrismaService } from '@/prisma/prisma.service'
 
@@ -13,7 +14,7 @@ export class SignalGeneratorRepository {
     return this.getClient().strategyInstance.findMany({
       where: {
         status: 'running',
-        mode: 'LIVE',
+        mode: { in: ['LIVE', 'TESTNET'] },
         strategyTemplate: { status: 'live' },
       },
       orderBy: { id: 'asc' },
@@ -53,13 +54,18 @@ export class SignalGeneratorRepository {
   }
 
   findSymbolsByCode(codes: string[]) {
+    const normalizedCodes = [...new Set(codes.map(code => normalizeRequestedCode(code)))]
     return this.getClient().symbol.findMany({
-      where: { code: { in: codes } },
+      where: { code: { in: normalizedCodes } },
     })
   }
 
   findSymbolByCode(code: string) {
-    return this.getClient().symbol.findUnique({ where: { code } })
+    return this.getClient().symbol.findUnique({
+      where: {
+        code: normalizeRequestedCode(code),
+      },
+    })
   }
 
   async createSignalWithCooldownLock(params: {

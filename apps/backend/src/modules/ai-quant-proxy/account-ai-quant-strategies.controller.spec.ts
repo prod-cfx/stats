@@ -48,6 +48,7 @@ describe('accountAiQuantStrategiesController', () => {
       symbol: 'BTCUSDT',
       timeframe: '15m',
       positionPct: 10,
+      strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
     })
@@ -58,6 +59,7 @@ describe('accountAiQuantStrategiesController', () => {
       symbol: 'BTCUSDT',
       timeframe: '15m',
       positionPct: 10,
+      strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
     })

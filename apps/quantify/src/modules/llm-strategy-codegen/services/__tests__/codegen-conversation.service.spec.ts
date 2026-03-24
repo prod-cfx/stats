@@ -14,6 +14,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     findById: jest.fn(),
     updateSession: jest.fn(),
     createVersion: jest.fn(),
+    createDraftStrategyInstanceFromPublishedSession: jest.fn().mockResolvedValue({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    }),
   }
   const mockAi = {
     chat: jest.fn(),
@@ -33,6 +37,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockRepo.createDraftStrategyInstanceFromPublishedSession.mockResolvedValue({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    })
   })
 
   it('starts in drafting and asks next key question from llm planner', async () => {
@@ -82,6 +90,44 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
     expect(result.assistantPrompt).toContain('确认逻辑图')
+  })
+
+  it('promotes a complete execution template to checklist gate even when planner keeps asking follow-up questions', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: [
+        '平台：OKX',
+        '类型：现货',
+        '交易对：SOL/USDT',
+        '账户余额：1000 USDT',
+        '开仓：市价买入 100 USDT',
+        '交易周期：5 分钟',
+        '止盈：涨幅达到 2% 市价卖出',
+        '止损：最大亏损 10% 市价卖出',
+      ].join('\n'),
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '为了完善策略，请补充短均线和长均线周期。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-execution-template' })
+
+    const result = await service.startSession(dto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      checklist: expect.objectContaining({
+        symbols: ['SOLUSDT'],
+        timeframes: ['5m'],
+        entryRules: ['5m 周期开盘时市价买入 100 USDT'],
+      }),
+    }))
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {

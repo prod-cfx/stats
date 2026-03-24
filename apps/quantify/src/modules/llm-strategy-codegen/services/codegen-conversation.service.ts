@@ -73,10 +73,11 @@ export class CodegenConversationService {
       ...this.extractChecklist(dto),
       ...this.inferChecklistFromMessage(dto.initialMessage),
     })
-    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
+    const plannerResult = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     })
+    const plan = this.promoteExecutableTemplatePlan(dto.initialMessage ?? '', seedChecklist, plannerResult)
     const checklist = this.mergeChecklistSnapshots(seedChecklist, plan.logic ?? {})
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
@@ -138,10 +139,11 @@ export class CodegenConversationService {
     const preMergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
     const constraintPack = this.readConstraintPack(session.constraintPack)
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
-    const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
+    const plannerResult = await this.planConversationByLlm(dto.message, preMergedChecklist, {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
+    const plan = this.promoteExecutableTemplatePlan(dto.message, preMergedChecklist, plannerResult)
     if (!plan.related && dto.confirmGenerate !== true) {
       return {
         id: session.id,
@@ -356,6 +358,15 @@ export class CodegenConversationService {
         specDesc,
       })
 
+      const publishedDraft = await this.createAccountDraftStrategyRecord({
+        userId: session.userId,
+        sessionId: session.id,
+        llmModel: dto.model ?? DEFAULT_MODEL,
+        scriptCode: finalScriptCode,
+        specDesc,
+        sourceMessage: this.resolveDraftSourceMessage(session.constraintPack, dto.message),
+      })
+
       await this.sessionsRepo.updateSession(session.id, {
         status: 'PUBLISHED',
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
@@ -368,6 +379,7 @@ export class CodegenConversationService {
         status: 'PUBLISHED',
         scriptCode: finalScriptCode,
         specDesc,
+        strategyInstanceId: publishedDraft.strategyInstanceId,
         missingFields: [],
       }
     }
@@ -470,7 +482,9 @@ export class CodegenConversationService {
     const upper = text.toUpperCase()
 
     const symbolMatches = upper.match(/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/g) ?? []
-    const symbols = Array.from(new Set(symbolMatches))
+    const slashSymbolMatches = Array.from(upper.matchAll(/\b([A-Z]{2,12})\s*\/\s*(USDT|USDC|USD)\b/g))
+      .map(([, base, quote]) => `${base}${quote}`)
+    const symbols = Array.from(new Set([...symbolMatches, ...slashSymbolMatches]))
     if (symbols.length === 0) {
       if (/比特币|大饼|BTC/i.test(text)) {
         symbols.push('BTCUSDT')
@@ -512,8 +526,18 @@ export class CodegenConversationService {
       exitRules.push(`${frame} 内上涨 ${sellRiseMatch[3]}% 卖出`)
     }
 
+    const marketBuyAmountMatch = text.match(/(?:开仓|买入)[^，。；;\n]{0,20}?市价[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*USDT/i)
+    if (entryRules.length === 0 && marketBuyAmountMatch?.[1] && timeframes[0]) {
+      entryRules.push(`${timeframes[0]} 周期开盘时市价买入 ${marketBuyAmountMatch[1]} USDT`)
+    }
+
     if (entryRules.length === 0 && /金叉|上穿|突破|入场|开仓|买入/.test(text)) {
       entryRules.push('短均线上穿长均线（金叉）入场')
+    }
+    const takeProfitMatch = text.match(/止盈[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/i)
+    const stopLossMatch = text.match(/止损[^，。；;\n]{0,20}?(\d+(?:\.\d+)?)\s*%/i)
+    if (exitRules.length === 0 && takeProfitMatch?.[1] && stopLossMatch?.[1]) {
+      exitRules.push(`盈利达到 ${takeProfitMatch[1]}% 或亏损达到 ${stopLossMatch[1]}% 市价卖出`)
     }
     if (exitRules.length === 0 && /死叉|跌破|止盈|止损|回撤|平仓|离场|出场|卖出/.test(text)) {
       if (/死叉/.test(text)) {
@@ -532,9 +556,11 @@ export class CodegenConversationService {
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/)
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
+    }
+    if (takeProfitMatch?.[1]) {
+      riskRules.takeProfitPct = Number(takeProfitMatch[1])
     }
     const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/)
     if (drawdownMatch?.[1]) {
@@ -655,6 +681,12 @@ export class CodegenConversationService {
           '你是量化策略脚本生成器。',
           '只能输出 JavaScript 脚本代码，不要使用 markdown 代码块。',
           '只能使用 helpers.finance/helpers.array/helpers.ta/helpers.signal。',
+          '运行时只提供这些顶层变量：bars, symbol, timeframe, indicators, currentPrice, params, helpers。',
+          '不要使用 Data/context/market/exchange/api/request/http/fetch/axios，也不要自己读取行情。',
+          '不要声明持久化状态，不要假设脚本能跨次保存 position；脚本必须基于当前 bars 和 currentPrice 做纯函数计算。',
+          '获取收盘价请使用 const closes = bars.map(bar => bar.close)。获取最新 K 线请使用 const lastBar = bars[bars.length - 1]。',
+          '不要使用 timestamp、openTime、closeTime 或任何 bars 上未明确说明的字段，也不要自己判断“新 K 线开始”。调度器已经按 timeframe 调用脚本；如果规则是“每 5 分钟开盘执行一次”，可直接把每次脚本调用视为该执行时点。',
+          '如果需要 ATR，可直接调用 helpers.ta.atr(bars, 14)。如果需要止盈止损价格，基于 currentPrice 或 lastBar.close 计算。',
           '禁止使用 import/require/eval/Function/process。',
           '脚本必须返回非空对象。',
           '以下是当前环境允许使用的 helper 函数签名（严格按签名调用，不要臆造函数）：',
@@ -877,6 +909,37 @@ export class CodegenConversationService {
     return this.normalizeChecklist(merged)
   }
 
+  private promoteExecutableTemplatePlan(
+    message: string,
+    currentLogic: ChecklistPayload,
+    plan: ConversationPlan,
+  ): ConversationPlan {
+    if (!this.isExecutionTemplateMessage(message)) {
+      return plan
+    }
+
+    const inferred = this.mergeChecklistSnapshots(currentLogic, this.inferChecklistFromMessage(message))
+    if (this.resolveChecklistMissingFields(inferred).length > 0) {
+      return plan
+    }
+
+    return {
+      related: true,
+      logicReady: true,
+      assistantPrompt: '我已根据你的下单模板整理出策略逻辑，请确认逻辑图。',
+      logic: inferred,
+    }
+  }
+
+  private isExecutionTemplateMessage(message?: string): boolean {
+    const text = (message ?? '').trim()
+    if (!text) return false
+    return /(?:平台|交易对|开仓|买入)/.test(text)
+      && /(?:交易周期|\d+\s*(?:分钟|min|m|小时|h))/i.test(text)
+      && /止盈/.test(text)
+      && /止损/.test(text)
+  }
+
   private appendConversationHistory(
     current: string[],
     userMessage?: string,
@@ -931,6 +994,102 @@ export class CodegenConversationService {
       .slice(0, MAX_HELPER_SIGNATURE_LINES)
       .map(doc => `- ${doc.signature}`)
       .join('\n')
+  }
+
+  private async createAccountDraftStrategyRecord(args: {
+    userId: string
+    sessionId: string
+    llmModel: string
+    scriptCode: string
+    specDesc: Record<string, unknown>
+    sourceMessage: string
+  }): Promise<{ strategyTemplateId: string, strategyInstanceId: string }> {
+    const market = (args.specDesc.market ?? {}) as Record<string, unknown>
+    const symbols = Array.isArray(market.symbols) ? market.symbols : []
+    const timeframes = Array.isArray(market.timeframes) ? market.timeframes : []
+    const symbol = typeof symbols[0] === 'string' ? symbols[0] : 'UNKNOWN'
+    const timeframe = typeof timeframes[0] === 'string' ? timeframes[0] : '1h'
+    const exchange = this.inferExchangeFromMessage(args.sourceMessage)
+    const marketType = this.inferMarketTypeFromMessage(args.sourceMessage)
+    const positionPct = this.inferPositionPctFromMessage(args.sourceMessage)
+    const strategyName = `${exchange.toUpperCase()} ${symbol} ${timeframe} AI策略`
+    const description = typeof args.specDesc.summary === 'string' && args.specDesc.summary.trim()
+      ? args.specDesc.summary.trim()
+      : `${symbol} ${timeframe} AI 代码生成策略`
+
+    return this.sessionsRepo.createDraftStrategyInstanceFromPublishedSession({
+      userId: args.userId,
+      sessionId: args.sessionId,
+      name: strategyName,
+      description,
+      llmModel: args.llmModel,
+      scriptCode: args.scriptCode,
+      specDesc: args.specDesc,
+      params: {
+        exchange,
+        marketType,
+        symbol,
+        timeframe,
+        positionPct,
+      },
+      metadata: {
+        sourceMessage: args.sourceMessage,
+      },
+    })
+  }
+
+  private inferExchangeFromMessage(message?: string): 'binance' | 'okx' | 'hyperliquid' {
+    const text = (message ?? '').trim()
+    if (/\bOKX\b/i.test(text)) return 'okx'
+    if (/\bHYPERLIQUID\b/i.test(text)) return 'hyperliquid'
+    return 'binance'
+  }
+
+  private inferMarketTypeFromMessage(message?: string): 'spot' | 'perp' {
+    const text = (message ?? '').trim()
+    if (/合约|永续|perp|perpetual|swap/i.test(text)) return 'perp'
+    return 'spot'
+  }
+
+  private inferPositionPctFromMessage(message?: string): number {
+    const text = (message ?? '').trim()
+    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/)
+    if (positionMatch?.[1]) {
+      const pct = Number(positionMatch[1])
+      if (Number.isFinite(pct) && pct > 0) {
+        return Number(Math.min(100, Math.max(1, pct)).toFixed(2))
+      }
+    }
+
+    const balanceMatch = text.match(/账户余额[：: ]*\s*(\d+(?:\.\d+)?)\s*USDT/i)
+    const buyAmountMatch = text.match(/(?:开仓|买入)[：: ]*[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
+    if (balanceMatch?.[1] && buyAmountMatch?.[1]) {
+      const balance = Number(balanceMatch[1])
+      const buyAmount = Number(buyAmountMatch[1])
+      if (Number.isFinite(balance) && balance > 0 && Number.isFinite(buyAmount) && buyAmount > 0) {
+        return Number(Math.min(100, Math.max(1, (buyAmount / balance) * 100)).toFixed(2))
+      }
+    }
+
+    return 10
+  }
+
+  private resolveDraftSourceMessage(
+    constraintPackPayload: Prisma.JsonValue | null,
+    fallbackMessage: string,
+  ): string {
+    const pack = this.readConstraintPack(constraintPackPayload)
+    const userMessages = (pack.conversationHistory ?? [])
+      .filter(item => item.startsWith('U: '))
+      .map(item => item.slice(3).trim())
+      .filter(Boolean)
+    for (let i = userMessages.length - 1; i >= 0; i -= 1) {
+      const candidate = userMessages[i]
+      if (!/^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i.test(candidate)) {
+        return candidate
+      }
+    }
+    return fallbackMessage
   }
 
   static isTerminalStatus(status: LlmCodegenSessionStatus): boolean {

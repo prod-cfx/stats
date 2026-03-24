@@ -1338,6 +1338,7 @@ export interface AccountAiQuantDeployPayload {
   symbol: string
   timeframe: string
   positionPct: number
+  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
 }
@@ -1451,6 +1452,7 @@ export async function deployAccountAiQuantStrategy(
         symbol: payload.symbol,
         timeframe: payload.timeframe,
         positionPct: payload.positionPct,
+        strategyInstanceId: payload.strategyInstanceId,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
       }),
@@ -1741,6 +1743,7 @@ export interface LlmCodegenSessionResponse {
   missingFields?: string[]
   scriptCode?: string | null
   specDesc?: Record<string, unknown> | null
+  strategyInstanceId?: string | null
   rejectReason?: string | null
   assistantPrompt?: string
 }

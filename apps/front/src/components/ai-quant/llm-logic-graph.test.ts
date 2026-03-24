@@ -58,4 +58,19 @@ describe('buildLogicGraphFromCodegenSpec', () => {
 
     expect(graph.status).toBe('draft')
   })
+
+  it('preserves confirmed status when rebuilding a published graph', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      { entryRules: ['a'] },
+      {
+        exchange: 'okx',
+        symbol: 'SOLUSDT',
+        positionPct: 10,
+      },
+      10,
+      'confirmed',
+    )
+
+    expect(graph.status).toBe('confirmed')
+  })
 })

@@ -16,6 +16,7 @@ import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
+import { deriveQuantParamsFromPrompt } from '@/components/ai-quant/prompt-params'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
@@ -58,6 +59,7 @@ interface ConversationState {
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
+  publishedStrategyInstanceId: string | null
   updatedAt: number
 }
 
@@ -138,6 +140,7 @@ export function AiQuantPageClient() {
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
       updatedAt: now,
     }
   }
@@ -177,6 +180,7 @@ export function AiQuantPageClient() {
       const normalized = parsed.map(item => ({
         ...item,
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
+        publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
       }))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
@@ -237,9 +241,13 @@ export function AiQuantPageClient() {
   )
   const deployAccounts = exchangeAccounts
 
+  const codegenReady = useMemo(() => {
+    return Boolean(activeConversation?.publishedStrategyInstanceId)
+  }, [activeConversation?.publishedStrategyInstanceId])
+
   const canDeploy = useMemo(() => {
-    return Boolean(activeConversation?.backtestResult)
-  }, [activeConversation?.backtestResult])
+    return Boolean(activeConversation?.backtestResult) && codegenReady
+  }, [activeConversation?.backtestResult, codegenReady])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
 
   const compactMode = useMemo(() => {
@@ -368,6 +376,7 @@ export function AiQuantPageClient() {
                 positionPct: targetParams.positionPct,
               },
               nextVersion,
+              conv.logicGraph?.status === 'confirmed' ? 'confirmed' : 'draft',
             )
           : conv.logicGraph
         const publishedReply = continued.scriptCode
@@ -386,6 +395,7 @@ export function AiQuantPageClient() {
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+          publishedStrategyInstanceId: continued.strategyInstanceId ?? conv.publishedStrategyInstanceId,
           logicGraph: nextGraph,
           backtestResult: null,
           messages: [
@@ -422,7 +432,7 @@ export function AiQuantPageClient() {
     if (!input.trim()) return
     const trimmedInput = input.trim()
     const currentConversationId = activeConversation.id
-    const currentParams = activeConversation.params
+    const currentParams = deriveQuantParamsFromPrompt(trimmedInput, activeConversation.params)
     const currentSessionId = activeConversation.llmCodegenSessionId
     const currentGraphStatus = activeConversation.logicGraph?.status
 
@@ -439,6 +449,7 @@ export function AiQuantPageClient() {
         ...curr,
         title: derivedTitle,
         messages: nextMessages,
+        params: currentParams,
         backtestResult: null,
         updatedAt: Date.now(),
       }
@@ -571,6 +582,21 @@ export function AiQuantPageClient() {
             id: `graph-guard-${Date.now()}`,
             role: 'assistant',
             content: t('aiQuant.messages.graphGuard'),
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+    if (!codegenReady) {
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `codegen-guard-${Date.now()}`,
+            role: 'assistant',
+            content: '策略代码仍在生成，请等待 AI 返回已生成代码后再开始回测。',
           },
         ],
         updatedAt: Date.now(),
@@ -725,7 +751,7 @@ export function AiQuantPageClient() {
             onParamsChange={nextParams => updateActiveConversation(curr => ({ ...curr, params: nextParams, updatedAt: Date.now() }))}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={graphConfirmed}
+            canRunBacktest={graphConfirmed && codegenReady}
           />
 
           {activeConversation.logicGraph && (
@@ -827,6 +853,7 @@ export function AiQuantPageClient() {
               symbol: activeConversation.params.symbol,
               timeframe,
               positionPct: activeConversation.params.positionPct,
+              strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
               exchangeAccountId: account.accountId,
               exchangeAccountName: account.accountName,
             })

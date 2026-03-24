@@ -56,6 +56,7 @@ export class AccountAiQuantStrategiesController {
       symbol: dto.symbol,
       timeframe: dto.timeframe,
       positionPct: dto.positionPct,
+      strategyInstanceId: dto.strategyInstanceId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
     })
