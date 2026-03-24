@@ -147,6 +147,59 @@
 - schema 设计若不稳定，会导致前端渲染频繁变更
 - adapter 规则不清晰会影响 codegen 一致性
 
-## 11. 下一步
+## 11. 实现状态（Task 6）
 
-进入 `writing-plans`，产出可执行实施计划（文件级改动、测试矩阵、回滚策略）。
+### 11.1 已完成任务
+
+- Task 1（后端 DTO 契约扩展）已完成：`paramSchema` / `paramValues` / `schemaVersion` 已进入 account-strategy-view DTO。
+- Task 2（后端聚合与返回）已完成：account-strategy-view 服务层已组装并返回动态参数契约。
+- Task 3（前端 AI 对话参数动态化）已完成：AI Quant 会话参数改为 schema 驱动并移除固定字段依赖。
+- Task 4（前端列表/详情动态展示）已完成：账户策略列表与详情已切换为动态参数展示并带历史无 schema 保护。
+- Task 5（前端参数校验闸门）已完成：提交前 schema 校验闸门与嵌套对象检查已补齐。
+- Task 6（集成验证与文档回填）已完成：完成本节验证记录与风险归档。
+
+### 11.2 关键提交
+
+- `e1b088fc`: `feat(quantify): extend account strategy view dto dynamic params contract`
+- `e6616353`: `feat(quantify): assemble dynamic param schema in account strategy view`
+- `f8bc81a9`: `feat(front): switch ai-quant chat params to schema-driven`
+- `02f0ab1d`: `feat(front): dynamic strategy params in account list/detail with legacy guard`
+- `82ce4842`: `fix(front): refine task5 validation gating and nested object checks`
+
+### 11.3 验证证据（2026-03-24）
+
+- Quantify account-strategy-view（unit）  
+  命令：`cd apps/quantify && pnpm run test:unit -- account-strategy-view`  
+  结果：`6` suites，`4` passed，`2` failed；`21` tests，`18` passed，`3` failed。  
+  失败要点：  
+  1) `account-strategy-view.action.spec.ts` 仍断言旧错误文案，实际为错误码 `account_strategy.owner_only`。  
+  2) `account-strategy-view.controller.spec.ts` 缺少 transactional host 初始化，触发 `TransactionHost not initialized`。
+
+- Quantify account-strategy-view（e2e 定向）  
+  命令：`cd apps/quantify && pnpm run test:e2e:file -- e2e/account-strategy-view/account-strategy-view.e2e-spec.ts`  
+  结果：未进入用例执行（`0` tests）；环境阻塞失败。  
+  失败要点：`DATABASE_URL` 缺失，`setup-e2e.ts` 触发 `process.exit(1)`。
+
+- Front account 组件测试  
+  命令：`cd apps/front && npx vitest run src/components/account/*.test.ts src/components/account/*.test.tsx`  
+  结果：`6` files failed，`0` tests executed。  
+  失败要点：测试文件使用 Jest 风格（含 `@jest/globals` / 全局 `describe`），当前以 Vitest 直接运行无法加载该运行时。
+
+- Front ai-quant session-loop + dynamic-params  
+  命令：`cd apps/front && npx vitest run src/components/ai-quant/session-loop.test.ts src/components/ai-quant/dynamic-params.test.ts`  
+  结果：`2` files failed，`0` tests executed。  
+  失败要点：同样依赖 `@jest/globals`，Vitest 运行时无法解析。
+
+- Front type-check  
+  命令：`pnpm --filter @ai/front run type-check`  
+  结果：失败（`tsc` exit code `2`），存在既有类型问题阻塞。  
+  代表性问题：  
+  1) `src/components/account/dynamic-param-summary.ts`：`object` 类型访问 `title` 报错。  
+  2) `src/components/trading/RightPanel/RightPanel.tsx`、`src/lib/hyperliquid-api.ts`：`@ai/shared` 类型声明缺失。  
+  3) `src/lib/api.ts` 多处分页返回与数组类型不匹配。
+
+### 11.4 已知残余风险
+
+- 测试基建分裂风险：前端账户/AI Quant 测试文件仍偏 Jest 写法，但验证阶段按 Vitest 运行会整体失败，CI/本地结果解释成本高。
+- 后端回归门禁风险：account-strategy-view 关键单测仍有断言与事务初始化问题，现阶段无法作为稳定回归门禁。
+- E2E 环境风险：`DATABASE_URL` 依赖未满足时，account-strategy-view e2e 无法执行，动态参数链路缺少端到端验证闭环。
