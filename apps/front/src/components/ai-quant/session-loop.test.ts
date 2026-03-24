@@ -231,4 +231,22 @@ describe('ai-quant session-loop', () => {
       },
     })
   })
+
+  it('does not block normal chat path when confirmGenerate=false and preset is disabled', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: false,
+      message: '请解释一下当前策略思路',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramSchema: {
+        type: 'object',
+        required: ['riskRules'],
+      },
+      paramValues: {},
+    } as any)
+
+    expect(payload).toEqual({})
+  })
 })

@@ -162,24 +162,27 @@ export function resolveChecklistPayload(input: {
   paramSchema?: Record<string, unknown> | null
   paramValues?: Record<string, unknown> | null
 }): SessionLoopResolveResult {
-  const missingRequiredKeys = collectMissingRequiredKeys(input.paramSchema, input.paramValues)
-  if (missingRequiredKeys.length > 0) {
-    return {
-      error: {
-        code: 'MISSING_REQUIRED_PARAMS',
-        missingKeys: missingRequiredKeys,
-      },
+  const shouldGateBySchema = input.usePresetRules || input.confirmGenerate
+  if (shouldGateBySchema) {
+    const missingRequiredKeys = collectMissingRequiredKeys(input.paramSchema, input.paramValues)
+    if (missingRequiredKeys.length > 0) {
+      return {
+        error: {
+          code: 'MISSING_REQUIRED_PARAMS',
+          missingKeys: missingRequiredKeys,
+        },
+      }
     }
-  }
 
-  const validation = validateDynamicParamValues(input.paramSchema, input.paramValues)
-  if (!validation.valid) {
-    return {
-      error: {
-        code: 'INVALID_PARAM_VALUES',
-        missingKeys: [],
-        fieldErrors: validation.fieldErrors,
-      },
+    const validation = validateDynamicParamValues(input.paramSchema, input.paramValues)
+    if (!validation.valid) {
+      return {
+        error: {
+          code: 'INVALID_PARAM_VALUES',
+          missingKeys: [],
+          fieldErrors: validation.fieldErrors,
+        },
+      }
     }
   }
 

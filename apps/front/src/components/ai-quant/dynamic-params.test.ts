@@ -99,4 +99,28 @@ describe('ai-quant dynamic-params', () => {
     expect(parseDynamicParamInputValue('integer', '   ')).toBeUndefined()
     expect(parseDynamicParamInputValue('number', '12.5')).toBe(12.5)
   })
+
+  it('validates nested object required fields', () => {
+    const nestedSchema = {
+      type: 'object',
+      properties: {
+        riskRules: {
+          type: 'object',
+          required: ['positionPct', 'maxDrawdownPct'],
+          properties: {
+            positionPct: { type: 'number', minimum: 1, maximum: 100 },
+            maxDrawdownPct: { type: 'number', minimum: 1, maximum: 100 },
+          },
+        },
+      },
+    }
+    const result = validateDynamicParamValues(nestedSchema, {
+      riskRules: {},
+    })
+    expect(result.valid).toBe(false)
+    expect(result.fieldErrors).toEqual({
+      'riskRules.positionPct': 'required',
+      'riskRules.maxDrawdownPct': 'required',
+    })
+  })
 })

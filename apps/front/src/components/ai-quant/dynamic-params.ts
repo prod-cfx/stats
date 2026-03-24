@@ -83,6 +83,87 @@ function normalizeNumber(value: unknown): number | null {
   return null
 }
 
+function validateAgainstSchemaNode(
+  schemaNode: Record<string, unknown>,
+  value: unknown,
+  path: string,
+  fieldErrors: Record<string, string>,
+) {
+  const type = asFieldType(schemaNode.type)
+
+  if (type === 'string') {
+    if (typeof value !== 'string') fieldErrors[path] = 'type'
+    if (Array.isArray(schemaNode.enum)) {
+      const enumValues = schemaNode.enum.map(item => String(item))
+      if (!enumValues.includes(String(value))) {
+        fieldErrors[path] = 'enum'
+      }
+    }
+    return
+  }
+
+  if (type === 'number' || type === 'integer') {
+    const numberValue = normalizeNumber(value)
+    if (numberValue === null) {
+      fieldErrors[path] = 'type'
+      return
+    }
+    if (type === 'integer' && !Number.isInteger(numberValue)) {
+      fieldErrors[path] = 'type'
+      return
+    }
+    const minimum = normalizeNumber(schemaNode.minimum)
+    const maximum = normalizeNumber(schemaNode.maximum)
+    if (minimum !== null && numberValue < minimum) {
+      fieldErrors[path] = 'minimum'
+      return
+    }
+    if (maximum !== null && numberValue > maximum) {
+      fieldErrors[path] = 'maximum'
+    }
+    return
+  }
+
+  if (type === 'boolean') {
+    if (typeof value !== 'boolean') fieldErrors[path] = 'type'
+    return
+  }
+
+  if (type === 'array') {
+    if (!Array.isArray(value)) fieldErrors[path] = 'type'
+    return
+  }
+
+  if (type === 'object') {
+    const objectValue = asObject(value)
+    if (!objectValue) {
+      fieldErrors[path] = 'type'
+      return
+    }
+
+    const required = Array.isArray(schemaNode.required)
+      ? schemaNode.required.filter((item): item is string => typeof item === 'string')
+      : []
+    for (const key of required) {
+      const nestedValue = objectValue[key]
+      if (isMissingValue(nestedValue)) {
+        fieldErrors[`${path}.${key}`] = 'required'
+      }
+    }
+
+    const properties = asObject(schemaNode.properties)
+    if (!properties) return
+    for (const [key, rawNestedSchema] of Object.entries(properties)) {
+      const nestedSchema = asObject(rawNestedSchema)
+      if (!nestedSchema) continue
+      const nestedValue = objectValue[key]
+      if (isMissingValue(nestedValue)) continue
+      validateAgainstSchemaNode(nestedSchema, nestedValue, `${path}.${key}`, fieldErrors)
+    }
+    
+  }
+}
+
 export function buildDynamicParamFields(paramSchema: DynamicParamSchema | null | undefined): DynamicParamFieldViewModel[] {
   const schema = asObject(paramSchema)
   if (!schema) return []
@@ -152,52 +233,7 @@ export function validateDynamicParamValues(
     if (!config) continue
     const value = values[key]
     if (isMissingValue(value)) continue
-
-    const type = asFieldType(config.type)
-    if (type === 'string' && typeof value !== 'string') {
-      fieldErrors[key] = 'type'
-      continue
-    }
-    if ((type === 'number' || type === 'integer')) {
-      const numberValue = normalizeNumber(value)
-      if (numberValue === null) {
-        fieldErrors[key] = 'type'
-        continue
-      }
-      if (type === 'integer' && !Number.isInteger(numberValue)) {
-        fieldErrors[key] = 'type'
-        continue
-      }
-      const minimum = normalizeNumber(config.minimum)
-      const maximum = normalizeNumber(config.maximum)
-      if (minimum !== null && numberValue < minimum) {
-        fieldErrors[key] = 'minimum'
-        continue
-      }
-      if (maximum !== null && numberValue > maximum) {
-        fieldErrors[key] = 'maximum'
-      }
-      continue
-    }
-    if (type === 'boolean' && typeof value !== 'boolean') {
-      fieldErrors[key] = 'type'
-      continue
-    }
-    if (type === 'array' && !Array.isArray(value)) {
-      fieldErrors[key] = 'type'
-      continue
-    }
-    if (type === 'object' && (!value || typeof value !== 'object' || Array.isArray(value))) {
-      fieldErrors[key] = 'type'
-      continue
-    }
-
-    if (Array.isArray(config.enum)) {
-      const enumValues = config.enum.map(item => String(item))
-      if (!enumValues.includes(String(value))) {
-        fieldErrors[key] = 'enum'
-      }
-    }
+    validateAgainstSchemaNode(config, value, key, fieldErrors)
   }
 
   return {
