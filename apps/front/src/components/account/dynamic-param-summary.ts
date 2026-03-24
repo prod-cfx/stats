@@ -43,8 +43,12 @@ export function buildDynamicParamRows(
       const value = formatParamValue(raw)
       if (!value) continue
 
-      const label = typeof config === 'object' && config !== null && !Array.isArray(config) && typeof config.title === 'string'
-        ? config.title
+      const configRecord
+        = typeof config === 'object' && config !== null && !Array.isArray(config)
+          ? (config as Record<string, unknown>)
+          : null
+      const label = typeof configRecord?.title === 'string'
+        ? configRecord.title
         : key
 
       rows.push({ key, label, value })
