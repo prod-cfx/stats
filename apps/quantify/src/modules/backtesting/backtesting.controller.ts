@@ -8,6 +8,7 @@ import { BacktestRunnerService } from './core/backtest-runner.service'
 import { RunBacktestDto } from './dto/run-backtest.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
@@ -41,18 +42,26 @@ export class BacktestingController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
-    await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     const strategy = await this.strategyAdapter.build(dto.strategy)
-    return this.jobsService.createJob({ ...dto, strategy } as BacktestRunInput)
+    return this.jobsService.createJob({ ...dto, strategy } as BacktestRunInput, callerUserId)
   }
 
   @Get('jobs/:id')
-  getJob(@Param('id') id: string) {
-    return this.jobsService.getJob(id)
+  async getJob(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.jobsService.getJob(id, callerUserId)
   }
 
   @Get('jobs/:id/result')
-  getJobResult(@Param('id') id: string) {
-    return this.jobsService.getJobResult(id)
+  async getJobResult(
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ) {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.jobsService.getJobResult(id, callerUserId)
   }
 }
