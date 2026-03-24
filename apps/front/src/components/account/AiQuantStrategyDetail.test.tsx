@@ -125,4 +125,19 @@ describe('AiQuant strategy dynamic params', () => {
     expect(html).not.toContain('参数快照')
     expect(html).not.toContain('杠杆：3')
   })
+
+  it('renders dynamic param panel when schema exists even if supportsDynamicParams is false', () => {
+    const html = renderToStaticMarkup(
+      <AiQuantStrategyDetail
+        lng="zh"
+        strategy={makeStrategy({
+          supportsDynamicParams: false,
+        })}
+      />,
+    )
+
+    expect(html).toContain('参数快照')
+    expect(html).toContain('杠杆：3')
+    expect(html).not.toContain('不支持旧策略，请重新生成')
+  })
 })

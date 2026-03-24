@@ -79,6 +79,34 @@ export function buildParamSummary(
   return output
 }
 
+interface PrimarySummary {
+  isDynamic: boolean
+  entries: string[]
+}
+
+export function buildPrimarySummary(
+  item: Pick<AiQuantStrategyRecord, 'exchange' | 'symbol' | 'timeframe' | 'positionPct' | 'paramSchema' | 'paramValues'>,
+  t: (key: string) => string,
+): PrimarySummary {
+  if (item.paramSchema) {
+    const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues)
+    return {
+      isDynamic: true,
+      entries: dynamicSummary.length ? dynamicSummary : ['暂无参数'],
+    }
+  }
+
+  return {
+    isDynamic: false,
+    entries: [
+      item.exchange.toUpperCase(),
+      item.symbol,
+      item.timeframe,
+      `${t('aiQuant.position')} ${item.positionPct}%`,
+    ],
+  }
+}
+
 export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const { t } = useTranslation()
   const { session } = useAuth()
@@ -201,8 +229,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         {strategies.map(item => {
           const statusConfig = STATUS_CONFIG[item.status]
           const StatusIcon = statusConfig.icon
-          const dynamicSummary = buildParamSummary(item.paramSchema, item.paramValues)
-          const shouldUseDynamicSummary = item.supportsDynamicParams && dynamicSummary.length > 0
+          const primarySummary = buildPrimarySummary(item, t)
 
           return (
             <Link
@@ -222,8 +249,8 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     </div>
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
-                    {shouldUseDynamicSummary
-                      ? dynamicSummary.map((entry, idx) => (
+                    {primarySummary.isDynamic
+                      ? primarySummary.entries.map((entry, idx) => (
                           <div key={`${item.id}-param-${idx}`} className="contents">
                             {idx > 0 && <span>/</span>}
                             <span className={idx === 0 ? 'font-medium text-[color:var(--cf-text)]' : undefined}>

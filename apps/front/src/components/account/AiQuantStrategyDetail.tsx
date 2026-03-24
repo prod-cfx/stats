@@ -263,7 +263,7 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        {strategy.supportsDynamicParams && strategy.paramSchema
+        {strategy.paramSchema
           ? (
               <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
                 <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">参数快照</h2>
