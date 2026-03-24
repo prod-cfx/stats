@@ -1,7 +1,38 @@
 import type { BacktestRunInput } from '../types/backtesting.types'
-import { IsArray, IsIn, IsNumber, IsObject, IsPositive, IsString, Min, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
+import {
+  IsArray,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsPositive,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator'
 
-export class RunBacktestDto implements BacktestRunInput {
+export class BacktestStrategyInputDto {
+  @IsString()
+  @IsNotEmpty()
+  id!: string
+
+  @IsIn(['v1'])
+  protocolVersion!: 'v1'
+
+  @IsString()
+  @IsNotEmpty()
+  scriptCode!: string
+
+  @IsObject()
+  params!: Record<string, unknown>
+}
+
+type RunBacktestDtoShape = Omit<BacktestRunInput, 'strategy'> & {
+  strategy: BacktestStrategyInputDto
+}
+
+export class RunBacktestDto implements RunBacktestDtoShape {
   @IsArray()
   @IsString({ each: true })
   symbols!: string[]
@@ -24,8 +55,9 @@ export class RunBacktestDto implements BacktestRunInput {
   @IsObject()
   execution!: BacktestRunInput['execution']
 
-  @IsObject()
-  strategy!: BacktestRunInput['strategy']
+  @ValidateNested()
+  @Type(() => BacktestStrategyInputDto)
+  strategy!: BacktestStrategyInputDto
 
   @IsObject()
   dataRange!: BacktestRunInput['dataRange']

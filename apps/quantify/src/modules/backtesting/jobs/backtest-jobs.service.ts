@@ -9,6 +9,7 @@ export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
 interface BacktestJobRecord {
   id: string
+  ownerUserId: string
   status: BacktestJobStatus
   createdAt: string
   startedAt?: string
@@ -26,7 +27,7 @@ interface BacktestJobRecord {
   result?: BacktestReport
 }
 
-type BacktestJobView = Omit<BacktestJobRecord, 'result'>
+type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'>
 
 @Injectable()
 export class BacktestJobsService {
@@ -37,13 +38,14 @@ export class BacktestJobsService {
 
   constructor(private readonly runner: BacktestRunnerService) {}
 
-  createJob(input: BacktestRunInput): BacktestJobView {
+  createJob(input: BacktestRunInput, ownerUserId: string): BacktestJobView {
     this.pruneJobs()
     this.ensureCapacityForNewJob()
 
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const job: BacktestJobRecord = {
       id,
+      ownerUserId,
       status: 'queued',
       createdAt: new Date().toISOString(),
       inputSummary: {
@@ -61,18 +63,28 @@ export class BacktestJobsService {
     return this.toView(job)
   }
 
-  getJob(id: string): BacktestJobView {
-    const job = this.jobs.get(id)
-    if (!job) throw new DomainException('backtest.job_not_found', { code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { id } })
+  getJob(id: string, ownerUserId: string): BacktestJobView {
+    const job = this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     return this.toView(job)
   }
 
-  getJobResult(id: string): BacktestReport {
-    const job = this.jobs.get(id)
-    if (!job) throw new DomainException('backtest.job_not_found', { code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND, status: HttpStatus.NOT_FOUND, args: { id } })
+  getJobResult(id: string, ownerUserId: string): BacktestReport {
+    const job = this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     if (job.status === 'failed') throw new DomainException('backtest.job_failed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, error: job.error } })
     if (job.status !== 'succeeded' || !job.result) throw new DomainException('backtest.job_not_completed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, status: job.status } })
     return job.result
+  }
+
+  private getOwnedJobOrThrowNotFound(id: string, ownerUserId: string): BacktestJobRecord {
+    const job = this.jobs.get(id)
+    if (!job || job.ownerUserId !== ownerUserId) {
+      throw new DomainException('backtest.job_not_found', {
+        code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: { id },
+      })
+    }
+    return job
   }
 
   private async executeJob(id: string, input: BacktestRunInput) {
