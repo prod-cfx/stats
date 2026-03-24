@@ -36,10 +36,10 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
   positionPct!: number | null
 
-  @ApiPropertyOptional({ nullable: true, type: 'object' })
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
   paramSchema!: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ nullable: true, type: 'object' })
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
   paramValues!: Record<string, unknown> | null
 
   @ApiPropertyOptional({ nullable: true })
