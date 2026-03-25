@@ -342,4 +342,51 @@ describe('backtestRunnerService', () => {
 
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
   })
+
+  it('should provide multi-leg runtime context helpers for protocol strategy scripts', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's1',
+        params: { positionPct: 10 },
+        fn: (ctx: any): StrategyDecisionV1 => {
+          const primaryLeg = ctx.legs?.find((leg: any) => leg.role === 'primary')
+          const timeframe = ctx.execution?.timeframe ?? '5m'
+          const legId = primaryLeg?.id
+          const tfData = legId ? ctx.data?.[legId]?.[timeframe] : undefined
+          const closes = Array.isArray(tfData?.bars) ? tfData.bars.map((bar: any) => bar.close) : []
+          if (closes.length < 3 || !ctx.helpers?.ta) return { action: 'NOOP' }
+
+          const fast = ctx.helpers.ta.sma(closes, 2)
+          const slow = ctx.helpers.ta.sma(closes, 3)
+          if (fast === null || slow === null) return { action: 'NOOP' }
+          if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 } }
+          if (fast < slow) return { action: 'CLOSE_LONG', size: { mode: 'QTY', value: 1 } }
+          return { action: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 4 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 1 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 2 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 3 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, close: 0 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.openPositions?.length ?? 0).toBe(0)
+  })
 })

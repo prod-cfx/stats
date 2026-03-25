@@ -4,6 +4,8 @@ import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestMarketDataService } from '../services/backtest-market-data.service'
 
 export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -22,6 +24,10 @@ interface BacktestJobRecord {
     initialCash: number
     leverage: number
     dataRange: BacktestRunInput['dataRange']
+    requestedRange: BacktestRunInput['dataRange']
+    appliedRange?: BacktestRunInput['dataRange']
+    allowPartial: boolean
+    isPartial: boolean
     strategyId: string
   }
   result?: BacktestReport
@@ -36,7 +42,10 @@ export class BacktestJobsService {
 
   private readonly jobs = new Map<string, BacktestJobRecord>()
 
-  constructor(private readonly runner: BacktestRunnerService) {}
+  constructor(
+    private readonly runner: BacktestRunnerService,
+    private readonly marketDataService: BacktestMarketDataService,
+  ) {}
 
   createJob(input: BacktestRunInput, ownerUserId: string): BacktestJobView {
     this.pruneJobs()
@@ -55,6 +64,9 @@ export class BacktestJobsService {
         initialCash: input.initialCash,
         leverage: input.leverage,
         dataRange: input.dataRange,
+        requestedRange: input.dataRange,
+        allowPartial: input.allowPartial === true,
+        isPartial: false,
         strategyId: input.strategy.id,
       },
     }
@@ -95,7 +107,38 @@ export class BacktestJobsService {
     job.startedAt = new Date().toISOString()
 
     try {
-      const result = await this.runner.run(input)
+      const coverage = await this.marketDataService.resolveCoverage(input)
+      if (coverage.kind === 'empty' || !coverage.appliedRange) {
+        throw new DomainException('backtest.market_data_empty', {
+          code: ErrorCode.BACKTEST_JOB_CONFLICT,
+          status: HttpStatus.CONFLICT,
+          args: { symbols: input.symbols, fromTs: input.dataRange.fromTs, toTs: input.dataRange.toTs },
+        })
+      }
+      if (coverage.kind === 'partial' && input.allowPartial === false) {
+        throw new DomainException('backtest.data_range_out_of_coverage', {
+          code: ErrorCode.BACKTEST_JOB_CONFLICT,
+          status: HttpStatus.CONFLICT,
+          args: {
+            requestedRange: input.dataRange,
+            availableRange: coverage.availableRange,
+            suggestedRange: coverage.appliedRange,
+          },
+        })
+      }
+
+      job.inputSummary.appliedRange = coverage.appliedRange
+      job.inputSummary.isPartial = coverage.kind === 'partial'
+
+      const bars = await this.marketDataService.loadBars({ ...input, dataRange: coverage.appliedRange })
+      if (bars.length === 0) {
+        throw new DomainException('backtest.market_data_empty', {
+          code: ErrorCode.BACKTEST_JOB_CONFLICT,
+          status: HttpStatus.CONFLICT,
+          args: { symbols: input.symbols, fromTs: coverage.appliedRange.fromTs, toTs: coverage.appliedRange.toTs },
+        })
+      }
+      const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars })
       job.status = 'succeeded'
       job.result = result
       job.finishedAt = new Date().toISOString()

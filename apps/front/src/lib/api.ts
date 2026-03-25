@@ -1950,7 +1950,6 @@ export interface LlmCodegenSessionResponse {
 }
 
 export interface StartLlmCodegenSessionPayload {
-  userId: string
   initialMessage?: string
   symbols?: string[]
   timeframes?: string[]
@@ -1960,7 +1959,6 @@ export interface StartLlmCodegenSessionPayload {
 }
 
 export interface ContinueLlmCodegenSessionPayload {
-  userId: string
   message: string
   confirmGenerate?: boolean
   symbols?: string[]
@@ -2017,9 +2015,6 @@ async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
 export async function startLlmCodegenSession(
   payload: StartLlmCodegenSessionPayload,
 ): Promise<LlmCodegenSessionResponse> {
-  if (!payload.userId.trim()) {
-    throw new ApiError('userId is required', 'INVALID_INPUT')
-  }
   return postLlmCodegen<LlmCodegenSessionResponse>('/sessions', payload)
 }
 
@@ -2028,9 +2023,6 @@ export async function continueLlmCodegenSession(
   payload: ContinueLlmCodegenSessionPayload,
 ): Promise<LlmCodegenSessionResponse> {
   validateId(sessionId, 'llm codegen session ID')
-  if (!payload.userId.trim()) {
-    throw new ApiError('userId is required', 'INVALID_INPUT')
-  }
   if (!payload.message.trim()) {
     throw new ApiError('message is required', 'INVALID_INPUT')
   }
@@ -2042,15 +2034,10 @@ export async function continueLlmCodegenSession(
 
 export async function getLlmCodegenSession(
   sessionId: string,
-  userId: string,
 ): Promise<LlmCodegenSessionResponse> {
   validateId(sessionId, 'llm codegen session ID')
-  if (!userId.trim()) {
-    throw new ApiError('userId is required', 'INVALID_INPUT')
-  }
   const authHeaders = requireAuthHeaders()
-  const encodedUserId = encodeURIComponent(userId)
-  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen/sessions/${sessionId}?userId=${encodedUserId}`, {
+  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen/sessions/${sessionId}`, {
     method: 'GET',
     headers: authHeaders,
   })

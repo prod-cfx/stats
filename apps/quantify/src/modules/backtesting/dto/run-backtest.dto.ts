@@ -6,8 +6,10 @@ import {
   IsNotEmpty,
   IsNumber,
   IsObject,
+  IsOptional,
   IsPositive,
   IsString,
+  IsBoolean,
   Min,
   ValidateNested,
 } from 'class-validator'
@@ -28,8 +30,9 @@ export class BacktestStrategyInputDto {
   params!: Record<string, unknown>
 }
 
-type RunBacktestDtoShape = Omit<BacktestRunInput, 'strategy'> & {
+type RunBacktestDtoShape = Omit<BacktestRunInput, 'strategy' | 'bars'> & {
   strategy: BacktestStrategyInputDto
+  bars?: BacktestRunInput['bars']
 }
 
 export class RunBacktestDto implements RunBacktestDtoShape {
@@ -52,6 +55,10 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @IsPositive()
   leverage!: number
 
+  @IsOptional()
+  @IsBoolean()
+  allowPartial?: boolean
+
   @IsObject()
   execution!: BacktestRunInput['execution']
 
@@ -62,7 +69,8 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @IsObject()
   dataRange!: BacktestRunInput['dataRange']
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  bars!: BacktestRunInput['bars']
+  bars?: BacktestRunInput['bars']
 }

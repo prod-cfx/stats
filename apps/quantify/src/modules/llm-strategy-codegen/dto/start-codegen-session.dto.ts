@@ -1,8 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsArray,
-  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -11,10 +10,10 @@ import {
 import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class StartCodegenSessionDto {
-  @ApiProperty({ description: '业务用户 ID' })
+  @ApiPropertyOptional({ description: '业务用户 ID（可选，优先使用鉴权主体）' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  userId!: string
+  userId?: string
 
   @ApiPropertyOptional({ description: '对策略目标的第一轮描述' })
   @IsOptional()

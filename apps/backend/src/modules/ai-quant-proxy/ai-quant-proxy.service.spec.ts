@@ -1,16 +1,8 @@
-import type { AuthenticatedUser } from '../../common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { QuantifyClientError } from './clients/quantify-ai-quant.client'
 
 describe('aiQuantProxyService', () => {
-  const authenticatedUser: AuthenticatedUser = {
-    id: 'user-1',
-    email: 'user-1@example.com',
-    roles: [],
-    principalType: 'user',
-  }
-
   function createService() {
     const quantifyClient = {
       get: jest.fn(),
@@ -55,20 +47,60 @@ describe('aiQuantProxyService', () => {
     )
   })
 
-  it('injects authenticated user id into codegen start requests', async () => {
+  it('forwards codegen start payload with authorization header', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
 
-    await service.startCodegen(authenticatedUser, {
+    await service.startCodegen('Bearer token-1', {
       initialMessage: 'build me a strategy',
       symbols: ['BTCUSDT'],
     })
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/llm-strategy-codegen/sessions', {
-      userId: 'user-1',
-      initialMessage: 'build me a strategy',
-      symbols: ['BTCUSDT'],
+    expect(quantifyClient.post).toHaveBeenCalledWith(
+      '/llm-strategy-codegen/sessions',
+      {
+        initialMessage: 'build me a strategy',
+        symbols: ['BTCUSDT'],
+      },
+      {
+        headers: { authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
+  it('forwards codegen continue payload without injecting userId', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
+
+    await service.continueCodegen('Bearer token-1', 'session-1', {
+      message: '继续',
+      confirmGenerate: false,
     })
+
+    expect(quantifyClient.post).toHaveBeenCalledWith(
+      '/llm-strategy-codegen/sessions/session-1/messages',
+      {
+        message: '继续',
+        confirmGenerate: false,
+      },
+      {
+        headers: { authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
+  it('proxies codegen session retrieval with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue({ id: 'session-1', status: 'DRAFTING' })
+
+    await service.getCodegenSession('Bearer token-1', 'session-1')
+
+    expect(quantifyClient.get).toHaveBeenCalledWith(
+      '/llm-strategy-codegen/sessions/session-1',
+      {
+        headers: { authorization: 'Bearer token-1' },
+      },
+    )
   })
 
   it('maps quantify client errors into domain exceptions', async () => {
@@ -101,6 +133,24 @@ describe('aiQuantProxyService', () => {
     expect(quantifyClient.get).toHaveBeenCalledWith('/backtesting/capabilities', {
       headers: { authorization: 'Bearer token-1' },
     })
+  })
+
+  it('retries backtesting capabilities on transient upstream connection failure', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get
+      .mockRejectedValueOnce(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
+      .mockResolvedValueOnce({
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      })
+
+    const result = await service.getBacktestCapabilities('Bearer token-1')
+
+    expect(result).toEqual({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
+    expect(quantifyClient.get).toHaveBeenCalledTimes(2)
   })
 
   it('proxies backtesting jobs and result endpoints', async () => {

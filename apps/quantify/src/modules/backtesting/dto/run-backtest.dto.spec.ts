@@ -21,6 +21,17 @@ function buildValidPayload() {
     },
     dataRange: { fromTs: 1, toTs: 2 },
     bars: [],
+  } as {
+    symbols: string[]
+    baseTimeframe: string
+    stateTimeframes: string[]
+    initialCash: number
+    leverage: number
+    execution: { slippageBps: number; feeBps: number; priceSource: string }
+    strategy: { id: string; protocolVersion: string; scriptCode: string; params: Record<string, unknown> }
+    dataRange: { fromTs: number; toTs: number }
+    bars?: unknown[]
+    allowPartial?: boolean
   }
 }
 
@@ -52,6 +63,26 @@ describe('runBacktestDto', () => {
 
   it('accepts minimal valid protocol-v1 strategy payload', async () => {
     const dto = plainToInstance(RunBacktestDto, buildValidPayload())
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
+  it('accepts payload without bars', async () => {
+    const payload = buildValidPayload()
+    delete (payload as { bars?: unknown[] }).bars
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
+  it('accepts optional allowPartial boolean', async () => {
+    const payload = buildValidPayload()
+    payload.allowPartial = true
+
+    const dto = plainToInstance(RunBacktestDto, payload)
     const errors = await validate(dto)
 
     expect(errors).toHaveLength(0)

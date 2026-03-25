@@ -25,7 +25,8 @@ export interface CreateBacktestJobPayload {
     fromTs: number
     toTs: number
   }
-  bars: unknown[]
+  allowPartial?: boolean
+  bars?: unknown[]
 }
 
 export interface BacktestJob {

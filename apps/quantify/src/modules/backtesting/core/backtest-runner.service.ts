@@ -1,5 +1,6 @@
-import type { BacktestReport, BacktestRunInput, Bar, SignalIntent } from '../types/backtesting.types'
+import type { BacktestReport, BacktestRunInput, Bar, SignalIntent, StrategyContext } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
+import { buildMultiLegStrategyContext, type MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -9,6 +10,20 @@ import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.ser
 import { BacktestReporterService } from '../report/backtest-reporter.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StateEngineService } from '../state/state-engine.service'
+
+interface ScriptRuntimeBar {
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  timestamp: number
+}
+
+interface HistorySeries {
+  rawBars: Bar[]
+  scriptBars: ScriptRuntimeBar[]
+}
 
 @Injectable()
 export class BacktestRunnerService {
@@ -43,10 +58,12 @@ export class BacktestRunnerService {
       .sort((a, b) => a.closeTime - b.closeTime)
 
     let stateCursor = 0
+    const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
         const sBar = stateBars[stateCursor]
+        this.appendHistoryBar(historyBarsBySymbolTimeframe, sBar)
         this.stateEngine.upsert({
           symbol: sBar.symbol,
           timeframe: sBar.timeframe,
@@ -61,23 +78,28 @@ export class BacktestRunnerService {
         })
         stateCursor += 1
       }
+      if (!input.stateTimeframes.includes(input.baseTimeframe)) {
+        this.appendHistoryBar(historyBarsBySymbolTimeframe, bar)
+      }
 
       const snapshot = ledger.snapshot()
       const position = ledger.getPosition(bar.symbol)
       const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
-      const intent = await input.strategy.fn({
-        ts: bar.closeTime,
-        symbol: bar.symbol,
-        baseTimeframeBar: bar,
+      const strategyContext = this.buildScriptContext({
+        bar,
+        input,
         htfState,
-        position,
+        historyBarsBySymbolTimeframe,
         portfolio: {
           cash: snapshot.cash,
           equity: snapshot.equity,
           usedMargin: snapshot.usedMargin,
           realizedPnl: snapshot.realizedPnl,
         },
-        params: input.strategy.params,
+        position,
+      })
+      const intent = await input.strategy.fn({
+        ...strategyContext,
       })
 
       const normalized = this.normalizeIntent(intent, {
@@ -263,6 +285,80 @@ export class BacktestRunnerService {
     }
 
     return undefined
+  }
+
+  private buildScriptContext(input: {
+    bar: Bar
+    htfState: StrategyContext['htfState']
+    position: StrategyContext['position']
+    portfolio: StrategyContext['portfolio']
+    input: BacktestRunInput
+    historyBarsBySymbolTimeframe: Map<string, HistorySeries>
+  }) {
+    const { bar, htfState, position, portfolio } = input
+    const primaryLegId = 'primary'
+    const requestedTimeframes = Array.from(new Set([input.input.baseTimeframe, ...input.input.stateTimeframes]))
+    const dataForPrimary: Record<string, { bars: ScriptRuntimeBar[]; indicators: Record<string, number>; currentPrice: number }> = {}
+
+    for (const timeframe of requestedTimeframes) {
+      const history = input.historyBarsBySymbolTimeframe.get(this.buildHistoryKey(bar.symbol, timeframe))
+      if (!history || history.rawBars.length === 0) continue
+      dataForPrimary[timeframe] = {
+        bars: history.scriptBars,
+        indicators: {},
+        currentPrice: history.rawBars[history.rawBars.length - 1]!.close,
+      }
+    }
+
+    const multiLegContext: MultiLegStrategyContext = {
+      data: { [primaryLegId]: dataForPrimary },
+      execution: { timeframe: input.input.baseTimeframe },
+      legs: [{ id: primaryLegId, symbol: bar.symbol, role: 'primary' }],
+      dataRequirements: { [primaryLegId]: requestedTimeframes },
+      timestamp: bar.closeTime,
+      params: input.input.strategy.params,
+    }
+
+    const runtimeContext = buildMultiLegStrategyContext(multiLegContext)
+    return {
+      ts: bar.closeTime,
+      symbol: bar.symbol,
+      baseTimeframeBar: bar,
+      htfState,
+      position,
+      portfolio,
+      params: input.input.strategy.params,
+      ...runtimeContext,
+    }
+  }
+
+  private buildHistoryKey(symbol: string, timeframe: string): string {
+    return `${symbol}::${timeframe}`
+  }
+
+  private appendHistoryBar(store: Map<string, HistorySeries>, bar: Bar): void {
+    const key = this.buildHistoryKey(bar.symbol, bar.timeframe)
+    const history = store.get(key)
+    if (history) {
+      history.rawBars.push(bar)
+      history.scriptBars.push(this.toScriptBar(bar))
+      return
+    }
+    store.set(key, {
+      rawBars: [bar],
+      scriptBars: [this.toScriptBar(bar)],
+    })
+  }
+
+  private toScriptBar(bar: Bar): ScriptRuntimeBar {
+    return {
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+      timestamp: bar.closeTime,
+    }
   }
 }
 

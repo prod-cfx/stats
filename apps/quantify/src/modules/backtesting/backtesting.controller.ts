@@ -1,5 +1,4 @@
 import type { BacktestRunInput } from './types/backtesting.types'
-import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -26,7 +25,6 @@ export class BacktestingController {
     private readonly capabilitiesService: BacktestCapabilitiesService,
   ) {}
 
-  @Transactional()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('run')
   async run(
@@ -35,10 +33,9 @@ export class BacktestingController {
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     const strategy = await this.strategyAdapter.build(dto.strategy)
-    return this.runner.run({ ...dto, strategy } as BacktestRunInput)
+    return this.runner.run({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput)
   }
 
-  @Transactional()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('jobs')
   async createJob(
@@ -47,7 +44,7 @@ export class BacktestingController {
   ) {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     const strategy = await this.strategyAdapter.build(dto.strategy)
-    return this.jobsService.createJob({ ...dto, strategy } as BacktestRunInput, callerUserId)
+    return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
   }
 
   @Get('jobs/:id')

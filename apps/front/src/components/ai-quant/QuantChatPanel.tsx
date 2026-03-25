@@ -39,6 +39,29 @@ function normalizeCodeText(children: unknown): string {
   return String(children ?? '').replace(/\n$/, '')
 }
 
+const BACKTEST_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
+
+function toDateTimeLocalValue(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const y = date.getFullYear()
+  const m = pad(date.getMonth() + 1)
+  const d = pad(date.getDate())
+  const hh = pad(date.getHours())
+  const mm = pad(date.getMinutes())
+  return `${y}-${m}-${d}T${hh}:${mm}`
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  if (!value.trim()) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString()
+}
+
 export function QuantChatPanel({
   messages,
   paramSchema,
@@ -58,6 +81,14 @@ export function QuantChatPanel({
     () => validateDynamicParamValues(paramSchema, paramValues),
     [paramSchema, paramValues],
   )
+  const backtestRangePreset = useMemo(() => {
+    const raw = typeof paramValues.backtestRangePreset === 'string'
+      ? paramValues.backtestRangePreset.toUpperCase()
+      : '30D'
+    return BACKTEST_RANGE_PRESETS.includes(raw as typeof BACKTEST_RANGE_PRESETS[number])
+      ? raw as typeof BACKTEST_RANGE_PRESETS[number]
+      : '30D'
+  }, [paramValues.backtestRangePreset])
 
   useEffect(() => {
     const el = chatScrollRef.current
@@ -123,6 +154,57 @@ export function QuantChatPanel({
       {showSettings && (
         <div className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-3 transition-all">
           <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2 md:col-span-3">
+              <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestRange')}</span>
+              <div className="flex flex-wrap gap-2">
+                {BACKTEST_RANGE_PRESETS.map((preset) => {
+                  const active = backtestRangePreset === preset
+                  const label = preset === 'CUSTOM' ? t('aiQuant.customRange') : preset
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => onParamChange('backtestRangePreset', preset)}
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        active
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-[color:var(--cf-border)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {backtestRangePreset === 'CUSTOM' && (
+              <>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestStart')}</span>
+                  <input
+                    type="datetime-local"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
+                    value={toDateTimeLocalValue(paramValues.backtestStart)}
+                    onChange={(event) => {
+                      onParamChange('backtestStart', fromDateTimeLocalValue(event.target.value))
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestEnd')}</span>
+                  <input
+                    type="datetime-local"
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
+                    value={toDateTimeLocalValue(paramValues.backtestEnd)}
+                    onChange={(event) => {
+                      onParamChange('backtestEnd', fromDateTimeLocalValue(event.target.value))
+                    }}
+                  />
+                </label>
+              </>
+            )}
+
             {fields.map(field => {
               const value = paramValues[field.key]
               const error = validation.fieldErrors[field.key]
@@ -236,7 +318,12 @@ export function QuantChatPanel({
                           remarkPlugins={[remarkGfm]}
                           components={{
                             code({ inline, className, children, node: _node, ...rest }: any) {
-                              if (inline) {
+                              const rawText = String(children ?? '')
+                              const hasLanguageClass = typeof className === 'string' && /language-[\w-]+/.test(className)
+                              const hasLineBreak = /\r?\n/.test(rawText)
+                              const shouldRenderInline = inline ?? (!hasLanguageClass && !hasLineBreak)
+
+                              if (shouldRenderInline) {
                                 return (
                                   <code className="rounded bg-[color:var(--cf-bg)] px-1.5 py-0.5" {...rest}>
                                     {children}

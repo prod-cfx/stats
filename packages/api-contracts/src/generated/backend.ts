@@ -2893,6 +2893,72 @@ const endpoints = makeApi([
   },
   {
     method: 'get',
+    path: '/backtesting/capabilities',
+    alias: 'BacktestingProxyController_capabilities',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/backtesting/jobs',
+    alias: 'BacktestingProxyController_createJob',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/backtesting/jobs/:id',
+    alias: 'BacktestingProxyController_getJob',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/backtesting/jobs/:id/result',
+    alias: 'BacktestingProxyController_getJobResult',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
     path: '/crypto-stock-quotes/latest',
     alias: 'CryptoStockQuotesController_getLatest',
     description: `返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的`,
