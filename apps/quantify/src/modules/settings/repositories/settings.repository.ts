@@ -3,6 +3,7 @@ import type { PrismaClient, SystemSetting } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports
 import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()

@@ -2,8 +2,8 @@ import { plainToInstance } from 'class-transformer'
 import { validateSync } from 'class-validator'
 import { AccountStrategyActionDto } from './account-strategy-action.dto'
 import { AccountStrategySnapshotDto } from './account-strategy-detail.response.dto'
-import { AccountStrategyListQueryDto } from './account-strategy-list.query.dto'
 import { AccountStrategyListItemDto } from './account-strategy-list-item.dto'
+import { AccountStrategyListQueryDto } from './account-strategy-list.query.dto'
 
 type DynamicParamRecord = Record<string, unknown> | null
 type SchemaVersion = string | null
