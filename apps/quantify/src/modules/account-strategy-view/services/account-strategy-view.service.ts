@@ -138,11 +138,8 @@ export class AccountStrategyViewService {
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
-    const repoAny = this.repo as any
-    const loadPositionOverview = repoAny.loadPositionOverview as
-      ((accountId: string) => Promise<{ openCount: number; closedCount: number }>) | undefined
-    const positionOverview = account && loadPositionOverview
-      ? await loadPositionOverview.call(this.repo, account.id).catch(() => ({ openCount: 0, closedCount: 0 }))
+    const positionOverview = account
+      ? await this.repo.loadPositionOverview(account.id)
       : { openCount: 0, closedCount: 0 }
     const timelineSource = await this.repo.loadTimeline(
       userId,

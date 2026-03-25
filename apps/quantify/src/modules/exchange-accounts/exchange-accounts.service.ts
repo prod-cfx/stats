@@ -42,7 +42,7 @@ export class ExchangeAccountsService {
       where: { userId, exchangeId: dto.exchangeId },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     })
-    const existingConfig = existing ? this.decryptConfig(existing) : undefined
+    const existingConfig = this.resolveExistingConfigForCreate(dto, existing)
     const config = this.buildConfig(dto, existingConfig)
     const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
     const encryptedConfig = this.crypto.encryptConfig(config)
@@ -345,6 +345,45 @@ export class ExchangeAccountsService {
     if (dto.exchangeId === 'hyperliquid')
       return this.buildHyperliquidConfig(dto, existingConfig as HyperliquidConfig | undefined)
     throw new InvalidExchangeAccountConfigException({ exchangeId: dto.exchangeId })
+  }
+
+  private resolveExistingConfigForCreate(
+    dto: CreateExchangeAccountDto,
+    existing: ExchangeAccount | null,
+  ): BinanceConfig | OkxConfig | HyperliquidConfig | undefined {
+    if (!existing || this.hasCompleteCredentialInput(dto))
+      return undefined
+
+    try {
+      return this.decryptConfig(existing)
+    }
+    catch {
+      return undefined
+    }
+  }
+
+  private hasCompleteCredentialInput(dto: CreateExchangeAccountDto): boolean {
+    if (dto.exchangeId === 'binance') {
+      return this.hasNonEmptyInput(dto.apiKey)
+        && this.hasNonEmptyInput(dto.apiSecret)
+    }
+
+    if (dto.exchangeId === 'okx') {
+      return this.hasNonEmptyInput(dto.apiKey)
+        && this.hasNonEmptyInput(dto.apiSecret)
+        && this.hasNonEmptyInput(dto.passphrase)
+    }
+
+    if (dto.exchangeId === 'hyperliquid') {
+      return this.hasNonEmptyInput(dto.mainWalletAddress)
+        && this.hasNonEmptyInput(dto.agentPrivateKey)
+    }
+
+    return false
+  }
+
+  private hasNonEmptyInput(value: string | undefined): boolean {
+    return typeof value === 'string' && value.trim().length > 0
   }
 
   private pickNonEmptyInput(value: string | undefined, fallback: string | undefined): string | undefined {
