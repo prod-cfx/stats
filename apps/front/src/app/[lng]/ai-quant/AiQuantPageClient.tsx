@@ -174,8 +174,24 @@ function buildCodegenReplyContent(args: {
   publishedReply: string
   graphGeneratedMessage: string
   graphReviseMessage: string
+  checklistContinuedMessage: string
+  checklistUpdatedMessage: string
+  stillGeneratingPrefix: string
+  rejectedPrefix: string
+  rejectedWithoutReason: string
 }): string {
-  const { response, confirmGenerate, publishedReply, graphGeneratedMessage, graphReviseMessage } = args
+  const {
+    response,
+    confirmGenerate,
+    publishedReply,
+    graphGeneratedMessage,
+    graphReviseMessage,
+    checklistContinuedMessage,
+    checklistUpdatedMessage,
+    stillGeneratingPrefix,
+    rejectedPrefix,
+    rejectedWithoutReason,
+  } = args
   if (response.assistantPrompt) {
     return response.assistantPrompt
   }
@@ -184,16 +200,16 @@ function buildCodegenReplyContent(args: {
   }
   if (response.status === 'CHECKLIST_GATE') {
     return confirmGenerate
-      ? '已基于当前逻辑图继续生成，请查看最新结果。'
-      : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
+      ? checklistContinuedMessage
+      : checklistUpdatedMessage
   }
   if (isCodegenProcessingStatus(response.status)) {
-    return `策略代码仍在生成中（${response.status}），请稍候。`
+    return `${stillGeneratingPrefix}（${response.status}）`
   }
   if (response.status === 'REJECTED') {
     return response.rejectReason
-      ? `基于当前逻辑图生成失败：${response.rejectReason}`
-      : '基于当前逻辑图生成失败：后端未返回详细原因，请查看服务日志。'
+      ? `${rejectedPrefix}：${response.rejectReason}`
+      : rejectedWithoutReason
   }
   return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
 }
@@ -638,6 +654,12 @@ export function AiQuantPageClient() {
     return !activeConversation.messages.some(x => x.role === 'user')
   }, [activeConversation])
 
+  const callingMessage = (elapsedSec: number) =>
+    t('aiQuant.messages.calling', {
+      seconds: elapsedSec,
+      defaultValue: `Calling... (${elapsedSec}s)`,
+    })
+
   const updateActiveConversation = (updater: (curr: ConversationState) => ConversationState) => {
     if (!activeConversation) return
     setConversations(prev =>
@@ -688,7 +710,7 @@ export function AiQuantPageClient() {
           {
             id: loadingMessageId,
             role: 'assistant',
-            content: '正在调用中（0s）',
+            content: callingMessage(0),
           },
         ],
         updatedAt: Date.now(),
@@ -703,7 +725,7 @@ export function AiQuantPageClient() {
           ...conv,
           messages: conv.messages.map(msg =>
             msg.id === loadingMessageId
-              ? { ...msg, content: `正在调用中（${elapsedSec}s）` }
+              ? { ...msg, content: callingMessage(elapsedSec) }
               : msg,
           ),
         }
@@ -750,7 +772,7 @@ export function AiQuantPageClient() {
             )
           : conv.logicGraph
         const publishedReply = response.scriptCode
-          ? `${t('aiQuant.messages.graphGenerated')}\n\n已生成策略代码：\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
+          ? `${t('aiQuant.messages.graphGenerated')}\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
           : t('aiQuant.messages.graphGenerated')
         const replyContent = buildCodegenReplyContent({
           response,
@@ -758,6 +780,11 @@ export function AiQuantPageClient() {
           publishedReply,
           graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
           graphReviseMessage: t('aiQuant.messages.graphRevise'),
+          checklistContinuedMessage: t('aiQuant.messages.checklistContinued', { defaultValue: 'Continued generation based on current logic graph. Please review the latest result.' }),
+          checklistUpdatedMessage: t('aiQuant.messages.checklistUpdated', { defaultValue: 'Logic graph updated. Please confirm it before I generate strategy code.' }),
+          stillGeneratingPrefix: t('aiQuant.messages.stillGenerating', { defaultValue: 'Strategy code is still generating, please wait' }),
+          rejectedPrefix: t('aiQuant.messages.generationFailedPrefix', { defaultValue: 'Failed to generate strategy from current logic graph' }),
+          rejectedWithoutReason: t('aiQuant.messages.generationFailedNoReason', { defaultValue: 'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.' }),
         })
         return {
           ...conv,
@@ -791,10 +818,18 @@ export function AiQuantPageClient() {
       })
       if ('error' in checklistResult) {
         const errorMessage = checklistResult.error.code === 'MISSING_REQUIRED_PARAMS'
-          ? `参数不完整，请补充必填字段：${checklistResult.error.missingKeys.join(', ')}`
-          : `参数校验失败，请修正：${Object.entries(checklistResult.error.fieldErrors ?? {})
+          ? t('aiQuant.messages.missingRequiredParams', {
+              keys: checklistResult.error.missingKeys.join(', '),
+              defaultValue: `Missing required parameters: ${checklistResult.error.missingKeys.join(', ')}`,
+            })
+          : t('aiQuant.messages.invalidParams', {
+              details: Object.entries(checklistResult.error.fieldErrors ?? {})
             .map(([key, reason]) => `${key}(${reason})`)
-            .join(', ')}`
+            .join(', '),
+              defaultValue: `Parameter validation failed: ${Object.entries(checklistResult.error.fieldErrors ?? {})
+                .map(([key, reason]) => `${key}(${reason})`)
+                .join(', ')}`,
+            })
         setConversations(prev => prev.map((conv) => {
           if (conv.id !== conversationId) return conv
           return {
@@ -1440,6 +1475,7 @@ export function AiQuantPageClient() {
 
         <div className="space-y-4">
           <QuantChatPanel
+            key={activeConversation.id}
             messages={activeConversation.messages}
             paramSchema={activeConversation.paramSchema}
             paramValues={activeConversation.paramValues}
@@ -1485,7 +1521,7 @@ export function AiQuantPageClient() {
                 }))
                 void requestBackendGraphGeneration({
                   conversationId: currentConversationId,
-                  message: '确认生成代码',
+                  message: t('aiQuant.messages.confirmGenerate', { defaultValue: 'Confirm code generation' }),
                   params: currentParams,
                   sessionId: currentSessionId,
                   usePresetRules: false,
@@ -1574,7 +1610,7 @@ export function AiQuantPageClient() {
           const account = deployAccounts.find(item => item.accountId === selectedDeployAccountId)
           if (!account || !activeConversation.backtestResult || !session?.userId) return
 
-          const strategyName = activeConversation.title || 'AI策略'
+          const strategyName = activeConversation.title || t('aiQuant.defaultStrategyName', { defaultValue: 'AI Strategy' })
           const timeframe = `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`
 
           try {
@@ -1628,7 +1664,11 @@ export function AiQuantPageClient() {
                   {
                     id: `deploy-mock-${Date.now()}`,
                     role: 'assistant',
-                    content: `模拟部署成功（仅本地数据）：${selectedDeployExchange.toUpperCase()} / ${account.accountName}。`,
+                    content: t('aiQuant.messages.mockDeploySuccess', {
+                      exchange: selectedDeployExchange.toUpperCase(),
+                      account: account.accountName,
+                      defaultValue: `Mock deployment succeeded (local only): ${selectedDeployExchange.toUpperCase()} / ${account.accountName}.`,
+                    }),
                   },
                 ],
                 updatedAt: Date.now(),
@@ -1636,7 +1676,7 @@ export function AiQuantPageClient() {
               return
             }
 
-            const deployErrorMessage = extractCodegenErrorMessage(error, '策略部署失败，请稍后重试。')
+            const deployErrorMessage = extractCodegenErrorMessage(error, t('aiQuant.messages.deployFailedFallback', { defaultValue: 'Strategy deployment failed. Please try again later.' }))
             updateActiveConversation(curr => ({
               ...curr,
               messages: [
@@ -1644,7 +1684,10 @@ export function AiQuantPageClient() {
                 {
                   id: `deploy-fail-${Date.now()}`,
                   role: 'assistant',
-                  content: `策略部署失败：${deployErrorMessage}`,
+                  content: t('aiQuant.messages.deployFailedWithReason', {
+                    reason: deployErrorMessage,
+                    defaultValue: `Strategy deployment failed: ${deployErrorMessage}`,
+                  }),
                 },
               ],
               updatedAt: Date.now(),

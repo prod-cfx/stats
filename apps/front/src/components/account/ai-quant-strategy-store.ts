@@ -367,3 +367,10 @@ export function updateStrategyStatus(id: string, status: StrategyStatus) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   return next
 }
+
+export function deleteStrategyById(id: string) {
+  const existing = ensureStrategyStore()
+  const next = existing.filter(item => item.id !== id)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  return next
+}

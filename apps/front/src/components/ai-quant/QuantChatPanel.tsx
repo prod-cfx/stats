@@ -258,20 +258,20 @@ export function QuantChatPanel({
                                     <button
                                       type="button"
                                       onClick={() => copyCode(normalizedText, blockId)}
-                                      aria-label={copiedCodeId === blockId ? t('common.copied', { defaultValue: '已复制' }) : t('common.copy', { defaultValue: '复制' })}
+                                      aria-label={copiedCodeId === blockId ? t('common.copied', { defaultValue: 'Copied' }) : t('common.copy', { defaultValue: 'Copy' })}
                                       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
                                     >
                                       {copiedCodeId === blockId
                                         ? (
                                             <>
                                               <Check className="h-3.5 w-3.5" />
-                                              <span>{t('common.copied', { defaultValue: '已复制' })}</span>
+                                              <span>{t('common.copied', { defaultValue: 'Copied' })}</span>
                                             </>
                                           )
                                         : (
                                             <>
                                               <Copy className="h-3.5 w-3.5" />
-                                              <span>{t('common.copy', { defaultValue: '复制' })}</span>
+                                              <span>{t('common.copy', { defaultValue: 'Copy' })}</span>
                                             </>
                                           )}
                                     </button>
@@ -315,10 +315,10 @@ export function QuantChatPanel({
             value={input}
             onChange={event => setInput(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter' && event.shiftKey) {
-                event.preventDefault()
-                submit()
-              }
+              if (event.key !== 'Enter' || event.shiftKey) return
+              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+              event.preventDefault()
+              submit()
             }}
           />
           <button

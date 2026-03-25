@@ -18,7 +18,9 @@
     "confirm": "确认",
     "cancel": "取消",
     "close": "关闭",
-    "price": "价格"
+    "price": "价格",
+    "copy": "复制",
+    "copied": "已复制"
   },
   "app": {
     "title": "Coinflux - 高级加密数据聚合器",

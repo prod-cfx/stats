@@ -18,7 +18,9 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "close": "Close",
-    "price": "Price"
+    "price": "Price",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "app": {
     "title": "Coinflux - Advanced Crypto Data Aggregator",

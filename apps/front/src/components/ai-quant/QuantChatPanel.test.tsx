@@ -10,6 +10,16 @@ jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => children,
+}))
+
+jest.mock('remark-gfm', () => ({
+  __esModule: true,
+  default: () => {},
+}))
+
 jest.mock('lucide-react', () => {
   const Icon = () => null
   return {
@@ -54,6 +64,13 @@ describe('QuantChatPanel range settings', () => {
 
   const triggerInputChange = (element: HTMLInputElement, value: string) => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    setter?.call(element, value)
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  const triggerTextareaChange = (element: HTMLTextAreaElement, value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
     element.dispatchEvent(new Event('change', { bubbles: true }))
@@ -140,5 +157,57 @@ describe('QuantChatPanel range settings', () => {
     expect(calls.some((value: any) => value.backtestRangePreset === 'CUSTOM')).toBe(true)
     expect(callCountAfterStart).toBeGreaterThan(callCountAfterCustom)
     expect(onParamsChange.mock.calls.length).toBeGreaterThan(callCountAfterStart)
+  })
+
+  it('does not submit when Enter is pressed during IME composition', async () => {
+    const onSend = jest.fn()
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{}}
+          onParamChange={() => {}}
+          onSend={onSend}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector('textarea')
+    expect(textarea).toBeTruthy()
+
+    await act(async () => {
+      triggerTextareaChange(textarea as HTMLTextAreaElement, '测试消息')
+    })
+
+    await act(async () => {
+      const composingEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true,
+      })
+      Object.defineProperty(composingEvent, 'isComposing', {
+        configurable: true,
+        value: true,
+      })
+      textarea?.dispatchEvent(composingEvent)
+    })
+
+    await act(async () => {
+      const keyCode229Event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true,
+      })
+      Object.defineProperty(keyCode229Event, 'keyCode', {
+        configurable: true,
+        value: 229,
+      })
+      textarea?.dispatchEvent(keyCode229Event)
+    })
+
+    expect(onSend).not.toHaveBeenCalled()
   })
 })
