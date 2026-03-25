@@ -17,6 +17,10 @@ import {
   getBacktestJob,
   getBacktestJobResult,
 } from '@/components/ai-quant/backtest-job-client'
+import {
+  fetchBacktestCapabilities,
+  type BacktestCapabilities,
+} from '@/components/ai-quant/backtest-capability-client'
 import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
@@ -44,6 +48,7 @@ import { ApiError } from '@/lib/errors'
 export interface QuantParams {
   exchange: 'binance' | 'okx'
   symbol: string
+  baseTimeframe: string
   buyWindowMin: number
   buyDropPct: number
   sellWindowMin: number
@@ -54,6 +59,7 @@ export interface QuantParams {
 const DEFAULT_PARAMS: QuantParams = {
   exchange: 'binance',
   symbol: 'BTCUSDT',
+  baseTimeframe: '15m',
   buyWindowMin: 3,
   buyDropPct: 1,
   sellWindowMin: 15,
@@ -63,7 +69,7 @@ const DEFAULT_PARAMS: QuantParams = {
 
 const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
   type: 'object',
-  required: ['exchange', 'symbol', 'buyWindowMin', 'buyDropPct', 'sellWindowMin', 'sellRisePct', 'positionPct'],
+  required: ['exchange', 'symbol', 'baseTimeframe', 'buyWindowMin', 'buyDropPct', 'sellWindowMin', 'sellRisePct', 'positionPct'],
   properties: {
     exchange: {
       type: 'string',
@@ -73,6 +79,12 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
     symbol: {
       type: 'string',
       title: 'Symbol',
+      enum: [DEFAULT_PARAMS.symbol],
+    },
+    baseTimeframe: {
+      type: 'string',
+      title: 'Base Timeframe',
+      enum: [DEFAULT_PARAMS.baseTimeframe],
     },
     buyWindowMin: {
       type: 'number',
@@ -104,6 +116,8 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
 }
 
 const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
+const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
+const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
@@ -126,6 +140,8 @@ interface ConversationState {
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
+
+type CapabilityState = 'loading' | 'ready' | 'failed'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -269,11 +285,41 @@ function normalizeParamsFromValues(values: Record<string, unknown>, fallback: Qu
   return {
     exchange: values.exchange === 'okx' ? 'okx' : 'binance',
     symbol: typeof values.symbol === 'string' && values.symbol.trim() ? values.symbol.trim() : fallback.symbol,
+    baseTimeframe: typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
+      ? values.baseTimeframe.trim()
+      : fallback.baseTimeframe,
     buyWindowMin: normalizeNumber(values.buyWindowMin, fallback.buyWindowMin),
     buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
     sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
     sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
     positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
+  }
+}
+
+function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | null): Record<string, unknown> {
+  const properties = (DEFAULT_PARAM_SCHEMA.properties ?? {}) as Record<string, unknown>
+  const symbolProperty = {
+    ...(properties.symbol as Record<string, unknown>),
+  }
+  const baseTimeframeProperty = {
+    ...(properties.baseTimeframe as Record<string, unknown>),
+  }
+
+  if (capabilities) {
+    symbolProperty.enum = capabilities.allowedSymbols
+    baseTimeframeProperty.enum = capabilities.allowedBaseTimeframes
+  } else {
+    symbolProperty.enum = [DEFAULT_PARAMS.symbol]
+    baseTimeframeProperty.enum = [DEFAULT_PARAMS.baseTimeframe]
+  }
+
+  return {
+    ...DEFAULT_PARAM_SCHEMA,
+    properties: {
+      ...properties,
+      symbol: symbolProperty,
+      baseTimeframe: baseTimeframeProperty,
+    },
   }
 }
 
@@ -345,7 +391,7 @@ export function AiQuantPageClient() {
         },
       ],
       params: DEFAULT_PARAMS,
-      paramSchema: DEFAULT_PARAM_SCHEMA,
+      paramSchema: buildParamSchemaWithCapabilities(null),
       paramValues: { ...DEFAULT_PARAM_VALUES },
       backtestResult: null,
       logicGraph: null,
@@ -366,6 +412,8 @@ export function AiQuantPageClient() {
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
+  const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(null)
   const isMountedRef = useRef(true)
   const activeConversationIdRef = useRef('')
   const previousActiveConversationIdRef = useRef<string>('')
@@ -396,7 +444,7 @@ export function AiQuantPageClient() {
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => ({
         ...item,
-        paramSchema: item.paramSchema ?? DEFAULT_PARAM_SCHEMA,
+        paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null),
         paramValues: item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) },
         params: item.params
           ? normalizeParamsFromValues(item.paramValues ?? item.params, item.params)
@@ -420,6 +468,84 @@ export function AiQuantPageClient() {
     if (!conversations.length) return
     localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations))
   }, [conversations])
+
+  useEffect(() => {
+    if (!session?.userId) return
+
+    const controller = new AbortController()
+    setBacktestCapabilityState('loading')
+
+    void fetchBacktestCapabilities({ signal: controller.signal })
+      .then((capabilities) => {
+        if (controller.signal.aborted) return
+        const normalizedSchema = buildParamSchemaWithCapabilities(capabilities)
+        const allowedSymbols = capabilities.allowedSymbols
+        const allowedBaseTimeframes = capabilities.allowedBaseTimeframes
+
+        setBacktestCapabilities(capabilities)
+        setBacktestCapabilityState('ready')
+        setConversations(prev => prev.map((conv) => {
+          const currentSymbol = typeof conv.paramValues.symbol === 'string' ? conv.paramValues.symbol : conv.params.symbol
+          const currentBaseTimeframe = typeof conv.paramValues.baseTimeframe === 'string'
+            ? conv.paramValues.baseTimeframe
+            : conv.params.baseTimeframe
+          const nextSymbol = allowedSymbols.includes(currentSymbol) ? currentSymbol : allowedSymbols[0]
+          const nextBaseTimeframe = allowedBaseTimeframes.includes(currentBaseTimeframe)
+            ? currentBaseTimeframe
+            : allowedBaseTimeframes[0]
+          const corrected = nextSymbol !== currentSymbol || nextBaseTimeframe !== currentBaseTimeframe
+          const nextValues = {
+            ...conv.paramValues,
+            symbol: nextSymbol,
+            baseTimeframe: nextBaseTimeframe,
+          }
+          const nextMessages = corrected
+            ? [
+                ...conv.messages,
+                {
+                  id: `capability-correct-${Date.now()}-${conv.id}`,
+                  role: 'assistant' as const,
+                  content: CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY,
+                },
+              ]
+            : conv.messages
+          return {
+            ...conv,
+            paramSchema: normalizedSchema,
+            paramValues: nextValues,
+            params: normalizeParamsFromValues(nextValues, conv.params),
+            messages: nextMessages,
+            updatedAt: Date.now(),
+          }
+        }))
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        setBacktestCapabilities(null)
+        setBacktestCapabilityState('failed')
+        setConversations(prev => prev.map((conv) => {
+          const alreadyAppended = conv.messages.some(msg => msg.content === CAPABILITY_FAILED_MESSAGE_KEY)
+          if (alreadyAppended) return conv
+          return {
+            ...conv,
+            paramSchema: buildParamSchemaWithCapabilities(null),
+            messages: [
+              ...conv.messages,
+              {
+                id: `capability-failed-${Date.now()}-${conv.id}`,
+                role: 'assistant',
+                content: CAPABILITY_FAILED_MESSAGE_KEY,
+              },
+            ],
+            updatedAt: Date.now(),
+          }
+        }))
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [session?.userId])
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId
@@ -969,6 +1095,23 @@ export function AiQuantPageClient() {
     }
     backtestRunMutexRef.current.add(conversationId)
 
+    if (backtestCapabilityState !== 'ready' || !backtestCapabilities) {
+      backtestRunMutexRef.current.delete(conversationId)
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `capability-guard-${Date.now()}`,
+            role: 'assistant',
+            content: CAPABILITY_FAILED_MESSAGE_KEY,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
     if (activeConversation.backtestExecutionState === 'submitting' || activeConversation.backtestExecutionState === 'running') {
       backtestRunMutexRef.current.delete(conversationId)
       return
@@ -995,12 +1138,9 @@ export function AiQuantPageClient() {
     try {
       payload = buildBacktestPayload({
         symbol: activeConversation.params.symbol,
-        baseTimeframe: '15m',
-        capabilities: {
-          allowedSymbols: [activeConversation.params.symbol.trim()],
-          allowedBaseTimeframes: ['15m'],
-        },
-        stateTimeframes: ['15m'],
+        baseTimeframe: activeConversation.params.baseTimeframe,
+        capabilities: backtestCapabilities,
+        stateTimeframes: [activeConversation.params.baseTimeframe],
         initialCash: 10000,
         leverage: 1,
         execution: {
@@ -1315,7 +1455,12 @@ export function AiQuantPageClient() {
             })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={(graphConfirmed || mockExecutionMode) && activeConversation.backtestExecutionState !== 'submitting' && activeConversation.backtestExecutionState !== 'running'}
+            canRunBacktest={
+              backtestCapabilityState === 'ready'
+              && (graphConfirmed || mockExecutionMode)
+              && activeConversation.backtestExecutionState !== 'submitting'
+              && activeConversation.backtestExecutionState !== 'running'
+            }
           />
 
           {activeConversation.logicGraph && (
