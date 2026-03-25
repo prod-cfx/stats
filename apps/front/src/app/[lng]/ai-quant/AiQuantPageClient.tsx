@@ -996,6 +996,10 @@ export function AiQuantPageClient() {
       payload = buildBacktestPayload({
         symbol: activeConversation.params.symbol,
         baseTimeframe: '15m',
+        capabilities: {
+          allowedSymbols: [activeConversation.params.symbol.trim()],
+          allowedBaseTimeframes: ['15m'],
+        },
         stateTimeframes: ['15m'],
         initialCash: 10000,
         leverage: 1,
