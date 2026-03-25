@@ -44,6 +44,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
       <div className="space-y-2">
         {items.map(item => {
           const active = item.id === activeId
+          const canSwitch = editingId !== item.id
           return (
             <div
               key={item.id}
@@ -52,6 +53,19 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   ? 'border-violet-500/40 bg-violet-500/10'
                   : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] hover:bg-[color:var(--cf-surface-hover)]'
               }`}
+              role="button"
+              tabIndex={canSwitch ? 0 : -1}
+              onClick={() => {
+                if (!canSwitch) return
+                onSwitch(item.id)
+              }}
+              onKeyDown={(event) => {
+                if (!canSwitch) return
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onSwitch(item.id)
+                }
+              }}
             >
               {editingId === item.id ? (
                 <input
@@ -74,19 +88,16 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
                 />
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onSwitch(item.id)}
-                  className="w-full truncate text-left text-sm font-semibold text-[color:var(--cf-text-strong)]"
-                >
+                <div className="w-full truncate text-left text-sm font-semibold text-[color:var(--cf-text-strong)]">
                   {item.title}
-                </button>
+                </div>
               )}
               <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</div>
               <div className="mt-2 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(event) => {
+                    event.stopPropagation()
                     setEditingId(item.id)
                     setDraftTitle(item.title)
                   }}
@@ -97,7 +108,10 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                 </button>
                 <button
                   type="button"
-                  onClick={() => onDelete(item.id)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onDelete(item.id)
+                  }}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400"
                   aria-label={t('common.delete', { defaultValue: 'Delete' })}
                 >
