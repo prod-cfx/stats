@@ -5,8 +5,10 @@ import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-a
 
 @Injectable()
 export class AiQuantProxyService {
-  private static readonly BACKTEST_CAPABILITIES_RETRY_ATTEMPTS = 90
-  private static readonly BACKTEST_CAPABILITIES_RETRY_DELAY_MS = 800
+  private static readonly BACKTEST_CAPABILITIES_RETRY_ATTEMPTS = 3
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
 
   constructor(
     @Inject(QuantifyAiQuantClient)
@@ -153,7 +155,7 @@ export class AiQuantProxyService {
         if (!isTransientUpstreamFailure || isLastAttempt) {
           throw this.mapQuantifyError(error)
         }
-        await this.sleep(AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_DELAY_MS)
+        await this.sleep(this.getBacktestCapabilitiesBackoffMs(attempt))
       }
     }
 
@@ -254,5 +256,14 @@ export class AiQuantProxyService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private getBacktestCapabilitiesBackoffMs(attempt: number): number {
+    const expo = Math.min(
+      AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+      AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_MAX_MS,
+    )
+    const jitter = Math.floor(Math.random() * AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS)
+    return expo + jitter
   }
 }

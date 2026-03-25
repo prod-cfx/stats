@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
+import { AuthRateLimitGuard } from '@/modules/auth/guards/auth-rate-limit.guard'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 
 @ApiTags('backtesting')
@@ -14,6 +16,8 @@ export class BacktestingProxyController {
   ) {}
 
   @Get('capabilities')
+  @UseGuards(AuthRateLimitGuard)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   async capabilities(
     @Headers('authorization') authorization: string | undefined,
   ): Promise<unknown> {

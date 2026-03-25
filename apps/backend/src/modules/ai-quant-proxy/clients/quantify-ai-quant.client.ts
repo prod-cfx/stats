@@ -57,6 +57,9 @@ export class QuantifyClientError extends Error {
 
 @Injectable()
 export class QuantifyAiQuantClient {
+  private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 10_000
+  private static readonly MIN_REQUEST_TIMEOUT_MS = 1_000
+
   constructor(@Inject(EnvService) private readonly env: EnvService) {}
 
   async get<T>(path: string, init?: RequestInit): Promise<T> {
@@ -84,10 +87,24 @@ export class QuantifyAiQuantClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const timeoutMs = this.getRequestTimeoutMs()
+    const timeoutController = new AbortController()
+    const upstreamSignal = init?.signal
+    const onUpstreamAbort = () => timeoutController.abort(upstreamSignal?.reason)
+    if (upstreamSignal) {
+      if (upstreamSignal.aborted) {
+        timeoutController.abort(upstreamSignal.reason)
+      } else {
+        upstreamSignal.addEventListener('abort', onUpstreamAbort, { once: true })
+      }
+    }
+    const timeout = setTimeout(() => timeoutController.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs)
+
     let response: Response
     try {
       response = await fetch(`${this.baseUrl()}${path}`, {
         ...init,
+        signal: timeoutController.signal,
         headers: {
           'content-type': 'application/json',
           ...(init?.headers ?? {}),
@@ -103,6 +120,12 @@ export class QuantifyAiQuantClient {
           cause: error instanceof Error ? error.message : String(error),
         },
       )
+    }
+    finally {
+      clearTimeout(timeout)
+      if (upstreamSignal) {
+        upstreamSignal.removeEventListener('abort', onUpstreamAbort)
+      }
     }
 
     if (response.status === 204) {
@@ -159,5 +182,16 @@ export class QuantifyAiQuantClient {
     }
 
     return 'http://localhost:3010/api/v1'
+  }
+
+  private getRequestTimeoutMs(): number {
+    const configured = this.env.getNumber('QUANTIFY_REQUEST_TIMEOUT_MS')
+    if (!configured || !Number.isFinite(configured)) {
+      return QuantifyAiQuantClient.DEFAULT_REQUEST_TIMEOUT_MS
+    }
+    return Math.max(
+      QuantifyAiQuantClient.MIN_REQUEST_TIMEOUT_MS,
+      Math.floor(configured),
+    )
   }
 }

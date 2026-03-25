@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { AuthModule } from '@/modules/auth/auth.module'
 import { AccountAiQuantStrategiesController } from './account-ai-quant-strategies.controller'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { BacktestingProxyController } from './backtesting.controller'
@@ -8,6 +9,7 @@ import { LlmStrategyInstancesController } from './llm-strategy-instances.control
 import { LlmStrategySubscriptionsController } from './llm-strategy-subscriptions.controller'
 
 @Module({
+  imports: [AuthModule],
   controllers: [
     AccountAiQuantStrategiesController,
     BacktestingProxyController,
