@@ -107,6 +107,32 @@ describe('backtest-capability-client', () => {
     })
   })
 
+  it('retries transient 502 and succeeds on next attempt', async () => {
+    ;(globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        json: jest.fn().mockResolvedValue({ message: 'upstream down' }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: jest.fn().mockResolvedValue({
+          data: {
+            allowedSymbols: ['BTCUSDT'],
+            allowedBaseTimeframes: ['15m'],
+          },
+        }),
+      } as unknown as Response)
+
+    await expect(fetchBacktestCapabilities()).resolves.toEqual({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('throws auth error when token is missing', async () => {
     mockGetToken.mockReturnValueOnce(null)
 
@@ -167,6 +193,7 @@ describe('backtest-capability-client', () => {
     })
     controller.abort()
     await assertion
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('uses statusText fallback when error body is non-JSON', async () => {

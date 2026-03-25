@@ -25,6 +25,30 @@ export interface FetchBacktestCapabilitiesOptions {
 
 const JWT_FORMAT_REGEX = /^[\w-]+\.[\w-]+\.[\w-]+$/
 export const BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS = 12_000
+const BACKTEST_CAPABILITY_RETRY_ATTEMPTS = 3
+const BACKTEST_CAPABILITY_RETRY_DELAY_MS = 400
+
+function waitRetryDelay(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ApiError('Request aborted', 'API_ERROR'))
+      return
+    }
+
+    const timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
+
+    const onAbort = () => {
+      globalThis.clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      reject(new ApiError('Request aborted', 'API_ERROR'))
+    }
+
+    signal?.addEventListener('abort', onAbort)
+  })
+}
 
 function extractErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== 'object') {
@@ -162,9 +186,35 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function fetchBacktestCapabilities(
   options?: FetchBacktestCapabilitiesOptions,
 ): Promise<BacktestCapabilities> {
-  const payload = await requestJson<BacktestCapabilities>('/backtesting/capabilities', {
-    method: 'GET',
-    signal: options?.signal,
-  })
-  return parseCapabilities(payload)
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= BACKTEST_CAPABILITY_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const payload = await requestJson<BacktestCapabilities>('/backtesting/capabilities', {
+        method: 'GET',
+        signal: options?.signal,
+      })
+      return parseCapabilities(payload)
+    } catch (error) {
+      lastError = error
+      if (!(error instanceof ApiError)) {
+        throw error
+      }
+      if (options?.signal?.aborted) {
+        throw error
+      }
+
+      const isTransientUpstream = error.statusCode === 502 || error.statusCode === 503 || error.code === 'API_ERROR'
+      const isLastAttempt = attempt >= BACKTEST_CAPABILITY_RETRY_ATTEMPTS
+      if (!isTransientUpstream || isLastAttempt) {
+        throw error
+      }
+
+      await waitRetryDelay(options?.signal)
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new ApiError('Failed to fetch backtest capabilities', 'API_ERROR')
 }

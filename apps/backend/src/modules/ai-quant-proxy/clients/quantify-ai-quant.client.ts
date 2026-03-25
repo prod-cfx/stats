@@ -125,8 +125,35 @@ export class QuantifyAiQuantClient {
   }
 
   private baseUrl(): string {
-    return this.env.getString('QUANTIFY_API_BASE_URL')
-      || this.env.getString('QUANTIFY_BASE_URL')
-      || 'http://localhost:3010/api/v1'
+    const apiBase = this.env.getString('QUANTIFY_API_BASE_URL')
+    if (apiBase) {
+      return apiBase.replace(/\/+$/, '')
+    }
+
+    const rawBase = this.env.getString('QUANTIFY_BASE_URL')
+    if (rawBase) {
+      const normalizedBase = rawBase.replace(/\/+$/, '')
+      try {
+        const parsed = new URL(normalizedBase)
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+        if (normalizedPath === '/api/v1') {
+          return normalizedBase
+        }
+        if (normalizedPath === '' || normalizedPath === '/') {
+          return `${normalizedBase}/api/v1`
+        }
+        return normalizedBase
+      } catch {
+        if (normalizedBase.endsWith('/api/v1')) {
+          return normalizedBase
+        }
+        if (!normalizedBase.includes('/')) {
+          return `${normalizedBase}/api/v1`
+        }
+        return normalizedBase
+      }
+    }
+
+    return 'http://localhost:3010/api/v1'
   }
 }

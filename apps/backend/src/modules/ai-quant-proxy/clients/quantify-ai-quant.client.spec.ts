@@ -46,4 +46,42 @@ describe('quantifyAiQuantClient', () => {
       },
     })
   })
+
+  it('appends /api/v1 when only QUANTIFY_BASE_URL is configured', async () => {
+    const envWithBaseOnly = {
+      getString: jest.fn((key: string) => key === 'QUANTIFY_BASE_URL' ? 'http://quantify.test' : undefined),
+    }
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(envWithBaseOnly as any)
+    await expect(client.get('/backtesting/capabilities')).resolves.toEqual({ ok: true })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/backtesting/capabilities',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('keeps pathful QUANTIFY_BASE_URL without force-appending /api/v1', async () => {
+    const envWithPathBase = {
+      getString: jest.fn((key: string) => key === 'QUANTIFY_BASE_URL' ? 'http://quantify.test/gateway/v2' : undefined),
+    }
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(envWithPathBase as any)
+    await expect(client.get('/backtesting/capabilities')).resolves.toEqual({ ok: true })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://quantify.test/gateway/v2/backtesting/capabilities',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
 })
