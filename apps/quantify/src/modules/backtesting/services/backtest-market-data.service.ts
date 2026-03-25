@@ -2,8 +2,8 @@ import type { MarketTimeframe } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-import { PrismaService } from '@/prisma/prisma.service'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
+import type { PrismaService } from '@/prisma/prisma.service'
 
 type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
@@ -19,12 +19,13 @@ export class BacktestMarketDataService {
   constructor(private readonly prisma: PrismaService) {}
 
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
+    const symbols = this.normalizeSymbols(input.symbols)
     const bars: Bar[] = []
-    const symbolMap = await this.loadSymbolMap(input.symbols)
+    const symbolMap = await this.loadSymbolMap(symbols)
     const timeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
 
-    for (const symbol of input.symbols) {
-      const symbolId = symbolMap.get(symbol.trim().toUpperCase())
+    for (const symbol of symbols) {
+      const symbolId = symbolMap.get(symbol)
       if (!symbolId) continue
 
       for (const timeframe of timeframes) {
@@ -63,13 +64,14 @@ export class BacktestMarketDataService {
   }
 
   async resolveCoverage(input: CoverageInput): Promise<BacktestRangeCoverage> {
+    const symbols = this.normalizeSymbols(input.symbols)
     const ranges: Array<{ fromTs: number; toTs: number }> = []
-    const symbolMap = await this.loadSymbolMap(input.symbols)
-    if (symbolMap.size < input.symbols.length) return { kind: 'empty' }
+    const symbolMap = await this.loadSymbolMap(symbols)
+    if (symbolMap.size < symbols.length) return { kind: 'empty' }
 
     const timeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
-    for (const symbol of input.symbols) {
-      const symbolId = symbolMap.get(symbol.trim().toUpperCase())
+    for (const symbol of symbols) {
+      const symbolId = symbolMap.get(symbol)
       if (!symbolId) return { kind: 'empty' }
 
       for (const timeframe of timeframes) {
@@ -124,5 +126,9 @@ export class BacktestMarketDataService {
       select: { id: true, code: true },
     })
     return new Map(rows.map(row => [row.code.toUpperCase(), row.id]))
+  }
+
+  private normalizeSymbols(symbols: string[]): string[] {
+    return [...new Set(symbols.map(symbol => symbol.trim().toUpperCase()))]
   }
 }
