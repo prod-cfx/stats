@@ -129,6 +129,30 @@ export class AiQuantProxyService {
     })).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async getBacktestCapabilities(authorization: string | undefined) {
+    return this.quantifyClient.get('/backtesting/capabilities', {
+      headers: this.authorizationHeaders(authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>) {
+    return this.quantifyClient.post('/backtesting/jobs', body, {
+      headers: this.authorizationHeaders(authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getBacktestJob(authorization: string | undefined, id: string) {
+    return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
+      headers: this.authorizationHeaders(authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getBacktestJobResult(authorization: string | undefined, id: string) {
+    return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
+      headers: this.authorizationHeaders(authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   private buildPath(path: string, query: Record<string, string | number | undefined>) {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(query)) {
@@ -144,6 +168,10 @@ export class AiQuantProxyService {
       'x-user-id': userId,
       ...(authorization ? { authorization } : {}),
     }
+  }
+
+  private authorizationHeaders(authorization: string | undefined) {
+    return authorization ? { authorization } : {}
   }
 
   private mapQuantifyError(error: unknown): DomainException {

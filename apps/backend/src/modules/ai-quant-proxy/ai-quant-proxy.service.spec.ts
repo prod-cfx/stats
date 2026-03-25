@@ -88,4 +88,39 @@ describe('aiQuantProxyService', () => {
       message: 'exchange account not found',
     })
   })
+
+  it('proxies backtesting capabilities with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
+
+    await service.getBacktestCapabilities('Bearer token-1')
+
+    expect(quantifyClient.get).toHaveBeenCalledWith('/backtesting/capabilities', {
+      headers: { authorization: 'Bearer token-1' },
+    })
+  })
+
+  it('proxies backtesting jobs and result endpoints', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })
+    quantifyClient.get.mockResolvedValue({ id: 'job-1', status: 'running' })
+
+    const payload = { symbols: ['BTCUSDT'] }
+    await service.createBacktestJob('Bearer token-1', payload)
+    await service.getBacktestJob('Bearer token-1', 'job-1')
+    await service.getBacktestJobResult('Bearer token-1', 'job-1')
+
+    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/jobs', payload, {
+      headers: { authorization: 'Bearer token-1' },
+    })
+    expect(quantifyClient.get).toHaveBeenNthCalledWith(1, '/backtesting/jobs/job-1', {
+      headers: { authorization: 'Bearer token-1' },
+    })
+    expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
+      headers: { authorization: 'Bearer token-1' },
+    })
+  })
 })
