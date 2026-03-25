@@ -44,17 +44,29 @@ export function parsePrismaEnums(content: string, source: 'backend' | 'quantify'
   return results
 }
 
+/** Build a map from enum name to the set of sources it appears in. */
+export function buildNameToSourcesMap(enums: ParsedEnum[]): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>()
+  for (const e of enums) {
+    if (!map.has(e.name)) map.set(e.name, new Set())
+    map.get(e.name)!.add(e.source)
+  }
+  return map
+}
+
+/** Resolve the final exported name for an enum (adds Backend/Quantify prefix on collision). */
+export function resolveEnumName(e: ParsedEnum, nameToSources: Map<string, Set<string>>): string {
+  const isDuplicate = (nameToSources.get(e.name)?.size ?? 0) > 1
+  const prefix = isDuplicate ? (e.source === 'backend' ? 'Backend' : 'Quantify') : ''
+  return `${prefix}${e.name}`
+}
+
 /**
  * Generate the TypeScript enum file content.
  * Adds Backend/Quantify prefix when same enum name appears in both sources.
  */
 export function generateEnumFile(enums: ParsedEnum[]): string {
-  // Detect duplicates across sources
-  const nameToSources = new Map<string, Set<string>>()
-  for (const e of enums) {
-    if (!nameToSources.has(e.name)) nameToSources.set(e.name, new Set())
-    nameToSources.get(e.name)!.add(e.source)
-  }
+  const nameToSources = buildNameToSourcesMap(enums)
 
   const lines: string[] = [
     '// @generated — DO NOT EDIT',
@@ -63,9 +75,7 @@ export function generateEnumFile(enums: ParsedEnum[]): string {
   ]
 
   for (const e of enums) {
-    const isDuplicate = (nameToSources.get(e.name)?.size ?? 0) > 1
-    const prefix = isDuplicate ? (e.source === 'backend' ? 'Backend' : 'Quantify') : ''
-    const enumName = `${prefix}${e.name}`
+    const enumName = resolveEnumName(e, nameToSources)
 
     lines.push(`export const ${enumName} = {`)
     for (const m of e.members) {
@@ -77,6 +87,22 @@ export function generateEnumFile(enums: ParsedEnum[]): string {
   }
 
   return lines.join('\n') + '\n'
+}
+
+/**
+ * Collect all final enum names (with prefix resolution) for ESLint restriction.
+ * Also includes raw Prisma names when they differ from the prefixed version.
+ */
+export function collectEnumNames(enums: ParsedEnum[]): string[] {
+  const nameToSources = buildNameToSourcesMap(enums)
+
+  const names = new Set<string>()
+  for (const e of enums) {
+    names.add(resolveEnumName(e, nameToSources))
+    if ((nameToSources.get(e.name)?.size ?? 0) > 1) names.add(e.name)
+  }
+
+  return [...names].sort()
 }
 
 // CLI entry point
@@ -106,7 +132,12 @@ function main() {
   fs.mkdirSync(outDir, { recursive: true })
   fs.writeFileSync(path.join(outDir, 'prisma-enums.ts'), output, 'utf-8')
 
+  // Generate enum names JSON for ESLint dynamic import restriction (pnpm generate:enums 自动维护)
+  const enumNames = collectEnumNames(allEnums)
+  fs.writeFileSync(path.join(outDir, 'prisma-enum-names.json'), JSON.stringify(enumNames, null, 2) + '\n', 'utf-8')
+
   console.log(`Generated ${allEnums.length} enums → packages/shared/src/generated/prisma-enums.ts`)
+  console.log(`Generated ${enumNames.length} enum names → packages/shared/src/generated/prisma-enum-names.json`)
 }
 
 // Only run main when executed directly

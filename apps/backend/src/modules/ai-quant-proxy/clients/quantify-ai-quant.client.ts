@@ -20,6 +20,29 @@ function tryParseJson<T>(raw: string): T | null {
   }
 }
 
+function normalizeQuantifyBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '')
+  try {
+    const parsed = new URL(trimmed)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+    if (/\/api\/v\d+$/i.test(normalizedPath)) {
+      return trimmed
+    }
+    if (normalizedPath === '' || normalizedPath === '/') {
+      return `${trimmed}/api/v1`
+    }
+    return trimmed
+  } catch {
+    if (/\/api\/v\d+$/i.test(trimmed)) {
+      return trimmed
+    }
+    if (!trimmed.includes('/')) {
+      return `${trimmed}/api/v1`
+    }
+    return trimmed
+  }
+}
+
 export class QuantifyClientError extends Error {
   constructor(
     message: string,
@@ -125,33 +148,14 @@ export class QuantifyAiQuantClient {
   }
 
   private baseUrl(): string {
-    const apiBase = this.env.getString('QUANTIFY_API_BASE_URL')
-    if (apiBase) {
-      return apiBase.replace(/\/+$/, '')
+    const explicitApiBase = this.env.getString('QUANTIFY_API_BASE_URL')
+    if (explicitApiBase) {
+      return normalizeQuantifyBaseUrl(explicitApiBase)
     }
 
-    const rawBase = this.env.getString('QUANTIFY_BASE_URL')
-    if (rawBase) {
-      const normalizedBase = rawBase.replace(/\/+$/, '')
-      try {
-        const parsed = new URL(normalizedBase)
-        const normalizedPath = parsed.pathname.replace(/\/+$/, '')
-        if (normalizedPath === '/api/v1') {
-          return normalizedBase
-        }
-        if (normalizedPath === '' || normalizedPath === '/') {
-          return `${normalizedBase}/api/v1`
-        }
-        return normalizedBase
-      } catch {
-        if (normalizedBase.endsWith('/api/v1')) {
-          return normalizedBase
-        }
-        if (!normalizedBase.includes('/')) {
-          return `${normalizedBase}/api/v1`
-        }
-        return normalizedBase
-      }
+    const base = this.env.getString('QUANTIFY_BASE_URL')
+    if (base) {
+      return normalizeQuantifyBaseUrl(base)
     }
 
     return 'http://localhost:3010/api/v1'

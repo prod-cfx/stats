@@ -1,4 +1,19 @@
+import { readFileSync } from 'node:fs'
 import antfu from '@antfu/eslint-config'
+
+// pnpm generate:enums 自动维护，无需手动同步
+let prismaEnumNames = []
+try {
+  prismaEnumNames = JSON.parse(
+    readFileSync(new URL('./packages/shared/src/generated/prisma-enum-names.json', import.meta.url), 'utf-8'),
+  )
+}
+catch {
+  console.warn('[eslint.config.js] prisma-enum-names.json not found — enum restriction disabled. Run: pnpm generate:enums')
+}
+const prismaEnumPattern = prismaEnumNames.length > 0
+  ? `^(${prismaEnumNames.join('|')}|\\$Enums)$`
+  : `^\\$Enums$`
 
 export default antfu(
   {
@@ -149,31 +164,7 @@ export default antfu(
       'no-restricted-imports': ['error', {
         patterns: [{
           group: ['**/prisma/prisma.types', '**/generated/prisma'],
-          importNames: [
-            // --- backend enums ---
-            'PrincipalType', 'AdminMenuType',
-            'LiquidationHeatmapSource', 'LiquidationHeatmapModelType',
-            'BackendMarketTimeframe', 'VenueType', 'BackendInstrumentType',
-            'UserCredentialType', 'VerificationCodePurpose',
-            'WhaleNotificationRuleType', 'WhaleNotificationChannel',
-            'WhaleNotificationDeliveryStatus',
-            // --- quantify enums ---
-            'LlmStrategyStatus', 'LlmStrategyInstanceStatus',
-            'LlmStrategyInstanceMode', 'LlmStrategyRunStatus',
-            'LlmCodegenSessionStatus',
-            'SymbolType', 'SymbolStatus',
-            'QuantifyInstrumentType', 'IndicatorType', 'QuantifyMarketTimeframe',
-            'OutboxStatus',
-            'TradeSide', 'PositionSide', 'PositionStatus', 'LedgerEntryType',
-            'SignalSourceType', 'SignalType', 'SignalDirection', 'SignalStatus',
-            'ExecutionStatus',
-            'StrategyTemplateStatus', 'StrategyInstanceStatus', 'StrategyInstanceMode',
-            'SubscriptionStatus', 'ExchangeId',
-            // --- raw Prisma enum names (codegen adds prefix, but originals still accessible) ---
-            'MarketTimeframe', 'InstrumentType',
-            // --- $Enums namespace (backdoor prevention) ---
-            '$Enums',
-          ],
+          importNamePattern: prismaEnumPattern,
           message: '枚举必须从 @ai/shared 导入，不要从 prisma.types 或 generated/prisma 导入。参见 ruler/conventions.md 枚举 SSOT 约定。',
         }],
       }],

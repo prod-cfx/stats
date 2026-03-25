@@ -49,9 +49,12 @@ describe('quantifyAiQuantClient', () => {
 
   it('appends /api/v1 when only QUANTIFY_BASE_URL is configured', async () => {
     const envWithBaseOnly = {
-      getString: jest.fn((key: string) => key === 'QUANTIFY_BASE_URL' ? 'http://quantify.test' : undefined),
+      getString: jest.fn((key: string) => {
+        if (key === 'QUANTIFY_API_BASE_URL') return undefined
+        if (key === 'QUANTIFY_BASE_URL') return 'http://quantify.test'
+        return undefined
+      }),
     }
-
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       status: 200,
@@ -59,9 +62,9 @@ describe('quantifyAiQuantClient', () => {
     } as Response)
 
     const client = new QuantifyAiQuantClient(envWithBaseOnly as any)
-    await expect(client.get('/backtesting/capabilities')).resolves.toEqual({ ok: true })
+    await expect(client.get('/llm-strategy-instances')).resolves.toEqual({ ok: true })
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://quantify.test/api/v1/backtesting/capabilities',
+      'http://quantify.test/api/v1/llm-strategy-instances',
       expect.objectContaining({ method: 'GET' }),
     )
   })

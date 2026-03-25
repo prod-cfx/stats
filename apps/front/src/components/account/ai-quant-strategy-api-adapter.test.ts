@@ -85,11 +85,51 @@ describe('ai-quant-strategy-api-adapter', () => {
         },
         schemaVersion: null,
       },
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10120,
+        availableBalance: 9800,
+        totalPnl: 120,
+        todayPnl: 20,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 3,
+        totalRealizedPnl: 100,
+        totalUnrealizedPnl: 20,
+      },
+      latestOrders: [{
+        executedAt: '2026-03-20T01:00:00.000Z',
+        side: 'BUY',
+        symbol: 'BTCUSDT',
+        price: 68000,
+        quantity: 0.01,
+        fee: 0.2,
+        feeCurrency: 'USDT',
+        orderId: 'ord-1',
+      }],
       timeline: [],
     } as any)
 
     expect(record.totalPnl).toBe(0)
     expect(record.todayPnl).toBeNull()
+    expect(record.accountOverview).toEqual({
+      initialBalance: 10000,
+      totalEquity: 10120,
+      availableBalance: 9800,
+      totalPnl: 120,
+      todayPnl: 20,
+      baseCurrency: 'USDT',
+    })
+    expect(record.positionOverview).toEqual({
+      openPositionsCount: 1,
+      closedPositionsCount: 3,
+      totalRealizedPnl: 100,
+      totalUnrealizedPnl: 20,
+    })
+    expect(record.latestOrders).toHaveLength(1)
+    expect(record.latestOrders[0]?.orderId).toBe('ord-1')
     expect(record.status).toBe('running')
     expect(record.exchange).toBe('okx')
     expect(record.paramSchema).toBeNull()

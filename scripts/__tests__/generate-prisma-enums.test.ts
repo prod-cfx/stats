@@ -1,4 +1,4 @@
-import { parsePrismaEnums, generateEnumFile } from '../generate-prisma-enums'
+import { parsePrismaEnums, generateEnumFile, collectEnumNames } from '../generate-prisma-enums'
 
 describe('parsePrismaEnums', () => {
   it('parses simple enum', () => {
@@ -67,5 +67,31 @@ describe('generateEnumFile', () => {
     expect(output).toContain('export const BackendInstrumentType')
     expect(output).toContain('export const QuantifyInstrumentType')
     expect(output).not.toContain('export const InstrumentType =')
+  })
+})
+
+describe('collectEnumNames', () => {
+  it('returns sorted unique names for non-duplicate enums', () => {
+    const enums = [
+      { name: 'TradeSide', source: 'quantify' as const, members: [{ key: 'BUY', value: 'BUY' }] },
+      { name: 'PrincipalType', source: 'backend' as const, members: [{ key: 'USER', value: 'USER' }] },
+    ]
+    const names = collectEnumNames(enums)
+    expect(names).toEqual(['PrincipalType', 'TradeSide'])
+  })
+
+  it('includes both prefixed and raw names for duplicates', () => {
+    const enums = [
+      { name: 'InstrumentType', source: 'backend' as const, members: [{ key: 'SPOT', value: 'SPOT' }] },
+      { name: 'InstrumentType', source: 'quantify' as const, members: [{ key: 'SPOT', value: 'SPOT' }] },
+    ]
+    const names = collectEnumNames(enums)
+    expect(names).toContain('BackendInstrumentType')
+    expect(names).toContain('QuantifyInstrumentType')
+    expect(names).toContain('InstrumentType')
+  })
+
+  it('returns empty array for empty input', () => {
+    expect(collectEnumNames([])).toEqual([])
   })
 })
