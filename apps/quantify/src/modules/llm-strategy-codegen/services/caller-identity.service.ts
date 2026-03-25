@@ -1,7 +1,8 @@
-import type { EnvService } from '@/common/services/env.service'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { EnvService } from '@/common/services/env.service'
 
 @Injectable()
 export class CallerIdentityService {
