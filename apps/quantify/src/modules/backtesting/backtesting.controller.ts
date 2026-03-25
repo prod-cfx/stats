@@ -11,6 +11,8 @@ import { BacktestJobsService } from './jobs/backtest-jobs.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 
 @Controller('backtesting')
@@ -21,6 +23,7 @@ export class BacktestingController {
     private readonly jobsService: BacktestJobsService,
     private readonly callerIdentityService: BacktestCallerIdentityService,
     private readonly strategyAdapter: BacktestStrategyAdapterService,
+    private readonly capabilitiesService: BacktestCapabilitiesService,
   ) {}
 
   @Transactional()
@@ -63,5 +66,10 @@ export class BacktestingController {
   ) {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
     return this.jobsService.getJobResult(id, callerUserId)
+  }
+
+  @Get('capabilities')
+  async getCapabilities() {
+    return this.capabilitiesService.getCapabilities()
   }
 }

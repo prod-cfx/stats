@@ -1,5 +1,6 @@
 'use client'
 
+import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
@@ -7,10 +8,20 @@ import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type { LlmCodegenSessionResponse } from '@/lib/api'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import { listExchangeAccounts } from '@/components/account/exchange-account-store'
+import {
+  createBacktestJob,
+  getBacktestJob,
+  getBacktestJobResult,
+} from '@/components/ai-quant/backtest-job-client'
+import {
+  fetchBacktestCapabilities,
+  type BacktestCapabilities,
+} from '@/components/ai-quant/backtest-capability-client'
+import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
@@ -37,6 +48,7 @@ import { ApiError } from '@/lib/errors'
 export interface QuantParams {
   exchange: 'binance' | 'okx'
   symbol: string
+  baseTimeframe: string
   buyWindowMin: number
   buyDropPct: number
   sellWindowMin: number
@@ -47,6 +59,7 @@ export interface QuantParams {
 const DEFAULT_PARAMS: QuantParams = {
   exchange: 'binance',
   symbol: 'BTCUSDT',
+  baseTimeframe: '15m',
   buyWindowMin: 3,
   buyDropPct: 1,
   sellWindowMin: 15,
@@ -56,7 +69,7 @@ const DEFAULT_PARAMS: QuantParams = {
 
 const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
   type: 'object',
-  required: ['exchange', 'symbol', 'buyWindowMin', 'buyDropPct', 'sellWindowMin', 'sellRisePct', 'positionPct'],
+  required: ['exchange', 'symbol', 'baseTimeframe', 'buyWindowMin', 'buyDropPct', 'sellWindowMin', 'sellRisePct', 'positionPct'],
   properties: {
     exchange: {
       type: 'string',
@@ -66,6 +79,12 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
     symbol: {
       type: 'string',
       title: 'Symbol',
+      enum: [DEFAULT_PARAMS.symbol],
+    },
+    baseTimeframe: {
+      type: 'string',
+      title: 'Base Timeframe',
+      enum: [DEFAULT_PARAMS.baseTimeframe],
     },
     buyWindowMin: {
       type: 'number',
@@ -97,11 +116,15 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
 }
 
 const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
+const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
+const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 
 const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
 const DEV_MOCK_EXECUTION_MODE = true
+const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
+const BACKTEST_JOB_TIMEOUT_MS = 60_000
 
 interface ConversationState {
   id: string
@@ -114,8 +137,11 @@ interface ConversationState {
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
   latestSignalMessage: string | null
+  backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
+
+type CapabilityState = 'loading' | 'ready' | 'failed'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -246,22 +272,6 @@ function isTerminalSessionConflict(error: unknown): boolean {
   return false
 }
 
-function getMockBacktest(params: QuantParams): BacktestResult {
-  const score = params.buyDropPct + params.sellRisePct + params.positionPct / 10 + (params.exchange === 'okx' ? 1 : 0)
-  const maxDrawdownPct = Number(Math.max(8, Math.min(35, 28 - score)).toFixed(2))
-  const totalReturnPct = Number((score * 1.8 - maxDrawdownPct * 0.4).toFixed(2))
-  const winRatePct = Number(Math.max(25, Math.min(78, 42 + score * 2.2)).toFixed(2))
-  const tradeCount = Math.max(8, Math.round(15 + score))
-
-  return {
-    id: String(Date.now()),
-    maxDrawdownPct,
-    totalReturnPct,
-    winRatePct,
-    tradeCount,
-  }
-}
-
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -275,12 +285,90 @@ function normalizeParamsFromValues(values: Record<string, unknown>, fallback: Qu
   return {
     exchange: values.exchange === 'okx' ? 'okx' : 'binance',
     symbol: typeof values.symbol === 'string' && values.symbol.trim() ? values.symbol.trim() : fallback.symbol,
+    baseTimeframe: typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
+      ? values.baseTimeframe.trim()
+      : fallback.baseTimeframe,
     buyWindowMin: normalizeNumber(values.buyWindowMin, fallback.buyWindowMin),
     buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
     sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
     sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
     positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
   }
+}
+
+function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | null): Record<string, unknown> {
+  const properties = (DEFAULT_PARAM_SCHEMA.properties ?? {}) as Record<string, unknown>
+  const symbolProperty = {
+    ...(properties.symbol as Record<string, unknown>),
+  }
+  const baseTimeframeProperty = {
+    ...(properties.baseTimeframe as Record<string, unknown>),
+  }
+
+  if (capabilities) {
+    symbolProperty.enum = capabilities.allowedSymbols
+    baseTimeframeProperty.enum = capabilities.allowedBaseTimeframes
+  } else {
+    symbolProperty.enum = [DEFAULT_PARAMS.symbol]
+    baseTimeframeProperty.enum = [DEFAULT_PARAMS.baseTimeframe]
+  }
+
+  return {
+    ...DEFAULT_PARAM_SCHEMA,
+    properties: {
+      ...properties,
+      symbol: symbolProperty,
+      baseTimeframe: baseTimeframeProperty,
+    },
+  }
+}
+
+const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
+type BacktestRangePresetValue = typeof VALID_RANGE_PRESETS[number]
+const SCRIPT_CODE_BLOCK_REGEX = /```(?:typescript|ts|javascript|js)?\r?\n([\s\S]*?)```/i
+const TRANSIENT_BACKTEST_STATES = new Set<ConversationState['backtestExecutionState']>([
+  'submitting',
+  'running',
+  'timeout',
+])
+
+function normalizeHydratedBacktestExecutionState(
+  state: ConversationState['backtestExecutionState'] | undefined,
+): ConversationState['backtestExecutionState'] {
+  if (!state || TRANSIENT_BACKTEST_STATES.has(state)) {
+    return 'idle'
+  }
+  return state
+}
+
+function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRangeInput {
+  const presetRaw = typeof values.backtestRangePreset === 'string'
+    ? values.backtestRangePreset.toUpperCase()
+    : '30D'
+  const preset = (VALID_RANGE_PRESETS as readonly string[]).includes(presetRaw)
+    ? presetRaw as BacktestRangePresetValue
+    : '30D'
+  if (preset !== 'CUSTOM') {
+    return { preset }
+  }
+
+  return {
+    preset: 'CUSTOM',
+    startAt: typeof values.backtestStart === 'string' ? values.backtestStart : '',
+    endAt: typeof values.backtestEnd === 'string' ? values.backtestEnd : '',
+  }
+}
+
+function extractLatestScriptCode(messages: QuantMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (message.role !== 'assistant') continue
+    const match = SCRIPT_CODE_BLOCK_REGEX.exec(message.content)
+    if (match?.[1]?.trim()) {
+      return match[1].trim()
+    }
+  }
+  return ''
 }
 
 export function AiQuantPageClient() {
@@ -303,12 +391,13 @@ export function AiQuantPageClient() {
         },
       ],
       params: DEFAULT_PARAMS,
-      paramSchema: DEFAULT_PARAM_SCHEMA,
+      paramSchema: buildParamSchemaWithCapabilities(null),
       paramValues: { ...DEFAULT_PARAM_VALUES },
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
       latestSignalMessage: null,
+      backtestExecutionState: 'idle',
       updatedAt: now,
     }
   }
@@ -323,6 +412,13 @@ export function AiQuantPageClient() {
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
+  const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(null)
+  const isMountedRef = useRef(true)
+  const activeConversationIdRef = useRef('')
+  const previousActiveConversationIdRef = useRef<string>('')
+  const backtestRunTokenRef = useRef(new Map<string, number>())
+  const backtestRunMutexRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -348,13 +444,14 @@ export function AiQuantPageClient() {
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => ({
         ...item,
-        paramSchema: item.paramSchema ?? DEFAULT_PARAM_SCHEMA,
+        paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null),
         paramValues: item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) },
         params: item.params
           ? normalizeParamsFromValues(item.paramValues ?? item.params, item.params)
           : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
+        backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
       }))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
@@ -371,6 +468,107 @@ export function AiQuantPageClient() {
     if (!conversations.length) return
     localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations))
   }, [conversations])
+
+  useEffect(() => {
+    if (!session?.userId) return
+
+    const controller = new AbortController()
+    setBacktestCapabilityState('loading')
+
+    void fetchBacktestCapabilities({ signal: controller.signal })
+      .then((capabilities) => {
+        if (controller.signal.aborted) return
+        const normalizedSchema = buildParamSchemaWithCapabilities(capabilities)
+        const allowedSymbols = capabilities.allowedSymbols
+        const allowedBaseTimeframes = capabilities.allowedBaseTimeframes
+
+        setBacktestCapabilities(capabilities)
+        setBacktestCapabilityState('ready')
+        setConversations(prev => prev.map((conv) => {
+          const currentSymbol = typeof conv.paramValues.symbol === 'string' ? conv.paramValues.symbol : conv.params.symbol
+          const currentBaseTimeframe = typeof conv.paramValues.baseTimeframe === 'string'
+            ? conv.paramValues.baseTimeframe
+            : conv.params.baseTimeframe
+          const nextSymbol = allowedSymbols.includes(currentSymbol) ? currentSymbol : allowedSymbols[0]
+          const nextBaseTimeframe = allowedBaseTimeframes.includes(currentBaseTimeframe)
+            ? currentBaseTimeframe
+            : allowedBaseTimeframes[0]
+          const corrected = nextSymbol !== currentSymbol || nextBaseTimeframe !== currentBaseTimeframe
+          const nextValues = {
+            ...conv.paramValues,
+            symbol: nextSymbol,
+            baseTimeframe: nextBaseTimeframe,
+          }
+          const nextMessages = corrected
+            ? [
+                ...conv.messages,
+                {
+                  id: `capability-correct-${Date.now()}-${conv.id}`,
+                  role: 'assistant' as const,
+                  content: CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY,
+                },
+              ]
+            : conv.messages
+          return {
+            ...conv,
+            paramSchema: normalizedSchema,
+            paramValues: nextValues,
+            params: normalizeParamsFromValues(nextValues, conv.params),
+            messages: nextMessages,
+            updatedAt: Date.now(),
+          }
+        }))
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return
+        setBacktestCapabilities(null)
+        setBacktestCapabilityState('failed')
+        setConversations(prev => prev.map((conv) => {
+          const alreadyAppended = conv.messages.some(msg => msg.content === CAPABILITY_FAILED_MESSAGE_KEY)
+          if (alreadyAppended) return conv
+          return {
+            ...conv,
+            paramSchema: buildParamSchemaWithCapabilities(null),
+            messages: [
+              ...conv.messages,
+              {
+                id: `capability-failed-${Date.now()}-${conv.id}`,
+                role: 'assistant',
+                content: CAPABILITY_FAILED_MESSAGE_KEY,
+              },
+            ],
+            updatedAt: Date.now(),
+          }
+        }))
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [session?.userId])
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+    const previousId = previousActiveConversationIdRef.current
+    if (previousId && previousId !== activeConversationId && backtestRunMutexRef.current.has(previousId)) {
+      backtestRunTokenRef.current.set(previousId, (backtestRunTokenRef.current.get(previousId) ?? 0) + 1)
+      backtestRunMutexRef.current.delete(previousId)
+      setConversations(prev => prev.map(conv =>
+        conv.id === previousId
+          ? { ...conv, backtestExecutionState: 'idle', updatedAt: Date.now() }
+          : conv,
+      ))
+    }
+    previousActiveConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      backtestRunTokenRef.current.clear()
+      backtestRunMutexRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     const syncApiReady = () => {
@@ -445,6 +643,24 @@ export function AiQuantPageClient() {
     setConversations(prev =>
       prev.map(conv => (conv.id === activeConversation.id ? updater(conv) : conv)),
     )
+  }
+  const updateConversationById = (
+    conversationId: string,
+    updater: (curr: ConversationState) => ConversationState,
+  ) => {
+    setConversations(prev =>
+      prev.map(conv => (conv.id === conversationId ? updater(conv) : conv)),
+    )
+  }
+  const setConversationBacktestExecutionState = (
+    conversationId: string,
+    state: ConversationState['backtestExecutionState'],
+  ) => {
+    updateConversationById(conversationId, curr => ({
+      ...curr,
+      backtestExecutionState: state,
+      updatedAt: Date.now(),
+    }))
   }
 
   const requestBackendGraphGeneration = async (args: {
@@ -832,11 +1048,6 @@ export function AiQuantPageClient() {
     })
   }
 
-  const runBacktestWithParams = (targetParams: QuantParams) => {
-    const result = getMockBacktest(targetParams)
-    return result
-  }
-
   const onRunStrategy = (
     _strategyId: string,
     preset: Partial<QuantParams>,
@@ -878,7 +1089,36 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
+    const conversationId = activeConversation.id
+    if (backtestRunMutexRef.current.has(conversationId)) {
+      return
+    }
+    backtestRunMutexRef.current.add(conversationId)
+
+    if (backtestCapabilityState !== 'ready' || !backtestCapabilities) {
+      backtestRunMutexRef.current.delete(conversationId)
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `capability-guard-${Date.now()}`,
+            role: 'assistant',
+            content: CAPABILITY_FAILED_MESSAGE_KEY,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
+    if (activeConversation.backtestExecutionState === 'submitting' || activeConversation.backtestExecutionState === 'running') {
+      backtestRunMutexRef.current.delete(conversationId)
+      return
+    }
+
     if (!graphConfirmed && !mockExecutionMode) {
+      backtestRunMutexRef.current.delete(conversationId)
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
@@ -893,23 +1133,177 @@ export function AiQuantPageClient() {
       }))
       return
     }
-    const result = runBacktestWithParams(activeConversation.params)
-    updateActiveConversation(curr => ({
-      ...curr,
-      backtestResult: result,
-      messages: [
-        ...curr.messages,
-        {
-          id: `bt-${Date.now()}`,
-          role: 'assistant',
-          content:
-            result.maxDrawdownPct <= 20
-              ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-              : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+
+    let payload: ReturnType<typeof buildBacktestPayload>
+    try {
+      payload = buildBacktestPayload({
+        symbol: activeConversation.params.symbol,
+        baseTimeframe: activeConversation.params.baseTimeframe,
+        capabilities: backtestCapabilities,
+        stateTimeframes: [activeConversation.params.baseTimeframe],
+        initialCash: 10000,
+        leverage: 1,
+        execution: {
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
         },
-      ],
+        strategy: {
+          id: activeConversation.llmCodegenSessionId ?? `mock-${Date.now()}`,
+          scriptCode: extractLatestScriptCode(activeConversation.messages),
+          params: activeConversation.paramValues,
+        },
+        range: resolveBacktestRangeInput(activeConversation.paramValues),
+      })
+    } catch (error) {
+      backtestRunMutexRef.current.delete(conversationId)
+      const message = (() => {
+        if (!isBacktestPayloadBuilderError(error)) {
+          return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'unknown_error' })
+        }
+
+        switch (error.code) {
+          case 'missing_range':
+            return t('aiQuant.messages.backtestRangeMissing')
+          case 'start_after_end':
+            return t('aiQuant.messages.backtestRangeOrderInvalid')
+          case 'range_too_large':
+            return t('aiQuant.messages.backtestRangeTooLarge')
+          case 'missing_script_code':
+            return t('aiQuant.messages.backtestMissingScriptCode')
+          case 'missing_symbol':
+          default:
+            return t('aiQuant.messages.backtestPayloadInvalid', { reason: error.code })
+        }
+      })()
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `bt-invalid-${Date.now()}`,
+            role: 'assistant',
+            content: message,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
+    const runToken = (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1
+    backtestRunTokenRef.current.set(conversationId, runToken)
+    const appendBacktestMessage = (content: string) => {
+      updateConversationById(conversationId, curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `bt-${Date.now()}`,
+            role: 'assistant',
+            content,
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+    }
+    const toFailureMessage = (reason: string) => t('aiQuant.messages.backtestPayloadInvalid', { reason })
+    const canContinue = () => (
+      isMountedRef.current
+      && backtestRunTokenRef.current.get(conversationId) === runToken
+      && activeConversationIdRef.current === conversationId
+    )
+
+    setConversationBacktestExecutionState(conversationId, 'submitting')
+    updateConversationById(conversationId, curr => ({
+      ...curr,
+      backtestResult: null,
       updatedAt: Date.now(),
     }))
+
+    void (async () => {
+      try {
+        const createdJob = await createBacktestJob(payload)
+        if (!canContinue()) {
+          return
+        }
+        setConversationBacktestExecutionState(conversationId, 'running')
+
+        const deadline = Date.now() + BACKTEST_JOB_TIMEOUT_MS
+        let latestJob = createdJob
+
+        while (latestJob.status === 'queued' || latestJob.status === 'running') {
+          if (!canContinue()) {
+            return
+          }
+          if (Date.now() >= deadline) {
+            setConversationBacktestExecutionState(conversationId, 'timeout')
+            appendBacktestMessage(toFailureMessage('timeout'))
+            return
+          }
+          await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
+          if (!canContinue()) {
+            return
+          }
+          latestJob = await getBacktestJob(createdJob.id)
+        }
+
+        if (!canContinue()) {
+          return
+        }
+        if (latestJob.status === 'failed') {
+          setConversationBacktestExecutionState(conversationId, 'failed')
+          appendBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
+          return
+        }
+
+        const jobResult = await getBacktestJobResult(createdJob.id)
+        if (!canContinue()) {
+          return
+        }
+        const summary = jobResult.summary
+        const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
+        const result: BacktestResult = {
+          id: createdJob.id,
+          maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
+          totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
+          winRatePct: Number(winRatePct.toFixed(2)),
+          tradeCount: summary.totalTrades,
+          symbol: payload.symbols[0],
+          startAt: new Date(payload.dataRange.fromTs).toISOString(),
+          endAt: new Date(payload.dataRange.toTs).toISOString(),
+        }
+
+        setConversationBacktestExecutionState(conversationId, 'succeeded')
+        updateConversationById(conversationId, curr => ({
+          ...curr,
+          backtestResult: result,
+          messages: [
+            ...curr.messages,
+            {
+              id: `bt-${Date.now()}`,
+              role: 'assistant',
+              content:
+                result.maxDrawdownPct <= 20
+                  ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+            },
+          ],
+          updatedAt: Date.now(),
+        }))
+      } catch (error) {
+        if (!canContinue()) {
+          return
+        }
+        setConversationBacktestExecutionState(conversationId, 'failed')
+        const message = error instanceof ApiError
+          ? (error.message?.trim() || toFailureMessage('unknown_error'))
+          : toFailureMessage('unknown_error')
+        appendBacktestMessage(message)
+      } finally {
+        backtestRunMutexRef.current.delete(conversationId)
+      }
+    })()
   }
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
@@ -1061,7 +1455,12 @@ export function AiQuantPageClient() {
             })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={graphConfirmed || mockExecutionMode}
+            canRunBacktest={
+              backtestCapabilityState === 'ready'
+              && (graphConfirmed || mockExecutionMode)
+              && activeConversation.backtestExecutionState !== 'submitting'
+              && activeConversation.backtestExecutionState !== 'running'
+            }
           />
 
           {activeConversation.logicGraph && (

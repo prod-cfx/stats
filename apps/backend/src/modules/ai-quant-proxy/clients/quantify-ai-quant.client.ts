@@ -21,11 +21,26 @@ function tryParseJson<T>(raw: string): T | null {
 }
 
 function normalizeQuantifyBaseUrl(raw: string): string {
-  const trimmed = raw.trim().replace(/\/$/, '')
-  if (/\/api\/v\d+$/i.test(trimmed)) {
+  const trimmed = raw.trim().replace(/\/+$/, '')
+  try {
+    const parsed = new URL(trimmed)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+    if (/\/api\/v\d+$/i.test(normalizedPath)) {
+      return trimmed
+    }
+    if (normalizedPath === '' || normalizedPath === '/') {
+      return `${trimmed}/api/v1`
+    }
+    return trimmed
+  } catch {
+    if (/\/api\/v\d+$/i.test(trimmed)) {
+      return trimmed
+    }
+    if (!trimmed.includes('/')) {
+      return `${trimmed}/api/v1`
+    }
     return trimmed
   }
-  return `${trimmed}/api/v1`
 }
 
 export class QuantifyClientError extends Error {

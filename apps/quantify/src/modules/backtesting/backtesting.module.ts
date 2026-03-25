@@ -7,7 +7,9 @@ import { TheoreticalExecutionModel } from './execution/theoretical-execution.mod
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { PortfolioLedgerServiceFactory } from './portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from './report/backtest-reporter.service'
+import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
+import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 import { StateEngineService } from './state/state-engine.service'
 
@@ -21,8 +23,10 @@ import { StateEngineService } from './state/state-engine.service'
     PortfolioLedgerServiceFactory,
     BacktestReporterService,
     BacktestCallerIdentityService,
+    BacktestCapabilitiesService,
     BacktestStrategyAdapterService,
     StateEngineService,
+    BacktestCapabilitiesRepository,
   ],
 })
 export class BacktestingModule {}
