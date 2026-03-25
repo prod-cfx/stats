@@ -144,6 +144,7 @@ export interface BacktestRunInput {
   symbols: string[]
   baseTimeframe: Timeframe
   stateTimeframes: Timeframe[]
+  allowPartial?: boolean
   initialCash: number
   leverage: number
   execution: ExecutionConfig

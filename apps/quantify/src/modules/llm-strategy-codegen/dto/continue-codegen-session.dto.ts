@@ -16,10 +16,10 @@ import {
 import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class ContinueCodegenSessionDto {
-  @ApiProperty({ description: '业务用户 ID' })
+  @ApiPropertyOptional({ description: '业务用户 ID（可选，优先使用鉴权主体）' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  userId!: string
+  userId?: string
 
   @ApiProperty({ description: '用户本轮输入' })
   @IsString()

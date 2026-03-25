@@ -3,6 +3,7 @@ import { QuantifyAiQuantClient } from './quantify-ai-quant.client'
 describe('quantifyAiQuantClient', () => {
   const env = {
     getString: jest.fn((key: string) => key === 'QUANTIFY_API_BASE_URL' ? 'http://quantify.test/api/v1' : undefined),
+    getNumber: jest.fn(() => undefined),
   }
 
   afterEach(() => {
@@ -54,6 +55,7 @@ describe('quantifyAiQuantClient', () => {
         if (key === 'QUANTIFY_BASE_URL') return 'http://quantify.test'
         return undefined
       }),
+      getNumber: jest.fn(() => undefined),
     }
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -72,6 +74,7 @@ describe('quantifyAiQuantClient', () => {
   it('keeps pathful QUANTIFY_BASE_URL without force-appending /api/v1', async () => {
     const envWithPathBase = {
       getString: jest.fn((key: string) => key === 'QUANTIFY_BASE_URL' ? 'http://quantify.test/gateway/v2' : undefined),
+      getNumber: jest.fn(() => undefined),
     }
 
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({

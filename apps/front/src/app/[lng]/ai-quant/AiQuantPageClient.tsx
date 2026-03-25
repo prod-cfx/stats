@@ -744,7 +744,7 @@ export function AiQuantPageClient() {
       const deadline = Date.now() + 120_000
       while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
         await new Promise(resolve => window.setTimeout(resolve, 1500))
-        current = await getLlmCodegenSession(id, session.userId)
+        current = await getLlmCodegenSession(id)
         if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
           return current
         }
@@ -851,14 +851,12 @@ export function AiQuantPageClient() {
 
       const startNewSession = async () =>
         startLlmCodegenSession({
-          userId: session.userId,
           initialMessage: trimmedMessage,
           ...checklistPayload,
         })
 
       const continueSession = async (id: string) =>
         continueLlmCodegenSession(id, {
-          userId: session.userId,
           message: trimmedMessage,
           confirmGenerate,
           ...checklistPayload,
@@ -901,7 +899,7 @@ export function AiQuantPageClient() {
 
           let recovered: Awaited<ReturnType<typeof continueSession>> | null = null
           try {
-            recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+            recovered = await getLlmCodegenSession(activeSessionId)
           } catch {
             recovered = null
           }
@@ -929,7 +927,7 @@ export function AiQuantPageClient() {
     } catch (error) {
       if (activeSessionId) {
         try {
-          let recovered = await getLlmCodegenSession(activeSessionId, session.userId)
+          let recovered = await getLlmCodegenSession(activeSessionId)
           recovered = await resolveProcessingSession(activeSessionId, recovered)
           if (isRecoverableCodegenStatus(recovered.status)) {
             applyCodegenResponseToConversation(recovered)

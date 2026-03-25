@@ -11,36 +11,50 @@ export class CodegenSessionsRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async createSession(data: Prisma.LlmStrategyCodegenSessionCreateInput): Promise<LlmStrategyCodegenSession> {
-    return this.txHost.tx.llmStrategyCodegenSession.create({ data })
+    return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.create({ data }))
   }
 
   async findById(id: string): Promise<LlmStrategyCodegenSession | null> {
-    return this.txHost.tx.llmStrategyCodegenSession.findUnique({ where: { id } })
+    return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.findUnique({ where: { id } }))
   }
 
   async updateSession(id: string, data: Prisma.LlmStrategyCodegenSessionUpdateInput): Promise<LlmStrategyCodegenSession> {
-    return this.txHost.tx.llmStrategyCodegenSession.update({
+    return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.update({
       where: { id },
       data,
-    })
+    }))
   }
 
   async tryMarkGenerating(
     id: string,
     data: Prisma.LlmStrategyCodegenSessionUpdateInput,
   ): Promise<boolean> {
-    const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
+    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
         status: { in: ['DRAFTING', 'CHECKLIST_GATE'] },
       },
       data,
-    })
+    }))
+    return result.count === 1
+  }
+
+  async tryRequeueFromProcessing(
+    id: string,
+    data: Prisma.LlmStrategyCodegenSessionUpdateInput,
+  ): Promise<boolean> {
+    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
+      where: {
+        id,
+        status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT'] },
+      },
+      data,
+    }))
     return result.count === 1
   }
 
   async createVersion(data: Prisma.LlmStrategyCodeVersionCreateInput): Promise<LlmStrategyCodeVersion> {
-    return this.txHost.tx.llmStrategyCodeVersion.create({ data })
+    return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodeVersion.create({ data }))
   }
 
   async createDraftStrategyInstanceFromPublishedSession(input: {

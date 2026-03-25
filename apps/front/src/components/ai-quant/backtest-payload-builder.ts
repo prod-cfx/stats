@@ -39,6 +39,7 @@ export interface BuildBacktestPayloadInput {
     params: Record<string, unknown>
   }
   range: BacktestRangeInput
+  allowPartial?: boolean
 }
 
 export function buildBacktestPayload(
@@ -70,7 +71,7 @@ export function buildBacktestPayload(
 
   const resolvedRange = resolveBacktestRange(input.range, now)
 
-  return {
+  const payload: CreateBacktestJobPayload = {
     symbols: [symbol],
     baseTimeframe,
     stateTimeframes: input.stateTimeframes,
@@ -87,6 +88,11 @@ export function buildBacktestPayload(
       fromTs: Date.parse(resolvedRange.startAt),
       toTs: Date.parse(resolvedRange.endAt),
     },
-    bars: [],
   }
+
+  if (input.allowPartial === true) {
+    payload.allowPartial = true
+  }
+
+  return payload
 }

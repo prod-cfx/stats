@@ -1,4 +1,3 @@
-import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -6,6 +5,11 @@ import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-a
 
 @Injectable()
 export class AiQuantProxyService {
+  private static readonly BACKTEST_CAPABILITIES_RETRY_ATTEMPTS = 3
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
+  private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+
   constructor(
     @Inject(QuantifyAiQuantClient)
     private readonly quantifyClient: QuantifyAiQuantClient,
@@ -56,17 +60,25 @@ export class AiQuantProxyService {
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async startCodegen(user: AuthenticatedUser, body: Record<string, unknown>) {
-    return this.quantifyClient.post('/llm-strategy-codegen/sessions', {
-      ...body,
-      userId: user.id,
+  async startCodegen(authorization: string | undefined, body: Record<string, unknown>) {
+    return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
+      headers: this.authorizationHeaders(authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async continueCodegen(user: AuthenticatedUser, sessionId: string, body: Record<string, unknown>) {
-    return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, {
-      ...body,
-      userId: user.id,
+  async getCodegenSession(authorization: string | undefined, sessionId: string) {
+    return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: this.authorizationHeaders(authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async continueCodegen(
+    authorization: string | undefined,
+    sessionId: string,
+    body: Record<string, unknown>,
+  ) {
+    return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, body, {
+      headers: this.authorizationHeaders(authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -130,9 +142,28 @@ export class AiQuantProxyService {
   }
 
   async getBacktestCapabilities(authorization: string | undefined) {
-    return this.quantifyClient.get('/backtesting/capabilities', {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+    for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.quantifyClient.get('/backtesting/capabilities', {
+          headers: this.authorizationHeaders(authorization),
+        })
+      } catch (error) {
+        const isTransientUpstreamFailure = error instanceof QuantifyClientError
+          && error.status === 502
+          && error.code === 'UPSTREAM_REQUEST_FAILED'
+        const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS
+        if (!isTransientUpstreamFailure || isLastAttempt) {
+          throw this.mapQuantifyError(error)
+        }
+        await this.sleep(this.getBacktestCapabilitiesBackoffMs(attempt))
+      }
+    }
+
+    throw this.mapQuantifyError(new QuantifyClientError(
+      'Quantify request failed',
+      502,
+      'UPSTREAM_REQUEST_FAILED',
+    ))
   }
 
   async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>) {
@@ -221,5 +252,18 @@ export class AiQuantProxyService {
       && typeof (error as { status?: unknown }).status === 'number'
       && 'message' in error
       && typeof (error as { message?: unknown }).message === 'string'
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private getBacktestCapabilitiesBackoffMs(attempt: number): number {
+    const expo = Math.min(
+      AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+      AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_MAX_MS,
+    )
+    const jitter = Math.floor(Math.random() * AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS)
+    return expo + jitter
   }
 }

@@ -104,10 +104,18 @@ describe('backtest-payload-builder', () => {
     })
   })
 
-  it('keeps bars fixed to empty list', () => {
+  it('does not include legacy bars payload field', () => {
     const payload = buildBacktestPayload(createInput(), now)
 
-    expect(payload.bars).toEqual([])
+    expect('bars' in payload).toBe(false)
+  })
+
+  it('includes allowPartial only when explicitly enabled', () => {
+    const withPartial = buildBacktestPayload(createInput({ allowPartial: true }), now)
+    const withoutPartial = buildBacktestPayload(createInput(), now)
+
+    expect(withPartial.allowPartial).toBe(true)
+    expect('allowPartial' in withoutPartial).toBe(false)
   })
 
   it('throws when scriptCode is missing', () => {

@@ -119,6 +119,12 @@ export class CodegenConversationService {
     callerUserId?: string,
   ): Promise<CodegenSessionResponseDto> {
     const sessionUserId = this.resolveSessionUserId(callerUserId, dto.userId)
+    if (!sessionUserId) {
+      throw new DomainException('codegen.missing_caller_identity', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
     const seedChecklist = this.normalizeChecklist({
       ...this.extractChecklist(dto),
       ...this.inferChecklistFromMessage(dto.initialMessage),
@@ -182,6 +188,12 @@ export class CodegenConversationService {
     callerUserId?: string,
   ): Promise<CodegenSessionResponseDto> {
     const sessionUserId = this.resolveSessionUserId(callerUserId, dto.userId)
+    if (!sessionUserId) {
+      throw new DomainException('codegen.missing_caller_identity', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== sessionUserId) {
       throw new DomainException('codegen.session_not_found', {
@@ -198,6 +210,30 @@ export class CodegenConversationService {
       })
     }
     if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
+      if (dto.confirmGenerate === true) {
+        const providerCode = this.resolveProviderCode(dto.providerCode)
+        const requeued = await this.sessionsRepo.tryRequeueFromProcessing(session.id, {
+          status: 'GENERATING',
+          rejectReason: null,
+        })
+        if (requeued) {
+          const checklist = this.readChecklist(session.checklist)
+          void this.runGenerationPipeline({
+            sessionId: session.id,
+            checklist,
+            message: dto.message,
+            providerCode,
+            model: dto.model,
+            temperature: dto.temperature,
+            maxTokens: dto.maxTokens,
+          })
+          return {
+            id: session.id,
+            status: 'GENERATING',
+            missingFields: [],
+          }
+        }
+      }
       return this.toSessionSnapshotResponse(session)
     }
 
@@ -1286,12 +1322,12 @@ export class CodegenConversationService {
       .join('\n')
   }
 
-  private resolveSessionUserId(callerUserId: string | undefined, requestUserId: string): string {
+  private resolveSessionUserId(callerUserId: string | undefined, requestUserId?: string): string {
     const normalizedCallerUserId = callerUserId?.trim()
     if (normalizedCallerUserId) {
       return normalizedCallerUserId
     }
-    return requestUserId
+    return requestUserId?.trim() ?? ''
   }
 
   static isTerminalStatus(status: LlmCodegenSessionStatus): boolean {

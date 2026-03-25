@@ -10,6 +10,7 @@ import { BacktestReporterService } from './report/backtest-reporter.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
+import { BacktestMarketDataService } from './services/backtest-market-data.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 import { StateEngineService } from './state/state-engine.service'
 
@@ -19,6 +20,7 @@ import { StateEngineService } from './state/state-engine.service'
   providers: [
     BacktestRunnerService,
     BacktestJobsService,
+    BacktestMarketDataService,
     TheoreticalExecutionModel,
     PortfolioLedgerServiceFactory,
     BacktestReporterService,

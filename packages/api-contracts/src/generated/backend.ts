@@ -156,6 +156,34 @@ const CreateAccountExchangeAccountDto = z
   })
   .passthrough()
 const Function = z.object({}).partial().passthrough()
+const LlmCodegenStartRequestDto = z
+  .object({
+    initialMessage: z.string(),
+    symbols: z.array(z.string()),
+    timeframes: z.array(z.string()),
+    entryRules: z.array(z.string()),
+    exitRules: z.array(z.string()),
+    riskRules: z.object({}).partial().passthrough(),
+    guideConfig: z.object({}).partial().passthrough(),
+  })
+  .partial()
+  .passthrough()
+const LlmCodegenContinueRequestDto = z
+  .object({
+    message: z.string(),
+    symbols: z.array(z.string()).optional(),
+    timeframes: z.array(z.string()).optional(),
+    entryRules: z.array(z.string()).optional(),
+    exitRules: z.array(z.string()).optional(),
+    riskRules: z.object({}).partial().passthrough().optional(),
+    guideConfig: z.object({}).partial().passthrough().optional(),
+    confirmGenerate: z.boolean().optional(),
+    providerCode: z.string().optional(),
+    model: z.string().optional(),
+    temperature: z.number().optional(),
+    maxTokens: z.number().optional(),
+  })
+  .passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1059,6 +1087,8 @@ export const schemas = {
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   Function,
+  LlmCodegenStartRequestDto,
+  LlmCodegenContinueRequestDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -2893,6 +2923,72 @@ const endpoints = makeApi([
   },
   {
     method: 'get',
+    path: '/backtesting/capabilities',
+    alias: 'BacktestingProxyController_capabilities',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/backtesting/jobs',
+    alias: 'BacktestingProxyController_createJob',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/backtesting/jobs/:id',
+    alias: 'BacktestingProxyController_getJob',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/backtesting/jobs/:id/result',
+    alias: 'BacktestingProxyController_getJobResult',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
     path: '/crypto-stock-quotes/latest',
     alias: 'CryptoStockQuotesController_getLatest',
     description: `返回每个股票代码（symbol）的最新一条报价记录，可通过 symbols 过滤特定标的`,
@@ -3014,7 +3110,31 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: LlmCodegenStartRequestDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/llm-strategy-codegen/sessions/:id',
+    alias: 'LlmStrategyCodegenController_getSession',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
       },
     ],
     response: z.void(),
@@ -3028,7 +3148,12 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: LlmCodegenContinueRequestDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
       },
       {
         name: 'id',
