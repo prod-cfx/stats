@@ -86,7 +86,7 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
-  const baseCurrency = strategy.accountOverview?.baseCurrency || 'USDT'
+  const baseCurrency = strategy?.accountOverview?.baseCurrency ?? 'USDT'
   const dynamicParamRows = useMemo(
     () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
     [strategy?.paramSchema, strategy?.paramValues],
