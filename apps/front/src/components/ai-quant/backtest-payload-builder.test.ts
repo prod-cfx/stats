@@ -11,6 +11,10 @@ function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildB
   return {
     symbol: 'BTCUSDT',
     baseTimeframe: '15m',
+    capabilities: {
+      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    },
     stateTimeframes: ['15m'],
     initialCash: 10000,
     leverage: 1,
@@ -116,5 +120,21 @@ describe('backtest-payload-builder', () => {
         },
       }), now)
     }, 'missing_script_code')
+  })
+
+  it('throws when symbol is not allowed by capability constraints', () => {
+    expectBuildErrorCode(() => {
+      buildBacktestPayload(createInput({
+        symbol: 'DOGEUSDT',
+      }), now)
+    }, 'symbol_not_allowed')
+  })
+
+  it('throws when baseTimeframe is not allowed by capability constraints', () => {
+    expectBuildErrorCode(() => {
+      buildBacktestPayload(createInput({
+        baseTimeframe: '4h',
+      }), now)
+    }, 'timeframe_not_allowed')
   })
 })

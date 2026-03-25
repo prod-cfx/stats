@@ -8,6 +8,8 @@ export type BacktestPayloadBuilderErrorCode =
   | 'missing_range'
   | 'start_after_end'
   | 'range_too_large'
+  | 'symbol_not_allowed'
+  | 'timeframe_not_allowed'
 
 export class BacktestPayloadBuilderError extends Error {
   constructor(public readonly code: BacktestPayloadBuilderErrorCode) {
@@ -23,6 +25,10 @@ export function isBacktestPayloadBuilderError(error: unknown): error is Backtest
 export interface BuildBacktestPayloadInput {
   symbol: string
   baseTimeframe: string
+  capabilities: {
+    allowedSymbols: string[]
+    allowedBaseTimeframes: string[]
+  }
   stateTimeframes: string[]
   initialCash: number
   leverage: number
@@ -43,6 +49,14 @@ export function buildBacktestPayload(
   if (!symbol) {
     throw new BacktestPayloadBuilderError('missing_symbol')
   }
+  if (!input.capabilities.allowedSymbols.includes(symbol)) {
+    throw new BacktestPayloadBuilderError('symbol_not_allowed')
+  }
+
+  const baseTimeframe = input.baseTimeframe.trim()
+  if (!input.capabilities.allowedBaseTimeframes.includes(baseTimeframe)) {
+    throw new BacktestPayloadBuilderError('timeframe_not_allowed')
+  }
 
   const scriptCode = input.strategy.scriptCode.trim()
   if (!scriptCode) {
@@ -58,7 +72,7 @@ export function buildBacktestPayload(
 
   return {
     symbols: [symbol],
-    baseTimeframe: input.baseTimeframe,
+    baseTimeframe,
     stateTimeframes: input.stateTimeframes,
     initialCash: input.initialCash,
     leverage: input.leverage,
