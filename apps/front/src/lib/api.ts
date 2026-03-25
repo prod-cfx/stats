@@ -42,8 +42,13 @@ const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
 const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK =
   process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK !== 'false'
+const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK_EXPLICIT =
+  process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
 
 function getHttpStatusFromError(error: unknown): number | undefined {
+  if (error instanceof ApiError && typeof error.statusCode === 'number') {
+    return error.statusCode
+  }
   if (!error || typeof error !== 'object') return undefined
   if (!('response' in error)) return undefined
 
@@ -65,6 +70,26 @@ function shouldFallbackToAccountAiQuantMock(error: unknown): boolean {
   if (error instanceof AuthenticationError) return false
   if (ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) return true
   return shouldFallbackToMock(error)
+}
+
+function isRetryableNetworkStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function shouldFallbackDeleteAccountAiQuantMock(error: unknown): boolean {
+  if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK_EXPLICIT) return false
+  if (!shouldFallbackToAccountAiQuantMock(error)) return false
+
+  const status = getHttpStatusFromError(error)
+  if (typeof status === 'number') {
+    return isRetryableNetworkStatus(status)
+  }
+
+  if (error instanceof ApiError) {
+    return error.code === 'API_ERROR' || error.code === 'UNKNOWN_ERROR'
+  }
+
+  return false
 }
 
 function mulberry32(seed: number) {
@@ -1654,7 +1679,7 @@ export async function deleteAccountAiQuantStrategy(
       await parseAccountAiQuantJson(response, '删除策略失败')
     }, 'DELETE_ACCOUNT_AI_QUANT_STRATEGY')
   } catch (error) {
-    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    if (!shouldFallbackDeleteAccountAiQuantMock(error)) throw error
     deleteMockStrategyById(strategyId)
   }
 }
