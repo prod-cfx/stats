@@ -3,11 +3,11 @@
 import { Copy, LogOut, Send } from 'lucide-react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useState } from 'react'
-import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
 import { useTranslation } from 'react-i18next'
+import { AiQuantSection } from '@/components/account/AiQuantSection'
+import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
-import { AiQuantSection } from '@/components/account/AiQuantSection'
 import { useToast } from '@/components/ui/toast'
 import { TelegramLoginButtons } from '@/features/auth/components/telegram-login-buttons'
 import { useAuth } from '@/hooks/use-auth'
@@ -86,7 +86,7 @@ export default function AccountPage() {
                 : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
             }`}
           >
-            账号设置
+            {t('account.settings')}
           </button>
           <button
             type="button"
@@ -97,7 +97,7 @@ export default function AccountPage() {
                 : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
             }`}
           >
-            AI量化
+            {t('aiQuant.title')}
           </button>
         </div>
 

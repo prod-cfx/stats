@@ -1,12 +1,16 @@
 'use client'
 
 import type { AiQuantStrategyRecord, StrategyStatus } from './ai-quant-strategy-store'
-import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle } from 'lucide-react'
+import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
-import { fetchAccountAiQuantStrategies, performAccountAiQuantStrategyAction } from '@/lib/api'
+import {
+  deleteAccountAiQuantStrategy,
+  fetchAccountAiQuantStrategies,
+  performAccountAiQuantStrategyAction,
+} from '@/lib/api'
 import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamSummary } from './dynamic-param-summary'
 
@@ -76,6 +80,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -89,11 +94,11 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       })
       setStrategies(response.items.map(mapAccountStrategyListItemToRecord))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载策略列表失败')
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.listLoadFailed', { defaultValue: 'Failed to load strategy list' }))
     } finally {
       setIsLoading(false)
     }
-  }, [session])
+  }, [session, t])
 
   useEffect(() => {
     void loadStrategies()
@@ -111,9 +116,32 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       })
       await loadStrategies()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '更新策略状态失败')
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
     } finally {
       setPendingActionId(null)
+    }
+  }
+
+  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!session) return
+    const confirmed = window.confirm(
+      t('aiQuant.confirmDeleteStrategy', {
+        defaultValue: `Delete strategy "${name}"? This action cannot be undone.`,
+        name,
+      }),
+    )
+    if (!confirmed) return
+
+    setPendingDeleteId(id)
+    try {
+      await deleteAccountAiQuantStrategy(id, session.userId)
+      setStrategies(prev => prev.filter(item => item.id !== id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
+    } finally {
+      setPendingDeleteId(null)
     }
   }
 
@@ -139,7 +167,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     if (isLoading) {
       return (
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">
-          正在加载策略列表...
+          {t('common.loading')}
         </section>
       )
     }
@@ -153,7 +181,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
             onClick={() => void loadStrategies()}
             className="mt-3 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-semibold text-red-300"
           >
-            重试
+            {t('common.retry')}
           </button>
         </section>
       )
@@ -245,6 +273,18 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     {t('aiQuant.actions.run')}
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={e => handleDelete(e, item.id, item.name)}
+                  disabled={pendingDeleteId === item.id}
+                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {pendingDeleteId === item.id
+                    ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
+                    : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
+                </button>
 
                 <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] transition group-hover:border-primary/30 group-hover:text-primary">
                   {t('aiQuant.viewDetail')}

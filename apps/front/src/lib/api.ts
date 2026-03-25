@@ -7,6 +7,7 @@ import type {
   UserPortfolioResponse,
 } from './hyperliquid-api'
 import {
+  deleteStrategyById as deleteMockStrategyById,
   getStrategyById,
   listStrategies as listMockStrategies,
   updateStrategyStatus as updateMockStrategyStatus,
@@ -1628,6 +1629,33 @@ export async function performAccountAiQuantStrategyAction(
     if (!shouldFallbackToAccountAiQuantMock(error)) throw error
     updateMockStrategyStatus(strategyId, payload.action === 'run' ? 'running' : 'stopped')
     return mapMockStrategyToDetail(getStrategyById(strategyId))
+  }
+}
+
+export async function deleteAccountAiQuantStrategy(
+  strategyId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    return await apiCall(async () => {
+      validateId(strategyId, 'strategy ID')
+      if (!userId?.trim()) {
+        throw new ApiError('userId is required', 'INVALID_INPUT')
+      }
+
+      const search = new URLSearchParams({ userId: userId.trim() })
+      const response = await fetch(
+        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+        {
+          method: 'DELETE',
+          headers: buildAccountAiQuantHeaders(userId.trim()),
+        },
+      )
+      await parseAccountAiQuantJson(response, '删除策略失败')
+    }, 'DELETE_ACCOUNT_AI_QUANT_STRATEGY')
+  } catch (error) {
+    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
+    deleteMockStrategyById(strategyId)
   }
 }
 

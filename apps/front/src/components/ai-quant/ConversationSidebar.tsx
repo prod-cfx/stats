@@ -91,7 +91,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                     setDraftTitle(item.title)
                   }}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]"
-                  aria-label="Rename"
+                  aria-label={t('common.rename', { defaultValue: 'Rename' })}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -99,7 +99,7 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   type="button"
                   onClick={() => onDelete(item.id)}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-muted)] hover:text-red-400"
-                  aria-label="Delete"
+                  aria-label={t('common.delete', { defaultValue: 'Delete' })}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
