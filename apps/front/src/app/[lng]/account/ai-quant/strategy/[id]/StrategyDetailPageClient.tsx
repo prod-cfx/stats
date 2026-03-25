@@ -28,7 +28,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     let cancelled = false
     setIsDetailLoading(true)
 
-    void fetchAccountAiQuantStrategyDetail(id)
+    void fetchAccountAiQuantStrategyDetail(id, session.userId)
       .then((detail) => {
         if (cancelled) return
         setStrategy(mapAccountStrategyDetailToRecord(detail))

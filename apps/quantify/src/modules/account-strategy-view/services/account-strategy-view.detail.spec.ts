@@ -42,6 +42,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         { date: new Date('2026-03-19T00:00:00.000Z'), equityEnd: 10100, maxDrawdown: 5.5, realizedPnl: 30, unrealizedPnl: 40 },
       ]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 74, closedCount: 10, winningCount: 6 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 2, closedCount: 10 }),
       loadTimeline: jest.fn().mockResolvedValue({
         instance: {
           createdAt: new Date('2026-03-18T10:00:00.000Z'),
@@ -50,7 +51,16 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         },
         subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
         signalExecutions: [{ createdAt: new Date('2026-03-20T11:00:00.000Z'), status: 'SUCCESS', errorMessage: null }],
-        trades: [{ executedAt: new Date('2026-03-20T11:01:00.000Z'), side: 'BUY', symbol: 'BTCUSDT', price: 68000 }],
+        trades: [{
+          executedAt: new Date('2026-03-20T11:01:00.000Z'),
+          side: 'BUY',
+          symbol: 'BTCUSDT',
+          price: 68000,
+          quantity: 0.12,
+          fee: 1.5,
+          feeCurrency: 'USDT',
+          orderId: 'ord-1',
+        }],
       }),
     }
     const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
@@ -69,6 +79,30 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.metrics.tradeCount).toBe(74)
     expect(detail.snapshot.deployAccountName).toBe('主账户')
     expect(detail.equitySeries.length).toBe(2)
+    expect(detail.accountOverview).toEqual({
+      initialBalance: 10000,
+      totalEquity: 12000,
+      availableBalance: 12000,
+      totalPnl: 2000,
+      todayPnl: 500,
+      baseCurrency: 'USDT',
+    })
+    expect(detail.positionOverview).toEqual({
+      openPositionsCount: 2,
+      closedPositionsCount: 10,
+      totalRealizedPnl: 1500,
+      totalUnrealizedPnl: 500,
+    })
+    expect(detail.latestOrders[0]).toEqual({
+      executedAt: '2026-03-20T11:01:00.000Z',
+      side: 'BUY',
+      symbol: 'BTCUSDT',
+      price: 68000,
+      quantity: 0.12,
+      fee: 1.5,
+      feeCurrency: 'USDT',
+      orderId: 'ord-1',
+    })
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
     expect(detail.timeline.some(e => e.eventType === 'trade')).toBe(true)
     expect(detail.timeline[0]?.event).toBe('创建策略')

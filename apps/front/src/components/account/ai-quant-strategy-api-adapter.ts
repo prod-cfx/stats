@@ -104,6 +104,36 @@ export function mapAccountStrategyDetailToRecord(
     ...dynamicParams,
     totalPnl: detail.totalPnl ?? null,
     todayPnl: detail.todayPnl ?? null,
+    accountOverview: detail.accountOverview
+      ? {
+          initialBalance: detail.accountOverview.initialBalance ?? null,
+          totalEquity: detail.accountOverview.totalEquity ?? null,
+          availableBalance: detail.accountOverview.availableBalance ?? null,
+          totalPnl: detail.accountOverview.totalPnl ?? null,
+          todayPnl: detail.accountOverview.todayPnl ?? null,
+          baseCurrency: detail.accountOverview.baseCurrency ?? null,
+        }
+      : undefined,
+    positionOverview: detail.positionOverview
+      ? {
+          openPositionsCount: detail.positionOverview.openPositionsCount ?? null,
+          closedPositionsCount: detail.positionOverview.closedPositionsCount ?? null,
+          totalRealizedPnl: detail.positionOverview.totalRealizedPnl ?? null,
+          totalUnrealizedPnl: detail.positionOverview.totalUnrealizedPnl ?? null,
+        }
+      : undefined,
+    latestOrders: Array.isArray(detail.latestOrders)
+      ? detail.latestOrders.map(order => ({
+          executedAt: fmtTimelineTime(order.executedAt),
+          side: order.side,
+          symbol: order.symbol,
+          price: typeof order.price === 'number' && Number.isFinite(order.price) ? order.price : null,
+          quantity: typeof order.quantity === 'number' && Number.isFinite(order.quantity) ? order.quantity : null,
+          fee: typeof order.fee === 'number' && Number.isFinite(order.fee) ? order.fee : null,
+          feeCurrency: order.feeCurrency ?? null,
+          orderId: order.orderId ?? null,
+        }))
+      : [],
     equitySeries: detail.equitySeries.map(item => ({
       ts: fmtTimelineTime(item.ts),
       value: normalizeNumber(item.value),

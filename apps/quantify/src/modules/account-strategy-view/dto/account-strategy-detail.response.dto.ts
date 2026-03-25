@@ -23,6 +23,66 @@ export class AccountStrategyTimelineEventDto {
   note?: string | null
 }
 
+export class AccountStrategyAccountOverviewDto {
+  @ApiPropertyOptional({ nullable: true })
+  initialBalance!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  totalEquity!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  availableBalance!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  totalPnl!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  todayPnl!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  baseCurrency!: string | null
+}
+
+export class AccountStrategyPositionOverviewDto {
+  @ApiPropertyOptional({ nullable: true })
+  openPositionsCount!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  closedPositionsCount!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  totalRealizedPnl!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  totalUnrealizedPnl!: number | null
+}
+
+export class AccountStrategyLatestOrderDto {
+  @ApiProperty()
+  executedAt!: string
+
+  @ApiProperty()
+  side!: string
+
+  @ApiProperty()
+  symbol!: string
+
+  @ApiPropertyOptional({ nullable: true })
+  price!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  quantity!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  fee!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  feeCurrency!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  orderId!: string | null
+}
+
 export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
   exchange!: string | null
@@ -67,4 +127,13 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [AccountStrategyTimelineEventDto] })
   timeline!: AccountStrategyTimelineEventDto[]
+
+  @ApiProperty({ type: AccountStrategyAccountOverviewDto })
+  accountOverview!: AccountStrategyAccountOverviewDto
+
+  @ApiProperty({ type: AccountStrategyPositionOverviewDto })
+  positionOverview!: AccountStrategyPositionOverviewDto
+
+  @ApiProperty({ type: [AccountStrategyLatestOrderDto] })
+  latestOrders!: AccountStrategyLatestOrderDto[]
 }

@@ -36,6 +36,30 @@ export interface AiQuantStrategyRecord {
   supportsDynamicParams: boolean
   totalPnl?: number | null
   todayPnl?: number | null
+  accountOverview?: {
+    initialBalance: number | null
+    totalEquity: number | null
+    availableBalance: number | null
+    totalPnl: number | null
+    todayPnl: number | null
+    baseCurrency: string | null
+  }
+  positionOverview?: {
+    openPositionsCount: number | null
+    closedPositionsCount: number | null
+    totalRealizedPnl: number | null
+    totalUnrealizedPnl: number | null
+  }
+  latestOrders?: Array<{
+    executedAt: string
+    side: string
+    symbol: string
+    price: number | null
+    quantity: number | null
+    fee: number | null
+    feeCurrency: string | null
+    orderId: string | null
+  }>
   deploy?: {
     exchange: 'binance' | 'okx'
     accountId: string
@@ -198,6 +222,11 @@ function migrateRecord(record: AiQuantStrategyRecord, seed: number): AiQuantStra
   return {
     ...record,
     initialCapital: record.initialCapital || 10000,
+    timeline: (record.timeline ?? []).map(item => (
+      item.event === '回测通过'
+        ? { ...item, event: '回测完成（模拟部署模式）' }
+        : item
+    )),
     equitySeries: nextSeries,
     ...dynamicParams,
   }
@@ -292,7 +321,7 @@ export function upsertStrategyDeployment(input: {
           equitySeries: makeEquity(Date.now() % 10),
           timeline: [
             { at: now.replace('T', ' ').slice(0, 16), event: '创建策略' },
-            { at: now.replace('T', ' ').slice(0, 16), event: '回测通过', note: `最大回撤 ${input.metrics.maxDrawdownPct}%` },
+            { at: now.replace('T', ' ').slice(0, 16), event: '回测完成（模拟部署模式）', note: `最大回撤 ${input.metrics.maxDrawdownPct}%` },
             { at: now.replace('T', ' ').slice(0, 16), event: '一键部署', note: `${input.exchange.toUpperCase()} / ${input.accountName}` },
             { at: now.replace('T', ' ').slice(0, 16), event: '开始运行' },
           ],

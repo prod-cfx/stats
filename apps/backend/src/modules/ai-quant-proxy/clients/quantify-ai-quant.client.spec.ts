@@ -46,4 +46,27 @@ describe('quantifyAiQuantClient', () => {
       },
     })
   })
+
+  it('appends /api/v1 when only QUANTIFY_BASE_URL is configured', async () => {
+    const envWithBaseOnly = {
+      getString: jest.fn((key: string) => {
+        if (key === 'QUANTIFY_API_BASE_URL') return undefined
+        if (key === 'QUANTIFY_BASE_URL') return 'http://quantify.test'
+        return undefined
+      }),
+    }
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(envWithBaseOnly as never)
+    await client.get('/llm-strategy-instances')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('http://quantify.test/api/v1/llm-strategy-instances'),
+      expect.any(Object),
+    )
+  })
 })

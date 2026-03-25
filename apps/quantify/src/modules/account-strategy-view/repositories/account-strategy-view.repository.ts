@@ -418,7 +418,9 @@ export class AccountStrategyViewRepository {
         account: {
           select: {
             id: true,
+            baseCurrency: true,
             initialBalance: true,
+            balance: true,
             equity: true,
             totalRealizedPnl: true,
             totalUnrealizedPnl: true,
@@ -459,6 +461,23 @@ export class AccountStrategyViewRepository {
       tradeCount,
       closedCount,
       winningCount,
+    }
+  }
+
+  async loadPositionOverview(accountId: string) {
+    const client = this.txHost.tx
+    const [openCount, closedCount] = await Promise.all([
+      client.position.count({
+        where: { userStrategyAccountId: accountId, status: 'OPEN' },
+      }),
+      client.position.count({
+        where: { userStrategyAccountId: accountId, status: 'CLOSED' },
+      }),
+    ])
+
+    return {
+      openCount,
+      closedCount,
     }
   }
 

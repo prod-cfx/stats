@@ -228,6 +228,55 @@ describe('exchangeAccountsService', () => {
     })
   })
 
+  it('reuses stored OKX credentials when editing without re-entering key secret and passphrase', async () => {
+    const { service, repo, tradingService } = createService()
+    repo.findExchangeAccountFirst.mockResolvedValue({
+      id: 'account-okx-1',
+      exchangeId: 'okx',
+      encryptedConfig: 'encrypted-old-okx',
+      name: 'Old OKX',
+      isTestnet: false,
+      lastValidatedAt: new Date('2026-03-19T00:00:00.000Z'),
+      createdAt: new Date('2026-03-19T00:00:00.000Z'),
+    })
+    repo.createExchangeAccount.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '7.4.2',
+      }),
+    )
+
+    await service.create('user-1', {
+      userId: 'user-1',
+      userEmail: 'user-1@example.com',
+      exchangeId: 'okx',
+      name: 'OKX Testnet',
+      isTestnet: true,
+      apiKey: '',
+      apiSecret: '',
+      passphrase: '',
+      marketType: 'spot',
+    })
+
+    expect(tradingService.validateCexCredentials).toHaveBeenCalledWith(
+      'okx',
+      'spot',
+      expect.objectContaining({
+        apiKey: 'okx-valid-key',
+        secret: 'okx-valid-secret',
+        passphrase: 'okx-valid-passphrase',
+        isTestnet: true,
+      }),
+    )
+    expect(repo.updateExchangeAccount).toHaveBeenCalledWith(
+      'account-okx-1',
+      expect.objectContaining({
+        name: 'OKX Testnet',
+        isTestnet: true,
+      }),
+    )
+  })
+
   it('deletes the current user binding by exchangeId', async () => {
     const { service, repo } = createService()
     repo.findExchangeAccountFirst.mockResolvedValue({

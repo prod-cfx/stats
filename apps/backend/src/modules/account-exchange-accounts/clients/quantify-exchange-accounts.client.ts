@@ -26,6 +26,14 @@ function tryParseJson<T>(raw: string): T | null {
   }
 }
 
+function normalizeQuantifyBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, '')
+  if (/\/api\/v\d+$/i.test(trimmed)) {
+    return trimmed
+  }
+  return `${trimmed}/api/v1`
+}
+
 export class QuantifyClientError extends Error {
   constructor(
     message: string,
@@ -135,8 +143,16 @@ export class QuantifyExchangeAccountsClient {
   }
 
   private baseUrl(): string {
-    return this.env.getString('QUANTIFY_API_BASE_URL')
-      || this.env.getString('QUANTIFY_BASE_URL')
-      || 'http://localhost:3010/api/v1'
+    const explicitApiBase = this.env.getString('QUANTIFY_API_BASE_URL')
+    if (explicitApiBase) {
+      return normalizeQuantifyBaseUrl(explicitApiBase)
+    }
+
+    const base = this.env.getString('QUANTIFY_BASE_URL')
+    if (base) {
+      return normalizeQuantifyBaseUrl(base)
+    }
+
+    return 'http://localhost:3010/api/v1'
   }
 }
