@@ -552,6 +552,8 @@ export class AccountStrategyViewService {
   }
 
   private toFiniteNumber(value: unknown): number | null {
+    if (value === null || value === undefined) return null
+    if (typeof value === 'string' && value.trim().length === 0) return null
     const normalized = Number(value)
     return Number.isFinite(normalized) ? normalized : null
   }
