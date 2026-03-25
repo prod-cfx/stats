@@ -3,6 +3,7 @@ import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
+import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 
 jest.mock('@nestjs-cls/transactional', () => ({
@@ -38,6 +39,10 @@ describe('backtestingController', () => {
           provide: BacktestCallerIdentityService,
           useValue: { resolveCallerUserIdFromAuthorization: jest.fn() },
         },
+        {
+          provide: BacktestCapabilitiesService,
+          useValue: { getCapabilities: jest.fn() },
+        },
       ],
     }).compile()
 
@@ -46,6 +51,7 @@ describe('backtestingController', () => {
     expect(typeof c.createJob).toBe('function')
     expect(typeof c.getJob).toBe('function')
     expect(typeof c.getJobResult).toBe('function')
+    expect(typeof c.getCapabilities).toBe('function')
   })
 
   it('adapts script strategy before delegating to runner and jobs service', async () => {
@@ -54,6 +60,12 @@ describe('backtestingController', () => {
     const adapted = { id: 's1', params: { p: 1 }, fn: jest.fn() }
     const adapter = { build: jest.fn().mockResolvedValue(adapted) }
     const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = {
+      getCapabilities: jest.fn().mockResolvedValue({
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      }),
+    }
 
     const mod = await Test.createTestingModule({
       controllers: [BacktestingController],
@@ -61,6 +73,7 @@ describe('backtestingController', () => {
         { provide: BacktestRunnerService, useValue: runner },
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
         { provide: BacktestStrategyAdapterService, useValue: adapter },
       ],
     }).compile()
@@ -82,6 +95,7 @@ describe('backtestingController', () => {
     await c.createJob('Bearer token', dto)
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
+    await c.getCapabilities()
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(4)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
@@ -94,5 +108,6 @@ describe('backtestingController', () => {
     expect(jobs.createJob).toHaveBeenCalledWith({ ...dto, strategy: adapted }, 'user-1')
     expect(jobs.getJob).toHaveBeenCalledWith('job-1', 'user-1')
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
+    expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
   })
 })
