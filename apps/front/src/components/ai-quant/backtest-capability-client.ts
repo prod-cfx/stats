@@ -8,6 +8,9 @@ interface ErrorPayload {
   error?: {
     code?: unknown
     message?: unknown
+    args?: {
+      reasonMessage?: unknown
+    }
   }
 }
 
@@ -29,6 +32,9 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   }
 
   const candidate = payload as ErrorPayload
+  if (typeof candidate.error?.args?.reasonMessage === 'string' && candidate.error.args.reasonMessage.trim()) {
+    return candidate.error.args.reasonMessage
+  }
   if (typeof candidate.error?.message === 'string' && candidate.error.message.trim()) {
     return candidate.error.message
   }
@@ -126,8 +132,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
         timeoutMs: BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
       })
     }
-    if (upstreamSignal?.aborted) {
-      throw new ApiError('Request aborted', 'API_ABORTED', 499, { path })
+    if (error instanceof ApiError) {
+      throw error
     }
     const message = error instanceof Error && error.message.trim() ? error.message : 'Request failed'
     throw new ApiError(message, 'API_ERROR')

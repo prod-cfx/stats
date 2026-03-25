@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/lib/api-client'
-import { ApiError } from '@/lib/errors'
+import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
   BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
   fetchBacktestCapabilities,
@@ -91,14 +91,44 @@ describe('backtest-capability-client', () => {
       ok: false,
       status: 502,
       statusText: 'Bad Gateway',
-      body: { message: 'upstream failed' },
+      body: {
+        error: {
+          args: { reasonMessage: 'upstream failed by reason message' },
+          message: 'should not win',
+        },
+      },
     })
 
-    await expect(fetchBacktestCapabilities()).rejects.toBeInstanceOf(ApiError)
-    await expect(fetchBacktestCapabilities()).rejects.toMatchObject({
-      message: expect.stringContaining('upstream failed'),
+    const request = fetchBacktestCapabilities()
+    await expect(request).rejects.toBeInstanceOf(ApiError)
+    await expect(request).rejects.toMatchObject({
+      message: expect.stringContaining('upstream failed by reason message'),
       statusCode: 502,
     })
+  })
+
+  it('throws auth error when token is missing', async () => {
+    mockGetToken.mockReturnValueOnce(null)
+
+    const request = fetchBacktestCapabilities()
+    await expect(request).rejects.toBeInstanceOf(AuthenticationError)
+    await expect(request).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+      statusCode: 401,
+    })
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+  })
+
+  it('throws auth error when token format is invalid', async () => {
+    mockGetToken.mockReturnValueOnce('not-a-jwt')
+
+    const request = fetchBacktestCapabilities()
+    await expect(request).rejects.toBeInstanceOf(AuthenticationError)
+    await expect(request).rejects.toMatchObject({
+      code: 'INVALID_TOKEN',
+      statusCode: 401,
+    })
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
   it('throws timeout ApiError when request hangs', async () => {
@@ -120,7 +150,7 @@ describe('backtest-capability-client', () => {
     await assertion
   })
 
-  it('maps upstream abort signal to API_ABORTED', async () => {
+  it('upstream abort follows backtest client semantics and maps to API_ERROR', async () => {
     ;(globalThis.fetch as jest.Mock).mockImplementation((_url: string, init?: RequestInit) => {
       const signal = init?.signal as AbortSignal | undefined
       return new Promise((_resolve, reject) => {
@@ -132,9 +162,38 @@ describe('backtest-capability-client', () => {
 
     const controller = new AbortController()
     const assertion = expect(fetchBacktestCapabilities({ signal: controller.signal })).rejects.toMatchObject({
-      code: 'API_ABORTED',
+      code: 'API_ERROR',
+      message: expect.stringContaining('aborted'),
     })
     controller.abort()
     await assertion
+  })
+
+  it('uses statusText fallback when error body is non-JSON', async () => {
+    mockFetchResponse({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      jsonRejects: true,
+    })
+
+    await expect(fetchBacktestCapabilities()).rejects.toMatchObject({
+      message: expect.stringContaining('Bad Gateway'),
+      statusCode: 502,
+    })
+  })
+
+  it('uses statusText fallback when error body is empty', async () => {
+    mockFetchResponse({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      body: null,
+    })
+
+    await expect(fetchBacktestCapabilities()).rejects.toMatchObject({
+      message: expect.stringContaining('Service Unavailable'),
+      statusCode: 503,
+    })
   })
 })
