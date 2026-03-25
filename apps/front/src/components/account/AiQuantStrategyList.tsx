@@ -83,6 +83,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     setError(null)
     try {
       const response = await fetchAccountAiQuantStrategies({
+        userId: session.userId,
         page: 1,
         limit: 20,
       })
@@ -105,6 +106,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     setPendingActionId(id)
     try {
       await performAccountAiQuantStrategyAction(id, {
+        userId: session.userId,
         action: status === 'running' ? 'run' : 'stop',
       })
       await loadStrategies()

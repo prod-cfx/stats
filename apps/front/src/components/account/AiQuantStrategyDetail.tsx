@@ -59,6 +59,11 @@ function formatAmount(value: number) {
   return Number(value.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
 }
 
+function formatOptionalAmount(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return formatAmount(value)
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -81,6 +86,7 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
   const hoverPoint = hoverIndex !== null ? series[hoverIndex] : null
   const hoverCoord = hoverIndex !== null ? coords[hoverIndex] : null
   const adjacentChangePct = hoverIndex !== null ? deriveAdjacentChangePct(series, hoverIndex) : null
+  const baseCurrency = strategy.accountOverview?.baseCurrency || 'USDT'
   const dynamicParamRows = useMemo(
     () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
     [strategy?.paramSchema, strategy?.paramValues],
@@ -149,6 +155,73 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
             今日 {formatSignedNumber(displayTodayPnl)} USDT
           </p>
         </article>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">账户概览</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <p className="text-[color:var(--cf-muted)]">初始资金</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.accountOverview?.initialBalance)} {baseCurrency}</p>
+            <p className="text-[color:var(--cf-muted)]">总权益</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.accountOverview?.totalEquity)} {baseCurrency}</p>
+            <p className="text-[color:var(--cf-muted)]">可用余额</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.accountOverview?.availableBalance)} {baseCurrency}</p>
+            <p className="text-[color:var(--cf-muted)]">今日盈亏</p>
+            <p className={`text-right ${typeof strategy.accountOverview?.todayPnl === 'number' && strategy.accountOverview.todayPnl < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {typeof strategy.accountOverview?.todayPnl === 'number' ? formatSignedNumber(strategy.accountOverview.todayPnl) : '--'} {baseCurrency}
+            </p>
+          </div>
+        </article>
+        <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">持仓概览</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <p className="text-[color:var(--cf-muted)]">当前持仓数</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{strategy.positionOverview?.openPositionsCount ?? '--'}</p>
+            <p className="text-[color:var(--cf-muted)]">已平仓数</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{strategy.positionOverview?.closedPositionsCount ?? '--'}</p>
+            <p className="text-[color:var(--cf-muted)]">累计已实现盈亏</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.positionOverview?.totalRealizedPnl)} {baseCurrency}</p>
+            <p className="text-[color:var(--cf-muted)]">当前未实现盈亏</p>
+            <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.positionOverview?.totalUnrealizedPnl)} {baseCurrency}</p>
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">最新成交</h2>
+        {strategy.latestOrders && strategy.latestOrders.length > 0
+          ? (
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
+                      <th className="py-2 pr-3">时间</th>
+                      <th className="py-2 pr-3">方向</th>
+                      <th className="py-2 pr-3">交易对</th>
+                      <th className="py-2 pr-3">价格</th>
+                      <th className="py-2 pr-3">数量</th>
+                      <th className="py-2 pr-3">手续费</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategy.latestOrders.map(order => (
+                      <tr key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`} className="border-b border-[color:var(--cf-border)]/60">
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.price)}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.quantity)}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                          {order.fee == null ? '--' : formatAmount(order.fee)} {order.feeCurrency ?? ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          : <p className="mt-3 text-sm text-[color:var(--cf-muted)]">暂无成交记录</p>}
       </section>
 
       <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">

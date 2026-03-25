@@ -138,6 +138,12 @@ export class AccountStrategyViewService {
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
+    const repoAny = this.repo as any
+    const loadPositionOverview = repoAny.loadPositionOverview as
+      ((accountId: string) => Promise<{ openCount: number; closedCount: number }>) | undefined
+    const positionOverview = account && loadPositionOverview
+      ? await loadPositionOverview.call(this.repo, account.id).catch(() => ({ openCount: 0, closedCount: 0 }))
+      : { openCount: 0, closedCount: 0 }
     const timelineSource = await this.repo.loadTimeline(
       userId,
       strategyInstanceId,
@@ -217,6 +223,21 @@ export class AccountStrategyViewService {
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
       },
       timeline: this.buildMixedTimeline(timelineSource),
+      accountOverview: {
+        initialBalance: account ? this.toFiniteNumber(account.initialBalance) : null,
+        totalEquity: account ? this.toFiniteNumber(account.equity) : null,
+        availableBalance: account ? this.toFiniteNumber(account.balance ?? account.equity) : null,
+        totalPnl: totalPnl ?? null,
+        todayPnl: todayPnl ?? null,
+        baseCurrency: account ? this.readAccountBaseCurrency(account) : null,
+      },
+      positionOverview: {
+        openPositionsCount: account ? positionOverview.openCount : null,
+        closedPositionsCount: account ? positionOverview.closedCount : null,
+        totalRealizedPnl: account ? this.toFiniteNumber(account.totalRealizedPnl) : null,
+        totalUnrealizedPnl: account ? this.toFiniteNumber(account.totalUnrealizedPnl) : null,
+      },
+      latestOrders: this.buildLatestOrders(timelineSource.trades),
     }
 
     if (detail.equitySeries.length === 0 && account) {
@@ -504,6 +525,45 @@ export class AccountStrategyViewService {
     return events
       .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
       .slice(0, 30)
+  }
+
+  private buildLatestOrders(
+    trades: Array<{
+      executedAt?: Date
+      side?: string
+      symbol?: string
+      price?: unknown
+      quantity?: unknown
+      fee?: unknown
+      feeCurrency?: string | null
+      orderId?: string | null
+    }>,
+  ) {
+    return trades
+      .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
+      .slice(0, 10)
+      .map(trade => ({
+        executedAt: trade.executedAt!.toISOString(),
+        side: trade.side!,
+        symbol: trade.symbol!,
+        price: this.toFiniteNumber(trade.price),
+        quantity: this.toFiniteNumber(trade.quantity),
+        fee: this.toFiniteNumber(trade.fee),
+        feeCurrency: trade.feeCurrency ?? null,
+        orderId: trade.orderId ?? null,
+      }))
+  }
+
+  private toFiniteNumber(value: unknown): number | null {
+    const normalized = Number(value)
+    return Number.isFinite(normalized) ? normalized : null
+  }
+
+  private readAccountBaseCurrency(account: unknown): string | null {
+    const row = this.readRecord(account)
+    if (!row) return 'USDT'
+    const raw = row.baseCurrency
+    return typeof raw === 'string' && raw.trim().length > 0 ? raw : 'USDT'
   }
 
   private buildIndustryEquitySeries(input: {

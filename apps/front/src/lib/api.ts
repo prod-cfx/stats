@@ -1338,6 +1338,30 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
   equitySeries: AccountAiQuantStrategyEquityPoint[]
   snapshot: AccountAiQuantStrategySnapshot
   timeline: AccountAiQuantStrategyTimelineEvent[]
+  accountOverview: {
+    initialBalance: number | null
+    totalEquity: number | null
+    availableBalance: number | null
+    totalPnl: number | null
+    todayPnl: number | null
+    baseCurrency: string | null
+  }
+  positionOverview: {
+    openPositionsCount: number | null
+    closedPositionsCount: number | null
+    totalRealizedPnl: number | null
+    totalUnrealizedPnl: number | null
+  }
+  latestOrders: Array<{
+    executedAt: string
+    side: string
+    symbol: string
+    price: number | null
+    quantity: number | null
+    fee: number | null
+    feeCurrency: string | null
+    orderId: string | null
+  }>
 }
 
 interface AccountAiQuantListQuery {
@@ -1426,6 +1450,21 @@ function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): Acco
       deployAccountName: item.deploy?.accountName ?? null,
       deployAt: item.deploy?.at ?? null,
     },
+    accountOverview: {
+      initialBalance: item.initialCapital ?? 10000,
+      totalEquity: null,
+      availableBalance: null,
+      totalPnl: item.totalPnl ?? null,
+      todayPnl: item.todayPnl ?? null,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: null,
+      closedPositionsCount: null,
+      totalRealizedPnl: null,
+      totalUnrealizedPnl: null,
+    },
+    latestOrders: [],
     timeline: item.timeline.map(event => ({
       at: event.at,
       eventType: 'system',
@@ -1544,9 +1583,13 @@ export async function fetchAccountAiQuantStrategyDetail(
         },
       )
       const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
-      return unwrapResponse<AccountAiQuantStrategyDetail>(
+      const detail = unwrapResponse<AccountAiQuantStrategyDetail | null>(
         json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
       )
+      if (!detail) {
+        throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404, json)
+      }
+      return detail
     }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
   } catch (error) {
     if (!shouldFallbackToAccountAiQuantMock(error)) throw error

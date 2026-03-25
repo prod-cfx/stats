@@ -79,6 +79,30 @@ function makeStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantSt
     schemaVersion: 'v1',
     supportsDynamicParams: true,
     updatedAt: '2026-03-20T00:00:00.000Z',
+    accountOverview: {
+      initialBalance: 10000,
+      totalEquity: 10120,
+      availableBalance: 9800,
+      totalPnl: 120,
+      todayPnl: 20,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: 1,
+      closedPositionsCount: 3,
+      totalRealizedPnl: 100,
+      totalUnrealizedPnl: 20,
+    },
+    latestOrders: [{
+      executedAt: '2026-03-20 01:10',
+      side: 'BUY',
+      symbol: 'BTCUSDT',
+      price: 68000,
+      quantity: 0.01,
+      fee: 0.2,
+      feeCurrency: 'USDT',
+      orderId: 'ord-1',
+    }],
     ...overrides,
   }
 }
@@ -119,6 +143,9 @@ describe('AiQuant strategy dynamic params', () => {
     expect(html).toContain('3')
     expect(html).toContain('14')
     expect(html).toContain('true')
+    expect(html).toContain('账户概览')
+    expect(html).toContain('最新成交')
+    expect(html).toContain('BTCUSDT')
   })
 
   it('shows legacy rejection when schema is missing and hides param panel', () => {

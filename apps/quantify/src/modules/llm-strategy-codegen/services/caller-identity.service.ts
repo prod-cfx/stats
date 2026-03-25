@@ -1,4 +1,4 @@
-import type { EnvService } from '@/common/services/env.service'
+import { EnvService } from '@/common/services/env.service'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'

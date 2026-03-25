@@ -38,7 +38,12 @@ export class ExchangeAccountsService {
 
   async create(userId: string, dto: CreateExchangeAccountDto): Promise<ExchangeAccountResponseDto> {
     await this.ensureUserExists(userId, dto.userEmail)
-    const config = this.buildConfig(dto)
+    const existing = await this.exchangeAccountRepository.findExchangeAccountFirst({
+      where: { userId, exchangeId: dto.exchangeId },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+    })
+    const existingConfig = existing ? this.decryptConfig(existing) : undefined
+    const config = this.buildConfig(dto, existingConfig)
     const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
     const encryptedConfig = this.crypto.encryptConfig(config)
     try {
@@ -331,60 +336,83 @@ export class ExchangeAccountsService {
 
   private buildConfig(
     dto: CreateExchangeAccountDto,
+    existingConfig?: BinanceConfig | OkxConfig | HyperliquidConfig,
   ): BinanceConfig | OkxConfig | HyperliquidConfig {
     if (dto.exchangeId === 'binance')
-      return this.buildBinanceConfig(dto)
+      return this.buildBinanceConfig(dto, existingConfig as BinanceConfig | undefined)
     if (dto.exchangeId === 'okx')
-      return this.buildOkxConfig(dto)
+      return this.buildOkxConfig(dto, existingConfig as OkxConfig | undefined)
     if (dto.exchangeId === 'hyperliquid')
-      return this.buildHyperliquidConfig(dto)
+      return this.buildHyperliquidConfig(dto, existingConfig as HyperliquidConfig | undefined)
     throw new InvalidExchangeAccountConfigException({ exchangeId: dto.exchangeId })
   }
 
-  private buildBinanceConfig(dto: CreateExchangeAccountDto): BinanceConfig {
-    if (!dto.apiKey || !dto.apiSecret)
+  private pickNonEmptyInput(value: string | undefined, fallback: string | undefined): string | undefined {
+    if (typeof value === 'string' && value.trim().length > 0)
+      return value.trim()
+    return fallback
+  }
+
+  private buildBinanceConfig(
+    dto: CreateExchangeAccountDto,
+    existingConfig?: BinanceConfig,
+  ): BinanceConfig {
+    const apiKey = this.pickNonEmptyInput(dto.apiKey, existingConfig?.apiKey)
+    const apiSecret = this.pickNonEmptyInput(dto.apiSecret, existingConfig?.secret)
+    if (!apiKey || !apiSecret)
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'binance' })
 
     return {
-      apiKey: dto.apiKey,
-      secret: dto.apiSecret,
+      apiKey,
+      secret: apiSecret,
       isTestnet: dto.isTestnet,
       spotEnabled: dto.marketType ? dto.marketType === 'spot' : undefined,
       futuresEnabled: dto.marketType ? dto.marketType === 'perp' : undefined,
     }
   }
 
-  private buildOkxConfig(dto: CreateExchangeAccountDto): OkxConfig {
-    if (!dto.apiKey || !dto.apiSecret || !dto.passphrase)
+  private buildOkxConfig(
+    dto: CreateExchangeAccountDto,
+    existingConfig?: OkxConfig,
+  ): OkxConfig {
+    const apiKey = this.pickNonEmptyInput(dto.apiKey, existingConfig?.apiKey)
+    const apiSecret = this.pickNonEmptyInput(dto.apiSecret, existingConfig?.secret)
+    const passphrase = this.pickNonEmptyInput(dto.passphrase, existingConfig?.passphrase)
+    if (!apiKey || !apiSecret || !passphrase)
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'okx' })
 
     return {
-      apiKey: dto.apiKey,
-      secret: dto.apiSecret,
-      passphrase: dto.passphrase,
+      apiKey,
+      secret: apiSecret,
+      passphrase,
       isTestnet: dto.isTestnet,
     }
   }
 
-  private buildHyperliquidConfig(dto: CreateExchangeAccountDto): HyperliquidConfig {
-    if (!dto.mainWalletAddress || !dto.agentPrivateKey)
+  private buildHyperliquidConfig(
+    dto: CreateExchangeAccountDto,
+    existingConfig?: HyperliquidConfig,
+  ): HyperliquidConfig {
+    const mainWalletAddress = this.pickNonEmptyInput(dto.mainWalletAddress, existingConfig?.mainWalletAddress)
+    const agentPrivateKey = this.pickNonEmptyInput(dto.agentPrivateKey, existingConfig?.agentPrivateKey)
+    if (!mainWalletAddress || !agentPrivateKey)
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'hyperliquid' })
 
     // 严格验证格式（防御性编程，即使 DTO 层已验证）
     const addressRegex = /^0x[0-9a-fA-F]{40}$/
     const privateKeyRegex = /^0x[0-9a-fA-F]{64}$/
 
-    if (!addressRegex.test(dto.mainWalletAddress)) {
+    if (!addressRegex.test(mainWalletAddress)) {
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'hyperliquid' })
     }
 
-    if (!privateKeyRegex.test(dto.agentPrivateKey)) {
+    if (!privateKeyRegex.test(agentPrivateKey)) {
       throw new InvalidExchangeAccountConfigException({ exchangeId: 'hyperliquid' })
     }
 
     return {
-      mainWalletAddress: dto.mainWalletAddress,
-      agentPrivateKey: dto.agentPrivateKey,
+      mainWalletAddress,
+      agentPrivateKey,
       // 将 isTestnet 标志透传到 HyperliquidConfig，便于客户端按账户维度选择测试网/主网
       isTestnet: dto.isTestnet ?? false,
     }
