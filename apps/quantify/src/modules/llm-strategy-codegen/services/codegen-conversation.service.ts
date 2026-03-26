@@ -156,6 +156,7 @@ export class CodegenConversationService {
       latestDraftCode: null,
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
       rejectReason: null,
+      strategyInstanceId: null,
     })
 
     return {
@@ -220,12 +221,14 @@ export class CodegenConversationService {
           const checklist = this.readChecklist(session.checklist)
           void this.runGenerationPipeline({
             sessionId: session.id,
+            userId: sessionUserId,
             checklist,
             message: dto.message,
             providerCode,
             model: dto.model,
             temperature: dto.temperature,
             maxTokens: dto.maxTokens,
+            existingStrategyInstanceId: session.strategyInstanceId ?? null,
           })
           return {
             id: session.id,
@@ -356,12 +359,14 @@ export class CodegenConversationService {
 
     void this.runGenerationPipeline({
       sessionId: session.id,
+      userId: sessionUserId,
       checklist: mergedChecklist,
       message: dto.message,
       providerCode,
       model: dto.model,
       temperature: dto.temperature,
       maxTokens: dto.maxTokens,
+      existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
     return {
@@ -373,21 +378,25 @@ export class CodegenConversationService {
 
   private async runGenerationPipeline(args: {
     sessionId: string
+    userId: string
     checklist: ChecklistPayload
     message: string
     providerCode: string
     model?: string
     temperature?: number
     maxTokens?: number
+    existingStrategyInstanceId?: string | null
   }): Promise<void> {
     const {
       sessionId,
+      userId,
       checklist,
       message,
       providerCode,
       model,
       temperature,
       maxTokens,
+      existingStrategyInstanceId,
     } = args
     try {
       let lastScriptCode = ''
@@ -489,11 +498,44 @@ export class CodegenConversationService {
         specDesc,
       })
 
+      let strategyInstanceId = existingStrategyInstanceId
+        ?? await this.sessionsRepo.findSessionStrategyInstanceId(sessionId)
+      if (!strategyInstanceId) {
+        try {
+          const publishInput = this.buildPublishedStrategyInput({
+            sessionId,
+            userId,
+            checklist,
+            message,
+            model,
+            scriptCode: finalScriptCode,
+            specDesc,
+          })
+          const created = await this.sessionsRepo.createDraftStrategyInstanceFromPublishedSession(publishInput)
+          strategyInstanceId = created.strategyInstanceId
+          const bound = await this.sessionsRepo.bindStrategyInstanceIfEmpty(sessionId, strategyInstanceId)
+          if (!bound) {
+            strategyInstanceId = await this.sessionsRepo.findSessionStrategyInstanceId(sessionId) ?? strategyInstanceId
+          }
+        } catch (publishError) {
+          const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
+          await this.sessionsRepo.updateSession(sessionId, {
+            status: 'PUBLISHED',
+            latestSpecDesc: specDesc as Prisma.InputJsonValue,
+            latestDraftCode: finalScriptCode,
+            rejectReason: publishReason,
+            strategyInstanceId: null,
+          })
+          return
+        }
+      }
+
       await this.sessionsRepo.updateSession(sessionId, {
         status: 'PUBLISHED',
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
         latestDraftCode: finalScriptCode,
         rejectReason: null,
+        strategyInstanceId: strategyInstanceId ?? null,
       })
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -518,6 +560,7 @@ export class CodegenConversationService {
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
     rejectReason: string | null
+    strategyInstanceId?: string | null
   }): CodegenSessionResponseDto {
     return {
       id: session.id,
@@ -527,7 +570,50 @@ export class CodegenConversationService {
       specDesc: session.latestSpecDesc && typeof session.latestSpecDesc === 'object' && !Array.isArray(session.latestSpecDesc)
         ? (session.latestSpecDesc as Record<string, unknown>)
         : null,
+      strategyInstanceId: session.strategyInstanceId ?? null,
       rejectReason: session.rejectReason,
+    }
+  }
+
+  private buildPublishedStrategyInput(args: {
+    sessionId: string
+    userId: string
+    checklist: ChecklistPayload
+    message: string
+    model?: string
+    scriptCode: string
+    specDesc: Record<string, unknown>
+  }): {
+    userId: string
+    sessionId: string
+    name: string
+    description: string
+    llmModel: string
+    scriptCode: string
+    specDesc: Record<string, unknown>
+    params: Record<string, unknown>
+    metadata: Record<string, unknown>
+  } {
+    const symbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    const timeframe = args.checklist.timeframes?.[0] ?? '5m'
+    const name = `${symbol} ${timeframe} AI策略`
+    return {
+      userId: args.userId,
+      sessionId: args.sessionId,
+      name,
+      description: 'LLM 对话发布策略',
+      llmModel: args.model ?? DEFAULT_MODEL,
+      scriptCode: args.scriptCode,
+      specDesc: args.specDesc,
+      params: {
+        symbol,
+        timeframe,
+        marketType: 'spot',
+      },
+      metadata: {
+        source: 'llm-codegen-session',
+        confirmMessage: args.message,
+      },
     }
   }
 

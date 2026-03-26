@@ -18,6 +18,14 @@ export class CodegenSessionsRepository {
     return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.findUnique({ where: { id } }))
   }
 
+  async findSessionStrategyInstanceId(id: string): Promise<string | null> {
+    const row = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.findUnique({
+      where: { id },
+      select: { strategyInstanceId: true },
+    }))
+    return row?.strategyInstanceId ?? null
+  }
+
   async updateSession(id: string, data: Prisma.LlmStrategyCodegenSessionUpdateInput): Promise<LlmStrategyCodegenSession> {
     return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.update({
       where: { id },
@@ -49,6 +57,17 @@ export class CodegenSessionsRepository {
         status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT'] },
       },
       data,
+    }))
+    return result.count === 1
+  }
+
+  async bindStrategyInstanceIfEmpty(sessionId: string, strategyInstanceId: string): Promise<boolean> {
+    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
+      where: {
+        id: sessionId,
+        strategyInstanceId: null,
+      },
+      data: { strategyInstanceId },
     }))
     return result.count === 1
   }
