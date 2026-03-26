@@ -511,12 +511,8 @@ export class CodegenConversationService {
             scriptCode: finalScriptCode,
             specDesc,
           })
-          const created = await this.sessionsRepo.createDraftStrategyInstanceFromPublishedSession(publishInput)
-          strategyInstanceId = created.strategyInstanceId
-          const bound = await this.sessionsRepo.bindStrategyInstanceIfEmpty(sessionId, strategyInstanceId)
-          if (!bound) {
-            strategyInstanceId = await this.sessionsRepo.findSessionStrategyInstanceId(sessionId) ?? strategyInstanceId
-          }
+          const bound = await this.sessionsRepo.ensureDraftStrategyInstanceBoundForPublishedSession(publishInput)
+          strategyInstanceId = bound.strategyInstanceId
         } catch (publishError) {
           const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
           await this.sessionsRepo.updateSession(sessionId, {
