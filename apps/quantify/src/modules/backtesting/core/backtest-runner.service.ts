@@ -1,6 +1,7 @@
+import type { MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import type { BacktestReport, BacktestRunInput, Bar, SignalIntent, StrategyContext } from '../types/backtesting.types'
+import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable } from '@nestjs/common'
-import { buildMultiLegStrategyContext, type MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'

@@ -1,3 +1,4 @@
+/* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'

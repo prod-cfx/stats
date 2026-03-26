@@ -16,10 +16,9 @@
 ## Interface Layer
 
 - Command:
-  - `pnpm -C apps/quantify run fixed-binance:testnet:signal -- --market spot --signal-type ENTRY --direction BUY --reason precheck-context`
-  - `pnpm -C apps/quantify run fixed-binance:testnet:signal -- --preset open-spot --position-size-quote 10 --execute`
+  - 历史验证曾使用单用户 bootstrap signal 脚本；该入口现已移除
 - Cases covered:
-  - fixed Binance testnet context resolve
+  - 历史单用户 Binance testnet context resolve
   - spot buy signal creation
   - real execution path (`executed=true`)
 - Failures:
@@ -43,7 +42,7 @@
   - `curl http://localhost:3010/api/v1/account/ai-quant/strategies?...`
 - Seed/Cleanup summary:
   - seed executed: `pnpm -C apps/quantify run prisma:db:seed`
-  - fixed binance seed ready for `binance-testnet-fixed@local.dev`
+  - 历史单用户 Binance seed 当时已准备好；当前仓库中该入口已移除
 - Failures:
   - blocked by quantify startup error in `indicator_config` initialization
 

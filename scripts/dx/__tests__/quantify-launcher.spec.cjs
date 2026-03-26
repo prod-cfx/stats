@@ -123,8 +123,8 @@ test('preserves extra QUANTIFY_* keys for quantify runtime flags', () => {
     QUANTIFY_REDIS_URL: 'redis://:redis@localhost:6379/1',
     QUANTIFY_APP_SECRET: 'app-secret',
     QUANTIFY_JWT_SECRET: 'jwt-secret',
-    QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED: 'true',
+    QUANTIFY_RUNTIME_PROFILE: 'paper-trading',
   })
 
-  assert.equal(env.QUANTIFY_FIXED_BINANCE_TESTNET_ENABLED, 'true')
+  assert.equal(env.QUANTIFY_RUNTIME_PROFILE, 'paper-trading')
 })

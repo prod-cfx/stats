@@ -3,7 +3,8 @@ import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.type
 import { Injectable } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
-import type { PrismaService } from '@/prisma/prisma.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PrismaService } from '@/prisma/prisma.service'
 
 type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
