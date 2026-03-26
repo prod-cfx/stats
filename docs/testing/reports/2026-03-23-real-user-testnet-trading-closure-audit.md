@@ -17,7 +17,7 @@
   - `apps/quantify/src/modules/llm-strategy-subscriptions/llm-strategy-subscriptions.service.ts`
   - `apps/quantify/src/modules/strategy-subscriptions/strategy-subscriptions.service.ts`
   - `apps/quantify/src/modules/account-strategy-view/**`
-  - `apps/quantify/src/modules/strategy-signals/services/fixed-*.service.ts`
+  - `apps/quantify/src/modules/strategy-signals/services/*legacy-single-user-bootstrap*.ts`（历史审计对象，现已移除）
 
 ## 当前正式链路
 
@@ -47,10 +47,10 @@ LLM 实例执行主链
   -> account center 聚合展示
 ```
 
-## 当前 fixed 链路
+## 当前遗留单用户链路（已移除）
 
 ```text
-fixed-binance-testnet / fixed-okx-simulated / fixed-hyperliquid-testnet service
+legacy single-user bootstrap signal service
   -> 按固定邮箱、固定策略名、固定实例名解析 seed 上下文
   -> 生成 signal
   -> signal-executor
@@ -58,15 +58,15 @@ fixed-binance-testnet / fixed-okx-simulated / fixed-hyperliquid-testnet service
 
 说明：
 
-- `signal-executor` 本身不是 fixed-only，已经支持按 LLM 订阅读取真实 `exchangeAccountId`
-- fixed 主要问题在于 signal 生成上下文仍依赖固定 seed 用户与固定实例命名
+- `signal-executor` 本身不是单用户专用，已经支持按 LLM 订阅读取真实 `exchangeAccountId`
+- 旧链路的主要问题在于 signal 生成上下文仍依赖固定 seed 用户与固定实例命名
 
 ## 模块状态表
 
 | 模块 | 当前状态 | 是否依赖 fixed | 断点/风险 |
 | --- | --- | --- | --- |
 | `trading` | 已实现真实用户账户解析 | 否 | 逻辑是 `exchangeAccountId` 优先、`userId + exchangeId` 回退，未发现 fixed fallback |
-| `signal-executor` | 已实现订阅到账户执行 | 部分 | 能读取 `userLlmStrategySubscription.exchangeAccountId`，但 fixed signal service 仍可向它喂固定上下文 signal |
+| `signal-executor` | 已实现订阅到账户执行 | 部分 | 能读取 `userLlmStrategySubscription.exchangeAccountId`，但旧单用户 bootstrap signal service 曾可向它喂固定上下文 signal |
 | `llm-strategy-subscriptions` | 已实现且约束较完整 | 否 | active 订阅已强制合法 `exchangeAccountId`，这是正式主链中最成熟的一段 |
 | `strategy-subscriptions` | 已实现，但较宽松 | 否 | 支持 `exchangeAccountId` 归属校验，但是否为正式主入口需进一步确认 |
 | `account-strategy-view` | 已实现展示与一键部署 | 部分 | `deployStrategyForUser` 在缺少账户时会创建 `encryptedConfig: '{}'` 的伪 testnet 账户，污染正式链 |
@@ -109,42 +109,31 @@ fixed-binance-testnet / fixed-okx-simulated / fixed-hyperliquid-testnet service
 
 - “AI 生成策略 -> LLM 实例 -> 订阅 -> 用户账户执行”是当前最成熟的正式主链基础
 
-## fixed 依赖清单
+## 历史单用户依赖清单
 
 ### 1. 固定邮箱
 
-- `apps/quantify/src/modules/strategy-signals/services/fixed-binance-testnet-signal.service.ts`
-  - `DEFAULT_FIXED_USER_EMAIL = 'binance-testnet-fixed@local.dev'`
-- `apps/quantify/src/modules/strategy-signals/services/fixed-okx-simulated-signal.service.ts`
-  - `DEFAULT_FIXED_USER_EMAIL = 'okx-sim-fixed@local.dev'`
-- `apps/quantify/src/modules/strategy-signals/services/fixed-hyperliquid-testnet-signal.service.ts`
-  - `DEFAULT_FIXED_USER_EMAIL = 'hyperliquid-testnet-fixed@local.dev'`
+- 历史单用户 bootstrap signal service
+  - 通过默认邮箱定位预置用户上下文
 
 ### 2. 固定策略名
 
-- `FIXED-BINANCE-TESTNET-${spotSymbolCode}`
-- `FIXED-OKX-SIMULATED-${spotSymbolCode}`
-- `FIXED-HYPERLIQUID-TESTNET-${spotSymbolCode}`
+- 旧策略名采用预置单用户命名模式
 
 ### 3. 固定实例名
 
-- `fixed-binance-${spotStrategySlug}-spot`
-- `fixed-binance-${perpStrategySlug}-perp`
-- `fixed-okx-${spotStrategySlug}-spot`
-- `fixed-okx-${perpStrategySlug}-perp`
-- `fixed-hyperliquid-${spotStrategySlug}-spot`
-- `fixed-hyperliquid-${perpStrategySlug}-perp`
+- 旧实例名采用预置 spot/perp 命名模式
 
 ### 4. 固定用户上下文
 
-- 三个 fixed service 都通过固定邮箱查 `user`
+- 三个历史单用户 service 都通过固定邮箱查 `user`
 - 然后继续查固定 `strategyAccount`、`spotInstance`、`perpInstance`
 - 成功后创建 signal 并送入同一个 `signal-executor`
 
-### 5. fixed service 直接入口
+### 5. 旧单用户 service 直接入口
 
 - `apps/quantify/src/modules/strategy-signals/strategy-signals-execution.module.ts`
-  - fixed service 仍直接注册为 provider/export
+  - 旧单用户 service 曾直接注册为 provider/export，现已移除
 
 ## 前端审计结论
 
@@ -278,11 +267,11 @@ exchangeAccount.create({
 - 必须明确正式主入口是 LLM subscription 主链还是 account deploy 主链，并统一模式与账户约束
 - fixed signal service 必须从正式主链断开
 
-### 3. 可降级为 internal/dev only 的 fixed 逻辑
+### 3. 可降级为 internal/dev only 的历史单用户逻辑
 
-- `FixedBinanceTestnetSignalService`
-- `FixedOkxSimulatedSignalService`
-- `FixedHyperliquidTestnetSignalService`
+- 历史单用户 Binance signal service
+- 历史单用户 OKX signal service
+- 历史单用户 Hyperliquid signal service
 - 任何依赖固定邮箱、固定策略名、固定实例名的 seed signal 生成逻辑
 
 ## 下一步建议

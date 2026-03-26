@@ -6,9 +6,6 @@ import { Pool } from 'pg'
 import { PrismaClient } from '../generated/prisma'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
-import { seedFixedBinanceTestnet } from './seed/fixed-binance-testnet'
-import { seedFixedHyperliquidTestnet } from './seed/fixed-hyperliquid-testnet'
-import { seedFixedOkxSimulated } from './seed/fixed-okx-simulated'
 
 // Load environment variables using the shared loader.
 const rootDir = path.resolve(__dirname, '../../..')
@@ -92,9 +89,6 @@ async function main() {
   console.log('Starting quantify seed...')
 
   await seedAiProviderKeys()
-  await seedFixedBinanceTestnet(prisma)
-  await seedFixedHyperliquidTestnet(prisma)
-  await seedFixedOkxSimulated(prisma)
 
   console.log('Quantify seed finished')
 }
