@@ -25,7 +25,7 @@ on:
 
 env:
   NODE_VERSION: '22.14.0'
-  DX_VERSION: '0.1.9'
+  DX_VERSION: '0.1.90'
   VERCEL_VERSION: '50.4.5'
   DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}
 
@@ -271,7 +271,7 @@ jobs:
             host: process.env.AWS_SSH_HOST,
             port: Number(process.env.AWS_SSH_PORT || 22),
             user: process.env.AWS_SSH_USER,
-            baseDir: '/opt/stats',
+            baseDir: '/opt/work/backend',
           }
 
           fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
@@ -413,7 +413,7 @@ jobs:
             host: process.env.AWS_SSH_HOST,
             port: Number(process.env.AWS_SSH_PORT || 22),
             user: process.env.AWS_SSH_USER,
-            baseDir: '/opt/stats',
+            baseDir: '/opt/work/quantify',
           }
 
           fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
