@@ -1,5 +1,6 @@
 import path from 'node:path'
-import { loadEnvironment } from '@net/config'
+// 部署环境无 workspace 别名，使用相对路径确保可解析
+import { loadEnvironment } from '../../packages/config/src'
 import { defineConfig } from 'prisma/config'
 import { applyQuantifyEnvOverrides } from './src/config/quantify-env'
 

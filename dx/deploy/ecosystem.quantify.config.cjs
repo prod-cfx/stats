@@ -4,7 +4,7 @@ module.exports = {
       name: 'quantify',
       cwd: '.',
       script: 'node',
-      args: 'apps/quantify/dist/apps/quantify/src/main.js',
+      args: 'apps/quantify/src/main.js',
       instances: 1,
       exec_mode: 'fork',
       watch: false,

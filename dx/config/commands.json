@@ -480,7 +480,7 @@
       "backendDeploy": {
         "build": {
           "app": "backend",
-          "distDir": "dist/backend",
+          "distDir": "apps/backend/dist",
           "versionFile": "apps/backend/package.json",
           "commands": {
             "development": "npx nx build backend --configuration=development",
@@ -489,7 +489,7 @@
           }
         },
         "runtime": {
-          "appPackage": "dist/backend/package.json",
+          "appPackage": "apps/backend/dist/package.json",
           "rootPackage": "package.json",
           "lockfile": "pnpm-lock.yaml",
           "prismaSchemaDir": "apps/backend/prisma/schema",
@@ -501,10 +501,10 @@
           "bundleName": "backend-bundle"
         },
         "remote": {
-          "host": "stats-server",
+          "host": "states-root-staging",
           "port": 22,
-          "user": "__SSH_CONFIG__",
-          "baseDir": "/opt/stats"
+          "user": "root",
+          "baseDir": "/opt/work/backend"
         },
         "startup": {
           "mode": "pm2",
@@ -515,7 +515,7 @@
           "installCommand": "CI=true pnpm install --prod --no-frozen-lockfile --ignore-workspace",
           "prismaGenerate": true,
           "prismaMigrateDeploy": true,
-          "prismaSeed": true
+          "prismaSeed": false
         }
       }
     },
@@ -525,7 +525,7 @@
       "backendDeploy": {
         "build": {
           "app": "quantify",
-          "distDir": "dist/quantify",
+          "distDir": "apps/quantify/dist",
           "versionFile": "apps/quantify/package.json",
           "commands": {
             "development": "npx nx build quantify --configuration=development",
@@ -534,7 +534,7 @@
           }
         },
         "runtime": {
-          "appPackage": "dist/quantify/package.json",
+          "appPackage": "apps/quantify/dist/package.json",
           "rootPackage": "package.json",
           "lockfile": "pnpm-lock.yaml",
           "prismaSchemaDir": "apps/quantify/prisma/schema",
@@ -546,10 +546,10 @@
           "bundleName": "quantify-bundle"
         },
         "remote": {
-          "host": "stats-server",
+          "host": "states-root-staging",
           "port": 22,
-          "user": "__SSH_CONFIG__",
-          "baseDir": "/opt/stats"
+          "user": "root",
+          "baseDir": "/opt/work/quantify"
         },
         "startup": {
           "mode": "pm2",

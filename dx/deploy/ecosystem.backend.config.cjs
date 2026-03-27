@@ -4,7 +4,7 @@ module.exports = {
       name: 'backend',
       cwd: '.',
       script: 'node',
-      args: 'apps/backend/dist/apps/backend/src/main.js',
+      args: 'apps/backend/src/main.js',
       instances: 1,
       exec_mode: 'fork',
       watch: false,
