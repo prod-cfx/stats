@@ -3,7 +3,7 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && npx dx build front --${APP_ENV}",
-  "outputDirectory": "../../dist/front/.next",
+  "outputDirectory": ".next",
   "redirects": [
     {
       "source": "/:path*/index.txt",

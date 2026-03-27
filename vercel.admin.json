@@ -1,9 +1,9 @@
 {
   "$schema": "https://vercel.json.schema.vercel.sh",
   "framework": "nextjs",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm exec dx build shared && pnpm exec dx build contracts --prod && pnpm exec dx build admin --${APP_ENV}",
-  "outputDirectory": "apps/admin-front/.next",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm exec dx build shared && pnpm exec dx build admin --${APP_ENV}",
+  "outputDirectory": "../../dist/admin-front",
   "rewrites": [
     {
       "source": "/(.*)",
