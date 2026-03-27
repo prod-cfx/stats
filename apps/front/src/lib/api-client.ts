@@ -5,11 +5,20 @@
 
 import { createApiClient as createZodiosClient } from '@ai/api-contracts'
 
+function normalizePublicUrlEnv(value?: string): string | undefined {
+  const normalized = value?.trim()
+  if (!normalized || normalized === '__SET_IN_env.local__') {
+    return undefined
+  }
+
+  return normalized.replace(/\/$/, '')
+}
+
 // 优先使用显式配置的基础地址（包含 /api/v1 前缀），与 admin-front 保持一致
 // 若未配置 NEXT_PUBLIC_API_BASE_URL，则回退到旧逻辑：由 NEXT_PUBLIC_API_SERVER_URL 拼接 /api/v1
-const EXPLICIT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '')
+const EXPLICIT_API_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
 const SERVER_BASE_URL =
-  process.env.NEXT_PUBLIC_API_SERVER_URL?.replace(/\/$/, '') ?? 'http://localhost:3000'
+  normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL) ?? 'http://localhost:3000'
 
 export const API_BASE_URL = EXPLICIT_API_BASE_URL ?? `${SERVER_BASE_URL}/api/v1`
 
