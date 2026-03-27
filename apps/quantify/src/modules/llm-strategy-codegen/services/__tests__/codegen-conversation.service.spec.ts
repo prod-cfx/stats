@@ -17,6 +17,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     createSession: jest.fn(),
     findById: jest.fn(),
     updateSession: jest.fn(),
+    tryMarkGenerating: jest.fn(),
+    tryRequeueFromProcessing: jest.fn(),
+    findSessionStrategyInstanceId: jest.fn(),
+    bindStrategyInstanceIfEmpty: jest.fn(),
     createVersion: jest.fn(),
     createDraftStrategyInstanceFromPublishedSession: jest.fn().mockResolvedValue({
       strategyTemplateId: 'template-1',
@@ -38,9 +42,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new SpecDescBuilderService(),
     mockRecommendation as unknown as RecommendationIndexService,
   )
+  const flushAsync = async (): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 0))
+  }
 
   beforeEach(() => {
     jest.resetAllMocks()
+    mockRepo.tryMarkGenerating.mockResolvedValue(true)
+    mockRepo.tryRequeueFromProcessing.mockResolvedValue(false)
+    mockRepo.findSessionStrategyInstanceId.mockResolvedValue(null)
+    mockRepo.bindStrategyInstanceIfEmpty.mockResolvedValue(true)
     mockRepo.createDraftStrategyInstanceFromPublishedSession.mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
@@ -181,6 +192,25 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const payload = mockRepo.createSession.mock.calls[0]?.[0] as { checklist?: { entryRules?: string[]; exitRules?: string[] } }
     expect(payload.checklist?.entryRules?.join(' ')).not.toContain('均线')
     expect(payload.checklist?.exitRules?.join(' ')).not.toContain('均线')
+  })
+
+  it('returns strategyInstanceId in session snapshot response', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-snapshot',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      constraintPack: {},
+      latestDraftCode: 'return null',
+      latestSpecDesc: {},
+      strategyInstanceId: 'instance-snapshot-1',
+      rejectReason: null,
+    })
+
+    const result = await service.getSession('s-snapshot', 'u1')
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.strategyInstanceId).toBe('instance-snapshot-1')
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
@@ -796,5 +826,138 @@ const strategy: StrategyAdapterV1 = {
 
     const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
     expect(secondCodegenCall.responseFormat).toBeUndefined()
+  })
+
+  it('creates strategy instance on publish and returns it in published snapshot', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-new-instance',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['5m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-1' })
+    mockRepo.updateSession.mockResolvedValue({ id: 's-new-instance' })
+
+    const result = await service.continueSession('s-new-instance', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.createDraftStrategyInstanceFromPublishedSession).toHaveBeenCalledTimes(1)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-new-instance', expect.objectContaining({
+      status: 'PUBLISHED',
+      strategyInstanceId: 'instance-1',
+    }))
+  })
+
+  it('does not recreate strategy instance when session already bound', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-existing-instance',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: 'instance-existing',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-2' })
+    mockRepo.updateSession.mockResolvedValue({ id: 's-existing-instance' })
+
+    const result = await service.continueSession('s-existing-instance', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.createDraftStrategyInstanceFromPublishedSession).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-existing-instance', expect.objectContaining({
+      status: 'PUBLISHED',
+      strategyInstanceId: 'instance-existing',
+    }))
+  })
+
+  it('keeps published with null strategyInstanceId and rejectReason when instance creation fails', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-instance-failed',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['5m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-3' })
+    mockRepo.createDraftStrategyInstanceFromPublishedSession.mockRejectedValueOnce(new Error('create instance failed'))
+    mockRepo.updateSession.mockResolvedValue({ id: 's-instance-failed' })
+
+    const result = await service.continueSession('s-instance-failed', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-instance-failed', expect.objectContaining({
+      status: 'PUBLISHED',
+      strategyInstanceId: null,
+      rejectReason: 'create instance failed',
+    }))
   })
 })
