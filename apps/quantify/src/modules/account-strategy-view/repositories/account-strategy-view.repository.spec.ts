@@ -8,7 +8,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -43,7 +43,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
 
     const repo = new AccountStrategyViewRepository(prisma as any)
 
-    const id = await repo.deployStrategyForUser({
+    const result = await repo.deployStrategyForUser({
       userId: 'user-1',
       name: 'OKX SOLUSDT 5m AI策略',
       exchange: 'okx',
@@ -54,7 +54,8 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       strategyInstanceId: 'strategy-instance-1',
     })
 
-    expect(id).toBe('strategy-instance-1')
+    expect(result.strategyInstanceId).toBe('strategy-instance-1')
+    expect(result.mode).toBe('TESTNET')
     expect(tx.strategyInstance.create).not.toHaveBeenCalled()
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
     expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -80,7 +81,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),

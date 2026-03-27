@@ -1,6 +1,7 @@
 export { Prisma, PrismaClient } from '../../generated/prisma'
 export type {
   AiProviderKey,
+  DeployRequest,
   ExchangeAccount,
   IndicatorConfig,
   IndicatorValue,
@@ -16,6 +17,8 @@ export type {
   Position,
   PositionSyncLog,
   StrategyInstance,
+  StrategyInstanceRiskProfile,
+  StrategyInstanceSafetyState,
   StrategyPnlDaily,
   StrategySignalState,
   StrategyTemplate,

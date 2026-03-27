@@ -8,6 +8,7 @@ import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { Prisma } from '@/prisma/prisma.types'
+import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
 
 interface ListStrategiesQuery {
   userId: string
@@ -23,6 +24,7 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  mode?: 'TESTNET' | 'LIVE'
   strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
@@ -32,7 +34,7 @@ interface DeployStrategyInput {
 export class AccountStrategyViewRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
-  async deployStrategyForUser(input: DeployStrategyInput): Promise<string> {
+  async deployStrategyForUser(input: DeployStrategyInput): Promise<{ strategyInstanceId: string; mode: 'TESTNET' | 'LIVE' }> {
     const normalizedName = this.normalizeStrategyName(input.name)
     const strategyInstanceId = await this.txHost.withTransaction(async () => {
       const tx = this.txHost.tx
@@ -53,18 +55,20 @@ export class AccountStrategyViewRepository {
       }
 
       let resolvedExchangeAccountId: string | undefined
+      let resolvedAccountIsTestnet: boolean | null = null
       if (input.exchangeAccountId) {
         const matchedAccount = await tx.exchangeAccount.findFirst({
           where: {
             id: input.exchangeAccountId,
             userId: input.userId,
           },
-          select: { id: true },
+          select: { id: true, isTestnet: true },
         })
         if (!matchedAccount) {
           throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
         }
         resolvedExchangeAccountId = matchedAccount.id
+        resolvedAccountIsTestnet = matchedAccount.isTestnet
       }
 
       if (!resolvedExchangeAccountId) {
@@ -74,7 +78,7 @@ export class AccountStrategyViewRepository {
             exchangeId: input.exchange,
           },
           orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-          select: { id: true },
+          select: { id: true, isTestnet: true },
         })
         if (!existingAccount) {
           throw new ExchangeAccountNotFoundException({
@@ -82,6 +86,16 @@ export class AccountStrategyViewRepository {
           })
         }
         resolvedExchangeAccountId = existingAccount.id
+        resolvedAccountIsTestnet = existingAccount.isTestnet
+      }
+
+      const resolvedMode: 'TESTNET' | 'LIVE' = resolvedAccountIsTestnet ? 'TESTNET' : 'LIVE'
+      if (input.mode && input.mode !== resolvedMode) {
+        throw new DeployModeAccountMismatchException({
+          expectedMode: resolvedMode,
+          accountIsTestnet: resolvedAccountIsTestnet ?? undefined,
+          exchangeAccountId: resolvedExchangeAccountId,
+        })
       }
 
       if (input.strategyInstanceId) {
@@ -98,7 +112,7 @@ export class AccountStrategyViewRepository {
         })
 
         if (!existingInstance) {
-          throw new Error('Strategy instance not found')
+          throw new DeployStrategyInstanceNotFoundException({ strategyInstanceId: input.strategyInstanceId })
         }
 
         const mergedParams = {
@@ -116,7 +130,7 @@ export class AccountStrategyViewRepository {
             description: `AI 策略部署 - ${input.symbol}`,
             params: mergedParams,
             status: 'running',
-            mode: 'TESTNET',
+            mode: resolvedMode,
             startedAt: new Date(),
             updatedBy: input.userId,
             metadata: {
@@ -181,7 +195,10 @@ export class AccountStrategyViewRepository {
           })
         }
 
-        return existingInstance.id
+        return {
+          strategyInstanceId: existingInstance.id,
+          mode: resolvedMode,
+        }
       }
 
       const templateName = `AI量化快捷模板-${input.userId}`
@@ -228,7 +245,7 @@ export class AccountStrategyViewRepository {
           llmModel: 'gpt-4',
           params,
           status: 'running',
-          mode: 'TESTNET',
+          mode: resolvedMode,
           startedAt: new Date(),
           createdBy: input.userId,
           updatedBy: input.userId,
@@ -247,7 +264,10 @@ export class AccountStrategyViewRepository {
         },
       })
 
-      return strategyInstance.id
+      return {
+        strategyInstanceId: strategyInstance.id,
+        mode: resolvedMode,
+      }
     })
 
     return strategyInstanceId
@@ -313,6 +333,75 @@ export class AccountStrategyViewRepository {
         subscribed: isSubscribed,
       }
     }))
+  }
+
+  async findDeployRequestByUserAndRequestId(userId: string, deployRequestId: string) {
+    return this.txHost.tx.deployRequest.findUnique({
+      where: {
+        userId_deployRequestId: {
+          userId,
+          deployRequestId,
+        },
+      },
+    })
+  }
+
+  async createDeployRequestProcessing(userId: string, deployRequestId: string, payloadHash: string) {
+    return this.txHost.tx.deployRequest.create({
+      data: {
+        userId,
+        deployRequestId,
+        payloadHash,
+        status: 'PROCESSING',
+      },
+    })
+  }
+
+  async markDeployRequestSucceeded(id: string, strategyInstanceId: string) {
+    return this.txHost.tx.deployRequest.update({
+      where: { id },
+      data: {
+        status: 'SUCCEEDED',
+        strategyInstanceId,
+        errorCode: null,
+        errorMessage: null,
+      },
+    })
+  }
+
+  async markDeployRequestFailed(id: string, errorCode: string, errorMessage: string) {
+    return this.txHost.tx.deployRequest.update({
+      where: { id },
+      data: {
+        status: 'FAILED',
+        errorCode,
+        errorMessage,
+      },
+    })
+  }
+
+  async upsertRiskProfile(params: {
+    strategyInstanceId: string
+    adminPerOrderMaxQuote: Prisma.Decimal
+    adminDailyMaxQuote: Prisma.Decimal
+    adminMaxRiskFractionCap: Prisma.Decimal
+    userPerOrderMaxQuote: Prisma.Decimal
+    userDailyMaxQuote: Prisma.Decimal
+    userMaxRiskFraction: Prisma.Decimal
+    effectivePerOrderMaxQuote: Prisma.Decimal
+    effectiveDailyMaxQuote: Prisma.Decimal
+    effectiveMaxRiskFraction: Prisma.Decimal
+  }) {
+    return this.txHost.tx.strategyInstanceRiskProfile.upsert({
+      where: { strategyInstanceId: params.strategyInstanceId },
+      create: {
+        ...params,
+      },
+      update: {
+        ...params,
+        version: { increment: 1 },
+      },
+    })
   }
 
   private normalizePage(value: number): number {

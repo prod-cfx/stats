@@ -35,12 +35,23 @@ export interface CreateTestingAppOptions {
    * 允许调用方注入额外的 app 设置逻辑
    */
   onAppInit?: (app: INestApplication) => Promise<void> | void
+  /**
+   * 测试中按需覆盖 provider
+   */
+  providerOverrides?: Array<{
+    provide: any
+    useValue: any
+  }>
 }
 
 interface NormalizedCreateTestingAppOptions {
   imports: any[]
   globalPrefix: string
   onAppInit?: (app: INestApplication) => Promise<void> | void
+  providerOverrides?: Array<{
+    provide: any
+    useValue: any
+  }>
 }
 
 export interface TestingAppContext {
@@ -71,6 +82,7 @@ async function resolveCreateTestingAppOptions(
     imports: options.imports ?? await resolveDefaultImports(),
     globalPrefix: options.globalPrefix ?? API_PREFIX,
     onAppInit: options.onAppInit,
+    providerOverrides: options.providerOverrides ?? [],
   }
 }
 
@@ -165,12 +177,19 @@ export async function createTestingApp(
   }
 
   const normalizedOptions = await resolveCreateTestingAppOptions(options)
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+  let moduleBuilder = Test.createTestingModule({
     imports: normalizedOptions.imports,
   })
     .overrideProvider(MarketDataIngestionService)
     .useValue({ onModuleInit: () => {}, onModuleDestroy: () => {}, handleGapFill: () => {}, handleDynamicSymbolRefresh: () => {} })
-    .compile()
+
+  for (const override of normalizedOptions.providerOverrides ?? []) {
+    moduleBuilder = moduleBuilder
+      .overrideProvider(override.provide)
+      .useValue(override.useValue)
+  }
+
+  const moduleFixture: TestingModule = await moduleBuilder.compile()
 
   const app = moduleFixture.createNestApplication()
 

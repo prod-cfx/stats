@@ -5,7 +5,12 @@ import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
-import type { Symbol as PrismaSymbol, UserStrategyAccount, PrismaClient } from '@/prisma/prisma.types'
+import type {
+  Symbol as PrismaSymbol,
+  UserStrategyAccount,
+  StrategyInstanceRiskProfile,
+  PrismaClient,
+} from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { LedgerEntryType } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -18,6 +23,8 @@ import { OnEvent } from '@nestjs/event-emitter'
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from '@/modules/positions/positions.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { EXECUTION_STAGES } from '@/modules/trading/core/execution-stage'
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -65,6 +72,7 @@ export class SignalExecutorService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly tradingService: TradingService,
     private readonly accountsService: AccountsService,
+    private readonly strategyInstancesService: StrategyInstancesService,
     private readonly positionsService: PositionsService,
     private readonly tradingSignalRepository: TradingSignalRepository,
     private readonly executionRepository: SignalExecutionRepository,
@@ -213,6 +221,34 @@ export class SignalExecutorService implements OnModuleInit {
     await this.tradingSignalRepository.updateStatus(signal.id, status, {
       executions: { total, executed, failed, skipped },
     })
+
+    if (signal.strategyInstanceId) {
+      if (status === 'FAILED') {
+        const safety = await this.executorRepository.incrementStrategyExecutionFailure(signal.strategyInstanceId)
+        if (safety.consecutiveExecutionFailures >= 3) {
+          await this.strategyInstancesService.updateInstance(
+            signal.strategyInstanceId,
+            {
+              status: 'stopped',
+              metadata: {
+                autoStopped: true,
+                reason: 'CONSECUTIVE_EXECUTION_FAILURES',
+                threshold: 3,
+              },
+            } as any,
+            'system:auto-stop',
+          )
+          await this.executorRepository.markStrategyAutoStopped(
+            signal.strategyInstanceId,
+            'CONSECUTIVE_EXECUTION_FAILURES',
+          )
+          this.logger.warn(`Strategy instance ${signal.strategyInstanceId} auto-stopped after 3 execution failures`)
+        }
+      } else if (status === 'EXECUTED' || status === 'PARTIAL') {
+        await this.executorRepository.resetStrategyExecutionFailure(signal.strategyInstanceId)
+      }
+    }
+
     this.telemetry.recordExecutionSummary({ signalId: signal.id, executed, failed, skipped })
   }
 
@@ -224,6 +260,21 @@ export class SignalExecutorService implements OnModuleInit {
     try {
       if (!signal?.symbol) return 'skipped'
       const resolvedSignal = signal as NonNullable<typeof signal>
+
+      if (resolvedSignal.strategyInstanceId) {
+        const [instanceModeRow, subscriptionNetwork] = await Promise.all([
+          this.executorRepository.findStrategyInstanceMode(resolvedSignal.strategyInstanceId),
+          this.executorRepository.findActiveSubscriptionNetwork(account.userId, resolvedSignal.strategyInstanceId),
+        ])
+        const expectedIsTestnet = instanceModeRow?.mode === 'TESTNET'
+        const actualIsTestnet = subscriptionNetwork?.exchangeAccount?.isTestnet
+        if (typeof actualIsTestnet === 'boolean' && expectedIsTestnet !== actualIsTestnet) {
+          this.logger.error(
+            `Mode/account network mismatch for strategyInstance=${resolvedSignal.strategyInstanceId}, user=${account.userId}: mode=${instanceModeRow?.mode}, account.isTestnet=${actualIsTestnet}`,
+          )
+          return 'failed'
+        }
+      }
 
       const direction = resolvedSignal.direction
       const tradeSide = this.mapTradeSide(direction)
@@ -622,7 +673,17 @@ export class SignalExecutorService implements OnModuleInit {
         closePositionQuantity = new Decimal(openPosition.quantity).abs()
       }
 
-      const orderParamsResult = this.buildOrderParamsWithLockedAccount(signal, lockedAccount, config, closePositionQuantity)
+      const riskProfile = signal.strategyInstanceId
+        ? await this.executorRepository.findRiskProfileByStrategyInstanceId(signal.strategyInstanceId)
+        : null
+
+      const orderParamsResult = this.buildOrderParamsWithLockedAccount(
+        signal,
+        lockedAccount,
+        config,
+        closePositionQuantity,
+        riskProfile,
+      )
       if (!orderParamsResult.ok) {
         const reason = (orderParamsResult as { ok: false; reason: string }).reason
         const execution = await prisma.userSignalExecution.create({
@@ -715,6 +776,7 @@ export class SignalExecutorService implements OnModuleInit {
     account: Pick<UserStrategyAccount, 'id' | 'userId' | 'baseCurrency' | 'balance'>,
     config: StrategySignalsRuntimeConfig,
     closePositionQuantity?: Decimal,
+    riskProfile?: StrategyInstanceRiskProfile | null,
   ): { ok: true; params: OrderParams; quoteBudget: Decimal } | { ok: false; reason: string } {
     const symbolMeta = signal?.symbol
     if (!symbolMeta) return { ok: false, reason: 'Signal missing symbol metadata' }
@@ -771,9 +833,16 @@ export class SignalExecutorService implements OnModuleInit {
       quoteBudget = new Decimal(0)
     }
     else {
+      const effectiveMaxRiskFraction = riskProfile
+        ? Number(riskProfile.effectiveMaxRiskFraction)
+        : config.execution.maxRiskFraction
+      const effectivePerOrderMaxQuote = riskProfile
+        ? new Decimal(riskProfile.effectivePerOrderMaxQuote)
+        : new Decimal(config.execution.defaultQuoteAmount)
+
       // 计算风险上限（基于账户余额和风险比例）
-      const maxRiskQuote = balance.mul(config.execution.maxRiskFraction)
-      const defaultQuote = new Decimal(config.execution.defaultQuoteAmount)
+      const maxRiskQuote = balance.mul(effectiveMaxRiskFraction)
+      const defaultQuote = effectivePerOrderMaxQuote
 
       // 优先使用策略指定的仓位大小，仅受 maxRiskFraction 约束
       // defaultQuoteAmount 仅在策略未指定仓位时作为 fallback
@@ -783,7 +852,7 @@ export class SignalExecutorService implements OnModuleInit {
         quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
         this.logger.debug(
           `Strategy-specified position size (quote): ${strategyQuote.toString()}, ` +
-          `max risk limit (${config.execution.maxRiskFraction}): ${maxRiskQuote.toString()}, ` +
+          `max risk limit (${effectiveMaxRiskFraction}): ${maxRiskQuote.toString()}, ` +
           `final budget: ${quoteBudget.toString()}`
         )
       }
@@ -794,7 +863,7 @@ export class SignalExecutorService implements OnModuleInit {
         quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
         this.logger.debug(
           `Strategy-specified position size (ratio): ${ratio.toString()} of balance ${balance.toString()} = ${strategyQuote.toString()}, ` +
-          `max risk limit (${config.execution.maxRiskFraction}): ${maxRiskQuote.toString()}, ` +
+          `max risk limit (${effectiveMaxRiskFraction}): ${maxRiskQuote.toString()}, ` +
           `final budget: ${quoteBudget.toString()}`
         )
       }

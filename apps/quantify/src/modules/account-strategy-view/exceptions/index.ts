@@ -1,3 +1,6 @@
+export { DeployIdempotencyConflictException } from './deploy-idempotency-conflict.exception'
+export { DeployModeAccountMismatchException } from './deploy-mode-account-mismatch.exception'
+export { DeployStrategyInstanceNotFoundException } from './deploy-strategy-instance-not-found.exception'
 export { InvalidStrategyActionException } from './invalid-strategy-action.exception'
 export { MissingUserIdentityException } from './missing-user-identity.exception'
 export { StrategyNotFoundException } from './strategy-not-found.exception'

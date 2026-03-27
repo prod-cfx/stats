@@ -3,8 +3,12 @@ import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dt
 import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
+import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Optional } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -13,8 +17,16 @@ import { MarketDataIngestionService } from '@/modules/market-data/services/marke
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
+import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import { Prisma } from '@/prisma/prisma.types'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
-import { InvalidStrategyActionException, MissingUserIdentityException, StrategyNotFoundException, StrategyOwnerOnlyException } from '../exceptions'
+import {
+  DeployIdempotencyConflictException,
+  InvalidStrategyActionException,
+  MissingUserIdentityException,
+  StrategyNotFoundException,
+  StrategyOwnerOnlyException,
+} from '../exceptions'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
 
@@ -25,6 +37,7 @@ export class AccountStrategyViewService {
     private readonly statsService: StrategyInstanceStatsService,
     private readonly strategyInstancesService: StrategyInstancesService,
     private readonly marketDataIngestionService: MarketDataIngestionService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   async listStrategies(
@@ -291,24 +304,84 @@ export class AccountStrategyViewService {
     if (!dto.userId) {
       throw new MissingUserIdentityException()
     }
+    if (!dto.deployRequestId) {
+      throw new DomainException('account_strategy.deploy_request_id_required', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const payloadHash = this.hashDeployPayload(dto)
+    const existingDeployRequest = await this.repo.findDeployRequestByUserAndRequestId(
+      dto.userId,
+      dto.deployRequestId,
+    )
+    if (existingDeployRequest) {
+      if (existingDeployRequest.payloadHash !== payloadHash) {
+        throw new DeployIdempotencyConflictException({
+          deployRequestId: dto.deployRequestId,
+          status: 'PAYLOAD_MISMATCH',
+        })
+      }
+      if (existingDeployRequest.status === 'SUCCEEDED' && existingDeployRequest.strategyInstanceId) {
+        return this.getStrategyDetail(dto.userId, existingDeployRequest.strategyInstanceId)
+      }
+      throw new DeployIdempotencyConflictException({
+        deployRequestId: dto.deployRequestId,
+        status: existingDeployRequest.status,
+      })
+    }
+
+    let deployRequest: { id: string }
+    try {
+      deployRequest = await this.repo.createDeployRequestProcessing(
+        dto.userId,
+        dto.deployRequestId,
+        payloadHash,
+      )
+    } catch {
+      const conflict = await this.repo.findDeployRequestByUserAndRequestId(dto.userId, dto.deployRequestId)
+      if (conflict?.status === 'SUCCEEDED' && conflict.strategyInstanceId) {
+        return this.getStrategyDetail(dto.userId, conflict.strategyInstanceId)
+      }
+      throw new DeployIdempotencyConflictException({
+        deployRequestId: dto.deployRequestId,
+        status: conflict?.status ?? 'PROCESSING',
+      })
+    }
 
     const resolvedDeploy = await this.resolveDeployPayload(dto)
 
-    await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
+    try {
+      await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
 
-    const strategyInstanceId = await this.repo.deployStrategyForUser({
-      userId: dto.userId,
-      name: dto.name,
-      exchange: resolvedDeploy.exchange,
-      symbol: resolvedDeploy.symbol,
-      timeframe: resolvedDeploy.timeframe,
-      positionPct: resolvedDeploy.positionPct,
-      strategyInstanceId: dto.strategyInstanceId,
-      exchangeAccountId: dto.exchangeAccountId,
-      exchangeAccountName: dto.exchangeAccountName,
-    })
+      const deployResult = await this.repo.deployStrategyForUser({
+        userId: dto.userId,
+        name: dto.name,
+        exchange: resolvedDeploy.exchange,
+        symbol: resolvedDeploy.symbol,
+        timeframe: resolvedDeploy.timeframe,
+        positionPct: resolvedDeploy.positionPct,
+        mode: dto.mode,
+        strategyInstanceId: dto.strategyInstanceId,
+        exchangeAccountId: dto.exchangeAccountId,
+        exchangeAccountName: dto.exchangeAccountName,
+      })
 
-    return this.getStrategyDetail(dto.userId, strategyInstanceId)
+      const riskProfile = this.buildRiskProfileSnapshot(dto)
+      await this.repo.upsertRiskProfile({
+        strategyInstanceId: deployResult.strategyInstanceId,
+        ...riskProfile,
+      })
+      await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
+
+      return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const code = error instanceof DomainException ? error.code : ErrorCode.BAD_REQUEST
+      await this.repo.markDeployRequestFailed(deployRequest.id, String(code), message)
+      throw error
+    }
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {
@@ -671,6 +744,61 @@ export class AccountStrategyViewService {
       .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
 
     return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
+  }
+
+  private hashDeployPayload(dto: AccountStrategyDeployDto): string {
+    return createHash('sha256')
+      .update(JSON.stringify({
+        name: dto.name,
+        exchange: dto.exchange ?? null,
+        symbol: dto.symbol ?? null,
+        timeframe: dto.timeframe ?? null,
+        positionPct: dto.positionPct ?? null,
+        exchangeAccountId: dto.exchangeAccountId ?? null,
+        strategyInstanceId: dto.strategyInstanceId ?? null,
+        mode: dto.mode ?? null,
+      }))
+      .digest('hex')
+  }
+
+  private buildRiskProfileSnapshot(dto: AccountStrategyDeployDto) {
+    const config = this.getSignalsConfig().execution
+    const adminPerOrderMaxQuote = new Prisma.Decimal(config.defaultQuoteAmount)
+    const adminDailyMaxQuote = adminPerOrderMaxQuote.mul(50)
+    const adminMaxRiskFractionCap = new Prisma.Decimal(config.maxRiskFraction)
+
+    const userPerOrderMaxQuote = new Prisma.Decimal(
+      typeof dto.userPerOrderMaxQuote === 'number' && dto.userPerOrderMaxQuote > 0
+        ? dto.userPerOrderMaxQuote
+        : adminPerOrderMaxQuote,
+    )
+    const userDailyMaxQuote = new Prisma.Decimal(
+      typeof dto.userDailyMaxQuote === 'number' && dto.userDailyMaxQuote > 0
+        ? dto.userDailyMaxQuote
+        : adminDailyMaxQuote,
+    )
+    const userMaxRiskFraction = new Prisma.Decimal(
+      typeof dto.userMaxRiskFraction === 'number' && dto.userMaxRiskFraction > 0
+        ? dto.userMaxRiskFraction
+        : adminMaxRiskFractionCap,
+    )
+
+    return {
+      adminPerOrderMaxQuote,
+      adminDailyMaxQuote,
+      adminMaxRiskFractionCap,
+      userPerOrderMaxQuote,
+      userDailyMaxQuote,
+      userMaxRiskFraction,
+      effectivePerOrderMaxQuote: Prisma.Decimal.min(adminPerOrderMaxQuote, userPerOrderMaxQuote),
+      effectiveDailyMaxQuote: Prisma.Decimal.min(adminDailyMaxQuote, userDailyMaxQuote),
+      effectiveMaxRiskFraction: Prisma.Decimal.min(adminMaxRiskFractionCap, userMaxRiskFraction),
+    }
+  }
+
+  private getSignalsConfig(): StrategySignalsRuntimeConfig {
+    return this.configService?.get<StrategySignalsRuntimeConfig>('strategySignals')
+      ?? DEFAULT_STRATEGY_SIGNALS_CONFIG
   }
 
   private async resolveDeployPayload(dto: AccountStrategyDeployDto): Promise<{
