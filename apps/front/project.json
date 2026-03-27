@@ -53,6 +53,7 @@
     "exportDist": {
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/front"],
+      "dependsOn": ["^build"],
       "options": {
         "command": "next build && node scripts/post-build.js",
         "cwd": "apps/front"
