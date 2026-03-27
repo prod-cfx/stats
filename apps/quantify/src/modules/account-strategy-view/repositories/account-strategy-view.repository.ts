@@ -634,6 +634,30 @@ export class AccountStrategyViewRepository {
     }
   }
 
+  async deleteStrategyForUser(userId: string, strategyInstanceId: string): Promise<void> {
+    await this.txHost.withTransaction(async () => {
+      const tx = this.txHost.tx
+      const strategy = await tx.strategyInstance.findFirst({
+        where: {
+          id: strategyInstanceId,
+          createdBy: userId,
+        },
+        select: {
+          id: true,
+        },
+      })
+      if (!strategy) {
+        return
+      }
+
+      await tx.strategyInstance.delete({
+        where: {
+          id: strategy.id,
+        },
+      })
+    })
+  }
+
   private buildStatusWhere(status?: 'running' | 'stopped' | 'draft'): Prisma.StrategyInstanceWhereInput {
     if (!status) return {}
     if (status === 'running') {

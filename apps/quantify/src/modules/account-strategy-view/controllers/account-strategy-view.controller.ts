@@ -2,7 +2,7 @@ import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-d
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { Transactional } from '@nestjs-cls/transactional'
-import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nestjs/common'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
@@ -71,5 +71,15 @@ export class AccountStrategyViewController {
       ...dto,
       userId,
     })
+  }
+
+  @Transactional()
+  @Delete(':id')
+  async remove(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ): Promise<void> {
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.service.deleteStrategy(userId, id)
   }
 }

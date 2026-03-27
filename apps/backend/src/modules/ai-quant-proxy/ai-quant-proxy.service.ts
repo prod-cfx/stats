@@ -60,6 +60,17 @@ export class AiQuantProxyService {
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async deleteAccountStrategy(
+    userId: string,
+    authorization: string | undefined,
+    strategyId: string,
+  ): Promise<void> {
+    return this.quantifyClient.delete(
+      this.buildPath(`/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`, { userId }),
+      { headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async startCodegen(authorization: string | undefined, body: Record<string, unknown>) {
     return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
       headers: this.authorizationHeaders(authorization),

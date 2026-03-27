@@ -384,6 +384,20 @@ export class AccountStrategyViewService {
     }
   }
 
+  async deleteStrategy(userId: string, strategyInstanceId: string): Promise<void> {
+    const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
+    if (!row) {
+      throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
+    const isOwner = row.createdBy === userId
+    if (!isOwner) {
+      throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
+    }
+
+    await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
+  }
+
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {
     if (status === 'running') return 'running'
     if (status === 'draft') return 'draft'

@@ -215,6 +215,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         </span>
       </div>
 
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+          {error}
+        </div>
+      )}
+
       <div className="space-y-3">
         {strategies.map(item => {
           const statusConfig = STATUS_CONFIG[item.status]
