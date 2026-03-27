@@ -447,13 +447,11 @@ describe('signalExecutorService', () => {
   })
 
   it('uses subscribed exchangeAccountId for llm subscription execution', async () => {
-    const prisma = {
-      userLlmStrategySubscription: {
-        findFirst: jest.fn().mockResolvedValue({
-          exchangeAccountId: 'exchange-account-1',
-          exchangeAccount: { exchangeId: 'binance' },
-        }),
-      },
+    const executorRepository = {
+      findActiveLlmSubscription: jest.fn().mockResolvedValue({
+        exchangeAccountId: 'exchange-account-1',
+        exchangeAccount: { exchangeId: 'binance' },
+      }),
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
@@ -469,7 +467,7 @@ describe('signalExecutorService', () => {
     const telemetry = { recordExecutionSummary: jest.fn() }
 
     const service = new SignalExecutorService(
-      prisma as any,
+      executorRepository as any,
       configService as any,
       tradingService as any,
       accountsService as any,
@@ -537,13 +535,7 @@ describe('signalExecutorService', () => {
     )
 
     expect(result).toBe('executed')
-    expect(prisma.userLlmStrategySubscription.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        userId: 'user-llm-1',
-        llmStrategyInstanceId: 'llm-instance-1',
-        status: 'active',
-      }),
-    }))
+    expect(executorRepository.findActiveLlmSubscription).toHaveBeenCalledWith('user-llm-1', 'llm-instance-1')
     expect(tradingService.placeOrder).toHaveBeenCalledWith(
       'user-llm-1',
       'binance',
@@ -555,5 +547,60 @@ describe('signalExecutorService', () => {
       }),
       'exchange-account-1',
     )
+  })
+
+  it('does not enforce live/testnet mismatch gate for PAPER mode strategy instances', async () => {
+    const executorRepository = {
+      findStrategyInstanceMode: jest.fn().mockResolvedValue({ mode: 'PAPER' }),
+      findActiveSubscriptionNetwork: jest.fn().mockResolvedValue({
+        exchangeAccount: { isTestnet: true },
+      }),
+    }
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const service = new SignalExecutorService(
+      executorRepository as any,
+      configService as any,
+      tradingService as any,
+      accountsService as any,
+      {} as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+      {} as any,
+    )
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'duplicate',
+    })
+    ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
+    ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-paper-1',
+        strategyInstanceId: 'inst-paper-1',
+        direction: 'BUY',
+        symbol: { quoteAsset: 'USDT' },
+      } as any,
+      { id: 'acct-paper-1', userId: 'user-paper-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('skipped')
+    expect(executorRepository.findStrategyInstanceMode).toHaveBeenCalledWith('inst-paper-1')
+    expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-paper-1', 'inst-paper-1')
   })
 })

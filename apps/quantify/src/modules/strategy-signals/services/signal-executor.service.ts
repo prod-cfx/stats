@@ -266,9 +266,11 @@ export class SignalExecutorService implements OnModuleInit {
           this.executorRepository.findStrategyInstanceMode(resolvedSignal.strategyInstanceId),
           this.executorRepository.findActiveSubscriptionNetwork(account.userId, resolvedSignal.strategyInstanceId),
         ])
-        const expectedIsTestnet = instanceModeRow?.mode === 'TESTNET'
+        const mode = instanceModeRow?.mode
+        const shouldEnforceNetworkMatch = mode === 'TESTNET' || mode === 'LIVE'
+        const expectedIsTestnet = mode === 'TESTNET'
         const actualIsTestnet = subscriptionNetwork?.exchangeAccount?.isTestnet
-        if (typeof actualIsTestnet === 'boolean' && expectedIsTestnet !== actualIsTestnet) {
+        if (shouldEnforceNetworkMatch && typeof actualIsTestnet === 'boolean' && expectedIsTestnet !== actualIsTestnet) {
           this.logger.error(
             `Mode/account network mismatch for strategyInstance=${resolvedSignal.strategyInstanceId}, user=${account.userId}: mode=${instanceModeRow?.mode}, account.isTestnet=${actualIsTestnet}`,
           )
