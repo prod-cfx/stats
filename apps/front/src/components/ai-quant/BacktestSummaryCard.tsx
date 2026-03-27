@@ -58,10 +58,10 @@ export function BacktestSummaryCard({
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <Metric title={t('aiQuant.maxDrawdown')} value={`${result.maxDrawdownPct}%`} />
-        <Metric title={t('aiQuant.totalReturn')} value={`${result.totalReturnPct}%`} />
-        <Metric title={t('aiQuant.winRate')} value={`${result.winRatePct}%`} />
-        <Metric title={t('aiQuant.tradeCount')} value={`${result.tradeCount}`} />
+        <Metric title={t('aiQuant.maxDrawdown')} value={`-${result.maxDrawdownPct}%`} type="loss" />
+        <Metric title={t('aiQuant.totalReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
+        <Metric title={t('aiQuant.winRate')} value={`${result.winRatePct}%`} type="neutral" />
+        <Metric title={t('aiQuant.tradeCount')} value={`${result.tradeCount}`} type="neutral" />
       </div>
 
       {!canDeploy && (
@@ -94,11 +94,12 @@ export function BacktestSummaryCard({
   )
 }
 
-function Metric({ title, value }: { title: string, value: string }) {
+function Metric({ title, value, type }: { title: string, value: string, type?: 'profit' | 'loss' | 'neutral' }) {
+  const colorClass = type === 'profit' ? 'text-[#00C087]' : type === 'loss' ? 'text-[#FF4D4F]' : 'text-[color:var(--cf-text-strong)]'
   return (
-    <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+    <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 transition-colors hover:bg-white/[0.02]">
       <p className="text-xs text-[color:var(--cf-muted)]">{title}</p>
-      <p className="mt-1 text-lg font-semibold text-[color:var(--cf-text-strong)]">{value}</p>
+      <p className={`mt-1 text-lg font-semibold ${colorClass}`}>{value}</p>
     </div>
   )
 }

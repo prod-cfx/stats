@@ -16,6 +16,19 @@ interface PaginatedResponse<T> {
   totalPages: number
 }
 
+export interface BacktestJobResultSummary {
+  netProfit: number
+  netProfitPct: number
+  maxDrawdownPct: number
+  winRate: number
+  profitFactor: number
+  totalTrades: number
+}
+
+interface BacktestJobResultResponse {
+  summary: BacktestJobResultSummary
+}
+
 /**
  * 在服务端获取 LLM 策略实例列表
  * 支持匿名访问，登录用户会看到 isSubscribed 状态
@@ -140,4 +153,31 @@ export async function fetchLlmStrategyInstanceDetailServer(
 
   const json = await response.json()
   return unwrapApiResponse(json) as UserLlmStrategyInstanceResponse
+}
+
+export async function fetchBacktestJobResultServer(
+  jobId: string,
+): Promise<BacktestJobResultSummary | null> {
+  const authHeaders = await getServerAuthHeaders()
+  if (!authHeaders.Authorization) {
+    return null
+  }
+
+  const url = `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}/result`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  const json = await response.json()
+  const payload = unwrapApiResponse(json) as BacktestJobResultResponse
+  return payload.summary ?? null
 }
