@@ -65,7 +65,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     strategyId: string,
   ): Promise<void> {
-    return this.quantifyClient.delete(
+    await this.quantifyClient.delete<void>(
       this.buildPath(`/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`, { userId }),
       { headers: this.userHeaders(userId, authorization) },
     ).catch(error => { throw this.mapQuantifyError(error) })
