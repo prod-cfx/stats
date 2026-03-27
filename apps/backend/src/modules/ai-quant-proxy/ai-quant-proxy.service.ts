@@ -1,5 +1,5 @@
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-ai-quant.client'
 
@@ -9,6 +9,11 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+  private static readonly TRANSIENT_UPSTREAM_CODES = new Set([
+    'UPSTREAM_REQUEST_FAILED',
+    'UPSTREAM_INVALID_RESPONSE',
+  ])
+  private readonly logger = new Logger(AiQuantProxyService.name)
 
   constructor(
     @Inject(QuantifyAiQuantClient)
@@ -141,47 +146,53 @@ export class AiQuantProxyService {
     })).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getBacktestCapabilities(authorization: string | undefined) {
+  async getBacktestCapabilities(authorization: string | undefined, requestId?: string) {
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
       try {
         return await this.quantifyClient.get('/backtesting/capabilities', {
-          headers: this.authorizationHeaders(authorization),
+          headers: this.proxyHeaders(authorization, requestId),
         })
       } catch (error) {
-        const isTransientUpstreamFailure = error instanceof QuantifyClientError
-          && error.status === 502
-          && error.code === 'UPSTREAM_REQUEST_FAILED'
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
         const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS
         if (!isTransientUpstreamFailure || isLastAttempt) {
+          if (isTransientUpstreamFailure || this.isInternalFailure(error)) {
+            this.logger.warn(
+              `event=backtesting_capabilities_fallback reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'} attempt=${attempt}`,
+            )
+            return {
+              allowedSymbols: [],
+              allowedBaseTimeframes: [],
+            }
+          }
           throw this.mapQuantifyError(error)
         }
         await this.sleep(this.getBacktestCapabilitiesBackoffMs(attempt))
       }
     }
 
-    throw this.mapQuantifyError(new QuantifyClientError(
-      'Quantify request failed',
-      502,
-      'UPSTREAM_REQUEST_FAILED',
-    ))
+    return {
+      allowedSymbols: [],
+      allowedBaseTimeframes: [],
+    }
   }
 
-  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>) {
+  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
     return this.quantifyClient.post('/backtesting/jobs', body, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJob(authorization: string | undefined, id: string) {
+  async getBacktestJob(authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJobResult(authorization: string | undefined, id: string) {
+  async getBacktestJobResult(authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
   private buildPath(path: string, query: Record<string, string | number | undefined>) {
@@ -203,6 +214,13 @@ export class AiQuantProxyService {
 
   private authorizationHeaders(authorization: string | undefined) {
     return authorization ? { authorization } : {}
+  }
+
+  private proxyHeaders(authorization: string | undefined, requestId?: string) {
+    return {
+      ...(authorization ? { authorization } : {}),
+      ...(requestId ? { 'x-request-id': requestId } : {}),
+    }
   }
 
   private mapQuantifyError(error: unknown): DomainException {
@@ -252,6 +270,58 @@ export class AiQuantProxyService {
       && typeof (error as { status?: unknown }).status === 'number'
       && 'message' in error
       && typeof (error as { message?: unknown }).message === 'string'
+  }
+
+  private mapBacktestingJobError(error: unknown, requestId?: string): DomainException {
+    if (this.isTransientUpstreamFailure(error)) {
+      this.logger.warn(
+        `event=backtesting_job_retryable_error reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'}`,
+      )
+      return new DomainException('Backtesting upstream temporarily unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+    return this.mapQuantifyError(error)
+  }
+
+  private isTransientUpstreamFailure(error: unknown): boolean {
+    const status = this.getQuantifyErrorStatus(error)
+    const code = this.getQuantifyErrorCode(error)
+    return status === HttpStatus.BAD_GATEWAY
+      || status === HttpStatus.SERVICE_UNAVAILABLE
+      || (typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code))
+  }
+
+  private isInternalFailure(error: unknown): boolean {
+    return !(error instanceof DomainException)
+      && !this.isQuantifyErrorShape(error)
+      && !(error instanceof QuantifyClientError)
+  }
+
+  private getQuantifyErrorStatus(error: unknown): number | undefined {
+    if (error instanceof QuantifyClientError) return error.status
+    if (this.isQuantifyErrorShape(error)) return error.status
+    return undefined
+  }
+
+  private getQuantifyErrorCode(error: unknown): string | undefined {
+    if (error instanceof QuantifyClientError) return error.code
+    if (this.isQuantifyErrorShape(error)) return error.code
+    return undefined
+  }
+
+  private describeError(error: unknown): string {
+    if (error instanceof QuantifyClientError) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (this.isQuantifyErrorShape(error)) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (error instanceof Error) {
+      return error.message
+    }
+    return String(error)
   }
 
   private sleep(ms: number): Promise<void> {
