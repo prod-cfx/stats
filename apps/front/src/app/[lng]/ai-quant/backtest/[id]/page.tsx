@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { BacktestReportClient } from './BacktestReportClient'
 
 export default async function AiQuantBacktestDetailPage({
   params,
@@ -29,49 +29,19 @@ export default async function AiQuantBacktestDetailPage({
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">回测详情</h1>
-          <Link
-            href={`/${lng}/ai-quant`}
-            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-          >
-            返回 AI量化
-          </Link>
-        </div>
-
-        <section className="grid gap-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 md:grid-cols-4">
-          <div>
-            <p className="text-xs text-[color:var(--cf-muted)]">最大回撤</p>
-            <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{maxDrawdownPct}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-[color:var(--cf-muted)]">总收益</p>
-            <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{totalReturnPct}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-[color:var(--cf-muted)]">胜率</p>
-            <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{winRatePct}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-[color:var(--cf-muted)]">交易次数</p>
-            <p className="mt-1 text-xl font-semibold text-[color:var(--cf-text-strong)]">{tradeCount}</p>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <p className="text-xs text-[color:var(--cf-muted)]">交易标的</p>
-          <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">{symbol}</p>
-          <p className="mt-3 text-xs text-[color:var(--cf-muted)]">历史回测区间</p>
-          <p className="mt-1 text-base font-semibold text-[color:var(--cf-text-strong)]">
-            {rangeDisplay}
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">净值曲线（MVP 占位）</h2>
-          <div className="mt-4 h-64 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]" />
-        </section>
+      <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col px-4 py-8 md:px-8">
+        <BacktestReportClient 
+          lng={lng}
+          id={resolved.id}
+          symbol={symbol}
+          rangeDisplay={rangeDisplay}
+          metrics={{
+            maxDrawdownPct,
+            totalReturnPct,
+            winRatePct,
+            tradeCount
+          }}
+        />
       </main>
       <Footer />
     </div>
