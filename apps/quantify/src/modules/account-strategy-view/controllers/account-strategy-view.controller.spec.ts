@@ -1,6 +1,10 @@
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
 import { AccountStrategyViewController } from './account-strategy-view.controller'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 describe('accountStrategyViewController', () => {
   function createController(service: Record<string, jest.Mock>) {
     const callerIdentityService = {
@@ -15,6 +19,7 @@ describe('accountStrategyViewController', () => {
   it('uses caller identity from authorization for list request', async () => {
     const service = {
       listStrategies: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }),
+      deleteStrategy: jest.fn().mockResolvedValue(undefined),
     }
     const { controller, callerIdentityService } = createController(service)
 
@@ -83,5 +88,17 @@ describe('accountStrategyViewController', () => {
         exchange: 'binance',
       }),
     )
+  })
+
+  it('uses caller identity from authorization for delete request', async () => {
+    const service = {
+      deleteStrategy: jest.fn().mockResolvedValue(undefined),
+    }
+    const { controller, callerIdentityService } = createController(service)
+
+    await controller.remove('inst-1', 'Bearer token')
+
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
 })

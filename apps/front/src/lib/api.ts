@@ -41,8 +41,6 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
 const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK =
-  process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK !== 'false'
-const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK_EXPLICIT =
   process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
 
 function getHttpStatusFromError(error: unknown): number | undefined {
@@ -68,8 +66,7 @@ function shouldFallbackToMock(error: unknown): boolean {
 
 function shouldFallbackToAccountAiQuantMock(error: unknown): boolean {
   if (error instanceof AuthenticationError) return false
-  if (ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) return true
-  return shouldFallbackToMock(error)
+  return ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK && shouldFallbackToMock(error)
 }
 
 function isRetryableNetworkStatus(status: number): boolean {
@@ -77,7 +74,7 @@ function isRetryableNetworkStatus(status: number): boolean {
 }
 
 function shouldFallbackDeleteAccountAiQuantMock(error: unknown): boolean {
-  if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK_EXPLICIT) return false
+  if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) return false
   if (!shouldFallbackToAccountAiQuantMock(error)) return false
 
   const status = getHttpStatusFromError(error)

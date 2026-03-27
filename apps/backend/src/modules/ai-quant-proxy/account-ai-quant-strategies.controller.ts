@@ -2,7 +2,7 @@ import type { AiQuantProxyService } from './ai-quant-proxy.service'
 import type { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
 import type { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
 import type { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list.query.dto'
-import { Body, Controller, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -68,5 +68,14 @@ export class AccountAiQuantStrategiesController {
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
     })
+  }
+
+  @Delete(':id')
+  async remove(
+    @CurrentUser('id') userId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.service.deleteAccountStrategy(userId, authorization, id)
   }
 }

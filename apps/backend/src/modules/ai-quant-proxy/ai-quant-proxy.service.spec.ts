@@ -47,6 +47,18 @@ describe('aiQuantProxyService', () => {
     )
   })
 
+  it('injects user identity and authorization into account strategy delete requests', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.delete.mockResolvedValue(undefined)
+
+    await service.deleteAccountStrategy('user-1', 'Bearer token-1', 'strategy-1')
+
+    expect(quantifyClient.delete).toHaveBeenCalledWith(
+      '/account/ai-quant/strategies/strategy-1?userId=user-1',
+      { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
   it('forwards codegen start payload with authorization header', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })

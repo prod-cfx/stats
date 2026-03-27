@@ -7,6 +7,7 @@ describe('accountAiQuantStrategiesController', () => {
       getAccountStrategyDetail: jest.fn().mockResolvedValue({ id: 'strategy-1' }),
       performAccountStrategyAction: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       deployAccountStrategy: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
+      deleteAccountStrategy: jest.fn().mockResolvedValue(undefined),
     }
 
     const controller = new AccountAiQuantStrategiesController(service as any)
@@ -63,5 +64,13 @@ describe('accountAiQuantStrategiesController', () => {
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
     })
+  })
+
+  it('deletes strategy with backend-controlled user identity', async () => {
+    const { controller, service } = createController()
+
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1')
+
+    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1')
   })
 })
