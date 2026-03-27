@@ -17,7 +17,7 @@ describe('backtestCapabilitiesService', () => {
       allowedBaseTimeframes: [' 1m ', '5m'],
     })
 
-    await expect(service.getCapabilities()).resolves.toEqual({
+    await expect(service.getCapabilities('req-1')).resolves.toEqual({
       allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['1m', '5m'],
     })
@@ -54,5 +54,11 @@ describe('backtestCapabilitiesService', () => {
       allowedSymbols: [],
       allowedBaseTimeframes: [],
     })
+  })
+
+  it('rethrows repository errors for upstream handling', async () => {
+    repository.findActiveConfig.mockRejectedValue(new Error('db down'))
+
+    await expect(service.getCapabilities('req-2')).rejects.toThrow('db down')
   })
 })
