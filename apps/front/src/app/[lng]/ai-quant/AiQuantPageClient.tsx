@@ -136,6 +136,7 @@ interface ConversationState {
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
+  publishedStrategyInstanceId: string | null
   latestSignalMessage: string | null
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
@@ -168,7 +169,7 @@ function isRecoverableCodegenStatus(status: string): boolean {
   return CODEGEN_RECOVERABLE_STATUSES.has(status)
 }
 
-function buildCodegenReplyContent(args: {
+export function buildCodegenReplyContent(args: {
   response: LlmCodegenSessionResponse
   confirmGenerate: boolean
   publishedReply: string
@@ -196,6 +197,9 @@ function buildCodegenReplyContent(args: {
     return response.assistantPrompt
   }
   if (response.status === 'PUBLISHED') {
+    if (response.rejectReason) {
+      return `${rejectedPrefix}：${response.rejectReason}`
+    }
     return publishedReply
   }
   if (response.status === 'CHECKLIST_GATE') {
@@ -212,6 +216,20 @@ function buildCodegenReplyContent(args: {
       : rejectedWithoutReason
   }
   return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
+}
+
+export function resolvePublishedStrategyInstanceId(args: {
+  response: LlmCodegenSessionResponse
+  isStartingNewSession: boolean
+}): string | null {
+  const { response, isStartingNewSession } = args
+  if (response.status === 'PUBLISHED' && !response.rejectReason) {
+    return response.strategyInstanceId ?? null
+  }
+  if (isStartingNewSession || response.status === 'REJECTED') {
+    return null
+  }
+  return null
 }
 
 function extractCodegenErrorMessage(error: unknown, fallback: string): string {
@@ -412,6 +430,7 @@ export function AiQuantPageClient() {
       backtestResult: null,
       logicGraph: null,
       llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -466,6 +485,7 @@ export function AiQuantPageClient() {
           ? normalizeParamsFromValues(item.paramValues ?? item.params, item.params)
           : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
         llmCodegenSessionId: item.llmCodegenSessionId ?? null,
+        publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
         latestSignalMessage: item.latestSignalMessage ?? null,
         backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
       }))
@@ -705,6 +725,7 @@ export function AiQuantPageClient() {
       if (conv.id !== conversationId) return conv
       return {
         ...conv,
+        publishedStrategyInstanceId: activeSessionId ? conv.publishedStrategyInstanceId : null,
         messages: [
           ...conv.messages,
           {
@@ -789,6 +810,10 @@ export function AiQuantPageClient() {
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+          publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
+            response,
+            isStartingNewSession: !activeSessionId,
+          }),
           logicGraph: nextGraph,
           backtestResult: null,
           latestSignalMessage: null,
@@ -1619,6 +1644,7 @@ export function AiQuantPageClient() {
               symbol: activeConversation.params.symbol,
               timeframe,
               positionPct: activeConversation.params.positionPct,
+              strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
               exchangeAccountId: account.accountId,
               exchangeAccountName: account.accountName,
             })

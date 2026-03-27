@@ -118,6 +118,7 @@ model LlmStrategyRun {
 model LlmStrategyCodegenSession {
   id              String                  @id @default(cuid())
   userId          String                  @map("user_id")
+  strategyInstanceId String?              @map("strategy_instance_id")
   status          LlmCodegenSessionStatus @default(DRAFTING)
   checklist       Json?
   constraintPack  Json?                   @map("constraint_pack")
