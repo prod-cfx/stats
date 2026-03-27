@@ -1,6 +1,7 @@
 import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
+import { fetchBacktestJobResultServer } from '@/lib/server-api'
 import { BacktestReportClient } from './BacktestReportClient'
 
 export default async function AiQuantBacktestDetailPage({
@@ -20,11 +21,15 @@ export default async function AiQuantBacktestDetailPage({
   const endAt = typeof resolvedSearch.endAt === 'string' ? resolvedSearch.endAt : null
   const rangeDisplay = formatBacktestRange(startAt, endAt)
 
-  const seed = Number(resolved.id.slice(-4)) || 1024
-  const maxDrawdownPct = Number((8 + (seed % 17)).toFixed(2))
-  const totalReturnPct = Number((10 + (seed % 23) * 0.9).toFixed(2))
-  const winRatePct = Number((38 + (seed % 31) * 0.8).toFixed(2))
-  const tradeCount = 10 + (seed % 40)
+  const summary = await fetchBacktestJobResultServer(resolved.id)
+  const metrics = summary
+    ? {
+        maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
+        totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
+        winRatePct: Number(summary.winRate.toFixed(2)),
+        tradeCount: summary.totalTrades,
+      }
+    : null
 
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
@@ -35,12 +40,7 @@ export default async function AiQuantBacktestDetailPage({
           id={resolved.id}
           symbol={symbol}
           rangeDisplay={rangeDisplay}
-          metrics={{
-            maxDrawdownPct,
-            totalReturnPct,
-            winRatePct,
-            tradeCount
-          }}
+          metrics={metrics}
         />
       </main>
       <Footer />
