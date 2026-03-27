@@ -71,6 +71,7 @@ describe('accountStrategyViewController', () => {
         symbol: 'BTCUSDT',
         timeframe: '5m/15m',
         positionPct: 10,
+        deployRequestId: 'req-1',
       } as any,
       'Bearer token',
     )

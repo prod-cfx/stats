@@ -62,4 +62,83 @@ export class SignalExecutorRepository {
       },
     })
   }
+
+  findRiskProfileByStrategyInstanceId(strategyInstanceId: string) {
+    return this.txHost.tx.strategyInstanceRiskProfile.findUnique({
+      where: { strategyInstanceId },
+    })
+  }
+
+  findStrategyInstanceMode(strategyInstanceId: string) {
+    return this.txHost.tx.strategyInstance.findUnique({
+      where: { id: strategyInstanceId },
+      select: { mode: true },
+    })
+  }
+
+  findActiveSubscriptionNetwork(userId: string, strategyInstanceId: string) {
+    return this.txHost.tx.userStrategySubscription.findFirst({
+      where: {
+        userId,
+        strategyInstanceId,
+        status: 'active',
+      },
+      select: {
+        exchangeAccountId: true,
+        exchangeAccount: {
+          select: { isTestnet: true },
+        },
+      },
+    })
+  }
+
+  async incrementStrategyExecutionFailure(strategyInstanceId: string) {
+    return this.txHost.tx.strategyInstanceSafetyState.upsert({
+      where: { strategyInstanceId },
+      create: {
+        strategyInstanceId,
+        consecutiveExecutionFailures: 1,
+        lastFailureAt: new Date(),
+      },
+      update: {
+        consecutiveExecutionFailures: { increment: 1 },
+        lastFailureAt: new Date(),
+      },
+      select: {
+        strategyInstanceId: true,
+        consecutiveExecutionFailures: true,
+      },
+    })
+  }
+
+  async resetStrategyExecutionFailure(strategyInstanceId: string) {
+    return this.txHost.tx.strategyInstanceSafetyState.upsert({
+      where: { strategyInstanceId },
+      create: {
+        strategyInstanceId,
+        consecutiveExecutionFailures: 0,
+      },
+      update: {
+        consecutiveExecutionFailures: 0,
+        autoStoppedAt: null,
+        autoStopReason: null,
+      },
+    })
+  }
+
+  async markStrategyAutoStopped(strategyInstanceId: string, reason: string) {
+    return this.txHost.tx.strategyInstanceSafetyState.upsert({
+      where: { strategyInstanceId },
+      create: {
+        strategyInstanceId,
+        consecutiveExecutionFailures: 3,
+        autoStoppedAt: new Date(),
+        autoStopReason: reason,
+      },
+      update: {
+        autoStoppedAt: new Date(),
+        autoStopReason: reason,
+      },
+    })
+  }
 }

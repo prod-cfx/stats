@@ -268,7 +268,10 @@ model StrategyInstance {
   strategyTemplate StrategyTemplate           @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
   signals          TradingSignal[]
   signalState      StrategySignalState?
+  safetyState      StrategyInstanceSafetyState?
+  riskProfile      StrategyInstanceRiskProfile?
   subscriptions    UserStrategySubscription[]
+  deployRequests   DeployRequest[]
 
   @@unique([strategyTemplateId, llmModel, name], map: "uniq_strategy_instance_template_model_name")
   @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")
@@ -276,6 +279,62 @@ model StrategyInstance {
   @@index([mode], map: "idx_strategy_instance_mode")
   @@index([createdAt], map: "idx_strategy_instance_created_at")
   @@map("strategy_instances")
+}
+
+model DeployRequest {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  deployRequestId  String   @map("deploy_request_id")
+  payloadHash      String   @map("payload_hash")
+  strategyInstanceId String? @map("strategy_instance_id")
+  status           String
+  errorCode        String?  @map("error_code")
+  errorMessage     String?  @map("error_message")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyInstance StrategyInstance? @relation(fields: [strategyInstanceId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, deployRequestId], map: "uniq_deploy_request_user_request_id")
+  @@index([status, createdAt], map: "idx_deploy_requests_status_created")
+  @@index([strategyInstanceId], map: "idx_deploy_requests_strategy_instance")
+  @@map("deploy_requests")
+}
+
+model StrategyInstanceRiskProfile {
+  id                        String   @id @default(cuid())
+  strategyInstanceId        String   @unique @map("strategy_instance_id")
+  adminPerOrderMaxQuote     Decimal  @map("admin_per_order_max_quote") @db.Decimal(48, 18)
+  adminDailyMaxQuote        Decimal  @map("admin_daily_max_quote") @db.Decimal(48, 18)
+  adminMaxRiskFractionCap   Decimal  @map("admin_max_risk_fraction_cap") @db.Decimal(10, 8)
+  userPerOrderMaxQuote      Decimal  @map("user_per_order_max_quote") @db.Decimal(48, 18)
+  userDailyMaxQuote         Decimal  @map("user_daily_max_quote") @db.Decimal(48, 18)
+  userMaxRiskFraction       Decimal  @map("user_max_risk_fraction") @db.Decimal(10, 8)
+  effectivePerOrderMaxQuote Decimal  @map("effective_per_order_max_quote") @db.Decimal(48, 18)
+  effectiveDailyMaxQuote    Decimal  @map("effective_daily_max_quote") @db.Decimal(48, 18)
+  effectiveMaxRiskFraction  Decimal  @map("effective_max_risk_fraction") @db.Decimal(10, 8)
+  version                   Int      @default(1)
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at")
+
+  strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+
+  @@map("strategy_instance_risk_profiles")
+}
+
+model StrategyInstanceSafetyState {
+  strategyInstanceId          String    @id @map("strategy_instance_id")
+  consecutiveExecutionFailures Int      @default(0) @map("consecutive_execution_failures")
+  autoStoppedAt               DateTime? @map("auto_stopped_at")
+  autoStopReason              String?   @map("auto_stop_reason")
+  lastFailureAt               DateTime? @map("last_failure_at")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+  updatedAt                   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+
+  @@map("strategy_instance_safety_states")
 }
 
 model TradingSignal {

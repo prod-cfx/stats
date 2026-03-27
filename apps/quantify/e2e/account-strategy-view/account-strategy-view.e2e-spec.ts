@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '@/prisma/prisma.service'
 import type { PrismaClient, User } from '@/prisma/prisma.types'
+import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 describe('account-strategy-view (E2E)', () => {
@@ -15,6 +16,7 @@ describe('account-strategy-view (E2E)', () => {
   let templateId: string
   let strategyRunningId: string
   let strategyPausedId: string
+  let ownerBinanceAccountId: string
 
   function createTestUser(prisma: PrismaClient, emailPrefix: string, nickname: string) {
     return prisma.user.create({
@@ -106,7 +108,20 @@ describe('account-strategy-view (E2E)', () => {
   }
 
   beforeAll(async () => {
-    const testing = await createTestingApp()
+    const testing = await createTestingApp({
+      providerOverrides: [{
+        provide: AccountStrategyCallerIdentityService,
+        useValue: {
+          async resolveCallerUserIdFromAuthorization(authorization?: string) {
+            const token = authorization?.replace(/^Bearer\s+/i, '').trim()
+            if (!token) {
+              throw new Error('missing bearer token for test')
+            }
+            return token
+          },
+        },
+      }],
+    })
     app = testing.app
     _moduleFixture = testing.moduleFixture
     prismaService = testing.prisma
@@ -114,6 +129,16 @@ describe('account-strategy-view (E2E)', () => {
 
     owner = await createTestUser(prisma, 'account-strategy-owner', 'owner')
     subscriber = await createTestUser(prisma, 'account-strategy-subscriber', 'subscriber')
+    const ownerBinanceAccount = await prisma.exchangeAccount.create({
+      data: {
+        userId: owner.id,
+        exchangeId: 'binance',
+        name: 'owner-binance',
+        isTestnet: true,
+        encryptedConfig: '{"apiKey":"k","apiSecret":"s"}',
+      },
+    })
+    ownerBinanceAccountId = ownerBinanceAccount.id
 
     const template = await createTestStrategyTemplate(prisma)
     templateId = template.id
@@ -172,6 +197,25 @@ describe('account-strategy-view (E2E)', () => {
         },
       },
     })
+    await prisma.strategyInstanceRiskProfile.deleteMany({
+      where: {
+        strategyInstanceId: {
+          in: [strategyRunningId, strategyPausedId],
+        },
+      },
+    })
+    await prisma.deployRequest.deleteMany({
+      where: {
+        userId: {
+          in: [owner.id, subscriber.id],
+        },
+      },
+    })
+    await prisma.exchangeAccount.deleteMany({
+      where: {
+        id: ownerBinanceAccountId,
+      },
+    })
     await prisma.strategyInstance.deleteMany({
       where: {
         id: {
@@ -198,7 +242,7 @@ describe('account-strategy-view (E2E)', () => {
     const request = createApiClient(app)
     const response = await request
       .get(`account/ai-quant/strategies?userId=${owner.id}&page=1&limit=20`)
-      .set('x-user-id', owner.id)
+      .set('authorization', `Bearer ${owner.id}`)
       .expect(200)
 
     const payload = response.body?.data ?? response.body
@@ -213,7 +257,7 @@ describe('account-strategy-view (E2E)', () => {
     const request = createApiClient(app)
     const response = await request
       .get(`account/ai-quant/strategies/${strategyRunningId}?userId=${owner.id}`)
-      .set('x-user-id', owner.id)
+      .set('authorization', `Bearer ${owner.id}`)
       .expect(200)
 
     const payload = response.body?.data
@@ -228,7 +272,7 @@ describe('account-strategy-view (E2E)', () => {
     const request = createApiClient(app)
     const response = await request
       .post(`account/ai-quant/strategies/${strategyRunningId}/actions`)
-      .set('x-user-id', owner.id)
+      .set('authorization', `Bearer ${owner.id}`)
       .send({
         userId: owner.id,
         action: 'stop',
@@ -238,5 +282,58 @@ describe('account-strategy-view (E2E)', () => {
     const payload = response.body?.data
     expect(payload.id).toBe(strategyRunningId)
     expect(payload.status).toBe('stopped')
+  })
+
+  it('deploy is idempotent: repeated click with same deployRequestId does not duplicate records', async () => {
+    const request = createApiClient(app)
+    const deployRequestId = `e2e-deploy-idem-${Date.now()}`
+    const body = {
+      name: 'E2E Deploy Idempotent',
+      deployRequestId,
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      strategyInstanceId: strategyRunningId,
+      exchangeAccountId: ownerBinanceAccountId,
+    }
+
+    const first = await request
+      .post('account/ai-quant/strategies/deploy')
+      .set('authorization', `Bearer ${owner.id}`)
+      .send(body)
+      .expect(201)
+
+    const second = await request
+      .post('account/ai-quant/strategies/deploy')
+      .set('authorization', `Bearer ${owner.id}`)
+      .send(body)
+      .expect(201)
+
+    expect(first.body?.data?.id).toBe(strategyRunningId)
+    expect(second.body?.data?.id).toBe(strategyRunningId)
+
+    const deployRequestCount = await prisma.deployRequest.count({
+      where: {
+        userId: owner.id,
+        deployRequestId,
+      },
+    })
+    expect(deployRequestCount).toBe(1)
+
+    const subscriptionCount = await prisma.userStrategySubscription.count({
+      where: {
+        userId: owner.id,
+        strategyInstanceId: strategyRunningId,
+      },
+    })
+    expect(subscriptionCount).toBe(1)
+
+    const riskProfileCount = await prisma.strategyInstanceRiskProfile.count({
+      where: {
+        strategyInstanceId: strategyRunningId,
+      },
+    })
+    expect(riskProfileCount).toBe(1)
   })
 })

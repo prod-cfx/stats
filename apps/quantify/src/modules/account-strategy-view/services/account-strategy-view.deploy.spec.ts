@@ -3,8 +3,13 @@ import { AccountStrategyViewService } from './account-strategy-view.service'
 describe('accountStrategyViewService.deployStrategy', () => {
   it('ensures market symbols are subscribed before deploying the strategy', async () => {
     const repo = {
-      deployStrategyForUser: jest.fn().mockResolvedValue('inst-okx-1'),
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
       findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -27,6 +32,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      deployRequestId: 'deploy-req-1',
       exchangeAccountId: 'acc-1',
       strategyInstanceId: 'inst-draft-1',
     } as any)
@@ -42,7 +48,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
 
   it('falls back to strategy instance params when deploy payload fields are missing', async () => {
     const repo = {
-      deployStrategyForUser: jest.fn().mockResolvedValue('inst-okx-1'),
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
       findStrategyForUser: jest.fn().mockResolvedValue({
         params: {
           exchange: 'okx',
@@ -53,6 +59,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyTemplate: { defaultParams: {} },
         subscriptions: [],
       }),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -75,6 +86,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       symbol: undefined as any,
       timeframe: undefined as any,
       positionPct: undefined as any,
+      deployRequestId: 'deploy-req-2',
       exchangeAccountId: 'acc-1',
       strategyInstanceId: 'inst-draft-1',
     } as any)
