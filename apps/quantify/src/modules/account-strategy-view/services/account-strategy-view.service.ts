@@ -48,6 +48,8 @@ export class AccountStrategyViewService {
       page: query.page,
       limit: query.limit,
       status: query.status,
+      subscribedOnly: query.subscribedOnly,
+      excludeDraft: query.excludeDraft,
     })
 
     const instanceIds = rows.items.map(item => item.id)
@@ -124,6 +126,11 @@ export class AccountStrategyViewService {
     }
 
     const sub = row.subscriptions[0]
+    const isSubscribed = !!sub && sub.status === 'active'
+    if (!isSubscribed || this.mapUiStatus(row.status) === 'draft') {
+      throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
     const mergedParams = {
       ...(row.strategyTemplate?.defaultParams as Record<string, unknown> ?? {}),
       ...(row.params as Record<string, unknown> ?? {}),
@@ -208,7 +215,7 @@ export class AccountStrategyViewService {
       timeframe: this.readString(mergedParams, ['timeframe', 'period']),
       positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
       ...dynamicParams,
-      isSubscribed: !!sub && sub.status === 'active',
+      isSubscribed,
       metrics: {
         returnPct,
         maxDrawdownPct,

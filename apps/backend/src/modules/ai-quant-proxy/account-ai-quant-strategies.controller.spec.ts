@@ -21,12 +21,16 @@ describe('accountAiQuantStrategiesController', () => {
       page: 2,
       limit: 10,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
 
     expect(service.listAccountStrategies).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       page: 2,
       limit: 10,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
   })
 

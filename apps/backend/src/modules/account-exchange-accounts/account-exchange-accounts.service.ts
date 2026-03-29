@@ -14,7 +14,12 @@ export class AccountExchangeAccountsService {
   ) {}
 
   async list(userId: string): Promise<AccountExchangeAccountResponseDto[]> {
-    return this.quantifyClient.list(userId)
+    try {
+      return await this.quantifyClient.list(userId)
+    }
+    catch (error) {
+      throw this.mapQuantifyError(error)
+    }
   }
 
   async upsert(

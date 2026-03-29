@@ -15,6 +15,8 @@ interface ListStrategiesQuery {
   page: number
   limit: number
   status?: 'running' | 'stopped' | 'draft'
+  subscribedOnly?: boolean
+  excludeDraft?: boolean
 }
 
 interface DeployStrategyInput {
@@ -279,19 +281,41 @@ export class AccountStrategyViewRepository {
     const client = this.txHost.tx
     const skip = (page - 1) * limit
 
-    const subscribedInstanceIds = (
-      await client.userStrategySubscription.findMany({
-        where: { userId: query.userId },
-        select: { strategyInstanceId: true },
-      })
-    ).map(item => item.strategyInstanceId)
-
     const where: Prisma.StrategyInstanceWhereInput = {
-      OR: [
+      ...this.buildStatusWhere(query.status),
+    }
+
+    if (query.subscribedOnly) {
+      where.subscriptions = {
+        some: {
+          userId: query.userId,
+          status: SubscriptionStatus.active,
+        },
+      }
+    } else {
+      const subscribedInstanceIds = (
+        await client.userStrategySubscription.findMany({
+          where: { userId: query.userId },
+          select: { strategyInstanceId: true },
+        })
+      ).map(item => item.strategyInstanceId)
+
+      where.OR = [
         { id: { in: subscribedInstanceIds.length > 0 ? subscribedInstanceIds : ['__none__'] } },
         { createdBy: query.userId },
-      ],
-      ...this.buildStatusWhere(query.status),
+      ]
+    }
+
+    if (query.excludeDraft) {
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : []
+      where.AND = [
+        ...existingAnd,
+        { status: { not: 'draft' } },
+      ]
     }
 
     const [items, total] = await Promise.all([

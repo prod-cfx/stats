@@ -1209,6 +1209,25 @@ const endpoints = makeApi([
     response: z.void(),
   },
   {
+    method: 'delete',
+    path: '/account/ai-quant/strategies/:id',
+    alias: 'AccountAiQuantStrategiesController_remove',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
     method: 'post',
     path: '/account/ai-quant/strategies/:id/actions',
     alias: 'AccountAiQuantStrategiesController_action',
@@ -2932,6 +2951,11 @@ const endpoints = makeApi([
         type: 'Header',
         schema: z.string(),
       },
+      {
+        name: 'x-request-id',
+        type: 'Header',
+        schema: z.string(),
+      },
     ],
     response: z.void(),
   },
@@ -2946,6 +2970,11 @@ const endpoints = makeApi([
         type: 'Header',
         schema: z.string(),
       },
+      {
+        name: 'x-request-id',
+        type: 'Header',
+        schema: z.string(),
+      },
     ],
     response: z.void(),
   },
@@ -2957,6 +2986,11 @@ const endpoints = makeApi([
     parameters: [
       {
         name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-request-id',
         type: 'Header',
         schema: z.string(),
       },
@@ -2976,6 +3010,11 @@ const endpoints = makeApi([
     parameters: [
       {
         name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-request-id',
         type: 'Header',
         schema: z.string(),
       },

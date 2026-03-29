@@ -46,6 +46,16 @@ describe('accountExchangeAccountsService', () => {
     expect(client.list).toHaveBeenCalledWith('user-1')
   })
 
+  it('maps list failures to domain exceptions instead of leaking raw client errors', async () => {
+    const { service, client } = createService()
+    client.list.mockRejectedValue(new TypeError('fetch failed'))
+
+    await expect(service.list('user-1')).rejects.toMatchObject<Partial<DomainException>>({
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: 'Quantify request failed',
+    })
+  })
+
   it('maps quantify credential validation errors into stable backend args', async () => {
     const { service, client } = createService()
     client.upsert.mockRejectedValue({
