@@ -10,9 +10,12 @@ describe('aiQuantProxyService', () => {
       patch: jest.fn(),
       delete: jest.fn(),
     }
+    const exchangeAccountsService = {
+      list: jest.fn().mockResolvedValue([]),
+    }
 
-    const service = new AiQuantProxyService(quantifyClient as any)
-    return { service, quantifyClient }
+    const service = new AiQuantProxyService(quantifyClient as any, exchangeAccountsService as any)
+    return { service, quantifyClient, exchangeAccountsService }
   }
 
   it('injects user identity and authorization into account strategy list requests', async () => {
@@ -61,6 +64,101 @@ describe('aiQuantProxyService', () => {
       '/account/ai-quant/strategies/strategy-1?userId=user-1',
       { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
+  })
+
+  it('forwards deploy payload including deployRequestId with backend user identity', async () => {
+    const { service, quantifyClient, exchangeAccountsService } = createService()
+    quantifyClient.post.mockResolvedValue({ id: 'strategy-1', status: 'draft' })
+    exchangeAccountsService.list.mockResolvedValue([{ id: 'acc-1' }])
+
+    await service.deployAccountStrategy('user-1', 'Bearer token-1', {
+      name: 'My Strategy',
+      deployRequestId: 'deploy-req-1',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m/15m',
+      positionPct: 10,
+      exchangeAccountId: 'acc-1',
+    })
+
+    expect(quantifyClient.post).toHaveBeenCalledWith(
+      '/account/ai-quant/strategies/deploy',
+      {
+        userId: 'user-1',
+        name: 'My Strategy',
+        deployRequestId: 'deploy-req-1',
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '3m/15m',
+        positionPct: 10,
+        exchangeAccountId: 'acc-1',
+      },
+      {
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
+  it('retries deploy when quantify is transiently unavailable', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post
+      .mockRejectedValueOnce(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
+      .mockResolvedValueOnce({ id: 'strategy-1', status: 'draft' })
+
+    await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
+      name: 'My Strategy',
+      deployRequestId: 'deploy-req-retry-1',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m/15m',
+      positionPct: 10,
+    })).resolves.toEqual({ id: 'strategy-1', status: 'draft' })
+
+    expect(quantifyClient.post).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry deploy for business validation errors', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post.mockRejectedValue(new QuantifyClientError(
+      'bad request',
+      400,
+      ErrorCode.BAD_REQUEST,
+      { reasonMessage: 'bad request' },
+    ))
+
+    await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
+      name: 'My Strategy',
+      deployRequestId: 'deploy-req-bad-1',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m/15m',
+      positionPct: 10,
+    })).rejects.toMatchObject({
+      status: 400,
+      code: ErrorCode.BAD_REQUEST,
+    })
+
+    expect(quantifyClient.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns exchange account not found before calling quantify deploy', async () => {
+    const { service, quantifyClient, exchangeAccountsService } = createService()
+    exchangeAccountsService.list.mockResolvedValue([{ id: 'acc-1' }])
+
+    await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
+      name: 'My Strategy',
+      deployRequestId: 'deploy-req-account-not-found',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m/15m',
+      positionPct: 10,
+      exchangeAccountId: 'missing-acc',
+    })).rejects.toMatchObject({
+      status: 404,
+      code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
+    })
+
+    expect(quantifyClient.post).not.toHaveBeenCalled()
   })
 
   it('forwards codegen start payload with authorization header', async () => {

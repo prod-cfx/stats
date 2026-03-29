@@ -1,11 +1,11 @@
 import type { AiQuantProxyService } from './ai-quant-proxy.service'
-import type { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
-import type { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
-import type { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list.query.dto'
 import { Body, Controller, Delete, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
+import { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
+import { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list.query.dto'
 import { AiQuantProxyService as AiQuantProxyServiceToken } from './ai-quant-proxy.service'
 
 @ApiTags('account-ai-quant')
@@ -13,6 +13,13 @@ import { AiQuantProxyService as AiQuantProxyServiceToken } from './ai-quant-prox
 @Auth()
 @Controller('account/ai-quant/strategies')
 export class AccountAiQuantStrategiesController {
+  // Keep DTOs as runtime values so Nest can emit metadata for validation/binding.
+  private static readonly dtoRefs = [
+    AccountAiQuantActionRequestDto,
+    AccountAiQuantDeployRequestDto,
+    AccountAiQuantListQueryDto,
+  ]
+
   constructor(
     @Inject(AiQuantProxyServiceToken)
     private readonly service: AiQuantProxyService,
@@ -62,6 +69,7 @@ export class AccountAiQuantStrategiesController {
   ): Promise<unknown> {
     return this.service.deployAccountStrategy(userId, authorization, {
       name: dto.name,
+      deployRequestId: dto.deployRequestId,
       exchange: dto.exchange,
       symbol: dto.symbol,
       timeframe: dto.timeframe,

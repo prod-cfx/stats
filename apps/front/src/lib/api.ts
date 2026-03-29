@@ -1399,6 +1399,7 @@ interface AccountAiQuantListQuery {
 export interface AccountAiQuantDeployPayload {
   userId: string
   name: string
+  deployRequestId: string
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   timeframe: string
@@ -1682,6 +1683,9 @@ export async function deployAccountAiQuantStrategy(
     if (!payload.name?.trim()) {
       throw new ApiError('name is required', 'INVALID_INPUT')
     }
+    if (!payload.deployRequestId?.trim()) {
+      throw new ApiError('deployRequestId is required', 'INVALID_INPUT')
+    }
 
     const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies/deploy`, {
       method: 'POST',
@@ -1689,6 +1693,7 @@ export async function deployAccountAiQuantStrategy(
       body: JSON.stringify({
         userId: payload.userId.trim(),
         name: payload.name.trim(),
+        deployRequestId: payload.deployRequestId.trim(),
         exchange: payload.exchange,
         symbol: payload.symbol,
         timeframe: payload.timeframe,

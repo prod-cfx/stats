@@ -11,7 +11,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
-import { listExchangeAccounts } from '@/components/account/exchange-account-store'
 import {
   createBacktestJob,
   getBacktestJob,
@@ -25,6 +24,7 @@ import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/component
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
+import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
@@ -40,6 +40,7 @@ import { useAuth } from '@/hooks/use-auth'
 import {
   deployAccountAiQuantStrategy,
   continueLlmCodegenSession,
+  fetchUserExchangeAccountStatuses,
   getLlmCodegenSession,
   startLlmCodegenSession,
 } from '@/lib/api'
@@ -119,7 +120,6 @@ const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
 const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 
-const API_STORAGE_KEY = 'exchange_api_configs_v1'
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
 const DEV_MOCK_EXECUTION_MODE = true
@@ -167,6 +167,13 @@ function isCodegenProcessingStatus(status: string): boolean {
 
 function isRecoverableCodegenStatus(status: string): boolean {
   return CODEGEN_RECOVERABLE_STATUSES.has(status)
+}
+
+function createDeployRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export function buildCodegenReplyContent(args: {
@@ -443,10 +450,9 @@ export function AiQuantPageClient() {
   const [conversations, setConversations] = useState<ConversationState[]>(() => [createConversation()])
   const [activeConversationId, setActiveConversationId] = useState<string>('')
   const [deployOpen, setDeployOpen] = useState(false)
-  const [apiReady, setApiReady] = useState({ binance: false, okx: false })
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
-  const [exchangeAccounts, setExchangeAccounts] = useState(listExchangeAccounts())
+  const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
   const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
   const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(null)
   const isMountedRef = useRef(true)
@@ -606,61 +612,15 @@ export function AiQuantPageClient() {
     }
   }, [])
 
-  useEffect(() => {
-    const syncApiReady = () => {
-      const raw = localStorage.getItem(API_STORAGE_KEY)
-      if (!raw) {
-        setApiReady({ binance: false, okx: false })
-        return
-      }
-      try {
-        const parsed = JSON.parse(raw) as {
-          binanceApiKey?: string
-          binanceSecretKey?: string
-          okxApiKey?: string
-          okxSecretKey?: string
-          okxPassphrase?: string
-        }
-        setApiReady({
-          binance: Boolean(parsed.binanceApiKey && parsed.binanceSecretKey),
-          okx: Boolean(parsed.okxApiKey && parsed.okxSecretKey && parsed.okxPassphrase),
-        })
-      } catch {
-        // ignore invalid local data
-      }
-    }
-
-    syncApiReady()
-    window.addEventListener('focus', syncApiReady)
-    window.addEventListener('storage', syncApiReady)
-    return () => {
-      window.removeEventListener('focus', syncApiReady)
-      window.removeEventListener('storage', syncApiReady)
-    }
-  }, [])
-
-  const apiConfigured = selectedDeployExchange === 'binance' ? apiReady.binance : apiReady.okx
+  const apiConfigured = useMemo(
+    () =>
+      exchangeAccounts.some(
+        item => item.exchange === selectedDeployExchange && item.status === 'available',
+      ),
+    [exchangeAccounts, selectedDeployExchange],
+  )
   const mockExecutionMode = DEV_MOCK_EXECUTION_MODE
-  const deployAccounts = useMemo(() => {
-    if (exchangeAccounts.length > 0) return exchangeAccounts
-    if (!mockExecutionMode) return exchangeAccounts
-    return [
-      {
-        accountId: 'mock-binance',
-        exchange: 'binance' as const,
-        accountName: 'Mock Binance Account',
-        apiKeyMask: 'MOCK',
-        status: 'available' as const,
-      },
-      {
-        accountId: 'mock-okx',
-        exchange: 'okx' as const,
-        accountName: 'Mock OKX Account',
-        apiKeyMask: 'MOCK',
-        status: 'available' as const,
-      },
-    ]
-  }, [exchangeAccounts, mockExecutionMode])
+  const deployAccounts = useMemo(() => exchangeAccounts, [exchangeAccounts])
 
   const canDeploy = useMemo(() => {
     if (!activeConversation?.backtestResult) return false
@@ -1407,15 +1367,50 @@ export function AiQuantPageClient() {
   }, [activeConversation, session])
 
   useEffect(() => {
-    const syncAccounts = () => setExchangeAccounts(listExchangeAccounts())
-    syncAccounts()
-    window.addEventListener('focus', syncAccounts)
-    window.addEventListener('storage', syncAccounts)
-    return () => {
-      window.removeEventListener('focus', syncAccounts)
-      window.removeEventListener('storage', syncAccounts)
+    if (!session?.userId) {
+      setExchangeAccounts([])
+      return
     }
-  }, [])
+
+    let cancelled = false
+    const syncAccounts = async () => {
+      try {
+        const items = await fetchUserExchangeAccountStatuses()
+        if (cancelled) return
+        setExchangeAccounts(
+          items
+            .filter(item => item.isBound && typeof item.id === 'string' && item.id.trim().length > 0)
+            .map(item => ({
+              accountId: item.id as string,
+              exchange: item.exchangeId,
+              accountName: item.name?.trim() || item.exchangeId.toUpperCase(),
+              apiKeyMask: item.maskedCredential?.trim() || '****',
+              status: 'available' as const,
+            })),
+        )
+      } catch {
+        if (!cancelled) {
+          setExchangeAccounts([])
+        }
+      }
+    }
+
+    const handleFocus = () => {
+      void syncAccounts()
+    }
+    const handleStorage = () => {
+      void syncAccounts()
+    }
+
+    void syncAccounts()
+    window.addEventListener('focus', handleFocus)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [session?.userId])
 
   useEffect(() => {
     setSelectedDeployExchange(activeConversation.params.exchange)
@@ -1423,13 +1418,12 @@ export function AiQuantPageClient() {
 
   useEffect(() => {
     if (!deployOpen) return
-    if (selectedDeployAccountId) return
-    const firstAvailable = deployAccounts.find(
+    const availableAccounts = deployAccounts.filter(
       item => item.exchange === selectedDeployExchange && item.status === 'available',
     )
-    if (firstAvailable) {
-      setSelectedDeployAccountId(firstAvailable.accountId)
-    }
+    const stillValid = availableAccounts.some(item => item.accountId === selectedDeployAccountId)
+    if (stillValid) return
+    setSelectedDeployAccountId(availableAccounts[0]?.accountId ?? '')
   }, [deployAccounts, deployOpen, selectedDeployAccountId, selectedDeployExchange])
 
   if (isLoading) {
@@ -1617,7 +1611,7 @@ export function AiQuantPageClient() {
         open={deployOpen}
         onClose={() => setDeployOpen(false)}
         canDeploy={canDeploy}
-        apiConfigured={apiConfigured || mockExecutionMode}
+        apiConfigured={apiConfigured}
         exchange={selectedDeployExchange}
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
@@ -1640,6 +1634,7 @@ export function AiQuantPageClient() {
             await deployAccountAiQuantStrategy({
               userId: session.userId,
               name: strategyName,
+              deployRequestId: createDeployRequestId(),
               exchange: selectedDeployExchange,
               symbol: activeConversation.params.symbol,
               timeframe,

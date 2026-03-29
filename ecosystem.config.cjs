@@ -188,6 +188,9 @@ function createQuantifyConfig() {
     env: {
       NODE_ENV: 'development',
       APP_ENV: 'development',
+      CHOKIDAR_USEPOLLING: '',
+      WATCHPACK_POLLING: 'false',
+      CHOKIDAR_INTERVAL: '',
     },
     max_memory_restart: '500M',
     error_file: './logs/pm2/quantify-error.log',

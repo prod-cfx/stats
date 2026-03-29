@@ -24,7 +24,7 @@ export class AccountExchangeAccountsController {
   @ApiOperation({ summary: '获取当前登录用户的交易所绑定状态' })
   @ApiOkResponse({ type: AccountExchangeAccountResponseDto, isArray: true })
   async list(@CurrentUser('id') userId: string): Promise<AccountExchangeAccountResponseDto[]> {
-    return this.service.list(userId)
+    return this.service.list(userId, { degradeOnTransientFailure: true })
   }
 
   @Post()

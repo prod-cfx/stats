@@ -345,7 +345,10 @@ export class AccountStrategyViewService {
         dto.deployRequestId,
         payloadHash,
       )
-    } catch {
+    } catch (error) {
+      if (!this.isDeployRequestUniqueConflict(error)) {
+        throw error
+      }
       const conflict = await this.repo.findDeployRequestByUserAndRequestId(dto.userId, dto.deployRequestId)
       if (conflict?.status === 'SUCCEEDED' && conflict.strategyInstanceId) {
         return this.getStrategyDetail(dto.userId, conflict.strategyInstanceId)
@@ -408,6 +411,16 @@ export class AccountStrategyViewService {
     if (status === 'running') return 'running'
     if (status === 'draft') return 'draft'
     return 'stopped'
+  }
+
+  private isDeployRequestUniqueConflict(error: unknown): boolean {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return error.code === 'P2002'
+    }
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      return (error as { code?: unknown }).code === 'P2002'
+    }
+    return false
   }
 
   private assertStrategyVisible<T extends { status?: string | null }>(

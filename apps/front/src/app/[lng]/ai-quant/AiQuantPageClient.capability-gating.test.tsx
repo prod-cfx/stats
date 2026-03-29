@@ -28,10 +28,6 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
-jest.mock('@/components/account/exchange-account-store', () => ({
-  listExchangeAccounts: () => [],
-}))
-
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
   upsertStrategyDeployment: jest.fn(),
 }))
@@ -110,6 +106,7 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: jest.fn(),
+  fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
   startLlmCodegenSession: jest.fn(),
 }))
