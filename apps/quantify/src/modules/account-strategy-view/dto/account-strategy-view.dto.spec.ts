@@ -25,6 +25,26 @@ describe('accountStrategyViewDtos', () => {
     expect(dto.limit).toBeGreaterThan(0)
   })
 
+  it('parses strict boolean query values for list query dto', () => {
+    const dto = plainToInstance(AccountStrategyListQueryDto, {
+      subscribedOnly: 'true',
+      excludeDraft: 'false',
+    })
+    const errors = validateSync(dto)
+    expect(errors).toHaveLength(0)
+    expect(dto.subscribedOnly).toBe(true)
+    expect(dto.excludeDraft).toBe(false)
+  })
+
+  it('rejects invalid boolean query values for list query dto', () => {
+    const dto = plainToInstance(AccountStrategyListQueryDto, {
+      subscribedOnly: 'abc',
+    })
+    const errors = validateSync(dto)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors.some(error => error.property === 'subscribedOnly')).toBe(true)
+  })
+
   it('rejects invalid action', () => {
     const dto = plainToInstance(AccountStrategyActionDto, {
       userId: 'user-1',
