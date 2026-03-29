@@ -3,6 +3,13 @@ import { Transform } from 'class-transformer'
 import { IsBoolean, IsIn, IsOptional } from 'class-validator'
 import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
 
+function parseStrictBooleanQuery(value: unknown): unknown {
+  if (value === true || value === false) return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return value
+}
+
 export class AccountAiQuantListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ enum: ['running', 'stopped', 'draft'] })
   @IsOptional()
@@ -11,13 +18,13 @@ export class AccountAiQuantListQueryDto extends BasePaginationRequestDto {
 
   @ApiPropertyOptional({ description: 'Only return subscribed strategies' })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value }) => parseStrictBooleanQuery(value))
   @IsBoolean()
   subscribedOnly?: boolean
 
   @ApiPropertyOptional({ description: 'Exclude draft strategies' })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(({ value }) => parseStrictBooleanQuery(value))
   @IsBoolean()
   excludeDraft?: boolean
 }
