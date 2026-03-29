@@ -285,13 +285,13 @@ export class AccountStrategyViewService {
 
     this.assertStrategyVisible(row, strategyInstanceId)
 
+    if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
+      throw new InvalidStrategyActionException({ action: dto.action })
+    }
+
     const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
     if (nextStatus === row.status) {
       return this.getStrategyDetail(userId, strategyInstanceId)
-    }
-
-    if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
-      throw new InvalidStrategyActionException({ action: dto.action })
     }
 
     await this.strategyInstancesService.updateInstance(
