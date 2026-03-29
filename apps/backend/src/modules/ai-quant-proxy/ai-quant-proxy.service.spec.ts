@@ -194,6 +194,17 @@ describe('aiQuantProxyService', () => {
     })
   })
 
+  it('does not degrade internal exceptions for backtesting capabilities', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockRejectedValue(new Error('unexpected'))
+
+    await expect(service.getBacktestCapabilities('Bearer token-1')).rejects.toMatchObject({
+      status: 500,
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: 'Quantify request failed',
+    })
+  })
+
   it('proxies backtesting jobs and result endpoints', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })

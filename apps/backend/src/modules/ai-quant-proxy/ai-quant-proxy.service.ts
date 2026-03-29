@@ -156,7 +156,7 @@ export class AiQuantProxyService {
         const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
         const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS
         if (!isTransientUpstreamFailure || isLastAttempt) {
-          if (isTransientUpstreamFailure || this.isInternalFailure(error)) {
+          if (isTransientUpstreamFailure) {
             this.logger.warn(
               `event=backtesting_capabilities_fallback reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'} attempt=${attempt}`,
             )
@@ -286,23 +286,8 @@ export class AiQuantProxyService {
   }
 
   private isTransientUpstreamFailure(error: unknown): boolean {
-    const status = this.getQuantifyErrorStatus(error)
     const code = this.getQuantifyErrorCode(error)
-    return status === HttpStatus.BAD_GATEWAY
-      || status === HttpStatus.SERVICE_UNAVAILABLE
-      || (typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code))
-  }
-
-  private isInternalFailure(error: unknown): boolean {
-    return !(error instanceof DomainException)
-      && !this.isQuantifyErrorShape(error)
-      && !(error instanceof QuantifyClientError)
-  }
-
-  private getQuantifyErrorStatus(error: unknown): number | undefined {
-    if (error instanceof QuantifyClientError) return error.status
-    if (this.isQuantifyErrorShape(error)) return error.status
-    return undefined
+    return typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code)
   }
 
   private getQuantifyErrorCode(error: unknown): string | undefined {
