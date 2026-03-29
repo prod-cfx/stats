@@ -20,31 +20,35 @@ export class BacktestingProxyController {
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   async capabilities(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
   ): Promise<unknown> {
-    return this.service.getBacktestCapabilities(authorization)
+    return this.service.getBacktestCapabilities(authorization, requestId)
   }
 
   @Post('jobs')
   async createJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Body() body: Record<string, unknown>,
   ): Promise<unknown> {
-    return this.service.createBacktestJob(authorization, body)
+    return this.service.createBacktestJob(authorization, body, requestId)
   }
 
   @Get('jobs/:id')
   async getJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Param('id') id: string,
   ): Promise<unknown> {
-    return this.service.getBacktestJob(authorization, id)
+    return this.service.getBacktestJob(authorization, id, requestId)
   }
 
   @Get('jobs/:id/result')
   async getJobResult(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Param('id') id: string,
   ): Promise<unknown> {
-    return this.service.getBacktestJobResult(authorization, id)
+    return this.service.getBacktestJobResult(authorization, id, requestId)
   }
 }

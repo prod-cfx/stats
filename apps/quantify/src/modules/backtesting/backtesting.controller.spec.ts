@@ -9,6 +9,35 @@ import { BacktestStrategyAdapterService } from './services/backtest-strategy-ada
 jest.mock('@nestjs-cls/transactional', () => ({
   Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
 }))
+jest.mock('./jobs/backtest-jobs.service', () => ({
+  BacktestJobsService: class {},
+}))
+jest.mock('./core/backtest-runner.service', () => ({
+  BacktestRunnerService: class {},
+}))
+jest.mock('./services/backtest-strategy-adapter.service', () => ({
+  BacktestStrategyAdapterService: class {},
+}))
+jest.mock('./services/backtest-caller-identity.service', () => ({
+  BacktestCallerIdentityService: class {},
+}))
+jest.mock('./services/backtest-capabilities.service', () => ({
+  BacktestCapabilitiesService: class {},
+}))
+jest.mock('@/common/utils/prisma-enum-mappers', () => ({
+  mapTimeframe: (value: string) => value,
+  reverseMapTimeframe: (value: string) => value,
+  mapIndicatorType: (value: string) => value,
+  mapSymbolStatus: (value: string) => value,
+  PRISMA_TIMEFRAME: {
+    M1: 'm1',
+    M5: 'm5',
+    M15: 'm15',
+    H1: 'h1',
+    H4: 'h4',
+    D1: 'd1',
+  },
+}))
 jest.mock('@nestjs/throttler', () => ({
   Throttle: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
   ThrottlerGuard: class {
@@ -95,7 +124,7 @@ describe('backtestingController', () => {
     await c.createJob('Bearer token', dto)
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
-    await c.getCapabilities()
+    await c.getCapabilities('req-1')
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(4)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
@@ -109,5 +138,6 @@ describe('backtestingController', () => {
     expect(jobs.getJob).toHaveBeenCalledWith('job-1', 'user-1')
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
+    expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
   })
 })
