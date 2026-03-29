@@ -70,7 +70,7 @@ describe('fetchAccountAiQuantStrategies', () => {
     }
   })
 
-  it('requests subscribedOnly and excludeDraft, and filters leaked remote items', async () => {
+  it('requests subscribedOnly and excludeDraft, and keeps backend paging payload unchanged', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -93,7 +93,8 @@ describe('fetchAccountAiQuantStrategies', () => {
     const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? '')
     expect(firstUrl).toContain('subscribedOnly=true')
     expect(firstUrl).toContain('excludeDraft=true')
-    expect(result.items.map(item => item.id)).toEqual(['s1'])
+    expect(result.total).toBe(3)
+    expect(result.items.map(item => item.id)).toEqual(['s1', 's2', 's3'])
   })
 
   it('falls back to local mock list in non-production only and still excludes draft', async () => {

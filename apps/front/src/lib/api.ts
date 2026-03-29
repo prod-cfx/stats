@@ -1561,12 +1561,7 @@ export async function fetchAccountAiQuantStrategies(
         json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
       )
 
-      return {
-        total: remote.total,
-        page: remote.page,
-        limit: remote.limit,
-        items: remote.items.filter(item => (!subscribedOnly || item.isSubscribed) && (!excludeDraft || item.status !== 'draft')),
-      }
+      return remote
     }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
   } catch (error) {
     if (!shouldFallbackToAccountAiQuantMock(error)) throw error
