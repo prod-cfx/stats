@@ -23,10 +23,12 @@ describe('aiQuantProxyService', () => {
       page: 1,
       limit: 20,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
 
     expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running',
+      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running&subscribedOnly=true&excludeDraft=true',
       { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })
@@ -39,10 +41,12 @@ describe('aiQuantProxyService', () => {
       page: 1,
       limit: 20,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
 
     expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running',
+      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running&subscribedOnly=true&excludeDraft=true',
       { headers: { 'x-user-id': 'user-1' } },
     )
   })

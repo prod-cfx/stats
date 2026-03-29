@@ -40,8 +40,8 @@ type SendVerificationCodePayload = Infer<typeof schemas.SendVerificationCodeRequ
 
 const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
-const ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK =
-  process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
+const ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED =
+  IS_NON_PROD && process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
 
 function getHttpStatusFromError(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.statusCode === 'number') {
@@ -66,7 +66,7 @@ function shouldFallbackToMock(error: unknown): boolean {
 
 function shouldFallbackToAccountAiQuantMock(error: unknown): boolean {
   if (error instanceof AuthenticationError) return false
-  return ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK && shouldFallbackToMock(error)
+  return ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED && shouldFallbackToMock(error)
 }
 
 function isRetryableNetworkStatus(status: number): boolean {
@@ -74,7 +74,7 @@ function isRetryableNetworkStatus(status: number): boolean {
 }
 
 function shouldFallbackDeleteAccountAiQuantMock(error: unknown): boolean {
-  if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) return false
+  if (!ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED) return false
   if (!shouldFallbackToAccountAiQuantMock(error)) return false
 
   const status = getHttpStatusFromError(error)
@@ -1392,6 +1392,8 @@ interface AccountAiQuantListQuery {
   page?: number
   limit?: number
   status?: AccountAiQuantStrategyStatus
+  subscribedOnly?: boolean
+  excludeDraft?: boolean
 }
 
 export interface AccountAiQuantDeployPayload {
@@ -1409,11 +1411,14 @@ export interface AccountAiQuantDeployPayload {
 function buildMockAccountAiQuantListResponse(
   query: AccountAiQuantListQuery,
 ): PaginatedResponse<AccountAiQuantStrategyListItem> {
+  const subscribedOnly = query.subscribedOnly === true
+  const excludeDraft = query.excludeDraft === true
   const page = query.page ?? 1
   const limit = query.limit ?? 20
   const all = listMockStrategies()
     .filter(item => !query.status || item.status === query.status)
     .map(mapMockStrategyToListItem)
+    .filter(item => (!subscribedOnly || item.isSubscribed) && (!excludeDraft || item.status !== 'draft'))
   const start = (page - 1) * limit
   const items = all.slice(start, start + limit)
   return {
@@ -1529,6 +1534,9 @@ async function parseAccountAiQuantJson(response: Response, fallbackMessage: stri
 export async function fetchAccountAiQuantStrategies(
   query: AccountAiQuantListQuery,
 ): Promise<PaginatedResponse<AccountAiQuantStrategyListItem>> {
+  const subscribedOnly = query.subscribedOnly ?? true
+  const excludeDraft = query.excludeDraft ?? true
+
   try {
     return await apiCall(async () => {
       if (!query.userId?.trim()) {
@@ -1539,6 +1547,8 @@ export async function fetchAccountAiQuantStrategies(
         userId: query.userId.trim(),
         page: String(query.page ?? 1),
         limit: String(query.limit ?? 20),
+        subscribedOnly: String(subscribedOnly),
+        excludeDraft: String(excludeDraft),
       })
       if (query.status) search.set('status', query.status)
 
@@ -1551,39 +1561,15 @@ export async function fetchAccountAiQuantStrategies(
         json as PaginatedResponse<AccountAiQuantStrategyListItem> | BaseResponse<PaginatedResponse<AccountAiQuantStrategyListItem>>,
       )
 
-      if (!ENABLE_ACCOUNT_AI_QUANT_MOCK_FALLBACK) {
-        return remote
-      }
-
-      const mock = buildMockAccountAiQuantListResponse(query)
-      if (mock.total === 0) {
-        return remote
-      }
-      if (remote.total === 0) {
-        return mock
-      }
-
-      const mergedById = new Map<string, AccountAiQuantStrategyListItem>()
-      for (const item of remote.items) mergedById.set(item.id, item)
-      for (const item of mock.items) {
-        if (!mergedById.has(item.id)) mergedById.set(item.id, item)
-      }
-      const mergedItems = Array.from(mergedById.values())
-      const mergedTotal = new Set([
-        ...remote.items.map(item => item.id),
-        ...mock.items.map(item => item.id),
-      ]).size
-
-      return {
-        total: mergedTotal,
-        page: remote.page,
-        limit: remote.limit,
-        items: mergedItems.slice(0, remote.limit),
-      }
+      return remote
     }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGIES')
   } catch (error) {
     if (!shouldFallbackToAccountAiQuantMock(error)) throw error
-    return buildMockAccountAiQuantListResponse(query)
+    return buildMockAccountAiQuantListResponse({
+      ...query,
+      subscribedOnly,
+      excludeDraft,
+    })
   }
 }
 
@@ -1617,7 +1603,11 @@ export async function fetchAccountAiQuantStrategyDetail(
     }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
   } catch (error) {
     if (!shouldFallbackToAccountAiQuantMock(error)) throw error
-    return mapMockStrategyToDetail(getStrategyById(strategyId))
+    const fallback = getStrategyById(strategyId)
+    if (!fallback || fallback.status === 'draft') {
+      throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
+    }
+    return mapMockStrategyToDetail(fallback)
   }
 }
 

@@ -23,13 +23,15 @@ export class AiQuantProxyService {
   async listAccountStrategies(
     userId: string,
     authorization: string | undefined,
-    query: Record<string, string | number | undefined>,
+    query: Record<string, string | number | boolean | undefined>,
   ) {
     return this.quantifyClient.get(this.buildPath('/account/ai-quant/strategies', {
       userId,
       page: query.page,
       limit: query.limit,
       status: query.status,
+      subscribedOnly: query.subscribedOnly,
+      excludeDraft: query.excludeDraft,
     }), { headers: this.userHeaders(userId, authorization) }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -206,7 +208,7 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  private buildPath(path: string, query: Record<string, string | number | undefined>) {
+  private buildPath(path: string, query: Record<string, string | number | boolean | undefined>) {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === '') continue

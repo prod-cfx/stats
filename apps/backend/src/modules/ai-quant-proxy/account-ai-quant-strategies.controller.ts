@@ -28,6 +28,8 @@ export class AccountAiQuantStrategiesController {
       page: query.page,
       limit: query.limit,
       status: query.status,
+      subscribedOnly: query.subscribedOnly,
+      excludeDraft: query.excludeDraft,
     })
   }
 
