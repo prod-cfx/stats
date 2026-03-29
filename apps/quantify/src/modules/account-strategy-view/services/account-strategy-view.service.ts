@@ -125,11 +125,8 @@ export class AccountStrategyViewService {
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
-    const sub = row.subscriptions[0]
-    const isSubscribed = !!sub && sub.status === 'active'
-    if (!isSubscribed || this.mapUiStatus(row.status) === 'draft') {
-      throw new StrategyNotFoundException({ strategyInstanceId })
-    }
+    const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    const isSubscribed = sub.status === 'active'
 
     const mergedParams = {
       ...(row.strategyTemplate?.defaultParams as Record<string, unknown> ?? {}),
@@ -286,6 +283,8 @@ export class AccountStrategyViewService {
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
 
+    this.assertStrategyVisible(row, strategyInstanceId)
+
     const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
     if (nextStatus === row.status) {
       return this.getStrategyDetail(userId, strategyInstanceId)
@@ -409,6 +408,19 @@ export class AccountStrategyViewService {
     if (status === 'running') return 'running'
     if (status === 'draft') return 'draft'
     return 'stopped'
+  }
+
+  private assertStrategyVisible<T extends { status?: string | null }>(
+    row: { status: string; subscriptions?: T[] | null },
+    strategyInstanceId: string,
+  ): T {
+    const sub = row.subscriptions?.[0]
+    const isSubscribed = !!sub && sub.status === 'active'
+    if (!isSubscribed || this.mapUiStatus(row.status) === 'draft') {
+      throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
+    return sub
   }
 
   private buildDynamicParams(meta: {
