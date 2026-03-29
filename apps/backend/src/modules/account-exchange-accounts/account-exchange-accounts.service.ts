@@ -2,22 +2,35 @@ import type { AccountExchangeAccountResponseDto } from './dto/account-exchange-a
 import type { CreateAccountExchangeAccountDto } from './dto/create-account-exchange-account.dto'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { QuantifyClientError, QuantifyExchangeAccountsClient } from './clients/quantify-exchange-accounts.client'
 
 @Injectable()
 export class AccountExchangeAccountsService {
+  private static readonly TRANSIENT_UPSTREAM_CODES = new Set([
+    'UPSTREAM_REQUEST_FAILED',
+    'UPSTREAM_INVALID_RESPONSE',
+  ])
+  private readonly logger = new Logger(AccountExchangeAccountsService.name)
+
   constructor(
     @Inject(QuantifyExchangeAccountsClient)
     private readonly quantifyClient: QuantifyExchangeAccountsClient,
   ) {}
 
-  async list(userId: string): Promise<AccountExchangeAccountResponseDto[]> {
+  async list(
+    userId: string,
+    options?: { degradeOnTransientFailure?: boolean },
+  ): Promise<AccountExchangeAccountResponseDto[]> {
     try {
       return await this.quantifyClient.list(userId)
     }
     catch (error) {
+      if (options?.degradeOnTransientFailure && this.isTransientUpstreamFailure(error)) {
+        this.logger.warn(`event=exchange_accounts_list_fallback reason=${this.describeError(error)} userId=${userId}`)
+        return []
+      }
       throw this.mapQuantifyError(error)
     }
   }
@@ -95,5 +108,29 @@ export class AccountExchangeAccountsService {
       && typeof (error as { status?: unknown }).status === 'number'
       && 'message' in error
       && typeof (error as { message?: unknown }).message === 'string'
+  }
+
+  private isTransientUpstreamFailure(error: unknown): boolean {
+    const code = this.getQuantifyErrorCode(error)
+    return typeof code === 'string' && AccountExchangeAccountsService.TRANSIENT_UPSTREAM_CODES.has(code)
+  }
+
+  private getQuantifyErrorCode(error: unknown): string | undefined {
+    if (error instanceof QuantifyClientError) return error.code
+    if (this.isQuantifyErrorShape(error)) return error.code
+    return undefined
+  }
+
+  private describeError(error: unknown): string {
+    if (error instanceof QuantifyClientError) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (this.isQuantifyErrorShape(error)) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (error instanceof Error) {
+      return error.message
+    }
+    return String(error)
   }
 }

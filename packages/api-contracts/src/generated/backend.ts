@@ -155,7 +155,20 @@ const CreateAccountExchangeAccountDto = z
       .optional(),
   })
   .passthrough()
-const Function = z.object({}).partial().passthrough()
+const AccountAiQuantActionRequestDto = z.object({ action: z.enum(['run', 'stop']) }).passthrough()
+const AccountAiQuantDeployRequestDto = z
+  .object({
+    name: z.string(),
+    deployRequestId: z.string(),
+    exchange: z.enum(['binance', 'okx', 'hyperliquid']),
+    symbol: z.string(),
+    timeframe: z.string(),
+    positionPct: z.number(),
+    exchangeAccountId: z.string().optional(),
+    strategyInstanceId: z.string().optional(),
+    exchangeAccountName: z.string().optional(),
+  })
+  .passthrough()
 const LlmCodegenStartRequestDto = z
   .object({
     initialMessage: z.string(),
@@ -184,6 +197,7 @@ const LlmCodegenContinueRequestDto = z
     maxTokens: z.number().optional(),
   })
   .passthrough()
+const Function = z.object({}).partial().passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1086,9 +1100,11 @@ export const schemas = {
   BindTelegramRequestDto,
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
-  Function,
+  AccountAiQuantActionRequestDto,
+  AccountAiQuantDeployRequestDto,
   LlmCodegenStartRequestDto,
   LlmCodegenContinueRequestDto,
+  Function,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -1186,6 +1202,31 @@ const endpoints = makeApi([
         type: 'Header',
         schema: z.string(),
       },
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
+      },
+      {
+        name: 'status',
+        type: 'Query',
+        schema: z.enum(['running', 'stopped', 'draft']).optional(),
+      },
+      {
+        name: 'subscribedOnly',
+        type: 'Query',
+        schema: z.boolean().optional(),
+      },
+      {
+        name: 'excludeDraft',
+        type: 'Query',
+        schema: z.boolean().optional(),
+      },
     ],
     response: z.void(),
   },
@@ -1236,7 +1277,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: AccountAiQuantActionRequestDto,
       },
       {
         name: 'authorization',
@@ -1260,7 +1301,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({}).partial().passthrough(),
+        schema: AccountAiQuantDeployRequestDto,
       },
       {
         name: 'authorization',

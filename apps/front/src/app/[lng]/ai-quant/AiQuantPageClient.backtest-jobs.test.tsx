@@ -10,6 +10,7 @@ const mockCreateBacktestJob = jest.fn()
 const mockGetBacktestJob = jest.fn()
 const mockGetBacktestJobResult = jest.fn()
 const mockBuildBacktestPayload = jest.fn()
+const mockFetchBacktestCapabilities = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -30,10 +31,6 @@ jest.mock('@/hooks/use-auth', () => ({
     session: { userId: 'u-1' },
     isLoading: false,
   }),
-}))
-
-jest.mock('@/components/account/exchange-account-store', () => ({
-  listExchangeAccounts: () => [],
 }))
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
@@ -115,6 +112,9 @@ jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
   buildBacktestPayload: (...args: unknown[]) => mockBuildBacktestPayload(...args),
   isBacktestPayloadBuilderError: (error: unknown) => Boolean((error as { __builderError?: boolean })?.__builderError),
 }))
+jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
+  fetchBacktestCapabilities: (...args: unknown[]) => mockFetchBacktestCapabilities(...args),
+}))
 
 jest.mock('@/components/ai-quant/backtest-job-client', () => ({
   createBacktestJob: (...args: unknown[]) => mockCreateBacktestJob(...args),
@@ -125,6 +125,7 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: jest.fn(),
+  fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
   startLlmCodegenSession: jest.fn(),
 }))
@@ -171,6 +172,10 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     jest.clearAllMocks()
 
     mockBuildBacktestPayload.mockReturnValue(defaultPayload())
+    mockFetchBacktestCapabilities.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
     mockCreateBacktestJob.mockResolvedValue({
       id: 'job-1',
       status: 'queued',

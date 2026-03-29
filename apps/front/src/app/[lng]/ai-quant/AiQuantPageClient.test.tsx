@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
+const mockFetchBacktestCapabilities = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -30,10 +31,6 @@ jest.mock('@/hooks/use-auth', () => ({
     session: { userId: 'u-1' },
     isLoading: false,
   }),
-}))
-
-jest.mock('@/components/account/exchange-account-store', () => ({
-  listExchangeAccounts: () => [],
 }))
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
@@ -132,9 +129,14 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
   })),
 }))
 
+jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
+  fetchBacktestCapabilities: (...args: unknown[]) => mockFetchBacktestCapabilities(...args),
+}))
+
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: jest.fn(),
+  fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
   startLlmCodegenSession: jest.fn(),
 }))
@@ -152,6 +154,10 @@ describe('AiQuantPageClient backtest range integration', () => {
     jest.clearAllMocks()
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-24T12:00:00.000Z'))
+    mockFetchBacktestCapabilities.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
   })
 
   afterEach(async () => {

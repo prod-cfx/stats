@@ -1,11 +1,14 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import { ErrorCode } from '@ai/shared'
 import { SubscriptionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
+import { HttpStatus } from '@nestjs/common'
 import { Injectable } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { Prisma } from '@/prisma/prisma.types'
 import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
@@ -46,13 +49,10 @@ export class AccountStrategyViewRepository {
       })
 
       if (!existingUser) {
-        await tx.user.create({
-          data: {
-            id: input.userId,
-            email: `${input.userId}@local.quantify`,
-            nickname: 'AI Quant User',
-            isGuest: true,
-          },
+        throw new DomainException('account_strategy.user_not_found', {
+          code: ErrorCode.USER_NOT_FOUND,
+          status: HttpStatus.NOT_FOUND,
+          args: { userId: input.userId },
         })
       }
 

@@ -1,6 +1,7 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AccountExchangeAccountsService } from '@/modules/account-exchange-accounts/account-exchange-accounts.service'
 import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-ai-quant.client'
 
 @Injectable()
@@ -9,6 +10,10 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+  private static readonly DEPLOY_RETRY_ATTEMPTS = 3
+  private static readonly DEPLOY_BACKOFF_BASE_MS = 200
+  private static readonly DEPLOY_BACKOFF_MAX_MS = 1_000
+  private static readonly DEPLOY_BACKOFF_JITTER_MS = 80
   private static readonly TRANSIENT_UPSTREAM_CODES = new Set([
     'UPSTREAM_REQUEST_FAILED',
     'UPSTREAM_INVALID_RESPONSE',
@@ -18,6 +23,8 @@ export class AiQuantProxyService {
   constructor(
     @Inject(QuantifyAiQuantClient)
     private readonly quantifyClient: QuantifyAiQuantClient,
+    @Inject(AccountExchangeAccountsService)
+    private readonly exchangeAccountsService: AccountExchangeAccountsService,
   ) {}
 
   async listAccountStrategies(
@@ -60,11 +67,47 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     body: Record<string, unknown>,
   ) {
-    return this.quantifyClient.post(
-      '/account/ai-quant/strategies/deploy',
-      { ...body, userId },
-      { headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    await this.assertExchangeAccountExists(userId, body.exchangeAccountId)
+
+    for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.quantifyClient.post(
+          '/account/ai-quant/strategies/deploy',
+          { ...body, userId },
+          { headers: this.userHeaders(userId, authorization) },
+        )
+      } catch (error) {
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
+        const isLastAttempt = attempt >= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS
+        if (!isTransientUpstreamFailure || isLastAttempt) {
+          throw this.mapQuantifyError(error)
+        }
+        this.logger.warn(`event=deploy_retry reason=${this.describeError(error)} attempt=${attempt}`)
+        await this.sleep(this.getDeployBackoffMs(attempt))
+      }
+    }
+
+    throw new DomainException('Quantify request failed', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    })
+  }
+
+  private async assertExchangeAccountExists(userId: string, exchangeAccountId: unknown): Promise<void> {
+    if (typeof exchangeAccountId !== 'string' || exchangeAccountId.trim().length === 0) return
+
+    const accounts = await this.exchangeAccountsService.list(userId)
+    const exists = accounts.some(account => account.id === exchangeAccountId)
+    if (exists) return
+
+    throw new DomainException('exchange account not found', {
+      code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
+      status: HttpStatus.NOT_FOUND,
+      args: {
+        accountId: exchangeAccountId,
+        reasonMessage: 'exchange account not found',
+      },
+    })
   }
 
   async deleteAccountStrategy(
@@ -332,6 +375,15 @@ export class AiQuantProxyService {
       AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_MAX_MS,
     )
     const jitter = Math.floor(Math.random() * AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS)
+    return expo + jitter
+  }
+
+  private getDeployBackoffMs(attempt: number): number {
+    const expo = Math.min(
+      AiQuantProxyService.DEPLOY_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+      AiQuantProxyService.DEPLOY_BACKOFF_MAX_MS,
+    )
+    const jitter = Math.floor(Math.random() * AiQuantProxyService.DEPLOY_BACKOFF_JITTER_MS)
     return expo + jitter
   }
 }

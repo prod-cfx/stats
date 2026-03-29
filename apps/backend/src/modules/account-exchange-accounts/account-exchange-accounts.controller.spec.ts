@@ -27,7 +27,7 @@ describe('accountExchangeAccountsController', () => {
 
     await controller.list('user-1')
 
-    expect(service.list).toHaveBeenCalledWith('user-1')
+    expect(service.list).toHaveBeenCalledWith('user-1', { degradeOnTransientFailure: true })
   })
 
   it('uses authenticated user id when upserting bindings', async () => {
