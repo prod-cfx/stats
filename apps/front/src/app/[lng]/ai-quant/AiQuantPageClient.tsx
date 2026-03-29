@@ -450,6 +450,8 @@ export function AiQuantPageClient() {
   const [conversations, setConversations] = useState<ConversationState[]>(() => [createConversation()])
   const [activeConversationId, setActiveConversationId] = useState<string>('')
   const [deployOpen, setDeployOpen] = useState(false)
+  const [deployRequestId, setDeployRequestId] = useState<string | null>(null)
+  const [deploySubmitting, setDeploySubmitting] = useState(false)
   const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
@@ -1601,7 +1603,10 @@ export function AiQuantPageClient() {
                   updatedAt: Date.now(),
                 }))
               }}
-              onDeploy={() => setDeployOpen(true)}
+              onDeploy={() => {
+                setDeployRequestId(createDeployRequestId())
+                setDeployOpen(true)
+              }}
             />
           )}
         </div>
@@ -1609,8 +1614,15 @@ export function AiQuantPageClient() {
 
       <DeployDialog
         open={deployOpen}
-        onClose={() => setDeployOpen(false)}
+        onClose={() => {
+          if (deploySubmitting) {
+            return
+          }
+          setDeployOpen(false)
+          setDeployRequestId(null)
+        }}
         canDeploy={canDeploy}
+        deploySubmitting={deploySubmitting}
         apiConfigured={apiConfigured}
         exchange={selectedDeployExchange}
         accounts={deployAccounts}
@@ -1624,17 +1636,25 @@ export function AiQuantPageClient() {
         }}
         onSelectAccount={setSelectedDeployAccountId}
         onConfirmDeploy={async () => {
+          if (deploySubmitting) {
+            return
+          }
           const account = deployAccounts.find(item => item.accountId === selectedDeployAccountId)
           if (!account || !activeConversation.backtestResult || !session?.userId) return
 
           const strategyName = activeConversation.title || t('aiQuant.defaultStrategyName', { defaultValue: 'AI Strategy' })
           const timeframe = `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`
+          const requestId = deployRequestId ?? createDeployRequestId()
+          if (!deployRequestId) {
+            setDeployRequestId(requestId)
+          }
 
           try {
+            setDeploySubmitting(true)
             await deployAccountAiQuantStrategy({
               userId: session.userId,
               name: strategyName,
-              deployRequestId: createDeployRequestId(),
+              deployRequestId: requestId,
               exchange: selectedDeployExchange,
               symbol: activeConversation.params.symbol,
               timeframe,
@@ -1644,6 +1664,7 @@ export function AiQuantPageClient() {
               exchangeAccountName: account.accountName,
             })
             setDeployOpen(false)
+            setDeployRequestId(null)
             updateActiveConversation(curr => ({
               ...curr,
               messages: [
@@ -1676,6 +1697,7 @@ export function AiQuantPageClient() {
                 },
               })
               setDeployOpen(false)
+              setDeployRequestId(null)
               updateActiveConversation(curr => ({
                 ...curr,
                 messages: [
@@ -1714,6 +1736,8 @@ export function AiQuantPageClient() {
             throw error instanceof ApiError
               ? error
               : new ApiError(deployErrorMessage, 'AI_QUANT_DEPLOY_FAILED', 500, { error })
+          } finally {
+            setDeploySubmitting(false)
           }
         }}
         lng={lng}
