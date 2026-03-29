@@ -355,8 +355,22 @@ export class BinanceClient extends BaseCexClient {
       const message = typeof record.msg === 'string' ? record.msg : `Binance request failed with status ${status}`
       const messageLower = message.toLowerCase()
 
+      // -2015 在 Binance 侧可能是 key/secret、IP 白名单、权限等混合问题，需要结合消息细分
+      if (code === '-2015') {
+        if (messageLower.includes('ip') || message.includes('白名单')) {
+          return new AuthError('IP地址未加入白名单，请在币安API管理页面添加服务器IP或取消IP限制', data)
+        }
+        if (messageLower.includes('permission') || message.includes('权限')) {
+          return new AuthError('API Key权限不足，请确保开启"读取"和"交易"权限', data)
+        }
+        if (messageLower.includes('disabled') || messageLower.includes('delete')) {
+          return new AuthError('API Key已被禁用，请在币安API管理页面检查状态', data)
+        }
+        return new AuthError('API Key或Secret错误，请检查是否正确复制（不要有多余空格）', data)
+      }
+
       // API Key 和 Secret 错误
-      if (code === '-2015' || code === '-2014') {
+      if (code === '-2014') {
         return new AuthError('API Key或Secret错误，请检查是否正确复制（不要有多余空格）', data)
       }
 
