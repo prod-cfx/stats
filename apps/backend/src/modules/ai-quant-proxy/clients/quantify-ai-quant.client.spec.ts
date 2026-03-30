@@ -90,4 +90,28 @@ describe('quantifyAiQuantClient', () => {
       expect.objectContaining({ method: 'GET' }),
     )
   })
+
+  it('ignores placeholder QUANTIFY_BASE_URL and falls back to localhost default', async () => {
+    const envWithPlaceholder = {
+      getString: jest.fn((key: string) => {
+        if (key === 'QUANTIFY_API_BASE_URL') return undefined
+        if (key === 'QUANTIFY_BASE_URL') return '__SET_IN_env.local__'
+        return undefined
+      }),
+      getNumber: jest.fn(() => undefined),
+    }
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(envWithPlaceholder as any)
+    await expect(client.get('/llm-strategy-instances')).resolves.toEqual({ ok: true })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://localhost:3010/api/v1/llm-strategy-instances',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
 })

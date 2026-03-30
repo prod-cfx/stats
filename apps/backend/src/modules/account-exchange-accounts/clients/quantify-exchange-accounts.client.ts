@@ -13,6 +13,8 @@ interface QuantifyErrorPayload {
   message?: string
 }
 
+const ENV_PLACEHOLDER = '__SET_IN_env.local__'
+
 function tryParseJson<T>(raw: string): T | null {
   if (!raw.trim()) {
     return null
@@ -32,6 +34,14 @@ function normalizeQuantifyBaseUrl(raw: string): string {
     return trimmed
   }
   return `${trimmed}/api/v1`
+}
+
+function normalizeConfiguredUrl(value: string | undefined): string | undefined {
+  const normalized = value?.trim()
+  if (!normalized || normalized === ENV_PLACEHOLDER) {
+    return undefined
+  }
+  return normalized
 }
 
 export class QuantifyClientError extends Error {
@@ -143,12 +153,12 @@ export class QuantifyExchangeAccountsClient {
   }
 
   private baseUrl(): string {
-    const explicitApiBase = this.env.getString('QUANTIFY_API_BASE_URL')
+    const explicitApiBase = normalizeConfiguredUrl(this.env.getString('QUANTIFY_API_BASE_URL'))
     if (explicitApiBase) {
       return normalizeQuantifyBaseUrl(explicitApiBase)
     }
 
-    const base = this.env.getString('QUANTIFY_BASE_URL')
+    const base = normalizeConfiguredUrl(this.env.getString('QUANTIFY_BASE_URL'))
     if (base) {
       return normalizeQuantifyBaseUrl(base)
     }

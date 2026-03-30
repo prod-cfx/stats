@@ -74,4 +74,27 @@ describe('quantifyExchangeAccountsClient', () => {
       expect.any(Object),
     )
   })
+
+  it('ignores placeholder QUANTIFY_BASE_URL and falls back to localhost default', async () => {
+    const envWithPlaceholder = {
+      getString: jest.fn((key: string) => {
+        if (key === 'QUANTIFY_API_BASE_URL') return undefined
+        if (key === 'QUANTIFY_BASE_URL') return '__SET_IN_env.local__'
+        return undefined
+      }),
+    }
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [] }),
+    } as Response)
+
+    const client = new QuantifyExchangeAccountsClient(envWithPlaceholder as never)
+    await client.list('user-1')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('http://localhost:3010/api/v1/exchange-accounts?userId=user-1'),
+      expect.any(Object),
+    )
+  })
 })

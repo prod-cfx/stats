@@ -21,6 +21,21 @@ const SERVER_BASE_URL =
   normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL) ?? 'http://localhost:3000'
 
 export const API_BASE_URL = EXPLICIT_API_BASE_URL ?? `${SERVER_BASE_URL}/api/v1`
+export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(API_BASE_URL, SERVER_BASE_URL)
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+function resolveServerApiBaseUrl(apiBaseUrl: string, serverBaseUrl: string): string {
+  if (isAbsoluteHttpUrl(apiBaseUrl)) {
+    return apiBaseUrl
+  }
+  if (apiBaseUrl.startsWith('/')) {
+    return `${serverBaseUrl}${apiBaseUrl}`
+  }
+  return `${serverBaseUrl}/${apiBaseUrl}`
+}
 
 /**
  * Zodios客户端实例
