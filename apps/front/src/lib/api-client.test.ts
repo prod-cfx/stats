@@ -33,4 +33,22 @@ describe('api-client env resolution', () => {
 
     expect(API_BASE_URL).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
   })
+
+  it('builds SERVER_API_BASE_URL as absolute when NEXT_PUBLIC_API_BASE_URL is relative', async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = '/api/v1'
+    process.env.NEXT_PUBLIC_API_SERVER_URL = 'http://localhost:3000'
+
+    const { SERVER_API_BASE_URL } = await loadApiClient()
+
+    expect(SERVER_API_BASE_URL).toBe('http://localhost:3000/api/v1')
+  })
+
+  it('keeps SERVER_API_BASE_URL unchanged when NEXT_PUBLIC_API_BASE_URL is absolute', async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.com/api/v1'
+    process.env.NEXT_PUBLIC_API_SERVER_URL = 'http://localhost:3000'
+
+    const { SERVER_API_BASE_URL } = await loadApiClient()
+
+    expect(SERVER_API_BASE_URL).toBe('https://api.example.com/api/v1')
+  })
 })
