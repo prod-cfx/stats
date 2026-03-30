@@ -33,6 +33,17 @@ export interface BacktestReportData {
   insights: string[]
 }
 
+export interface LiveBacktestReportInput {
+  equityCurve?: Array<{ ts: number, equity: number }> | null
+  trades?: Array<{
+    id: string
+    side: 'LONG' | 'SHORT'
+    exitTs: number
+    exitPrice: number
+    returnPct: number
+  }> | null
+}
+
 function hashString(value: string): number {
   let hash = 0
   for (let i = 0; i < value.length; i += 1) {
@@ -130,4 +141,72 @@ export function createBacktestReportData(
     volatilitySharpe,
     insights,
   }
+}
+
+export function createBacktestReportDataFromLive(
+  id: string,
+  metrics: BacktestReportMetrics,
+  report: LiveBacktestReportInput,
+): BacktestReportData | null {
+  const mappedEquitySeries = mapLiveEquitySeries(report.equityCurve)
+  const mappedTrades = mapLiveTrades(report.trades)
+  if (mappedEquitySeries.length === 0 || mappedTrades.length === 0) {
+    return null
+  }
+
+  const fallback = createBacktestReportData(id, metrics)
+  return {
+    ...fallback,
+    equitySeries: mappedEquitySeries,
+    trades: mappedTrades,
+  }
+}
+
+function mapLiveEquitySeries(
+  equityCurve: LiveBacktestReportInput['equityCurve'],
+): EquityPoint[] {
+  if (!Array.isArray(equityCurve) || equityCurve.length === 0) {
+    return []
+  }
+
+  let peak = Number.NEGATIVE_INFINITY
+  return equityCurve
+    .filter(point => Number.isFinite(point?.ts) && Number.isFinite(point?.equity))
+    .map((point) => {
+      peak = Math.max(peak, point.equity)
+      const drawdown = peak > 0 ? -((peak - point.equity) / peak) * 100 : 0
+      const date = new Date(point.ts)
+      const time = Number.isNaN(date.getTime())
+        ? '-'
+        : `${date.getUTCMonth() + 1}-${date.getUTCDate()}`
+      return {
+        time,
+        equity: Number(point.equity.toFixed(2)),
+        drawdown: Number(drawdown.toFixed(2)),
+      }
+    })
+}
+
+function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[] {
+  if (!Array.isArray(trades) || trades.length === 0) {
+    return []
+  }
+
+  return trades
+    .filter(trade => Number.isFinite(trade?.exitTs) && Number.isFinite(trade?.exitPrice) && Number.isFinite(trade?.returnPct))
+    .map((trade, index) => {
+      const date = new Date(trade.exitTs)
+      const time = Number.isNaN(date.getTime())
+        ? '-'
+        : date.toISOString().slice(0, 16).replace('T', ' ')
+      const profitPct = Number(trade.returnPct.toFixed(2))
+      return {
+        id: index + 1,
+        time,
+        type: trade.side === 'LONG' ? 'buy-long' : 'sell-close',
+        price: Number(trade.exitPrice.toFixed(2)),
+        profitPct,
+        isProfit: profitPct >= 0,
+      }
+    })
 }

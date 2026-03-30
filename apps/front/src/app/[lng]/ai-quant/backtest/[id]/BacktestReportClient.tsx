@@ -1,6 +1,6 @@
 'use client'
 
-import type { BacktestReportMetrics, EquityPoint, RiskItem, TradeRecord } from './backtest-report-data'
+import type { BacktestReportMetrics, EquityPoint, LiveBacktestReportInput, RiskItem, TradeRecord } from './backtest-report-data'
 import Link from 'next/link'
 import React, { useMemo, useState } from 'react'
 import {
@@ -13,7 +13,7 @@ import {
   YAxis,
   Tooltip,
 } from 'recharts'
-import { createBacktestReportData } from './backtest-report-data'
+import { createBacktestReportData, createBacktestReportDataFromLive } from './backtest-report-data'
 
 interface BacktestReportProps {
   lng: string
@@ -21,6 +21,7 @@ interface BacktestReportProps {
   symbol: string
   rangeDisplay: string
   metrics: BacktestReportMetrics | null
+  report?: LiveBacktestReportInput | null
 }
 
 // --- 1. Strategy Conclusion Card ---
@@ -327,8 +328,14 @@ function TradeDetailsSection({ lng, trades }: { lng: string, trades: TradeRecord
 }
 
 // --- Main Page Component ---
-export function BacktestReportClient({ lng, id, symbol, rangeDisplay, metrics }: BacktestReportProps) {
-  const reportData = useMemo(() => (metrics ? createBacktestReportData(id, metrics) : null), [id, metrics])
+export function BacktestReportClient({ lng, id, symbol, rangeDisplay, metrics, report = null }: BacktestReportProps) {
+  const reportData = useMemo(() => {
+    if (!metrics) {
+      return null
+    }
+    const liveData = report ? createBacktestReportDataFromLive(id, metrics, report) : null
+    return liveData ?? createBacktestReportData(id, metrics)
+  }, [id, metrics, report])
   const hasReportData = metrics !== null && reportData !== null
 
   const handleDeploy = () => {}

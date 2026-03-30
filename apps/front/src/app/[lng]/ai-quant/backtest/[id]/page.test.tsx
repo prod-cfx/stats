@@ -3,6 +3,10 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server.node'
 import AiQuantBacktestDetailPage from './page'
 
+jest.mock('@/lib/server-api', () => ({
+  fetchBacktestJobResultServer: jest.fn(async () => null),
+}))
+
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ href, children }: { href: string, children: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -44,6 +48,6 @@ describe('AiQuantBacktestDetailPage', () => {
 
     const html = renderToStaticMarkup(element)
     expect(html).toContain('BTCUSDT')
-    expect(html).toContain('>-<')
+    expect(html).toContain(' · -')
   })
 })

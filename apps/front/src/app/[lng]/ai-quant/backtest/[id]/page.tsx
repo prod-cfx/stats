@@ -22,12 +22,12 @@ export default async function AiQuantBacktestDetailPage({
   const rangeDisplay = formatBacktestRange(startAt, endAt)
 
   const summary = await fetchBacktestJobResultServer(resolved.id)
-  const metrics = summary
+  const metrics = summary?.summary
     ? {
-        maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
-        totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
-        winRatePct: Number(summary.winRate.toFixed(2)),
-        tradeCount: summary.totalTrades,
+        maxDrawdownPct: Number(summary.summary.maxDrawdownPct.toFixed(2)),
+        totalReturnPct: Number(summary.summary.netProfitPct.toFixed(2)),
+        winRatePct: Number(summary.summary.winRate.toFixed(2)),
+        tradeCount: summary.summary.totalTrades,
       }
     : null
 
@@ -41,6 +41,18 @@ export default async function AiQuantBacktestDetailPage({
           symbol={symbol}
           rangeDisplay={rangeDisplay}
           metrics={metrics}
+          report={summary
+            ? {
+                equityCurve: summary.equityCurve ?? [],
+                trades: summary.trades?.map(trade => ({
+                  id: trade.id,
+                  side: trade.side,
+                  exitTs: trade.exitTs,
+                  exitPrice: trade.exitPrice,
+                  returnPct: trade.returnPct,
+                })) ?? [],
+              }
+            : null}
         />
       </main>
       <Footer />

@@ -25,8 +25,29 @@ export interface BacktestJobResultSummary {
   totalTrades: number
 }
 
-interface BacktestJobResultResponse {
+export interface BacktestJobResultEquityPoint {
+  ts: number
+  equity: number
+}
+
+export interface BacktestJobResultTradeRecord {
+  id: string
+  symbol: string
+  side: 'LONG' | 'SHORT'
+  entryTs: number
+  entryPrice: number
+  exitTs: number
+  exitPrice: number
+  qty: number
+  fee: number
+  pnl: number
+  returnPct: number
+}
+
+export interface BacktestJobResultReport {
   summary: BacktestJobResultSummary
+  equityCurve?: BacktestJobResultEquityPoint[]
+  trades?: BacktestJobResultTradeRecord[]
 }
 
 /**
@@ -157,7 +178,7 @@ export async function fetchLlmStrategyInstanceDetailServer(
 
 export async function fetchBacktestJobResultServer(
   jobId: string,
-): Promise<BacktestJobResultSummary | null> {
+): Promise<BacktestJobResultReport | null> {
   const authHeaders = await getServerAuthHeaders()
   if (!authHeaders.Authorization) {
     return null
@@ -178,6 +199,9 @@ export async function fetchBacktestJobResultServer(
   }
 
   const json = await response.json()
-  const payload = unwrapApiResponse(json) as BacktestJobResultResponse
-  return payload.summary ?? null
+  const payload = unwrapApiResponse(json) as BacktestJobResultReport
+  if (!payload?.summary) {
+    return null
+  }
+  return payload
 }
