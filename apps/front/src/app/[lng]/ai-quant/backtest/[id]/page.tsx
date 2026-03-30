@@ -45,14 +45,16 @@ export default async function AiQuantBacktestDetailPage({
           metrics={metrics}
           report={summary
             ? {
-                equityCurve: summary.equityCurve ?? [],
-                trades: summary.trades?.map(trade => ({
-                  id: trade.id,
-                  side: trade.side,
-                  exitTs: trade.exitTs,
-                  exitPrice: trade.exitPrice,
-                  returnPct: trade.returnPct,
-                })) ?? [],
+                equityCurve: summary.equityCurve,
+                trades: summary.trades
+                  ? summary.trades.map(trade => ({
+                      id: trade.id,
+                      side: trade.side,
+                      exitTs: trade.exitTs,
+                      exitPrice: trade.exitPrice,
+                      returnPct: trade.returnPct,
+                    }))
+                  : undefined,
               }
             : null}
         />
