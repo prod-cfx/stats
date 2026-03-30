@@ -64,6 +64,7 @@ describe('backtest-capability-client', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer header.payload.signature',
       },
+      cache: 'no-store',
       signal: expect.any(AbortSignal),
     })
   })
