@@ -87,7 +87,7 @@ export function createBacktestReportData(
     })
   }
 
-  const tradeCount = Math.max(metrics.tradeCount, 1)
+  const tradeCount = Math.max(0, Math.floor(metrics.tradeCount))
   const trades: TradeRecord[] = Array.from({ length: tradeCount }, (_, index) => {
     const raw = Math.sin((seed % 37) + index * 1.7) * 3.4 + Math.cos(index * 0.9) * 1.8
     const normalized = Number(raw.toFixed(2))
@@ -148,11 +148,12 @@ export function createBacktestReportDataFromLive(
   metrics: BacktestReportMetrics,
   report: LiveBacktestReportInput,
 ): BacktestReportData | null {
-  const mappedEquitySeries = mapLiveEquitySeries(report.equityCurve)
-  const mappedTrades = mapLiveTrades(report.trades)
-  if (mappedEquitySeries.length === 0 || mappedTrades.length === 0) {
+  if (!Array.isArray(report.equityCurve) || !Array.isArray(report.trades)) {
     return null
   }
+
+  const mappedEquitySeries = mapLiveEquitySeries(report.equityCurve)
+  const mappedTrades = mapLiveTrades(report.trades)
 
   const fallback = createBacktestReportData(id, metrics)
   return {

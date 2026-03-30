@@ -26,7 +26,9 @@ export default async function AiQuantBacktestDetailPage({
     ? {
         maxDrawdownPct: Number(summary.summary.maxDrawdownPct.toFixed(2)),
         totalReturnPct: Number(summary.summary.netProfitPct.toFixed(2)),
-        winRatePct: Number(summary.summary.winRate.toFixed(2)),
+        winRatePct: Number((summary.summary.winRate <= 1
+          ? summary.summary.winRate * 100
+          : summary.summary.winRate).toFixed(2)),
         tradeCount: summary.summary.totalTrades,
       }
     : null

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { createBacktestReportDataFromLive } from './backtest-report-data'
+import { createBacktestReportData, createBacktestReportDataFromLive } from './backtest-report-data'
 
 describe('backtest-report-data live mapping', () => {
   it('maps live equity curve and trades to display format', () => {
@@ -62,19 +62,38 @@ describe('backtest-report-data live mapping', () => {
     ])
   })
 
-  it('returns null when live payload misses equity or trades', () => {
-    const missingTrades = createBacktestReportDataFromLive(
+  it('keeps empty live arrays and only falls back when fields are missing', () => {
+    const emptyArrays = createBacktestReportDataFromLive(
       'btjob-2',
-      { maxDrawdownPct: 10, totalReturnPct: 20, winRatePct: 60, tradeCount: 2 },
-      { equityCurve: [{ ts: Date.now(), equity: 10000 }], trades: [] },
+      { maxDrawdownPct: 10, totalReturnPct: 20, winRatePct: 60, tradeCount: 0 },
+      { equityCurve: [], trades: [] },
     )
-    const missingEquity = createBacktestReportDataFromLive(
+    const missingTrades = createBacktestReportDataFromLive(
       'btjob-3',
       { maxDrawdownPct: 10, totalReturnPct: 20, winRatePct: 60, tradeCount: 2 },
-      { equityCurve: [], trades: [{ id: 't1', side: 'LONG', exitTs: Date.now(), exitPrice: 100, returnPct: 1 }] },
+      { equityCurve: [{ ts: Date.now(), equity: 10000 }], trades: undefined },
+    )
+    const missingEquity = createBacktestReportDataFromLive(
+      'btjob-4',
+      { maxDrawdownPct: 10, totalReturnPct: 20, winRatePct: 60, tradeCount: 2 },
+      { equityCurve: undefined, trades: [{ id: 't1', side: 'LONG', exitTs: Date.now(), exitPrice: 100, returnPct: 1 }] },
     )
 
+    expect(emptyArrays).not.toBeNull()
+    expect(emptyArrays?.trades).toEqual([])
+    expect(emptyArrays?.equitySeries).toEqual([])
     expect(missingTrades).toBeNull()
     expect(missingEquity).toBeNull()
+  })
+
+  it('does not generate fake trades when tradeCount is zero', () => {
+    const data = createBacktestReportData('btjob-5', {
+      maxDrawdownPct: 10,
+      totalReturnPct: 5,
+      winRatePct: 0,
+      tradeCount: 0,
+    })
+
+    expect(data.trades).toEqual([])
   })
 })
