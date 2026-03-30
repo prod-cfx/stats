@@ -13,6 +13,10 @@ const schema = z.object({
         .string()
         .optional()
         .transform(value => (value ? value.split(',').map(origin => origin.trim()) : [])),
+    ALLOWED_ORIGINS: z
+        .string()
+        .optional()
+        .transform(value => (value ? value.split(',').map(origin => origin.trim()) : [])),
     NEXT_PUBLIC_API_SERVER_URL: z.string().optional(),
 })
 

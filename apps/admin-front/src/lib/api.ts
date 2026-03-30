@@ -2,6 +2,7 @@ import type { schemas } from '@ai/api-contracts'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
 
+import { resolveApiBaseUrl } from './api-base-url'
 import { useAuthStore } from './auth-store'
 import { getToken } from './session'
 
@@ -31,8 +32,10 @@ function unwrapListResponse<T>(response: unknown): T[] {
   return []
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ?? 'http://localhost:3000/api/v1'
+const API_BASE_URL = resolveApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_BASE_URL,
+  process.env.NEXT_PUBLIC_API_SERVER_URL,
+)
 
 const client = createApiClient(API_BASE_URL, { validate: 'request' })
 
