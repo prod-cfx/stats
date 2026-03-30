@@ -26,4 +26,13 @@ describe('buildCorsOrigins', () => {
       'https://cfx-admin-staging.devbase.cloud',
     ])
   })
+
+  it('derives the admin staging origin from the www staging origin', async () => {
+    const { buildCorsOrigins } = await import('./cors-origins')
+
+    expect(buildCorsOrigins(['https://cfx-www-staging.devbase.cloud'], [])).toEqual([
+      'https://cfx-www-staging.devbase.cloud',
+      'https://cfx-admin-staging.devbase.cloud',
+    ])
+  })
 })
