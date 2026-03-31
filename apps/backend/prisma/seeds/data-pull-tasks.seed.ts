@@ -1,5 +1,6 @@
 import { OI_SYMBOLS } from '@ai/shared'
 import type { PrismaClient } from '../../generated/prisma'
+import { isPublicDataTaskKey, shouldEnablePublicDataTaskByDefault } from './data-pull-task-policy'
 
 const COINGLASS_TAKER_VOLUME_RANGES = ['5m', '15m', '30m', '1h', '4h', '12h', '24h'] as const
 
@@ -11,6 +12,7 @@ const COINGLASS_TAKER_VOLUME_RANGES = ['5m', '15m', '30m', '1h', '4h', '12h', '2
  */
 export async function seedDataPullTasks(prisma: PrismaClient) {
   console.log('🌱 Seeding data-pull tasks...')
+  const appEnv = process.env.APP_ENV
 
   const tasks = [
     // Open Interest Sync - 各币种独立任务
@@ -35,7 +37,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       type: 'whale-alert',
       // 每 5 分钟同步一次
       intervalSeconds: 300,
-      enabled: false,
+      enabled: shouldEnablePublicDataTaskByDefault(appEnv, 'coinglass-hyperliquid-whale-alert'),
       cursor: null,
     },
     {
@@ -45,7 +47,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       type: 'whale-position',
       // 每 5 分钟同步一次
       intervalSeconds: 300,
-      enabled: false,
+      enabled: shouldEnablePublicDataTaskByDefault(appEnv, 'coinglass-hyperliquid-whale-position'),
       cursor: null,
     },
     // Coinglass Futures Price History - 主流币种多时间粒度 K线同步
@@ -329,7 +331,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       type: 'crypto-stock-quotes',
       // 默认每 5 分钟同步一次，按需在后台调整
       intervalSeconds: 300,
-      enabled: false,
+      enabled: shouldEnablePublicDataTaskByDefault(appEnv, 'bbx-crypto-stock-quotes'),
       cursor: null,
       meta: {
         symbols: ['MSTR', 'COIN', 'MARA', 'RIOT', 'CLSK'],
@@ -342,7 +344,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       type: 'crypto-stock-scraper',
       // 页面抓取较慢，默认每 10 分钟同步一次
       intervalSeconds: 600,
-      enabled: false,
+      enabled: shouldEnablePublicDataTaskByDefault(appEnv, 'bbx-crypto-stock-scraper'),
       cursor: null,
       meta: {
         url: 'https://bbx.com/zh-Hans',
@@ -545,6 +547,8 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
           type: task.type,
           intervalSeconds: task.intervalSeconds,
           cursor: task.cursor,
+          // staging / production 的公共看板依赖这些任务，seed 需要把它们恢复到系统默认启用状态。
+          ...(isPublicDataTaskKey(task.key) && task.enabled ? { enabled: true } : {}),
           // 仅当 seed 中标记为 disabled 时强制禁用（系统级禁用，由 API 支持情况决定）
           // 这样可以确保新发现不支持的交易所会被自动禁用，同时不会重新启用用户手动禁用的任务
           ...(task.enabled === false ? { enabled: false } : {}),
