@@ -2027,71 +2027,40 @@ function parseApiErrorMessage(status: number, payload: unknown, fallback: string
   return buildAiQuantStageFallbackMessage(fallback, status, meta)
 }
 
-const LLM_CODEGEN_RETRY_ATTEMPTS = 3
-const LLM_CODEGEN_RETRY_DELAY_MS = 600
-
-function isTransientCodegenError(status: number): boolean {
-  return status === 502 || status === 503 || status === 504
-}
-
-async function waitLlmCodegenRetryDelay(): Promise<void> {
-  await new Promise(resolve => globalThis.setTimeout(resolve, LLM_CODEGEN_RETRY_DELAY_MS))
-}
-
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
   const authHeaders = requireAuthHeaders()
-  let lastError: unknown = null
-  for (let attempt = 1; attempt <= LLM_CODEGEN_RETRY_ATTEMPTS; attempt += 1) {
-    let response: Response
-    try {
-      response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-        },
-        body: JSON.stringify(payload),
-      })
-    } catch (error) {
-      lastError = error
-      const isLastAttempt = attempt >= LLM_CODEGEN_RETRY_ATTEMPTS
-      if (isLastAttempt) {
-        const message = error instanceof Error && error.message.trim() ? error.message : 'LLM 策略生成请求失败'
-        throw new ApiError(message, 'LLM_CODEGEN_ERROR', 502)
-      }
-      await waitLlmCodegenRetryDelay()
-      continue
-    }
-
-    let json: unknown = null
-    try {
-      json = await response.json()
-    } catch {
-      json = null
-    }
-
-    if (!response.ok) {
-      lastError = new ApiError(
-        parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败'),
-        'LLM_CODEGEN_ERROR',
-        response.status,
-        json,
-      )
-      const isLastAttempt = attempt >= LLM_CODEGEN_RETRY_ATTEMPTS
-      if (!isTransientCodegenError(response.status) || isLastAttempt) {
-        throw lastError
-      }
-      await waitLlmCodegenRetryDelay()
-      continue
-    }
-
-    return unwrapResponse<T>(json as T | BaseResponse<T>)
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch (error) {
+    const message = error instanceof Error && error.message.trim() ? error.message : 'LLM 策略生成请求失败'
+    throw new ApiError(message, 'LLM_CODEGEN_ERROR', 502)
   }
 
-  if (lastError instanceof Error) {
-    throw lastError
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
   }
-  throw new ApiError('LLM 策略生成请求失败', 'LLM_CODEGEN_ERROR', 502)
+
+  if (!response.ok) {
+    throw new ApiError(
+      parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败'),
+      'LLM_CODEGEN_ERROR',
+      response.status,
+      json,
+    )
+  }
+
+  return unwrapResponse<T>(json as T | BaseResponse<T>)
 }
 
 export async function startLlmCodegenSession(
