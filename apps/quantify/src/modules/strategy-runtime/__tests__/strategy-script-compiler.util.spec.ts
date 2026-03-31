@@ -45,4 +45,47 @@ strategy
     expect(compiled.error).toContain('"v2"')
     expect(compiled.error).toContain('"v1"')
   })
+
+  it('falls back to workspace shared source when runtime @ai/shared cannot be resolved', () => {
+    const source = `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: "v1",
+  onBar(ctx: StrategyExecutionContextV1): StrategyDecisionV1 {
+    return {
+      action: "NOOP",
+      confidence: 80,
+      reason: ctx.symbol ?? "hold"
+    }
+  }
+}
+strategy
+`
+
+    jest.resetModules()
+    jest.doMock('node:module', () => {
+      const actual = jest.requireActual('node:module')
+      return {
+        ...actual,
+        createRequire: () => ({
+          resolve: () => {
+            throw new Error("Cannot find module '@ai/shared'")
+          },
+        }),
+      }
+    })
+
+    let compileWithFallback!: typeof compileStrategyScriptForVm
+    jest.isolateModules(() => {
+      ({ compileStrategyScriptForVm: compileWithFallback } = require('../strategy-script-compiler.util'))
+    })
+
+    expect(() => compileWithFallback(source)).not.toThrow()
+
+    const compiled = compileWithFallback(source)
+    expect(compiled.ok).toBe(true)
+    expect(compiled.isTypeScript).toBe(true)
+
+    jest.dontMock('node:module')
+    jest.resetModules()
+  })
 })

@@ -12,10 +12,14 @@ export interface StrategyScriptCompileResult {
 
 function resolveSharedTypeModuleSpecifier(): string {
   const requireFromHere = createRequire(__filename)
-  const runtimeEntry = requireFromHere.resolve('@ai/shared')
-  const inferredTypesEntry = runtimeEntry.replace(/\.js$/, '.d.ts')
-  if (existsSync(inferredTypesEntry)) {
-    return inferredTypesEntry.split(path.sep).join('/')
+  try {
+    const runtimeEntry = requireFromHere.resolve('@ai/shared')
+    const inferredTypesEntry = runtimeEntry.replace(/\.js$/, '.d.ts')
+    if (existsSync(inferredTypesEntry)) {
+      return inferredTypesEntry.split(path.sep).join('/')
+    }
+  } catch {
+    // artifact deployment may omit @ai/shared runtime resolution; continue to workspace fallback
   }
 
   // workspace fallback: direct source file
