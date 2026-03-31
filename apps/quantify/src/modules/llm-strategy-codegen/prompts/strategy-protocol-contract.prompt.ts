@@ -7,16 +7,20 @@ let cachedContract: string | null = null
 
 function resolveSharedTypeDeclarationFile(): string {
   const requireFromHere = createRequire(__filename)
-  const runtimeEntry = requireFromHere.resolve('@ai/shared')
-  const runtimeDir = path.dirname(runtimeEntry)
-  const candidates = [
-    path.join(runtimeDir, 'strategy-protocol.d.ts'),
-    path.join(runtimeDir, 'strategy-protocol.ts'),
-    runtimeEntry.replace(/\.js$/, '.d.ts'),
-    runtimeEntry,
-  ]
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate
+  try {
+    const runtimeEntry = requireFromHere.resolve('@ai/shared')
+    const runtimeDir = path.dirname(runtimeEntry)
+    const candidates = [
+      path.join(runtimeDir, 'strategy-protocol.d.ts'),
+      path.join(runtimeDir, 'strategy-protocol.ts'),
+      runtimeEntry.replace(/\.js$/, '.d.ts'),
+      runtimeEntry,
+    ]
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate
+    }
+  } catch {
+    // runtime dependency may be absent in artifact deployment; continue to workspace fallback
   }
 
   const workspaceFallback = path.resolve(__dirname, '../../../../../../packages/shared/src/strategy-protocol.ts')
