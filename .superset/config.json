@@ -1,0 +1,7 @@
+{
+  "setup": [
+    "dx lint"
+  ],
+  "teardown": [],
+  "run": []
+}
