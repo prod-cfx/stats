@@ -87,6 +87,9 @@ async function main() {
   const staleBefore = new Date(Date.now() - STALE_RUNNING_MINUTES * 60 * 1000)
   const staleRunningTasks = await prisma.dataPullTask.findMany({
     where: {
+      key: {
+        in: requiredKeys,
+      },
       lastStatus: 'RUNNING',
       lastRunAt: {
         lt: staleBefore,
