@@ -1,6 +1,7 @@
 import type { DomainException } from '@/common/exceptions/domain.exception'
 import { ErrorCode } from '@ai/shared'
 import { AccountExchangeAccountsService } from './account-exchange-accounts.service'
+import { QuantifyClientError } from './clients/quantify-exchange-accounts.client'
 
 describe('accountExchangeAccountsService', () => {
   const authenticatedUser = {
@@ -44,6 +45,28 @@ describe('accountExchangeAccountsService', () => {
     ])
 
     expect(client.list).toHaveBeenCalledWith('user-1')
+  })
+
+  it('maps list failures to domain exceptions instead of leaking raw client errors', async () => {
+    const { service, client } = createService()
+    client.list.mockRejectedValue(new TypeError('fetch failed'))
+
+    await expect(service.list('user-1')).rejects.toMatchObject<Partial<DomainException>>({
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      message: 'Quantify request failed',
+    })
+  })
+
+  it('degrades exchange account list to empty array on transient upstream failures', async () => {
+    const { service, client } = createService()
+    client.list.mockRejectedValue(new QuantifyClientError(
+      'Quantify request failed',
+      502,
+      'UPSTREAM_REQUEST_FAILED',
+      { cause: 'fetch failed' },
+    ))
+
+    await expect(service.list('user-1', { degradeOnTransientFailure: true })).resolves.toEqual([])
   })
 
   it('maps quantify credential validation errors into stable backend args', async () => {

@@ -23,11 +23,22 @@ describe('accountStrategyViewController', () => {
     }
     const { controller, callerIdentityService } = createController(service)
 
-    await controller.list({ page: 1, limit: 20, status: 'running', userId: 'attacker' } as any, 'Bearer token')
+    await controller.list({
+      page: 1,
+      limit: 20,
+      status: 'running',
+      userId: 'attacker',
+      subscribedOnly: true,
+      excludeDraft: true,
+    } as any, 'Bearer token')
 
     expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
     expect(service.listStrategies).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'caller-u1' }),
+      expect.objectContaining({
+        userId: 'caller-u1',
+        subscribedOnly: true,
+        excludeDraft: true,
+      }),
     )
   })
 

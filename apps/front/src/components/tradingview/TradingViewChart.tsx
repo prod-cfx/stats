@@ -26,6 +26,7 @@ import {
   liquidationSymbolPrices,
 } from '@/lib/liquidation-map/mock-liquidation-map'
 import { logger } from '@/utils/logger'
+import { extractLongShortRatioItems, getSafeChartFromWidget } from './TradingViewChart.helpers'
 import { createMockDatafeed } from './mockDatafeed'
 
 // P2-6: TradingView 最小类型定义，替代 any
@@ -510,11 +511,12 @@ function useLongShortRatioData(pairSymbol: string, tvInterval: string) {
         : `${pairSymbol.toUpperCase()}USDT`
       const tradingPairId = `${normalizedSymbol}.BINANCE.PERP`
 
-      const data = await fetchLongShortRatio({
+      const response = await fetchLongShortRatio({
         tradingPairId,
         interval: apiInterval,
         limit: LONG_SHORT_RATIO_FETCH_LIMIT,
       })
+      const data = extractLongShortRatioItems(response)
 
       const map = new Map<number, number>()
       const timestamps: number[] = []
@@ -2222,7 +2224,7 @@ export const TradingViewChart = forwardRef(
       }
 
       try {
-        const chart = widget?.activeChart?.() || widget?.chart?.()
+        const chart = getSafeChartFromWidget(widget)
         if (!chart) return
 
         const containerEl = document.getElementById(containerId)

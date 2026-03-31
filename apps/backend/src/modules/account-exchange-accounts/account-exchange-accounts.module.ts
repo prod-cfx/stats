@@ -8,5 +8,6 @@ import { QuantifyExchangeAccountsClient } from './clients/quantify-exchange-acco
   imports: [AuthModule],
   controllers: [AccountExchangeAccountsController],
   providers: [AccountExchangeAccountsService, QuantifyExchangeAccountsClient],
+  exports: [AccountExchangeAccountsService],
 })
 export class AccountExchangeAccountsModule {}

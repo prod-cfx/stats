@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
+import { buildCorsOrigins } from './common/utils/cors-origins'
 import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
 
@@ -54,8 +55,10 @@ async function bootstrap() {
   // 设置全局路由前缀
   app.setGlobalPrefix('api/v1')
 
+  const corsOrigins = buildCorsOrigins(env.FRONTEND_REDIRECT_ORIGINS, env.ALLOWED_ORIGINS)
+
   app.enableCors({
-    origin: env.FRONTEND_REDIRECT_ORIGINS,
+    origin: corsOrigins,
     credentials: true,
   })
 

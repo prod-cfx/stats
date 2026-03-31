@@ -43,6 +43,7 @@ jest.mock('./hyperliquid-api', () => ({
 }))
 
 const originalMockFallbackEnv = process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK
+const originalAppEnv = process.env.NEXT_PUBLIC_APP_ENV
 
 describe('deleteAccountAiQuantStrategy', () => {
   beforeEach(() => {
@@ -55,6 +56,11 @@ describe('deleteAccountAiQuantStrategy', () => {
       delete process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK
     } else {
       process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = originalMockFallbackEnv
+    }
+    if (originalAppEnv === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_ENV
+    } else {
+      process.env.NEXT_PUBLIC_APP_ENV = originalAppEnv
     }
     jest.restoreAllMocks()
     if (originalFetch) {
@@ -109,6 +115,20 @@ describe('deleteAccountAiQuantStrategy', () => {
     const { deleteAccountAiQuantStrategy } = await import('./api')
 
     await expect(deleteAccountAiQuantStrategy('strategy-3', 'user-3')).rejects.toThrow('invalid request')
+    expect(deleteMockStrategyById).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never falls back to local delete in production mode even when fallback flag is true', async () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'production'
+    process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = 'true'
+
+    const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { deleteAccountAiQuantStrategy } = await import('./api')
+
+    await expect(deleteAccountAiQuantStrategy('strategy-4', 'user-4')).rejects.toThrow('fetch failed')
     expect(deleteMockStrategyById).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })

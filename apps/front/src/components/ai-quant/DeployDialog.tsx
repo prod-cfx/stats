@@ -13,6 +13,7 @@ export interface DeployExchangeAccount {
 interface DeployDialogProps {
   open: boolean
   canDeploy: boolean
+  deploySubmitting: boolean
   apiConfigured: boolean
   exchange: 'binance' | 'okx' | 'hyperliquid'
   accounts: DeployExchangeAccount[]
@@ -20,13 +21,14 @@ interface DeployDialogProps {
   lng: 'zh' | 'en'
   onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
   onSelectAccount: (accountId: string) => void
-  onConfirmDeploy: () => void
+  onConfirmDeploy: () => Promise<void> | void
   onClose: () => void
 }
 
 export function DeployDialog({
   open,
   canDeploy,
+  deploySubmitting,
   apiConfigured,
   exchange,
   accounts,
@@ -115,7 +117,7 @@ export function DeployDialog({
           <button
             type="button"
             onClick={onConfirmDeploy}
-            disabled={!apiConfigured || !canDeploy || !accountReady}
+            disabled={!apiConfigured || !canDeploy || !accountReady || deploySubmitting}
             className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('aiQuant.deployDialog.confirmDeploy')}

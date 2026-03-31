@@ -1,6 +1,7 @@
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AccountExchangeAccountsService } from '@/modules/account-exchange-accounts/account-exchange-accounts.service'
 import { QuantifyAiQuantClient, QuantifyClientError } from './clients/quantify-ai-quant.client'
 
 @Injectable()
@@ -9,22 +10,35 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+  private static readonly DEPLOY_RETRY_ATTEMPTS = 3
+  private static readonly DEPLOY_BACKOFF_BASE_MS = 200
+  private static readonly DEPLOY_BACKOFF_MAX_MS = 1_000
+  private static readonly DEPLOY_BACKOFF_JITTER_MS = 80
+  private static readonly TRANSIENT_UPSTREAM_CODES = new Set([
+    'UPSTREAM_REQUEST_FAILED',
+    'UPSTREAM_INVALID_RESPONSE',
+  ])
+  private readonly logger = new Logger(AiQuantProxyService.name)
 
   constructor(
     @Inject(QuantifyAiQuantClient)
     private readonly quantifyClient: QuantifyAiQuantClient,
+    @Inject(AccountExchangeAccountsService)
+    private readonly exchangeAccountsService: AccountExchangeAccountsService,
   ) {}
 
   async listAccountStrategies(
     userId: string,
     authorization: string | undefined,
-    query: Record<string, string | number | undefined>,
+    query: Record<string, string | number | boolean | undefined>,
   ) {
     return this.quantifyClient.get(this.buildPath('/account/ai-quant/strategies', {
       userId,
       page: query.page,
       limit: query.limit,
       status: query.status,
+      subscribedOnly: query.subscribedOnly,
+      excludeDraft: query.excludeDraft,
     }), { headers: this.userHeaders(userId, authorization) }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -53,11 +67,47 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     body: Record<string, unknown>,
   ) {
-    return this.quantifyClient.post(
-      '/account/ai-quant/strategies/deploy',
-      { ...body, userId },
-      { headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    await this.assertExchangeAccountExists(userId, body.exchangeAccountId)
+
+    for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.quantifyClient.post(
+          '/account/ai-quant/strategies/deploy',
+          { ...body, userId },
+          { headers: this.userHeaders(userId, authorization) },
+        )
+      } catch (error) {
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
+        const isLastAttempt = attempt >= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS
+        if (!isTransientUpstreamFailure || isLastAttempt) {
+          throw this.mapQuantifyError(error)
+        }
+        this.logger.warn(`event=deploy_retry reason=${this.describeError(error)} attempt=${attempt}`)
+        await this.sleep(this.getDeployBackoffMs(attempt))
+      }
+    }
+
+    throw new DomainException('Quantify request failed', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    })
+  }
+
+  private async assertExchangeAccountExists(userId: string, exchangeAccountId: unknown): Promise<void> {
+    if (typeof exchangeAccountId !== 'string' || exchangeAccountId.trim().length === 0) return
+
+    const accounts = await this.exchangeAccountsService.list(userId)
+    const exists = accounts.some(account => account.id === exchangeAccountId)
+    if (exists) return
+
+    throw new DomainException('exchange account not found', {
+      code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
+      status: HttpStatus.NOT_FOUND,
+      args: {
+        accountId: exchangeAccountId,
+        reasonMessage: 'exchange account not found',
+      },
+    })
   }
 
   async deleteAccountStrategy(
@@ -152,50 +202,56 @@ export class AiQuantProxyService {
     })).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getBacktestCapabilities(authorization: string | undefined) {
+  async getBacktestCapabilities(authorization: string | undefined, requestId?: string) {
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
       try {
         return await this.quantifyClient.get('/backtesting/capabilities', {
-          headers: this.authorizationHeaders(authorization),
+          headers: this.proxyHeaders(authorization, requestId),
         })
       } catch (error) {
-        const isTransientUpstreamFailure = error instanceof QuantifyClientError
-          && error.status === 502
-          && error.code === 'UPSTREAM_REQUEST_FAILED'
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
         const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS
         if (!isTransientUpstreamFailure || isLastAttempt) {
+          if (isTransientUpstreamFailure) {
+            this.logger.warn(
+              `event=backtesting_capabilities_fallback reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'} attempt=${attempt}`,
+            )
+            return {
+              allowedSymbols: [],
+              allowedBaseTimeframes: [],
+            }
+          }
           throw this.mapQuantifyError(error)
         }
         await this.sleep(this.getBacktestCapabilitiesBackoffMs(attempt))
       }
     }
 
-    throw this.mapQuantifyError(new QuantifyClientError(
-      'Quantify request failed',
-      502,
-      'UPSTREAM_REQUEST_FAILED',
-    ))
+    return {
+      allowedSymbols: [],
+      allowedBaseTimeframes: [],
+    }
   }
 
-  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>) {
+  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
     return this.quantifyClient.post('/backtesting/jobs', body, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJob(authorization: string | undefined, id: string) {
+  async getBacktestJob(authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJobResult(authorization: string | undefined, id: string) {
+  async getBacktestJobResult(authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
-      headers: this.authorizationHeaders(authorization),
-    }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  private buildPath(path: string, query: Record<string, string | number | undefined>) {
+  private buildPath(path: string, query: Record<string, string | number | boolean | undefined>) {
     const params = new URLSearchParams()
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === '') continue
@@ -214,6 +270,13 @@ export class AiQuantProxyService {
 
   private authorizationHeaders(authorization: string | undefined) {
     return authorization ? { authorization } : {}
+  }
+
+  private proxyHeaders(authorization: string | undefined, requestId?: string) {
+    return {
+      ...(authorization ? { authorization } : {}),
+      ...(requestId ? { 'x-request-id': requestId } : {}),
+    }
   }
 
   private mapQuantifyError(error: unknown): DomainException {
@@ -265,6 +328,43 @@ export class AiQuantProxyService {
       && typeof (error as { message?: unknown }).message === 'string'
   }
 
+  private mapBacktestingJobError(error: unknown, requestId?: string): DomainException {
+    if (this.isTransientUpstreamFailure(error)) {
+      this.logger.warn(
+        `event=backtesting_job_retryable_error reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'}`,
+      )
+      return new DomainException('Backtesting upstream temporarily unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+    return this.mapQuantifyError(error)
+  }
+
+  private isTransientUpstreamFailure(error: unknown): boolean {
+    const code = this.getQuantifyErrorCode(error)
+    return typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code)
+  }
+
+  private getQuantifyErrorCode(error: unknown): string | undefined {
+    if (error instanceof QuantifyClientError) return error.code
+    if (this.isQuantifyErrorShape(error)) return error.code
+    return undefined
+  }
+
+  private describeError(error: unknown): string {
+    if (error instanceof QuantifyClientError) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (this.isQuantifyErrorShape(error)) {
+      return `${error.status}:${error.code ?? 'UNKNOWN'}:${error.message}`
+    }
+    if (error instanceof Error) {
+      return error.message
+    }
+    return String(error)
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
@@ -275,6 +375,15 @@ export class AiQuantProxyService {
       AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_MAX_MS,
     )
     const jitter = Math.floor(Math.random() * AiQuantProxyService.BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS)
+    return expo + jitter
+  }
+
+  private getDeployBackoffMs(attempt: number): number {
+    const expo = Math.min(
+      AiQuantProxyService.DEPLOY_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+      AiQuantProxyService.DEPLOY_BACKOFF_MAX_MS,
+    )
+    const jitter = Math.floor(Math.random() * AiQuantProxyService.DEPLOY_BACKOFF_JITTER_MS)
     return expo + jitter
   }
 }

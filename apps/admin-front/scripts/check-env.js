@@ -4,7 +4,7 @@
  * Next 版管理后台环境变量检查
  */
 
-const requiredEnvVars = ['NEXT_PUBLIC_API_BASE_URL', 'APP_ENV']
+const requiredEnvVars = ['APP_ENV']
 
 console.log('检查环境变量配置 (admin-front)...')
 
@@ -15,7 +15,24 @@ if (missingEnvVars.length) {
   process.exit(1)
 }
 
-const validAppEnvs = ['dev', 'development', 'production', 'test', 'local', 'e2e']
+const normalizePublicUrlEnv = value => {
+  const normalized = value?.trim()
+  if (!normalized || normalized === '__SET_IN_env.local__') {
+    return undefined
+  }
+
+  return normalized.replace(/\/$/, '')
+}
+
+const apiBaseUrl = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
+const apiServerUrl = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL)
+
+if (!apiBaseUrl && !apiServerUrl) {
+  console.error('\x1B[31m%s\x1B[0m', '错误: NEXT_PUBLIC_API_BASE_URL 与 NEXT_PUBLIC_API_SERVER_URL 不能同时缺失或为占位符')
+  process.exit(1)
+}
+
+const validAppEnvs = ['dev', 'development', 'staging', 'production', 'test', 'local', 'e2e']
 if (!validAppEnvs.includes(process.env.APP_ENV)) {
   console.error('\x1B[31m%s\x1B[0m', '错误: APP_ENV 值异常')
   process.exit(1)

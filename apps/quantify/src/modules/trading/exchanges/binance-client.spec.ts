@@ -50,6 +50,46 @@ describe('binanceClient mapError', () => {
 
     expect(error).toBeInstanceOf(AuthError)
   })
+
+  it('maps -2015 ip related errors to whitelist guidance', () => {
+    const error = client.mapErrorForTest(401, {
+      code: -2015,
+      msg: 'Invalid API-key, IP, or permissions for action.',
+    })
+
+    expect(error).toBeInstanceOf(AuthError)
+    expect(error.message).toBe('IP地址未加入白名单，请在币安API管理页面添加服务器IP或取消IP限制')
+  })
+
+  it('maps -2015 permission related errors to permission guidance', () => {
+    const error = client.mapErrorForTest(401, {
+      code: -2015,
+      msg: 'API-key format invalid or permission denied.',
+    })
+
+    expect(error).toBeInstanceOf(AuthError)
+    expect(error.message).toBe('API Key权限不足，请确保开启"读取"和"交易"权限')
+  })
+
+  it('maps -2015 disabled key errors to disabled guidance', () => {
+    const error = client.mapErrorForTest(401, {
+      code: -2015,
+      msg: 'This API key has been disabled.',
+    })
+
+    expect(error).toBeInstanceOf(AuthError)
+    expect(error.message).toBe('API Key已被禁用，请在币安API管理页面检查状态')
+  })
+
+  it('falls back to generic credential guidance when -2015 message is unclassified', () => {
+    const error = client.mapErrorForTest(401, {
+      code: -2015,
+      msg: 'Invalid API-key format.',
+    })
+
+    expect(error).toBeInstanceOf(AuthError)
+    expect(error.message).toBe('API Key或Secret错误，请检查是否正确复制（不要有多余空格）')
+  })
 })
 
 describe('binanceClient createOrder', () => {

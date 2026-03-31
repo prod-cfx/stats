@@ -147,6 +147,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
         ...requireAuthHeaders(),
         ...(init?.headers ?? {}),
       },
+      cache: 'no-store',
       signal: timeoutController.signal,
     })
   } catch (error) {

@@ -1,11 +1,14 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import { ErrorCode } from '@ai/shared'
 import { SubscriptionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
+import { HttpStatus } from '@nestjs/common'
 import { Injectable } from '@nestjs/common'
 import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
 import { Prisma } from '@/prisma/prisma.types'
 import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
@@ -15,6 +18,8 @@ interface ListStrategiesQuery {
   page: number
   limit: number
   status?: 'running' | 'stopped' | 'draft'
+  subscribedOnly?: boolean
+  excludeDraft?: boolean
 }
 
 interface DeployStrategyInput {
@@ -44,13 +49,10 @@ export class AccountStrategyViewRepository {
       })
 
       if (!existingUser) {
-        await tx.user.create({
-          data: {
-            id: input.userId,
-            email: `${input.userId}@local.quantify`,
-            nickname: 'AI Quant User',
-            isGuest: true,
-          },
+        throw new DomainException('account_strategy.user_not_found', {
+          code: ErrorCode.USER_NOT_FOUND,
+          status: HttpStatus.NOT_FOUND,
+          args: { userId: input.userId },
         })
       }
 
@@ -279,19 +281,41 @@ export class AccountStrategyViewRepository {
     const client = this.txHost.tx
     const skip = (page - 1) * limit
 
-    const subscribedInstanceIds = (
-      await client.userStrategySubscription.findMany({
-        where: { userId: query.userId },
-        select: { strategyInstanceId: true },
-      })
-    ).map(item => item.strategyInstanceId)
-
     const where: Prisma.StrategyInstanceWhereInput = {
-      OR: [
+      ...this.buildStatusWhere(query.status),
+    }
+
+    if (query.subscribedOnly) {
+      where.subscriptions = {
+        some: {
+          userId: query.userId,
+          status: SubscriptionStatus.active,
+        },
+      }
+    } else {
+      const subscribedInstanceIds = (
+        await client.userStrategySubscription.findMany({
+          where: { userId: query.userId },
+          select: { strategyInstanceId: true },
+        })
+      ).map(item => item.strategyInstanceId)
+
+      where.OR = [
         { id: { in: subscribedInstanceIds.length > 0 ? subscribedInstanceIds : ['__none__'] } },
         { createdBy: query.userId },
-      ],
-      ...this.buildStatusWhere(query.status),
+      ]
+    }
+
+    if (query.excludeDraft) {
+      const existingAnd = Array.isArray(where.AND)
+        ? where.AND
+        : where.AND
+          ? [where.AND]
+          : []
+      where.AND = [
+        ...existingAnd,
+        { status: { not: 'draft' } },
+      ]
     }
 
     const [items, total] = await Promise.all([

@@ -4,9 +4,9 @@ import type { AiQuantStrategyRecord, StrategyEquityPoint, StrategyStatus } from 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 import { buildDynamicParamRows } from './dynamic-param-summary'
+import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 
 const STATUS_LABEL: Record<StrategyStatus, string> = {
   running: '运行中',
@@ -96,8 +96,8 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
     return (
       <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">策略不存在或已删除</h1>
-          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">请返回 AI量化列表重新选择策略。</p>
+          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">策略不存在或不可访问</h1>
+          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">请返回 AI量化列表重新选择已部署策略。</p>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
             className="mt-5 inline-flex rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"

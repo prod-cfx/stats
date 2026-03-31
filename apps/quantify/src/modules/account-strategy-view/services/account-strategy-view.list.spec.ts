@@ -53,7 +53,14 @@ describe('accountStrategyViewService.listStrategies', () => {
       marketDataIngestionService as any,
     )
 
-    const result = await service.listStrategies({ userId: 'user-1', page: 1, limit: 20, status: 'running' })
+    const result = await service.listStrategies({
+      userId: 'user-1',
+      page: 1,
+      limit: 20,
+      status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
+    } as any)
 
     expect(result.total).toBe(1)
     expect(repo.listStrategiesForUser).toHaveBeenCalledWith({
@@ -61,6 +68,8 @@ describe('accountStrategyViewService.listStrategies', () => {
       page: 1,
       limit: 20,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
     expect(result.items[0]).toMatchObject({
       id: 'inst-1',

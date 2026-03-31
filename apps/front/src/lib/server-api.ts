@@ -1,4 +1,4 @@
-import { API_BASE_URL, unwrapApiResponse } from './api-client'
+import { SERVER_API_BASE_URL, unwrapApiResponse } from './api-client'
 import { getServerAuthHeaders } from './server-auth'
 
 export type UserLlmStrategyInstanceResponse = any
@@ -25,8 +25,29 @@ export interface BacktestJobResultSummary {
   totalTrades: number
 }
 
-interface BacktestJobResultResponse {
+export interface BacktestJobResultEquityPoint {
+  ts: number
+  equity: number
+}
+
+export interface BacktestJobResultTradeRecord {
+  id: string
+  symbol: string
+  side: 'LONG' | 'SHORT'
+  entryTs: number
+  entryPrice: number
+  exitTs: number
+  exitPrice: number
+  qty: number
+  fee: number
+  pnl: number
+  returnPct: number
+}
+
+export interface BacktestJobResultReport {
   summary: BacktestJobResultSummary
+  equityCurve?: BacktestJobResultEquityPoint[]
+  trades?: BacktestJobResultTradeRecord[]
 }
 
 /**
@@ -41,7 +62,7 @@ export async function fetchLlmStrategyInstancesServer(
 ): Promise<PaginatedResponse<UserLlmStrategyInstanceResponse>> {
   const authHeaders = await getServerAuthHeaders()
 
-  const url = new URL(`${API_BASE_URL}/llm-strategy-instances`)
+  const url = new URL(`${SERVER_API_BASE_URL}/llm-strategy-instances`)
   url.searchParams.set('page', params.page.toString())
   url.searchParams.set('limit', params.limit.toString())
 
@@ -105,7 +126,7 @@ export async function fetchLlmStrategyInstanceDetailServer(
 ): Promise<UserLlmStrategyInstanceResponse> {
   const authHeaders = await getServerAuthHeaders()
 
-  const url = `${API_BASE_URL}/llm-strategy-instances/${id}`
+  const url = `${SERVER_API_BASE_URL}/llm-strategy-instances/${id}`
 
   // 第一次请求：带上 Authorization（如果有）
   const response = await fetch(url, {
@@ -157,13 +178,13 @@ export async function fetchLlmStrategyInstanceDetailServer(
 
 export async function fetchBacktestJobResultServer(
   jobId: string,
-): Promise<BacktestJobResultSummary | null> {
+): Promise<BacktestJobResultReport | null> {
   const authHeaders = await getServerAuthHeaders()
   if (!authHeaders.Authorization) {
     return null
   }
 
-  const url = `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}/result`
+  const url = `${SERVER_API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}/result`
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -178,6 +199,9 @@ export async function fetchBacktestJobResultServer(
   }
 
   const json = await response.json()
-  const payload = unwrapApiResponse(json) as BacktestJobResultResponse
-  return payload.summary ?? null
+  const payload = unwrapApiResponse(json) as BacktestJobResultReport
+  if (!payload?.summary) {
+    return null
+  }
+  return payload
 }

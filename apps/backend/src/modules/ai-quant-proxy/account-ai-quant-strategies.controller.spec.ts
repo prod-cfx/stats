@@ -21,12 +21,16 @@ describe('accountAiQuantStrategiesController', () => {
       page: 2,
       limit: 10,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
 
     expect(service.listAccountStrategies).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       page: 2,
       limit: 10,
       status: 'running',
+      subscribedOnly: true,
+      excludeDraft: true,
     })
   })
 
@@ -45,6 +49,7 @@ describe('accountAiQuantStrategiesController', () => {
 
     await controller.deploy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
+      deployRequestId: 'deploy-req-1',
       exchange: 'binance',
       symbol: 'BTCUSDT',
       timeframe: '15m',
@@ -56,6 +61,7 @@ describe('accountAiQuantStrategiesController', () => {
 
     expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       name: 'My Strategy',
+      deployRequestId: 'deploy-req-1',
       exchange: 'binance',
       symbol: 'BTCUSDT',
       timeframe: '15m',

@@ -355,33 +355,60 @@ export class BinanceClient extends BaseCexClient {
       const message = typeof record.msg === 'string' ? record.msg : `Binance request failed with status ${status}`
       const messageLower = message.toLowerCase()
 
+      // -2015 在 Binance 侧可能是 key/secret、IP 白名单、权限等混合问题，需要结合消息细分
+      if (code === '-2015') {
+        const authHint = this.mapAuthHintByMessage(message, messageLower)
+        if (authHint) {
+          return new AuthError(authHint, data)
+        }
+        return new AuthError('API Key或Secret错误，请检查是否正确复制（不要有多余空格）', data)
+      }
+
       // API Key 和 Secret 错误
-      if (code === '-2015' || code === '-2014') {
+      if (code === '-2014') {
         return new AuthError('API Key或Secret错误，请检查是否正确复制（不要有多余空格）', data)
       }
 
       // 签名无效（-1022 可能是签名错误或 IP 限制，需要检查消息内容）
       if (code === '-1022') {
-        if (messageLower.includes('ip')) {
-          return new AuthError('IP地址未加入白名单，请在币安API管理页面添加服务器IP或取消IP限制', data)
+        const authHint = this.mapAuthHintByMessage(message, messageLower, { allowPermission: false, allowDisabled: false })
+        if (authHint) {
+          return new AuthError(authHint, data)
         }
         return new AuthError('API签名验证失败，请检查 API Secret 是否正确', data)
       }
 
       // 权限不足
-      if (messageLower.includes('permission') || message.includes('权限')) {
-        return new AuthError('API Key权限不足，请确保开启"读取"和"交易"权限', data)
-      }
-
-      // API Key 被禁用/删除
-      if (messageLower.includes('disabled') || messageLower.includes('delete')) {
-        return new AuthError('API Key已被禁用，请在币安API管理页面检查状态', data)
+      const authHint = this.mapAuthHintByMessage(message, messageLower, { allowIp: false })
+      if (authHint) {
+        return new AuthError(authHint, data)
       }
 
       return new ExchangeError(message, code, data)
     }
 
     return super.mapError(status, data)
+  }
+
+  private mapAuthHintByMessage(
+    message: string,
+    messageLower: string,
+    options?: { allowIp?: boolean; allowPermission?: boolean; allowDisabled?: boolean },
+  ): string | null {
+    const allowIp = options?.allowIp ?? true
+    const allowPermission = options?.allowPermission ?? true
+    const allowDisabled = options?.allowDisabled ?? true
+
+    if (allowIp && (messageLower.includes('ip') || message.includes('白名单'))) {
+      return 'IP地址未加入白名单，请在币安API管理页面添加服务器IP或取消IP限制'
+    }
+    if (allowPermission && (messageLower.includes('permission') || message.includes('权限'))) {
+      return 'API Key权限不足，请确保开启"读取"和"交易"权限'
+    }
+    if (allowDisabled && (messageLower.includes('disabled') || messageLower.includes('delete'))) {
+      return 'API Key已被禁用，请在币安API管理页面检查状态'
+    }
+    return null
   }
 
   private buildQuery(params: Record<string, unknown>): string {

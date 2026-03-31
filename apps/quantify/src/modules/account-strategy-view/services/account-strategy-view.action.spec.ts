@@ -91,4 +91,62 @@ describe('accountStrategyViewService.performAction', () => {
 
     expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
   })
+
+  it('rejects action when strategy is not visible and does not update status', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        status: 'running',
+        createdBy: 'user-1',
+        strategyTemplateId: 'tpl-1',
+        subscriptions: [{ userId: 'user-1', status: 'inactive' }],
+      }),
+    }
+
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+
+    await expect(
+      service.performAction('inst-1', { userId: 'user-1', action: AccountStrategyAction.STOP }),
+    ).rejects.toThrow('account_strategy.not_found')
+
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid action even when strategy status is already stopped', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        status: 'stopped',
+        createdBy: 'user-1',
+        strategyTemplateId: 'tpl-1',
+        subscriptions: [{ userId: 'user-1', status: 'active' }],
+      }),
+    }
+
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn().mockResolvedValue({}) }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+    service.getStrategyDetail = jest.fn()
+
+    await expect(
+      service.performAction('inst-1', { userId: 'user-1', action: 'INVALID_ACTION' as any }),
+    ).rejects.toThrow('account_strategy.invalid_action')
+
+    expect(service.getStrategyDetail).not.toHaveBeenCalled()
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+  })
 })

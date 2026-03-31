@@ -126,6 +126,68 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.schemaVersion).toBe('7')
   })
 
+  it('rejects detail when strategy is not actively subscribed', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        name: 'BTC 动量突破',
+        status: 'running',
+        createdBy: 'user-1',
+        params: null,
+        strategyTemplateId: 'tpl-1',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'inactive' }],
+        startedAt: null,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+    }
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+
+    await expect(service.getStrategyDetail('user-1', 'inst-1')).rejects.toMatchObject({
+      message: 'Strategy not found',
+    })
+  })
+
+  it('rejects detail when strategy status is draft', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        name: 'BTC 动量突破',
+        status: 'draft',
+        createdBy: 'user-1',
+        params: null,
+        strategyTemplateId: 'tpl-1',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active' }],
+        startedAt: null,
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+    }
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+
+    await expect(service.getStrategyDetail('user-1', 'inst-1')).rejects.toMatchObject({
+      message: 'Strategy not found',
+    })
+  })
+
   it('falls back to instance stats tradeCount when account trade stats are empty', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

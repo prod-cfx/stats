@@ -1,5 +1,5 @@
 import type { BacktestRunInput } from './types/backtesting.types'
-import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Logger, Param, Post, UseGuards } from '@nestjs/common'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
@@ -17,6 +17,8 @@ import { BacktestStrategyAdapterService } from './services/backtest-strategy-ada
 @Controller('backtesting')
 @UseGuards(ThrottlerGuard)
 export class BacktestingController {
+  private readonly logger = new Logger(BacktestingController.name)
+
   constructor(
     private readonly runner: BacktestRunnerService,
     private readonly jobsService: BacktestJobsService,
@@ -66,7 +68,19 @@ export class BacktestingController {
   }
 
   @Get('capabilities')
-  async getCapabilities() {
-    return this.capabilitiesService.getCapabilities()
+  async getCapabilities(
+    @Headers('x-request-id') requestId: string | undefined,
+  ) {
+    const startedAt = Date.now()
+    try {
+      this.logger.log(`event=backtesting_capabilities_request requestId=${requestId ?? 'N/A'}`)
+      return await this.capabilitiesService.getCapabilities(requestId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtesting_capabilities_request_failed requestId=${requestId ?? 'N/A'} reason=${message} durationMs=${Date.now() - startedAt}`,
+      )
+      throw error
+    }
   }
 }

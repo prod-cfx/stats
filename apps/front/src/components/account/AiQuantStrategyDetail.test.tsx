@@ -1,7 +1,7 @@
+import type { ReactNode } from 'react'
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import { describe, expect, it, jest } from '@jest/globals'
 import { renderToStaticMarkup } from 'react-dom/server.node'
-import type { ReactNode } from 'react'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
 import { buildParamSummary } from './AiQuantStrategyList'
 
@@ -218,5 +218,17 @@ describe('AiQuant strategy dynamic params', () => {
     expect(html).toContain('2026-03-20 10:30')
     expect(html).not.toContain('部署账户：')
     expect(html).not.toContain('部署时间：')
+  })
+
+  it('shows inaccessible copy when strategy is null', () => {
+    const html = renderToStaticMarkup(
+      <AiQuantStrategyDetail
+        lng="zh"
+        strategy={null}
+      />,
+    )
+
+    expect(html).toContain('策略不存在或不可访问')
+    expect(html).toContain('请返回 AI量化列表重新选择已部署策略。')
   })
 })

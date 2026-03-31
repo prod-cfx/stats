@@ -7,6 +7,11 @@ export class AccountAiQuantDeployRequestDto {
   @IsNotEmpty()
   name!: string
 
+  @ApiProperty({ description: '部署请求幂等 ID（前端点击一次生成一次）' })
+  @IsString()
+  @IsNotEmpty()
+  deployRequestId!: string
+
   @ApiProperty({ enum: ['binance', 'okx', 'hyperliquid'] })
   @IsIn(['binance', 'okx', 'hyperliquid'])
   exchange!: 'binance' | 'okx' | 'hyperliquid'

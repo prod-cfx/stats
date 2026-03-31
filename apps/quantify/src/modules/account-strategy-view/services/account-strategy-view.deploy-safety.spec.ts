@@ -91,4 +91,46 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       positionPct: 10,
     } as any)).rejects.toBeInstanceOf(DeployIdempotencyConflictException)
   })
+
+  it('maps create-deploy unique conflict (P2002) to idempotency conflict', async () => {
+    const { service } = buildService({
+      createDeployRequestProcessing: jest.fn().mockRejectedValue({ code: 'P2002' }),
+      findDeployRequestByUserAndRequestId: jest.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'req-1',
+          deployRequestId: 'same-2',
+          payloadHash: 'same-hash',
+          status: 'PROCESSING',
+          strategyInstanceId: null,
+        }),
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      deployRequestId: 'same-2',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+    } as any)).rejects.toBeInstanceOf(DeployIdempotencyConflictException)
+  })
+
+  it('rethrows non-unique create-deploy errors instead of turning them into idempotency conflict', async () => {
+    const { service } = buildService({
+      createDeployRequestProcessing: jest.fn().mockRejectedValue(new Error('fk constraint failed')),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      deployRequestId: 'same-3',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+    } as any)).rejects.toThrow('fk constraint failed')
+  })
 })
