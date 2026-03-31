@@ -468,11 +468,37 @@ jobs:
 
           export APP_ENV="${APP_ENV_NAME}"
 
-          pnpm exec dotenv -e ".env.${APP_ENV}" -e ".env.${APP_ENV}.local" -- bash -lc '
+          resolve_env_file() {
+            local filename="$1"
+            local candidates=(
+              "/opt/work/quantify/current/${filename}"
+              "/opt/work/quantify/shared/${filename}"
+              "/opt/work/quantify/${filename}"
+            )
+            for candidate in "${candidates[@]}"; do
+              if [ -f "$candidate" ]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
+          ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
+          if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
+            echo "[ERROR] cannot locate env files for APP_ENV=${APP_ENV}"
+            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
+            exit 1
+          fi
+
+          pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
             set -euo pipefail
-            export DATABASE_URL="${QUANTIFY_DATABASE_URL:-${DATABASE_URL:-}}"
+            if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
+              export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
+            fi
             if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
-              echo "[ERROR] quantify DATABASE_URL is missing after env mapping"
+              echo "[ERROR] quantify DATABASE_URL is missing"
               exit 1
             fi
 
