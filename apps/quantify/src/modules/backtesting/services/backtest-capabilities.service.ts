@@ -35,12 +35,12 @@ export class BacktestCapabilitiesService {
           }
 
       this.logger.log(
-        `event=backtesting_capabilities_loaded requestId=${requestId ?? 'N/A'} durationMs=${Date.now() - startedAt}`,
+        `event=backtesting_capabilities_loaded stage=capability requestId=${requestId ?? 'N/A'} durationMs=${Date.now() - startedAt}`,
       )
       return result
     } catch (error) {
       this.logger.error(
-        `event=backtesting_capabilities_failed requestId=${requestId ?? 'N/A'} reason=${this.describeError(error)} durationMs=${Date.now() - startedAt}`,
+        `event=backtesting_capabilities_failed stage=capability requestId=${requestId ?? 'N/A'} reason=${this.describeError(error)} durationMs=${Date.now() - startedAt}`,
       )
       throw error
     }

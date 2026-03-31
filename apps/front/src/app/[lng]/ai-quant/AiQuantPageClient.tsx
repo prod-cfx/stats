@@ -30,6 +30,7 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import {
   buildAutoAdvanceMessage,
   shouldAutoAdvanceOnConfirmation,
@@ -245,6 +246,8 @@ function extractCodegenErrorMessage(error: unknown, fallback: string): string {
   }
 
   const details = error.details
+  const meta = parseAiQuantErrorMeta(details)
+
   if (details && typeof details === 'object') {
     const record = details as Record<string, unknown>
     const directRejectReason = record.rejectReason
@@ -263,17 +266,24 @@ function extractCodegenErrorMessage(error: unknown, fallback: string): string {
         return nestedMessage.trim()
       }
     }
+  }
 
-    const detailMessage = record.message
-    if (typeof detailMessage === 'string' && detailMessage.trim()) {
-      return detailMessage.trim()
-    }
+  if (meta.message) {
+    return meta.message
   }
 
   if (error.message?.trim()) {
     return error.message.trim()
   }
-  return fallback
+
+  return buildAiQuantStageFallbackMessage(
+    fallback,
+    error.statusCode ?? 500,
+    {
+      ...meta,
+      code: meta.code ?? error.code,
+    },
+  )
 }
 
 function isTerminalSessionConflict(error: unknown): boolean {

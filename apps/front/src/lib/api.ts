@@ -12,6 +12,7 @@ import {
   listStrategies as listMockStrategies,
   updateStrategyStatus as updateMockStrategyStatus,
 } from '@/components/account/ai-quant-strategy-store'
+import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
@@ -2021,17 +2022,9 @@ export interface ContinueLlmCodegenSessionPayload {
 }
 
 function parseApiErrorMessage(status: number, payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object') {
-    const message = (payload as Record<string, unknown>).message
-    if (typeof message === 'string' && message.trim().length > 0) return message
-    const error = (payload as Record<string, unknown>).error
-    if (typeof error === 'string' && error.trim().length > 0) return error
-    if (error && typeof error === 'object') {
-      const nested = (error as Record<string, unknown>).message
-      if (typeof nested === 'string' && nested.trim().length > 0) return nested
-    }
-  }
-  return `${fallback} (HTTP ${status})`
+  const meta = parseAiQuantErrorMeta(payload)
+  if (meta.message) return meta.message
+  return buildAiQuantStageFallbackMessage(fallback, status, meta)
 }
 
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {

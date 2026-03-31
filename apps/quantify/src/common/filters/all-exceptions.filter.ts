@@ -14,6 +14,7 @@ const PrismaClientKnownRequestError = Prisma.PrismaClientKnownRequestError
 /* eslint-enable no-redeclare, ts/no-redeclare */
 
 type ErrorArgs = Record<string, unknown> | undefined
+type ErrorStage = 'capability' | 'codegen' | 'backtest' | 'deploy' | 'unknown'
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -63,6 +64,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const requestId = this.ensureRequestId(request, response)
     const timestamp = new Date().toISOString()
+    const stage = this.inferStageFromPath(request.originalUrl || request.url)
 
     let code: ErrorCode | undefined
     let args: ErrorArgs
@@ -105,6 +107,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: ErrorCode
         args?: ErrorArgs
         requestId?: string
+        stage?: ErrorStage
       }
       message?: unknown
       timestamp: string
@@ -116,6 +119,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: code ?? this.mapStatusToCode(status),
         args,
         requestId,
+        stage,
       },
       timestamp,
       path: request.originalUrl || request.url,
@@ -152,6 +156,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const timestamp = new Date().toISOString()
     const path = req.originalUrl || req.url
     const method = req.method
+    const stage = this.inferStageFromPath(path)
 
     const logMeta = {
       method,
@@ -169,6 +174,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           code: ErrorCode.INTERNAL_SERVER_ERROR,
           args: { detail: 'TransactionTimeout' },
           requestId,
+          stage,
         },
         timestamp,
         path,
@@ -187,6 +193,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
             target: this.readMetaArray(exception.meta, 'target'),
           },
           requestId,
+          stage,
         },
         timestamp,
         path,
@@ -202,6 +209,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           code: ErrorCode.NOT_FOUND,
           args: { detail: 'RecordNotFound' },
           requestId,
+          stage,
         },
         timestamp,
         path,
@@ -221,6 +229,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code: ErrorCode.INTERNAL_SERVER_ERROR,
         args: { detail: 'DatabaseError' },
         requestId,
+        stage,
       },
       timestamp,
       path,
@@ -288,5 +297,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
       default:
         return ErrorCode.INTERNAL_SERVER_ERROR
     }
+  }
+
+  private inferStageFromPath(path: string): ErrorStage {
+    const normalized = path.toLowerCase()
+    if (normalized.includes('/backtesting/capabilities')) {
+      return 'capability'
+    }
+    if (normalized.includes('/llm-strategy-codegen')) {
+      return 'codegen'
+    }
+    if (normalized.includes('/backtesting')) {
+      return 'backtest'
+    }
+    if (normalized.includes('deploy')) {
+      return 'deploy'
+    }
+    return 'unknown'
   }
 }
