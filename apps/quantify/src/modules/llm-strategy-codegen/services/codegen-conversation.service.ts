@@ -173,8 +173,8 @@ export class CodegenConversationService {
   async getSession(sessionId: string, userId: string): Promise<CodegenSessionResponseDto> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session || session.userId !== userId) {
-      throw new DomainException('会话不存在', {
-        code: ErrorCode.NOT_FOUND,
+      throw new DomainException('codegen.session_not_found', {
+        code: ErrorCode.LLM_CODEGEN_SESSION_NOT_FOUND,
         status: HttpStatus.NOT_FOUND,
         args: { sessionId },
       })
@@ -922,16 +922,17 @@ export class CodegenConversationService {
         }
         if (!strictFallback) {
           const detail = error instanceof Error ? error.message : String(error)
-          throw new DomainException(`策略脚本生成失败（strict 模式）: ${detail}`, {
-            code: ErrorCode.AI_PROVIDER_ERROR,
+          throw new DomainException('codegen.generation_failed_strict_mode', {
+            code: ErrorCode.LLM_CODEGEN_GENERATION_FAILED,
             status: HttpStatus.BAD_GATEWAY,
+            args: { detail },
           })
         }
       }
 
       if (!code && !strictFallback) {
-        throw new DomainException('策略脚本生成失败（strict 模式）：模型未返回 {code}', {
-          code: ErrorCode.AI_PROVIDER_ERROR,
+        throw new DomainException('codegen.generation_failed_no_code_returned', {
+          code: ErrorCode.LLM_CODEGEN_GENERATION_FAILED,
           status: HttpStatus.BAD_GATEWAY,
         })
       }

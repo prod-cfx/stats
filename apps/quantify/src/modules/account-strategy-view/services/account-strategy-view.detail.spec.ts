@@ -153,7 +153,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
 
     await expect(service.getStrategyDetail('user-1', 'inst-1')).rejects.toMatchObject({
-      message: 'Strategy not found',
+      message: 'account_strategy.not_found',
     })
   })
 
@@ -184,7 +184,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
 
     await expect(service.getStrategyDetail('user-1', 'inst-1')).rejects.toMatchObject({
-      message: 'Strategy not found',
+      message: 'account_strategy.not_found',
     })
   })
 
@@ -198,7 +198,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         params: null,
         strategyTemplateId: 'tpl-1',
         strategyTemplate: { defaultParams: {} },
-        subscriptions: [],
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
         startedAt: null,
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),
@@ -211,6 +211,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       }),
       loadEquitySeries: jest.fn().mockResolvedValue([]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
       loadTimeline: jest.fn().mockResolvedValue({
         instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
         subscription: null,
@@ -250,7 +251,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         params: null,
         strategyTemplateId: 'tpl-1',
         strategyTemplate: { defaultParams: {} },
-        subscriptions: [],
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
         startedAt: null,
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),
@@ -294,7 +295,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         params: { symbol: 'BTCUSDT' },
         strategyTemplateId: 'tpl-missing',
         strategyTemplate: { defaultParams: {} },
-        subscriptions: [],
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
         startedAt: null,
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),
@@ -308,6 +309,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       }),
       loadEquitySeries: jest.fn().mockResolvedValue([]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 3, closedCount: 2, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 2 }),
       loadTimeline: jest.fn().mockResolvedValue({
         instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
         subscription: null,
@@ -345,7 +347,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         params: { symbol: 'BTCUSDT' },
         strategyTemplateId: 'tpl-1',
         strategyTemplate: { defaultParams: {} },
-        subscriptions: [],
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
         startedAt: new Date('2026-03-20T10:00:00.000Z'),
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),
@@ -371,6 +373,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         },
       ]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
       loadTimeline: jest.fn().mockResolvedValue({
         instance: { createdAt: new Date('2026-03-20T10:00:00.000Z') },
         subscription: null,
@@ -408,7 +411,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           paramsSchema: null,
           rulesVersion: 9,
         },
-        subscriptions: [],
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
         startedAt: null,
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),

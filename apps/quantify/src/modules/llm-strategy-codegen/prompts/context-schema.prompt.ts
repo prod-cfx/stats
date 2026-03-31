@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import ts from 'typescript'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 let cachedPrompt: string | null = null
 
@@ -23,7 +26,10 @@ function resolveSharedHelpersTypesFile(): string {
   )
   if (existsSync(workspaceFallback)) return workspaceFallback
 
-  throw new Error('Cannot resolve @ai/shared helpers type declarations')
+  throw new DomainException('codegen.cannot_resolve_helpers_type_declarations', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+  })
 }
 
 function resolveSharedBarTypesFile(): string {
@@ -44,7 +50,10 @@ function resolveSharedBarTypesFile(): string {
   )
   if (existsSync(workspaceFallback)) return workspaceFallback
 
-  throw new Error('Cannot resolve @ai/shared Bar type declarations')
+  throw new DomainException('codegen.cannot_resolve_bar_type_declarations', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+  })
 }
 
 function readSourceFile(filePath: string): ts.SourceFile {
@@ -59,7 +68,11 @@ function extractDeclaration(sourceFile: ts.SourceFile, name: string): string {
       return raw.trim().replace(/^export\s+/, '')
     }
   }
-  throw new Error(`Missing declaration "${name}" in ${sourceFile.fileName}`)
+  throw new DomainException('codegen.missing_type_declaration', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    args: { name, fileName: sourceFile.fileName },
+  })
 }
 
 export function buildContextSchemaPrompt(): string {

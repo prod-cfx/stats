@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import ts from 'typescript'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 let cachedContract: string | null = null
 
@@ -22,7 +25,10 @@ function resolveSharedTypeDeclarationFile(): string {
   const workspaceFallback = path.resolve(__dirname, '../../../../../../packages/shared/src/strategy-protocol.ts')
   if (existsSync(workspaceFallback)) return workspaceFallback
 
-  throw new Error('Cannot resolve @ai/shared strategy protocol declarations')
+  throw new DomainException('codegen.cannot_resolve_strategy_protocol_declarations', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+  })
 }
 
 function collectExportedTypeDeclarations(sourceFile: ts.SourceFile): string[] {
@@ -49,7 +55,11 @@ export function buildStrategyProtocolTypeContractPrompt(): string {
   const sourceFile = ts.createSourceFile(declarationFile, sourceText, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS)
   const declarations = collectExportedTypeDeclarations(sourceFile)
   if (declarations.length === 0) {
-    throw new Error(`No exported type declarations found in ${declarationFile}`)
+    throw new DomainException('codegen.no_exported_type_declarations', {
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { declarationFile },
+    })
   }
   const typeBindingBlock = [
     "type StrategyAdapterV1 = import('@ai/shared').StrategyAdapterV1",

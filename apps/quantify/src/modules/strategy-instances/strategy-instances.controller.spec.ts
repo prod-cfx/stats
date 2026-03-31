@@ -9,6 +9,10 @@ import { LiveStrategyInstancesController } from './controllers/live-strategy-ins
 import { OpsStrategyInstancesController } from './controllers/ops-strategy-instances.controller'
 import { StrategyInstancesService } from './services/strategy-instances.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 jest.mock('@/prisma/prisma.types', () => ({
   StrategyInstanceMode: {
     BACKTEST: 'BACKTEST',

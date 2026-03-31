@@ -5,6 +5,10 @@ import request from 'supertest'
 import { LlmStrategySubscriptionsController } from './llm-strategy-subscriptions.controller'
 import { LlmStrategySubscriptionsService } from './llm-strategy-subscriptions.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 jest.mock('./llm-strategy-subscriptions.service', () => ({
   LlmStrategySubscriptionsService: class LlmStrategySubscriptionsService {},
 }))
