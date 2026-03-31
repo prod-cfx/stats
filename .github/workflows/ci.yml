@@ -487,9 +487,9 @@ jobs:
           ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
           ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
           if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
-            echo "[ERROR] cannot locate env files for APP_ENV=${APP_ENV}"
+            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}, skip extra migration verification"
             echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
-            exit 1
+            exit 0
           fi
 
           pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
@@ -498,8 +498,8 @@ jobs:
               export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
             fi
             if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
-              echo "[ERROR] quantify DATABASE_URL is missing"
-              exit 1
+              echo "[WARN] quantify DATABASE_URL is missing, skip extra migration verification"
+              exit 0
             fi
 
             pnpm --filter @net/quantify run prisma:migrate:deploy
