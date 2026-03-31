@@ -43,6 +43,12 @@ interface BitmaxDepthMessage {
   id?: string
 }
 
+export function isBitmaxConnectionActivityMessage(
+  msg: Pick<BitmaxDepthMessage, 'm'> | null | undefined,
+): boolean {
+  return typeof msg?.m === 'string'
+}
+
 interface BitmaxRestResponse {
   code: number
   message?: string
@@ -752,9 +758,12 @@ class BitmaxWsConnection {
       return
     }
 
+    if (isBitmaxConnectionActivityMessage(msg)) {
+      this.lastPongTs = Date.now()
+    }
+
     // 处理 ping 消息，回复 pong
     if (msg.m === 'ping') {
-      this.lastPongTs = Date.now()
       if (this.ws && this.open) {
         try {
           this.ws.send(JSON.stringify({ op: 'pong' }))
@@ -765,7 +774,6 @@ class BitmaxWsConnection {
 
     // 处理 pong 响应
     if (msg.m === 'pong') {
-      this.lastPongTs = Date.now()
       return
     }
 
@@ -776,7 +784,6 @@ class BitmaxWsConnection {
 
     // 处理连接消息
     if (msg.m === 'connected') {
-      this.lastPongTs = Date.now()
       return
     }
 
