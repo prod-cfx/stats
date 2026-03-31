@@ -10,7 +10,50 @@ export interface StrategyScriptCompileResult {
   error?: string
 }
 
-function resolveSharedTypeModuleSpecifier(): string {
+const FALLBACK_STRATEGY_TYPE_DECLARATIONS = [
+  "type StrategyAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION' | 'NOOP'",
+  "type StrategySizeMode = 'QUOTE' | 'RATIO' | 'QTY'",
+  'interface StrategyDecisionSize {',
+  '  mode: StrategySizeMode',
+  '  value: number',
+  '}',
+  'interface StrategyDecisionV1 {',
+  '  action: StrategyAction',
+  '  size?: StrategyDecisionSize',
+  "  adjustMode?: 'TARGET' | 'DELTA'",
+  '  confidence?: number',
+  '  reason?: string',
+  '  risk?: {',
+  '    stopLoss?: number',
+  '    takeProfit?: number',
+  '    maxDrawdown?: number',
+  '  }',
+  '  meta?: Record<string, unknown>',
+  '}',
+  'interface StrategyExecutionContextV1 extends Record<string, unknown> {',
+  '  timestamp?: number',
+  '  paramsNormalized?: Record<string, unknown>',
+  '  params?: Record<string, unknown> | null',
+  '  symbol?: string',
+  '  timeframe?: string',
+  '  currentPrice?: number',
+  '  indicators?: Record<string, number>',
+  '  bars?: Array<Record<string, unknown>>',
+  '  helpers?: Record<string, unknown>',
+  '  execution?: Record<string, unknown>',
+  '  legs?: Array<Record<string, unknown>>',
+  '  dataRequirements?: Record<string, unknown>',
+  '  data?: Record<string, unknown>',
+  '}',
+  'interface StrategyAdapterV1 {',
+  "  protocolVersion: 'v1'",
+  '  onBar: (ctx: StrategyExecutionContextV1) => StrategyDecisionV1 | Promise<StrategyDecisionV1>',
+  '  init?: (ctx: StrategyExecutionContextV1) => unknown',
+  '  shutdown?: () => unknown',
+  '}',
+].join('\n')
+
+function resolveSharedTypeModuleSpecifier(): string | null {
   const requireFromHere = createRequire(__filename)
   try {
     const runtimeEntry = requireFromHere.resolve('@ai/shared')
@@ -22,17 +65,33 @@ function resolveSharedTypeModuleSpecifier(): string {
     // artifact deployment may omit @ai/shared runtime resolution; continue to workspace fallback
   }
 
-  // workspace fallback: direct source file
-  const workspaceFallback = path.resolve(__dirname, '../../../../../packages/shared/src/index.ts')
-  return workspaceFallback.split(path.sep).join('/')
+  const workspaceCandidates = [
+    path.resolve(__dirname, '../../../../../packages/shared/dist/index.d.ts'),
+    path.resolve(__dirname, '../../../../../packages/shared/src/index.d.ts'),
+    path.resolve(__dirname, '../../../../../packages/shared/src/index.ts'),
+  ]
+  for (const candidate of workspaceCandidates) {
+    if (existsSync(candidate)) {
+      return candidate.split(path.sep).join('/')
+    }
+  }
+
+  return null
 }
 
 function buildTypecheckPrelude(): string {
   const specifier = resolveSharedTypeModuleSpecifier()
+  const typeDeclarations = specifier
+    ? [
+        `type StrategyAdapterV1 = import('${specifier}').StrategyAdapterV1`,
+        `type StrategyDecisionV1 = import('${specifier}').StrategyDecisionV1`,
+        `type StrategyExecutionContextV1 = import('${specifier}').StrategyExecutionContextV1`,
+      ]
+    : [
+        FALLBACK_STRATEGY_TYPE_DECLARATIONS,
+      ]
   return [
-    `type StrategyAdapterV1 = import('${specifier}').StrategyAdapterV1`,
-    `type StrategyDecisionV1 = import('${specifier}').StrategyDecisionV1`,
-    `type StrategyExecutionContextV1 = import('${specifier}').StrategyExecutionContextV1`,
+    ...typeDeclarations,
     'declare const ctx: StrategyExecutionContextV1',
     "declare const helpers: NonNullable<StrategyExecutionContextV1['helpers']>",
     "declare const bars: NonNullable<StrategyExecutionContextV1['bars']>",
