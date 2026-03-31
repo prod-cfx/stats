@@ -5,6 +5,10 @@ import request from 'supertest'
 import { StrategySubscriptionsController } from './strategy-subscriptions.controller'
 import { StrategySubscriptionsService } from './strategy-subscriptions.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 jest.mock('./strategy-subscriptions.service', () => ({
   StrategySubscriptionsService: class StrategySubscriptionsService {},
 }))

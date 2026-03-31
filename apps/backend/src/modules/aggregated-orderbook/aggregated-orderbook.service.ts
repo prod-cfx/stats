@@ -9,6 +9,7 @@ const STABLE_QUOTES = ['USDT', 'USDC']
 
 // 聚合结果缓存 TTL（秒）
 const AGGREGATED_CACHE_TTL = 2
+const STALE_ORDERBOOK_MAX_AGE_MS = 60_000
 
 // 支持的交易所和对应的 venueId 映射
 const VENUE_MAPPING: Record<string, Record<string, string>> = {
@@ -179,6 +180,12 @@ export class AggregatedOrderbookService {
       if (raw) {
         try {
           const book = JSON.parse(raw) as VenueOrderBook
+          if (!this.isFreshOrderbook(book)) {
+            this.logger.warn(
+              `Skip stale orderbook snapshot: venue=${book.venueId} market=${book.marketKey} exchangeTs=${book.exchangeTs ?? 'n/a'} receivedTs=${book.receivedTs ?? 'n/a'}`,
+            )
+            continue
+          }
           orderbooks.push(book)
         }
         catch (err) {
@@ -188,6 +195,19 @@ export class AggregatedOrderbookService {
     }
 
     return orderbooks
+  }
+
+  private isFreshOrderbook(book: VenueOrderBook): boolean {
+    const candidateTimestamps = [book.receivedTs, book.exchangeTs].filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0,
+    )
+
+    if (candidateTimestamps.length === 0) {
+      return true
+    }
+
+    const latestTimestamp = Math.max(...candidateTimestamps)
+    return Date.now() - latestTimestamp <= STALE_ORDERBOOK_MAX_AGE_MS
   }
 
   private aggregateOrderbooks(

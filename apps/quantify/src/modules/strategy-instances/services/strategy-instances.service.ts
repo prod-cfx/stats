@@ -15,7 +15,7 @@ import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
-import { BadRequestException, HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -512,7 +512,11 @@ export class StrategyInstancesService {
     const engine = createScriptEngine()
     const compiledScript = compileStrategyScriptForVm(strategy.script)
     if (!compiledScript.ok) {
-      throw new BadRequestException(`脚本 TypeScript 类型检查失败：${compiledScript.error ?? '未知错误'}`)
+      throw new DomainException('strategy_instance.script_type_check_failed', {
+        code: ErrorCode.STRATEGY_INSTANCE_INVALID_INPUT,
+        status: HttpStatus.BAD_REQUEST,
+        args: { error: compiledScript.error ?? 'unknown' },
+      })
     }
 
     // 与正式执行路径保持一致：合并模板 defaultParams 与实例 params
@@ -710,7 +714,11 @@ export class StrategyInstancesService {
       this.logger.error(
         `Test run for strategy instance ${id} protocol resolution failed: ${resolved.error}`,
       )
-      throw new BadRequestException(`脚本协议不合法：${resolved.error}`)
+      throw new DomainException('strategy_instance.script_protocol_invalid', {
+        code: ErrorCode.STRATEGY_INSTANCE_SCRIPT_FAILED,
+        status: HttpStatus.BAD_REQUEST,
+        args: { error: resolved.error },
+      })
     }
 
     const scriptResult = resolved.decision
