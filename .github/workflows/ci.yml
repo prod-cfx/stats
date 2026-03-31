@@ -439,3 +439,45 @@ jobs:
 
           unset NO_COLOR
           npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"
+
+      - name: 强制执行 quantify 数据库迁移并校验关键表
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENV" in
+            "prod")
+              APP_ENV_NAME="production"
+              ;;
+            "staging")
+              APP_ENV_NAME="staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          ssh -p "$PORT" "$USER@$HOST" "APP_ENV_NAME=${APP_ENV_NAME} bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/work/quantify/current
+
+          export APP_ENV="${APP_ENV_NAME}"
+
+          pnpm exec dotenv -e ".env.${APP_ENV}" -e ".env.${APP_ENV}.local" -- bash -lc '
+            set -euo pipefail
+            export DATABASE_URL="${QUANTIFY_DATABASE_URL:-${DATABASE_URL:-}}"
+            if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
+              echo "[ERROR] quantify DATABASE_URL is missing after env mapping"
+              exit 1
+            fi
+
+            pnpm --filter @net/quantify run prisma:migrate:deploy
+
+            node -e "const { Client } = require(\"pg\"); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const r = await client.query(\"select to_regclass('public.backtest_capability_configs') as reg\"); await client.end(); if (!r.rows[0] || !r.rows[0].reg) { console.error(\"[ERROR] missing table public.backtest_capability_configs\"); process.exit(1); } console.log(\"[INFO] table check passed:\", r.rows[0].reg); })().catch((err) => { console.error(err); process.exit(1); });"
+          '
+          REMOTE
