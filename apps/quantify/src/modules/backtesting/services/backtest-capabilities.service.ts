@@ -1,11 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCapabilitiesRepository } from '../repositories/backtest-capabilities.repository'
-
-export interface BacktestCapabilitiesConfigRecord {
-  allowedSymbols?: unknown
-  allowedBaseTimeframes?: unknown
-}
+import { normalizeBacktestCapabilityConfig } from '../backtest-capability-config'
 
 export interface BacktestCapabilitiesDto {
   allowedSymbols: string[]
@@ -24,15 +22,14 @@ export class BacktestCapabilitiesService {
     const startedAt = Date.now()
     try {
       const config = await this.repository.findActiveConfig()
-      const result = !config
-        ? {
-            allowedSymbols: [],
-            allowedBaseTimeframes: [],
-          }
-        : {
-            allowedSymbols: this.normalizeStringArray(config.allowedSymbols),
-            allowedBaseTimeframes: this.normalizeStringArray(config.allowedBaseTimeframes),
-          }
+      if (!config) {
+        throw this.createUnavailableError('missing_active_config')
+      }
+
+      const result = normalizeBacktestCapabilityConfig(config)
+      if (!result) {
+        throw this.createUnavailableError('invalid_active_config')
+      }
 
       this.logger.log(
         `event=backtesting_capabilities_loaded stage=capability requestId=${requestId ?? 'N/A'} durationMs=${Date.now() - startedAt}`,
@@ -46,24 +43,12 @@ export class BacktestCapabilitiesService {
     }
   }
 
-  private normalizeStringArray(raw: unknown): string[] {
-    if (!Array.isArray(raw)) {
-      return []
-    }
-
-    const normalized: string[] = []
-    for (const item of raw) {
-      if (typeof item !== 'string') {
-        return []
-      }
-
-      const value = item.trim()
-      if (!value) {
-        return []
-      }
-      normalized.push(value)
-    }
-    return normalized
+  private createUnavailableError(reason: 'missing_active_config' | 'invalid_active_config'): DomainException {
+    return new DomainException('backtesting.capabilities_unavailable', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: { reason },
+    })
   }
 
   private describeError(error: unknown): string {

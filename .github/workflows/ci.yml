@@ -542,7 +542,6 @@ jobs:
             fi
 
             pnpm --filter @net/quantify run prisma:migrate:deploy
-
-            node -e "const { Client } = require(\"pg\"); (async () => { const client = new Client({ connectionString: process.env.DATABASE_URL }); await client.connect(); const r = await client.query(\"select to_regclass('public.backtest_capability_configs') as reg\"); await client.end(); if (!r.rows[0] || !r.rows[0].reg) { console.error(\"[ERROR] missing table public.backtest_capability_configs\"); process.exit(1); } console.log(\"[INFO] table check passed:\", r.rows[0].reg); })().catch((err) => { console.error(err); process.exit(1); });"
+            pnpm --filter @net/quantify run prisma:schema:audit
           '
           REMOTE

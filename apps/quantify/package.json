@@ -14,6 +14,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:schema:audit": "tsx scripts/required-schema-audit.ts",
+    "prisma:schema:repair": "tsx scripts/required-schema-audit.ts --apply",
     "prisma:migrate:reset": "prisma migrate reset --force",
     "prisma:db:push": "prisma db push",
     "prisma:db:reset": "prisma db push --force-reset",
