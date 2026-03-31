@@ -1,0 +1,65 @@
+name: Read Staging Email Code
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: '需要检索验证码的邮箱地址'
+        required: true
+        type: string
+
+jobs:
+  read-staging-email-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+      - name: 预热 SSH known_hosts
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: 读取 staging 邮件验证码日志
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+          TARGET_EMAIL: ${{ inputs.email }}
+        run: |
+          set -euo pipefail
+
+          MASKED_EMAIL="$(node - <<'NODE'
+          const email = (process.env.TARGET_EMAIL || '').trim()
+          const [local, domain] = email.split('@')
+          if (!local || !domain) {
+            process.exit(1)
+          }
+          const visible = local.slice(0, Math.min(2, local.length))
+          process.stdout.write(`${visible}***@${domain}`)
+          NODE
+          )"
+
+          ssh -p "$PORT" "$USER@$HOST" "MASKED_EMAIL=$MASKED_EMAIL bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          LOG_FILE="/tmp/staging-email-codes.log"
+          if [ ! -f "$LOG_FILE" ]; then
+            echo "[ERROR] log file not found: $LOG_FILE"
+            exit 1
+          fi
+
+          MATCHED_LINE="$(grep -F "verification code for ${MASKED_EMAIL}:" "$LOG_FILE" | tail -n 1 || true)"
+          if [ -z "$MATCHED_LINE" ]; then
+            echo "[ERROR] no verification code found for ${MASKED_EMAIL}"
+            exit 1
+          fi
+
+          echo "$MATCHED_LINE"
+          REMOTE
