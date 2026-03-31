@@ -310,7 +310,7 @@ export async function seedDataPullTasks(prisma: PrismaClient) {
       enabled: true,
       cursor: null,
       meta: {
-        category: '',
+        category: 'crypto',
         onlyActive: true,
       },
     },
