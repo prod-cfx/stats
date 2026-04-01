@@ -19,6 +19,7 @@ interface TelegramConfigResponse {
 }
 
 const DESKTOP_CALLBACK_REDIRECT_DELAY_MS = 350
+const DESKTOP_POPUP_AUTOCLOSE_DELAY_MS = 1200
 
 export function TelegramLoginButtons({ lng, intent = 'login', redirect }: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
@@ -93,10 +94,11 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
             type="button"
             disabled={desktopBusy}
             onClick={async () => {
+              let popup: Window | null = null
               try {
                 setDesktopBusy(true)
                 // Open a popup synchronously within user gesture to avoid browser popup blocking.
-                const popup = window.open('', '_blank', 'noopener,noreferrer')
+                popup = window.open('', '_blank', 'noopener,noreferrer')
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
@@ -109,6 +111,13 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
                 }
                 if (popup) {
                   popup.location.href = launchLink
+                  window.setTimeout(() => {
+                    try {
+                      popup?.close()
+                    } catch {
+                      // Ignore popup close errors caused by browser policies.
+                    }
+                  }, DESKTOP_POPUP_AUTOCLOSE_DELAY_MS)
                 } else {
                   window.location.href = launchLink
                 }
@@ -116,6 +125,7 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
                   window.location.href = result.callbackUrl
                 }, DESKTOP_CALLBACK_REDIRECT_DELAY_MS)
               } catch (error) {
+                popup?.close()
                 setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
               } finally {
                 setDesktopBusy(false)
