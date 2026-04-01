@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
@@ -24,6 +24,7 @@ export default function TelegramCallbackPage() {
     isLoading,
   } = useAuth()
   const [error, setError] = useState<string | null>(null)
+  const handledCallbackKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const query = typeof window === 'undefined'
@@ -133,21 +134,41 @@ export default function TelegramCallbackPage() {
         return
       }
 
+      const callbackKey = `bind:${source}:${payload.telegramId}:${payload.authDate}:${payload.hash}`
+      if (handledCallbackKeyRef.current === callbackKey) {
+        return
+      }
+      handledCallbackKeyRef.current = callbackKey
+
       bindTelegram(payload)
         .then(() => {
           router.replace(redirect)
         })
         .catch(err => {
+          if (loadStoredSession()) {
+            router.replace(redirect)
+            return
+          }
           setError(err instanceof Error ? err.message : 'Telegram 绑定失败')
         })
       return
     }
+
+    const callbackKey = `login:${source}:${payload.telegramId}:${payload.authDate}:${payload.hash}`
+    if (handledCallbackKeyRef.current === callbackKey) {
+      return
+    }
+    handledCallbackKeyRef.current = callbackKey
 
     loginWithTelegramCallback(payload)
       .then(() => {
         router.replace(redirect)
       })
       .catch(err => {
+        if (loadStoredSession()) {
+          router.replace(redirect)
+          return
+        }
         setError(err instanceof Error ? err.message : 'Telegram 登录失败')
       })
   }, [
