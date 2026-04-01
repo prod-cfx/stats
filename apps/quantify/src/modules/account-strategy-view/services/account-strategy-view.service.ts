@@ -174,6 +174,9 @@ export class AccountStrategyViewService {
     const resolvedUnrealizedPnl = account
       ? this.resolveAccountUnrealizedPnl(account, positionFinancials)
       : null
+    const resolvedAvailableBalance = account
+      ? this.resolveAccountAvailableBalance(account, positionFinancials)
+      : null
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
@@ -250,7 +253,7 @@ export class AccountStrategyViewService {
       accountOverview: {
         initialBalance: account ? this.toFiniteNumber(account.initialBalance) : null,
         totalEquity: account ? this.resolveAccountEquity(account, positionFinancials) : null,
-        availableBalance: account ? this.toFiniteNumber(account.balance ?? account.equity) : null,
+        availableBalance: resolvedAvailableBalance,
         totalPnl: totalPnl ?? null,
         todayPnl: todayPnl ?? null,
         baseCurrency: account ? this.readAccountBaseCurrency(account) : null,
@@ -807,7 +810,11 @@ export class AccountStrategyViewService {
 
   private resolveAccountRealizedPnl(
     account: unknown,
-    positionFinancials: { totalRealizedPnl?: unknown } | null,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
   ): number {
     const positionRealized = this.toFiniteNumber(positionFinancials?.totalRealizedPnl)
     if (positionRealized !== null) return positionRealized
@@ -816,7 +823,11 @@ export class AccountStrategyViewService {
 
   private resolveAccountUnrealizedPnl(
     account: unknown,
-    positionFinancials: { totalUnrealizedPnl?: unknown } | null,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
   ): number {
     const positionUnrealized = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl)
     if (positionUnrealized !== null) return positionUnrealized
@@ -825,17 +836,49 @@ export class AccountStrategyViewService {
 
   private resolveAccountEquity(
     account: unknown,
-    positionFinancials: { openCostBasis?: unknown; totalUnrealizedPnl?: unknown } | null,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
   ): number | null {
     const row = this.readRecord(account)
     if (!row) return null
 
-    const balance = this.toFiniteNumber(row.balance)
+    const initialBalance = this.toFiniteNumber(row.initialBalance)
+    const realizedPnl = this.resolveAccountRealizedPnl(account, positionFinancials)
+    const unrealizedPnl = this.resolveAccountUnrealizedPnl(account, positionFinancials)
+
+    if (initialBalance !== null) {
+      return Number((initialBalance + realizedPnl + unrealizedPnl).toFixed(8))
+    }
+
+    const balance = this.resolveAccountAvailableBalance(account, positionFinancials)
     if (balance === null) return this.toFiniteNumber(row.equity)
 
     const openCostBasis = this.toFiniteNumber(positionFinancials?.openCostBasis) ?? 0
-    const unrealizedPnl = this.resolveAccountUnrealizedPnl(account, positionFinancials)
     return Number((balance + openCostBasis + unrealizedPnl).toFixed(8))
+  }
+
+  private resolveAccountAvailableBalance(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): number | null {
+    const row = this.readRecord(account)
+    if (!row) return null
+
+    const initialBalance = this.toFiniteNumber(row.initialBalance)
+    if (initialBalance !== null) {
+      const realizedPnl = this.resolveAccountRealizedPnl(account, positionFinancials)
+      const openCostBasis = this.toFiniteNumber(positionFinancials?.openCostBasis) ?? 0
+      return Number((initialBalance + realizedPnl - openCostBasis).toFixed(8))
+    }
+
+    return this.toFiniteNumber(row.balance ?? row.equity)
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {
