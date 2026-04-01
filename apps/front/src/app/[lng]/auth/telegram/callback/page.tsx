@@ -7,6 +7,7 @@ import { Navbar } from '@/components/layout/Navbar'
 import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
 import { isRetryableTelegramDesktopError } from '@/features/auth/telegram-callback-retry'
 import { useAuth } from '@/hooks/use-auth'
+import { loadStoredSession } from '@/lib/auth-storage'
 
 export default function TelegramCallbackPage() {
   const router = useRouter()
@@ -51,6 +52,12 @@ export default function TelegramCallbackPage() {
           return 'done'
         }
 
+        if (isLoading) return 'waiting'
+        if (isAuthenticated || loadStoredSession()) {
+          router.replace(redirect)
+          return 'done'
+        }
+
         await loginWithTelegramDesktopIntent(desktopIntentId)
         router.replace(redirect)
         return 'done'
@@ -90,6 +97,12 @@ export default function TelegramCallbackPage() {
           window.setTimeout(tick, 2000)
         } catch (err) {
           if (stopped) return
+          // Another tab may have already finished the desktop login and persisted session.
+          // In that case, do not show an expiry/error on this tab.
+          if (intent === 'login' && loadStoredSession()) {
+            router.replace(redirect)
+            return
+          }
           if (isRetryableTelegramDesktopError(err)) {
             if (attempts >= maxAttempts) {
               setError('等待 Telegram 授权超时，请返回登录页重试')
