@@ -3,8 +3,18 @@ import { Prisma } from '@/prisma/prisma.types'
 import { PositionsService } from './positions.service'
 
 describe('positionsService', () => {
-  function createService(txHost: any = {}, accountsService: any = {}) {
-    return new PositionsService({} as any, accountsService as any, {} as any, txHost)
+  function createService(
+    txHost: any = {},
+    accountsService: any = {},
+    tradingService: any = {},
+    positionsRepository: any = {},
+  ) {
+    return new PositionsService(
+      positionsRepository as any,
+      accountsService as any,
+      tradingService as any,
+      txHost,
+    )
   }
 
   it('maps locked position rows to Prisma field names', async () => {
@@ -163,5 +173,67 @@ describe('positionsService', () => {
 
     expect(settlementCall?.delta.toString()).toBe('100')
     expect(realizedCall?.delta.toString()).toBe('20')
+  })
+
+  it('uses unified exchange symbol when placing a manual close order', async () => {
+    const placeOrder = jest.fn().mockResolvedValue({
+      id: 'order-1',
+      status: 'closed',
+      amount: 1,
+      filled: 1,
+      price: 120,
+      createdAt: Date.parse('2026-04-01T01:00:00.000Z'),
+      marketType: 'spot',
+      side: 'sell',
+      type: 'market',
+      symbol: 'BTC/USDT',
+      raw: {},
+    })
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const service = createService(
+      {},
+      {},
+      { placeOrder },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-1',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal(1),
+          avgEntryPrice: new Prisma.Decimal(100),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    expect(placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'spot',
+      expect.objectContaining({
+        symbol: 'BTC/USDT',
+        side: 'sell',
+        type: 'market',
+      }),
+    )
+
+    recordTrade.mockRestore()
   })
 })

@@ -17,6 +17,7 @@ import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
+import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { Prisma } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
@@ -521,6 +522,7 @@ export class PositionsService {
     
     const exchangeId = position.exchangeId as ExchangeId
     const marketType = position.marketType as MarketType
+    const executionSymbol = normalizeExecutionSymbol(position.symbol, marketType, exchangeId)
     
     // 4. 确定订单方向：平多单需要卖出，平空单需要买入
     const orderSide = position.positionSide === PositionSide.LONG ? 'sell' : 'buy'
@@ -532,7 +534,7 @@ export class PositionsService {
         exchangeId,
         marketType,
         {
-          symbol: position.symbol,
+          symbol: executionSymbol,
           marketType,
           side: orderSide,
           type: 'market',
