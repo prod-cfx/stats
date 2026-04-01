@@ -1,12 +1,13 @@
 'use client'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
 import { isRetryableTelegramDesktopError } from '@/features/auth/telegram-callback-retry'
 import { useAuth } from '@/hooks/use-auth'
+import { loadStoredSession } from '@/lib/auth-storage'
 
 export default function TelegramCallbackPage() {
   const router = useRouter()
@@ -23,6 +24,7 @@ export default function TelegramCallbackPage() {
     isLoading,
   } = useAuth()
   const [error, setError] = useState<string | null>(null)
+  const handledCallbackKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const query = typeof window === 'undefined'
@@ -47,6 +49,12 @@ export default function TelegramCallbackPage() {
             return 'failed'
           }
           await bindTelegramByDesktopIntent(desktopIntentId)
+          router.replace(redirect)
+          return 'done'
+        }
+
+        if (isLoading) return 'waiting'
+        if (isAuthenticated || loadStoredSession()) {
           router.replace(redirect)
           return 'done'
         }
@@ -90,6 +98,12 @@ export default function TelegramCallbackPage() {
           window.setTimeout(tick, 2000)
         } catch (err) {
           if (stopped) return
+          // Another tab may have already finished the desktop login and persisted session.
+          // In that case, do not show an expiry/error on this tab.
+          if (intent === 'login' && loadStoredSession()) {
+            router.replace(redirect)
+            return
+          }
           if (isRetryableTelegramDesktopError(err)) {
             if (attempts >= maxAttempts) {
               setError('等待 Telegram 授权超时，请返回登录页重试')
@@ -120,6 +134,12 @@ export default function TelegramCallbackPage() {
         return
       }
 
+      const callbackKey = `bind:${source}:${payload.telegramId}:${payload.authDate}:${payload.hash}`
+      if (handledCallbackKeyRef.current === callbackKey) {
+        return
+      }
+      handledCallbackKeyRef.current = callbackKey
+
       bindTelegram(payload)
         .then(() => {
           router.replace(redirect)
@@ -130,11 +150,21 @@ export default function TelegramCallbackPage() {
       return
     }
 
+    const callbackKey = `login:${source}:${payload.telegramId}:${payload.authDate}:${payload.hash}`
+    if (handledCallbackKeyRef.current === callbackKey) {
+      return
+    }
+    handledCallbackKeyRef.current = callbackKey
+
     loginWithTelegramCallback(payload)
       .then(() => {
         router.replace(redirect)
       })
       .catch(err => {
+        if (loadStoredSession()) {
+          router.replace(redirect)
+          return
+        }
         setError(err instanceof Error ? err.message : 'Telegram 登录失败')
       })
   }, [
