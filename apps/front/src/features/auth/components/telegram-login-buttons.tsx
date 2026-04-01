@@ -97,8 +97,9 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
               let popup: Window | null = null
               try {
                 setDesktopBusy(true)
-                // Open a popup synchronously within user gesture to avoid browser popup blocking.
-                popup = window.open('', '_blank', 'noopener,noreferrer')
+                // Open a controllable popup synchronously within user gesture to avoid popup blocking.
+                // Do not set noopener/noreferrer here, otherwise some browsers return null and leave about:blank uncloseable.
+                popup = window.open('', '_blank')
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
