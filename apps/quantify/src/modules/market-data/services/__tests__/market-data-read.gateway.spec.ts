@@ -11,6 +11,7 @@ describe('market data read gateway', () => {
     findLatestBar: jest.fn(),
     findLatestBarBySymbolId: jest.fn(),
     findLatestQuote: jest.fn(),
+    findLatestQuoteBySymbolId: jest.fn(),
     findLatestIndicatorValues: jest.fn(),
   } as unknown as jest.Mocked<MarketDataRepository>
 
@@ -20,6 +21,7 @@ describe('market data read gateway', () => {
     getLatestBarSnapshot: jest.fn(),
     getLatestBarSnapshotBySymbolId: jest.fn(),
     getLatestQuoteSnapshot: jest.fn(),
+    getSymbolOrThrow: jest.fn(),
   } as unknown as jest.Mocked<MarketDataService>
 
   let gateway: MarketDataReadGateway
@@ -31,6 +33,7 @@ describe('market data read gateway', () => {
     mockMarketDataService.getLatestBarSnapshot.mockReturnValue(null)
     mockMarketDataService.getLatestBarSnapshotBySymbolId.mockReturnValue(null)
     mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue(null)
+    mockMarketDataService.getSymbolOrThrow.mockResolvedValue({ id: 'symbol-spot-1', code: 'BTCUSDT:SPOT' })
     gateway = new MarketDataReadGateway(mockRepository, mockMarketDataService)
   })
 
@@ -105,7 +108,7 @@ describe('market data read gateway', () => {
   })
 
   it('throws DomainException when quote missing', async () => {
-    mockRepository.findLatestQuote.mockResolvedValue(null)
+    mockRepository.findLatestQuoteBySymbolId.mockResolvedValue(null)
     await expect(gateway.getLatestQuote('BTCUSDT')).rejects.toBeInstanceOf(DomainException)
   })
 
@@ -262,7 +265,7 @@ describe('market data read gateway', () => {
 
   it('prefers in-memory quote snapshot before repository', async () => {
     mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({
-      symbol: 'BTCUSDT',
+      symbol: 'BTCUSDT:SPOT',
       lastPrice: '12345.67',
       eventTime: Date.now(),
       source: 'BINANCE_WS',
@@ -271,7 +274,8 @@ describe('market data read gateway', () => {
     const quote = await gateway.getLatestQuote('BTCUSDT')
 
     expect(Number(quote.lastPrice)).toBe(12345.67)
-    expect(mockRepository.findLatestQuote).not.toHaveBeenCalled()
+    expect(mockMarketDataService.getSymbolOrThrow).toHaveBeenCalledWith('BTCUSDT')
+    expect(mockRepository.findLatestQuoteBySymbolId).not.toHaveBeenCalled()
   })
 
   it('sorts in-memory bar snapshot before direct return when snapshot count reaches limit', async () => {
@@ -316,7 +320,7 @@ describe('market data read gateway', () => {
   it('preserves high precision quote value from snapshot without Number round-trip', async () => {
     const precise = '12345.123456789123456789'
     mockMarketDataService.getLatestQuoteSnapshot.mockReturnValue({
-      symbol: 'BTCUSDT',
+      symbol: 'BTCUSDT:SPOT',
       lastPrice: precise,
       eventTime: Date.now(),
       source: 'BINANCE_WS',
@@ -325,5 +329,35 @@ describe('market data read gateway', () => {
     const quote = await gateway.getLatestQuote('BTCUSDT')
 
     expect(quote.lastPrice).toBe(precise)
+  })
+
+  it('resolves raw symbol to canonical quote row before repository lookup', async () => {
+    const eventTime = new Date('2026-04-01T08:00:00.000Z')
+    mockRepository.findLatestQuoteBySymbolId.mockResolvedValue({
+      id: 'quote-1',
+      symbolId: 'symbol-spot-1',
+      lastPrice: '68535.5',
+      priceChange: null,
+      priceChangePercent: null,
+      openPrice: null,
+      highPrice: null,
+      lowPrice: null,
+      volume: null,
+      quoteVolume: null,
+      bidPrice: null,
+      bidQty: null,
+      askPrice: null,
+      askQty: null,
+      eventTime,
+      source: 'OKX_WS',
+      createdAt: eventTime,
+      updatedAt: eventTime,
+    } as any)
+
+    const quote = await gateway.getLatestQuote('BTCUSDT')
+
+    expect(mockMarketDataService.getSymbolOrThrow).toHaveBeenCalledWith('BTCUSDT')
+    expect(mockRepository.findLatestQuoteBySymbolId).toHaveBeenCalledWith('symbol-spot-1')
+    expect(quote.lastPrice).toBe('68535.5')
   })
 })

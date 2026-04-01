@@ -158,4 +158,31 @@ describe('marketDataService symbol code compatibility', () => {
     ])
     expect(service.getLatestBarSnapshot('BTCUSDT', '1m')?.timestamp).toBe(1_710_000_120_000)
   })
+
+  it('treats duplicate market bar upsert as idempotent and still updates snapshots', async () => {
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repoMock.upsertBar.mockRejectedValue({ code: 'P2002' })
+
+    await expect(service.saveBarFromProvider({
+      symbol: 'BTCUSDT',
+      timeframe: '1m',
+      timestamp: 1_710_000_180_000,
+      open: '103',
+      high: '113',
+      low: '93',
+      close: '108',
+      volume: '13',
+      quoteVolume: '1300',
+      trades: 1,
+      source: 'BINANCE_WS',
+      isFinal: true,
+    })).resolves.toBeUndefined()
+
+    expect(indicatorEngineMock.handleNewBar).toHaveBeenCalledWith({
+      symbolId: 'spot-id',
+      symbolCode: 'BTCUSDT:SPOT',
+      timeframe: '1m',
+    })
+    expect(service.getLatestBarSnapshot('BTCUSDT', '1m')?.timestamp).toBe(1_710_000_180_000)
+  })
 })

@@ -107,4 +107,125 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
 
     expect(payload).toEqual({ type: 'none', reason: 'NO_ACTION' })
   })
+
+  it('accepts normalized signal payloads emitted from StrategyAdapterV1 codegen scripts', () => {
+    const payload = (service as any).buildPublishedCodegenSignalPayload(
+      {
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        confidence: 55,
+        entryPrice: 200,
+        stopLoss: 180,
+        takeProfit: 220,
+        positionSizeRatio: 0.1,
+        reasoning: 'fast SMA above slow SMA',
+      },
+      200,
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      },
+      {},
+    )
+
+    expect(payload).toMatchObject({
+      type: 'signal',
+      payload: {
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        confidence: 55,
+        entryPrice: 200,
+        stopLoss: 180,
+        takeProfit: 220,
+        positionSizeRatio: 0.1,
+        reasoning: 'fast SMA above slow SMA',
+      },
+    })
+  })
+
+  it('runs published codegen adapter scripts against single-leg bars context even when template has legs metadata', async () => {
+    const generatorRepository = {
+      findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT:SPOT' }),
+    }
+    service = new SignalGeneratorService(
+      generatorRepository as any,
+      { get: jest.fn().mockReturnValue(config) } as any,
+      { addCronJob: jest.fn(), deleteCronJob: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      { reset: jest.fn(), incrementFailure: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      {} as any,
+      { isProd: jest.fn().mockReturnValue(false) } as any,
+      { withTransaction: jest.fn() } as any,
+    )
+
+    const loadMultiLegDataBatch = jest.spyOn(service as any, 'loadMultiLegDataBatch').mockResolvedValue({
+      primary: {
+        '15m': {
+          bars: Array.from({ length: 25 }, (_unused, index) => ({
+            open: 100 + index,
+            high: 101 + index,
+            low: 99 + index,
+            close: 100 + index,
+            volume: 10 + index,
+            timestamp: 1_775_000_000_000 + index * 900_000,
+          })),
+          indicators: {},
+          currentPrice: 124,
+        },
+      },
+    })
+    const createMultiLegSignal = jest.spyOn(service as any, 'createMultiLegSignal').mockResolvedValue({
+      created: true,
+      signalId: 'signal-1',
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).generateSignalForMultiLegStrategy(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-4',
+        params: {},
+      },
+      {
+        id: 'template-1',
+        name: 'codegen strategy',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
+    return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 55, reason: 'buy signal' }
+  },
+}
+strategy`,
+        defaultParams: {},
+      },
+      { timeframe: '15m', cooldownMinutes: 15 },
+      { primary: ['15m'] },
+      [{ id: 'primary', role: 'primary', symbol: 'BTCUSDT:SPOT', description: 'primary leg' }],
+      { id: 'primary', role: 'primary', symbol: 'BTCUSDT:SPOT', description: 'primary leg' },
+      config,
+      { skipCooldown: true },
+    )
+
+    expect(loadMultiLegDataBatch).toHaveBeenCalled()
+    expect(createMultiLegSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ code: 'BTCUSDT:SPOT' }),
+      expect.objectContaining({ timeframe: '15m' }),
+      expect.anything(),
+      expect.objectContaining({
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        positionSizeRatio: 0.1,
+        reasoning: 'buy signal',
+      }),
+      expect.anything(),
+      true,
+    )
+  })
 })

@@ -289,40 +289,46 @@ export class MarketDataService {
     const symbol = await this.getSymbolOrThrow(payload.symbol)
     const prismaTimeframe = mapTimeframe(payload.timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
-    await this.repo.upsertBar(
-      {
-        symbolId_timeframe_time: {
-          symbolId: symbol.id,
+    try {
+      await this.repo.upsertBar(
+        {
+          symbolId_timeframe_time: {
+            symbolId: symbol.id,
+            timeframe: prismaTimeframe,
+            time: new Date(payload.timestamp),
+          },
+        },
+        {
+          symbol: { connect: { id: symbol.id } },
           timeframe: prismaTimeframe,
           time: new Date(payload.timestamp),
+          open: payload.open,
+          high: payload.high,
+          low: payload.low,
+          close: payload.close,
+          volume: payload.volume,
+          quoteVolume: payload.quoteVolume,
+          trades: payload.trades,
+          source: payload.source,
+          isFinal: payload.isFinal ?? true,
         },
-      },
-      {
-        symbol: { connect: { id: symbol.id } },
-        timeframe: prismaTimeframe,
-        time: new Date(payload.timestamp),
-        open: payload.open,
-        high: payload.high,
-        low: payload.low,
-        close: payload.close,
-        volume: payload.volume,
-        quoteVolume: payload.quoteVolume,
-        trades: payload.trades,
-        source: payload.source,
-        isFinal: payload.isFinal ?? true,
-      },
-      {
-        open: payload.open,
-        high: payload.high,
-        low: payload.low,
-        close: payload.close,
-        volume: payload.volume,
-        quoteVolume: payload.quoteVolume,
-        trades: payload.trades,
-        source: payload.source,
-        isFinal: payload.isFinal ?? true,
-      },
-    )
+        {
+          open: payload.open,
+          high: payload.high,
+          low: payload.low,
+          close: payload.close,
+          volume: payload.volume,
+          quoteVolume: payload.quoteVolume,
+          trades: payload.trades,
+          source: payload.source,
+          isFinal: payload.isFinal ?? true,
+        },
+      )
+    } catch (error) {
+      if (!this.isUniqueConflict(error)) {
+        throw error
+      }
+    }
 
     // 保存 K 线后触发指标计算（若存在相关配置）
     await this.indicatorEngine.handleNewBar({
@@ -457,6 +463,13 @@ export class MarketDataService {
 
   private normalizeSymbol(symbol?: string): string {
     return (symbol ?? '').trim().toUpperCase()
+  }
+
+  private isUniqueConflict(error: unknown): boolean {
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      return (error as { code?: unknown }).code === 'P2002'
+    }
+    return false
   }
 
   private getBarSnapshotKey(symbolCode: string, timeframe: MarketTimeframe): string {

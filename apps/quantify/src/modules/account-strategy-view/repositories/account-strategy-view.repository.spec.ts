@@ -262,4 +262,70 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
     expect(result.limit).toBe(20)
     expect(result.total).toBe(0)
   })
+
+  it('selects strategy template schema fields for account strategy list rendering', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const count = jest.fn().mockResolvedValue(0)
+    const userStrategySubscriptionFindMany = jest.fn().mockResolvedValue([])
+    const tx = {
+      userStrategySubscription: {
+        findMany: userStrategySubscriptionFindMany,
+      },
+      strategyInstance: {
+        findMany,
+        count,
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository({ tx } as any)
+
+    await repo.listStrategiesForUser({
+      userId: 'user-1',
+      page: 1,
+      limit: 20,
+    })
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        strategyTemplate: {
+          select: expect.objectContaining({
+            id: true,
+            defaultParams: true,
+            paramsSchema: true,
+            rulesVersion: true,
+            metadata: true,
+          }),
+        },
+      }),
+    }))
+  })
+})
+
+describe('accountStrategyViewRepository.findStrategyForUser', () => {
+  it('selects strategy template schema fields for account strategy detail rendering', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null)
+    const tx = {
+      strategyInstance: {
+        findFirst,
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository({ tx } as any)
+
+    await repo.findStrategyForUser('user-1', 'inst-1')
+
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        strategyTemplate: {
+          select: expect.objectContaining({
+            id: true,
+            defaultParams: true,
+            paramsSchema: true,
+            rulesVersion: true,
+            metadata: true,
+          }),
+        },
+      }),
+    }))
+  })
 })

@@ -178,4 +178,37 @@ describe('backtestMarketDataService', () => {
       appliedRange: { fromTs: 2_100, toTs: 3_900 },
     })
   })
+
+  it('falls back unsuffixed symbol to canonical spot code when loading bars', async () => {
+    const prisma = createPrismaMock()
+    prisma.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    prisma.marketBar.findMany.mockResolvedValue([
+      {
+        time: new Date(2_000),
+        open: 11,
+        high: 12,
+        low: 10,
+        close: 11.5,
+        volume: 120,
+      },
+    ])
+
+    const service = new BacktestMarketDataService(prisma as never)
+    const bars = await service.loadBars({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_500, toTs: 2_500 },
+    })
+
+    expect(prisma.symbol.findMany).toHaveBeenCalledWith({
+      where: {
+        code: { in: ['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'] },
+      },
+      select: { id: true, code: true },
+    })
+    expect(bars).toEqual([
+      expect.objectContaining({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2_000, close: 11.5 }),
+    ])
+  })
 })
