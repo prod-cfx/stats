@@ -103,9 +103,7 @@ export class SignalExecutorService implements OnModuleInit {
       return
     }
 
-    await this.txHost.withTransaction(async () => {
-      await this.executeSignalForSubscribedUsers(event.signalId, config)
-    })
+    await this.executeSignalForSubscribedUsers(event.signalId, config)
   }
 
   private getConfig(): StrategySignalsRuntimeConfig {
