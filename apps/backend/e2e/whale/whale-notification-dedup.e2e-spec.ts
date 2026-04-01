@@ -2,7 +2,13 @@ import type { INestApplication } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleNotificationDeduplicatorService } from '@/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createTestingApp } from '../fixtures/fixtures'
+import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
+
+type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
+
+const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
+  return prisma.whaleNotificationRule.create({ data })
+}
 
 describe('Whale notification deduplicator (service E2E)', () => {
   let app: INestApplication
@@ -27,15 +33,10 @@ describe('Whale notification deduplicator (service E2E)', () => {
     await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-dedup-user' } })
     await prisma.user.deleteMany({ where: { id: 'e2e-dedup-user' } })
 
-    await prisma.user.create({
-      data: {
-        id: 'e2e-dedup-user',
-        email: 'e2e-dedup-user@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'dedup-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: 'e2e-dedup-user',
+      email: 'e2e-dedup-user@example.com',
+      nickname: 'dedup-user',
     })
   })
 
@@ -60,13 +61,11 @@ describe('Whale notification deduplicator (service E2E)', () => {
 
   it('should skip candidate within cooldown window by dedup key', async () => {
 
-    const rule = await prisma.whaleNotificationRule.create({
-      data: {
-        userId: 'e2e-dedup-user',
-        type: 'ADDRESS',
-        whaleAddress: '0xabc',
-        thresholdUsd: 100000,
-      },
+    const rule = await createWhaleNotificationRuleRecord(prisma, {
+      userId: 'e2e-dedup-user',
+      type: 'ADDRESS',
+      whaleAddress: '0xabc',
+      thresholdUsd: 100000,
     })
 
     const candidates = [

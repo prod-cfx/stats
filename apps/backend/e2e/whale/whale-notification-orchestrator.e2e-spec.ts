@@ -3,7 +3,13 @@ import type { WhaleAlertService } from '@/modules/whale-alert/whale-alert.servic
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createApiClient, createTestingApp } from '../fixtures/fixtures'
+import { createApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
+
+type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
+
+const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
+  return prisma.whaleNotificationRule.create({ data })
+}
 
 describe('Whale notification orchestrator via whale trade record (service E2E)', () => {
   let app: INestApplication
@@ -35,27 +41,20 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
     await prisma.user.deleteMany({ where: { id: userId } })
 
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: 'e2e-orchestrator-user@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'orchestrator-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: userId,
+      email: 'e2e-orchestrator-user@example.com',
+      nickname: 'orchestrator-user',
     })
 
-    await prisma.whaleNotificationRule.create({
-      data: {
-        userId,
-        type: 'ADDRESS',
-        whaleAddress: '0xorchestrator',
-        thresholdUsd: 100000,
-        channelWeb: true,
-        channelEmail: true,
-        channelTelegram: false,
-      },
+    await createWhaleNotificationRuleRecord(prisma, {
+      userId,
+      type: 'ADDRESS',
+      whaleAddress: '0xorchestrator',
+      thresholdUsd: 100000,
+      channelWeb: true,
+      channelEmail: true,
+      channelTelegram: false,
     })
   })
 
@@ -162,16 +161,14 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     const whaleAddress = '0xorchestrator-telegram'
     await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
     await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
-    const telegramRule = await prisma.whaleNotificationRule.create({
-      data: {
-        userId,
-        type: 'ADDRESS',
-        whaleAddress,
-        thresholdUsd: 100000,
-        channelWeb: false,
-        channelEmail: false,
-        channelTelegram: true,
-      },
+    const telegramRule = await createWhaleNotificationRuleRecord(prisma, {
+      userId,
+      type: 'ADDRESS',
+      whaleAddress,
+      thresholdUsd: 100000,
+      channelWeb: false,
+      channelEmail: false,
+      channelTelegram: true,
     })
 
     const now = new Date()

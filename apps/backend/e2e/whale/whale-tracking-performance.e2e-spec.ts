@@ -7,6 +7,12 @@ import { createTestingApp } from '../fixtures/fixtures'
 
 jest.setTimeout(180_000)
 
+type WhaleAlertSeedData = Parameters<PrismaService['hyperliquidWhaleAlert']['createMany']>[0]['data']
+
+async function createWhaleAlertRecords(prisma: PrismaService, data: WhaleAlertSeedData) {
+  await prisma.hyperliquidWhaleAlert.createMany({ data })
+}
+
 describe('WhaleTrackingService - trader performance (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -39,8 +45,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
     // - BTC: 多空各一条
     // - ETH: 多头一条
     // - 其中一条超出 timeRangeDays 窗口，应被排除
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: [
+    await createWhaleAlertRecords(prisma, [
         {
           userAddress: '0xWhaleAddressPerf1',
           symbol: 'BTC',
@@ -86,8 +91,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
           createTime: daysAgo(40),
           source: 'TEST',
         },
-      ],
-    })
+      ])
 
     const result = await whaleTrackingService.getTraderPerformance('0xWhaleAddressPerf1', {
       timeRangeDays: 30,
@@ -131,8 +135,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
   it('should support symbol filter', async () => {
     await prisma.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: [
+    await createWhaleAlertRecords(prisma, [
         {
           userAddress: '0xWhaleAddressPerf1',
           symbol: 'BTC',
@@ -155,8 +158,7 @@ describe('WhaleTrackingService - trader performance (E2E)', () => {
           createTime: new Date(now.getTime() - 60 * 1000),
           source: 'TEST',
         },
-      ],
-    })
+      ])
 
     const result = await whaleTrackingService.getTraderPerformance('0xWhaleAddressPerf1', {
       timeRangeDays: 30,

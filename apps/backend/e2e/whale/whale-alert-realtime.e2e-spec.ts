@@ -7,6 +7,17 @@ import { createTestingApp } from '../fixtures/fixtures'
 
 jest.setTimeout(180_000)
 
+type WhaleAlertSeedData = Parameters<PrismaService['hyperliquidWhaleAlert']['createMany']>[0]['data']
+type WhaleAlertCreateData = Parameters<PrismaService['hyperliquidWhaleAlert']['create']>[0]['data']
+
+async function createWhaleAlertRecord(prisma: PrismaService, data: WhaleAlertCreateData) {
+  await prisma.hyperliquidWhaleAlert.create({ data })
+}
+
+async function createWhaleAlertRecords(prisma: PrismaService, data: WhaleAlertSeedData) {
+  await prisma.hyperliquidWhaleAlert.createMany({ data })
+}
+
 let recentLongTime: Date
 let recentShortTime: Date
 let oldLongTime: Date
@@ -43,8 +54,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     // 插入多条不同条件的数据，覆盖默认过滤条件：
     // - 名义价值阈值（min_position_value_usd 默认 1_000_000）
     // - 时间窗口（默认最近 24 小时）
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: [
+    await createWhaleAlertRecords(prisma, [
         // 最近的多头，名义价值 5,000,000（应被包含）
         {
           userAddress: '0xWhaleE2E1',
@@ -93,8 +103,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
           createTime: oldLongTime,
           source: 'E2E',
         },
-      ],
-    })
+      ])
 
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'E2E',
@@ -112,8 +121,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   it('should respect symbol filter and limit', async () => {
     const now = new Date()
     await prisma.hyperliquidWhaleAlert.deleteMany({})
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: [
+    await createWhaleAlertRecords(prisma, [
         {
           userAddress: '0xWhaleE2E1',
           symbol: 'E2E',
@@ -136,8 +144,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
           createTime: new Date(now.getTime() - 2 * 60 * 1000),
           source: 'E2E',
         },
-      ],
-    })
+      ])
 
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'E2E',
@@ -154,18 +161,16 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
   it('should respect custom minPositionValueUsd', async () => {
     const localSince = new Date(Date.now() - 10 * 60 * 1000)
     await prisma.hyperliquidWhaleAlert.deleteMany({})
-    await prisma.hyperliquidWhaleAlert.create({
-      data: {
-        userAddress: '0xWhaleE2E1',
-        symbol: 'E2E',
-        positionSize: '10',
-        entryPrice: '50000',
-        liquidationPrice: '45000',
-        positionValueUsd: '5000000',
-        positionAction: 1,
-        createTime: localSince,
-        source: 'E2E',
-      },
+    await createWhaleAlertRecord(prisma, {
+      userAddress: '0xWhaleE2E1',
+      symbol: 'E2E',
+      positionSize: '10',
+      entryPrice: '50000',
+      liquidationPrice: '45000',
+      positionValueUsd: '5000000',
+      positionAction: 1,
+      createTime: localSince,
+      source: 'E2E',
     })
 
     // 使用更高的阈值，并限制时间窗口仅覆盖最近一段时间，
@@ -187,8 +192,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     const now = new Date()
 
     // Seed 5 records within time window
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: Array.from({ length: 5 }, (_, i) => ({
+    await createWhaleAlertRecords(prisma, Array.from({ length: 5 }, (_, i) => ({
         userAddress: `0xPagTest${i}`,
         symbol: 'PAG',
         positionSize: '10',
@@ -198,8 +202,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
         positionAction: 1,
         createTime: new Date(now.getTime() - (i + 1) * 60 * 1000),
         source: 'E2E',
-      })),
-    })
+      })))
 
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'PAG',
@@ -239,8 +242,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
     // 独立 seed，不依赖前序测试数据
     await prisma.hyperliquidWhaleAlert.deleteMany({})
     const now = new Date()
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: Array.from({ length: 3 }, (_, i) => ({
+    await createWhaleAlertRecords(prisma, Array.from({ length: 3 }, (_, i) => ({
         userAddress: `0xOutOfRange${i}`,
         symbol: 'OOR',
         positionSize: '10',
@@ -250,8 +252,7 @@ describe('Hyperliquid whale alert realtime API (service-level E2E)', () => {
         positionAction: 1,
         createTime: new Date(now.getTime() - (i + 1) * 60 * 1000),
         source: 'E2E',
-      })),
-    })
+      })))
 
     const result = await whaleAlertService.getRealtimeAlerts({
       symbol: 'OOR',
