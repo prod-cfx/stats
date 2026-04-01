@@ -104,8 +104,10 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
       bar: this.toOkxBar(query.timeframe),
       limit: String(query.limit ?? 500),
     }
-    if (query.start) params.after = String(query.start.getTime())
-    if (query.end) params.before = String(query.end.getTime())
+    // OKX history-candles 的 after 会继续向更旧的数据翻页；
+    // gapfill 传入 start cursor 时需要朝当前时间推进，因此这里使用 before。
+    if (query.start) params.before = String(query.start.getTime())
+    if (query.end) params.after = String(query.end.getTime())
 
     const url = new URL('/api/v5/market/history-candles', this.restBaseUrl)
     const { data } = await lastValueFrom(

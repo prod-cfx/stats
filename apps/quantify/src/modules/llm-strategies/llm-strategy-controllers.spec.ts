@@ -8,6 +8,10 @@ import { OpsLlmStrategiesController } from './controllers/ops-llm-strategies.con
 import { LiveLlmStrategyInstancesService } from './services/live-llm-strategy-instances.service'
 import { LlmStrategiesService } from './services/llm-strategies.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 jest.mock('@/prisma/prisma.types', () => ({
   LlmStrategyStatus: {
     draft: 'draft',

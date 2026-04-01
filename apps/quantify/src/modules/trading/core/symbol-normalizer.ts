@@ -19,10 +19,6 @@ export function normalizeExecutionSymbol(
   marketType: MarketType,
   exchangeId: ExchangeId,
 ): string {
-  if (exchangeId !== 'binance') {
-    return raw
-  }
-
   if (raw.includes('/')) {
     if (marketType === 'perp' && !raw.endsWith(':PERP')) {
       return `${raw}:PERP`

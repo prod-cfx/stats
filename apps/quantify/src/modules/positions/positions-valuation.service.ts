@@ -4,7 +4,9 @@ import type { PrismaClient } from '@/prisma/prisma.types'
 import { PositionSide, PositionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
+import { OnEvent } from '@nestjs/event-emitter'
 import { Injectable, Logger } from '@nestjs/common'
+import { MARKET_QUOTE_EVENT } from '@/modules/market-data/services/market-data-stream.service'
 import { Prisma } from '@/prisma/prisma.types'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
@@ -25,9 +27,9 @@ export class PositionsValuationService {
     }
     const symbolMap = new Map<string, Decimal>()
     for (const quote of quotes) {
-      const symbol = quote.symbol.trim().toUpperCase()
-      if (!symbol) continue
-      symbolMap.set(symbol, new Decimal(quote.price))
+      for (const symbol of this.expandQuoteSymbols(quote.symbol)) {
+        symbolMap.set(symbol, new Decimal(quote.price))
+      }
     }
     if (!symbolMap.size) {
       return { updatedPositions: 0, updatedAccounts: 0 }
@@ -89,6 +91,58 @@ export class PositionsValuationService {
         updatedAccounts: affectedAccounts.size,
       }
     })
+  }
+
+  @OnEvent(MARKET_QUOTE_EVENT, { async: true })
+  async handleMarketQuote(event: {
+    data?: {
+      symbol?: string
+      lastPrice?: string | number | null
+      source?: string | null
+      eventTime?: string | number | Date | null
+    }
+  }): Promise<void> {
+    const symbol = typeof event.data?.symbol === 'string' ? event.data.symbol.trim() : ''
+    const rawLastPrice = event.data?.lastPrice
+    const price = typeof rawLastPrice === 'number'
+      ? String(rawLastPrice)
+      : typeof rawLastPrice === 'string'
+        ? rawLastPrice.trim()
+        : ''
+
+    if (!symbol || !price) return
+
+    const rawEventTime = event.data?.eventTime
+    const eventTime = rawEventTime instanceof Date
+      ? rawEventTime.toISOString()
+      : rawEventTime != null
+        ? new Date(rawEventTime).toISOString()
+        : undefined
+
+    try {
+      await this.applyQuotes({
+        quotes: [{
+          symbol,
+          price,
+          source: event.data?.source ?? undefined,
+          eventTime,
+        }],
+      })
+    } catch (error) {
+      this.logger.error(
+        `实时估值更新失败: ${(error as Error).message}`,
+        (error as Error).stack,
+      )
+    }
+  }
+
+  private expandQuoteSymbols(symbol: string): string[] {
+    const normalized = symbol.trim().toUpperCase()
+    if (!normalized) return []
+    if (!normalized.includes(':')) return [normalized]
+    const raw = normalized.split(':')[0] ?? normalized
+    if (!raw || raw === normalized) return [normalized]
+    return [normalized, raw]
   }
 
   private calculateUnrealizedPnl(

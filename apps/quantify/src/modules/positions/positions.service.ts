@@ -17,6 +17,7 @@ import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
+import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { Prisma } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
@@ -64,6 +65,7 @@ export class PositionsService {
       const {
         position,
         realizedPnlDelta,
+        settlementDelta,
       } = isIncrease
         ? await this.applyIncrease({
             dto,
@@ -102,6 +104,18 @@ export class PositionsService {
           metadata: dto.metadata as Prisma.JsonValue | undefined,
         },
       })
+
+      if (!settlementDelta.isZero()) {
+        await this.accountsService.applyLedgerDelta({
+          accountId: dto.userStrategyAccountId,
+          delta: settlementDelta,
+          ledgerType: LedgerEntryType.ADJUSTMENT,
+          positionId: position!.id,
+          referenceId: `${tradeRecord.id}:settlement`,
+          description: `Spot close settlement ${dto.symbol}`,
+          occurredAt: executedAt,
+        })
+      }
 
       if (!realizedPnlDelta.isZero()) {
         await this.accountsService.applyLedgerDelta({
@@ -199,7 +213,7 @@ export class PositionsService {
       executedAt: Date
       existingPosition: Position | null
     },
-  ): Promise<{ position: Position; realizedPnlDelta: Decimal }> {
+  ): Promise<{ position: Position; realizedPnlDelta: Decimal; settlementDelta: Decimal }> {
     const { dto, normalizedSymbol, price, quantity, leverage, executedAt } = params
     let { existingPosition } = params
 
@@ -229,7 +243,7 @@ export class PositionsService {
             metadata: dto.metadata as Prisma.JsonValue | undefined,
           },
         })
-        return { position: created, realizedPnlDelta: new Decimal(0) }
+        return { position: created, realizedPnlDelta: new Decimal(0), settlementDelta: new Decimal(0) }
       }
       catch (error: any) {
         // P2002 = Unique constraint violation，说明另一事务刚好创建了同方向 OPEN 仓位
@@ -276,7 +290,7 @@ export class PositionsService {
       },
     })
 
-    return { position: updated, realizedPnlDelta: new Decimal(0) }
+    return { position: updated, realizedPnlDelta: new Decimal(0), settlementDelta: new Decimal(0) }
   }
 
   private async applyDecrease(
@@ -288,7 +302,7 @@ export class PositionsService {
       executedAt: Date
       existingPosition: Position | null
     },
-  ): Promise<{ position: Position; realizedPnlDelta: Decimal }> {
+  ): Promise<{ position: Position; realizedPnlDelta: Decimal; settlementDelta: Decimal }> {
     const { dto, normalizedSymbol, price, quantity, executedAt, existingPosition } = params
 
     if (!existingPosition || existingPosition.status !== PositionStatus.OPEN) {
@@ -315,6 +329,13 @@ export class PositionsService {
     )
 
     const isFullClose = remainingQty.isZero()
+    const settlementDelta = this.calculateSettlementDelta(
+      dto.market,
+      dto.positionSide,
+      dto.side,
+      existingPosition.avgEntryPrice,
+      quantity,
+    )
     const updated = await this.txHost.tx.position.update({
       where: { id: existingPosition.id },
       data: {
@@ -329,7 +350,7 @@ export class PositionsService {
 
     await this.recalculateUnrealizedAndEquity(dto.userStrategyAccountId)
 
-    return { position: updated, realizedPnlDelta }
+    return { position: updated, realizedPnlDelta, settlementDelta }
   }
 
   private async recalculateUnrealizedAndEquity(accountId: string): Promise<void> {
@@ -394,6 +415,24 @@ export class PositionsService {
   ) {
     const diff = exitPrice.sub(entryPrice)
     return diff.mul(quantity).mul(positionSide === PositionSide.LONG ? 1 : -1)
+  }
+
+  private calculateSettlementDelta(
+    market: string | undefined,
+    positionSide: PositionSide,
+    tradeSide: TradeSide,
+    entryPrice: Prisma.Decimal,
+    quantity: Prisma.Decimal,
+  ) {
+    const normalizedMarket = (market ?? '').toLowerCase()
+    const isSpot = normalizedMarket.endsWith(':spot')
+    const isLongClose = positionSide === PositionSide.LONG && tradeSide === TradeSide.SELL
+
+    if (!isSpot || !isLongClose) {
+      return new Decimal(0)
+    }
+
+    return entryPrice.mul(quantity)
   }
 
   private toPositionResponse(
@@ -483,6 +522,7 @@ export class PositionsService {
     
     const exchangeId = position.exchangeId as ExchangeId
     const marketType = position.marketType as MarketType
+    const executionSymbol = normalizeExecutionSymbol(position.symbol, marketType, exchangeId)
     
     // 4. 确定订单方向：平多单需要卖出，平空单需要买入
     const orderSide = position.positionSide === PositionSide.LONG ? 'sell' : 'buy'
@@ -494,7 +534,7 @@ export class PositionsService {
         exchangeId,
         marketType,
         {
-          symbol: position.symbol,
+          symbol: executionSymbol,
           marketType,
           side: orderSide,
           type: 'market',

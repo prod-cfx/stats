@@ -7,6 +7,10 @@ import { PositionsValuationService } from './positions-valuation.service'
 import { PositionsController } from './positions.controller'
 import { PositionsService } from './positions.service'
 
+jest.mock('@nestjs-cls/transactional', () => ({
+  Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
+}))
+
 jest.mock('./positions.service', () => ({
   PositionsService: class PositionsService {},
 }))

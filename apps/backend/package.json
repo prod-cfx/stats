@@ -16,6 +16,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:reset": "prisma migrate reset --force",
     "prisma:db:seed": "prisma db seed",
+    "repair:public-data-tasks": "tsx prisma/scripts/repair-public-data-tasks.ts",
     "prisma:format": "prisma format",
     "lint": "eslint \"src/**/*.ts\" \"e2e/**/*.ts\" --config ../../eslint.config.js",
     "test": "echo \"backend tests 尚未配置\"",

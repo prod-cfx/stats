@@ -1,5 +1,12 @@
 import { AccountStrategyViewRepository } from './account-strategy-view.repository'
 
+function createTxHost(tx: any) {
+  return {
+    tx,
+    withTransaction: jest.fn(async (callback: () => Promise<any>) => callback()),
+  }
+}
+
 describe('accountStrategyViewRepository.deployStrategyForUser', () => {
   it('reuses the published AI draft instance when strategyInstanceId is provided', async () => {
     const tx = {
@@ -37,11 +44,8 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
     }
-    const prisma = {
-      runInTransaction: jest.fn(async (callback: (client: typeof tx) => Promise<string>) => callback(tx)),
-    }
 
-    const repo = new AccountStrategyViewRepository(prisma as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
 
     const result = await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -110,11 +114,8 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
     }
-    const prisma = {
-      runInTransaction: jest.fn(async (callback: (client: typeof tx) => Promise<string>) => callback(tx)),
-    }
 
-    const repo = new AccountStrategyViewRepository(prisma as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
 
     await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -166,11 +167,8 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
     }
-    const prisma = {
-      runInTransaction: jest.fn(async (callback: (client: typeof tx) => Promise<string>) => callback(tx)),
-    }
 
-    const repo = new AccountStrategyViewRepository(prisma as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -212,11 +210,8 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
     }
-    const prisma = {
-      runInTransaction: jest.fn(async (callback: (client: typeof tx) => Promise<string>) => callback(tx)),
-    }
 
-    const repo = new AccountStrategyViewRepository(prisma as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -237,19 +232,17 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
     const findMany = jest.fn().mockResolvedValue([])
     const count = jest.fn().mockResolvedValue(0)
     const userStrategySubscriptionFindMany = jest.fn().mockResolvedValue([])
-    const prisma = {
-      getClient: jest.fn().mockReturnValue({
-        userStrategySubscription: {
-          findMany: userStrategySubscriptionFindMany,
-        },
-        strategyInstance: {
-          findMany,
-          count,
-        },
-      }),
+    const tx = {
+      userStrategySubscription: {
+        findMany: userStrategySubscriptionFindMany,
+      },
+      strategyInstance: {
+        findMany,
+        count,
+      },
     }
 
-    const repo = new AccountStrategyViewRepository(prisma as any)
+    const repo = new AccountStrategyViewRepository({ tx } as any)
 
     const result = await repo.listStrategiesForUser({
       userId: 'user-1',
@@ -268,5 +261,71 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
     expect(result.page).toBe(1)
     expect(result.limit).toBe(20)
     expect(result.total).toBe(0)
+  })
+
+  it('selects strategy template schema fields for account strategy list rendering', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const count = jest.fn().mockResolvedValue(0)
+    const userStrategySubscriptionFindMany = jest.fn().mockResolvedValue([])
+    const tx = {
+      userStrategySubscription: {
+        findMany: userStrategySubscriptionFindMany,
+      },
+      strategyInstance: {
+        findMany,
+        count,
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository({ tx } as any)
+
+    await repo.listStrategiesForUser({
+      userId: 'user-1',
+      page: 1,
+      limit: 20,
+    })
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        strategyTemplate: {
+          select: expect.objectContaining({
+            id: true,
+            defaultParams: true,
+            paramsSchema: true,
+            rulesVersion: true,
+            metadata: true,
+          }),
+        },
+      }),
+    }))
+  })
+})
+
+describe('accountStrategyViewRepository.findStrategyForUser', () => {
+  it('selects strategy template schema fields for account strategy detail rendering', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null)
+    const tx = {
+      strategyInstance: {
+        findFirst,
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository({ tx } as any)
+
+    await repo.findStrategyForUser('user-1', 'inst-1')
+
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        strategyTemplate: {
+          select: expect.objectContaining({
+            id: true,
+            defaultParams: true,
+            paramsSchema: true,
+            rulesVersion: true,
+            metadata: true,
+          }),
+        },
+      }),
+    }))
   })
 })

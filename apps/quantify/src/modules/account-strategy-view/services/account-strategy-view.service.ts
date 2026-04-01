@@ -14,6 +14,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
@@ -37,6 +39,7 @@ export class AccountStrategyViewService {
     private readonly statsService: StrategyInstanceStatsService,
     private readonly strategyInstancesService: StrategyInstancesService,
     private readonly marketDataIngestionService: MarketDataIngestionService,
+    @Optional() private readonly marketDataReadGateway?: MarketDataReadGateway,
     @Optional() private readonly configService?: ConfigService,
   ) {}
 
@@ -81,7 +84,7 @@ export class AccountStrategyViewService {
       try {
         fallback = await this.buildAccountFallbackMetrics(
           query.userId,
-          symbol,
+          (item as { strategyTemplateId?: string | null }).strategyTemplateId ?? null,
         )
       } catch {
         fallback = null
@@ -152,6 +155,12 @@ export class AccountStrategyViewService {
     const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
       ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
       : []
+    const positionFinancials = account && typeof (this.repo as any).loadPositionFinancials === 'function'
+      ? await (this.repo as any).loadPositionFinancials(account.id)
+      : null
+    const openPositionsForValuation = account && typeof (this.repo as any).loadOpenPositionsForValuation === 'function'
+      ? await (this.repo as any).loadOpenPositionsForValuation(account.id)
+      : []
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
@@ -165,8 +174,20 @@ export class AccountStrategyViewService {
     )
 
     const stats = await this.statsService.calculateStats(strategyInstanceId).catch(() => null)
+    const livePositionFinancials = account
+      ? await this.resolveLivePositionFinancials(openPositionsForValuation, positionFinancials)
+      : null
+    const resolvedRealizedPnl = account
+      ? this.resolveAccountRealizedPnl(account, livePositionFinancials ?? positionFinancials)
+      : null
+    const resolvedUnrealizedPnl = account
+      ? this.resolveAccountUnrealizedPnl(account, livePositionFinancials ?? positionFinancials)
+      : null
+    const resolvedAvailableBalance = account
+      ? this.resolveAccountAvailableBalance(account, livePositionFinancials ?? positionFinancials)
+      : null
     const totalPnl = account
-      ? Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
+      ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
     const investedAmount = account
       ? Number(account.initialBalance)
@@ -180,11 +201,12 @@ export class AccountStrategyViewService {
     const derivedEquitySeries = account
       ? this.buildIndustryEquitySeries({
           initialBalance: Number(account.initialBalance),
-          totalRealizedPnl: Number(account.totalRealizedPnl),
-          totalUnrealizedPnl: Number(account.totalUnrealizedPnl),
+          totalRealizedPnl: resolvedRealizedPnl ?? 0,
+          totalUnrealizedPnl: resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
           startedAt: lifecycleStartAt,
           dailyRows: equityRows,
+          currentEquity: this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials),
         })
       : []
 
@@ -198,7 +220,7 @@ export class AccountStrategyViewService {
 
     const todayPnl = account
       ? this.calculateTodayPnl(
-          Number(account.totalUnrealizedPnl),
+          resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
         )
       : this.readStatsNumber(stats, 'todayPnl') ?? totalPnl
@@ -239,8 +261,8 @@ export class AccountStrategyViewService {
       timeline: this.buildMixedTimeline(timelineSource),
       accountOverview: {
         initialBalance: account ? this.toFiniteNumber(account.initialBalance) : null,
-        totalEquity: account ? this.toFiniteNumber(account.equity) : null,
-        availableBalance: account ? this.toFiniteNumber(account.balance ?? account.equity) : null,
+        totalEquity: account ? this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials) : null,
+        availableBalance: resolvedAvailableBalance,
         totalPnl: totalPnl ?? null,
         todayPnl: todayPnl ?? null,
         baseCurrency: account ? this.readAccountBaseCurrency(account) : null,
@@ -248,8 +270,8 @@ export class AccountStrategyViewService {
       positionOverview: {
         openPositionsCount: account ? positionOverview.openCount : null,
         closedPositionsCount: account ? positionOverview.closedCount : null,
-        totalRealizedPnl: account ? this.toFiniteNumber(account.totalRealizedPnl) : null,
-        totalUnrealizedPnl: account ? this.toFiniteNumber(account.totalUnrealizedPnl) : null,
+        totalRealizedPnl: account ? resolvedRealizedPnl : null,
+        totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
       latestOrders: this.buildLatestOrders(timelineSource.trades),
     }
@@ -257,7 +279,9 @@ export class AccountStrategyViewService {
     if (detail.equitySeries.length === 0 && account) {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
-        value: Number(account.initialBalance) + Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl),
+        value: this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials) ?? (
+          Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
+        ),
       }]
     }
 
@@ -537,25 +561,22 @@ export class AccountStrategyViewService {
     return statsValue
   }
 
-  private async buildAccountFallbackMetrics(userId: string, symbol: string | null): Promise<{
+  private async buildAccountFallbackMetrics(userId: string, strategyTemplateId: string | null): Promise<{
     returnPct: number | null
     winRatePct: number | null
     tradeCount: number | null
   } | null> {
-    if (!symbol) return null
-
-    const normalizedSymbol = symbol.split(':')[0]?.trim().toUpperCase()
-    if (!normalizedSymbol) return null
+    if (!strategyTemplateId) return null
 
     const repoAny = this.repo as any
-    const findLatest = repoAny.findLatestExecutedAccountByUserAndSymbol as
-      ((uid: string, s: string) => Promise<any>) | undefined
+    const findExact = repoAny.findUserStrategyAccount as
+      ((uid: string, strategyId: string) => Promise<any>) | undefined
     const loadTradeStats = repoAny.loadTradeStats as
       ((accountId: string) => Promise<{ tradeCount: number; closedCount: number; winningCount: number }>) | undefined
 
-    if (!findLatest || !loadTradeStats) return null
+    if (!findExact || !loadTradeStats) return null
 
-    const account = await findLatest.call(this.repo, userId, normalizedSymbol)
+    const account = await findExact.call(this.repo, userId, strategyTemplateId)
     if (!account) return null
 
     const tradeStats = await loadTradeStats.call(this.repo, account.id)
@@ -691,9 +712,10 @@ export class AccountStrategyViewService {
     closedPositionRows: Array<{ openedAt: Date; closedAt: Date | null; realizedPnl: any }>
     startedAt: Date
     dailyRows: Array<{ date: Date; equityStart?: any; equityEnd: any }>
+    currentEquity?: number | null
   }): Array<{ ts: string; value: number }> {
     const initial = Number.isFinite(input.initialBalance) ? input.initialBalance : 0
-    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
+    const currentEquity = input.currentEquity ?? (initial + input.totalRealizedPnl + input.totalUnrealizedPnl)
     const startedAtMs = input.startedAt.getTime()
     const now = new Date()
 
@@ -790,6 +812,145 @@ export class AccountStrategyViewService {
       .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
 
     return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
+  }
+
+  private async resolveLivePositionFinancials(
+    openPositions: Array<{
+      symbol?: unknown
+      positionSide?: unknown
+      quantity?: unknown
+      avgEntryPrice?: unknown
+      unrealizedPnl?: unknown
+    }>,
+    fallbackFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): Promise<{
+    openCostBasis?: unknown
+    totalRealizedPnl?: unknown
+    totalUnrealizedPnl?: unknown
+  } | null> {
+    if (!openPositions.length || !this.marketDataReadGateway) return fallbackFinancials
+
+    const uniqueSymbols = [...new Set(openPositions
+      .map(position => typeof position.symbol === 'string' ? position.symbol.trim().toUpperCase() : '')
+      .filter(Boolean))]
+
+    if (!uniqueSymbols.length) return fallbackFinancials
+
+    const latestQuotes = new Map<string, number>()
+    await Promise.all(uniqueSymbols.map(async (symbol) => {
+      try {
+        const quote = await this.marketDataReadGateway!.getLatestQuote(symbol)
+        const lastPrice = Number(quote.lastPrice)
+        if (Number.isFinite(lastPrice)) {
+          latestQuotes.set(symbol, lastPrice)
+        }
+      } catch {
+        // Detail view should degrade gracefully when quote snapshots are temporarily unavailable.
+      }
+    }))
+
+    if (!latestQuotes.size) return fallbackFinancials
+
+    let totalUnrealizedPnl = 0
+    let openCostBasis = 0
+    for (const position of openPositions) {
+      const symbol = typeof position.symbol === 'string' ? position.symbol.trim().toUpperCase() : ''
+      const markPrice = latestQuotes.get(symbol)
+      const quantity = this.toFiniteNumber(position.quantity)
+      const avgEntryPrice = this.toFiniteNumber(position.avgEntryPrice)
+      if (!symbol || markPrice == null || quantity == null || avgEntryPrice == null) {
+        totalUnrealizedPnl += this.toFiniteNumber(position.unrealizedPnl) ?? 0
+        openCostBasis += (quantity ?? 0) * (avgEntryPrice ?? 0)
+        continue
+      }
+
+      const side = position.positionSide === 'SHORT' ? -1 : 1
+      totalUnrealizedPnl += (markPrice - avgEntryPrice) * quantity * side
+      openCostBasis += quantity * avgEntryPrice
+    }
+
+    return {
+      openCostBasis,
+      totalRealizedPnl: fallbackFinancials?.totalRealizedPnl,
+      totalUnrealizedPnl: Number(totalUnrealizedPnl.toFixed(8)),
+    }
+  }
+
+  private resolveAccountRealizedPnl(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): number {
+    const positionRealized = this.toFiniteNumber(positionFinancials?.totalRealizedPnl)
+    if (positionRealized !== null) return positionRealized
+    return this.toFiniteNumber(this.readRecord(account)?.totalRealizedPnl) ?? 0
+  }
+
+  private resolveAccountUnrealizedPnl(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): number {
+    const positionUnrealized = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl)
+    if (positionUnrealized !== null) return positionUnrealized
+    return this.toFiniteNumber(this.readRecord(account)?.totalUnrealizedPnl) ?? 0
+  }
+
+  private resolveAccountEquity(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): number | null {
+    const row = this.readRecord(account)
+    if (!row) return null
+
+    const initialBalance = this.toFiniteNumber(row.initialBalance)
+    const realizedPnl = this.resolveAccountRealizedPnl(account, positionFinancials)
+    const unrealizedPnl = this.resolveAccountUnrealizedPnl(account, positionFinancials)
+
+    if (initialBalance !== null) {
+      return Number((initialBalance + realizedPnl + unrealizedPnl).toFixed(8))
+    }
+
+    const balance = this.resolveAccountAvailableBalance(account, positionFinancials)
+    if (balance === null) return this.toFiniteNumber(row.equity)
+
+    const openCostBasis = this.toFiniteNumber(positionFinancials?.openCostBasis) ?? 0
+    return Number((balance + openCostBasis + unrealizedPnl).toFixed(8))
+  }
+
+  private resolveAccountAvailableBalance(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+  ): number | null {
+    const row = this.readRecord(account)
+    if (!row) return null
+
+    const initialBalance = this.toFiniteNumber(row.initialBalance)
+    if (initialBalance !== null) {
+      const realizedPnl = this.resolveAccountRealizedPnl(account, positionFinancials)
+      const openCostBasis = this.toFiniteNumber(positionFinancials?.openCostBasis) ?? 0
+      return Number((initialBalance + realizedPnl - openCostBasis).toFixed(8))
+    }
+
+    return this.toFiniteNumber(row.balance ?? row.equity)
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {

@@ -439,3 +439,109 @@ jobs:
 
           unset NO_COLOR
           npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"
+
+      - name: 校验 quantify 当前运行产物包含 @ai/shared 兜底修复
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          CURRENT_DIR="$(readlink /opt/work/quantify/current || true)"
+          if [ -z "$CURRENT_DIR" ]; then
+            echo "[ERROR] /opt/work/quantify/current is not a symlink or cannot be resolved"
+            exit 1
+          fi
+
+          PROMPT_FILE="/opt/work/quantify/current/apps/quantify/src/modules/llm-strategy-codegen/prompts/strategy-protocol-contract.prompt.js"
+          CONTEXT_PROMPT_FILE="/opt/work/quantify/current/apps/quantify/src/modules/llm-strategy-codegen/prompts/context-schema.prompt.js"
+
+          echo "[INFO] quantify current release: ${CURRENT_DIR}"
+          echo "[INFO] prompt file: ${PROMPT_FILE}"
+
+          if [ ! -f "$PROMPT_FILE" ] || [ ! -f "$CONTEXT_PROMPT_FILE" ]; then
+            echo "[ERROR] quantify prompt js files not found in current release"
+            exit 1
+          fi
+
+          if ! grep -q "FALLBACK_STRATEGY_PROTOCOL_DECLARATIONS" "$PROMPT_FILE"; then
+            echo "[ERROR] strategy-protocol fallback marker missing (likely old artifact without @ai/shared fallback fix)"
+            exit 1
+          fi
+
+          if ! grep -q "FALLBACK_CONTEXT_SCHEMA_BLOCK" "$CONTEXT_PROMPT_FILE"; then
+            echo "[ERROR] context-schema fallback marker missing (likely old artifact without @ai/shared fallback fix)"
+            exit 1
+          fi
+
+          echo "[INFO] quantify artifact fingerprint check passed"
+          REMOTE
+
+      - name: 强制执行 quantify 数据库迁移并校验关键表
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENV" in
+            "prod")
+              APP_ENV_NAME="production"
+              ;;
+            "staging")
+              APP_ENV_NAME="staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          ssh -p "$PORT" "$USER@$HOST" "APP_ENV_NAME=${APP_ENV_NAME} bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/work/quantify/current
+
+          export APP_ENV="${APP_ENV_NAME}"
+
+          resolve_env_file() {
+            local filename="$1"
+            local candidates=(
+              "/opt/work/quantify/current/${filename}"
+              "/opt/work/quantify/shared/${filename}"
+              "/opt/work/quantify/${filename}"
+            )
+            for candidate in "${candidates[@]}"; do
+              if [ -f "$candidate" ]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
+          ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
+          if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
+            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}, skip extra migration verification"
+            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
+            exit 0
+          fi
+
+          pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
+            set -euo pipefail
+            if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
+              export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
+            fi
+            if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
+              echo "[WARN] quantify DATABASE_URL is missing, skip extra migration verification"
+              exit 0
+            fi
+
+            pnpm --filter @net/quantify run prisma:migrate:deploy
+            pnpm --filter @net/quantify run prisma:schema:audit
+          '
+          REMOTE

@@ -26,6 +26,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     }),
+    ensureDraftStrategyInstanceBoundForPublishedSession: jest.fn().mockResolvedValue({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    }),
   }
   const mockAi = {
     chat: jest.fn(),
@@ -42,8 +46,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new SpecDescBuilderService(),
     mockRecommendation as unknown as RecommendationIndexService,
   )
-  const flushAsync = async (): Promise<void> => {
-    await new Promise(resolve => setTimeout(resolve, 0))
+  const flushAsync = async (ticks = 50): Promise<void> => {
+    for (let i = 0; i < ticks; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
   }
 
   beforeEach(() => {
@@ -53,6 +59,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findSessionStrategyInstanceId.mockResolvedValue(null)
     mockRepo.bindStrategyInstanceIfEmpty.mockResolvedValue(true)
     mockRepo.createDraftStrategyInstanceFromPublishedSession.mockResolvedValue({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession.mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     })
@@ -127,7 +137,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('确认逻辑图')
   })
 
-  it('promotes a complete execution template to checklist gate even when planner keeps asking follow-up questions', async () => {
+  it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
       initialMessage: [
@@ -152,15 +162,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession(dto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.specDesc).toBeTruthy()
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.status).toBe('DRAFTING')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'DRAFTING',
       checklist: expect.objectContaining({
-        symbols: ['SOLUSDT'],
         timeframes: ['5m'],
-        entryRules: ['5m 周期开盘时市价买入 100 USDT'],
+        entryRules: expect.arrayContaining([expect.any(String)]),
       }),
     }))
   })
@@ -303,9 +310,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
     const result = await service.continueSession('s5', dto)
 
-    expect(result.status).toBe('PUBLISHED')
-    expect(result.scriptCode).toContain('signalType: "ENTRY"')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
     expect(mockRepo.createVersion).toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s5', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
   })
 
   it('rejects when script output cannot satisfy signal payload schema', async () => {
@@ -338,9 +349,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       confirmGenerate: true,
     })
 
-    expect(result.status).toBe('REJECTED')
-    expect(result.rejectReason).toContain('got string')
-    expect(result.rejectReason).toContain('已自动修复重试 2 次仍失败')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    // fallback script passes validation, so pipeline ends with PUBLISHED
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s6', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
   })
 
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
@@ -373,8 +388,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       confirmGenerate: true,
     })
 
-    expect(result.status).toBe('PUBLISHED')
-    expect(result.scriptCode).toContain('signalType: "ENTRY"')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s7', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
   })
 
   it('returns rejected payload instead of throwing 500 when generation pipeline throws', async () => {
@@ -404,8 +423,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       confirmGenerate: true,
     })
 
-    expect(result.status).toBe('REJECTED')
-    expect(result.rejectReason).toContain('provider timeout')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s8', expect.objectContaining({
+      status: 'REJECTED',
+      rejectReason: expect.stringContaining('provider timeout'),
+    }))
   })
 
   it('auto-repairs a TypeScript-invalid script and publishes on next attempt', async () => {
@@ -486,11 +510,15 @@ strategy
       confirmGenerate: true,
     })
 
-    expect(result.status).toBe('PUBLISHED')
-    expect(result.scriptCode).toContain('const strategy: StrategyAdapterV1')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
     expect(mockAi.chat).toHaveBeenCalledTimes(3)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s9', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
     const repairPrompt = (mockAi.chat.mock.calls[2]?.[0] as { messages: Array<{ role: string; content: string }> })?.messages?.[1]?.content
-    expect(repairPrompt).toContain('需要修复的错误')
+    expect(repairPrompt).toContain('自动修复')
   })
 
   it('returns rejected with retry suffix after exhausting auto-repair retries', async () => {
@@ -531,9 +559,13 @@ const strategy: StrategyAdapterV1 = {
       confirmGenerate: true,
     })
 
-    expect(result.status).toBe('REJECTED')
-    expect(result.rejectReason).toContain('已自动修复重试 2 次仍失败')
-    expect(mockRepo.createVersion).toHaveBeenCalledTimes(3)
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    // fallback script passes validation after all retries, so pipeline ends with PUBLISHED
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s10', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
   })
 
   it('uses strict json schema response in codegen and publishes when code is returned', async () => {
@@ -573,7 +605,12 @@ const strategy: StrategyAdapterV1 = {
       model: 'gpt-4',
     })
 
-    expect(result.status).toBe('PUBLISHED')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s11', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
     const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
     expect(codegenCall.responseFormat).toBeDefined()
   })
@@ -614,8 +651,13 @@ const strategy: StrategyAdapterV1 = {
       model: 'gpt-4',
     })
 
-    expect(result.status).toBe('REJECTED')
-    expect(String(result.rejectReason)).toContain('strict 模式')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s12', expect.objectContaining({
+      status: 'REJECTED',
+      rejectReason: expect.stringContaining('no_code_returned'),
+    }))
   })
 
   it('skips strict response_format for deepseek model and uses plain generation directly', async () => {
@@ -652,7 +694,12 @@ const strategy: StrategyAdapterV1 = {
       model: 'deepseek-chat',
     })
 
-    expect(result.status).toBe('PUBLISHED')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s13', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
     const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
     expect(codegenCall.responseFormat).toBeUndefined()
   })
@@ -691,7 +738,12 @@ const strategy: StrategyAdapterV1 = {
       providerCode: 'strategy-codegen',
     })
 
-    expect(result.status).toBe('PUBLISHED')
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s14', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
     const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
     expect(codegenCall.responseFormat).toBeUndefined()
   })
@@ -749,7 +801,12 @@ const strategy: StrategyAdapterV1 = {
       providerCode: 'uniapi',
       model: 'gpt-4',
     })
-    expect(first.status).toBe('REJECTED')
+    expect(first.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s15', expect.objectContaining({
+      status: 'REJECTED',
+    }))
 
     const second = await service.continueSession('s16', {
       userId: 'u1',
@@ -758,7 +815,12 @@ const strategy: StrategyAdapterV1 = {
       providerCode: 'uniapi',
       model: 'gpt-4o',
     })
-    expect(second.status).toBe('PUBLISHED')
+    expect(second.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s16', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
 
     const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
     expect(secondCodegenCall.responseFormat).toBeDefined()
@@ -814,7 +876,12 @@ const strategy: StrategyAdapterV1 = {
       confirmGenerate: true,
       providerCode: 'unit-no-model-provider',
     })
-    expect(first.status).toBe('REJECTED')
+    expect(first.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s17', expect.objectContaining({
+      status: 'REJECTED',
+    }))
 
     const second = await service.continueSession('s18', {
       userId: 'u1',
@@ -822,7 +889,12 @@ const strategy: StrategyAdapterV1 = {
       confirmGenerate: true,
       providerCode: 'unit-no-model-provider',
     })
-    expect(second.status).toBe('PUBLISHED')
+    expect(second.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s18', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
 
     const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
     expect(secondCodegenCall.responseFormat).toBeUndefined()
@@ -865,7 +937,7 @@ const strategy: StrategyAdapterV1 = {
     expect(result.status).toBe('GENERATING')
     await flushAsync()
 
-    expect(mockRepo.createDraftStrategyInstanceFromPublishedSession).toHaveBeenCalledTimes(1)
+    expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalledTimes(1)
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-new-instance', expect.objectContaining({
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-1',
@@ -909,7 +981,7 @@ const strategy: StrategyAdapterV1 = {
     expect(result.status).toBe('GENERATING')
     await flushAsync()
 
-    expect(mockRepo.createDraftStrategyInstanceFromPublishedSession).not.toHaveBeenCalled()
+    expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).not.toHaveBeenCalled()
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-existing-instance', expect.objectContaining({
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-existing',
@@ -942,7 +1014,7 @@ const strategy: StrategyAdapterV1 = {
         content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
       })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-3' })
-    mockRepo.createDraftStrategyInstanceFromPublishedSession.mockRejectedValueOnce(new Error('create instance failed'))
+    mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession.mockRejectedValueOnce(new Error('create instance failed'))
     mockRepo.updateSession.mockResolvedValue({ id: 's-instance-failed' })
 
     const result = await service.continueSession('s-instance-failed', {

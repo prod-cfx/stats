@@ -2,6 +2,7 @@ import type { MarketTimeframe } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { normalizeExactCode, normalizeRequestedCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
@@ -119,17 +120,53 @@ export class BacktestMarketDataService {
   }
 
   private async loadSymbolMap(symbols: string[]): Promise<Map<string, string>> {
-    const normalizedSymbols = symbols.map(symbol => symbol.trim().toUpperCase())
+    const normalizedSymbols = symbols.map(symbol => normalizeExactCode(symbol))
+    const codeCandidates = [...new Set(normalizedSymbols.flatMap(symbol => this.buildCodeCandidates(symbol)))]
     const rows = await this.prisma.symbol.findMany({
       where: {
-        code: { in: normalizedSymbols },
+        code: { in: codeCandidates },
       },
       select: { id: true, code: true },
     })
-    return new Map(rows.map(row => [row.code.toUpperCase(), row.id]))
+
+    const rowMap = new Map(rows.map(row => [normalizeExactCode(row.code), row.id]))
+    const result = new Map<string, string>()
+    for (const symbol of normalizedSymbols) {
+      const resolvedId = this.resolveSymbolId(symbol, rowMap)
+      if (resolvedId) {
+        result.set(symbol, resolvedId)
+      }
+    }
+    return result
   }
 
   private normalizeSymbols(symbols: string[]): string[] {
-    return [...new Set(symbols.map(symbol => symbol.trim().toUpperCase()))]
+    return [...new Set(symbols.map(symbol => normalizeExactCode(symbol)))]
+  }
+
+  private buildCodeCandidates(symbol: string): string[] {
+    if (symbol.includes(':')) {
+      return symbol.endsWith(':SPOT')
+        ? [symbol, symbol.slice(0, -':SPOT'.length)]
+        : [symbol]
+    }
+
+    return [symbol, toSymbolCode(symbol, 'PERP'), normalizeRequestedCode(symbol)]
+  }
+
+  private resolveSymbolId(symbol: string, rowMap: Map<string, string>): string | undefined {
+    if (symbol.includes(':')) {
+      if (rowMap.has(symbol)) {
+        return rowMap.get(symbol)
+      }
+      if (symbol.endsWith(':SPOT')) {
+        return rowMap.get(symbol.slice(0, -':SPOT'.length))
+      }
+      return undefined
+    }
+
+    return rowMap.get(normalizeRequestedCode(symbol))
+      ?? rowMap.get(toSymbolCode(symbol, 'PERP'))
+      ?? rowMap.get(symbol)
   }
 }

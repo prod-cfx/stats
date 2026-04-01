@@ -1,9 +1,61 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import ts from 'typescript'
+import { DomainException } from '@/common/exceptions/domain.exception'
 
 let cachedPrompt: string | null = null
+
+const FALLBACK_CONTEXT_SCHEMA_BLOCK = [
+  'interface Bar {',
+  '  open: number',
+  '  high: number',
+  '  low: number',
+  '  close: number',
+  '  volume: number',
+  '  timestamp: number',
+  '}',
+  'interface StrategyParamsNormalized {',
+  '  riskPct: number | null',
+  '  positionPct: number | null',
+  '  stopLossPct: number | null',
+  '  takeProfitPct: number | null',
+  '  maxDrawdownPct: number | null',
+  '  leverage: number | null',
+  '  allowShort: boolean | null',
+  '}',
+  'interface LegTimeframeData {',
+  '  bars: Bar[]',
+  '  indicators: Record<string, number>',
+  '  currentPrice: number',
+  '}',
+  'interface StrategyContext {',
+  '  bars: Bar[]',
+  '  symbol: string',
+  '  timeframe: string',
+  '  indicators: Record<string, number>',
+  '  currentPrice?: number',
+  '  timestamp?: number',
+  '  params?: Record<string, unknown> | null',
+  '  paramsNormalized?: StrategyParamsNormalized',
+  '}',
+  'interface MultiLegStrategyContext {',
+  '  data: Record<string, Record<string, LegTimeframeData>>',
+  '  execution: { timeframe: string; cooldownMinutes?: number }',
+  "  legs: Array<{ id: string; symbol: string; role: 'primary' | 'hedge' | 'context'; description?: string }>",
+  '  dataRequirements: Record<string, string[]>',
+  '  timestamp: number',
+  '  params?: Record<string, unknown> | null',
+  '  paramsNormalized?: StrategyParamsNormalized',
+  '  bars?: Bar[]',
+  '  symbol?: string',
+  '  timeframe?: string',
+  '  indicators?: Record<string, number>',
+  '  currentPrice?: number',
+  '}',
+].join('\n')
 
 function resolveSharedHelpersTypesFile(): string {
   const requireFromHere = createRequire(__filename)
@@ -23,7 +75,10 @@ function resolveSharedHelpersTypesFile(): string {
   )
   if (existsSync(workspaceFallback)) return workspaceFallback
 
-  throw new Error('Cannot resolve @ai/shared helpers type declarations')
+  throw new DomainException('codegen.cannot_resolve_helpers_type_declarations', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+  })
 }
 
 function resolveSharedBarTypesFile(): string {
@@ -44,7 +99,10 @@ function resolveSharedBarTypesFile(): string {
   )
   if (existsSync(workspaceFallback)) return workspaceFallback
 
-  throw new Error('Cannot resolve @ai/shared Bar type declarations')
+  throw new DomainException('codegen.cannot_resolve_bar_type_declarations', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+  })
 }
 
 function readSourceFile(filePath: string): ts.SourceFile {
@@ -59,27 +117,35 @@ function extractDeclaration(sourceFile: ts.SourceFile, name: string): string {
       return raw.trim().replace(/^export\s+/, '')
     }
   }
-  throw new Error(`Missing declaration "${name}" in ${sourceFile.fileName}`)
+  throw new DomainException('codegen.missing_type_declaration', {
+    code: ErrorCode.INTERNAL_SERVER_ERROR,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    args: { name, fileName: sourceFile.fileName },
+  })
 }
 
 export function buildContextSchemaPrompt(): string {
   if (cachedPrompt) return cachedPrompt
 
-  const helpersSource = readSourceFile(resolveSharedHelpersTypesFile())
-  const barSource = readSourceFile(resolveSharedBarTypesFile())
-
-  const barDeclaration = extractDeclaration(barSource, 'Bar')
-  const declarations = [
-    extractDeclaration(helpersSource, 'StrategyParamsNormalized'),
-    extractDeclaration(helpersSource, 'LegTimeframeData'),
-    extractDeclaration(helpersSource, 'StrategyContext'),
-    extractDeclaration(helpersSource, 'MultiLegStrategyContext'),
-  ]
+  let schemaBlock = ''
+  try {
+    const helpersSource = readSourceFile(resolveSharedHelpersTypesFile())
+    const barSource = readSourceFile(resolveSharedBarTypesFile())
+    const barDeclaration = extractDeclaration(barSource, 'Bar')
+    const declarations = [
+      extractDeclaration(helpersSource, 'StrategyParamsNormalized'),
+      extractDeclaration(helpersSource, 'LegTimeframeData'),
+      extractDeclaration(helpersSource, 'StrategyContext'),
+      extractDeclaration(helpersSource, 'MultiLegStrategyContext'),
+    ]
+    schemaBlock = [barDeclaration, ...declarations].join('\n')
+  } catch {
+    schemaBlock = FALLBACK_CONTEXT_SCHEMA_BLOCK
+  }
 
   cachedPrompt = [
     '// 以下 ctx 协议由 @ai/shared 类型定义自动生成',
-    barDeclaration,
-    ...declarations,
+    schemaBlock,
     '',
     '// 使用规则',
     '1) 你的 onBar 入参是 ctx（可视为 StrategyContext & MultiLegStrategyContext 的运行时联合）。',

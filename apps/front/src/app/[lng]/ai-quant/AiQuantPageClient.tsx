@@ -30,6 +30,7 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import {
   buildAutoAdvanceMessage,
   shouldAutoAdvanceOnConfirmation,
@@ -119,6 +120,7 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
 const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
 const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
+const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
@@ -245,6 +247,8 @@ function extractCodegenErrorMessage(error: unknown, fallback: string): string {
   }
 
   const details = error.details
+  const meta = parseAiQuantErrorMeta(details)
+
   if (details && typeof details === 'object') {
     const record = details as Record<string, unknown>
     const directRejectReason = record.rejectReason
@@ -263,17 +267,24 @@ function extractCodegenErrorMessage(error: unknown, fallback: string): string {
         return nestedMessage.trim()
       }
     }
+  }
 
-    const detailMessage = record.message
-    if (typeof detailMessage === 'string' && detailMessage.trim()) {
-      return detailMessage.trim()
-    }
+  if (meta.message) {
+    return meta.message
   }
 
   if (error.message?.trim()) {
     return error.message.trim()
   }
-  return fallback
+
+  return buildAiQuantStageFallbackMessage(
+    fallback,
+    error.statusCode ?? 500,
+    {
+      ...meta,
+      code: meta.code ?? error.code,
+    },
+  )
 }
 
 function isTerminalSessionConflict(error: unknown): boolean {
@@ -457,6 +468,7 @@ export function AiQuantPageClient() {
   const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
   const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
   const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(null)
+  const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const isMountedRef = useRef(true)
   const activeConversationIdRef = useRef('')
   const previousActiveConversationIdRef = useRef<string>('')
@@ -519,6 +531,7 @@ export function AiQuantPageClient() {
     const controller = new AbortController()
     setBacktestCapabilityState('loading')
 
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
     void fetchBacktestCapabilities({ signal: controller.signal })
       .then((capabilities) => {
         if (controller.signal.aborted) return
@@ -563,7 +576,7 @@ export function AiQuantPageClient() {
           }
         }))
       })
-      .catch(() => {
+      .catch((error) => {
         if (controller.signal.aborted) return
         setBacktestCapabilities(null)
         setBacktestCapabilityState('failed')
@@ -584,12 +597,26 @@ export function AiQuantPageClient() {
             updatedAt: Date.now(),
           }
         }))
+
+        if (
+          error instanceof ApiError
+          && (error.statusCode === 502 || error.statusCode === 503 || error.statusCode === 504 || error.code === 'API_TIMEOUT')
+        ) {
+          retryTimer = globalThis.setTimeout(() => {
+            if (!controller.signal.aborted) {
+              setBacktestCapabilityRetryNonce(prev => prev + 1)
+            }
+          }, CAPABILITY_AUTO_RETRY_DELAY_MS)
+        }
       })
 
     return () => {
       controller.abort()
+      if (retryTimer) {
+        globalThis.clearTimeout(retryTimer)
+      }
     }
-  }, [session?.userId])
+  }, [session?.userId, backtestCapabilityRetryNonce])
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId

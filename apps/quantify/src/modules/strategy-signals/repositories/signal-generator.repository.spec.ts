@@ -4,11 +4,11 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
   it('includes TESTNET instances in the generation scan', async () => {
     const findMany = jest.fn().mockResolvedValue([])
     const repo = new SignalGeneratorRepository({
-      getClient: jest.fn().mockReturnValue({
+      tx: {
         strategyInstance: {
           findMany,
         },
-      }),
+      },
     } as any)
 
     await repo.findRunningInstances()
@@ -27,13 +27,13 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     const findMany = jest.fn().mockResolvedValue([])
     const findUnique = jest.fn().mockResolvedValue(null)
     const repo = new SignalGeneratorRepository({
-      getClient: jest.fn().mockReturnValue({
+      tx: {
         strategyInstance: { findMany: jest.fn() },
         symbol: {
           findMany,
           findUnique,
         },
-      }),
+      },
     } as any)
 
     await repo.findSymbolsByCode(['SOLUSDT'])

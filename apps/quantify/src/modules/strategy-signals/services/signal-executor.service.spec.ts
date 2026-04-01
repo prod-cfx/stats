@@ -66,6 +66,37 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('handles signal-created events inside a fresh transaction scope', async () => {
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<void>) => fn()) }
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+      },
+    }
+    const service = new SignalExecutorService(
+      {} as any,
+      { get: jest.fn().mockReturnValue(config) } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      txHost as any,
+    )
+    const executeSignalForSubscribedUsers = jest
+      .spyOn(service as any, 'executeSignalForSubscribedUsers')
+      .mockResolvedValue(undefined)
+
+    await service.handleSignalCreated({ signalId: 'signal-1' } as any)
+
+    expect(txHost.withTransaction).toHaveBeenCalled()
+    expect(executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-1', config)
+  })
+
   it('keeps hyperliquid spot entries executable once rounded notional meets the minimum', () => {
     const service = createService()
 

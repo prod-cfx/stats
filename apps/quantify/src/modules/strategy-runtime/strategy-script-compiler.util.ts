@@ -10,25 +10,150 @@ export interface StrategyScriptCompileResult {
   error?: string
 }
 
-function resolveSharedTypeModuleSpecifier(): string {
+const FALLBACK_STRATEGY_TYPE_DECLARATIONS = [
+  "type StrategyAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION' | 'NOOP'",
+  "type StrategySizeMode = 'QUOTE' | 'RATIO' | 'QTY'",
+  'interface Bar {',
+  '  time: number',
+  '  open: number',
+  '  high: number',
+  '  low: number',
+  '  close: number',
+  '  volume?: number',
+  '}',
+  'interface StrategyParamsNormalized {',
+  '  riskPct: number | null',
+  '  positionPct: number | null',
+  '  stopLossPct: number | null',
+  '  takeProfitPct: number | null',
+  '  maxDrawdownPct: number | null',
+  '  leverage: number | null',
+  '  allowShort: boolean | null',
+  '}',
+  'interface StrategyHelpers {',
+  '  finance: Record<string, (...args: any[]) => any>',
+  '  array: Record<string, (...args: any[]) => any>',
+  '  ta: {',
+  '    sma: (prices: number[], period: number) => number | null',
+  '    ema: (prices: number[], period: number) => number | null',
+  '    emaArray: (prices: number[], period: number) => number[]',
+  '    macd: (prices: number[], fast?: number, slow?: number, signal?: number) => { macd: number, signal: number, histogram: number } | null',
+  '    rsi: (prices: number[], period?: number) => number | null',
+  '    bollingerBands: (prices: number[], period?: number, stdDev?: number) => { upper: number, middle: number, lower: number } | null',
+  '    atr: (bars: Bar[], period?: number) => number | null',
+  '    stochastic: (bars: Bar[], kPeriod?: number, dPeriod?: number) => { k: number, d: number } | null',
+  '    obv: (bars: Bar[]) => number | null',
+  '    vwap: (bars: Bar[]) => number | null',
+  '    momentum: (prices: number[], period?: number) => number | null',
+  '    roc: (prices: number[], period?: number) => number | null',
+  '    williamsR: (bars: Bar[], period?: number) => number | null',
+  '    cci: (bars: Bar[], period?: number) => number | null',
+  '    adx: (bars: Bar[], period?: number) => number | null',
+  '  }',
+  '  signal: {',
+  '    createSignal: (params: any) => any',
+  '    crossOver: (series1: number[], series2: number[]) => boolean',
+  '    crossUnder: (series1: number[], series2: number[]) => boolean',
+  '    highest: (array: number[], period: number) => number | null',
+  '    lowest: (array: number[], period: number) => number | null',
+  '    isRising: (array: number[], count: number) => boolean',
+  '    isFalling: (array: number[], count: number) => boolean',
+  '    inRange: (value: number, min: number, max: number) => boolean',
+  '    isOverbought: (rsi: number, threshold?: number) => boolean',
+  '    isOversold: (rsi: number, threshold?: number) => boolean',
+  '    calcStopLoss: (entryPrice: number, atr: number, multiplier?: number, direction?: "BUY" | "SELL") => number',
+  '    calcTakeProfit: (entryPrice: number, stopLoss: number, riskRewardRatio?: number, direction?: "BUY" | "SELL") => number',
+  '    calcPositionSize: (capital: number, riskPercent: number, entryPrice: number, stopLoss: number) => number',
+  '    kellyPercentage: (winRate: number, avgWin: number, avgLoss: number) => number',
+  '    sharpeRatio: (returns: number[], riskFreeRate?: number) => number | null',
+  '    maxDrawdown: (equity: number[]) => number | null',
+  '    winRate: (trades: number[]) => number | null',
+  '    profitFactor: (trades: number[]) => number | null',
+  '    pricePosition: (bars: Bar[], period: number) => number | null',
+  '    goldenCross: (fastMA: number[], slowMA: number[]) => boolean',
+  '    deathCross: (fastMA: number[], slowMA: number[]) => boolean',
+  '    trendDirection: (prices: number[], period?: number) => "UP" | "DOWN" | "SIDEWAYS" | null',
+  '  }',
+  '}',
+  'interface StrategyDecisionSize {',
+  '  mode: StrategySizeMode',
+  '  value: number',
+  '}',
+  'interface StrategyDecisionV1 {',
+  '  action: StrategyAction',
+  '  size?: StrategyDecisionSize',
+  "  adjustMode?: 'TARGET' | 'DELTA'",
+  '  confidence?: number',
+  '  reason?: string',
+  '  risk?: {',
+  '    stopLoss?: number',
+  '    takeProfit?: number',
+  '    maxDrawdown?: number',
+  '  }',
+  '  meta?: Record<string, unknown>',
+  '}',
+  'interface StrategyExecutionContextV1 extends Record<string, unknown> {',
+  '  timestamp?: number',
+  '  paramsNormalized?: StrategyParamsNormalized',
+  '  params?: Record<string, unknown> | null',
+  '  symbol?: string',
+  '  timeframe?: string',
+  '  currentPrice?: number',
+  '  indicators?: Record<string, number>',
+  '  bars?: Bar[]',
+  '  helpers?: StrategyHelpers',
+  '  execution?: Record<string, unknown>',
+  '  legs?: Array<Record<string, unknown>>',
+  '  dataRequirements?: Record<string, unknown>',
+  '  data?: Record<string, unknown>',
+  '}',
+  'interface StrategyAdapterV1 {',
+  "  protocolVersion: 'v1'",
+  '  onBar: (ctx: StrategyExecutionContextV1) => StrategyDecisionV1 | Promise<StrategyDecisionV1>',
+  '  init?: (ctx: StrategyExecutionContextV1) => unknown',
+  '  shutdown?: () => unknown',
+  '}',
+].join('\n')
+
+function resolveSharedTypeModuleSpecifier(): string | null {
   const requireFromHere = createRequire(__filename)
-  const runtimeEntry = requireFromHere.resolve('@ai/shared')
-  const inferredTypesEntry = runtimeEntry.replace(/\.js$/, '.d.ts')
-  if (existsSync(inferredTypesEntry)) {
-    return inferredTypesEntry.split(path.sep).join('/')
+  try {
+    const runtimeEntry = requireFromHere.resolve('@ai/shared')
+    const inferredTypesEntry = runtimeEntry.replace(/\.js$/, '.d.ts')
+    if (existsSync(inferredTypesEntry)) {
+      return inferredTypesEntry.split(path.sep).join('/')
+    }
+  } catch {
+    // artifact deployment may omit @ai/shared runtime resolution; continue to workspace fallback
   }
 
-  // workspace fallback: direct source file
-  const workspaceFallback = path.resolve(__dirname, '../../../../../packages/shared/src/index.ts')
-  return workspaceFallback.split(path.sep).join('/')
+  const workspaceCandidates = [
+    path.resolve(__dirname, '../../../../../packages/shared/dist/index.d.ts'),
+    path.resolve(__dirname, '../../../../../packages/shared/src/index.d.ts'),
+    path.resolve(__dirname, '../../../../../packages/shared/src/index.ts'),
+  ]
+  for (const candidate of workspaceCandidates) {
+    if (existsSync(candidate)) {
+      return candidate.split(path.sep).join('/')
+    }
+  }
+
+  return null
 }
 
 function buildTypecheckPrelude(): string {
   const specifier = resolveSharedTypeModuleSpecifier()
+  const typeDeclarations = specifier
+    ? [
+        `type StrategyAdapterV1 = import('${specifier}').StrategyAdapterV1`,
+        `type StrategyDecisionV1 = import('${specifier}').StrategyDecisionV1`,
+        `type StrategyExecutionContextV1 = import('${specifier}').StrategyExecutionContextV1`,
+      ]
+    : [
+        FALLBACK_STRATEGY_TYPE_DECLARATIONS,
+      ]
   return [
-    `type StrategyAdapterV1 = import('${specifier}').StrategyAdapterV1`,
-    `type StrategyDecisionV1 = import('${specifier}').StrategyDecisionV1`,
-    `type StrategyExecutionContextV1 = import('${specifier}').StrategyExecutionContextV1`,
+    ...typeDeclarations,
     'declare const ctx: StrategyExecutionContextV1',
     "declare const helpers: NonNullable<StrategyExecutionContextV1['helpers']>",
     "declare const bars: NonNullable<StrategyExecutionContextV1['bars']>",

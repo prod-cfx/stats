@@ -18,8 +18,6 @@ interface TelegramConfigResponse {
   botName?: string | null
 }
 
-const DESKTOP_CALLBACK_REDIRECT_DELAY_MS = 350
-
 export function TelegramLoginButtons({ lng, intent = 'login', redirect }: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
   const [showDesktopEntry, setShowDesktopEntry] = useState(false)
@@ -95,26 +93,18 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
             onClick={async () => {
               try {
                 setDesktopBusy(true)
-                // Open a popup synchronously within user gesture to avoid browser popup blocking.
-                const popup = window.open('', '_blank', 'noopener,noreferrer')
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
                   redirect,
                 })
-                const launchLink = result.webLink?.trim() || result.deepLink?.trim()
+                const launchLink = result.deepLink?.trim() || result.webLink?.trim()
                 if (!launchLink) {
-                  popup?.close()
                   throw new Error('Telegram launch link is missing. Please try again.')
                 }
-                if (popup) {
-                  popup.location.href = launchLink
-                } else {
-                  window.location.href = launchLink
-                }
-                window.setTimeout(() => {
-                  window.location.href = result.callbackUrl
-                }, DESKTOP_CALLBACK_REDIRECT_DELAY_MS)
+                // Only launch Telegram app here. The actual login callback should be opened
+                // from Telegram bot message after user confirmation.
+                window.location.assign(launchLink)
               } catch (error) {
                 setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
               } finally {
