@@ -1025,6 +1025,16 @@ export class SignalGeneratorService {
 
     const action = typeof promptData.action === 'string' ? promptData.action.trim().toLowerCase() : ''
     if (!action || action === 'hold' || action === 'wait' || action === 'none') {
+      const normalizedSignal = this.buildPublishedCodegenNormalizedSignal(promptData)
+      if (normalizedSignal) {
+        return {
+          type: 'signal',
+          payload: {
+            ...normalizedSignal,
+            rawResponse: this.truncateRawResponse(JSON.stringify(promptData), this.getConfig()),
+          },
+        }
+      }
       return { type: 'none', reason: 'NO_ACTION' }
     }
 
@@ -1078,6 +1088,36 @@ export class SignalGeneratorService {
     }
 
     return { type: 'none', reason: 'UNSUPPORTED_ACTION' }
+  }
+
+  private buildPublishedCodegenNormalizedSignal(promptData: Record<string, unknown>): AiSignalPayload | null {
+    const direction = typeof promptData.direction === 'string' ? promptData.direction : null
+    const signalType = typeof promptData.signalType === 'string' ? promptData.signalType : null
+    const entryPrice = this.readNumeric(promptData.entryPrice)
+    if (
+      !direction
+      || !['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT'].includes(direction)
+      || !signalType
+      || !['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT'].includes(signalType)
+      || !(entryPrice && entryPrice > 0)
+    ) {
+      return null
+    }
+
+    return {
+      direction: direction as AiSignalPayload['direction'],
+      signalType: signalType as AiSignalPayload['signalType'],
+      confidence: this.readNumeric(promptData.confidence) ?? 80,
+      entryPrice,
+      stopLoss: this.readNumeric(promptData.stopLoss) ?? Math.max(0.00000001, entryPrice * 0.98),
+      takeProfit: this.readNumeric(promptData.takeProfit) ?? entryPrice * 1.02,
+      positionSizeQuote: this.readNumeric(promptData.positionSizeQuote),
+      positionSizeRatio: this.readNumeric(promptData.positionSizeRatio),
+      reasoning:
+        (typeof promptData.reasoning === 'string' && promptData.reasoning.trim())
+        || (typeof promptData.reason === 'string' && promptData.reason.trim())
+        || 'AI codegen direct signal',
+    }
   }
 
   private truncateRawResponse(
@@ -1503,7 +1543,13 @@ export class SignalGeneratorService {
       
       const resolved = await resolveStrategyOutput(
         validation.value as Record<string, unknown>,
-        scriptContext as unknown as Record<string, unknown>,
+        this.buildResolvedStrategyContextForMultiLeg(
+          strategy,
+          execution,
+          primaryLeg,
+          multiLegData,
+          scriptContext,
+        ),
       )
       if (resolved.error) {
         this.logger.error(
@@ -1776,6 +1822,33 @@ export class SignalGeneratorService {
       symbolCode: primaryLeg.symbol,
       success: false,
       reason: 'AI_FAILURE',
+    })
+  }
+
+  private buildResolvedStrategyContextForMultiLeg(
+    strategy: Pick<StrategyTemplate, 'promptTemplate'>,
+    execution: Pick<StrategyExecutionConfig, 'timeframe'>,
+    primaryLeg: Pick<StrategyLegDefinition, 'id' | 'symbol'>,
+    multiLegData: Record<string, Record<string, LegTimeframeData>>,
+    scriptContext: MultiLegStrategyContext,
+  ): Record<string, unknown> {
+    if (strategy.promptTemplate !== 'AI_CODEGEN_PUBLISHED_TEMPLATE') {
+      return scriptContext as unknown as Record<string, unknown>
+    }
+
+    const primaryTimeframeData = multiLegData[primaryLeg.id]?.[execution.timeframe]
+    if (!primaryTimeframeData?.bars?.length) {
+      return scriptContext as unknown as Record<string, unknown>
+    }
+
+    return buildStrategyContext({
+      bars: primaryTimeframeData.bars,
+      symbol: primaryLeg.symbol,
+      timeframe: execution.timeframe,
+      indicators: primaryTimeframeData.indicators ?? {},
+      currentPrice: primaryTimeframeData.currentPrice,
+      timestamp: scriptContext.timestamp,
+      params: scriptContext.params ?? {},
     })
   }
 

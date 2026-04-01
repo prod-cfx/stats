@@ -193,12 +193,7 @@ export class OpsStrategyInstancesController {
       })
     }
 
-    // 验证通过后，异步触发信号生成（不阻塞 AI 调用），手动触发时跳过 cooldown 检查
-    setImmediate(() => {
-      this.signalGenerator.generateSignalForInstance(id, { skipCooldown: true }).catch(error => {
-        this.logger.error(`手动触发实例 ${id} 信号生成失败: ${error.message}`, error.stack)
-      })
-    })
+    await this.signalGenerator.generateSignalForInstance(id, { skipCooldown: true })
 
     return {
       message: '信号生成任务已触发，请稍后查看信号列表',

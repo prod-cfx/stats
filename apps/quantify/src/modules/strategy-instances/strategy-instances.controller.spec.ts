@@ -38,6 +38,7 @@ jest.mock('@/modules/strategy-signals/services/signal-generator.service', () => 
 
 describe('strategyInstancesControllers', () => {
   let app: INestApplication
+  let opsController: OpsStrategyInstancesController
 
   const instancesService = {
     createInstance: jest.fn(),
@@ -68,6 +69,7 @@ describe('strategyInstancesControllers', () => {
     }).compile()
 
     app = moduleRef.createNestApplication()
+    opsController = moduleRef.get(OpsStrategyInstancesController)
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -156,9 +158,6 @@ describe('strategyInstancesControllers', () => {
       })
 
     expect(signalGenerator.validateManualTriggerTarget).toHaveBeenCalledWith('instance-1')
-
-    await new Promise(resolve => setImmediate(resolve))
-
     expect(signalGenerator.generateSignalForInstance).toHaveBeenCalledWith('instance-1', { skipCooldown: true })
   })
 
@@ -168,5 +167,12 @@ describe('strategyInstancesControllers', () => {
     await request(app.getHttpServer())
       .post('/ops/strategy-instances/instance-404/generate-signal')
       .expect(404)
+  })
+
+  it('controller method surfaces generation failures instead of detaching work after transaction closes', async () => {
+    signalGenerator.validateManualTriggerTarget.mockResolvedValue(undefined)
+    signalGenerator.generateSignalForInstance.mockRejectedValue(new Error('Transaction already closed'))
+
+    await expect(opsController.generateSignal('instance-1')).rejects.toThrow('Transaction already closed')
   })
 })
