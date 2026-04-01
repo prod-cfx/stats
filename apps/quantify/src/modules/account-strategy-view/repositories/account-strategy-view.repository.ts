@@ -646,6 +646,23 @@ export class AccountStrategyViewRepository {
     }
   }
 
+  async loadOpenPositionsForValuation(accountId: string) {
+    const client = this.txHost.tx
+    return client.position.findMany({
+      where: {
+        userStrategyAccountId: accountId,
+        status: 'OPEN',
+      },
+      select: {
+        symbol: true,
+        positionSide: true,
+        quantity: true,
+        avgEntryPrice: true,
+        unrealizedPnl: true,
+      },
+    })
+  }
+
   async loadClosedPositionPnlSeries(accountId: string, limit = 500) {
     const client = this.txHost.tx
     return client.position.findMany({

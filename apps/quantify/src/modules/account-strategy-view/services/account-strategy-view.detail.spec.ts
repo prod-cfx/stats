@@ -602,4 +602,88 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
     expect(detail.equitySeries.at(-1)).toEqual(expect.objectContaining({ value: 1000 }))
   })
+
+  it('revalues open positions from latest market quotes when stored unrealized pnl is stale', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-live',
+        name: 'Live strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'okx' },
+        strategyTemplateId: 'tpl-live',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-live',
+        baseCurrency: 'USDT',
+        initialBalance: 1000,
+        balance: 919.760815,
+        equity: 1000,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 1, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 80.239185,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([{
+        symbol: 'BTCUSDT',
+        positionSide: 'LONG',
+        quantity: 0.00117,
+        avgEntryPrice: 68580.5,
+        unrealizedPnl: 0,
+      }]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const marketDataReadGateway = {
+      getLatestQuote: jest.fn().mockResolvedValue({ lastPrice: '68535.5' }),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      marketDataReadGateway as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-live')
+
+    expect(detail.positionOverview).toEqual({
+      openPositionsCount: 1,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 0,
+      totalUnrealizedPnl: -0.05265,
+    })
+    expect(detail.accountOverview).toEqual({
+      initialBalance: 1000,
+      totalEquity: 999.94735,
+      availableBalance: 919.760815,
+      totalPnl: -0.05265,
+      todayPnl: -0.05265,
+      baseCurrency: 'USDT',
+    })
+    expect(detail.equitySeries.at(-1)).toEqual(expect.objectContaining({ value: 999.94735 }))
+  })
 })
