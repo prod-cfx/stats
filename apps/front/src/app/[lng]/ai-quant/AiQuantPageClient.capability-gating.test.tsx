@@ -111,6 +111,56 @@ jest.mock('@/lib/api', () => ({
   startLlmCodegenSession: jest.fn(),
 }))
 
+function seedConfirmedConversation(now = Date.now()) {
+  localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+    {
+      id: 'conv-1',
+      title: 'conv',
+      messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: now,
+    },
+  ]))
+}
+
 describe('AiQuantPageClient capability gating', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -121,6 +171,7 @@ describe('AiQuantPageClient capability gating', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     localStorage.clear()
+    seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
   })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { createBacktestReportData, createBacktestReportDataFromLive } from './backtest-report-data'
+import { createBacktestReportDataFromLive } from './backtest-report-data'
 
 describe('backtest-report-data live mapping', () => {
   it('maps live equity curve and trades to display format', () => {
@@ -86,14 +86,19 @@ describe('backtest-report-data live mapping', () => {
     expect(missingEquity).toBeNull()
   })
 
-  it('does not generate fake trades when tradeCount is zero', () => {
-    const data = createBacktestReportData('btjob-5', {
-      maxDrawdownPct: 10,
-      totalReturnPct: 5,
-      winRatePct: 0,
-      tradeCount: 0,
-    })
-
-    expect(data.trades).toEqual([])
+  it('returns null for incomplete live reports instead of synthesizing fallback charts', () => {
+    expect(createBacktestReportDataFromLive(
+      'btjob-5',
+      {
+        maxDrawdownPct: 10,
+        totalReturnPct: 5,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      {
+        equityCurve: null,
+        trades: [],
+      },
+    )).toBeNull()
   })
 })

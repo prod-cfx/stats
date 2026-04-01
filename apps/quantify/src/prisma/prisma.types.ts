@@ -1,5 +1,7 @@
 export { Prisma, PrismaClient } from '../../generated/prisma'
 export type {
+  BacktestJob,
+  BacktestJobStatus,
   AiProviderKey,
   DeployRequest,
   ExchangeAccount,

@@ -10,7 +10,6 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { upsertStrategyDeployment } from '@/components/account/ai-quant-strategy-store'
 import {
   createBacktestJob,
   getBacktestJob,
@@ -124,7 +123,6 @@ const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 
 const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
-const DEV_MOCK_EXECUTION_MODE = true
 const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
 const BACKTEST_JOB_TIMEOUT_MS = 60_000
 
@@ -423,6 +421,25 @@ function extractLatestScriptCode(messages: QuantMessage[]): string {
   return ''
 }
 
+function buildBacktestSummaryResult(
+  previous: BacktestResult,
+  summary: {
+    netProfitPct: number
+    maxDrawdownPct: number
+    winRate: number
+    totalTrades: number
+  },
+): BacktestResult {
+  const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
+  return {
+    ...previous,
+    maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
+    totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
+    winRatePct: Number(winRatePct.toFixed(2)),
+    tradeCount: summary.totalTrades,
+  }
+}
+
 export function AiQuantPageClient() {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
@@ -474,6 +491,7 @@ export function AiQuantPageClient() {
   const previousActiveConversationIdRef = useRef<string>('')
   const backtestRunTokenRef = useRef(new Map<string, number>())
   const backtestRunMutexRef = useRef(new Set<string>())
+  const backtestSummarySyncRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -638,8 +656,45 @@ export function AiQuantPageClient() {
       isMountedRef.current = false
       backtestRunTokenRef.current.clear()
       backtestRunMutexRef.current.clear()
+      backtestSummarySyncRef.current.clear()
     }
   }, [])
+
+  useEffect(() => {
+    const cachedBacktest = activeConversation?.backtestResult
+    if (!activeConversation || !cachedBacktest?.id) {
+      return
+    }
+
+    const syncKey = `${activeConversation.id}:${cachedBacktest.id}`
+    if (backtestSummarySyncRef.current.has(syncKey)) {
+      return
+    }
+    backtestSummarySyncRef.current.add(syncKey)
+
+    void (async () => {
+      try {
+        const report = await getBacktestJobResult(cachedBacktest.id)
+        const summary = report?.summary
+        if (!summary || !isMountedRef.current) {
+          return
+        }
+
+        updateConversationById(activeConversation.id, curr => {
+          if (curr.backtestResult?.id !== cachedBacktest.id) {
+            return curr
+          }
+          return {
+            ...curr,
+            backtestResult: buildBacktestSummaryResult(curr.backtestResult, summary),
+            updatedAt: Date.now(),
+          }
+        })
+      } catch {
+        backtestSummarySyncRef.current.delete(syncKey)
+      }
+    })()
+  }, [activeConversation])
 
   const apiConfigured = useMemo(
     () =>
@@ -648,14 +703,12 @@ export function AiQuantPageClient() {
       ),
     [exchangeAccounts, selectedDeployExchange],
   )
-  const mockExecutionMode = DEV_MOCK_EXECUTION_MODE
   const deployAccounts = useMemo(() => exchangeAccounts, [exchangeAccounts])
 
   const canDeploy = useMemo(() => {
     if (!activeConversation?.backtestResult) return false
-    if (mockExecutionMode) return true
     return activeConversation.backtestResult.maxDrawdownPct <= 20
-  }, [activeConversation?.backtestResult, mockExecutionMode])
+  }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
 
   const compactMode = useMemo(() => {
@@ -1164,7 +1217,7 @@ export function AiQuantPageClient() {
       return
     }
 
-    if (!graphConfirmed && !mockExecutionMode) {
+    if (!graphConfirmed) {
       backtestRunMutexRef.current.delete(conversationId)
       updateActiveConversation(curr => ({
         ...curr,
@@ -1539,7 +1592,7 @@ export function AiQuantPageClient() {
             onRunBacktest={onRunBacktest}
             canRunBacktest={
               backtestCapabilityState === 'ready'
-              && (graphConfirmed || mockExecutionMode)
+              && graphConfirmed
               && activeConversation.backtestExecutionState !== 'submitting'
               && activeConversation.backtestExecutionState !== 'running'
             }
@@ -1591,18 +1644,11 @@ export function AiQuantPageClient() {
             />
           )}
 
-          {activeConversation.latestSignalMessage && (
-            <section className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
-              <p className="text-xs font-semibold text-emerald-300">MOCK SIGNAL</p>
-              <p className="mt-2 text-sm text-emerald-100">{activeConversation.latestSignalMessage}</p>
-            </section>
-          )}
-
           {activeConversation.backtestResult && (
             <BacktestSummaryCard
               result={activeConversation.backtestResult}
               canDeploy={canDeploy}
-              drawdownLimited={!mockExecutionMode}
+              drawdownLimited
               onOpenFullScreen={() => {
                 const currentBacktest = activeConversation.backtestResult
                 if (!currentBacktest) {
@@ -1705,45 +1751,6 @@ export function AiQuantPageClient() {
               updatedAt: Date.now(),
             }))
           } catch (error) {
-            // 后端部署失败时，在本地 mock 模式下保留可演示能力，但明确这是本地模拟
-            if (mockExecutionMode) {
-              upsertStrategyDeployment({
-                id: `stg-${activeConversation.id}`,
-                name: strategyName,
-                exchange: selectedDeployExchange,
-                symbol: activeConversation.params.symbol,
-                timeframe,
-                positionPct: activeConversation.params.positionPct,
-                accountId: account.accountId,
-                accountName: account.accountName,
-                metrics: {
-                  returnPct: activeConversation.backtestResult.totalReturnPct,
-                  maxDrawdownPct: activeConversation.backtestResult.maxDrawdownPct,
-                  winRatePct: activeConversation.backtestResult.winRatePct,
-                  tradeCount: activeConversation.backtestResult.tradeCount,
-                },
-              })
-              setDeployOpen(false)
-              setDeployRequestId(null)
-              updateActiveConversation(curr => ({
-                ...curr,
-                messages: [
-                  ...curr.messages,
-                  {
-                    id: `deploy-mock-${Date.now()}`,
-                    role: 'assistant',
-                    content: t('aiQuant.messages.mockDeploySuccess', {
-                      exchange: selectedDeployExchange.toUpperCase(),
-                      account: account.accountName,
-                      defaultValue: `Mock deployment succeeded (local only): ${selectedDeployExchange.toUpperCase()} / ${account.accountName}.`,
-                    }),
-                  },
-                ],
-                updatedAt: Date.now(),
-              }))
-              return
-            }
-
             const deployErrorMessage = extractCodegenErrorMessage(error, t('aiQuant.messages.deployFailedFallback', { defaultValue: 'Strategy deployment failed. Please try again later.' }))
             updateActiveConversation(curr => ({
               ...curr,

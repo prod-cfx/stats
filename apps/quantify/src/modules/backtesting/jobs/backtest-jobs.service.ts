@@ -2,6 +2,8 @@ import type { BacktestReport, BacktestRunInput } from '../types/backtesting.type
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { PrismaService } from '@/prisma/prisma.service'
+import type { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -37,58 +39,43 @@ type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'>
 
 @Injectable()
 export class BacktestJobsService {
-  private static readonly COMPLETED_JOB_RETENTION_MS = 1000 * 60 * 60 * 24
-  private static readonly MAX_JOBS = 1000
-
-  private readonly jobs = new Map<string, BacktestJobRecord>()
-
   constructor(
     private readonly runner: BacktestRunnerService,
     private readonly marketDataService: BacktestMarketDataService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  createJob(input: BacktestRunInput, ownerUserId: string): BacktestJobView {
-    this.pruneJobs()
-    this.ensureCapacityForNewJob()
-
+  async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
-    const job: BacktestJobRecord = {
-      id,
-      ownerUserId,
-      status: 'queued',
-      createdAt: new Date().toISOString(),
-      inputSummary: {
-        symbols: input.symbols,
-        baseTimeframe: input.baseTimeframe,
-        stateTimeframes: input.stateTimeframes,
-        initialCash: input.initialCash,
-        leverage: input.leverage,
-        dataRange: input.dataRange,
-        requestedRange: input.dataRange,
-        allowPartial: input.allowPartial === true,
-        isPartial: false,
-        strategyId: input.strategy.id,
+    const inputSummary = this.createInputSummary(input)
+    const job = await this.prisma.backtestJob.create({
+      data: {
+        id,
+        ownerUserId,
+        status: 'queued',
+        inputSummary: inputSummary as Prisma.InputJsonValue,
       },
-    }
-    this.jobs.set(id, job)
-    queueMicrotask(() => this.executeJob(id, input))
+    })
+    queueMicrotask(() => {
+      void this.executeJob(id, input, inputSummary)
+    })
     return this.toView(job)
   }
 
-  getJob(id: string, ownerUserId: string): BacktestJobView {
-    const job = this.getOwnedJobOrThrowNotFound(id, ownerUserId)
+  async getJob(id: string, ownerUserId: string): Promise<BacktestJobView> {
+    const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     return this.toView(job)
   }
 
-  getJobResult(id: string, ownerUserId: string): BacktestReport {
-    const job = this.getOwnedJobOrThrowNotFound(id, ownerUserId)
+  async getJobResult(id: string, ownerUserId: string): Promise<BacktestReport> {
+    const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
     if (job.status === 'failed') throw new DomainException('backtest.job_failed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, error: job.error } })
     if (job.status !== 'succeeded' || !job.result) throw new DomainException('backtest.job_not_completed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, status: job.status } })
-    return job.result
+    return job.result as unknown as BacktestReport
   }
 
-  private getOwnedJobOrThrowNotFound(id: string, ownerUserId: string): BacktestJobRecord {
-    const job = this.jobs.get(id)
+  private async getOwnedJobOrThrowNotFound(id: string, ownerUserId: string) {
+    const job = await this.prisma.backtestJob.findUnique({ where: { id } })
     if (!job || job.ownerUserId !== ownerUserId) {
       throw new DomainException('backtest.job_not_found', {
         code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,
@@ -99,12 +86,17 @@ export class BacktestJobsService {
     return job
   }
 
-  private async executeJob(id: string, input: BacktestRunInput) {
-    const job = this.jobs.get(id)
+  private async executeJob(id: string, input: BacktestRunInput, initialSummary: BacktestJobRecord['inputSummary']) {
+    const job = await this.prisma.backtestJob.findUnique({ where: { id } })
     if (!job) return
 
-    job.status = 'running'
-    job.startedAt = new Date().toISOString()
+    await this.prisma.backtestJob.update({
+      where: { id },
+      data: {
+        status: 'running',
+        startedAt: new Date(),
+      },
+    })
 
     try {
       const coverage = await this.marketDataService.resolveCoverage(input)
@@ -115,7 +107,7 @@ export class BacktestJobsService {
           args: { symbols: input.symbols, fromTs: input.dataRange.fromTs, toTs: input.dataRange.toTs },
         })
       }
-      if (coverage.kind === 'partial' && input.allowPartial === false) {
+      if (coverage.kind === 'partial' && input.allowPartial !== true) {
         throw new DomainException('backtest.data_range_out_of_coverage', {
           code: ErrorCode.BACKTEST_JOB_CONFLICT,
           status: HttpStatus.CONFLICT,
@@ -127,8 +119,11 @@ export class BacktestJobsService {
         })
       }
 
-      job.inputSummary.appliedRange = coverage.appliedRange
-      job.inputSummary.isPartial = coverage.kind === 'partial'
+      const resolvedSummary: BacktestJobRecord['inputSummary'] = {
+        ...initialSummary,
+        appliedRange: coverage.appliedRange,
+        isPartial: coverage.kind === 'partial',
+      }
 
       const bars = await this.marketDataService.loadBars({ ...input, dataRange: coverage.appliedRange })
       if (bars.length === 0) {
@@ -139,55 +134,60 @@ export class BacktestJobsService {
         })
       }
       const result = await this.runner.run({ ...input, dataRange: coverage.appliedRange, bars })
-      job.status = 'succeeded'
-      job.result = result
-      job.finishedAt = new Date().toISOString()
+      await this.prisma.backtestJob.update({
+        where: { id },
+        data: {
+          status: 'succeeded',
+          inputSummary: resolvedSummary as Prisma.InputJsonValue,
+          result: result as unknown as Prisma.InputJsonValue,
+          error: null,
+          finishedAt: new Date(),
+        },
+      })
     } catch (error) {
-      job.status = 'failed'
-      job.error = error instanceof Error ? error.message : String(error)
-      job.finishedAt = new Date().toISOString()
+      await this.prisma.backtestJob.update({
+        where: { id },
+        data: {
+          status: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date(),
+        },
+      })
     }
   }
 
-  private toView(job: BacktestJobRecord): BacktestJobView {
+  private toView(job: {
+    id: string
+    status: BacktestJobStatus
+    createdAt: Date
+    startedAt: Date | null
+    finishedAt: Date | null
+    error: string | null
+    inputSummary: Prisma.JsonValue
+  }): BacktestJobView {
     return {
       id: job.id,
       status: job.status,
-      createdAt: job.createdAt,
-      startedAt: job.startedAt,
-      finishedAt: job.finishedAt,
-      error: job.error,
-      inputSummary: job.inputSummary,
+      createdAt: job.createdAt.toISOString(),
+      startedAt: job.startedAt?.toISOString(),
+      finishedAt: job.finishedAt?.toISOString(),
+      error: job.error ?? undefined,
+      inputSummary: job.inputSummary as unknown as BacktestJobRecord['inputSummary'],
     }
   }
 
-  private pruneJobs() {
-    const now = Date.now()
-    for (const [id, job] of this.jobs) {
-      if (!job.finishedAt) continue
-      const finishedAtMs = Date.parse(job.finishedAt)
-      if (Number.isNaN(finishedAtMs)) continue
-      if (now - finishedAtMs > BacktestJobsService.COMPLETED_JOB_RETENTION_MS) {
-        this.jobs.delete(id)
-      }
-    }
-  }
-
-  private ensureCapacityForNewJob() {
-    if (this.jobs.size < BacktestJobsService.MAX_JOBS) return
-    const targetSize = BacktestJobsService.MAX_JOBS - 1
-    this.evictCompletedJobs(targetSize)
-    if (this.jobs.size > targetSize) {
-      throw new DomainException('backtest.job_queue_full', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT })
-    }
-  }
-
-  private evictCompletedJobs(targetSize: number) {
-    if (this.jobs.size <= targetSize) return
-    for (const [id, job] of this.jobs) {
-      if (this.jobs.size <= targetSize) break
-      if (job.status === 'queued' || job.status === 'running') continue
-      this.jobs.delete(id)
+  private createInputSummary(input: BacktestRunInput): BacktestJobRecord['inputSummary'] {
+    return {
+      symbols: input.symbols,
+      baseTimeframe: input.baseTimeframe,
+      stateTimeframes: input.stateTimeframes,
+      initialCash: input.initialCash,
+      leverage: input.leverage,
+      dataRange: input.dataRange,
+      requestedRange: input.dataRange,
+      allowPartial: input.allowPartial === true,
+      isPartial: false,
+      strategyId: input.strategy.id,
     }
   }
 }
