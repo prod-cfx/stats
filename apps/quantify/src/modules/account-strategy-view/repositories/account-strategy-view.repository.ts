@@ -353,6 +353,7 @@ export class AccountStrategyViewRepository {
         id: item.id,
         name: item.name,
         status: item.status,
+        strategyTemplateId: item.strategyTemplateId,
         params: item.params as Record<string, unknown> | null,
         defaultParams: item.strategyTemplate?.defaultParams as Record<string, unknown> | null,
         strategySchema: item.strategyTemplate?.paramsSchema as Record<string, unknown> | null,

@@ -84,7 +84,7 @@ export class AccountStrategyViewService {
       try {
         fallback = await this.buildAccountFallbackMetrics(
           query.userId,
-          symbol,
+          (item as { strategyTemplateId?: string | null }).strategyTemplateId ?? null,
         )
       } catch {
         fallback = null
@@ -561,25 +561,22 @@ export class AccountStrategyViewService {
     return statsValue
   }
 
-  private async buildAccountFallbackMetrics(userId: string, symbol: string | null): Promise<{
+  private async buildAccountFallbackMetrics(userId: string, strategyTemplateId: string | null): Promise<{
     returnPct: number | null
     winRatePct: number | null
     tradeCount: number | null
   } | null> {
-    if (!symbol) return null
-
-    const normalizedSymbol = symbol.split(':')[0]?.trim().toUpperCase()
-    if (!normalizedSymbol) return null
+    if (!strategyTemplateId) return null
 
     const repoAny = this.repo as any
-    const findLatest = repoAny.findLatestExecutedAccountByUserAndSymbol as
-      ((uid: string, s: string) => Promise<any>) | undefined
+    const findExact = repoAny.findUserStrategyAccount as
+      ((uid: string, strategyId: string) => Promise<any>) | undefined
     const loadTradeStats = repoAny.loadTradeStats as
       ((accountId: string) => Promise<{ tradeCount: number; closedCount: number; winningCount: number }>) | undefined
 
-    if (!findLatest || !loadTradeStats) return null
+    if (!findExact || !loadTradeStats) return null
 
-    const account = await findLatest.call(this.repo, userId, normalizedSymbol)
+    const account = await findExact.call(this.repo, userId, strategyTemplateId)
     if (!account) return null
 
     const tradeStats = await loadTradeStats.call(this.repo, account.id)
