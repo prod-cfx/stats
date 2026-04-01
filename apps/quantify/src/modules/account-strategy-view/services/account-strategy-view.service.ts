@@ -152,6 +152,9 @@ export class AccountStrategyViewService {
     const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
       ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
       : []
+    const positionFinancials = account && typeof (this.repo as any).loadPositionFinancials === 'function'
+      ? await (this.repo as any).loadPositionFinancials(account.id)
+      : null
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
@@ -165,8 +168,14 @@ export class AccountStrategyViewService {
     )
 
     const stats = await this.statsService.calculateStats(strategyInstanceId).catch(() => null)
+    const resolvedRealizedPnl = account
+      ? this.resolveAccountRealizedPnl(account, positionFinancials)
+      : null
+    const resolvedUnrealizedPnl = account
+      ? this.resolveAccountUnrealizedPnl(account, positionFinancials)
+      : null
     const totalPnl = account
-      ? Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
+      ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
     const investedAmount = account
       ? Number(account.initialBalance)
@@ -180,11 +189,12 @@ export class AccountStrategyViewService {
     const derivedEquitySeries = account
       ? this.buildIndustryEquitySeries({
           initialBalance: Number(account.initialBalance),
-          totalRealizedPnl: Number(account.totalRealizedPnl),
-          totalUnrealizedPnl: Number(account.totalUnrealizedPnl),
+          totalRealizedPnl: resolvedRealizedPnl ?? 0,
+          totalUnrealizedPnl: resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
           startedAt: lifecycleStartAt,
           dailyRows: equityRows,
+          currentEquity: this.resolveAccountEquity(account, positionFinancials),
         })
       : []
 
@@ -198,7 +208,7 @@ export class AccountStrategyViewService {
 
     const todayPnl = account
       ? this.calculateTodayPnl(
-          Number(account.totalUnrealizedPnl),
+          resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
         )
       : this.readStatsNumber(stats, 'todayPnl') ?? totalPnl
@@ -239,7 +249,7 @@ export class AccountStrategyViewService {
       timeline: this.buildMixedTimeline(timelineSource),
       accountOverview: {
         initialBalance: account ? this.toFiniteNumber(account.initialBalance) : null,
-        totalEquity: account ? this.toFiniteNumber(account.equity) : null,
+        totalEquity: account ? this.resolveAccountEquity(account, positionFinancials) : null,
         availableBalance: account ? this.toFiniteNumber(account.balance ?? account.equity) : null,
         totalPnl: totalPnl ?? null,
         todayPnl: todayPnl ?? null,
@@ -248,8 +258,8 @@ export class AccountStrategyViewService {
       positionOverview: {
         openPositionsCount: account ? positionOverview.openCount : null,
         closedPositionsCount: account ? positionOverview.closedCount : null,
-        totalRealizedPnl: account ? this.toFiniteNumber(account.totalRealizedPnl) : null,
-        totalUnrealizedPnl: account ? this.toFiniteNumber(account.totalUnrealizedPnl) : null,
+        totalRealizedPnl: account ? resolvedRealizedPnl : null,
+        totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
       latestOrders: this.buildLatestOrders(timelineSource.trades),
     }
@@ -257,7 +267,9 @@ export class AccountStrategyViewService {
     if (detail.equitySeries.length === 0 && account) {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
-        value: Number(account.initialBalance) + Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl),
+        value: this.resolveAccountEquity(account, positionFinancials) ?? (
+          Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
+        ),
       }]
     }
 
@@ -691,9 +703,10 @@ export class AccountStrategyViewService {
     closedPositionRows: Array<{ openedAt: Date; closedAt: Date | null; realizedPnl: any }>
     startedAt: Date
     dailyRows: Array<{ date: Date; equityStart?: any; equityEnd: any }>
+    currentEquity?: number | null
   }): Array<{ ts: string; value: number }> {
     const initial = Number.isFinite(input.initialBalance) ? input.initialBalance : 0
-    const currentEquity = initial + input.totalRealizedPnl + input.totalUnrealizedPnl
+    const currentEquity = input.currentEquity ?? (initial + input.totalRealizedPnl + input.totalUnrealizedPnl)
     const startedAtMs = input.startedAt.getTime()
     const now = new Date()
 
@@ -790,6 +803,39 @@ export class AccountStrategyViewService {
       .reduce((acc, row) => acc + Number(row.realizedPnl ?? 0), 0)
 
     return Number((realizedToday + totalUnrealizedPnl).toFixed(8))
+  }
+
+  private resolveAccountRealizedPnl(
+    account: unknown,
+    positionFinancials: { totalRealizedPnl?: unknown } | null,
+  ): number {
+    const positionRealized = this.toFiniteNumber(positionFinancials?.totalRealizedPnl)
+    if (positionRealized !== null) return positionRealized
+    return this.toFiniteNumber(this.readRecord(account)?.totalRealizedPnl) ?? 0
+  }
+
+  private resolveAccountUnrealizedPnl(
+    account: unknown,
+    positionFinancials: { totalUnrealizedPnl?: unknown } | null,
+  ): number {
+    const positionUnrealized = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl)
+    if (positionUnrealized !== null) return positionUnrealized
+    return this.toFiniteNumber(this.readRecord(account)?.totalUnrealizedPnl) ?? 0
+  }
+
+  private resolveAccountEquity(
+    account: unknown,
+    positionFinancials: { openCostBasis?: unknown; totalUnrealizedPnl?: unknown } | null,
+  ): number | null {
+    const row = this.readRecord(account)
+    if (!row) return null
+
+    const balance = this.toFiniteNumber(row.balance)
+    if (balance === null) return this.toFiniteNumber(row.equity)
+
+    const openCostBasis = this.toFiniteNumber(positionFinancials?.openCostBasis) ?? 0
+    const unrealizedPnl = this.resolveAccountUnrealizedPnl(account, positionFinancials)
+    return Number((balance + openCostBasis + unrealizedPnl).toFixed(8))
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {

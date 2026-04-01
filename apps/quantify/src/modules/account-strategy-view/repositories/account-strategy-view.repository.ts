@@ -326,6 +326,9 @@ export class AccountStrategyViewRepository {
             select: {
               id: true,
               defaultParams: true,
+              paramsSchema: true,
+              rulesVersion: true,
+              metadata: true,
             },
           },
           subscriptions: {
@@ -352,6 +355,11 @@ export class AccountStrategyViewRepository {
         status: item.status,
         params: item.params as Record<string, unknown> | null,
         defaultParams: item.strategyTemplate?.defaultParams as Record<string, unknown> | null,
+        strategySchema: item.strategyTemplate?.paramsSchema as Record<string, unknown> | null,
+        schemaVersion: item.strategyTemplate?.rulesVersion != null
+          ? String(item.strategyTemplate.rulesVersion)
+          : null,
+        metadata: item.strategyTemplate?.metadata as Record<string, unknown> | null,
         customParams: userSub?.customParams as Record<string, unknown> | null,
         updatedAt: item.updatedAt,
         subscribed: isSubscribed,
@@ -485,6 +493,9 @@ export class AccountStrategyViewRepository {
           select: {
             id: true,
             defaultParams: true,
+            paramsSchema: true,
+            rulesVersion: true,
+            metadata: true,
           },
         },
         subscriptions: {
@@ -591,6 +602,47 @@ export class AccountStrategyViewRepository {
     return {
       openCount,
       closedCount,
+    }
+  }
+
+  async loadPositionFinancials(accountId: string) {
+    const client = this.txHost.tx
+    const [closedAggregate, openPositions] = await Promise.all([
+      client.position.aggregate({
+        where: {
+          userStrategyAccountId: accountId,
+          status: 'CLOSED',
+        },
+        _sum: {
+          realizedPnl: true,
+        },
+      }),
+      client.position.findMany({
+        where: {
+          userStrategyAccountId: accountId,
+          status: 'OPEN',
+        },
+        select: {
+          quantity: true,
+          avgEntryPrice: true,
+          unrealizedPnl: true,
+        },
+      }),
+    ])
+
+    const totalRealizedPnl = closedAggregate._sum.realizedPnl ?? new Prisma.Decimal(0)
+    let totalUnrealizedPnl = new Prisma.Decimal(0)
+    let openCostBasis = new Prisma.Decimal(0)
+
+    for (const position of openPositions) {
+      totalUnrealizedPnl = totalUnrealizedPnl.add(position.unrealizedPnl ?? new Prisma.Decimal(0))
+      openCostBasis = openCostBasis.add(position.quantity.mul(position.avgEntryPrice))
+    }
+
+    return {
+      totalRealizedPnl,
+      totalUnrealizedPnl,
+      openCostBasis,
     }
   }
 
