@@ -8,6 +8,54 @@ import { createTestingApp } from '../fixtures/fixtures'
 
 jest.setTimeout(180_000)
 
+type LongShortRatioSeedData = Parameters<PrismaService['longShortRatio']['createMany']>[0]['data']
+type MarketTradeSeedData = Parameters<PrismaService['marketTrade']['createMany']>[0]['data']
+
+function buildLongShortRatioSeedData(
+  pairId: string,
+  interval: string,
+  baseTime: Date,
+): LongShortRatioSeedData {
+  return Array.from({ length: 5 }, (_, i) => ({
+    tradingPairId: pairId,
+    interval,
+    timestamp: new Date(baseTime.getTime() + i * 60 * 60 * 1000),
+    longShortRatio: String(1 + i * 0.1),
+    longAccountRatio: String(0.55 + i * 0.01),
+    shortAccountRatio: String(0.45 - i * 0.01),
+  }))
+}
+
+function buildMarketTradeSeedData(
+  exchange: string,
+  instrumentType: string,
+  symbol: string,
+  baseAsset: string,
+  quoteAsset: string,
+  baseTs: bigint,
+): MarketTradeSeedData {
+  return Array.from({ length: 5 }, (_, i) => ({
+    exchange,
+    instrumentType,
+    symbol,
+    baseAsset,
+    quoteAsset,
+    tradeId: `test-pagination-trade-${i + 1}`,
+    price: String(30000 + i * 100),
+    size: String(0.1 + i * 0.05),
+    side: i % 2 === 0 ? 'buy' : 'sell',
+    tradeTimestamp: baseTs + BigInt(i * 1000),
+  }))
+}
+
+async function seedLongShortRatioRecords(prisma: PrismaService, data: LongShortRatioSeedData) {
+  await prisma.longShortRatio.createMany({ data, skipDuplicates: true })
+}
+
+async function seedMarketTradeRecords(prisma: PrismaService, data: MarketTradeSeedData) {
+  await prisma.marketTrade.createMany({ data, skipDuplicates: true })
+}
+
 // ---------------------------------------------------------------------------
 // getLongShortRatios pagination
 // ---------------------------------------------------------------------------
@@ -36,16 +84,10 @@ describe('MarketsService.getLongShortRatios pagination (E2E)', () => {
     })
 
     // 插入 5 条测试数据，每条时间戳递增 1 小时
-    const records = Array.from({ length: 5 }, (_, i) => ({
-      tradingPairId: PAIR_ID,
-      interval: PRISMA_INTERVAL,
-      timestamp: new Date(BASE_TIME.getTime() + i * 60 * 60 * 1000),
-      longShortRatio: String(1 + i * 0.1),
-      longAccountRatio: String(0.55 + i * 0.01),
-      shortAccountRatio: String(0.45 - i * 0.01),
-    }))
-
-    await prisma.longShortRatio.createMany({ data: records, skipDuplicates: true })
+    await seedLongShortRatioRecords(
+      prisma,
+      buildLongShortRatioSeedData(PAIR_ID, PRISMA_INTERVAL, BASE_TIME),
+    )
   })
 
   afterAll(async () => {
@@ -155,20 +197,17 @@ describe('MarketsService.getLatestTrades pagination (E2E)', () => {
     })
 
     // 插入 5 条测试成交记录
-    const records = Array.from({ length: 5 }, (_, i) => ({
-      exchange: EXCHANGE,
-      instrumentType: INSTRUMENT_TYPE,
-      symbol: SYMBOL,
-      baseAsset: BASE_ASSET,
-      quoteAsset: QUOTE_ASSET,
-      tradeId: `test-pagination-trade-${i + 1}`,
-      price: String(30000 + i * 100),
-      size: String(0.1 + i * 0.05),
-      side: i % 2 === 0 ? 'buy' : 'sell',
-      tradeTimestamp: BASE_TS + BigInt(i * 1000),
-    }))
-
-    await prisma.marketTrade.createMany({ data: records, skipDuplicates: true })
+    await seedMarketTradeRecords(
+      prisma,
+      buildMarketTradeSeedData(
+        EXCHANGE,
+        INSTRUMENT_TYPE,
+        SYMBOL,
+        BASE_ASSET,
+        QUOTE_ASSET,
+        BASE_TS,
+      ),
+    )
   })
 
   afterAll(async () => {

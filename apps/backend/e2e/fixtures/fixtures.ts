@@ -44,6 +44,15 @@ export interface ApiClient {
   delete: (path: string) => any
 }
 
+export interface CreateUserRecordInput {
+  id: string
+  email: string
+  passwordHash?: string
+  nickname?: string | null
+  emailVerified?: boolean
+  isGuest?: boolean
+}
+
 /**
  * 构建完整API URL
  * @param endpoint API端点路径
@@ -243,6 +252,22 @@ export function generateRandomString(length: number = 10): string {
   }
 
   return result
+}
+
+export async function createUserRecord(
+  prisma: PrismaService,
+  input: CreateUserRecordInput,
+) {
+  return prisma.user.create({
+    data: {
+      id: input.id,
+      email: input.email,
+      passwordHash: input.passwordHash ?? 'e2e-password-hash',
+      nickname: input.nickname ?? null,
+      emailVerified: input.emailVerified ?? true,
+      isGuest: input.isGuest ?? false,
+    },
+  })
 }
 
 // ---------------------------------------------------------------------------

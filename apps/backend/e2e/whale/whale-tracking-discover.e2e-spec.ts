@@ -6,6 +6,12 @@ import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 
 jest.setTimeout(180_000)
 
+type WhaleAlertSeedData = Parameters<PrismaService['hyperliquidWhaleAlert']['createMany']>[0]['data']
+
+async function createWhaleAlertRecords(prisma: PrismaService, data: WhaleAlertSeedData) {
+  await prisma.hyperliquidWhaleAlert.createMany({ data })
+}
+
 describe('Whale tracking discover API (E2E)', () => {
   let app: INestApplication
   let prisma: any
@@ -79,9 +85,7 @@ describe('Whale tracking discover API (E2E)', () => {
       },
     ]
 
-    await prisma.hyperliquidWhaleAlert.createMany({
-      data: clientData,
-    })
+    await createWhaleAlertRecords(prisma, clientData)
   })
 
   afterAll(async () => {

@@ -2,7 +2,7 @@ import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createAuthApiClient, createTestingApp } from '../fixtures/fixtures'
+import { createAuthApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
 
 describe('Whale notification rules HTTP (E2E)', () => {
   let app: INestApplication
@@ -35,15 +35,10 @@ describe('Whale notification rules HTTP (E2E)', () => {
     await prisma.user.deleteMany({
       where: { id: 'e2e-user-whale-notify' },
     })
-    await prisma.user.create({
-      data: {
-        id: 'e2e-user-whale-notify',
-        email: 'e2e-user-whale-notify@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'e2e-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: 'e2e-user-whale-notify',
+      email: 'e2e-user-whale-notify@example.com',
+      nickname: 'e2e-user',
     })
   })
 
