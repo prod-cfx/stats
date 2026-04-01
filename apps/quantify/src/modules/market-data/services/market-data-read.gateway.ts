@@ -159,7 +159,8 @@ export class MarketDataReadGateway {
   }
 
   async getLatestQuote(symbol: string): Promise<GatewayQuote> {
-    const snapshot = this.marketDataService.getLatestQuoteSnapshot(symbol)
+    const resolvedSymbol = await this.marketDataService.getSymbolOrThrow(symbol)
+    const snapshot = this.marketDataService.getLatestQuoteSnapshot(resolvedSymbol.code)
     if (snapshot) {
       return {
         lastPrice: String(snapshot.lastPrice),
@@ -179,13 +180,13 @@ export class MarketDataReadGateway {
         createdAt: new Date(snapshot.eventTime),
       }
     }
-    const quote = await this.repository.findLatestQuote(symbol)
+    const quote = await this.repository.findLatestQuoteBySymbolId(resolvedSymbol.id)
     const mappedQuote = this.toGatewayQuote(quote)
     if (mappedQuote) return mappedQuote
 
     throw new DomainException('No market data available', {
       code: ErrorCode.MARKET_DATA_PROVIDER_ERROR,
-      args: { symbol },
+      args: { symbol: resolvedSymbol.code },
     })
   }
 
