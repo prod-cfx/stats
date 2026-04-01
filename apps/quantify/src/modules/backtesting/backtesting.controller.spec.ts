@@ -1,4 +1,6 @@
 import { Test } from '@nestjs/testing'
+import { HttpStatus } from '@nestjs/common'
+import { ErrorCode } from '@ai/shared'
 import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
@@ -139,5 +141,34 @@ describe('backtestingController', () => {
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
     expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
+  })
+
+  it('maps capability upstream error to service unavailable domain exception', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapter = { build: jest.fn() }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn() }
+    const capabilities = {
+      getCapabilities: jest.fn().mockRejectedValue(new Error('db down')),
+    }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestStrategyAdapterService, useValue: adapter },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+
+    await expect(c.getCapabilities('req-2')).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: { reasonMessage: 'db down' },
+    })
   })
 })

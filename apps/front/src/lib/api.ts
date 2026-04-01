@@ -12,6 +12,7 @@ import {
   listStrategies as listMockStrategies,
   updateStrategyStatus as updateMockStrategyStatus,
 } from '@/components/account/ai-quant-strategy-store'
+import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
@@ -2021,29 +2022,27 @@ export interface ContinueLlmCodegenSessionPayload {
 }
 
 function parseApiErrorMessage(status: number, payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object') {
-    const message = (payload as Record<string, unknown>).message
-    if (typeof message === 'string' && message.trim().length > 0) return message
-    const error = (payload as Record<string, unknown>).error
-    if (typeof error === 'string' && error.trim().length > 0) return error
-    if (error && typeof error === 'object') {
-      const nested = (error as Record<string, unknown>).message
-      if (typeof nested === 'string' && nested.trim().length > 0) return nested
-    }
-  }
-  return `${fallback} (HTTP ${status})`
+  const meta = parseAiQuantErrorMeta(payload)
+  if (meta.message) return meta.message
+  return buildAiQuantStageFallbackMessage(fallback, status, meta)
 }
 
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
   const authHeaders = requireAuthHeaders()
-  const response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-    },
-    body: JSON.stringify(payload),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/llm-strategy-codegen${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch (error) {
+    const message = error instanceof Error && error.message.trim() ? error.message : 'LLM 策略生成请求失败'
+    throw new ApiError(message, 'LLM_CODEGEN_ERROR', 502)
+  }
 
   let json: unknown = null
   try {
@@ -2053,8 +2052,12 @@ async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
   }
 
   if (!response.ok) {
-    const message = parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败')
-    throw new ApiError(message, 'LLM_CODEGEN_ERROR', response.status, json)
+    throw new ApiError(
+      parseApiErrorMessage(response.status, json, 'LLM 策略生成请求失败'),
+      'LLM_CODEGEN_ERROR',
+      response.status,
+      json,
+    )
   }
 
   return unwrapResponse<T>(json as T | BaseResponse<T>)

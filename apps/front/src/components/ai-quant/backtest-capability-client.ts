@@ -1,18 +1,7 @@
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
-
-interface ErrorPayload {
-  code?: unknown
-  message?: unknown
-  error?: {
-    code?: unknown
-    message?: unknown
-    args?: {
-      reasonMessage?: unknown
-    }
-  }
-}
+import { parseAiQuantErrorMeta } from './ai-quant-error-stage'
 
 export interface BacktestCapabilities {
   allowedSymbols: string[]
@@ -51,36 +40,13 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
 }
 
 function extractErrorMessage(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== 'object') {
-    return fallback
-  }
-
-  const candidate = payload as ErrorPayload
-  if (typeof candidate.error?.args?.reasonMessage === 'string' && candidate.error.args.reasonMessage.trim()) {
-    return candidate.error.args.reasonMessage
-  }
-  if (typeof candidate.error?.message === 'string' && candidate.error.message.trim()) {
-    return candidate.error.message
-  }
-  if (typeof candidate.message === 'string' && candidate.message.trim()) {
-    return candidate.message
-  }
-  return fallback
+  const meta = parseAiQuantErrorMeta(payload)
+  return meta.message ?? fallback
 }
 
 function extractErrorCode(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') {
-    return 'API_ERROR'
-  }
-
-  const candidate = payload as ErrorPayload
-  if (typeof candidate.error?.code === 'string' && candidate.error.code.trim()) {
-    return candidate.error.code
-  }
-  if (typeof candidate.code === 'string' && candidate.code.trim()) {
-    return candidate.code
-  }
-  return 'API_ERROR'
+  const meta = parseAiQuantErrorMeta(payload)
+  return meta.code ?? 'API_ERROR'
 }
 
 function requireAuthHeaders(): Record<string, string> {

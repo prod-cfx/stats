@@ -925,7 +925,10 @@ export class CodegenConversationService {
           throw new DomainException('codegen.generation_failed_strict_mode', {
             code: ErrorCode.LLM_CODEGEN_GENERATION_FAILED,
             status: HttpStatus.BAD_GATEWAY,
-            args: { detail },
+            args: {
+              detail,
+              reasonMessage: `strict 模式调用失败: ${detail}`,
+            },
           })
         }
       }
@@ -934,6 +937,7 @@ export class CodegenConversationService {
         throw new DomainException('codegen.generation_failed_no_code_returned', {
           code: ErrorCode.LLM_CODEGEN_GENERATION_FAILED,
           status: HttpStatus.BAD_GATEWAY,
+          args: { reasonMessage: 'strict 模式未返回 code 字段' },
         })
       }
     }
@@ -953,6 +957,7 @@ export class CodegenConversationService {
       throw new DomainException('codegen.script_generation_empty_result', {
         code: ErrorCode.AI_PROVIDER_ERROR,
         status: HttpStatus.BAD_GATEWAY,
+        args: { reasonMessage: '模型未返回可执行策略脚本' },
       })
     }
 

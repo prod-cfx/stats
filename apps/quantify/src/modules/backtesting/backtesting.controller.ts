@@ -1,6 +1,9 @@
 import type { BacktestRunInput } from './types/backtesting.types'
+import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, Logger, Param, Post, UseGuards } from '@nestjs/common'
+import { HttpStatus } from '@nestjs/common'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
+import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
@@ -76,11 +79,18 @@ export class BacktestingController {
       this.logger.log(`event=backtesting_capabilities_request requestId=${requestId ?? 'N/A'}`)
       return await this.capabilitiesService.getCapabilities(requestId)
     } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
         `event=backtesting_capabilities_request_failed requestId=${requestId ?? 'N/A'} reason=${message} durationMs=${Date.now() - startedAt}`,
       )
-      throw error
+      throw new DomainException('backtesting.capabilities_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { reasonMessage: message },
+      })
     }
   }
 }
