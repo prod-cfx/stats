@@ -145,10 +145,6 @@ export default function TelegramCallbackPage() {
           router.replace(redirect)
         })
         .catch(err => {
-          if (loadStoredSession()) {
-            router.replace(redirect)
-            return
-          }
           setError(err instanceof Error ? err.message : 'Telegram 绑定失败')
         })
       return
