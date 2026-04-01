@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { resolveTelegramCallbackPayload } from '@/features/auth/telegram-callback-params'
+import { isRetryableTelegramDesktopError } from '@/features/auth/telegram-callback-retry'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function TelegramCallbackPage() {
@@ -61,28 +62,42 @@ export default function TelegramCallbackPage() {
 
         try {
           const status = await getTelegramDesktopIntentStatus(desktopIntentId)
+          if (stopped) return
           if (status.status === 'confirmed') {
             const result = await finishDesktopFlow()
+            if (stopped) return
             if (result === 'waiting') {
               window.setTimeout(tick, 800)
             }
             return
           }
           if (status.status === 'expired') {
+            if (stopped) return
             setError('Telegram 授权已过期，请返回登录页重新发起')
             return
           }
           if (status.status !== 'pending') {
+            if (stopped) return
             setError('Telegram 授权状态异常，请返回登录页重试')
             return
           }
 
           if (attempts >= maxAttempts) {
+            if (stopped) return
             setError('等待 Telegram 授权超时，请返回登录页重试')
             return
           }
           window.setTimeout(tick, 2000)
         } catch (err) {
+          if (stopped) return
+          if (isRetryableTelegramDesktopError(err)) {
+            if (attempts >= maxAttempts) {
+              setError('等待 Telegram 授权超时，请返回登录页重试')
+              return
+            }
+            window.setTimeout(tick, 2000)
+            return
+          }
           setError(err instanceof Error ? err.message : 'Telegram 桌面登录失败')
         }
       }
