@@ -59,6 +59,18 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       data: expect.objectContaining({
         promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
         script: 'return { action: "buy" }',
+        paramsSchema: {
+          type: 'object',
+          properties: {
+            exchange: { type: 'string', title: 'exchange' },
+            marketType: { type: 'string', title: 'marketType' },
+            symbol: { type: 'string', title: 'symbol' },
+            timeframe: { type: 'string', title: 'timeframe' },
+            positionPct: { type: 'number', title: 'positionPct' },
+          },
+          required: ['exchange', 'marketType', 'symbol', 'timeframe', 'positionPct'],
+          additionalProperties: true,
+        },
         execution: {
           timeframe: '5m',
           cooldownMinutes: 5,

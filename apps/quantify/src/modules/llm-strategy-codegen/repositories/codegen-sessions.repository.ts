@@ -290,6 +290,28 @@ export class CodegenSessionsRepository {
     return toSymbolCode(rawSymbol, marketType === 'perp' ? 'PERP' : 'SPOT')
   }
 
+  private buildParamsSchema(params: Record<string, unknown>): Prisma.InputJsonValue {
+    const properties = Object.fromEntries(
+      Object.entries(params).map(([key, value]) => {
+        const schemaType = Array.isArray(value)
+          ? 'array'
+          : typeof value === 'number'
+            ? 'number'
+            : typeof value === 'boolean'
+              ? 'boolean'
+              : 'string'
+        return [key, { type: schemaType, title: key }]
+      }),
+    )
+
+    return {
+      type: 'object',
+      properties,
+      required: Object.keys(params),
+      additionalProperties: true,
+    } as Prisma.InputJsonValue
+  }
+
   private async createDraftStrategyInstanceFromPublishedSessionWithTx(
     tx: Prisma.TransactionClient,
     input: {
@@ -327,7 +349,7 @@ export class CodegenSessionsRepository {
         llmModel: input.llmModel,
         promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
         script: input.scriptCode,
-        paramsSchema: {},
+        paramsSchema: this.buildParamsSchema(input.params),
         defaultParams: input.params as Prisma.InputJsonValue,
         rulesJson: input.specDesc as Prisma.InputJsonValue,
         requiredFields: [],
