@@ -1,11 +1,10 @@
 import type { MarketTimeframe } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { normalizeExactCode, normalizeRequestedCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PrismaService } from '@/prisma/prisma.service'
+import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 
 type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
@@ -18,7 +17,7 @@ export interface BacktestRangeCoverage {
 
 @Injectable()
 export class BacktestMarketDataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly repository: BacktestMarketDataRepository) {}
 
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
     const symbols = this.normalizeSymbols(input.symbols)
@@ -31,18 +30,12 @@ export class BacktestMarketDataService {
       if (!symbolId) continue
 
       for (const timeframe of timeframes) {
-        const prismaTimeframe = mapTimeframe(timeframe as MarketTimeframe)
         const timeframeMs = getMarketTimeframeMs(timeframe)
-        const rows = await this.prisma.marketBar.findMany({
-          where: {
-            symbolId,
-            timeframe: prismaTimeframe,
-            time: {
-              gte: new Date(input.dataRange.fromTs),
-              lte: new Date(input.dataRange.toTs),
-            },
-          },
-          orderBy: { time: 'asc' },
+        const rows = await this.repository.findBars({
+          symbolId,
+          timeframe: timeframe as MarketTimeframe,
+          fromTs: input.dataRange.fromTs,
+          toTs: input.dataRange.toTs,
         })
 
         for (const row of rows) {
@@ -77,14 +70,9 @@ export class BacktestMarketDataService {
       if (!symbolId) return { kind: 'empty' }
 
       for (const timeframe of timeframes) {
-        const prismaTimeframe = mapTimeframe(timeframe as MarketTimeframe)
-        const aggregate = await this.prisma.marketBar.aggregate({
-          where: {
-            symbolId,
-            timeframe: prismaTimeframe,
-          },
-          _min: { time: true },
-          _max: { time: true },
+        const aggregate = await this.repository.aggregateCoverage({
+          symbolId,
+          timeframe: timeframe as MarketTimeframe,
         })
 
         const from = aggregate._min.time
@@ -122,12 +110,7 @@ export class BacktestMarketDataService {
   private async loadSymbolMap(symbols: string[]): Promise<Map<string, string>> {
     const normalizedSymbols = symbols.map(symbol => normalizeExactCode(symbol))
     const codeCandidates = [...new Set(normalizedSymbols.flatMap(symbol => this.buildCodeCandidates(symbol)))]
-    const rows = await this.prisma.symbol.findMany({
-      where: {
-        code: { in: codeCandidates },
-      },
-      select: { id: true, code: true },
-    })
+    const rows = await this.repository.findSymbolsByCodes(codeCandidates)
 
     const rowMap = new Map(rows.map(row => [normalizeExactCode(row.code), row.id]))
     const result = new Map<string, string>()

@@ -10,6 +10,7 @@ import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { PortfolioLedgerServiceFactory } from './portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from './report/backtest-reporter.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
+import { BacktestMarketDataRepository } from './repositories/backtest-market-data.repository'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
@@ -32,6 +33,7 @@ import { StateEngineService } from './state/state-engine.service'
     BacktestStrategyAdapterService,
     StateEngineService,
     BacktestCapabilitiesRepository,
+    BacktestMarketDataRepository,
     BacktestSymbolSupportService,
   ],
 })
