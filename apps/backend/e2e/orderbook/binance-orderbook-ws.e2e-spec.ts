@@ -5,9 +5,10 @@ import { RedisService } from '@/common/services/redis.service'
 import { BinanceCexSpotOrderbookWsAdapter } from '@/modules/data-sync/services/adapters/binance-cex-spot-orderbook-ws.adapter'
 import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Binance WS，避免在 CI 默认跑外网依赖
-const E2E_ENABLED = process.env.BINANCE_ORDERBOOK_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('BINANCE_ORDERBOOK_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Binance orderbook WS (E2E)', () => {

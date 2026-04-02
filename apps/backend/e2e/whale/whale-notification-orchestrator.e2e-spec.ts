@@ -4,6 +4,7 @@ import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
 import { createApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
+import { restoreE2eEnv, setE2eEnvValue, snapshotE2eEnv } from '../helpers/setup-e2e-env'
 
 type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
 
@@ -15,9 +16,11 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   let app: INestApplication
   let prisma: PrismaService
   let whaleAlertService: WhaleAlertService
-  const originalWhaleNotificationEnabled = process.env.WHALE_NOTIFICATION_ENABLED
-  const originalWhaleNotificationAllowedUserIds = process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS
-  const originalTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  const envSnapshot = snapshotE2eEnv([
+    'WHALE_NOTIFICATION_ENABLED',
+    'WHALE_NOTIFICATION_ALLOWED_USER_IDS',
+    'TELEGRAM_BOT_TOKEN',
+  ])
 
   const userId = 'e2e-orchestrator-user'
 
@@ -70,9 +73,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   })
 
   afterAll(async () => {
-    process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
-    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
-    process.env.TELEGRAM_BOT_TOKEN = originalTelegramBotToken
+    restoreE2eEnv(envSnapshot)
 
     if (prisma) {
       await prisma.whaleNotificationCooldownGuard.deleteMany({
@@ -131,7 +132,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   })
 
   it('should skip orchestration when feature flag is disabled', async () => {
-    process.env.WHALE_NOTIFICATION_ENABLED = 'false'
+    setE2eEnvValue('WHALE_NOTIFICATION_ENABLED', 'false')
 
     await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
 
@@ -150,13 +151,13 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
     })
 
     expect(rows.length).toBe(0)
-    process.env.WHALE_NOTIFICATION_ENABLED = originalWhaleNotificationEnabled
+    restoreE2eEnv(envSnapshot)
   })
 
   it('should not mark failed telegram delivery as cooldown-skipped on next event', async () => {
-    process.env.TELEGRAM_BOT_TOKEN = ''
-    process.env.WHALE_NOTIFICATION_ENABLED = 'true'
-    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = ''
+    setE2eEnvValue('TELEGRAM_BOT_TOKEN', '')
+    setE2eEnvValue('WHALE_NOTIFICATION_ENABLED', 'true')
+    setE2eEnvValue('WHALE_NOTIFICATION_ALLOWED_USER_IDS', '')
 
     const whaleAddress = '0xorchestrator-telegram'
     await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
@@ -205,11 +206,11 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
     await prisma.whaleNotificationRule.delete({ where: { id: telegramRule.id } })
     await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: whaleAddress } })
-    process.env.TELEGRAM_BOT_TOKEN = originalTelegramBotToken
+    restoreE2eEnv(envSnapshot)
   })
 
   it('should expose basic orchestrator metrics', async () => {
-    process.env.WHALE_NOTIFICATION_ENABLED = 'true'
+    setE2eEnvValue('WHALE_NOTIFICATION_ENABLED', 'true')
 
     const now = new Date()
     await whaleAlertService.recordWhaleTrade({
@@ -234,7 +235,7 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
   })
 
   it('should ignore allowlist setting and continue dispatching', async () => {
-    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = 'some-other-user'
+    setE2eEnvValue('WHALE_NOTIFICATION_ALLOWED_USER_IDS', 'some-other-user')
     await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
 
     await whaleAlertService.recordWhaleTrade({
@@ -251,6 +252,6 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       where: { userId },
     })
     expect(rows.length).toBeGreaterThan(0)
-    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalWhaleNotificationAllowedUserIds
+    restoreE2eEnv(envSnapshot)
   })
 })

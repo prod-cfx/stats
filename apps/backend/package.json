@@ -19,7 +19,7 @@
     "repair:public-data-tasks": "tsx prisma/scripts/repair-public-data-tasks.ts",
     "prisma:format": "prisma format",
     "lint": "eslint \"src/**/*.ts\" \"e2e/**/*.ts\" --config ../../eslint.config.js",
-    "test": "echo \"backend tests 尚未配置\"",
+    "test": "jest --config ./jest-unit.json --runInBand",
     "test:e2e": "jest --config ./e2e/jest-e2e.json --runInBand --forceExit",
     "test:e2e:file": "jest --config ./e2e/jest-e2e.json --runInBand --forceExit",
     "diagnose:kline": "tsx scripts/diagnose-kline-gap.ts"

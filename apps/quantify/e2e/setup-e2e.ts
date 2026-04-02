@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import * as crypto from 'node:crypto'
 import * as path from 'node:path'
 
+import { defaultEnvAccessor, setProcessEnvValue } from '@/common/env/env.accessor'
 import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { ensureE2eEnv } from './helpers/setup-e2e-env'
 
@@ -10,7 +11,7 @@ applyQuantifyEnvOverrides()
 ensureE2eEnv({ strict: true, label: 'Quantify E2E' })
 
 // 控制 E2E 日志详细程度，默认关闭，仅在 E2E_VERBOSE_LOG=true 时输出详细日志
-const E2E_VERBOSE_LOG = process.env.E2E_VERBOSE_LOG === 'true'
+const E2E_VERBOSE_LOG = defaultEnvAccessor.bool('E2E_VERBOSE_LOG', false)
 const logVerbose = (...args: unknown[]) => {
   if (E2E_VERBOSE_LOG) console.log(...args)
 }
@@ -161,7 +162,7 @@ function checkDatabasePermissions(baseUrl: string): boolean {
  * 默认启用，设置 E2E_CLEANUP_OLD_RESOURCES=false 可禁用
  */
 function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
-  if (process.env.E2E_CLEANUP_OLD_RESOURCES === 'false') {
+  if (defaultEnvAccessor.bool('E2E_CLEANUP_OLD_RESOURCES', true) === false) {
     logVerbose('[E2E setup] 历史数据库清理已禁用 (E2E_CLEANUP_OLD_RESOURCES=false)')
     return
   }
@@ -262,7 +263,7 @@ function cleanupOldDatabases(baseUrl: string, maxAgeHours = 24): void {
  * 使用 SCAN + DEL 按前缀模式删除，避免阻塞 Redis
  */
 function cleanupRedisKeys(dbName: string): void {
-  const redisUrl = process.env.REDIS_URL
+  const redisUrl = defaultEnvAccessor.str('REDIS_URL')
   if (!redisUrl) {
     logVerbose('[E2E teardown] 未配置 REDIS_URL，跳过 Redis 清理')
     return
@@ -319,11 +320,11 @@ function cleanupRedisKeys(dbName: string): void {
  * 默认启用，设置 E2E_CLEANUP_OLD_RESOURCES=false 可禁用
  */
 function cleanupOldRedisKeys(maxAgeHours = 24): void {
-  if (process.env.E2E_CLEANUP_OLD_RESOURCES === 'false') {
+  if (defaultEnvAccessor.bool('E2E_CLEANUP_OLD_RESOURCES', true) === false) {
     return
   }
 
-  const redisUrl = process.env.REDIS_URL
+  const redisUrl = defaultEnvAccessor.str('REDIS_URL')
   if (!redisUrl) {
     return
   }
@@ -402,13 +403,13 @@ function setupTestDatabase(baseUrl: string, dbName: string, originalDbUrl: strin
 
     // 直接同步当前 schema；当前项目不保留历史 migrations，测试库始终按空库初始化。
     execFileSync('npx', ['prisma', 'db', 'push'], {
-      stdio: 'inherit',
-      cwd: quantifyDir,
-      env: {
-        ...process.env,
-        DATABASE_URL: testDbUrl,
-        QUANTIFY_DATABASE_URL: testDbUrl,
-        QUANTIFY_E2E_DATABASE_URL: testDbUrl,
+        stdio: 'inherit',
+        cwd: quantifyDir,
+        env: {
+          ...defaultEnvAccessor.snapshot(),
+          DATABASE_URL: testDbUrl,
+          QUANTIFY_DATABASE_URL: testDbUrl,
+          QUANTIFY_E2E_DATABASE_URL: testDbUrl,
         APP_ENV: 'e2e',
       },
     })
@@ -420,7 +421,7 @@ function setupTestDatabase(baseUrl: string, dbName: string, originalDbUrl: strin
         stdio: 'inherit',
         cwd: quantifyDir,
         env: {
-          ...process.env,
+          ...defaultEnvAccessor.snapshot(),
           DATABASE_URL: testDbUrl,
           QUANTIFY_DATABASE_URL: testDbUrl,
           QUANTIFY_E2E_DATABASE_URL: testDbUrl,
@@ -470,7 +471,7 @@ function cleanupTestDatabase(baseUrl: string, dbName: string): void {
 // ========== 主入口 ==========
 
 // 验证测试数据库 URL 安全性
-const dbUrl = process.env.DATABASE_URL
+const dbUrl = defaultEnvAccessor.str('DATABASE_URL')
 if (!dbUrl || (!dbUrl.includes('e2e') && !dbUrl.includes('test'))) {
   const maskedUrl = (() => {
     if (!dbUrl) return '(missing)'
@@ -483,7 +484,12 @@ if (!dbUrl || (!dbUrl.includes('e2e') && !dbUrl.includes('test'))) {
     }
   })()
   console.error('[E2E setup] 缺少有效的 DATABASE_URL,检测结果:', maskedUrl)
-  console.error('[E2E setup] APP_ENV:', process.env.APP_ENV, ' NODE_ENV:', process.env.NODE_ENV)
+  console.error(
+    '[E2E setup] APP_ENV:',
+    defaultEnvAccessor.raw('APP_ENV'),
+    ' NODE_ENV:',
+    defaultEnvAccessor.raw('NODE_ENV'),
+  )
   process.exit(1)
 }
 
@@ -512,7 +518,7 @@ console.log(`[E2E setup] 使用测试数据库: ${currentTestDatabase}`)
 // 构建新的 DATABASE_URL
 const testDbUrl = buildDatabaseUrl(urlParams.originalUrl, currentTestDatabase)
 
-// 初始化测试数据库（在成功之前不修改 process.env.DATABASE_URL）
+// 初始化测试数据库（在成功之前不修改 DATABASE_URL）
 try {
   setupTestDatabase(adminDatabaseUrl, currentTestDatabase, urlParams.originalUrl)
 } catch (error) {
@@ -524,9 +530,9 @@ try {
 }
 
 // 仅在 setup 成功后替换环境变量
-process.env.DATABASE_URL = testDbUrl
-process.env.QUANTIFY_DATABASE_URL = testDbUrl
-process.env.QUANTIFY_E2E_DATABASE_URL = testDbUrl
+setProcessEnvValue('DATABASE_URL', testDbUrl)
+setProcessEnvValue('QUANTIFY_DATABASE_URL', testDbUrl)
+setProcessEnvValue('QUANTIFY_E2E_DATABASE_URL', testDbUrl)
 
 // 注册全局钩子：在所有测试结束后清理数据库
 afterAll(async () => {
@@ -543,9 +549,9 @@ afterAll(async () => {
     cleanupTestDatabase(adminDatabaseUrl, currentTestDatabase)
 
     // 恢复原始 URL
-    process.env.DATABASE_URL = originalDatabaseUrl
-    process.env.QUANTIFY_DATABASE_URL = originalDatabaseUrl
-    process.env.QUANTIFY_E2E_DATABASE_URL = originalDatabaseUrl
+    setProcessEnvValue('DATABASE_URL', originalDatabaseUrl)
+    setProcessEnvValue('QUANTIFY_DATABASE_URL', originalDatabaseUrl)
+    setProcessEnvValue('QUANTIFY_E2E_DATABASE_URL', originalDatabaseUrl)
     currentTestDatabase = null
     originalDatabaseUrl = null
   }

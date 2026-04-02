@@ -4,8 +4,9 @@ import { firstValueFrom, take, timeout } from 'rxjs'
 import { HyperliquidDexPerpetualTradesWsAdapter } from '@/modules/data-sync/services/adapters/hyperliquid-dex-perpetual-trades-ws.adapter'
 import { PrismaService } from '@/prisma/prisma.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
-const E2E_ENABLED = process.env.HYPERLIQUID_TRADES_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('HYPERLIQUID_TRADES_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 interface HyperliquidWsTradeFixture {

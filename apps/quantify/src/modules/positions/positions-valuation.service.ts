@@ -8,6 +8,8 @@ import { Injectable, Logger } from '@nestjs/common'
 import { OnEvent } from '@nestjs/event-emitter'
 import { MARKET_QUOTE_EVENT } from '@/modules/market-data/services/market-data-stream.service'
 import { Prisma } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PositionsRepository } from './repositories/positions.repository'
 
 // Prisma 7: 从 Prisma namespace 导出类型和值
 /* eslint-disable no-redeclare, ts/no-redeclare */
@@ -19,7 +21,10 @@ const Decimal = Prisma.Decimal
 export class PositionsValuationService {
   private readonly logger = new Logger(PositionsValuationService.name)
 
-  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
+  constructor(
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    private readonly positionsRepository: PositionsRepository,
+  ) {}
 
   async applyQuotes({ quotes }: QuotesUpdateDto) {
     if (!quotes.length) {
@@ -36,14 +41,8 @@ export class PositionsValuationService {
     }
 
     return this.txHost.withTransaction(async () => {
-      const prisma = this.txHost.tx
       const symbols = Array.from(symbolMap.keys())
-      const positions = await prisma.position.findMany({
-        where: {
-          status: PositionStatus.OPEN,
-          symbol: { in: symbols },
-        },
-      })
+      const positions = await this.positionsRepository.findOpenPositionsBySymbols(symbols)
 
       if (!positions.length) {
         return { updatedPositions: 0, updatedAccounts: 0 }
@@ -60,30 +59,14 @@ export class PositionsValuationService {
           position.quantity,
         )
         affectedAccounts.add(position.userStrategyAccountId)
-        await prisma.position.update({
-          where: { id: position.id },
-          data: { unrealizedPnl: unrealized },
-        })
+        await this.positionsRepository.updatePositionUnrealizedPnl(position.id, unrealized)
       }
 
       for (const accountId of affectedAccounts) {
-        const aggregate = await prisma.position.aggregate({
-          where: { userStrategyAccountId: accountId, status: PositionStatus.OPEN },
-          _sum: { unrealizedPnl: true },
-        })
-        const totalUnrealized = aggregate._sum.unrealizedPnl ?? new Decimal(0)
-        const account = await prisma.userStrategyAccount.findUnique({
-          where: { id: accountId },
-          select: { balance: true },
-        })
-        if (!account) continue
-        await prisma.userStrategyAccount.update({
-          where: { id: accountId },
-          data: {
-            totalUnrealizedPnl: totalUnrealized,
-            equity: account.balance.add(totalUnrealized),
-          },
-        })
+        const totalUnrealized = await this.positionsRepository.aggregateOpenPositionUnrealizedPnl(accountId) ?? new Decimal(0)
+        const balance = await this.positionsRepository.findAccountBalance(accountId)
+        if (!balance) continue
+        await this.positionsRepository.updateAccountValuation(accountId, totalUnrealized, balance.add(totalUnrealized))
       }
 
       return {

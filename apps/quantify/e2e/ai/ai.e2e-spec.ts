@@ -5,6 +5,7 @@ import { AiService } from '@/modules/ai/ai.service'
 import { AiProviderErrorException } from '@/modules/ai/exceptions/ai-provider-error.exception'
 import { AiProviderNotFoundException } from '@/modules/ai/exceptions/ai-provider-not-found.exception'
 import { createTestingApp } from '../fixtures/fixtures'
+import { getE2eEnvValue } from '../helpers/setup-e2e-env'
 
 const isConfiguredKey = (value: string | undefined | null): boolean => {
   const trimmed = value?.trim()
@@ -28,7 +29,7 @@ describe('AiService (E2E)', () => {
     aiService = moduleFixture.get(AiService)
 
     // 仅在环境中配置了非占位的 UNIAPI_API_KEY 时才执行真实调用
-    hasUniapiKey = isConfiguredKey(process.env.UNIAPI_API_KEY)
+    hasUniapiKey = isConfiguredKey(getE2eEnvValue('UNIAPI_API_KEY'))
   })
 
   afterAll(async () => {

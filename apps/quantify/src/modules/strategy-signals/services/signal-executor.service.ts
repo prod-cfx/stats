@@ -7,13 +7,13 @@ import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 import type {
   Symbol as PrismaSymbol,
+  PrismaClient,
   UserStrategyAccount,
   StrategyInstanceRiskProfile,
-  PrismaClient,
 } from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { LedgerEntryType } from '@ai/shared'
-// eslint-disable-next-line ts/consistent-type-imports
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
@@ -599,15 +599,7 @@ export class SignalExecutorService implements OnModuleInit {
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
     return this.txHost.withTransaction(async () => {
-      const prisma = this.txHost.tx
-      const existing = await prisma.userSignalExecution.findUnique({
-        where: {
-          signalId_userStrategyAccountId: {
-            signalId: signal!.id,
-            userStrategyAccountId: account.id,
-          },
-        },
-      })
+      const existing = await this.executionRepository.findBySignalAndAccount(signal!.id, account.id)
 
       if (existing) {
         return { type: 'duplicate' }
@@ -632,44 +624,34 @@ export class SignalExecutorService implements OnModuleInit {
 
         if (!normalizedPositionSymbol || !positionSideForClose) {
           const reason = 'Cannot close position: missing symbol or position side'
-          const execution = await prisma.userSignalExecution.create({
-            data: {
-              signal: { connect: { id: signal!.id } },
-              user: { connect: { id: account.userId } },
-              account: { connect: { id: account.id } },
-              orderSide,
-              positionSide,
-              status: 'SKIPPED',
-              errorMessage: reason,
-            },
-            select: { id: true },
+          const execution = await this.executionRepository.create({
+            signal: { connect: { id: signal!.id } },
+            user: { connect: { id: account.userId } },
+            account: { connect: { id: account.id } },
+            orderSide,
+            positionSide,
+            status: 'SKIPPED',
+            errorMessage: reason,
           })
           return { type: 'skip', reason, executionId: execution.id }
         }
 
-        const openPosition = await prisma.position.findFirst({
-          where: {
-            userStrategyAccountId: account.id,
-            symbol: normalizedPositionSymbol,
-            status: 'OPEN',
-            positionSide: positionSideForClose,
-          },
-          orderBy: { openedAt: 'desc' },
-        })
+        const openPosition = await this.executorRepository.findOpenPositionForClose(
+          account.id,
+          normalizedPositionSymbol,
+          positionSideForClose,
+        )
 
         if (!openPosition || new Decimal(openPosition.quantity).lte(0)) {
           const reason = 'No open position to close for this signal'
-          const execution = await prisma.userSignalExecution.create({
-            data: {
-              signal: { connect: { id: signal!.id } },
-              user: { connect: { id: account.userId } },
-              account: { connect: { id: account.id } },
-              orderSide,
-              positionSide,
-              status: 'SKIPPED',
-              errorMessage: reason,
-            },
-            select: { id: true },
+          const execution = await this.executionRepository.create({
+            signal: { connect: { id: signal!.id } },
+            user: { connect: { id: account.userId } },
+            account: { connect: { id: account.id } },
+            orderSide,
+            positionSide,
+            status: 'SKIPPED',
+            errorMessage: reason,
           })
           return { type: 'skip', reason, executionId: execution.id }
         }
@@ -690,17 +672,14 @@ export class SignalExecutorService implements OnModuleInit {
       )
       if (!orderParamsResult.ok) {
         const reason = (orderParamsResult as { ok: false; reason: string }).reason
-        const execution = await prisma.userSignalExecution.create({
-          data: {
-            signal: { connect: { id: signal!.id } },
-            user: { connect: { id: account.userId } },
-            account: { connect: { id: account.id } },
-            orderSide,
-            positionSide,
-            status: 'SKIPPED',
-            errorMessage: reason,
-          },
-          select: { id: true },
+        const execution = await this.executionRepository.create({
+          signal: { connect: { id: signal!.id } },
+          user: { connect: { id: account.userId } },
+          account: { connect: { id: account.id } },
+          orderSide,
+          positionSide,
+          status: 'SKIPPED',
+          errorMessage: reason,
         })
         return { type: 'skip', reason, executionId: execution.id }
       }
@@ -726,20 +705,17 @@ export class SignalExecutorService implements OnModuleInit {
         reservedQuoteForExecution = new Decimal(0)
       }
 
-      const execution = await prisma.userSignalExecution.create({
-        data: {
-          signal: { connect: { id: signal.id } },
-          user: { connect: { id: account.userId } },
-          account: { connect: { id: account.id } },
-          orderSide,
-          positionSide,
-          reservedQuote: reservedQuoteForExecution.gt(0) ? reservedQuoteForExecution : undefined,
-          metadata: this.buildExecutionStageMetadata([
-            EXECUTION_STAGES[0],
-            EXECUTION_STAGES[1],
-          ]),
-        },
-        select: { id: true },
+      const execution = await this.executionRepository.create({
+        signal: { connect: { id: signal.id } },
+        user: { connect: { id: account.userId } },
+        account: { connect: { id: account.id } },
+        orderSide,
+        positionSide,
+        reservedQuote: reservedQuoteForExecution.gt(0) ? reservedQuoteForExecution : undefined,
+        metadata: this.buildExecutionStageMetadata([
+          EXECUTION_STAGES[0],
+          EXECUTION_STAGES[1],
+        ]),
       })
 
       return {
@@ -755,23 +731,7 @@ export class SignalExecutorService implements OnModuleInit {
   private async lockAccount(
     accountId: string,
   ): Promise<Pick<UserStrategyAccount, 'id' | 'userId' | 'baseCurrency' | 'balance'> | null> {
-    const rows = await this.txHost.tx.$queryRaw<
-      Array<{
-        id: string
-        userId: string
-        baseCurrency: string
-        balance: Decimal
-      }>
-    >`
-      SELECT
-        "id",
-        "user_id" AS "userId",
-        "base_currency" AS "baseCurrency",
-        "balance"
-      FROM "user_strategy_accounts"
-      WHERE "id" = ${accountId}
-      FOR UPDATE
-    `
+    const rows = await this.executorRepository.lockAccount(accountId)
     return rows[0] ?? null
   }
 

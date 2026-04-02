@@ -4,6 +4,7 @@ import type { SuperTest, Test as SupertestTest } from 'supertest'
 import { randomBytes } from 'node:crypto'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { createEnvAccessor } from '@/common/env/env.accessor'
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -172,7 +173,8 @@ export function buildApiUrl(endpoint: string): string {
 export async function createTestingApp(
   options?: CreateTestingAppOptions | any[],
 ): Promise<TestingAppContext> {
-  if (!process.env.APP_ENV || !['test', 'e2e'].includes(process.env.APP_ENV)) {
+  const appEnv = createEnvAccessor(process.env).raw('APP_ENV')
+  if (!appEnv || !['test', 'e2e'].includes(appEnv)) {
     console.warn('[E2E] 警告: 测试未在测试环境中运行，可能会影响生产数据库')
   }
 
@@ -181,7 +183,13 @@ export async function createTestingApp(
     imports: normalizedOptions.imports,
   })
     .overrideProvider(MarketDataIngestionService)
-    .useValue({ onModuleInit: () => {}, onModuleDestroy: () => {}, handleGapFill: () => {}, handleDynamicSymbolRefresh: () => {} })
+    .useValue({
+      onModuleInit: () => {},
+      onModuleDestroy: () => {},
+      handleGapFill: () => {},
+      handleDynamicSymbolRefresh: () => {},
+      ensureSymbolsSubscribed: async () => {},
+    })
 
   for (const override of normalizedOptions.providerOverrides ?? []) {
     moduleBuilder = moduleBuilder

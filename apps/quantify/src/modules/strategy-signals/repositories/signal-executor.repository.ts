@@ -1,4 +1,4 @@
-import type { SignalStatus, QuantifyInstrumentType as InstrumentType } from '@ai/shared'
+import type { PositionSide, SignalStatus, QuantifyInstrumentType as InstrumentType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -140,5 +140,37 @@ export class SignalExecutorRepository {
         autoStopReason: reason,
       },
     })
+  }
+
+  findOpenPositionForClose(accountId: string, symbol: string, positionSide: PositionSide) {
+    return this.txHost.tx.position.findFirst({
+      where: {
+        userStrategyAccountId: accountId,
+        symbol,
+        status: 'OPEN',
+        positionSide,
+      },
+      orderBy: { openedAt: 'desc' },
+    })
+  }
+
+  lockAccount(accountId: string) {
+    return this.txHost.tx.$queryRaw<
+      Array<{
+        id: string
+        userId: string
+        baseCurrency: string
+        balance: Prisma.Decimal
+      }>
+    >`
+      SELECT
+        "id",
+        "user_id" AS "userId",
+        "base_currency" AS "baseCurrency",
+        "balance"
+      FROM "user_strategy_accounts"
+      WHERE "id" = ${accountId}
+      FOR UPDATE
+    `
   }
 }

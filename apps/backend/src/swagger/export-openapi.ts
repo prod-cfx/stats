@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { BaseResponseDto } from '../common/dto/base.dto'
+import { defaultEnvAccessor } from '../common/env/env.accessor'
 import { AppModule } from '../modules/app.module'
 import { CryptoStockQuoteResponseDto } from '../modules/crypto-stock-quotes/dto/crypto-stock-quote.dto'
 
@@ -32,8 +33,9 @@ async function bootstrap() {
     }
   }
 
-  const workspaceRoot = process.env.DX_PROJECT_ROOT
-    ? resolve(process.env.DX_PROJECT_ROOT)
+  const projectRoot = defaultEnvAccessor.raw('DX_PROJECT_ROOT')
+  const workspaceRoot = projectRoot
+    ? resolve(projectRoot)
     : findWorkspaceRoot(process.cwd())
   const outputDir = join(workspaceRoot, 'dist', 'openapi')
   if (!existsSync(outputDir)) {

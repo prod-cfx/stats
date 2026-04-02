@@ -8,6 +8,7 @@ import type { PrismaService } from '@/prisma/prisma.service'
 import { PolymarketGammaClient } from '@/clients/polymarket/gamma-client'
 import { PolymarketMarketsJob } from '@/modules/data-sync/jobs/polymarket-markets.job'
 import { createTestingApp } from '../fixtures/fixtures'
+import { assertSafeE2eDatabase } from '../helpers/setup-e2e-env'
 
 describe('Polymarket markets job (E2E)', () => {
   let app: INestApplication
@@ -25,13 +26,7 @@ describe('Polymarket markets job (E2E)', () => {
     gammaClient = ctx.moduleFixture.get(PolymarketGammaClient)
 
     // 在清理数据前增加安全保护：仅允许在 e2e 测试数据库上执行
-    const appEnv = process.env.APP_ENV
-    const databaseUrl = process.env.DATABASE_URL ?? ''
-    if (appEnv !== 'e2e' || (!databaseUrl.includes('e2e') && !databaseUrl.includes('test'))) {
-      throw new Error(
-        `Unsafe database environment for E2E test: APP_ENV=${appEnv}, DATABASE_URL=${databaseUrl}`,
-      )
-    }
+    assertSafeE2eDatabase('Polymarket markets job (E2E)')
 
     // 仅清理本测试中会用到的测试数据，避免误删其他数据
     await prisma.$transaction([

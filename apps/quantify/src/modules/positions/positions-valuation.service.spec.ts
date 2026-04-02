@@ -5,57 +5,36 @@ import { PositionsValuationService } from './positions-valuation.service'
 
 describe('positionsValuationService', () => {
   it('updates raw-symbol open positions when quote uses canonical market suffix', async () => {
-    const tx = {
-      position: {
-        findMany: jest.fn().mockResolvedValue([{
-          id: 'pos-1',
-          userStrategyAccountId: 'acc-1',
-          symbol: 'BTCUSDT',
-          positionSide: PositionSide.LONG,
-          avgEntryPrice: new Prisma.Decimal('68000'),
-          quantity: new Prisma.Decimal('0.1'),
-          status: PositionStatus.OPEN,
-        }]),
-        update: jest.fn().mockResolvedValue(undefined),
-        aggregate: jest.fn().mockResolvedValue({
-          _sum: { unrealizedPnl: new Prisma.Decimal('50') },
-        }),
-      },
-      userStrategyAccount: {
-        findUnique: jest.fn().mockResolvedValue({ balance: new Prisma.Decimal('900') }),
-        update: jest.fn().mockResolvedValue(undefined),
-      },
+    const positionsRepository = {
+      findOpenPositionsBySymbols: jest.fn().mockResolvedValue([{
+        id: 'pos-1',
+        userStrategyAccountId: 'acc-1',
+        symbol: 'BTCUSDT',
+        positionSide: PositionSide.LONG,
+        avgEntryPrice: new Prisma.Decimal('68000'),
+        quantity: new Prisma.Decimal('0.1'),
+        status: PositionStatus.OPEN,
+      }]),
+      updatePositionUnrealizedPnl: jest.fn().mockResolvedValue(undefined),
+      aggregateOpenPositionUnrealizedPnl: jest.fn().mockResolvedValue(new Prisma.Decimal('50')),
+      findAccountBalance: jest.fn().mockResolvedValue(new Prisma.Decimal('900')),
+      updateAccountValuation: jest.fn().mockResolvedValue(undefined),
     }
 
     const txHost = {
-      tx,
       withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
     }
 
-    const service = new PositionsValuationService(txHost as any)
+    const service = new PositionsValuationService(txHost as any, positionsRepository as any)
 
     const result = await service.applyQuotes({
       quotes: [{ symbol: 'BTCUSDT:SPOT', price: '68500' }],
     })
 
     expect(result).toEqual({ updatedPositions: 1, updatedAccounts: 1 })
-    expect(tx.position.findMany).toHaveBeenCalledWith({
-      where: {
-        status: PositionStatus.OPEN,
-        symbol: { in: ['BTCUSDT:SPOT', 'BTCUSDT'] },
-      },
-    })
-    expect(tx.position.update).toHaveBeenCalledWith({
-      where: { id: 'pos-1' },
-      data: { unrealizedPnl: new Prisma.Decimal('50') },
-    })
-    expect(tx.userStrategyAccount.update).toHaveBeenCalledWith({
-      where: { id: 'acc-1' },
-      data: {
-        totalUnrealizedPnl: new Prisma.Decimal('50'),
-        equity: new Prisma.Decimal('950'),
-      },
-    })
+    expect(positionsRepository.findOpenPositionsBySymbols).toHaveBeenCalledWith(['BTCUSDT:SPOT', 'BTCUSDT'])
+    expect(positionsRepository.updatePositionUnrealizedPnl).toHaveBeenCalledWith('pos-1', new Prisma.Decimal('50'))
+    expect(positionsRepository.updateAccountValuation).toHaveBeenCalledWith('acc-1', new Prisma.Decimal('50'), new Prisma.Decimal('950'))
   })
 
   it('reacts to market quote events by delegating to quote valuation', async () => {
@@ -63,7 +42,7 @@ describe('positionsValuationService', () => {
       tx: {},
       withTransaction: jest.fn(),
     }
-    const service = new PositionsValuationService(txHost as any)
+    const service = new PositionsValuationService(txHost as any, {} as any)
     const applyQuotesSpy = jest.spyOn(service, 'applyQuotes').mockResolvedValue({
       updatedPositions: 1,
       updatedAccounts: 1,
@@ -95,7 +74,7 @@ describe('positionsValuationService', () => {
       tx: {},
       withTransaction: jest.fn(),
     }
-    const service = new PositionsValuationService(txHost as any)
+    const service = new PositionsValuationService(txHost as any, {} as any)
     const applyQuotesSpy = jest.spyOn(service, 'applyQuotes').mockResolvedValue({
       updatedPositions: 0,
       updatedAccounts: 0,

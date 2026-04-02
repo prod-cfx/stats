@@ -26,7 +26,7 @@ const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
 
 async function seedAiProviderKeys() {
-  const rawKey = process.env.UNIAPI_API_KEY
+  const rawKey = env.raw('UNIAPI_API_KEY')
   const apiKey = rawKey?.trim()
 
   // Skip provider seeding when the key is missing or still a placeholder.

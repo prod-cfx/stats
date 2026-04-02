@@ -1,4 +1,5 @@
 import { Client } from 'pg'
+import { createEnvAccessor } from '../src/common/env/env.accessor'
 import {
   normalizeBacktestCapabilityConfig,
   resolveConfiguredBacktestCapabilityConfig,
@@ -223,7 +224,7 @@ async function applyRepairStatements(connectionString: string, statements: strin
 async function main() {
   const args = new Set(process.argv.slice(2))
   const apply = args.has('--apply')
-  const connectionString = process.env.DATABASE_URL?.trim()
+  const connectionString = createEnvAccessor().raw('DATABASE_URL')?.trim()
 
   if (!connectionString) {
     console.error('[ERROR] DATABASE_URL is required')

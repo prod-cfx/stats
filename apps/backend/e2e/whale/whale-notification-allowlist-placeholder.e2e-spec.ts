@@ -6,6 +6,7 @@ import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-ale
 import { WhaleNotificationDeduplicatorService } from '@/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
 import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
+import { restoreE2eEnv, setE2eEnvValue, snapshotE2eEnv } from '../helpers/setup-e2e-env'
 
 type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
 
@@ -19,10 +20,10 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
   let whaleAlertService: WhaleAlertService
 
   const userId = 'e2e-allowlist-placeholder-user'
-  const originalAllowlist = process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS
+  const envSnapshot = snapshotE2eEnv(['WHALE_NOTIFICATION_ALLOWED_USER_IDS'])
 
   beforeAll(async () => {
-    process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = '__SET_IN_env.local__'
+    setE2eEnvValue('WHALE_NOTIFICATION_ALLOWED_USER_IDS', '__SET_IN_env.local__')
 
     const ctx = await createTestingApp({
       onBeforeInit: builder =>
@@ -92,11 +93,7 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
       await prisma.user.deleteMany({ where: { id: userId } })
     }
 
-    if (originalAllowlist === undefined) {
-      delete process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS
-    } else {
-      process.env.WHALE_NOTIFICATION_ALLOWED_USER_IDS = originalAllowlist
-    }
+    restoreE2eEnv(envSnapshot)
     if (app) await app.close()
   })
 

@@ -49,7 +49,6 @@ export class PositionsService {
     const executedAt = new Date(dto.executedAt)
 
     const trade = await this.txHost.withTransaction(async () => {
-      const tx = this.txHost.tx
       // 1. 校验账户与成交幂等
       await this.ensureAccountAndNoDuplicateTrade(dto)
 
@@ -85,24 +84,22 @@ export class PositionsService {
             existingPosition: lockedPosition,
           })
 
-      const tradeRecord = await tx.trade.create({
-        data: {
-          userStrategyAccountId: dto.userStrategyAccountId,
-          positionId: position!.id,
-          symbol: dto.symbol,
-          market: dto.market,
-          side: dto.side,
-          positionSide: dto.positionSide,
-          price,
-          quantity,
-          fee,
-          feeCurrency: dto.feeCurrency,
-          orderId: dto.orderId,
-          externalTradeId: dto.externalTradeId,
-          provider: dto.provider,
-          executedAt,
-          metadata: dto.metadata as Prisma.JsonValue | undefined,
-        },
+      const tradeRecord = await this.positionsRepository.createTrade({
+        userStrategyAccountId: dto.userStrategyAccountId,
+        positionId: position!.id,
+        symbol: dto.symbol,
+        market: dto.market,
+        side: dto.side,
+        positionSide: dto.positionSide,
+        price,
+        quantity,
+        fee,
+        feeCurrency: dto.feeCurrency,
+        orderId: dto.orderId,
+        externalTradeId: dto.externalTradeId,
+        provider: dto.provider,
+        executedAt,
+        metadata: dto.metadata as Prisma.JsonValue | undefined,
       })
 
       if (!settlementDelta.isZero()) {
@@ -148,22 +145,17 @@ export class PositionsService {
   }
 
   private async ensureAccountAndNoDuplicateTrade(dto: RecordTradeDto) {
-    const prisma = this.txHost.tx
-    const account = await prisma.userStrategyAccount.findUnique({
-      where: { id: dto.userStrategyAccountId },
-    })
+    const account = await this.positionsRepository.findAccountById(dto.userStrategyAccountId)
     if (!account) {
       throw new StrategyAccountNotFoundException({ accountId: dto.userStrategyAccountId })
     }
 
     if (!dto.externalTradeId) return
 
-    const duplicated = await prisma.trade.findFirst({
-      where: {
-        userStrategyAccountId: dto.userStrategyAccountId,
-        externalTradeId: dto.externalTradeId,
-      },
-    })
+    const duplicated = await this.positionsRepository.findTradeByExternalTradeId(
+      dto.userStrategyAccountId,
+      dto.externalTradeId,
+    )
     if (duplicated) {
       throw new TradeConflictException({ referenceId: dto.externalTradeId })
     }
@@ -174,32 +166,7 @@ export class PositionsService {
     normalizedSymbol: string,
     positionSide: PositionSide,
   ): Promise<Position | null> {
-    const lockedPositions = await this.txHost.tx.$queryRaw<Position[]>`
-      SELECT
-        "id",
-        "user_strategy_account_id" AS "userStrategyAccountId",
-        "symbol",
-        "position_side" AS "positionSide",
-        "leverage",
-        "quantity",
-        "avg_entry_price" AS "avgEntryPrice",
-        "realized_pnl" AS "realizedPnl",
-        "unrealized_pnl" AS "unrealizedPnl",
-        "status",
-        "opened_at" AS "openedAt",
-        "closed_at" AS "closedAt",
-        "exchange_id" AS "exchangeId",
-        "market_type" AS "marketType",
-        "metadata",
-        "created_at" AS "createdAt",
-        "updated_at" AS "updatedAt"
-      FROM "positions"
-      WHERE "user_strategy_account_id" = ${accountId}
-        AND "symbol" = ${normalizedSymbol}
-        AND "position_side" = ${positionSide}
-        AND "status" = ${PositionStatus.OPEN}
-      FOR UPDATE
-    `
+    const lockedPositions = await this.positionsRepository.lockOpenPosition(accountId, normalizedSymbol, positionSide)
     return lockedPositions[0] ?? null
   }
 
@@ -229,19 +196,17 @@ export class PositionsService {
       }
 
       try {
-        const created = await this.txHost.tx.position.create({
-          data: {
-            userStrategyAccountId: dto.userStrategyAccountId,
-            symbol: normalizedSymbol,
-            positionSide: dto.positionSide,
-            leverage,
-            quantity,
-            avgEntryPrice: price,
-            openedAt: executedAt,
-            exchangeId,
-            marketType,
-            metadata: dto.metadata as Prisma.JsonValue | undefined,
-          },
+        const created = await this.positionsRepository.createPosition({
+          userStrategyAccountId: dto.userStrategyAccountId,
+          symbol: normalizedSymbol,
+          positionSide: dto.positionSide,
+          leverage,
+          quantity,
+          avgEntryPrice: price,
+          openedAt: executedAt,
+          exchangeId,
+          marketType,
+          metadata: dto.metadata as Prisma.JsonValue | undefined,
         })
         return { position: created, realizedPnlDelta: new Decimal(0), settlementDelta: new Decimal(0) }
       }
@@ -277,17 +242,14 @@ export class PositionsService {
       marketType = marketType || mType || null
     }
     
-    const updated = await this.txHost.tx.position.update({
-      where: { id: existingPosition.id },
-      data: {
-        quantity: newQty,
-        avgEntryPrice: newAvg,
-        leverage: leverage ?? existingPosition.leverage,
-        exchangeId,
-        marketType,
-        metadata: params.dto.metadata ? (params.dto.metadata as Prisma.JsonValue) : existingPosition.metadata,
-        status: PositionStatus.OPEN,
-      },
+    const updated = await this.positionsRepository.updatePosition(existingPosition.id, {
+      quantity: newQty,
+      avgEntryPrice: newAvg,
+      leverage: leverage ?? existingPosition.leverage,
+      exchangeId,
+      marketType,
+      metadata: params.dto.metadata ? (params.dto.metadata as Prisma.JsonValue) : existingPosition.metadata,
+      status: PositionStatus.OPEN,
     })
 
     return { position: updated, realizedPnlDelta: new Decimal(0), settlementDelta: new Decimal(0) }
@@ -336,16 +298,13 @@ export class PositionsService {
       existingPosition.avgEntryPrice,
       quantity,
     )
-    const updated = await this.txHost.tx.position.update({
-      where: { id: existingPosition.id },
-      data: {
-        quantity: remainingQty,
-        realizedPnl: existingPosition.realizedPnl.add(realizedPnlDelta),
-        // 平仓后该部分的未实现盈亏应当归零
-        unrealizedPnl: isFullClose ? new Decimal(0) : existingPosition.unrealizedPnl,
-        status: isFullClose ? PositionStatus.CLOSED : PositionStatus.OPEN,
-        closedAt: isFullClose ? executedAt : existingPosition.closedAt,
-      },
+    const updated = await this.positionsRepository.updatePosition(existingPosition.id, {
+      quantity: remainingQty,
+      realizedPnl: existingPosition.realizedPnl.add(realizedPnlDelta),
+      // 平仓后该部分的未实现盈亏应当归零
+      unrealizedPnl: isFullClose ? new Decimal(0) : existingPosition.unrealizedPnl,
+      status: isFullClose ? PositionStatus.CLOSED : PositionStatus.OPEN,
+      closedAt: isFullClose ? executedAt : existingPosition.closedAt,
     })
 
     await this.recalculateUnrealizedAndEquity(dto.userStrategyAccountId)
@@ -354,23 +313,12 @@ export class PositionsService {
   }
 
   private async recalculateUnrealizedAndEquity(accountId: string): Promise<void> {
-    const tx = this.txHost.tx
     // 重新聚合该账户的未实现盈亏，确保 equity = balance + totalUnrealizedPnl 不依赖后续行情推送
-    const aggregate = await tx.position.aggregate({
-      where: { userStrategyAccountId: accountId, status: PositionStatus.OPEN },
-      _sum: { unrealizedPnl: true },
-    })
-    const totalUnrealized = aggregate._sum.unrealizedPnl ?? new Decimal(0)
+    const totalUnrealized = await this.positionsRepository.aggregateOpenPositionUnrealizedPnl(accountId) ?? new Decimal(0)
 
     // 🔒 并发安全：用数据库最新余额 + 聚合浮盈，避免覆盖其它事务（入金/出金/手续费）对 balance 的修改
     // 使用 $queryRaw 原子读 + 写，不依赖事务开头的快照 account.balance
-    await tx.$executeRaw`
-      UPDATE "user_strategy_accounts"
-      SET "total_unrealized_pnl" = ${totalUnrealized},
-          "equity" = "balance" + ${totalUnrealized},
-          "updated_at" = NOW()
-      WHERE "id" = ${accountId}
-    `
+    await this.positionsRepository.refreshAccountEquityFromBalance(accountId, totalUnrealized)
   }
 
   async listPositions(

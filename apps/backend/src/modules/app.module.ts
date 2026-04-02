@@ -65,8 +65,6 @@ const currentEnv = defaultEnvAccessor.appEnv()
       ignoreErrors: false,
     }),
     WinstonModule.forRootAsync({
-      // Nest 模块约定字段名为 useFactory，忽略 React hooks 相关 lint
-       
       useFactory: (env: EnvService) => {
         const config = resolveLoggerConfig()
         return {

@@ -67,6 +67,15 @@ export class SignalGeneratorRepository {
     })
   }
 
+  lockStrategyInstance(instanceId: string) {
+    return this.txHost.tx.$queryRaw`
+      SELECT "id"
+      FROM "strategy_instances"
+      WHERE "id" = ${instanceId}
+      FOR UPDATE
+    `
+  }
+
   async createSignalWithCooldownLock(params: {
     instanceId: string
     strategyId: string
@@ -101,6 +110,18 @@ export class SignalGeneratorRepository {
 
       const signal = await tx.tradingSignal.create({ data: params.data })
       return { created: true as const, signalId: signal.id }
+    })
+  }
+
+  findRecentSignalForCooldown(strategyId: string, symbolId: string, instanceId: string, cooldownSince: Date) {
+    return this.txHost.tx.tradingSignal.findFirst({
+      where: {
+        strategyId,
+        symbolId,
+        createdAt: { gte: cooldownSince },
+        OR: [{ strategyInstanceId: instanceId }, { strategyInstanceId: null }],
+      },
+      orderBy: { createdAt: 'desc' },
     })
   }
 

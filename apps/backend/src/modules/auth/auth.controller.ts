@@ -23,6 +23,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard'
 // eslint-disable-next-line ts/consistent-type-imports
 import { UserAuthService } from './services/user-auth.service'
 import { Transactional } from '@nestjs-cls/transactional'
+import { TransactionalWithAfterCommit } from '@/common/decorators/transactional-with-after-commit.decorator'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -143,7 +144,7 @@ export class AuthController {
 
   @Post('send-verification-code')
   @UseGuards(AuthRateLimitGuard)
-  @Transactional()
+  @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送验证码（注册/密码重置）' })
   @ApiBody({ type: SendVerificationCodeRequestDto })
@@ -153,7 +154,7 @@ export class AuthController {
 
   @Post('email/send-code')
   @UseGuards(AuthRateLimitGuard)
-  @Transactional()
+  @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '发送邮箱登录验证码' })
   @ApiBody({ type: SendEmailLoginCodeRequestDto })
@@ -222,7 +223,7 @@ export class AuthController {
 
   @Post('password-reset')
   @UseGuards(AuthRateLimitGuard)
-  @Transactional()
+  @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '申请重置密码' })
   @ApiBody({ type: PasswordResetRequestDto })
@@ -252,7 +253,7 @@ export class AuthController {
 
   @Post('resend-verification')
   @UseGuards(AuthRateLimitGuard)
-  @Transactional()
+  @TransactionalWithAfterCommit()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '重新发送邮箱验证码' })
   @ApiBody({ type: ResendVerificationRequestDto })

@@ -119,7 +119,15 @@ export class PolymarketClobClient {
     ws.on('message', handleMessage)
 
     ws.on('error', error => {
-      options.onError?.(error instanceof Error ? error : new Error(String(error)))
+      options.onError?.(
+        error instanceof Error
+          ? error
+          : new DomainException('polymarket.client_error', {
+              code: ErrorCode.POLYMARKET_CLIENT_ERROR,
+              status: HttpStatus.INTERNAL_SERVER_ERROR,
+              args: { reason: String(error) },
+            }),
+      )
     })
 
     ws.on('close', () => {

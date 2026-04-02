@@ -889,8 +889,12 @@ export class AccountStrategyViewService {
     } | null,
   ): number {
     const positionRealized = this.toFiniteNumber(positionFinancials?.totalRealizedPnl)
+    const accountRealized = this.toFiniteNumber(this.readRecord(account)?.totalRealizedPnl)
+    if (this.shouldPreferAccountAggregateField(account, positionFinancials, 'totalRealizedPnl')) {
+      return accountRealized ?? 0
+    }
     if (positionRealized !== null) return positionRealized
-    return this.toFiniteNumber(this.readRecord(account)?.totalRealizedPnl) ?? 0
+    return accountRealized ?? 0
   }
 
   private resolveAccountUnrealizedPnl(
@@ -902,8 +906,12 @@ export class AccountStrategyViewService {
     } | null,
   ): number {
     const positionUnrealized = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl)
+    const accountUnrealized = this.toFiniteNumber(this.readRecord(account)?.totalUnrealizedPnl)
+    if (this.shouldPreferAccountAggregateField(account, positionFinancials, 'totalUnrealizedPnl')) {
+      return accountUnrealized ?? 0
+    }
     if (positionUnrealized !== null) return positionUnrealized
-    return this.toFiniteNumber(this.readRecord(account)?.totalUnrealizedPnl) ?? 0
+    return accountUnrealized ?? 0
   }
 
   private resolveAccountEquity(
@@ -951,6 +959,32 @@ export class AccountStrategyViewService {
     }
 
     return this.toFiniteNumber(row.balance ?? row.equity)
+  }
+
+  private shouldPreferAccountAggregateField(
+    account: unknown,
+    positionFinancials: {
+      openCostBasis?: unknown
+      totalRealizedPnl?: unknown
+      totalUnrealizedPnl?: unknown
+    } | null,
+    field: 'totalRealizedPnl' | 'totalUnrealizedPnl',
+  ): boolean {
+    if (!positionFinancials) return false
+
+    const positionRealized = this.toFiniteNumber(positionFinancials.totalRealizedPnl)
+    const positionUnrealized = this.toFiniteNumber(positionFinancials.totalUnrealizedPnl)
+    const openCostBasis = this.toFiniteNumber(positionFinancials.openCostBasis)
+
+    if (positionRealized !== 0 || positionUnrealized !== 0 || openCostBasis !== 0) {
+      return false
+    }
+
+    const accountRow = this.readRecord(account)
+    if (!accountRow) return false
+
+    const accountValue = this.toFiniteNumber(accountRow[field])
+    return accountValue !== null && accountValue !== 0
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {

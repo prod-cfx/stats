@@ -207,4 +207,36 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(confirmButton?.disabled).toBe(true)
     expect(runButton?.disabled).toBe(false)
   })
+
+  it('enables backtest even when published response has null strategyInstanceId', async () => {
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'PUBLISHED',
+      strategyInstanceId: null,
+      scriptCode: 'return { ok: true }',
+      specDesc: {
+        entryRules: ['价格达到 66830 时买入'],
+        exitRules: ['价格上涨到 66890 时卖出'],
+        riskRules: { positionPct: 10, maxDrawdownPct: 20 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-graph"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
+    expect(runButton?.disabled).toBe(false)
+  })
 })

@@ -31,6 +31,17 @@ export class SignalExecutionRepository {
     return this.txHost.tx.userSignalExecution.create({ data })
   }
 
+  findBySignalAndAccount(signalId: string, userStrategyAccountId: string) {
+    return this.txHost.tx.userSignalExecution.findUnique({
+      where: {
+        signalId_userStrategyAccountId: {
+          signalId,
+          userStrategyAccountId,
+        },
+      },
+    })
+  }
+
   async markStage(id: string, stage: ExecutionStage, metadataPatch: Prisma.JsonObject = {}) {
     const existing = await this.txHost.tx.userSignalExecution.findUnique({
       where: { id },

@@ -157,7 +157,7 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
       { recordGeneration: jest.fn() } as any,
       {} as any,
       { isProd: jest.fn().mockReturnValue(false) } as any,
-      { withTransaction: jest.fn() } as any,
+      {} as any,
     )
 
     const loadMultiLegDataBatch = jest.spyOn(service as any, 'loadMultiLegDataBatch').mockResolvedValue({

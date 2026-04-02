@@ -11,6 +11,7 @@ import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
 import { HttpStatus, Injectable } from '@nestjs/common'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AiService } from '@/modules/ai/ai.service'
@@ -1018,7 +1019,7 @@ export class CodegenConversationService {
   }
 
   private readPositiveIntEnv(key: string, defaultValue: number): number {
-    const raw = process.env[key]
+    const raw = defaultEnvAccessor.raw(key)
     if (!raw) return defaultValue
     const value = Number.parseInt(raw, 10)
     if (!Number.isFinite(value) || value <= 0) return defaultValue
@@ -1033,7 +1034,7 @@ export class CodegenConversationService {
   }
 
   private readBooleanEnv(key: string, defaultValue: boolean): boolean {
-    const raw = process.env[key]
+    const raw = defaultEnvAccessor.raw(key)
     if (!raw) return defaultValue
     const normalized = raw.trim().toLowerCase()
     if (['1', 'true', 'yes', 'on'].includes(normalized)) return true

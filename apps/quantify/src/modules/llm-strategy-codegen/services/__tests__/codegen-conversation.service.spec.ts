@@ -3,15 +3,18 @@ import type { StartCodegenSessionDto } from '../../dto/start-codegen-session.dto
 import type { CodegenSessionsRepository } from '../../repositories/codegen-sessions.repository'
 import type { RecommendationIndexService } from '../recommendation-index.service'
 import type { AiService } from '@/modules/ai/ai.service'
+import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
-  const originalStrictEnabled = process.env.LLM_CODEGEN_STRICT_ENABLED
-  const originalStrictFallback = process.env.LLM_CODEGEN_STRICT_FALLBACK
-  const originalStrictUnsupportedTtl = process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS
+  const envSnapshot = snapshotProcessEnv([
+    'LLM_CODEGEN_STRICT_ENABLED',
+    'LLM_CODEGEN_STRICT_FALLBACK',
+    'LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS',
+  ])
 
   const mockRepo = {
     createSession: jest.fn(),
@@ -66,26 +69,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     })
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'false'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'true'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
   })
 
   afterAll(() => {
-    if (originalStrictEnabled === undefined) {
-      delete process.env.LLM_CODEGEN_STRICT_ENABLED
-    } else {
-      process.env.LLM_CODEGEN_STRICT_ENABLED = originalStrictEnabled
-    }
-    if (originalStrictFallback === undefined) {
-      delete process.env.LLM_CODEGEN_STRICT_FALLBACK
-    } else {
-      process.env.LLM_CODEGEN_STRICT_FALLBACK = originalStrictFallback
-    }
-    if (originalStrictUnsupportedTtl === undefined) {
-      delete process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS
-    } else {
-      process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = originalStrictUnsupportedTtl
-    }
+    restoreProcessEnv(envSnapshot)
   })
 
   it('starts in drafting and asks next key question from llm planner', async () => {
@@ -569,8 +558,8 @@ const strategy: StrategyAdapterV1 = {
   }, 15_000)
 
   it('uses strict json schema response in codegen and publishes when code is returned', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
 
     mockRepo.findById.mockResolvedValue({
       id: 's11',
@@ -616,8 +605,8 @@ const strategy: StrategyAdapterV1 = {
   })
 
   it('rejects when strict mode returns payload without code and fallback is disabled', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
 
     mockRepo.findById.mockResolvedValue({
       id: 's12',
@@ -661,8 +650,8 @@ const strategy: StrategyAdapterV1 = {
   })
 
   it('skips strict response_format for deepseek model and uses plain generation directly', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
 
     mockRepo.findById.mockResolvedValue({
       id: 's13',
@@ -705,8 +694,8 @@ const strategy: StrategyAdapterV1 = {
   })
 
   it('skips strict response_format for strategy-codegen provider when model is not explicitly provided', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
 
     mockRepo.findById.mockResolvedValue({
       id: 's14',
@@ -749,9 +738,9 @@ const strategy: StrategyAdapterV1 = {
   })
 
   it('does not disable strict for other models after one model is marked unsupported', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
-    process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = '600000'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS', '600000')
 
     mockRepo.findById
       .mockResolvedValueOnce({
@@ -827,9 +816,9 @@ const strategy: StrategyAdapterV1 = {
   })
 
   it('caches strict unsupported at provider level when model is omitted', async () => {
-    process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'
-    process.env.LLM_CODEGEN_STRICT_FALLBACK = 'false'
-    process.env.LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = '600000'
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS', '600000')
 
     mockRepo.findById
       .mockResolvedValueOnce({

@@ -6,9 +6,10 @@ import { HyperliquidDexPerpetualOrderbookWsAdapter } from '@/modules/data-sync/s
 import { HyperliquidDexSpotOrderbookWsAdapter } from '@/modules/data-sync/services/adapters/hyperliquid-dex-spot-orderbook-ws.adapter'
 import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Hyperliquid WS，避免在 CI 默认跑外网依赖
-const E2E_ENABLED = process.env.HYPERLIQUID_ORDERBOOK_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('HYPERLIQUID_ORDERBOOK_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Hyperliquid orderbook WS (E2E)', () => {

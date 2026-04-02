@@ -32,6 +32,16 @@ function resolveEnv(source?: EnvSource): EnvRecord {
   return {}
 }
 
+function writeProcessEnv(key: string, value: string | undefined): void {
+  const env = resolveEnv()
+  if (value === undefined) {
+    delete env[key]
+    return
+  }
+
+  env[key] = value
+}
+
 export function normalizeAppEnv(value: string | undefined): AppEnv {
   const normalized = (value || 'development').toLowerCase()
   switch (normalized) {
@@ -94,6 +104,31 @@ function getInt(key: string, defaultValue: number | undefined, env: EnvRecord): 
 export function parsePositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function setProcessEnvValue(key: string, value: string | undefined): void {
+  writeProcessEnv(key, value)
+}
+
+export function ensureProcessEnvDefaults(defaults: Record<string, string>): void {
+  const env = resolveEnv()
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!env[key]) {
+      env[key] = value
+    }
+  }
+}
+
+export function snapshotProcessEnv(keys: readonly string[]): EnvRecord {
+  const env = resolveEnv()
+
+  return Object.fromEntries(keys.map(key => [key, env[key]]))
+}
+
+export function restoreProcessEnv(snapshot: EnvRecord): void {
+  for (const [key, value] of Object.entries(snapshot)) {
+    writeProcessEnv(key, value)
+  }
 }
 
 export function createEnvAccessor(source?: EnvSource): EnvAccessor {

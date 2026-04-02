@@ -686,4 +686,144 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
     expect(detail.equitySeries.at(-1)).toEqual(expect.objectContaining({ value: 999.94735 }))
   })
+
+  it('preserves account pnl aggregates when position financials are empty snapshots', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-aggregate',
+        name: 'Aggregate strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'binance' },
+        strategyTemplateId: 'tpl-aggregate',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-aggregate',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10320.12,
+        equity: 10320.12,
+        totalRealizedPnl: 300,
+        totalUnrealizedPnl: 20.12,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-aggregate')
+
+    expect(detail.totalPnl).toBe(320.12)
+    expect(detail.accountOverview).toEqual({
+      initialBalance: 10000,
+      totalEquity: 10320.12,
+      availableBalance: 10300,
+      totalPnl: 320.12,
+      todayPnl: 20.12,
+      baseCurrency: 'USDT',
+    })
+    expect(detail.positionOverview).toEqual({
+      openPositionsCount: 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 300,
+      totalUnrealizedPnl: 20.12,
+    })
+  })
+
+  it('falls back per field when empty position financials only conflict with one account aggregate side', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-partial-aggregate',
+        name: 'Partial aggregate strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'binance' },
+        strategyTemplateId: 'tpl-partial-aggregate',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-partial-aggregate',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10300,
+        equity: 10300,
+        totalRealizedPnl: 300,
+        totalUnrealizedPnl: null,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-partial-aggregate')
+
+    expect(detail.totalPnl).toBe(300)
+    expect(detail.positionOverview).toEqual({
+      openPositionsCount: 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 300,
+      totalUnrealizedPnl: 0,
+    })
+  })
 })

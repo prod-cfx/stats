@@ -11,16 +11,16 @@
       "outputs": ["{workspaceRoot}/dist/admin-front"],
       "defaultConfiguration": "production",
       "options": {
-        "command": "next build",
+        "command": "NODE_ENV=production next build",
         "cwd": "apps/admin-front"
       },
       "configurations": {
         "development": {
-          "command": "next build",
+          "command": "NODE_ENV=production next build",
           "cwd": "apps/admin-front"
         },
         "production": {
-          "command": "next build",
+          "command": "NODE_ENV=production next build",
           "cwd": "apps/admin-front"
         }
       }

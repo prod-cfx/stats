@@ -387,8 +387,7 @@ function buildParamSchemaWithCapabilities(
 }
 
 function hasLatestPublishedCode(conversation: ConversationState | null | undefined): boolean {
-  if (!conversation?.publishedStrategyInstanceId) return false
-  return extractLatestScriptCode(conversation.messages).trim().length > 0
+  return extractLatestScriptCode(conversation?.messages ?? []).trim().length > 0
 }
 
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
@@ -1639,7 +1638,7 @@ export function AiQuantPageClient() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
         <ConversationSidebar
           items={conversations.map(x => ({ id: x.id, title: x.title, updatedAt: x.updatedAt }))}
           activeId={activeConversation.id}
@@ -1666,7 +1665,7 @@ export function AiQuantPageClient() {
           }}
         />
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <QuantChatPanel
             key={activeConversation.id}
             messages={activeConversation.messages}
