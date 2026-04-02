@@ -162,6 +162,9 @@ export class AccountStrategyViewService {
     const equityRows = account
       ? await this.repo.loadEquitySeries(account.id)
       : []
+    const latestDailySnapshot = account && typeof (this.repo as any).loadLatestDailySnapshot === 'function'
+      ? await (this.repo as any).loadLatestDailySnapshot(account.id)
+      : this.getLatestDailySnapshotFromSeries(equityRows)
     const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
       ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
       : []
@@ -179,7 +182,6 @@ export class AccountStrategyViewService {
       : { openCount: 0, closedCount: 0 }
     const hasLocalActivity = this.hasLocalStrategyActivity({
       account,
-      equityRows,
       tradeStats,
       positionOverview,
     })
@@ -267,7 +269,7 @@ export class AccountStrategyViewService {
     const todayPnl = account
       ? this.calculateTodayPnl(
           overviewTotalEquity,
-          equityRows,
+          shouldUseExchangeBalance ? null : latestDailySnapshot,
           resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
         )
@@ -866,22 +868,20 @@ export class AccountStrategyViewService {
 
   private calculateTodayPnl(
     currentEquity: number | null,
-    dailyRows: Array<{ date: Date; equityStart?: any }>,
+    latestDailySnapshot: { date: Date; equityStart?: any } | null,
     totalUnrealizedPnl: number,
     closedPositionRows: Array<{ closedAt: Date | null; realizedPnl: any }>,
   ): number {
-    const latestDailyStart = [...dailyRows]
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .map(row => this.toFiniteNumber(row.equityStart))
-      .filter((value): value is number => value !== null)
-      .at(-1)
+    const startUtcDay = this.startOfUtcDay(new Date())
+    const latestDailyStart = latestDailySnapshot
+      && this.startOfUtcDay(latestDailySnapshot.date).getTime() === startUtcDay.getTime()
+      ? this.toFiniteNumber(latestDailySnapshot.equityStart)
+      : null
 
-    if (currentEquity !== null && latestDailyStart !== undefined) {
+    if (currentEquity !== null && latestDailyStart !== null) {
       return Number((currentEquity - latestDailyStart).toFixed(8))
     }
 
-    const startUtcDay = new Date()
-    startUtcDay.setUTCHours(0, 0, 0, 0)
     const endUtcDay = new Date(startUtcDay.getTime() + 24 * 60 * 60 * 1000)
 
     const realizedToday = closedPositionRows
@@ -1066,7 +1066,6 @@ export class AccountStrategyViewService {
 
   private hasLocalStrategyActivity(input: {
     account: unknown
-    equityRows: Array<{ date: Date }>
     tradeStats: { tradeCount: number; closedCount: number; winningCount: number }
     positionOverview: { openCount: number; closedCount: number }
   }): boolean {
@@ -1077,9 +1076,17 @@ export class AccountStrategyViewService {
     return input.tradeStats.tradeCount > 0
       || input.positionOverview.openCount > 0
       || input.positionOverview.closedCount > 0
-      || input.equityRows.length > 0
       || realizedPnl !== 0
       || unrealizedPnl !== 0
+  }
+
+  private getLatestDailySnapshotFromSeries(
+    dailyRows: Array<{ date: Date; equityStart?: any }>,
+  ): { date: Date; equityStart?: any } | null {
+    const rows = dailyRows
+      .filter(row => row.date instanceof Date && Number.isFinite(row.date.getTime()))
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+    return rows[0] ?? null
   }
 
   private isDefaultSeedAccount(account: unknown): boolean {
@@ -1169,18 +1176,13 @@ export class AccountStrategyViewService {
         total: preferred.total,
       }
     }
+    return null
+  }
 
-    const richest = [...balances]
-      .filter(balance => Number.isFinite(balance.total) && balance.total > 0)
-      .sort((a, b) => b.total - a.total)[0]
-
-    if (!richest) return null
-
-    return {
-      asset: richest.asset,
-      free: richest.free,
-      total: richest.total,
-    }
+  private startOfUtcDay(date: Date): Date {
+    const start = new Date(date)
+    start.setUTCHours(0, 0, 0, 0)
+    return start
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {

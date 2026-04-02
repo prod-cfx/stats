@@ -592,6 +592,14 @@ export class AccountStrategyViewRepository {
     })
   }
 
+  async loadLatestDailySnapshot(accountId: string) {
+    const client = this.txHost.tx
+    return client.strategyPnlDaily.findFirst({
+      where: { userStrategyAccountId: accountId },
+      orderBy: { date: 'desc' },
+    })
+  }
+
   async loadTradeStats(accountId: string) {
     const client = this.txHost.tx
     const [tradeCount, closedCount, winningCount] = await Promise.all([

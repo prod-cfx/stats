@@ -847,6 +847,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
   })
 
   it('derives today pnl from the latest daily equity start when available', async () => {
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-today',
@@ -873,11 +875,16 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       }),
       loadEquitySeries: jest.fn().mockResolvedValue([
         {
-          date: new Date('2026-03-20T00:00:00.000Z'),
+          date: todayStart,
           equityStart: 10000,
           equityEnd: 9450,
         },
       ]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue({
+        date: todayStart,
+        equityStart: 10000,
+        equityEnd: 9450,
+      }),
       loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
       loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
@@ -977,5 +984,175 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       totalRealizedPnl: 300,
       totalUnrealizedPnl: 0,
     })
+  })
+
+  it('still prefers exchange balances when only flat daily snapshots exist locally', async () => {
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-exchange-flat-daily',
+        name: 'Exchange-first strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'okx' },
+        strategyTemplateId: 'tpl-exchange-flat-daily',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          exchangeAccount: { id: 'exchange-account-1', name: 'OKX 模拟盘', exchangeId: 'okx' },
+        }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-exchange-flat-daily',
+        baseCurrency: 'USDT',
+        initialBalance: 1000,
+        balance: 1000,
+        equity: 1000,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([
+        {
+          date: todayStart,
+          equityStart: 1000,
+          equityEnd: 1000,
+          realizedPnl: 0,
+          unrealizedPnl: 0,
+        },
+      ]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue({
+        date: todayStart,
+        equityStart: 1000,
+        equityEnd: 1000,
+      }),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 58000, locked: 2000, total: 60000 },
+      ]),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      tradingService as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-exchange-flat-daily')
+
+    expect(detail.accountOverview).toEqual({
+      initialBalance: 60000,
+      totalEquity: 60000,
+      availableBalance: 58000,
+      totalPnl: 0,
+      todayPnl: 0,
+      baseCurrency: 'USDT',
+    })
+  })
+
+  it('falls back to intraday realized plus unrealized pnl when the latest daily snapshot is stale', async () => {
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-stale-daily',
+        name: 'Stale daily pnl strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'binance' },
+        strategyTemplateId: 'tpl-stale-daily',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-stale-daily',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10300,
+        equity: 10320.12,
+        totalRealizedPnl: 300,
+        totalUnrealizedPnl: 20.12,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([
+        {
+          date: yesterdayStart,
+          equityStart: 10000,
+          equityEnd: 10300,
+        },
+      ]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue({
+        date: yesterdayStart,
+        equityStart: 10000,
+        equityEnd: 10300,
+      }),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 20.12,
+        totalRealizedPnl: 300,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-stale-daily')
+
+    expect(detail.todayPnl).toBe(20.12)
+    expect(detail.accountOverview?.todayPnl).toBe(20.12)
   })
 })

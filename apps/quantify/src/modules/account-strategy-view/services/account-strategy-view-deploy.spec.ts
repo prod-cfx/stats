@@ -151,4 +151,54 @@ describe('accountStrategyViewService.deployStrategy', () => {
       accountBalanceQuote: 58000,
     }))
   })
+
+  it('ignores exchange balance snapshots when the preferred quote asset is unavailable', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = {
+      ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'BTC', free: 0.8, locked: 0, total: 0.8 },
+      ]),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      tradingService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      deployRequestId: 'deploy-req-missing-quote-asset',
+      exchangeAccountId: 'exchange-account-1',
+      strategyInstanceId: 'inst-draft-1',
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.not.objectContaining({
+      initialBalanceQuote: expect.anything(),
+      accountBalanceQuote: expect.anything(),
+    }))
+  })
 })
