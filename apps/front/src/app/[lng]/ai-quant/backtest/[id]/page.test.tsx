@@ -13,6 +13,7 @@ const mockBacktestReportClient = jest.fn(
     symbol,
     rangeDisplay,
     metrics,
+    partialCoverageNotice,
   }: {
     symbol: string
     rangeDisplay: string
@@ -22,11 +23,16 @@ const mockBacktestReportClient = jest.fn(
       winRatePct: number
       tradeCount: number
     } | null
+    partialCoverageNotice?: {
+      requestedRange: string
+      appliedRange: string
+    } | null
   }) => (
     <section>
       <div>{symbol}</div>
       <div>{rangeDisplay}</div>
       <div>{metrics ? `${metrics.winRatePct}%` : '--'}</div>
+      <div>{partialCoverageNotice?.appliedRange ?? 'full-range'}</div>
     </section>
   ),
 )
@@ -168,6 +174,51 @@ describe('AiQuantBacktestDetailPage', () => {
       },
     })
     expect(props).not.toHaveProperty('report')
+  })
+
+  it('passes partial coverage notice when the server marks the backtest as partial', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      id: 'backtest-3003',
+      status: 'succeeded',
+      createdAt: '2026-04-02T00:00:00.000Z',
+      inputSummary: {
+        isPartial: true,
+        requestedRange: {
+          fromTs: Date.parse('2026-03-03T10:30:00.000Z'),
+          toTs: Date.parse('2026-04-02T10:30:00.000Z'),
+        },
+        appliedRange: {
+          fromTs: Date.parse('2026-03-03T10:45:00.000Z'),
+          toTs: Date.parse('2026-04-02T10:15:00.000Z'),
+        },
+      },
+      resultSummary: {
+        netProfit: 12,
+        netProfitPct: 0.12,
+        maxDrawdownPct: 0.45,
+        winRate: 1,
+        profitFactor: 1.4,
+        totalTrades: 3,
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'zh', id: 'backtest-3003' },
+      searchParams: {
+        symbol: 'BTCUSDT',
+      },
+    })
+
+    renderToStaticMarkup(element)
+
+    const props = mockBacktestReportClient.mock.calls[0]?.[0] as Record<string, unknown>
+
+    expect(props).toMatchObject({
+      partialCoverageNotice: {
+        requestedRange: '2026-03-03 10:30 UTC ~ 2026-04-02 10:30 UTC',
+        appliedRange: '2026-03-03 10:45 UTC ~ 2026-04-02 10:15 UTC',
+      },
+    })
   })
 
   it('starts resolving params and searchParams together', async () => {

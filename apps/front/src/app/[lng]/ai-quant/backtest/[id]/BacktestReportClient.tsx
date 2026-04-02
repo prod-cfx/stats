@@ -30,6 +30,10 @@ interface BacktestReportProps {
   rangeDisplay: string
   metrics: BacktestReportMetrics | null
   report?: LiveBacktestReportInput | null
+  partialCoverageNotice?: {
+    requestedRange: string
+    appliedRange: string
+  } | null
 }
 
 type DetailedReportState = 'idle' | 'loading' | 'ready' | 'error'
@@ -476,6 +480,7 @@ export function BacktestReportClient({
   rangeDisplay,
   metrics,
   report = null,
+  partialCoverageNotice = null,
 }: BacktestReportProps) {
   const [detailedReport, setDetailedReport] = useState<LiveBacktestReportInput | null>(report)
   const [detailedReportState, setDetailedReportState] = useState<DetailedReportState>(() => {
@@ -582,6 +587,26 @@ export function BacktestReportClient({
           {lng === 'en' ? 'Back to AI Quant' : '返回 AI量化'}
         </Link>
       </div>
+
+      {partialCoverageNotice && (
+        <div className="rounded-[16px] border border-[#F5A623]/30 bg-[#F5A623]/8 p-4 text-sm text-[color:var(--cf-text)]">
+          <p className="font-medium text-[color:var(--cf-text-strong)]">
+            {lng === 'en'
+              ? 'This backtest ran on partially covered market data.'
+              : '本次回测使用了部分覆盖的市场数据。'}
+          </p>
+          <p className="mt-2 text-[color:var(--cf-muted)]">
+            {lng === 'en'
+              ? `Requested range: ${partialCoverageNotice.requestedRange}`
+              : `请求区间：${partialCoverageNotice.requestedRange}`}
+          </p>
+          <p className="mt-1 text-[color:var(--cf-muted)]">
+            {lng === 'en'
+              ? `Applied range: ${partialCoverageNotice.appliedRange}`
+              : `实际执行区间：${partialCoverageNotice.appliedRange}`}
+          </p>
+        </div>
+      )}
 
       {/* 1. 策略结论区 */}
       <StrategyConclusionCard status={status} summary={summary} onDeploy={handleDeploy} lng={lng} />

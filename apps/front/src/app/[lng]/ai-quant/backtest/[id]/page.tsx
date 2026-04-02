@@ -4,6 +4,58 @@ import { Navbar } from '@/components/layout/Navbar'
 import { fetchBacktestJobServer } from '@/lib/server-api'
 import { BacktestReportClient } from './BacktestReportClient'
 
+interface CoverageRange {
+  fromTs: number
+  toTs: number
+}
+
+function isCoverageRange(value: unknown): value is CoverageRange {
+  return typeof value === 'object'
+    && value !== null
+    && Number.isFinite((value as CoverageRange).fromTs)
+    && Number.isFinite((value as CoverageRange).toTs)
+}
+
+function formatCoverageTimestamp(ts: number): string {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) {
+    return '--'
+  }
+  return `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 16)} UTC`
+}
+
+function formatCoverageRange(range: CoverageRange): string {
+  return `${formatCoverageTimestamp(range.fromTs)} ~ ${formatCoverageTimestamp(range.toTs)}`
+}
+
+function resolvePartialCoverageNotice(inputSummary: unknown): {
+  requestedRange: string
+  appliedRange: string
+} | null {
+  if (typeof inputSummary !== 'object' || inputSummary === null) {
+    return null
+  }
+
+  const candidate = inputSummary as {
+    isPartial?: unknown
+    requestedRange?: unknown
+    appliedRange?: unknown
+  }
+
+  if (candidate.isPartial !== true) {
+    return null
+  }
+
+  if (!isCoverageRange(candidate.requestedRange) || !isCoverageRange(candidate.appliedRange)) {
+    return null
+  }
+
+  return {
+    requestedRange: formatCoverageRange(candidate.requestedRange),
+    appliedRange: formatCoverageRange(candidate.appliedRange),
+  }
+}
+
 export default async function AiQuantBacktestDetailPage({
   params,
   searchParams,
@@ -28,6 +80,7 @@ export default async function AiQuantBacktestDetailPage({
   const rangeDisplay = formatBacktestRange(startAt, endAt)
 
   const job = await fetchBacktestJobServer(resolved.id)
+  const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
   const metrics = job?.resultSummary
     ? {
         maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
@@ -52,6 +105,7 @@ export default async function AiQuantBacktestDetailPage({
           symbol={symbol}
           rangeDisplay={rangeDisplay}
           metrics={metrics}
+          partialCoverageNotice={partialCoverageNotice}
         />
       </main>
       <Footer />
