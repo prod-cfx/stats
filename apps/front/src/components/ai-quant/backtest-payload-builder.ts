@@ -8,7 +8,6 @@ export type BacktestPayloadBuilderErrorCode =
   | 'missing_range'
   | 'start_after_end'
   | 'range_too_large'
-  | 'symbol_not_allowed'
   | 'timeframe_not_allowed'
 
 export class BacktestPayloadBuilderError extends Error {
@@ -49,9 +48,6 @@ export function buildBacktestPayload(
   const symbol = input.symbol.trim()
   if (!symbol) {
     throw new BacktestPayloadBuilderError('missing_symbol')
-  }
-  if (!input.capabilities.allowedSymbols.includes(symbol)) {
-    throw new BacktestPayloadBuilderError('symbol_not_allowed')
   }
 
   const baseTimeframe = input.baseTimeframe.trim()

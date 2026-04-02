@@ -130,12 +130,16 @@ describe('backtest-payload-builder', () => {
     }, 'missing_script_code')
   })
 
-  it('throws when symbol is not allowed by capability constraints', () => {
-    expectBuildErrorCode(() => {
-      buildBacktestPayload(createInput({
-        symbol: 'DOGEUSDT',
-      }), now)
-    }, 'symbol_not_allowed')
+  it('keeps strategy symbol even when capability symbols are narrower', () => {
+    const payload = buildBacktestPayload(createInput({
+      symbol: 'ETHUSDC',
+      capabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m', '1h'],
+      },
+    }), now)
+
+    expect(payload.symbols).toEqual(['ETHUSDC'])
   })
 
   it('throws when baseTimeframe is not allowed by capability constraints', () => {

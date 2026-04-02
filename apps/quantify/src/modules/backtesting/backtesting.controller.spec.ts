@@ -7,6 +7,7 @@ import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
 jest.mock('@nestjs-cls/transactional', () => ({
   Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,
@@ -25,6 +26,9 @@ jest.mock('./services/backtest-caller-identity.service', () => ({
 }))
 jest.mock('./services/backtest-capabilities.service', () => ({
   BacktestCapabilitiesService: class {},
+}))
+jest.mock('./services/backtest-symbol-support.service', () => ({
+  BacktestSymbolSupportService: class {},
 }))
 jest.mock('@/common/utils/prisma-enum-mappers', () => ({
   mapTimeframe: (value: string) => value,
@@ -74,6 +78,10 @@ describe('backtestingController', () => {
           provide: BacktestCapabilitiesService,
           useValue: { getCapabilities: jest.fn() },
         },
+        {
+          provide: BacktestSymbolSupportService,
+          useValue: { checkSymbolSupport: jest.fn() },
+        },
       ],
     }).compile()
 
@@ -83,6 +91,7 @@ describe('backtestingController', () => {
     expect(typeof c.getJob).toBe('function')
     expect(typeof c.getJobResult).toBe('function')
     expect(typeof c.getCapabilities).toBe('function')
+    expect(typeof c.checkSymbolSupport).toBe('function')
   })
 
   it('adapts script strategy before delegating to runner and jobs service', async () => {
@@ -97,6 +106,9 @@ describe('backtestingController', () => {
         allowedBaseTimeframes: ['15m'],
       }),
     }
+    const symbolSupport = {
+      checkSymbolSupport: jest.fn().mockResolvedValue({ status: 'supported' }),
+    }
 
     const mod = await Test.createTestingModule({
       controllers: [BacktestingController],
@@ -105,6 +117,7 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
         { provide: BacktestStrategyAdapterService, useValue: adapter },
       ],
     }).compile()
@@ -127,12 +140,14 @@ describe('backtestingController', () => {
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
     await c.getCapabilities('req-1')
+    await c.checkSymbolSupport('Bearer token', { exchange: 'okx', symbol: 'ETHUSDC' })
 
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(4)
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(2, 'Bearer token')
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(3, 'Bearer token')
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(4, 'Bearer token')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(5, 'Bearer token')
     expect(adapter.build).toHaveBeenCalledTimes(2)
     expect(adapter.build).toHaveBeenCalledWith(dto.strategy)
     expect(runner.run).toHaveBeenCalledWith({ ...dto, strategy: adapted })
@@ -141,6 +156,7 @@ describe('backtestingController', () => {
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
     expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
+    expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith('okx', 'ETHUSDC')
   })
 
   it('maps capability upstream error to service unavailable domain exception', async () => {
@@ -151,6 +167,9 @@ describe('backtestingController', () => {
     const capabilities = {
       getCapabilities: jest.fn().mockRejectedValue(new Error('db down')),
     }
+    const symbolSupport = {
+      checkSymbolSupport: jest.fn(),
+    }
 
     const mod = await Test.createTestingModule({
       controllers: [BacktestingController],
@@ -159,6 +178,7 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
         { provide: BacktestStrategyAdapterService, useValue: adapter },
       ],
     }).compile()

@@ -165,6 +165,17 @@ export class MarketDataRepository {
     return this.txHost.tx.symbol.findUnique({ where: { code } })
   }
 
+  async findActiveSymbolByExchangeAndCodes(exchange: string, codes: string[]): Promise<PrismaSymbol | null> {
+    return this.txHost.tx.symbol.findFirst({
+      where: {
+        exchange,
+        status: PrismaSymbolStatus.ACTIVE,
+        code: { in: codes },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+  }
+
   async updateSymbol(code: string, data: Prisma.SymbolUpdateInput): Promise<PrismaSymbol> {
     return this.txHost.tx.symbol.update({ where: { code }, data })
   }

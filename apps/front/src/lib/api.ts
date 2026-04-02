@@ -43,6 +43,7 @@ const IS_NON_PROD =
   process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_APP_ENV !== 'production'
 const ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED =
   IS_NON_PROD && process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
+const BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS = 12_000
 
 function getHttpStatusFromError(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.statusCode === 'number') {
@@ -335,6 +336,102 @@ async function apiCall<T>(operation: () => Promise<T>, context: string): Promise
 
     throw new ApiError('未知错误', 'UNKNOWN_ERROR')
   }
+}
+
+interface BacktestSymbolSupportCheckInput {
+  exchange: string
+  symbol: string
+}
+
+interface BacktestSymbolSupportCheckPayload {
+  status: string
+}
+
+function extractAiQuantErrorMessage(payload: unknown, fallback: string): string {
+  const meta = parseAiQuantErrorMeta(payload)
+  return meta.message ?? fallback
+}
+
+function extractAiQuantErrorCode(payload: unknown): string {
+  const meta = parseAiQuantErrorMeta(payload)
+  return meta.code ?? 'API_ERROR'
+}
+
+async function requestBacktestingJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const timeoutController = new AbortController()
+  let timedOut = false
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true
+    timeoutController.abort()
+  }, BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS)
+
+  const upstreamSignal = init?.signal
+  const abortFromUpstream = () => timeoutController.abort()
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      timeoutController.abort()
+    } else {
+      upstreamSignal.addEventListener('abort', abortFromUpstream)
+    }
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...requireAuthHeaders(),
+        ...(init?.headers ?? {}),
+      },
+      cache: 'no-store',
+      signal: timeoutController.signal,
+    })
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError('Request timeout', 'API_TIMEOUT', 408, {
+        path,
+        timeoutMs: BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS,
+      })
+    }
+    if (error instanceof ApiError) {
+      throw error
+    }
+    const message = error instanceof Error && error.message.trim() ? error.message : 'Request failed'
+    throw new ApiError(message, 'API_ERROR')
+  } finally {
+    globalThis.clearTimeout(timeout)
+    if (upstreamSignal) {
+      upstreamSignal.removeEventListener('abort', abortFromUpstream)
+    }
+  }
+
+  let payload: unknown = null
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok) {
+    const message = extractAiQuantErrorMessage(payload, response.statusText || 'Request failed')
+    throw new ApiError(message, extractAiQuantErrorCode(payload), response.status, payload)
+  }
+
+  return unwrapApiResponse(payload as T | { data?: T; message?: string }) as T
+}
+
+export async function postBacktestSymbolSupportCheck(
+  input: BacktestSymbolSupportCheckInput,
+): Promise<BacktestSymbolSupportCheckPayload> {
+  return apiCall(
+    () =>
+      requestBacktestingJson<BacktestSymbolSupportCheckPayload>('/backtesting/symbols/check', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    'CHECK_BACKTEST_SYMBOL_SUPPORT',
+  )
 }
 
 // ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====

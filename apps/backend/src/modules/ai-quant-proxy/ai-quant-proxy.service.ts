@@ -239,6 +239,12 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
+  async checkBacktestSymbolSupport(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
+    return this.quantifyClient.post('/backtesting/symbols/check', body, {
+      headers: this.proxyHeaders(authorization, requestId),
+    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
+  }
+
   async getBacktestJob(authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
       headers: this.proxyHeaders(authorization, requestId),

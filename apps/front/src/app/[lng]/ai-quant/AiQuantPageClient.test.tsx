@@ -53,6 +53,10 @@ jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
   LogicGraphPreview: () => null,
 }))
 
+jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
+  checkBacktestSymbolSupport: jest.fn(async () => ({ status: 'supported' })),
+}))
+
 jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
   QuantChatPanel: ({
     messages,

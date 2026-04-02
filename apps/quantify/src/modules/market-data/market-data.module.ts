@@ -15,6 +15,7 @@ import { MarketDataReadGateway } from './services/market-data-read.gateway'
 import { MarketDataStreamService } from './services/market-data-stream.service'
 import { MarketDataRepository } from './services/market-data.repository'
 import { MarketDataService } from './services/market-data.service'
+import { MarketSymbolCatalogService } from './services/market-symbol-catalog.service'
 
 @Module({
   imports: [ConfigModule.forFeature(marketDataConfig), HttpModule, IndicatorsModule],
@@ -25,6 +26,7 @@ import { MarketDataService } from './services/market-data.service'
     MarketDataReadGateway,
     MarketDataHealthService,
     MarketDataIngestionService,
+    MarketSymbolCatalogService,
     MarketDataStreamService,
     BinanceMarketDataProvider,
     OkxMarketDataProvider,
@@ -46,6 +48,15 @@ import { MarketDataService } from './services/market-data.service'
       },
     },
   ],
-  exports: [MarketDataService, MarketDataReadGateway, MarketDataHealthService, MarketDataIngestionService],
+  exports: [
+    MarketDataService,
+    MarketDataReadGateway,
+    MarketDataHealthService,
+    MarketDataIngestionService,
+    MarketSymbolCatalogService,
+    BinanceMarketDataProvider,
+    OkxMarketDataProvider,
+    HyperliquidMarketDataProvider,
+  ],
 })
 export class MarketDataModule {}

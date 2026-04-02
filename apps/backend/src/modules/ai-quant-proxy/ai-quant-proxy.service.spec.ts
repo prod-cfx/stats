@@ -340,6 +340,23 @@ describe('aiQuantProxyService', () => {
     })
   })
 
+  it('proxies backtesting symbol support check', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post.mockResolvedValue({ status: 'supported' })
+
+    await expect(service.checkBacktestSymbolSupport('Bearer token-1', {
+      exchange: 'okx',
+      symbol: 'ETHUSDC',
+    })).resolves.toEqual({ status: 'supported' })
+
+    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/symbols/check', {
+      exchange: 'okx',
+      symbol: 'ETHUSDC',
+    }, {
+      headers: { authorization: 'Bearer token-1' },
+    })
+  })
+
   it('forwards x-request-id header for backtesting jobs endpoints', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })
@@ -356,6 +373,23 @@ describe('aiQuantProxyService', () => {
       headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
     expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
+      headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
+    })
+  })
+
+  it('forwards x-request-id header for backtesting symbol support check', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.post.mockResolvedValue({ status: 'supported' })
+
+    await service.checkBacktestSymbolSupport('Bearer token-1', {
+      exchange: 'okx',
+      symbol: 'ETHUSDC',
+    }, 'req-1')
+
+    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/symbols/check', {
+      exchange: 'okx',
+      symbol: 'ETHUSDC',
+    }, {
       headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
