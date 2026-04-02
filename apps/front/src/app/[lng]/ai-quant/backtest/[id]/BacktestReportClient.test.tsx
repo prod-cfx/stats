@@ -14,6 +14,13 @@ jest.mock('next/link', () => ({
   ),
 }))
 
+jest.mock('next/dynamic', () => ({
+  __esModule: true,
+  default: jest.fn(() => function MockDynamicEquityChart() {
+    return <div data-testid="dynamic-equity-chart">dynamic-equity-chart</div>
+  }),
+}))
+
 jest.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ComposedChart: () => <div />,
@@ -32,6 +39,7 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 describe('BacktestReportClient', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
+  let mockDynamic: jest.Mock
 
   beforeEach(() => {
     ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -40,6 +48,7 @@ describe('BacktestReportClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     mockGetBacktestJobResult.mockReset()
+    mockDynamic = jest.requireMock('next/dynamic').default as jest.Mock
   })
 
   afterEach(async () => {
@@ -100,5 +109,42 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('交易明细')
     expect(container.textContent).toContain('2026-03-02 12:00')
     expect(container.textContent).not.toContain('回测结果暂不可用')
+  })
+
+  it('loads the equity chart through a dynamic boundary when report data is available', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="zh"
+          id="btjob-2"
+          symbol="BTCUSDT"
+          rangeDisplay="2026-03-01 ~ 2026-03-02"
+          metrics={{
+            maxDrawdownPct: 2.4,
+            totalReturnPct: 3.2,
+            winRatePct: 50,
+            tradeCount: 1,
+          }}
+          report={{
+            equityCurve: [
+              { ts: Date.parse('2026-03-01T00:00:00.000Z'), equity: 10000 },
+              { ts: Date.parse('2026-03-02T00:00:00.000Z'), equity: 10320 },
+            ],
+            trades: [
+              {
+                id: 'trade-1',
+                side: 'LONG',
+                exitTs: Date.parse('2026-03-02T12:00:00.000Z'),
+                exitPrice: 103.2,
+                returnPct: 3.2,
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    expect(mockDynamic).toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="dynamic-equity-chart"]')).not.toBeNull()
   })
 })
