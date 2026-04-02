@@ -9,6 +9,14 @@ function readFrontSource(relativePath: string) {
 }
 
 describe('issue #618 chart bundle guards', () => {
+  it('exposes the minimal echarts runtime API required by echarts-for-react', () => {
+    const echartsRuntime = readFrontSource('components/charts/echarts-runtime.ts')
+
+    expect(echartsRuntime).toContain('init')
+    expect(echartsRuntime).toContain('getInstanceByDom')
+    expect(echartsRuntime).toContain('dispose')
+  })
+
   it('uses modular echarts imports instead of the full library entrypoint', () => {
     const liquidationMapChart = readFrontSource(
       'components/liquidation-map/LiquidationMapChart.tsx',

@@ -15,7 +15,15 @@ import {
   MarkLineComponent,
   TooltipComponent,
 } from 'echarts/components'
-import { graphic, init, use as registerEChartsModules } from 'echarts/core'
+import {
+  connect,
+  disconnect,
+  dispose,
+  graphic,
+  getInstanceByDom,
+  init,
+  use as registerEChartsModules,
+} from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 
 registerEChartsModules([
@@ -31,7 +39,11 @@ registerEChartsModules([
 ])
 
 export const echarts = {
+  connect,
+  disconnect,
+  dispose,
   graphic,
+  getInstanceByDom,
   init,
 }
 
