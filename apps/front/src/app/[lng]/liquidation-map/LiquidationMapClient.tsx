@@ -1,12 +1,20 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import React, { useEffect, useState } from 'react'
-import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { LiquidationMapHeader } from '@/components/liquidation-map/LiquidationMapHeader'
 import {
   generateLiquidationMapMockData,
   liquidationSymbolPrices,
 } from '@/lib/liquidation-map/mock-liquidation-map'
+
+const LiquidationMapChart = dynamic(
+  () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[600px] w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+  },
+)
 
 export function LiquidationMapClient() {
   const [symbol, setSymbol] = useState('BTC')
@@ -46,5 +54,4 @@ export function LiquidationMapClient() {
     </div>
   )
 }
-
 

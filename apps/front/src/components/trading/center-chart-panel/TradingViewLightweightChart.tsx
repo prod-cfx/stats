@@ -4,13 +4,18 @@ import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
 import { AreaSeries, CandlestickSeries, ColorType, createChart, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
+import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { createLightweightChartAdapter } from '@/components/trading/chart-adapter/lightweight-chart-adapter'
 import { generateLiquidationMapMockData } from '@/lib/liquidation-map/mock-liquidation-map'
 import { getMockBasePrice, getMockVolatility } from '@/lib/mock/market'
+
+const LiquidationMapChart = dynamic(
+  () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
+  { ssr: false, loading: () => null },
+)
 
 // ---- Helper Components ----
 

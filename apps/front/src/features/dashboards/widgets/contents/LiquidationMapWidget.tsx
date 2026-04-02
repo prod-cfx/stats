@@ -1,11 +1,19 @@
 'use client'
 
 import { RefreshCcw } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { generateLiquidationMapMockData, liquidationSymbolPrices } from '@/lib/liquidation-map/mock-liquidation-map'
+
+const LiquidationMapChart = dynamic(
+  () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+  },
+)
 
 type Range = '1d' | '7d' | '30d'
 

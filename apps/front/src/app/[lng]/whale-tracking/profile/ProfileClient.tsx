@@ -8,6 +8,7 @@ import type {
   UserFillsResponse,
   UserPortfolioResponse,
 } from '@/lib/api'
+import dynamic from 'next/dynamic'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Footer } from '@/components/layout/Footer'
@@ -17,11 +18,18 @@ import { PnLTrendCard } from '@/components/whale-tracking/profile/PnLTrendCard'
 import { PositionProfile } from '@/components/whale-tracking/profile/PositionProfile'
 import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs'
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader'
-import { ProfileSummary } from '@/components/whale-tracking/profile/ProfileSummary'
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchTraderDiscoverTags, fetchTraderFullData } from '@/lib/api'
+
+const ProfileSummary = dynamic(
+  () => import('@/components/whale-tracking/profile/ProfileSummary').then(mod => mod.ProfileSummary),
+  {
+    ssr: false,
+    loading: () => <div className="min-h-[140px] w-full animate-pulse rounded-xl bg-[color:var(--cf-surface-2)]" />,
+  },
+)
 
 export function ProfileClient({ address }: { address: string }) {
   const { t } = useTranslation()

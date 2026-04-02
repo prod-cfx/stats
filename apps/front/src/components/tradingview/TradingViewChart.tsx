@@ -6,6 +6,7 @@
 import type { MutableRefObject, Ref } from 'react'
 import type { LiquidationMapChartHandle } from '@/components/liquidation-map/LiquidationMapChart'
 import type { ChartAdapter } from '@/components/trading/chart-adapter/chart-adapter'
+import dynamic from 'next/dynamic'
 import {
   forwardRef,
   useCallback,
@@ -17,7 +18,6 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LiquidationMapChart } from '@/components/liquidation-map/LiquidationMapChart'
 import { createTradingViewChartAdapter } from '@/components/trading/chart-adapter/tradingview-chart-adapter'
 import { useAggregatedVolumeData } from '@/hooks/useAggregatedVolumeData'
 import { fetchAggregatedOpenInterest, fetchLongShortRatio } from '@/lib/api'
@@ -221,6 +221,10 @@ const SCRIPT_SRC = '/tradingview/charting_library/charting_library.js'
 const LIBRARY_PATH = '/tradingview/charting_library/'
 const SCRIPT_ID = 'tv-charting-library-script'
 const PENDING_STUDY_ID = '__pending__'
+const LiquidationMapChart = dynamic(
+  () => import('@/components/liquidation-map/LiquidationMapChart').then(mod => mod.LiquidationMapChart),
+  { ssr: false, loading: () => null },
+)
 
 function resolveMaybePromiseId(maybe: any, onResolved: (id: string) => void) {
   if (!maybe) return

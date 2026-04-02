@@ -1,7 +1,9 @@
 'use client';
 
-import * as echarts from 'echarts';
+import type { ECharts } from 'echarts/core'
+import type { AppEChartsOption } from '@/components/charts/echarts-runtime'
 import React, { useEffect, useRef } from 'react';
+import { echarts } from '@/components/charts/echarts-runtime'
 import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface DataPoint {
@@ -15,7 +17,7 @@ interface PnLTrendChartProps {
 
 export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
+  const chartInstance = useRef<ECharts | null>(null);
   const { theme } = useTheme()
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
     const tooltipBg = theme === 'dark' ? '#161b22' : '#ffffff'
     const tooltipText = theme === 'dark' ? '#ffffff' : '#0f172a'
 
-    const option: echarts.EChartsOption = {
+    const option: AppEChartsOption = {
       backgroundColor: 'transparent',
       tooltip: {
         trigger: 'axis',
@@ -175,5 +177,3 @@ export const PnLTrendChart = ({ data }: PnLTrendChartProps) => {
 
   return <div ref={chartRef} className="w-full h-full" />;
 };
-
-

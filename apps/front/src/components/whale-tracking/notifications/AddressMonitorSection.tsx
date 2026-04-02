@@ -6,12 +6,17 @@ import type {
 } from '@/features/whale-notification/types'
 import type { TraderPositionsResponse, TraderSnapshotResponse } from '@/lib/api'
 import { BellOff, Copy, Pencil, TrendingUp, Trash2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { WhaleTradingStatsModal } from '@/components/whale-tracking/WhaleTradingStatsModal'
 import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { fetchTraderPositions, fetchTraderSnapshot } from '@/lib/api'
 import { toast } from '@/lib/toast'
+
+const WhaleTradingStatsModal = dynamic(
+  () => import('@/components/whale-tracking/WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
+  { ssr: false, loading: () => null },
+)
 
 interface AddressMetrics {
   totalPositionValue: number
@@ -262,4 +267,3 @@ export function AddressMonitorSection({
     </section>
   )
 }
-

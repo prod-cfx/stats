@@ -1,10 +1,10 @@
 'use client'
 
 import type { WhaleAddressPerformanceResponse } from '@/lib/api'
-import ReactECharts from 'echarts-for-react'
 import { ChevronDown } from 'lucide-react'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LazyReactECharts } from '@/components/charts/LazyReactECharts'
 import { Modal } from '@/components/ui/Modal'
 import { SectionTitle } from '@/components/ui/Typography'
 import { useAsync } from '@/hooks/use-async'
@@ -625,7 +625,7 @@ export const WhaleTradingStatsModal = ({
             </span>
 
             <div className="absolute top-1/2 right-4 h-[80px] w-[80px] -translate-y-1/2">
-              <ReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
+              <LazyReactECharts option={donutOption} style={{ height: '100%', width: '100%' }} />
             </div>
 
             <div className="z-10 mt-auto flex flex-col gap-1">

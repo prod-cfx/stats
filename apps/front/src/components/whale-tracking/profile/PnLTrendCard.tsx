@@ -2,9 +2,14 @@
 
 import type { UserPortfolioResponse } from '@/lib/api';
 import { ChevronDown } from 'lucide-react';
+import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PnLTrendChart } from './PnLTrendChart';
+
+const PnLTrendChart = dynamic(() => import('./PnLTrendChart').then(mod => mod.PnLTrendChart), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+})
 
 interface PnLTrendCardProps {
   portfolio: UserPortfolioResponse;
@@ -173,4 +178,3 @@ export const PnLTrendCard = ({ portfolio }: PnLTrendCardProps) => {
     </div>
   );
 };
-

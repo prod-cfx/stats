@@ -1,8 +1,8 @@
 'use client';
 
-import ReactECharts from 'echarts-for-react';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LazyReactECharts } from '@/components/charts/LazyReactECharts'
 
 interface DepthDataPoint {
   price: number;
@@ -169,7 +169,7 @@ export const DepthChart: React.FC<DepthChartProps & { height?: number | string }
 
   return (
     <div className="w-full h-full" style={{ minHeight: typeof height === 'number' ? `${height}px` : height }}>
-      <ReactECharts 
+      <LazyReactECharts
         option={option} 
         style={{ height: '100%', width: '100%' }}
         theme="dark"
@@ -179,4 +179,3 @@ export const DepthChart: React.FC<DepthChartProps & { height?: number | string }
     </div>
   );
 };
-

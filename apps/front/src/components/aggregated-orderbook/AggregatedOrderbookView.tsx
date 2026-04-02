@@ -2,13 +2,21 @@
 
 import type { AggregatedOrderbookLevel, AggregatedOrderbookMarketType } from '@/lib/api'
 import { Check, Info, Settings } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DepthChart } from '@/components/aggregated-orderbook/DepthChart'
 import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable'
 import { FilterButton } from '@/components/ui/FilterButton'
 import { LoadingState } from '@/components/ui/loading'
 import { fetchAggregatedOrderbook } from '@/lib/api'
+
+const DepthChart = dynamic(
+  () => import('@/components/aggregated-orderbook/DepthChart').then(mod => mod.DepthChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-[color:var(--cf-surface-2)]" />,
+  },
+)
 
 // 后端支持的交易所
 const FUTURES_EXCHANGES = ['bybit', 'binance', 'bitmax', 'okx']

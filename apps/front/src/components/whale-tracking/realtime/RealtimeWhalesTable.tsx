@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, RefreshCw, TrendingUp } from 'lucide-react';
+import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +11,11 @@ import { CreateMonitorModal } from '@/features/whale-notification/components/Cre
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard';
 import { fetchWhaleTradesRealtime } from '@/lib/api';
 import { toast } from '@/lib/toast';
-import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
+
+const WhaleTradingStatsModal = dynamic(
+  () => import('../WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
+  { ssr: false, loading: () => null },
+)
 
 interface WhaleTransaction {
   address: string;

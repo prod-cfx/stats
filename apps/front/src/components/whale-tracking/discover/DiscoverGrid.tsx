@@ -2,13 +2,18 @@
 
 import type {WhaleDiscoverResponse} from '@/lib/api';
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import dynamic from 'next/dynamic'
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/ui/loading';
 import { useAsync } from '@/hooks/use-async';
 import { fetchWhaleTrackingDiscover  } from '@/lib/api';
-import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal';
 import { TraderCard } from './TraderCard';
+
+const WhaleTradingStatsModal = dynamic(
+  () => import('../WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
+  { ssr: false, loading: () => null },
+)
 
 export const DiscoverGrid = () => {
   const { t } = useTranslation();

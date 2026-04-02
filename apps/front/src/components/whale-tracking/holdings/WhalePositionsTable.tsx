@@ -2,6 +2,7 @@
 
 import type { WhaleHoldingApiItem } from '@/lib/api'
 import { ArrowUpDown, Check, ChevronDown, ChevronUp, Copy, TrendingUp } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -11,7 +12,11 @@ import { LoadingState } from '@/components/ui/loading'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
 import { useAsync } from '@/hooks/use-async'
 import { fetchWhaleHoldings } from '@/lib/api'
-import { WhaleTradingStatsModal } from '../WhaleTradingStatsModal'
+
+const WhaleTradingStatsModal = dynamic(
+  () => import('../WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
+  { ssr: false, loading: () => null },
+)
 
 interface WhalePosition {
   address: string

@@ -2,10 +2,10 @@
 
 import type { ReactNode } from 'react'
 import type { UserFillsResponse, UserPortfolioResponse } from '@/lib/api'
-import ReactECharts from 'echarts-for-react'
 import { Info } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LazyReactECharts } from '@/components/charts/LazyReactECharts'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
 // 后端 API 数据类型
@@ -150,7 +150,7 @@ const SummaryCard = ({
             <div className="w-full">{subText}</div>
           </div>
           <div className="ml-2 h-12 w-12 flex-none md:ml-4 md:h-16 md:w-16">
-            <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
+            <LazyReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
           </div>
         </div>
       )}

@@ -1,8 +1,10 @@
 'use client';
 
-import * as echarts from 'echarts';
+import type { EChartsType } from 'echarts/core'
+import type { AppEChartsOption } from '@/components/charts/echarts-runtime'
 import React, { useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { echarts } from '@/components/charts/echarts-runtime'
 import { useTheme } from '@/components/providers/ThemeProvider';
 
 interface LiquidationMapChartProps {
@@ -145,7 +147,7 @@ export const LiquidationMapChart = (
     { ref, data, currentPrice, mode = 'full', getPriceToY, overlayWidth = 260, overlayOpacity = 0.85, selectedPrice = null, className }: LiquidationMapChartProps & { ref?: React.RefObject<LiquidationMapChartHandle | null> },
 ) => {
 const chartRef = useRef<HTMLDivElement>(null);
-const chartInstanceRef = useRef<echarts.EChartsType | null>(null);
+const chartInstanceRef = useRef<EChartsType | null>(null);
 const { t } = useTranslation();
 const { theme } = useTheme();
 
@@ -789,7 +791,7 @@ const colors = useMemo(
 
     // full mode: keep original option/behavior unchanged
     const option = buildFullOption();
-    chart.setOption(option as any, { notMerge: true, lazyUpdate: true });
+    chart.setOption(option as AppEChartsOption, { notMerge: true, lazyUpdate: true });
     chart.resize();
   };
 
