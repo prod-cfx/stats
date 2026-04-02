@@ -140,6 +140,71 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     }))
   })
 
+  it('uses provided exchange balance quotes when seeding the internal strategy account', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+        create: jest.fn(),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-1',
+          createdBy: 'user-1',
+          strategyTemplateId: 'template-1',
+          params: {
+            symbol: 'SOLUSDT',
+            timeframe: '5m',
+            positionPct: 10,
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'OKX SOLUSDT 5m AI策略',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      strategyInstanceId: 'strategy-instance-1',
+      initialBalanceQuote: 60000,
+      accountBalanceQuote: 58000,
+    } as any)
+
+    expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        initialBalance: expect.objectContaining({}),
+        balance: expect.objectContaining({}),
+        equity: expect.objectContaining({}),
+      }),
+    }))
+    const call = tx.userStrategyAccount.create.mock.calls[0]?.[0]
+    expect(String(call.data.initialBalance)).toBe('60000')
+    expect(String(call.data.balance)).toBe('58000')
+    expect(String(call.data.equity)).toBe('60000')
+  })
+
   it('rejects deploy when the selected exchangeAccountId does not belong to the user instead of creating a fake account', async () => {
     const tx = {
       user: {
