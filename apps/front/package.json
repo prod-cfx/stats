@@ -9,7 +9,7 @@
     "predev:mock": "pnpm --filter @ai/shared run build",
     "dev:mock": "NEXT_PUBLIC_API_SERVER_URL=http://localhost:3000 APP_ENV=development NEXT_PUBLIC_APP_ENV=development next dev -H 0.0.0.0 -p 3001",
     "check-env": "node scripts/check-env.js",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "start": "next start",
     "lint": "eslint . --fix --ext .ts,.tsx,.js,.jsx --config ../../eslint.config.js",
     "type-check": "tsc --noEmit --skipLibCheck --incremental false",

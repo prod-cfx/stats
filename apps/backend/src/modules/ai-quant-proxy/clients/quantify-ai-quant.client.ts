@@ -108,7 +108,7 @@ export class QuantifyAiQuantClient {
         upstreamSignal.addEventListener('abort', onUpstreamAbort, { once: true })
       }
     }
-    const timeout = setTimeout(() => timeoutController.abort(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs)
+    const timeout = setTimeout(() => timeoutController.abort(`timeout after ${timeoutMs}ms`), timeoutMs)
 
     let response: Response
     try {

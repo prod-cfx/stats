@@ -7,7 +7,7 @@
     "prestart:dev": "pnpm --filter @ai/shared run build",
     "start:dev": "next dev -H 0.0.0.0 -p 3500",
     "check-env": "node scripts/check-env.js",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "start": "next start -p 3500",
     "lint": "eslint . --ext .ts,.tsx --config ../../eslint.config.js",
     "type-check": "tsc --noEmit --project ."

@@ -9,7 +9,12 @@ import { WhaleAlertRepository } from './whale-alert.repository'
 import { WhaleAlertService } from './whale-alert.service'
 
 @Module({
-  imports: [PrismaModule, AuthModule, forwardRef(() => DataSyncModule), WhaleNotificationModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    forwardRef(() => DataSyncModule),
+    WhaleNotificationModule,
+  ],
   controllers: [WhaleAlertController, WhaleAlertStreamController],
   providers: [WhaleAlertService, WhaleAlertRepository],
   exports: [WhaleAlertService],

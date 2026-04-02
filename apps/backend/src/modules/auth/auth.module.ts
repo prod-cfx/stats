@@ -30,7 +30,6 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     PassportModule.register({ defaultStrategy: 'jwt', property: 'user', session: false }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-       
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('jwt.secret'),
         signOptions: {
@@ -40,7 +39,6 @@ import { JwtStrategy } from './strategies/jwt.strategy'
     }),
     ThrottlerModule.forRootAsync({
       inject: [RedisService],
-       
       useFactory: (redisService: RedisService) => ({
         throttlers: [
           {
@@ -81,5 +79,3 @@ import { JwtStrategy } from './strategies/jwt.strategy'
   ],
 })
 export class AuthModule {}
-
-

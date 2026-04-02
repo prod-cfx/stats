@@ -49,10 +49,16 @@ export class BacktestCallerIdentityService {
       const decoded = Buffer.from(part, 'base64url').toString('utf8')
       const parsed = JSON.parse(decoded) as unknown
       if (!parsed || typeof parsed !== 'object') {
-        throw new Error('invalid_jwt_part')
+        throw new DomainException(errorCode, {
+          code: ErrorCode.UNAUTHORIZED,
+          status: HttpStatus.UNAUTHORIZED,
+        })
       }
       return parsed as Record<string, unknown>
-    } catch {
+    } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
       throw new DomainException(errorCode, {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,

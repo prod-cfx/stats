@@ -11,16 +11,16 @@
       "outputs": ["{workspaceRoot}/dist/front"],
       "defaultConfiguration": "production",
       "options": {
-        "command": "next build && node scripts/post-build.js",
+        "command": "NODE_ENV=production next build && node scripts/post-build.js",
         "cwd": "apps/front"
       },
       "configurations": {
         "development": {
-          "command": "next build && node scripts/post-build.js",
+          "command": "NODE_ENV=production next build && node scripts/post-build.js",
           "cwd": "apps/front"
         },
         "production": {
-          "command": "next build && node scripts/post-build.js",
+          "command": "NODE_ENV=production next build && node scripts/post-build.js",
           "cwd": "apps/front"
         }
       }
@@ -55,7 +55,7 @@
       "outputs": ["{workspaceRoot}/dist/front"],
       "dependsOn": ["^build"],
       "options": {
-        "command": "next build && node scripts/post-build.js",
+        "command": "NODE_ENV=production next build && node scripts/post-build.js",
         "cwd": "apps/front"
       }
     },
