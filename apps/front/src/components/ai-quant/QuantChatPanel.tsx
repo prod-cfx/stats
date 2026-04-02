@@ -116,7 +116,7 @@ export function QuantChatPanel({
   }
 
   return (
-    <section className="flex h-[calc(100vh-200px)] min-h-[600px] flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
+    <section className="flex h-[calc(100vh-200px)] min-h-[600px] min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-sm">
       {/* Header / Toolbar */}
       <div className="flex items-center justify-between border-b border-[color:var(--cf-border)] bg-[color:var(--cf-surface-active)] px-4 py-3">
         <div className="flex items-center gap-2">
@@ -289,12 +289,12 @@ export function QuantChatPanel({
       )}
 
       {/* Chat Area */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
+      <div ref={chatScrollRef} className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
         <div className="space-y-6">
           {messages.map(message => (
             <div
               key={message.id}
-              className={`flex gap-3 ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
+              className={`flex min-w-0 gap-3 ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
             >
               {message.role === 'assistant' && (
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -303,14 +303,14 @@ export function QuantChatPanel({
               )}
               
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                className={`min-w-0 max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === 'assistant'
                     ? 'rounded-tl-none border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] [&_code]:rounded [&_code]:bg-[color:var(--cf-bg)] [&_code]:px-1.5 [&_code]:py-0.5'
                     : 'rounded-tr-none bg-primary text-white'
                 }`}
               >
                 {message.role === 'assistant' ? (
-                  <div className="space-y-3 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
+                  <div className="min-w-0 space-y-3 [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[color:var(--cf-border)] [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:leading-7 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-[color:var(--cf-border)] [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-[color:var(--cf-border)] [&_th]:bg-[color:var(--cf-surface-active)] [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-6">
                     {(() => {
                       let codeBlockIndex = 0
                       return (

@@ -32,68 +32,60 @@ export class CodegenSessionsRepository {
 
   async createSession(data: Prisma.LlmStrategyCodegenSessionCreateInput): Promise<LlmStrategyCodegenSession> {
     if (this.strategyInstanceColumnMissing) {
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.create({
-          data: this.omitStrategyInstanceIdField(data),
-          select: SESSION_SELECT_BASE,
-        })
-        return this.toSessionWithNullableStrategy(row)
+      const row = await this.txHost.tx.llmStrategyCodegenSession.create({
+        data: this.omitStrategyInstanceIdField(data),
+        select: SESSION_SELECT_BASE,
       })
+      return this.toSessionWithNullableStrategy(row)
     }
 
     try {
-      return await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.create({
+      return await this.txHost.tx.llmStrategyCodegenSession.create({
         data,
         select: SESSION_SELECT_WITH_STRATEGY,
-      }))
+      })
     } catch (error) {
       if (!this.isMissingStrategyInstanceColumnError(error)) throw error
       this.strategyInstanceColumnMissing = true
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.create({
-          data: this.omitStrategyInstanceIdField(data),
-          select: SESSION_SELECT_BASE,
-        })
-        return this.toSessionWithNullableStrategy(row)
+      const row = await this.txHost.tx.llmStrategyCodegenSession.create({
+        data: this.omitStrategyInstanceIdField(data),
+        select: SESSION_SELECT_BASE,
       })
+      return this.toSessionWithNullableStrategy(row)
     }
   }
 
   async findById(id: string): Promise<LlmStrategyCodegenSession | null> {
     if (this.strategyInstanceColumnMissing) {
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
-          where: { id },
-          select: SESSION_SELECT_BASE,
-        })
-        return row ? this.toSessionWithNullableStrategy(row) : null
+      const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
+        where: { id },
+        select: SESSION_SELECT_BASE,
       })
+      return row ? this.toSessionWithNullableStrategy(row) : null
     }
 
     try {
-      return await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.findUnique({
+      return await this.txHost.tx.llmStrategyCodegenSession.findUnique({
         where: { id },
         select: SESSION_SELECT_WITH_STRATEGY,
-      }))
+      })
     } catch (error) {
       if (!this.isMissingStrategyInstanceColumnError(error)) throw error
       this.strategyInstanceColumnMissing = true
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
-          where: { id },
-          select: SESSION_SELECT_BASE,
-        })
-        return row ? this.toSessionWithNullableStrategy(row) : null
+      const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
+        where: { id },
+        select: SESSION_SELECT_BASE,
       })
+      return row ? this.toSessionWithNullableStrategy(row) : null
     }
   }
 
   async findSessionStrategyInstanceId(id: string): Promise<string | null> {
     if (this.strategyInstanceColumnMissing) return null
-    const row = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.findUnique({
+    const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
       where: { id },
       select: { strategyInstanceId: true },
-    })).catch(error => {
+    }).catch(error => {
       if (this.isMissingStrategyInstanceColumnError(error)) {
         this.strategyInstanceColumnMissing = true
         return null
@@ -105,33 +97,29 @@ export class CodegenSessionsRepository {
 
   async updateSession(id: string, data: Prisma.LlmStrategyCodegenSessionUpdateInput): Promise<LlmStrategyCodegenSession> {
     if (this.strategyInstanceColumnMissing) {
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.update({
-          where: { id },
-          data: this.omitStrategyInstanceIdField(data),
-          select: SESSION_SELECT_BASE,
-        })
-        return this.toSessionWithNullableStrategy(row)
+      const row = await this.txHost.tx.llmStrategyCodegenSession.update({
+        where: { id },
+        data: this.omitStrategyInstanceIdField(data),
+        select: SESSION_SELECT_BASE,
       })
+      return this.toSessionWithNullableStrategy(row)
     }
 
     try {
-      return await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.update({
+      return await this.txHost.tx.llmStrategyCodegenSession.update({
         where: { id },
         data,
         select: SESSION_SELECT_WITH_STRATEGY,
-      }))
+      })
     } catch (error) {
       if (!this.isMissingStrategyInstanceColumnError(error)) throw error
       this.strategyInstanceColumnMissing = true
-      return this.txHost.withTransaction(async () => {
-        const row = await this.txHost.tx.llmStrategyCodegenSession.update({
-          where: { id },
-          data: this.omitStrategyInstanceIdField(data),
-          select: SESSION_SELECT_BASE,
-        })
-        return this.toSessionWithNullableStrategy(row)
+      const row = await this.txHost.tx.llmStrategyCodegenSession.update({
+        where: { id },
+        data: this.omitStrategyInstanceIdField(data),
+        select: SESSION_SELECT_BASE,
       })
+      return this.toSessionWithNullableStrategy(row)
     }
   }
 
@@ -139,13 +127,13 @@ export class CodegenSessionsRepository {
     id: string,
     data: Prisma.LlmStrategyCodegenSessionUpdateInput,
   ): Promise<boolean> {
-    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
+    const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
         status: { in: ['DRAFTING', 'CHECKLIST_GATE'] },
       },
       data,
-    }))
+    })
     return result.count === 1
   }
 
@@ -153,25 +141,25 @@ export class CodegenSessionsRepository {
     id: string,
     data: Prisma.LlmStrategyCodegenSessionUpdateInput,
   ): Promise<boolean> {
-    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
+    const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
         status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT'] },
       },
       data,
-    }))
+    })
     return result.count === 1
   }
 
   async bindStrategyInstanceIfEmpty(sessionId: string, strategyInstanceId: string): Promise<boolean> {
     if (this.strategyInstanceColumnMissing) return false
-    const result = await this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodegenSession.updateMany({
+    const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id: sessionId,
         strategyInstanceId: null,
       },
       data: { strategyInstanceId },
-    })).catch(error => {
+    }).catch(error => {
       if (this.isMissingStrategyInstanceColumnError(error)) {
         this.strategyInstanceColumnMissing = true
         return { count: 0 }
@@ -182,7 +170,7 @@ export class CodegenSessionsRepository {
   }
 
   async createVersion(data: Prisma.LlmStrategyCodeVersionCreateInput): Promise<LlmStrategyCodeVersion> {
-    return this.txHost.withTransaction(async () => this.txHost.tx.llmStrategyCodeVersion.create({ data }))
+    return this.txHost.tx.llmStrategyCodeVersion.create({ data })
   }
 
   async createDraftStrategyInstanceFromPublishedSession(input: {

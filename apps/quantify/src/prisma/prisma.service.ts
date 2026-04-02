@@ -217,8 +217,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       })
     }
 
-    attach(this)
-    if (this.extendedClient) attach(this.extendedClient)
+    const attachedClients = new Set<PrismaClient>()
+    const attachOnce = (client: PrismaClient | null | undefined) => {
+      if (!client || attachedClients.has(client)) return
+      attachedClients.add(client)
+      attach(client)
+    }
+
+    attachOnce(this)
+    attachOnce(this.extendedClient)
     this.logger.log('查询性能监控已启用')
   }
 

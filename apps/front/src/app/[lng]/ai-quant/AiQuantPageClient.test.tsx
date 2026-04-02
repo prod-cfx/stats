@@ -141,6 +141,56 @@ jest.mock('@/lib/api', () => ({
   startLlmCodegenSession: jest.fn(),
 }))
 
+function seedConfirmedConversation(now = Date.now()) {
+  localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+    {
+      id: 'conv-1',
+      title: 'conv',
+      messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: 'strategy-1',
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: now,
+    },
+  ]))
+}
+
 describe('AiQuantPageClient backtest range integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -151,6 +201,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     localStorage.clear()
+    seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-24T12:00:00.000Z'))
@@ -262,5 +313,17 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
+  })
+
+  it('uses shrink-safe layout classes for the chat column', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    const grid = container.querySelector('main > div + div')
+    expect(grid?.className).toContain('md:grid-cols-[280px_minmax(0,1fr)]')
+
+    const contentColumn = grid?.lastElementChild
+    expect(contentColumn?.className).toContain('min-w-0')
   })
 })

@@ -156,6 +156,56 @@ function defaultPayload() {
   }
 }
 
+function seedConfirmedConversation(now = Date.now()) {
+  localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+    {
+      id: 'conv-1',
+      title: 'conv',
+      messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: now,
+    },
+  ]))
+}
+
 describe('AiQuantPageClient backtest jobs integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -169,6 +219,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-24T12:00:00.000Z'))
     localStorage.clear()
+    seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
 
     mockBuildBacktestPayload.mockReturnValue(defaultPayload())
@@ -261,6 +312,88 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockGetBacktestJobResult).not.toHaveBeenCalled()
   })
 
+  it('refreshes cached backtest summary from the persisted job result on hydration', async () => {
+    const now = Date.now()
+    localStorage.clear()
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+      {
+        id: 'conv-1',
+        title: 'conv',
+        messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: {
+          id: 'job-1',
+          symbol: 'BTCUSDT',
+          startAt: '2026-03-01T00:00:00.000Z',
+          endAt: '2026-03-24T00:00:00.000Z',
+          maxDrawdownPct: 20,
+          totalReturnPct: 10,
+          winRatePct: 50,
+          tradeCount: 10,
+        },
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: now,
+      },
+    ]))
+
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 200,
+        netProfitPct: 12.5,
+        maxDrawdownPct: 9.6,
+        winRate: 0.61,
+        profitFactor: 1.8,
+        totalTrades: 18,
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    const summary = container.querySelector('[data-testid="backtest-summary"]')
+    expect(summary?.textContent).toContain('job-1')
+    expect(summary?.textContent).toContain('|9.6|12.5|61|18')
+    expect(mockGetBacktestJobResult).toHaveBeenCalledWith('job-1')
+  })
+
   it('running state disables backtest button', async () => {
     let resolvePoll: ((value: unknown) => void) | null = null
     const pollPromise = new Promise(resolve => {
@@ -294,7 +427,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         {
           id: 'conv-1',
           title: 'conv',
-          messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+          messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
           params: {
             exchange: 'binance',
             symbol: 'BTCUSDT',
@@ -307,8 +440,21 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           paramSchema: null,
           paramValues: {},
           backtestResult: null,
-          logicGraph: null,
+          logicGraph: {
+            version: 1,
+            status: 'confirmed',
+            trigger: [],
+            actions: [],
+            risk: [],
+            meta: {
+              exchange: 'binance',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          },
           llmCodegenSessionId: null,
+          publishedStrategyInstanceId: null,
           latestSignalMessage: null,
           backtestExecutionState: state,
           updatedAt: now,

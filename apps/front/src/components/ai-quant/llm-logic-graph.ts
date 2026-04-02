@@ -15,7 +15,9 @@ interface CodegenSpec {
 interface GraphFallbackMeta {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
+  baseTimeframe: string
   positionPct: number
+  executionTags?: string[]
 }
 
 function asStringList(input: unknown): string[] {
@@ -100,8 +102,9 @@ export function buildLogicGraphFromCodegenSpec(
     meta: {
       exchange: fallback.exchange,
       symbol,
-      timeframe: timeframes.length > 0 ? timeframes.join('/') : '-',
+      timeframe: timeframes.length > 0 ? timeframes.join('/') : fallback.baseTimeframe,
       positionPct: fallback.positionPct,
+      executionTags: fallback.executionTags ?? [],
     },
   }
 }

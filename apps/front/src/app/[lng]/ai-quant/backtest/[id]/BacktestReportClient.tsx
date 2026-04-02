@@ -13,7 +13,7 @@ import {
   YAxis,
   Tooltip,
 } from 'recharts'
-import { createBacktestReportData, createBacktestReportDataFromLive } from './backtest-report-data'
+import { createBacktestReportDataFromLive } from './backtest-report-data'
 
 interface BacktestReportProps {
   lng: string
@@ -330,11 +330,10 @@ function TradeDetailsSection({ lng, trades }: { lng: string, trades: TradeRecord
 // --- Main Page Component ---
 export function BacktestReportClient({ lng, id, symbol, rangeDisplay, metrics, report = null }: BacktestReportProps) {
   const reportData = useMemo(() => {
-    if (!metrics) {
+    if (!metrics || !report) {
       return null
     }
-    const liveData = report ? createBacktestReportDataFromLive(id, metrics, report) : null
-    return liveData ?? createBacktestReportData(id, metrics)
+    return createBacktestReportDataFromLive(id, metrics, report)
   }, [id, metrics, report])
   const hasReportData = metrics !== null && reportData !== null
 

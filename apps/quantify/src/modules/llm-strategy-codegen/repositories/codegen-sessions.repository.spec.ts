@@ -150,4 +150,78 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       data: { strategyInstanceId: 'instance-1' },
     })
   })
+
+  it('uses the ambient prisma client for single-statement session reads and writes', async () => {
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'user-1',
+          status: 'DRAFTING',
+          checklist: {},
+          constraintPack: {},
+          latestDraftCode: null,
+          latestSpecDesc: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-02T00:00:00.000Z'),
+        }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'user-1',
+          status: 'DRAFTING',
+          checklist: {},
+          constraintPack: {},
+          latestDraftCode: null,
+          latestSpecDesc: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-02T00:00:00.000Z'),
+        }),
+        update: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'user-1',
+          status: 'VALIDATING_STATIC',
+          checklist: {},
+          constraintPack: {},
+          latestDraftCode: 'code',
+          latestSpecDesc: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-02T00:00:01.000Z'),
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      llmStrategyCodeVersion: {
+        create: jest.fn().mockResolvedValue({ id: 'version-1' }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    await repo.createSession({
+      user: { connect: { id: 'user-1' } },
+      status: 'DRAFTING',
+      checklist: {} as any,
+      constraintPack: {} as any,
+    } as any)
+    await repo.findById('session-1')
+    await repo.updateSession('session-1', { status: 'VALIDATING_STATIC' } as any)
+    await repo.tryMarkGenerating('session-1', { status: 'GENERATING' } as any)
+    await repo.createVersion({ session: { connect: { id: 'session-1' } }, scriptCode: 'code' } as any)
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalled()
+    expect(tx.llmStrategyCodegenSession.findUnique).toHaveBeenCalled()
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalled()
+    expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalled()
+    expect(tx.llmStrategyCodeVersion.create).toHaveBeenCalled()
+    expect(txHost.withTransaction).not.toHaveBeenCalled()
+  })
 })
