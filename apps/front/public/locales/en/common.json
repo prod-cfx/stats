@@ -198,6 +198,7 @@
       "welcome": "Tell me your trading idea, I will help you generate a strategy and backtest it. Max drawdown must be <= 20% to deploy.",
       "graphGenerated": "I have converted your natural language into a logic graph. Please confirm the logic graph before backtesting.",
       "graphGuard": "Please confirm the logic graph above before backtesting.",
+      "backtestRunning": "Backtest is running, please wait...",
       "backtestSuccess": "Backtest max drawdown {{drawdown}}% (Passed), ready to deploy.",
       "backtestFail": "Backtest max drawdown {{drawdown}}% (Failed). Suggest optimizing parameters via chat before backtesting again.",
       "optimizeHint": "Suggest reducing single position size or adjusting buy/sell thresholds before re-backtesting.",
