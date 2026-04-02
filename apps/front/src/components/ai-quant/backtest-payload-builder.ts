@@ -65,7 +65,7 @@ export function buildBacktestPayload(
     throw new BacktestPayloadBuilderError(validation.reason)
   }
 
-  const resolvedRange = resolveBacktestRange(input.range, now, input.baseTimeframe)
+  const resolvedRange = resolveBacktestRange(input.range, now, baseTimeframe)
 
   const payload: CreateBacktestJobPayload = {
     symbols: [symbol],
